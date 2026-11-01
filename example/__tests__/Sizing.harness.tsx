@@ -200,6 +200,48 @@ async function collectTrace(
   }
 }
 
+/**
+ * The `hybridRef` handle for the control a test just rendered, once it arrives.
+ *
+ * `hybridRef` fires on a props turn *after* the mount that puts the view on screen, so
+ * reading the module-level capture right after a render is a race the runner wins at
+ * load and loses at rest: CI 41282238854 measured the box at `61.00x28.00` and the
+ * content as `null` in the same test, at load1 394 on 3 cores. The box is Fabric's, so
+ * it was already right; the handle had simply not been handed over yet. Waiting for the
+ * handle is waiting for a thing to exist, which is allowed; the assertions on what it
+ * then reports are untouched.
+ */
+async function handleArrived(what: string): Promise<SwitchHandle> {
+  return pollUntil(
+    () => hybrid,
+    () =>
+      new Error(
+        `no hybridRef handle for ${what} — the control rendered, but never handed itself over.`
+      )
+  );
+}
+
+/**
+ * What the hosted control measured, once it has measured.
+ *
+ * Same race one level in: the host caches `nil` until its first layout pass has run,
+ * and `measureContent()` answers that as `0x0` rather than blocking for the main thread.
+ * So a read can be early in two different ways — no handle, or a handle that has not
+ * measured yet — and both are "not yet", not "wrong". This waits for a real size, which
+ * is the only answer the test can compare against; a control that never measures one
+ * still goes red, on the message below.
+ */
+async function measuredContent(what: string): Promise<Size> {
+  const handle = await handleArrived(what);
+  return pollUntil(
+    () => {
+      const size = handle.measureContent();
+      return size.width > 0 && size.height > 0 ? size : null;
+    },
+    () => new Error(`${what}: measureContent() never reported a size.`)
+  );
+}
+
 /** Enough to read a first frame: the drawn sample has arrived. */
 const hasDrawnSample = (events: NitroUiSizingTraceEvent[]) =>
   events.some((event) => event.stage === 'drew');
@@ -359,7 +401,7 @@ describe('Sizing · intrinsic (T11)', () => {
       <Switch defaultValue testID="cold" hybridRef={captureHybrid} />
     );
     const box = await waitForTestId('cold');
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the cold Switch');
     const trace = await collectTrace(hasDrawnSample);
 
     console.log(
@@ -368,13 +410,12 @@ describe('Sizing · intrinsic (T11)', () => {
         `d=${JSON.stringify(delta(before, stats()))}`
     );
 
-    expect(content).not.toBeNull();
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
-    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.height - expectedBox!.height)).toBeLessThan(1.5);
     // The invariant that holds in every environment: the box is the control.
-    expect(Math.abs(box!.width - content!.width)).toBeLessThan(0.6);
-    expect(Math.abs(box!.height - content!.height)).toBeLessThan(0.6);
+    expect(Math.abs(box!.width - content.width)).toBeLessThan(0.6);
+    expect(Math.abs(box!.height - content.height)).toBeLessThan(0.6);
 
     // The first instance of a configuration pays exactly one state update: the
     // shadow tree has to learn the size it will keep handing out - asserted on
@@ -449,12 +490,12 @@ describe('Sizing · intrinsic (T11)', () => {
       <Switch defaultValue testID="warm" hybridRef={captureHybrid} />
     );
     const box = await waitForTestId('warm');
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the warm Switch');
     const d = delta(before, stats());
 
     console.log(`warm: box=${describeBox(box)} d=${JSON.stringify(d)}`);
     expect(boxMatches(box, expectedBox!)).toBe(true);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
     expect(d.corrections).toBe(0);
     expect(d.dropped).toBeGreaterThan(0);
     unmount();
@@ -961,7 +1002,7 @@ describe('Sizing · intrinsic (T11)', () => {
         ),
       8000
     );
-    const content = hybrid?.measureContent() ?? null;
+    const content = await measuredContent('the Switch inside the Modal');
     const cold = delta(before, stats());
     const own = trace.filter(
       (event: NitroUiSizingTraceEvent) => event.instanceId === instanceId
@@ -977,7 +1018,6 @@ describe('Sizing · intrinsic (T11)', () => {
         `trace=${String(JSON.stringify(own.map(sizingEventLabel)))} d=${JSON.stringify(cold)}`
     );
 
-    expect(content).not.toBeNull();
     // The dialog mounted from the poisoned guess (the wait above proves a report
     // reached the engine, and `laidOut` names the box the first measure answered
     // with), so `corrected` is the control's own measurement outranking it - and
@@ -986,11 +1026,11 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(Math.abs(laidOut[0]!.width - WRONG_GUESS.width)).toBeLessThan(1.5);
     expect(Math.abs(laidOut[0]!.height - WRONG_GUESS.height)).toBeLessThan(1.5);
     expect(corrected.length).toBeGreaterThan(0);
-    expect(Math.abs(content!.width - expectedBox!.width)).toBeLessThan(1.5);
-    expect(Math.abs(content!.height - expectedBox!.height)).toBeLessThan(1.5);
+    expect(Math.abs(content.width - expectedBox!.width)).toBeLessThan(1.5);
+    expect(Math.abs(content.height - expectedBox!.height)).toBeLessThan(1.5);
     for (const event of corrected) {
-      expect(Math.abs(event.width - content!.width)).toBeLessThan(0.6);
-      expect(Math.abs(event.height - content!.height)).toBeLessThan(0.6);
+      expect(Math.abs(event.width - content.width)).toBeLessThan(0.6);
+      expect(Math.abs(event.height - content.height)).toBeLessThan(0.6);
     }
     // The dialog is the only window doing work, so the flush that pushed this
     // correction is this mount's.
@@ -1041,6 +1081,13 @@ describe('Sizing · intrinsic (T11)', () => {
     const lateCorrected = lateOwn.filter(
       (event: NitroUiSizingTraceEvent) => event.stage === 'corrected'
     );
+    /**
+     * Read directly rather than through `measuredContent`, because this handle has
+     * already reported a *different* size: the control above was laid out at the
+     * narrow box, and `measuredContent` waits only for "a size", which this one still
+     * holds. Same reason it is read before the second render below — inside one test,
+     * the module-level capture can name either control.
+     */
     const wideContent = hybrid?.measureContent() ?? null;
     console.log(
       `modal late: content=${describeBox(wideContent)} ` +
@@ -1408,7 +1455,7 @@ describe('Sizing · intrinsic (T11)', () => {
       TEST_WIDTH,
       'a control whose width arrived with its first props'
     );
-    const measured = hybrid?.measureContent() ?? null;
+    const measured = await measuredContent('the first-commit wide Switch');
     const d = delta(before, stats());
     const trace = await collectTrace(hasDrawnSample);
     console.log(
@@ -1451,6 +1498,11 @@ describe('Sizing · intrinsic (T11)', () => {
       'a plain control mounted on a host that measured a wider one'
     );
     const recycledDelta = delta(recycled, stats());
+    /**
+     * Read directly, as before, for the reason at `wideContent` above: this is the
+     * second control in one test, so the capture may still hold the first one's
+     * handle, and `measuredContent` would accept that one's size as an answer.
+     */
     console.log(
       `after recycle: box=${describeBox(plainBox)} measured=${describeBox(
         hybrid?.measureContent() ?? null
@@ -1540,6 +1592,198 @@ describe('Sizing · intrinsic (T11)', () => {
     expect(boxMatches(box, wideBox)).toBe(true);
     expect(d.corrections).toBe(1);
     unmount();
+  });
+
+  /**
+   * The control the two cases below drive: the same `Switch`, optionally hidden with
+   * `display: 'none'`, and optionally given a different `nuiTestWidth` — the only
+   * size-affecting prop a Switch has (`SwitchProps.nuiTestWidth`, TEMPORARY per S1).
+   *
+   * Round 1's forgotten-id guard refused to file a layout for an id the engine had
+   * finished, on the assumption that an id which mounts again is a new id. It is not:
+   * `useSizingId` mints one per **React** mount (`src/core/useSizingId.ts`), so on iOS a
+   * hide that tears the native view down (`onDropView` → `host.drop()` → `forget(id)`)
+   * without ending the React mount leaves an id that comes back later attached to a
+   * brand-new native view — laid out one step *before* the mount transaction re-binds it.
+   * Round 1 refused that layout, the bind then cleared the mark, and the instance was
+   * left bound with no ledger entry: `report` returns at its first line without one, and
+   * `invalidateSizingEnvironment` re-keys `ledger_` and so cannot reach it. The control
+   * kept the size it was laid out at for the rest of its life — one lost correction per
+   * hide/show, and a `sizingKey` change made while hidden was the visible case.
+   *
+   * Both cases therefore move the size *while hidden* and then re-show, with a guess
+   * seeded to a size that is not the control's (review S8), so a correction that never
+   * arrives leaves the box visibly at 40x20 instead of passing quietly. Every prop is
+   * passed on every render, `nuiTestWidth` included (nitro#1184); `null` is that prop's
+   * own default, i.e. the control's normal configuration.
+   */
+  const reShownSwitch = (hidden: boolean, width: number | null) => (
+    <Switch
+      defaultValue
+      nuiTestWidth={width}
+      testID="reshown"
+      accessibilityLabel="Sizing re-shown switch"
+      hybridRef={captureHybrid}
+      {...(hidden ? { style: { display: 'none' } } : {})}
+    />
+  );
+
+  /**
+   * Assert which of the two `display: none` paths a run actually took, and describe it.
+   *
+   * The property is platform-divergent, and the difference is the whole point of the two
+   * cases below. iOS Fabric creates **no native view** for a hidden node, so hiding one is
+   * a real teardown and the engine forgets the instance (`ledgerEntries` falls) — the
+   * re-show path the forgotten-id rule exists for. Android reaches the view as `INVISIBLE`
+   * (`NitroComposeHost.kt:424`), so nothing is torn down, nothing is forgotten, and its
+   * "re-show" is a visibility flip that cannot lose a correction.
+   *
+   * Asserted rather than printed, because `console.log` from a harness file reaches
+   * neither the gate log nor the report (X4 round 2 found that for this suite's own
+   * findings): a note about which path ran is worth nothing if nobody can read it. And
+   * asserted in both directions — if iOS ever starts leaving a hidden view alive, these
+   * cases would pass for the same reason Android's does, and the regression guard would
+   * be gone with no red anywhere to notice. Measured, not assumed: `1→0` on iOS and
+   * `1→1` on Android, both read from runs of this case.
+   *
+   * On iOS the drop arrives with the transaction that removes the view and the
+   * deallocation with it, so the fall is waited for rather than read once — the same
+   * reason `Conformance`'s leak rule waits for its drops instead of assuming unmount is
+   * synchronous.
+   */
+  async function expectHidePath(
+    mountedLedger: number,
+    expected: 'torn-down' | 'kept-alive'
+  ) {
+    if (expected === 'torn-down') {
+      const after = await pollUntil(
+        () => {
+          const now = stats().ledgerEntries;
+          return now < mountedLedger ? now : null;
+        },
+        () =>
+          new Error(
+            `display:none did not tear the hidden view down on iOS (ledger stayed at ` +
+              `${String(mountedLedger)}), so this run never exercised the re-show path ` +
+              'this case exists to guard: it would have passed for Android’s reason.'
+          ),
+        4000
+      );
+      return `tore the hidden view down (ledger ${String(mountedLedger)}→${String(
+        after
+      )}): the re-show path`;
+    }
+    const now = stats().ledgerEntries;
+    if (now < mountedLedger) {
+      throw new Error(
+        `display:none tore the view down on Android (ledger ${String(
+          mountedLedger
+        )}→${String(now)}), which is not what \`NitroComposeHost.kt:424\` says happens ` +
+          '(RN’s `display: none` reaches a view as INVISIBLE). If that changed, this ' +
+          'suite has a second platform on the re-show path and the expectation here ' +
+          'needs updating deliberately, not by a green run.'
+      );
+    }
+    return `left the hidden view alive (ledger ${String(mountedLedger)}→${String(
+      now
+    )}): the visibility-flip path`;
+  }
+
+  it('corrects a control hidden with display:none when it is shown again', async () => {
+    seedWrongGuess();
+    const before = stats();
+
+    // Mounted and correct.
+    const { rerender, unmount } = await render(reShownSwitch(false, null));
+    await waitForBoxWidth(
+      'reshown',
+      expectedBox.width,
+      'the control before it was hidden'
+    );
+    await settle(300);
+    const mounted = stats();
+    expect(mounted.ledgerEntries).toBeGreaterThan(0);
+
+    // Hidden, with its size-affecting prop moved while it is hidden — the case the
+    // reviewer reproduced, where the new configuration has never been laid out.
+    await rerender(reShownSwitch(true, TEST_WIDTH));
+    const hidePath = await expectHidePath(
+      mounted.ledgerEntries,
+      Platform.OS === 'ios' ? 'torn-down' : 'kept-alive'
+    );
+
+    // Shown again with no further change: the re-shown view's own layout is the first
+    // thing the engine sees for this configuration, and round 1 refused to file it.
+    await rerender(reShownSwitch(false, TEST_WIDTH));
+    const box = await waitForBoxWidth(
+      'reshown',
+      TEST_WIDTH,
+      'the control after it was shown again'
+    );
+    const d = delta(mounted, stats());
+    console.log(
+      `  hide ${hidePath}; re-show box=${describeBox(box)} ` +
+        `corrections=${String(d.corrections)}`
+    );
+    expect(boxMatches(box, wideBox)).toBe(true);
+    // Exactly one, counted across the whole hide→show window: correcting the size while
+    // hidden and again afterwards is paying for one change twice.
+    expect(d.corrections).toBe(1);
+
+    // And the entry that came back left nothing on hold for the rest of the run.
+    unmount();
+    await settle(600);
+    const dropped = stats();
+    expect(dropped.ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries);
+    expect(dropped.registryEntries).toBeLessThanOrEqual(before.registryEntries);
+  });
+
+  it('corrects a control shown again after the environment moved while it was hidden', async () => {
+    seedWrongGuess();
+    const before = stats();
+    const epoch = stats().environmentEpoch;
+
+    const { rerender, unmount } = await render(reShownSwitch(false, null));
+    await waitForBoxWidth(
+      'reshown',
+      expectedBox.width,
+      'the control before it was hidden'
+    );
+    await settle(300);
+    const mounted = stats();
+
+    await rerender(reShownSwitch(true, TEST_WIDTH));
+    const hidePath = await expectHidePath(
+      mounted.ledgerEntries,
+      Platform.OS === 'ios' ? 'torn-down' : 'kept-alive'
+    );
+
+    // The environment moves while it is hidden: every ledger entry is re-keyed and
+    // marked inexact so that its next report is a correction (`invalidateEnvironment`,
+    // review S2). An instance with no entry is not in that walk at all — the second way
+    // round 1 lost a correction, and the one no later re-measure repairs.
+    nitroUiCore.invalidateSizingEnvironment();
+    await settle(300);
+    expect(stats().environmentEpoch).toBe(epoch + 1);
+
+    await rerender(reShownSwitch(false, TEST_WIDTH));
+    const box = await waitForBoxWidth(
+      'reshown',
+      TEST_WIDTH,
+      'the control after it was shown again, in the new environment'
+    );
+    const d = delta(mounted, stats());
+    console.log(
+      `  hide ${hidePath}; re-show after an environment change ` +
+        `box=${describeBox(box)} corrections=${String(d.corrections)}`
+    );
+    expect(boxMatches(box, wideBox)).toBe(true);
+    expect(d.corrections).toBe(1);
+
+    unmount();
+    await settle(600);
+    expect(stats().ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries);
+    expect(stats().registryEntries).toBeLessThanOrEqual(before.registryEntries);
   });
 
   it('never lets a pre-warmed size outlive the control that contradicts it', async () => {
@@ -1740,8 +1984,24 @@ describe('Sizing · intrinsic (T11)', () => {
     perInstance: number;
     corrections: number;
     confirmed: number;
+    /**
+     * Layouts the engine answered, and reports it saw. Both are per *call*, not per
+     * instance, which is what makes them readable next to `confirmed` — see the note on
+     * the assertion that uses them.
+     */
+    measurements: number;
+    queued: number;
+    dropped: number;
     flushes: number;
     maxFlushMs: number;
+    /** What was in the engine when the batch's counters were read. */
+    ledgerEntries: number;
+    registryEntries: number;
+    /**
+     * Instances mounted in this process that are not in this batch — the reason a
+     * global counter can legitimately exceed `count`, and the number that says so.
+     */
+    otherInstancesMounted: number;
   };
 
   /**
@@ -1770,7 +2030,17 @@ describe('Sizing · intrinsic (T11)', () => {
     }
     const before = stats();
     const { mountedIn, unmount } = await mountMany(count, prefix);
-    const d = delta(before, stats());
+    /**
+     * Read the counters before unmounting, and read the totals as well as the deltas.
+     *
+     * The totals matter because a global counter can only be compared against a global
+     * total: if the process holds more instances than this batch mounted, then `count`
+     * and `confirmed` are not the same quantity. That is the measurement which decides
+     * whether a `confirmed` above `count` double-counts these controls or correctly
+     * counts someone else's reports (see the assertion that reads it).
+     */
+    const after = stats();
+    const d = delta(before, after);
     unmount();
     return {
       count,
@@ -1779,9 +2049,37 @@ describe('Sizing · intrinsic (T11)', () => {
       perInstance: mountedIn / count,
       corrections: d.corrections,
       confirmed: d.confirmed,
+      measurements: d.measurements,
+      queued: d.queued,
+      dropped: d.dropped,
       flushes: d.flushes,
       maxFlushMs: d.maxFlushMs,
+      ledgerEntries: after.ledgerEntries,
+      registryEntries: after.registryEntries,
+      otherInstancesMounted: after.registryEntries - count,
     } satisfies BenchRow;
+  }
+
+  /**
+   * Report one batch's counters, with the extra numbers that make a counter readable.
+   *
+   * A CI run of this test went red on `confirmed=74` for a batch of 50, and the log
+   * line had nothing in it that could say why: `confirmed` is a *report* counter, so
+   * the number of instances is not its upper bound, and the only way to tell a
+   * legitimate extra report from a double-count is to see the reports and the mounted
+   * instances beside it. That diagnosis needed a local rebuild with a probe in it,
+   * which is the thing a log line should spare everyone.
+   */
+  function logBenchRow(row: BenchRow): void {
+    console.log(
+      `bench: ${row.guess} n=${row.count} ` +
+        `${row.mountedIn.toFixed(1)}ms (${row.perInstance.toFixed(2)}ms each) ` +
+        `corrections=${row.corrections} confirmed=${row.confirmed} ` +
+        `flushes=${row.flushes} maxFlushMs=${row.maxFlushMs.toFixed(3)} · ` +
+        `measures=${row.measurements} queued=${row.queued} dropped=${row.dropped} · ` +
+        `registry=${row.registryEntries} (this batch ${row.count}, ` +
+        `others still mounted ${row.otherInstancesMounted}) ledger=${row.ledgerEntries}`
+    );
   }
 
   it('mounts the same batch from every starting guess, at the right size', async () => {
@@ -1802,13 +2100,7 @@ describe('Sizing · intrinsic (T11)', () => {
       }
     }
     for (const row of rows) {
-      console.log(
-        `bench: ${row.guess} n=${row.count} ` +
-          `${row.mountedIn.toFixed(1)}ms (${row.perInstance.toFixed(2)}ms each) ` +
-          `corrections=${row.corrections} confirmed=${row.confirmed} ` +
-          `flushes=${row.flushes} ` +
-          `maxFlushMs=${row.maxFlushMs.toFixed(3)}`
-      );
+      logBenchRow(row);
     }
     for (const count of [1, 50]) {
       for (const guess of guesses) {
@@ -1817,8 +2109,41 @@ describe('Sizing · intrinsic (T11)', () => {
         )!;
         // A guess that agrees with the control costs nothing to confirm; a wrong
         // one costs exactly one update per instance, and no more.
+        //
+        // `corrections` is the assertion with teeth, and it stays exact: a state
+        // update is the expensive thing, and one per instance is the promise.
         expect(row.corrections).toBe(guess === 'wrongGuess' ? count : 0);
-        expect(row.confirmed).toBe(guess === 'wrongGuess' ? 0 : count);
+        if (guess === 'wrongGuess') {
+          // A wrong guess corrects; it does not also confirm. A batch that did
+          // both is pushing something twice that `corrections` alone would not
+          // show, so this half stays exact.
+          expect(row.confirmed).toBe(0);
+          continue;
+        }
+        // An agreeing guess owes at least one free confirmation per instance —
+        // the direction that catches a control left unable to answer for its own
+        // size, which is what every other case in this file is about.
+        //
+        // It used to be `toBe(count)`, and CI's `confirmed=74` for 50 was not the
+        // engine over-confirming. `reportsConfirmed` counts *reports*, not
+        // instances, and reports are not bounded by the instance count:
+        //  - a host that re-measures and re-reports the same size confirms again
+        //    (proved natively: one instance, three measure+report cycles, three
+        //    confirmations, zero corrections), and a Compose host legitimately
+        //    measures more than once per mount — this batch reads `measures=100`
+        //    for 50 instances on Android; and
+        //  - `seedGuess` bumps the environment epoch, which marks *every* mounted
+        //    row of this configuration inexact, so a Switch another suite left
+        //    mounted is confirmed by this batch's flush as well. A probe read
+        //    `registry=7` before a batch, from this file's own earlier tests.
+        // Either way an extra confirmation is a report that cost no commit, which
+        // is the outcome this rule wants. So the ceiling is deliberately not
+        // asserted: any ceiling I would write is a guess at this process's
+        // population and its layout passes, and a number fitted to the last run
+        // is a red waiting for the next one. `logBenchRow` carries the measures,
+        // the reports and the registry, so a count that moves can be read from
+        // the log rather than re-diagnosed with a local rebuild.
+        expect(row.confirmed).toBeGreaterThanOrEqual(count);
         await expectTimingBudget({
           label: `bench: mount a batch of ${String(count)}`,
           measuredMs: row.mountedIn,

@@ -102,15 +102,18 @@ behind either way.
   asks for at that width (a graphical calendar's own width is fixed at 320 pt so a day
   cell stays a touch target, and the popover is not in the React Native layout at all).
 - Declared fallbacks (the D17 first-frame size for a cold configuration, registered at
-  startup by `NitroUiDeclaredFallbacks`): **103 × 36.33 pt** on iOS, **131 × 48 dp** on
+  startup by `NitroUiDeclaredFallbacks`): **107 × 36.33 pt** on iOS, **131 × 48 dp** on
   Android — the `compact` `date` field, which is the default configuration and the one a
   cold mount is most likely to be. Both are the size the control measures on the gate
-  device (the harness logs `field=103.00x36.33` / the Android box is 48 dp tall because
-  Material 3 puts a 48 dp interactive minimum under a 40 dp outline), so a cold mount is
-  laid out at its own size and pays no correction. The width is locale-dependent — a
-  locale whose date format is wider costs that configuration's first instance one
-  horizontal correction. `prewarm` cannot help here: it seeds only a component's
-  empty configuration, and a DatePicker's key always names its variant and mode.
+  device in the locale the harness pins — `en_US` on iOS (`xcrun simctl launch
+    -AppleLocale en_US`), the emulator's own default on Android — and the harness logs
+  `field=107.00x36.33` / the Android box is 48 dp tall because Material 3 puts a 48 dp
+  interactive minimum under a 40 dp outline. So a cold mount is laid out at its own size
+  and pays no correction. The width is locale-dependent: the same field is 103.00 under
+  `en_PT`, and a locale whose date format differs from the pinned one costs that
+  configuration's first instance one horizontal correction. `prewarm` cannot help here:
+  it seeds only a component's empty configuration, and a DatePicker's key always names
+  its variant and mode.
 - Because the width never comes from the value, a value change is a props-only turn: no
   re-measure, no correction. Changing `mode` or `variant` does re-measure (different
   key, and `variant` also moves the sizing policy), and that costs the D17 one frame.

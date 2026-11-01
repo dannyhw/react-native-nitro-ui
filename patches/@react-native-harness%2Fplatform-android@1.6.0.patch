@@ -1,8 +1,8 @@
 diff --git a/dist/emulator-startup.js b/dist/emulator-startup.js
-index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c05471fe53fa4 100644
+index 33621b6ae4025988e08d0618c27ccf7490341d61..b4683c8bf6cb1e469367ccd8574b17c72725f489 100644
 --- a/dist/emulator-startup.js
 +++ b/dist/emulator-startup.js
-@@ -26,17 +26,67 @@ export const getEmulatorStartupArgs = (name, mode) => {
+@@ -26,17 +26,80 @@ export const getEmulatorStartupArgs = (name, mode) => {
          : mode === 'snapshot-reuse'
              ? ['-no-snapshot-save']
              : ['-no-snapshot-load', '-no-snapshot-save'];
@@ -17,20 +17,27 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c0547
 -export const isAccelerationUsable = (accelCheckOutput) => {
 -    return accelCheckOutput.includes('is installed and usable');
 +    // nitro-ui patch: boot on the console port the caller was assigned, on the
-+    // GPU this repo's launch configuration names. Several tasks share one
-+    // machine, each with its own AVD, its own private adb server and a device
-+    // the person owns that must never be used. Without `-port` the emulator
-+    // takes the lowest free console port, so a leased AVD can land on a serial
-+    // another task was told not to touch, and the serial the lease exported
++    // GPU this machine can actually honour. Several tasks share one machine,
++    // each with its own AVD, its own private adb server and a device the person
++    // owns that must never be used. Without `-port` the emulator takes the
++    // lowest free console port, so a leased AVD can land on a serial another
++    // task was told not to touch, and the serial the lease exported
 +    // (`emulator-5574`) is not the one that exists. When EMULATOR_PORT is set
-+    // the emulator either gets that port or fails to start - which is the
-+    // answer a lease needs; a port that cannot be a console port at all is a
-+    // mistake in the environment, and dropping `-port` there would boot the AVD
-+    // on any free serial, which is the very thing this patch prevents. The GPU
-+    // mode is `host` rather than upstream's `swiftshader_indirect`: software
-+    // rendering is most of why the Android harness costs three times iOS. Set
-+    // NITRO_UI_EMULATOR_GPU to override for one shell (an A/B run, or a bench
-+    // host pinning its baseline's mode).
++    // the emulator either gets that port or fails to start - which is the answer
++    // a lease needs; a port that cannot be a console port at all is a mistake in
++    // the environment, and dropping `-port` there would boot the AVD on any free
++    // serial, which is the very thing this patch prevents.
++    //
++    // The GPU mode is the other half of this block, and it is why the repo
++    // patched it at all: upstream's `swiftshader_indirect` renders on the CPU,
++    // which is most of why the Android harness cost three times iOS (X11). `host`
++    // is the fix on a machine with a GPU and something to draw into - and the
++    // failure mode when it has neither is not an error, it is an emulator that
++    // never finishes booting (F8: both hosted Android runs, 900 s, cache miss and
++    // cache hit). So the rule is machine-aware, and it is one rule: the text
++    // below is rendered from `scripts/emulator-launch.mjs`, whose
++    // `emulatorGpuModeForHost` is the Node-side form and the local that follows
++    // is its twin.
 +    // Drop this patch once react-native-harness accepts a port and a GPU mode.
 +    //
 +    // nitro-ui: the block below is rendered verbatim by
@@ -47,7 +54,13 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c0547
 +        }
 +        nitroUiPortArgs = ['-port', nitroUiPort];
 +    }
-+    const nitroUiGpu = (process.env.NITRO_UI_EMULATOR_GPU ?? '').trim() || 'host';
++    const nitroUiGpu = (function nitroUiGpuMode() {
++        const override = (process.env['NITRO_UI_EMULATOR_GPU'] ?? '').trim();
++        if (override !== '') return override;
++        if (process.platform === 'darwin') return 'host';
++        const displayServer = ['DISPLAY', 'WAYLAND_DISPLAY'].some((name) => (process.env[name] ?? '').trim() !== '');
++        return displayServer ? 'host' : 'swiftshader_indirect';
++      })();
 +    return [`@${name}`, ...nitroUiPortArgs, ...modeArgs, '-no-window', '-gpu', nitroUiGpu, '-noaudio', '-no-boot-anim', '-no-metrics'];
  };
 +    /**
@@ -80,7 +93,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c0547
  /**
   * Runs `emulator -accel-check` and logs a non-fatal warning when hardware
   * acceleration (KVM/HVF) appears unavailable, in which case the emulator
-@@ -46,6 +96,7 @@ export const isAccelerationUsable = (accelCheckOutput) => {
+@@ -46,6 +109,7 @@ export const isAccelerationUsable = (accelCheckOutput) => {
   */
  export const warnIfEmulatorAccelerationUnavailable = async () => {
      let combinedOutput;
@@ -88,7 +101,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c0547
      try {
          const emulatorBinaryPath = getEmulatorBinaryPath();
          const { stdout, stderr } = await spawn(emulatorBinaryPath, [
-@@ -59,6 +110,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+@@ -59,6 +123,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
              // `-accel-check` reports that acceleration is unavailable, so treat
              // its output as a normal (non-fatal) result rather than swallowing it.
              combinedOutput = `${error.stdout}\n${error.stderr}`;
@@ -96,7 +109,7 @@ index 33621b6ae4025988e08d0618c27ccf7490341d61..67211db0963b63e147b45c95427c0547
          }
          else {
              // Failed to even run the check (e.g. binary missing). This must never
-@@ -67,7 +119,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
+@@ -67,7 +132,7 @@ export const warnIfEmulatorAccelerationUnavailable = async () => {
              return;
          }
      }

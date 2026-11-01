@@ -305,7 +305,36 @@ namespace margelo::nitro::nitroui {
     // Overwrite: after our own push the family has a new `State` object, and the
     // platform calls this again with it from the resulting `updateState`.
     const std::lock_guard<std::shared_mutex> lock(mutex_);
-    registry_[instanceId] = BoundInstance{componentHash, push, state};
+    // Binding is the proof of life that `measure`'s forgotten-id guard needs: an
+    // id that reaches this line has a `State` in the shadow tree, whatever it was
+    // doing in an earlier mount. Recycle is the case that makes the order matter —
+    // the *same native view* is re-mounted, and if its new props happen to carry an
+    // id the engine finished, `updateState:oldState:` binds it here.
+    clearForgottenLocked(instanceId);
+    // The layout of a re-shown view ran before this line and is held, not filed;
+    // it belongs to the instance being bound, and `report` cannot be answered
+    // without it. Claiming here is what makes a hide/show lose nothing.
+    const bool claimedHold = claimLateFilingLocked(instanceId);
+    // And this row is no longer owed a mount window: it has its instance.
+    waitingForBind_.erase(instanceId);
+    /**
+     * A bind that found nothing to claim, and whose entry this engine is on record
+     * having thrown away, is a mount that arrived after both windows closed — the
+     * unbound row's second plus the hold's. That is not hypothetical on a saturated
+     * runner (F8 measured load1 380 on 3 cores), and its cost is asymmetric in the
+     * usual way: the instance is live and correctable forever, but it has no row, so
+     * the report that is on its way is dropped at `report`'s first line and the
+     * control sits at the size a *guess* laid it out at.
+     *
+     * What is owed is a fresh measure, not a resurrection: the entry is gone, and
+     * inventing one here would mean filing a size for a configuration `report` never
+     * named. So the instance is marked as owing itself a re-ask, which is the same
+     * FIX2 channel a corrected instance uses — `shouldNewRevisionDirtyMeasurement`
+     * asks `requiresFreshMeasure`, and the layout that follows files the row that
+     * `report` needs. See {@link BoundInstance::owesFreshMeasure}.
+     */
+    const bool owedASecondLook = !claimedHold && consumeFilingAbandonedLocked(instanceId);
+    registry_[instanceId] = BoundInstance{componentHash, push, state, owedASecondLook};
   }
 
   void NitroUiSizingEngine::forget(int64_t instanceId) {
@@ -316,19 +345,284 @@ namespace margelo::nitro::nitroui {
     forgetLocked(instanceId);
   }
 
+  void NitroUiSizingEngine::stageLateFilingLocked(int64_t instanceId, const LedgerEntry& entry) {
+    /**
+     * The queue holds one slot per id currently on hold while it holds it, in staged
+     * order; a slot whose entry has gone (claimed, or forgotten) is left behind and
+     * dropped by the prune rather than chased, because removing an arbitrary id from a
+     * deque is a scan and `forget` runs on every dropped view.
+     *
+     * At capacity, the *window* is closed first and the ceiling only then takes a slot.
+     * The order is the whole fix for the cliff F8b found: a commit that re-shows three
+     * hundred hidden controls stages three hundred holds inside the same millisecond,
+     * and evicting the oldest for being numerous throws away a correction that was
+     * still owed its window - for a control that had done nothing wrong but arrive with
+     * company. Nothing in-window is ever evicted while there is an expired entry to
+     * take instead, so the working bound is the rate of orphans over one second, which
+     * is what the table was sized for. See {@link kLateFilingCapacity}.
+     */
+    if (lateFilings_.find(instanceId) == lateFilings_.end()) {
+      if (lateFilingQueue_.size() >= kLateFilingCapacity) {
+        // The cheap half: everything at the front whose bind has already missed the
+        // window. One compare per entry it frees, and it stops at the first hold that
+        // is still in time.
+        pruneLateFilingsLocked();
+      }
+      while (lateFilingQueue_.size() >= kLateFilingCapacity) {
+        /**
+         * The memory backstop, and the only place a hold is given up while it is still
+         * in time. Reaching it means more than `kLateFilingCapacity` orphans staged in
+         * under a second - far past any commit this project has measured - and what it
+         * costs is that one control keeps the size it was laid out at instead of the
+         * correction it was owed. Bounded, and never a leak: the entry is gone either
+         * way, and the ledger never saw it. Recorded as abandoned, the same cost the
+         * window's own expiry pays.
+         */
+        const int64_t oldest = lateFilingQueue_.front();
+        lateFilingQueue_.pop_front();
+        if (lateFilings_.erase(oldest) > 0) {
+          // Same marking the window's own expiry makes, for the same reason: this is
+          // an entry that can no longer be claimed, and a bind that turns up later is
+          // owed the second look rather than a silent nothing.
+          markFilingAbandonedLocked(oldest);
+        }
+      }
+      lateFilingQueue_.push_back(instanceId);
+    }
+    lateFilings_[instanceId] = HeldFiling{entry, NitroUiClock::nowNs()};
+    // `measure` added this instance to the needs-correction set for the row it
+    // just wrote, and that row is leaving the ledger. The set is walked for
+    // *bound* instances, so an id held here must not sit in it; `claim` puts it
+    // back if the instance turns out to be real.
+    if (entry.key && !entry.exact) {
+      removeNeedsCorrectionLocked(entry.key, instanceId);
+    }
+  }
+
+  void NitroUiSizingEngine::pruneLateFilingsLocked() {
+    /**
+     * Reclaim what can no longer be saved, oldest staged first.
+     *
+     * An orphan's `forget` has already run by the time its late layout arrives
+     * (`onDropView` is what ended the view), so `forget` cannot be its reclaimer,
+     * and the registry sweep cannot find it either — a held entry has no registry
+     * row by definition. Something has to take it back, and the queue is staged
+     * order, so the front is always the hold with the least chance left.
+     *
+     * Age is the rule, and the alternative — an id horizon — is wrong in a way
+     * that is easy to miss: a re-shown view keeps the id it was minted at *React*
+     * mount time, which for a control that was hidden when it mounted can be
+     * thousands of ids in the past. Prune on id arithmetic and you drop precisely
+     * the holds that save re-shown views, i.e. you reintroduce the bug this fix
+     * exists to cure, quietly, and only for long-lived controls.
+     *
+     * A slot whose id has been claimed or forgotten carries no entry and is
+     * dropped on sight, so the queue measures holds rather than history.
+     */
+    const int64_t oldestAllowed = NitroUiClock::nowNs() - kLateFilingGraceNs;
+    while (!lateFilingQueue_.empty()) {
+      const int64_t instanceId = lateFilingQueue_.front();
+      auto held = lateFilings_.find(instanceId);
+      if (held == lateFilings_.end()) {
+        lateFilingQueue_.pop_front();
+        continue;
+      }
+      if (held->second.stagedAtNs > oldestAllowed) {
+        // The front is the oldest hold and it is still in its window, so
+        // everything behind it is too.
+        break;
+      }
+      lateFilings_.erase(held);
+      lateFilingQueue_.pop_front();
+      // This is the abandonment a late bind is paid for: the entry is gone and
+      // nothing else can bring it back, so if that bind does turn up, the instance
+      // has to be told it owes itself a second look.
+      markFilingAbandonedLocked(instanceId);
+    }
+  }
+
+  void NitroUiSizingEngine::markFilingAbandonedLocked(int64_t instanceId) {
+    // Direct-mapped by the low bits, for the same reason and with the same exactness as
+    // `rememberForgottenLocked`: ids are monotonic, so a slot answers for its own id and
+    // no other. See {@link abandonedFilings_}.
+    abandonedFilings_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
+  }
+
+  bool NitroUiSizingEngine::consumeFilingAbandonedLocked(int64_t instanceId) {
+    int64_t& slot = abandonedFilings_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)];
+    if (slot != instanceId) {
+      return false;
+    }
+    slot = NitroUiSizing::NO_INSTANCE;
+    return true;
+  }
+
+  void NitroUiSizingEngine::pruneUnboundFilingsLocked() {
+    /**
+     * Close the mount window on rows whose bind never came — by *demoting* them, not
+     * deleting them.
+     *
+     * A demotion is exactly what a late layout of a finished id already gets: the row
+     * leaves `ledger_`, so the leak stops, and lands in the held table, where a bind
+     * that arrives late can still claim it back. Reusing that machinery is also why this
+     * is safe: `stageLateFilingLocked` takes the row out of the needs-correction set, the
+     * held table is bounded by its own capacity, and its own prune is what finally drops
+     * a row nobody claims.
+     *
+     * Deleting the row instead would be one line shorter and wrong. "Not bound yet" is
+     * not evidence of absence — layout runs before the mount transaction binds, which is
+     * the ordering `measure` exists to survive (review S7) — and a runner saturated
+     * enough to take longer than the window between a layout and its bind would lose that
+     * control's correction for the life of its mount. Losing a correction is the failure
+     * this file exists to fix, so the window hands the row to a place where it can still
+     * come home.
+     *
+     * The id is marked forgotten as well, so a further layout for it is held rather than
+     * filed: one row per abandoned mount, not one per layout after it.
+     *
+     * Age is the rule, and the queue is filed order, so the front is the row with the
+     * least chance left; a slot for an id that has since bound is dropped on sight rather
+     * than chased (see {@link unboundQueue_}).
+     */
+    const int64_t oldestAllowed = NitroUiClock::nowNs() - kLateFilingGraceNs;
+    while (!unboundQueue_.empty()) {
+      const UnboundFiling filing = unboundQueue_.front();
+      if (filing.filedAtNs > oldestAllowed) {
+        break;
+      }
+      unboundQueue_.pop_front();
+      if (waitingForBind_.erase(filing.instanceId) == 0) {
+        // Bound, or already demoted through the late-layout door: the slot is stale.
+        continue;
+      }
+      demoteUnboundFilingLocked(filing.instanceId);
+    }
+  }
+
+  void NitroUiSizingEngine::demoteUnboundFilingLocked(int64_t instanceId) {
+    auto ledger = ledger_.find(instanceId);
+    if (ledger != ledger_.end()) {
+      stageLateFilingLocked(instanceId, ledger->second);
+      ledger_.erase(ledger);
+    }
+    rememberForgottenLocked(instanceId);
+  }
+
+  void NitroUiSizingEngine::fileAwaitingBindLocked(int64_t instanceId) {
+    if (!waitingForBind_.insert(instanceId).second) {
+      // Already owed a window, and its original filing time is the one to age from.
+      return;
+    }
+    /**
+     * At capacity, the oldest waiting row gives up its slot before the new row takes
+     * one, so {@link kUnboundFilingCapacity} is the number that can be waiting at any
+     * moment, the row being filed included.
+     *
+     * Overflow is not fatal and not what the constant is for: a long list's first commit
+     * legitimately has one row per view in it, laid out before its mount transaction
+     * binds any of them. Those overflow rows go the same way the window sends them — to
+     * the held table, where the bind that follows claims them back — so the valve costs
+     * a later correction at worst, never a lost one.
+     */
+    while (unboundQueue_.size() >= kUnboundFilingCapacity) {
+      const int64_t oldest = unboundQueue_.front().instanceId;
+      unboundQueue_.pop_front();
+      if (waitingForBind_.erase(oldest) > 0) {
+        demoteUnboundFilingLocked(oldest);
+      }
+    }
+    unboundQueue_.push_back(UnboundFiling{instanceId, NitroUiClock::nowNs()});
+  }
+
+  bool NitroUiSizingEngine::claimLateFilingLocked(int64_t instanceId) {
+    auto held = lateFilings_.find(instanceId);
+    if (held == lateFilings_.end()) {
+      return false;
+    }
+    LedgerEntry& ledger = ledger_[instanceId];
+    ledger = held->second.entry;
+    lateFilings_.erase(held);
+    // Its queue slot is left behind on purpose (see `lateFilingQueue_`): the prune
+    // drops a slot with no entry, and `forget` would have to scan to remove one.
+    // The proof of life is what the hold was waiting for, so the entry is live
+    // bookkeeping again and the correction it is owed is owed by a real instance.
+    if (ledger.key && !ledger.exact) {
+      addNeedsCorrectionLocked(ledger.key, instanceId);
+    }
+    return true;
+  }
+
+  size_t NitroUiSizingEngine::lateFilingCount() const {
+    const std::shared_lock<std::shared_mutex> lock(mutex_);
+    return lateFilings_.size();
+  }
+
+  size_t NitroUiSizingEngine::unboundFilingCount() const {
+    const std::shared_lock<std::shared_mutex> lock(mutex_);
+    return waitingForBind_.size();
+  }
+
+  void NitroUiSizingEngine::rememberForgottenLocked(int64_t instanceId) {
+    // Direct-mapped by the low bits, which is exact for a monotonic id sequence:
+    // see the `forgotten_` declaration for why a false positive is impossible.
+    forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
+  }
+
+  void NitroUiSizingEngine::clearForgottenLocked(int64_t instanceId) {
+    int64_t& slot = forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)];
+    if (slot == instanceId) {
+      slot = NitroUiSizing::NO_INSTANCE;
+    }
+  }
+
+  bool NitroUiSizingEngine::isForgottenLocked(int64_t instanceId) const {
+    return forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] == instanceId;
+  }
+
   void NitroUiSizingEngine::forgetLocked(int64_t instanceId) {
+    // Before anything else, and even for an id with nothing to erase: this is the
+    // moment the id stops being a live instance, and the only thing that makes a
+    // layout arriving after it harmless. See `forgotten_`.
+    rememberForgottenLocked(instanceId);
     registry_.erase(instanceId);
     auto ledger = ledger_.find(instanceId);
     if (ledger != ledger_.end() && ledger->second.key) {
       removeNeedsCorrectionLocked(ledger->second.key, instanceId);
     }
     ledger_.erase(instanceId);
+    // And whatever a late layout of this id left on hold: it belongs to a revision
+    // that is gone, and this id is finished again.
+    // (Its queue slot is left behind; the prune drops a slot that has no entry.)
+    lateFilings_.erase(instanceId);
+    // Same for a filing we gave up on: the debt behind that mark was "you bound with
+    // nothing, so re-ask", and an id that is finished again has no mount to pay it.
+    // Clearing here is also what makes the ring safe to reuse an id over — the only
+    // situation where a slot could be read against the wrong mount is one where ids are
+    // minted again, which is a test's id space, not `nextInstanceId()`'s.
+    consumeFilingAbandonedLocked(instanceId);
     // A correction on its way to an instance that is gone must not be applied
     // later, when some other code may have taken over the id (`unboundTries`
     // aside, the ledger check in `applyReports` is the second guard).
     pending_.erase(std::remove_if(pending_.begin(), pending_.end(),
                                   [&](const Report& report) { return report.instanceId == instanceId; }),
                    pending_.end());
+    // And this id is finished whether or not its row was still owed a mount window, so
+    // the prune must not come back later and "reclaim" an id it was told about twice.
+    // (Its queue slot is left behind; the prune drops a slot whose id is not waiting.)
+    waitingForBind_.erase(instanceId);
+    /**
+     * Re-anchor the sweep's gate to the registry's new size.
+     *
+     * The gate means "the registry has grown by a stride since the last walk", and the
+     * walk's cost is proportional to the registry, so the comparison is only honest
+     * against the size it has now. Without this line, an app that mounts a few thousand
+     * views and then drops them all — closing a screen, a list whose data is replaced —
+     * leaves the gate far above the registry, and the next sweep waits for another full
+     * stride *on top of nothing*: the reclaimer for a `State` that died without a
+     * `forget` goes quiet for as long as it takes to mount that many more views. The
+     * clamp is one compare on a path that already erases from four containers.
+     */
+    nextRegistrySweepAt_ = std::min(nextRegistrySweepAt_, registry_.size() + kRegistrySweepStride);
   }
 
   void NitroUiSizingEngine::addNeedsCorrectionLocked(const NitroUiSizeKey& key, int64_t instanceId) {
@@ -383,6 +677,16 @@ namespace margelo::nitro::nitroui {
 
     const std::lock_guard<std::shared_mutex> lock(mutex_);
     stats_.measurements += 1;
+    // Runs here rather than only under `filedLate` so the reclaim does not need a
+    // late filing to trigger it: a trickle of orphans, one per scroll, is the
+    // workload that grows state and the one that would never reach a capacity. The
+    // call is one branch when nothing is held.
+    pruneLateFilingsLocked();
+    // Same argument, for rows waiting on a bind: the leak this reclaims is one row per
+    // abandoned mount, and an app that abandons one every scroll needs the walk running
+    // on layouts that have nothing to do with the abandoned id. One branch when nothing
+    // is waiting.
+    pruneUnboundFilingsLocked();
     const NitroUiSizeKey key = keyFor(componentName, sizingKey, environmentEpoch_);
 
     NitroUiMeasuredSize result{};
@@ -424,10 +728,39 @@ namespace margelo::nitro::nitroui {
       // reported later finds this instance and corrects it.
     }
 
+    /**
+     * A layout for an id the engine has finished gets its entry, and a place in
+     * the held set that keeps it from becoming a leak.
+     *
+     * Round 1 refused to file here, and that was wrong: an id is *not* new per
+     * native mount. `useSizingId` mints one per React mount, and iOS Fabric
+     * creates no native view for a `display: none` node — so hiding a control runs
+     * `drop()` -> `forget(X)` while the React mount, and its id, survive. Showing
+     * it again lays the new view out *before* mounting it: this branch refused the
+     * layout, `registerInstance` then cleared the mark, and the instance was bound
+     * with no ledger entry. `report` returns at its first line without one, and
+     * `invalidateEnvironment` re-keys `ledger_`, so the control sat at the size it
+     * was laid out at for the rest of its life — one lost correction per hide/show,
+     * and `mode`/`variant` changes with it.
+     *
+     * So the entry is filed, but *held* rather than in `ledger_`: `ledger_` counts
+     * live instances, and an id that has been through `forget` is not one until it
+     * binds again. Only `registerInstance` claims a hold, because it is the one call
+     * that means "this id has a `State` in the shadow tree"; a hold that no bind comes
+     * for is reclaimed by the prune {@link pruneLateFilingsLocked}, whose bound is the
+     * window — a bind that arrives after it is charged a fresh measure rather than left
+     * with nothing. See {@link lateFilings_}.
+     */
+    const bool filedLate = isForgottenLocked(instanceId);
+
     // Record what this instance laid out with, and whether that is the answer we
     // already believe. `exact` instances never get a state push, which is what
     // makes a pre-warmed mount cost zero extra commits.
     LedgerEntry& ledger = ledger_[instanceId];
+    // Does this instance already have a row? A late filing for an id whose entry
+    // `forget` erased always creates one, and that is the row the hold below
+    // takes back out of the ledger.
+    const bool freshRow = !ledger.key && !ledger.hasMeasured;
     if (ledger.key) {
       removeNeedsCorrectionLocked(ledger.key, instanceId);
     }
@@ -476,6 +809,41 @@ namespace margelo::nitro::nitroui {
     if (!exact) {
       addNeedsCorrectionLocked(key, instanceId);
     }
+    if (filedLate) {
+      stageLateFilingLocked(instanceId, ledger);
+      if (freshRow) {
+        // The row `ledger` refers to was created by this layout, and the id is
+        // finished: hold the entry off-ledger and take the row back out, so
+        // `ledger_` keeps meaning "an instance the engine knows about".
+        ledger_.erase(instanceId);
+      }
+      return result;
+    }
+    /**
+     * A row filed for an id that is not bound yet is owed a mount window (see
+     * {@link UnboundFiling}).
+     *
+     * It has to be *after* the filing rather than a condition on it, because "not in
+     * `registry_`" is the normal state of an instance whose commit is in flight — that
+     * is the ordering `measure` exists to survive — so the row is kept and only *time*
+     * decides whether it was filed for something that is coming. The check is one hash
+     * lookup on a path that already did two, and a bound instance never enters it, so
+     * the cost of the rule is on the layout of a view that has not mounted yet.
+     */
+    /**
+     * A row that did not exist and now does, for an id that was bound with nothing to
+     * its name, is the debt being paid: this is the re-ask {@link
+     * BoundInstance::owesFreshMeasure} existed to cause, and leaving the flag set would
+     * put the instance on the paying path for the rest of its mount.
+     */
+    if (freshRow) {
+      const auto bound = registry_.find(instanceId);
+      if (bound == registry_.end()) {
+        fileAwaitingBindLocked(instanceId);
+      } else {
+        bound->second.owesFreshMeasure = false;
+      }
+    }
     return result;
   }
 
@@ -485,7 +853,11 @@ namespace margelo::nitro::nitroui {
     }
     const std::shared_lock<std::shared_mutex> lock(mutex_);
     auto ledger = ledger_.find(instanceId);
-    return ledger != ledger_.end() && ledger->second.answerChanged;
+    if (ledger != ledger_.end() && ledger->second.answerChanged) {
+      return true;
+    }
+    auto instance = registry_.find(instanceId);
+    return instance != registry_.end() && instance->second.owesFreshMeasure;
   }
 
   void NitroUiSizingEngine::setFallback(const char* componentName, float width, float height, uint32_t flags) {
@@ -529,7 +901,9 @@ namespace margelo::nitro::nitroui {
       if (ledger == ledger_.end() || !ledger->second.key) {
         // Nothing ever laid out for this instance, so there is nothing to correct.
         // It gets its ledger entry from the next `measure`, and can report again
-        // then; that is the order a mount actually happens in.
+        // then; that is the order a mount actually happens in. A layout held for a
+        // re-shown view cannot reach here either: the bind claims it as it happens,
+        // and a bound id with a hold is not a state this engine can be in.
         return;
       }
       const NitroUiSizeKey& key = ledger->second.key;
@@ -631,6 +1005,25 @@ namespace margelo::nitro::nitroui {
     std::vector<Report> reports{};
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
+      /**
+       * Both mount windows are closed from here, not only from `measure`.
+       *
+       * A churn of mounts and drops is exactly the workload that *stops* laying out when
+       * it finishes, and CI's rule reads the ledger after the churn has settled — so a
+       * reclaim that needed a further layout would be reporting a leak the engine had
+       * already decided to give up on. On iOS this runs on every run-loop turn, idle
+       * included (the observer fires on `kCFRunLoopBeforeWaiting`), so one abandoned row
+       * costs one turn rather than the silence after the last animation. The call is one
+       * compare when nothing is waiting, which is every turn of a healthy app.
+       *
+       * The held table needs it for the same reason, and needed it before this round:
+       * a hold's other reclaimer is `forget`, and an orphan's `forget` has already run.
+       * With the prune only in `measure`, a churn that stopped left its holds on the
+       * table until the *next* layout came by — correct, but a set the leak rule could
+       * read as a survivor, which is exactly the reading F8 was chasing.
+       */
+      pruneLateFilingsLocked();
+      pruneUnboundFilingsLocked();
       if (pending_.empty()) {
         return false;
       }

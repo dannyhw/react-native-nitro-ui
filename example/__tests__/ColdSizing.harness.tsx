@@ -60,6 +60,7 @@ import {
   Switch,
   type NitroUiSizingTraceEvent,
 } from 'react-native-nitro-ui';
+import { waitForHandle } from './handles';
 
 const SLIDER = 'NitroUiSlider';
 const SWITCH = 'NitroUiSwitch';
@@ -255,6 +256,21 @@ const captureFor =
     handles.set(testId, handle);
   };
 
+/**
+ * The handle for this testID, once the callback has run.
+ *
+ * The four call sites below read through a handle one statement after `render()`
+ * resolved, and a `hybridRef` callback lands on a commit *after* the view exists.
+ * On CI's 3-core runner that difference was visible: two of these tests died as
+ * `Cannot read property 'nuiSizingId' of undefined`, which reads like a product
+ * crash and is a fixture that did not wait (run 41230848294; both passed in the
+ * next dispatch of the same tree). The non-null `!` asserted the thing that was
+ * actually in question, so it is replaced by a wait that names the miss instead.
+ */
+async function handleFor(testId: string): Promise<Handle> {
+  return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
+}
+
 /** Seed a size for a component, then drop the answers so a mount is cold. */
 function declareThenGoCold(
   componentName: string,
@@ -308,7 +324,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
         hybridRef={captureFor('t14-slider')}
       />
     );
-    const handle = handles.get('t14-slider')!;
+    const handle = await handleFor('t14-slider');
     const instanceId = await sizingIdOf(handle);
     const box = await waitForBox('t14-slider');
     const events = await collectEventsFor(instanceId, 'laidOut');
@@ -359,7 +375,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
         hybridRef={captureFor('t14-slider-wrong')}
       />
     );
-    const handle = handles.get('t14-slider-wrong')!;
+    const handle = await handleFor('t14-slider-wrong');
     const instanceId = await sizingIdOf(handle);
     const box = await waitForBox('t14-slider-wrong');
     const events = await collectEventsFor(instanceId, 'corrected');
@@ -408,7 +424,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
         hybridRef={captureFor('t14-switch')}
       />
     );
-    const handle = handles.get('t14-switch')!;
+    const handle = await handleFor('t14-switch');
     const instanceId = await sizingIdOf(handle);
     const box = await waitForBox('t14-switch');
     const events = await collectEventsFor(instanceId, 'laidOut');
@@ -452,7 +468,7 @@ describe('Sizing · declared before the first measure (T14)', () => {
         hybridRef={captureFor('t14-switch-wrong')}
       />
     );
-    const handle = handles.get('t14-switch-wrong')!;
+    const handle = await handleFor('t14-switch-wrong');
     const instanceId = await sizingIdOf(handle);
     const box = await waitForBox('t14-switch-wrong');
     const events = await collectEventsFor(instanceId, 'corrected');
