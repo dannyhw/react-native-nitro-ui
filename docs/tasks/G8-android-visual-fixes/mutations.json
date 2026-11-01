@@ -1,0 +1,72 @@
+{
+  "task": "G8",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 1-6 are the rule's own unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first two rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574.",
+  "mutations": [
+    {
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › gives the list the width its items need, not the trigger's",
+      "kind": "premise: shipped code",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "before": "matchAnchorWidth = false (the fix)",
+      "after": "matchAnchorWidth defaulted by ExposedDropdownMenu (true), i.e. the shipped code before this task",
+      "red": "expect(popupWidth).toBeGreaterThan(triggerWidth) — popup 216 px, trigger 216 px, a 'Move' trigger beside a 'Move into a folder' row"
+    },
+    {
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › keeps Material's 112 dp floor on a list of short items",
+      "kind": "premise: shipped code",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "before": "matchAnchorWidth = false (the fix)",
+      "after": "matchAnchorWidth defaulted by ExposedDropdownMenu (true), i.e. the shipped code before this task",
+      "red": "expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(112) — a two-row list of 'Up'/'Down' measured 65.5 dp"
+    },
+    {
+      "test": "real-input:android · date-picker › the 320 dp inline calendar lays out a whole week",
+      "kind": "premise: shipped code",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt",
+      "before": "CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) { DatePicker(...) }",
+      "after": "DatePicker(...) with no provider, i.e. Material's 48 dp default and the shipped code before this task",
+      "red": "✗ the 320 dp inline calendar lays out a whole week: 7 columns of 126px, 126px, 126px, 126px, 126px, 126px, 20px (narrowest 7.6 dp, Material's floor is 40 dp) — the narrowest column is 7.6 dp, under Material's 40 dp day cell; columns differ by 106 px wide, so they are not sharing the width out evenly"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › refuses a grid that lost its last column rather than only shrinking it",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "  if (grid.columns.length < DAYS_IN_WEEK) {",
+      "after": "  if (false) {",
+      "red": "expect(calendarGridProblems(grid)).toEqual([...]) at scripts/__tests__/real-input-calendar.test.js:178 — the six-column dump reports no problems at all"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › names the clipped calendar the dump showed before the fix",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "export const DAY_CELL_MIN_DP = 40;",
+      "after": "export const DAY_CELL_MIN_DP = 5;",
+      "red": "expect(calendarGridProblems(grid)).toEqual([...]) at scripts/__tests__/real-input-calendar.test.js:165 — the 7.6 dp complaint disappears from the list"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › names the clipped calendar the dump showed before the fix",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "  if (grid.minWidthDp < DAY_CELL_MIN_DP) {",
+      "after": "  if (false) {",
+      "red": "expect(calendarGridProblems(grid)).toEqual([...]) at scripts/__tests__/real-input-calendar.test.js:165 — same assertion, the floor check removed rather than loosened"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › catches a squeeze that never reaches the 40 dp floor",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "const COLUMN_ROUNDING_PX = 2;",
+      "after": "const COLUMN_ROUNDING_PX = 200;",
+      "red": "expect(calendarGridProblems(grid)).toEqual([...]) at scripts/__tests__/real-input-calendar.test.js:193 — the 8 px spread is no longer reported"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › calls a clipped header missing rather than measuring a week of day cells",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "    if (node.clickable === 'true') {",
+      "after": "    if (false) {",
+      "red": "expect(grid).toBeNull() — the day row is returned as the grid (columns[0] = {x1: 22, width: 105, height: 123}), so a calendar whose header is off screen would pass on its day cells"
+    },
+    {
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › refuses a grid that lost its last column rather than only shrinking it",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "const MIN_COLUMNS_TO_BE_A_WEEK = 5;",
+      "after": "const MIN_COLUMNS_TO_BE_A_WEEK = 7;",
+      "red": "expect(calendarGridProblems(grid)) — Received: null: a clipped calendar is reported as 'no calendar here' rather than as broken"
+    }
+  ]
+}
