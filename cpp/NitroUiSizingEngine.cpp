@@ -921,6 +921,18 @@ namespace margelo::nitro::nitroui {
     std::vector<Report> reports{};
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
+      /**
+       * The mount-window reclaim also runs from here, not only from `measure`.
+       *
+       * A churn of mounts and drops is exactly the workload that *stops* laying out when
+       * it finishes, and CI's rule reads the ledger after the churn has settled — so a
+       * reclaim that needed a further layout would be reporting a leak the engine had
+       * already decided to give up on. On iOS this runs on every run-loop turn, idle
+       * included (the observer fires on `kCFRunLoopBeforeWaiting`), so one abandoned row
+       * costs one turn rather than the silence after the last animation. The call is one
+       * compare when nothing is waiting, which is every turn of a healthy app.
+       */
+      pruneUnboundFilingsLocked();
       if (pending_.empty()) {
         return false;
       }
