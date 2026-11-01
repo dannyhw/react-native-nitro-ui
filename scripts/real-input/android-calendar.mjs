@@ -30,9 +30,13 @@
  * cell, which lands unevenly across the row (16 px = 6 dp between the widest and the
  * narrowest) even in a grid that is laid out perfectly. A width rule written against the
  * day cells would therefore call a healthy calendar broken, and a rule loosened enough
- * to tolerate that spread would not see the squeeze it exists to catch: the same dump
- * with the 48 dp default measured header columns `105, 105, 105, 105, 41` in a 240 dp box
- * — the sixth column at 15.6 dp, and the seventh absent from the tree entirely.
+ * to tolerate that spread would not see the squeeze it exists to catch.
+ *
+ * For what a squeeze looks like in the same header row: the same box at **240 dp** — re-measured
+ * on `emulator-5570` with the fix in place — reports *six* columns, `105, 105, 105, 105,
+ * 105, 41`, with the seventh absent from the tree altogether. Five are the 40 dp they
+ * were asked for, the sixth is the 41 px left over (15.6 dp), and Saturday is not there
+ * to be measured at all. That is why the rule counts columns before it weighs them.
  *
  * ## What else in a dump a header row must not be mistaken for
  *
@@ -105,7 +109,7 @@ export function expectedColumnDp(widthDp) {
  *
  * Compose rounds each column's `SpaceEvenly` share to whole pixels, so the same grid can
  * report 105 and 106 across a row. The squeeze this rule exists for differs by tens: the
- * measured 240 dp reading was 105 beside 41.
+ * measured 240 dp reading was 105 px beside 41 px.
  */
 const COLUMN_ROUNDING_PX = 2;
 

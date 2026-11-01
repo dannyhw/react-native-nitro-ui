@@ -248,15 +248,34 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('refuses a grid that lost its last column rather than only shrinking it', () => {
-    // At a 240 dp box Material's own layout dropped the seventh header from the tree
-    // entirely: six 126 px columns and no Saturday at all. A rule that only read the
-    // widths of whatever is there would have been handed six 48 dp columns to praise.
-    const six = headerRow([126, 126, 126, 126, 126, 126]);
-    const grid = measureCalendarGrid(screen(six), BOX, DENSITY);
+    // The real 240 dp dump: `105, 105, 105, 105, 105, 41`, with the seventh header absent
+    // from the tree entirely. Squeeze and missing column in one row, asserted as measured.
+    const grid = measureCalendarGrid(
+      screen(headerRow([105, 105, 105, 105, 105, 41])),
+      BOX,
+      DENSITY
+    );
     expect(grid).not.toBeNull();
+    expect(grid.columns).toHaveLength(6);
     expect(calendarGridProblems(grid)).toEqual([
       'only 6 of 7 weekday columns are laid out',
+      'the narrowest column is 15.6 dp, under the 40 dp touch target this box should ' +
+        'have produced',
+      'columns differ by 64 px wide, so they are not sharing the width out evenly',
     ]);
+    // And once with the width claims silenced: six equal 40 dp columns is a week with a
+    // day missing and nothing else wrong, which only the column count can see. This is
+    // the case a rule that weighed widths alone would have been handed six fine columns
+    // to congratulate.
+    expect(
+      calendarGridProblems(
+        measureCalendarGrid(
+          screen(headerRow([105, 105, 105, 105, 105, 105])),
+          BOX,
+          DENSITY
+        )
+      )
+    ).toEqual(['only 6 of 7 weekday columns are laid out']);
   });
 
   it('catches a squeeze that never reaches the 40 dp floor', () => {
@@ -317,16 +336,16 @@ describe('real-input Android calendar grid', () => {
     // The failure mode the `clickable` filter exists for. A calendar scrolled so its
     // header is clipped keeps naming its day cells, and a week of them looks exactly
     // like a header row structurally: seven boxes, one row, equal heights. Here they are
-    // the real dump's day cells at a 320 dp box — 105 × 123 px each, an even spread — so
-    // a rule that let clickable nodes in would answer "40 dp floor cleared, columns
-    // equal" for a calendar whose header is off screen, which is the pass this check must
-    // never give. With the filter the row is not found at all and the answer is null:
-    // "not on screen", which the caller aborts on.
+    // the real dump's day cells at a 320 dp box — `110, 110, 111, 110, 110, 110, 126` over
+    // a 123 px height, the uneven row the module docs describe — so a rule that let
+    // clickable nodes in would answer either "a squeeze" (the 16 px spread it invented) or
+    // "fine", for a calendar whose header is off screen. With the filter the row is not
+    // found at all and the answer is null: "not on screen", which the caller aborts on.
     const grid = measureCalendarGrid(
       [
         ...calendarChrome(),
         headerCell('Sunday', 0, 0),
-        ...dayRow([105, 105, 105, 105, 105, 105, 105]),
+        ...dayRow([110, 110, 111, 110, 110, 110, 126]),
       ],
       BOX,
       DENSITY
