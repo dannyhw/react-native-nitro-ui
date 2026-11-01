@@ -49,4 +49,19 @@ if (match == null) {
   process.exit(1);
 }
 
-process.stdout.write(`${match[1]}\n`);
+/**
+ * Same precedence as `avd()` in the config above: `ANDROID_AVD`, then `AVD`, then
+ * the constant. Without this the two disagree on any machine that overrides the
+ * name — which is every leased device on this repo's own dev boxes (`lease.mjs`
+ * exports `ANDROID_AVD=nitroui_a`), and any CI job that parameterises it. The
+ * consequence is silent and specific: the harness boots `nitroui_a`, this prints
+ * `nitroui`, and the diagnostics step reports "no AVD directory" for a job that had
+ * a fully working emulator. A name is also allowed to be empty-ish in the
+ * environment (`ANDROID_AVD=''` is what a bad `set -a` source produces), so an
+ * empty override falls through rather than printing an empty line.
+ */
+const override = [process.env.ANDROID_AVD, process.env.AVD].find(
+  (value) => typeof value === 'string' && value.trim() !== ''
+);
+
+process.stdout.write(`${override ?? match[1]}\n`);
