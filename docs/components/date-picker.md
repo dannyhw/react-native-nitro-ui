@@ -106,16 +106,23 @@ behind either way.
   `LocalMinimumInteractiveComponentSize` — 48 dp by default — so the grid wants 360 dp,
   and in a narrower box the columns past the squeeze *lose width* instead of the box
   growing (`Modifier.size` enforces the incoming maximum, and a `fillWidth` control is
-  measured at its box's width, so nothing ever asks for more). The inline calendar
-  therefore asks Material for its **40 dp day cell** rather than 48 dp of interactive
-  padding — the token the cell's own disc is drawn at — and 7 × 40 + 2 × 12 = **304 dp**
-  is what the grid then needs, so the 320 dp box the stories and the README use fits with
-  every column equal. Below 304 dp the calendar still cannot fit and is not made to
-  pretend it did: it comes out clipped at the right, measured at a 240 dp box as six
-  40 dp columns and a 15.6 dp sliver. That is a box too small for its content saying so;
-  give the picker a wider box rather than scaling a touch target down further. The
-  `compact` dialog is untouched by all of this — it is a window of its own, laid out at
-  Material's 360 dp.
+  measured at its box's width, so nothing ever asks for more). So the calendar reads the
+  width it was given: **below 360 dp** it asks Material for its **40 dp day cell** rather
+  than 48 dp of interactive padding — the token the cell's own disc is drawn at — and
+  7 × 40 + 2 × 12 = **304 dp** is what the grid then needs, so the 320 dp box the stories
+  and the README use fits with every column equal. **At 360 dp and above it keeps
+  Material's own 48 dp**, because at that width the grid fits and the default is the
+  right answer. What the narrow case trades is 8 dp of touch-target padding, on the day
+  cells and on the month's previous/next buttons and year toggle alike — they read the
+  same value, so they cannot be held at 48 dp separately. 40 dp is above WCAG 2.2 AA's
+  24 px minimum and below Material's recommended 48 dp: a calendar in a narrow box is
+  smaller to tap than one with room, which is what a box too narrow for the design
+  system costs. Below 304 dp it still cannot fit and is not made to pretend it did: it
+  comes out clipped at the right, measured at a 240 dp box as six 40 dp columns and a
+  15.6 dp sliver. That is a box too small for its content saying so; give the picker a
+  wider box rather than scaling a touch target down further. The `compact` dialog is
+  untouched by all of this — it is a window of its own, laid out at Material's 360 dp,
+  and `real-input:android` measures one narrow and one wide inline calendar on every run.
 - Declared fallbacks (the D17 first-frame size for a cold configuration, registered at
   startup by `NitroUiDeclaredFallbacks`): **107 × 36.33 pt** on iOS, **131 × 48 dp** on
   Android — the `compact` `date` field, which is the default configuration and the one a
