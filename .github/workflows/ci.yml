@@ -256,25 +256,32 @@ jobs:
           NITRO_UI_CCACHE: '0'
         run: node scripts/build-app.mjs --platform android --arch x86_64
 
-      # What the emulator will actually be booted with, printed before the run
-      # rather than reconstructed after it. Both dispatch runs of this job ended the
-      # same way — `The platform did not become ready within 900000ms`, the qemu
-      # process still alive at cleanup (41230848294 on a cold AVD, 41234953779 on a
-      # cached one) — and nothing in that log said which GPU mode, cores or AVD it
-      # had tried. The harness keeps those to itself, so this asks the same
-      # questions of the machine: is KVM there, what does the AVD claim, what does
-      # this repo's patched rule choose.
+      # What this machine can offer an emulator, printed before the run rather than
+      # reconstructed after it. Both dispatch runs of this job ended the same way —
+      # `The platform did not become ready within 900000ms`, the qemu process still
+      # alive at cleanup (41230848294 on a cold AVD, 41234953779 on a cached one) —
+      # and nothing in that log said which GPU mode, cores or AVD it had tried. The
+      # harness keeps those to itself, so this asks the machine what it has: is KVM
+      # there, which accelerator does it resolve to, what does this repo's patched
+      # rule choose.
+      #
+      # What it deliberately does **not** read is the AVD's `config.ini`. The
+      # harness creates or restores the AVD in the step *after* this one, so on a
+      # cache miss `$HOME/.android/avd` is empty here and the line can only print
+      # "no such file" — run 41256853746 printed exactly that, three lines that read
+      # like a misconfigured AVD when it simply did not exist yet. The AVD's own
+      # hardware lines are collected after the run instead, in the diagnostics step,
+      # where they do exist. The directory listing stays: "did the cache restore
+      # anything?" is a real pre-run question.
       - name: Show the emulator configuration this job will boot
         run: |
-          AVD_NAME="$(node -e "const c=(s)=>require('node:fs').readFileSync(s,'utf8').match(/const DEFAULT_AVD = '([^']+)'/)[1]; console.log(c(require('node:fs').readFileSync('example/rn-harness.config.mjs','utf8')))")"
+          AVD_NAME="$(node scripts/ci-avd-name.mjs)"
           echo "avd (from rn-harness.config.mjs): $AVD_NAME"
           echo "nproc: $(nproc)  mem: $(free -g | awk '/^Mem:/{print $2}')GiB  load: $(cut -d' ' -f1-3 /proc/loadavg)"
           echo "kvm: $(ls -l /dev/kvm 2>&1)"
           "$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | sed 's/^/accel: /'
-          echo "--- AVD dir ---"
+          echo "--- AVD dir (empty before the run is normal: the harness creates it next step) ---"
           ls -la "$HOME/.android/avd" 2>&1 | sed 's/^/  /'
-          echo "--- config.ini (hardware lines) ---"
-          grep -E 'hw\.|disk|image\.sys' "$HOME/.android/avd/$AVD_NAME.avd/config.ini" 2>&1 | sed 's/^/  /'
           echo "--- the GPU mode this repo's rule chooses on this machine ---"
           node -e "import('./scripts/emulator-launch.mjs').then((m)=>{console.log('gpu mode:', m.emulatorGpuModeForHost({env: process.env, platform: process.platform})); console.log('DISPLAY:', JSON.stringify(process.env.DISPLAY ?? null), 'WAYLAND_DISPLAY:', JSON.stringify(process.env.WAYLAND_DISPLAY ?? null));})"
 
@@ -305,41 +312,102 @@ jobs:
       # the timeout, so this is the only place the emulator's own side of that
       # quarter hour can be read: qemu's log, logcat's boot progress, and whether
       # KVM was actually usable by the user the job runs as.
+      #
+      # Written so that it always exits 0. Its first version ended with
+      # `tail … emulator-*.log`, and `tail` exits 1 when the glob matched nothing —
+      # so on run 41256853746, whose harness never ran at all, the diagnostics step
+      # that existed to explain a failure reported one of its own, and on a run that
+      # passed it would have turned a green job red. Same reason the upload step
+      # below has to stay reachable: `if: always()`.
       - name: Collect emulator boot diagnostics
         if: always()
         run: |
           set +e
-          DIAG=.harness-diag
+          DIAG=harness-diag
           mkdir -p "$DIAG"
+          # `adb` is on the harness action's PATH, not this step's: run 41256853746's
+          # host.log is eight lines of "adb: command not found", which is the entire
+          # reason to want it resolved rather than assumed.
+          ADB="$(command -v adb 2>/dev/null)"
+          if [ -z "$ADB" ]; then
+            for candidate in "$ANDROID_HOME/platform-tools/adb" "$ANDROID_HOME/emulator/adb" /opt/android-sdk/platform-tools/adb; do
+              if [ -x "$candidate" ]; then ADB="$candidate"; break; fi
+            done
+          fi
           {
             echo "== date =="; date -u
+            echo "== adb =="; echo "${ADB:-not found}"
             echo "== qemu processes =="; pgrep -a qemu || echo none
-            echo "== adb devices =="; adb devices -l
+            [ -n "$ADB" ] && "$ADB" devices -l
             echo "== boot properties =="
-            for p in sys.boot_completed init.svc.zygote init.svc.surfaceflinger; do
-              echo "$p=$(adb -e shell getprop $p 2>&1)"
-            done
-            echo "== dmesg (kvm) =="; dmesg | grep -iE 'kvm|binder' | tail -40
-            echo "== kernel tail =="; dmesg | tail -60
+            if [ -n "$ADB" ]; then
+              for prop in sys.boot_completed init.svc.zygote init.svc.surfaceflinger; do
+                echo "$prop=$("$ADB" -e shell getprop "$prop" 2>&1)"
+              done
+            fi
+            echo "== dmesg (kvm) =="
+            # Needs CAP_SYSLOG, which the job user does not have: plain `dmesg`
+            # printed "read kernel buffer failed: Operation not permitted" twice on
+            # 41256853746. The runners do grant the tool user passwordless sudo.
+            sudo -n dmesg 2>&1 | grep -iE 'kvm|binder' | tail -40
+            echo "== kernel tail =="; sudo -n dmesg 2>&1 | tail -60
           } > "$DIAG/host.log" 2>&1
-          adb -e logcat -d -v brief > "$DIAG/logcat.txt" 2>&1
-          for f in "$HOME"/.android/avd/*.avd/*.log "$HOME"/.android/avd/*.avd/emulator-launch-params.txt; do
+          # The AVD's real hardware configuration — `hw.gpu.mode` included, which is
+          # the number this job's GPU change is judged by. This is the first point in
+          # the job where it exists: the harness creates or restores the AVD in the
+          # step after the preflight, so asking there could only print "No such file"
+          # on a cache miss.
+          AVD_NAME="$(node scripts/ci-avd-name.mjs 2>/dev/null)"
+          if [ -z "$AVD_NAME" ]; then
+            AVD_NAME="<ci-avd-name.mjs failed>"
+          fi
+          AVD_DIR="$HOME/.android/avd/$AVD_NAME.avd"
+          {
+            echo "== avd name =="; echo "$AVD_NAME"
+            echo "== avd dir =="; ls -la "$HOME/.android/avd" 2>&1
+            echo "== config.ini (hardware lines) =="
+            grep -E 'hw\.|disk|image\.sys' "$AVD_DIR/config.ini" 2>&1
+          } > "$DIAG/avd.log" 2>&1
+          if [ -n "$ADB" ]; then
+            "$ADB" -e logcat -d -v brief > "$DIAG/logcat.txt" 2>&1
+          fi
+          for f in "$AVD_DIR"/*.log "$AVD_DIR"/emulator-launch-params.txt; do
             [ -e "$f" ] && cp "$f" "$DIAG/" 2>/dev/null
           done
-          ls -la "$DIAG"
-          echo "--- host.log ---"; tail -40 "$DIAG/host.log"
+          echo "--- host.log (last 40 lines) ---"
+          tail -40 "$DIAG/host.log" 2>/dev/null
+          echo "--- avd.log ---"
+          cat "$DIAG/avd.log" 2>/dev/null
           echo "--- logcat (FATAL / boot) ---"
-          grep -aiE 'FATAL|AndroidRuntime|boot_completed|bootanim|zygote' "$DIAG/logcat.txt" | tail -40
-          echo "--- qemu stderr (last 80 lines) ---"
-          tail -80 "$DIAG"/emulator-*.log 2>/dev/null
+          grep -aiE 'FATAL|AndroidRuntime|boot_completed|bootanim|zygote' "$DIAG/logcat.txt" 2>&1 | tail -40
+          echo "--- qemu stderr ---"
+          # Per file, and only for files that exist. This is where the exit-1 came
+          # from when it was one `tail` over a glob.
+          for f in "$DIAG"/emulator-*.log; do
+            [ -e "$f" ] || continue
+            echo "--- $(basename "$f") (last 80 lines) ---"
+            tail -80 "$f" 2>/dev/null
+          done
+          # Last command, and it cannot fail for the reason above: the step's exit
+          # status is a count of what it managed to collect.
+          echo "diagnostics: $(find "$DIAG" -type f 2>/dev/null | wc -l | tr -d ' ') file(s) in $DIAG"
 
       - name: Upload emulator boot diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: harness-boot-diagnostics-android
-          path: .harness-diag
-          if-no-files-found: ignore
+          # Not a dot-directory, which is the part that mattered: v4 resolves `path`
+          # with `omitHidden: !include-hidden-files`, and that input defaults to
+          # false — so `.harness-diag` matched nothing. On 41256853746 the collect
+          # step had just listed two files, and the upload step printed "No files were
+          # found with the provided path". A non-hidden name removes the failure mode
+          # instead of re-arming it with a flag a later edit can drop.
+          path: harness-diag
+          # `error` rather than `ignore`, for the same reason: the collect step
+          # writes `host.log` before it does anything else, so nothing here means the
+          # step never ran — a fact worth a red step rather than a skipped one.
+          if-no-files-found: error
 
   # Builds a Debug simulator app and runs the Harness tests on it. Xcode 27 is
   # required because rn-harness.config.mjs asks for an iOS 27 simulator. The
