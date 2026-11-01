@@ -962,15 +962,15 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         '#!/bin/sh',
         ...(hangTools
           ? [
-              // The marker is printed and then stdout is *closed*, so the script has
-              // already read the line into its own buffer long before the deadline, rather
-              // than the test racing a kernel pipe. Both halves matter: a shell builtin's
-              // `echo` into a pipe is block-buffered and SIGKILL destroys the buffer (which
-              // is how this case went red inside `check` under jest's workers), and a line
-              // still in the pipe when the child dies is a line no assertion may rely on.
-              // Closing the write end is what makes the witness deterministic.
-              'echo "SANDBOX_SUDO_HANG ran: $*"',
-              'exec 1>&-',
+              // `/bin/echo`, to stderr: an *external* command's output is its own
+              // process's write-and-exit, so the bytes are in the pipe before the shell
+              // moves on, and nothing the script does to the shell later — including
+              // SIGKILL — can un-write them. The shell builtin's `echo` was tried first
+              // and went red inside `check` and green standalone: bash buffers a builtin's
+              // stdout, and a killed process's buffer dies with it. A witness that is
+              // sometimes missing is worse than no witness, because the green case would
+              // then be green for the wrong reason.
+              '/bin/echo "SANDBOX_SUDO_HANG ran: $*" >&2',
               // `exec`, so the stub *is* the sleep: killing it leaves no orphan behind,
               // which matters on a machine where other tasks are running emulators.
               'exec sleep 600',
@@ -1015,15 +1015,14 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     const hangingAdb = [
       '#!/bin/sh',
       'case "$1" in',
-      '  devices) echo "SANDBOX_ADB_HANG devices"; exec 1>&-; exec sleep 600;;',
+      '  devices) /bin/echo "SANDBOX_ADB_HANG devices" >&2; exec sleep 600;;',
       '  -e)',
       '    case "$2" in',
-      '      shell) echo "SANDBOX_ADB_HANG shell"; exec 1>&-; exec sleep 600;;',
-      '      logcat) echo "SANDBOX_ADB_HANG logcat"; exec 1>&-; exec sleep 600;;',
+      '      shell) /bin/echo "SANDBOX_ADB_HANG shell" >&2; exec sleep 600;;',
+      '      logcat) /bin/echo "SANDBOX_ADB_HANG logcat" >&2; exec sleep 600;;',
       '    esac;;',
       'esac',
-      'echo "SANDBOX_ADB_HANG other: $*"',
-      'exec 1>&-',
+      '/bin/echo "SANDBOX_ADB_HANG other: $*" >&2',
       'exec sleep 600',
       '',
     ].join('\n');
@@ -1236,6 +1235,23 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       expect(host).toContain('SANDBOX_ADB_HANG devices');
       expect(host).toContain('SANDBOX_SUDO_HANG ran: -n dmesg');
       expect(host).toMatch(/timed out after .+s and was killed/u);
+      /**
+       * The `dmesg` section says so too, rather than reporting an *answer*.
+       *
+       * A killed command keeps its partial output and appends the reason, so "did it
+       * answer" cannot be a prefix test: the first version of this check read the start of
+       * the string, saw the stub's own line, concluded the kernel ring had been read, and
+       * printed `<nothing mentions kvm or binder>` about a machine whose `sudo` never
+       * answered. That is the failure mode this whole step exists to avoid — an evidence
+       * file that looks healthy — and it survived a green run until `check` under load
+       * reordered the sections and someone read them.
+       */
+      const dmesgSection = host.slice(
+        host.indexOf('== dmesg (kvm) =='),
+        host.indexOf('== kernel tail ==')
+      );
+      expect(dmesgSection).toMatch(/timed out|gave up/u);
+      expect(dmesgSection).not.toContain('nothing mentions kvm');
       // And the run says so in its own output, so the artifact is not the only place
       // the truth exists.
       expect(String(ran.stdout)).toContain('incomplete');

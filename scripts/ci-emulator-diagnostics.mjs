@@ -280,6 +280,18 @@ appendHost(
   ].join('\n')
 );
 /**
+ * Whether the text above is a command's *answer* or the record of it not answering.
+ *
+ * A killed command keeps whatever it printed and appends the reason, so the reason can
+ * be anywhere in the string rather than at the start — testing the prefix would let a
+ * `sudo` that printed one line and then hang be filed as a healthy `dmesg`, which is the
+ * mistake in the other direction: the log would then say "nothing mentions kvm" about a
+ * machine that never got as far as answering.
+ */
+const UNANSWERED =
+  /(\bno output \(|<timed out after |\bgave up \(|skipped, the diagnostics budget)/u;
+
+/**
  * The kernel ring needs CAP_SYSLOG, which the job user does not have (41256853746's plain
  * `dmesg` printed "read kernel buffer failed: Operation not permitted" twice). The runners
  * grant the tool user passwordless sudo, and `-n` means "refuse rather than prompt" — but
@@ -289,7 +301,7 @@ appendHost(
  * rather than two.
  */
 const dmesg = run(['sudo', '-n', 'dmesg'], { label: 'sudo -n dmesg' });
-const unanswerable = /^(no output|timed out|skipped|exit )/u.test(dmesg);
+const unanswerable = UNANSWERED.test(dmesg);
 appendHost(
   [
     '== dmesg (kvm) ==',
