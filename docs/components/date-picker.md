@@ -101,6 +101,21 @@ behind either way.
 - **`inline` and `wheel` are `fillWidth`:** the box's width, and the height the picker
   asks for at that width (a graphical calendar's own width is fixed at 320 pt so a day
   cell stays a touch target, and the popover is not in the React Native layout at all).
+  On Android that width is a decision rather than a given: Material 3 lays the calendar's
+  seven weekday columns out with `Arrangement.SpaceEvenly` and gives each one
+  `LocalMinimumInteractiveComponentSize` — 48 dp by default — so the grid wants 360 dp,
+  and in a narrower box the columns past the squeeze *lose width* instead of the box
+  growing (`Modifier.size` enforces the incoming maximum, and a `fillWidth` control is
+  measured at its box's width, so nothing ever asks for more). The inline calendar
+  therefore asks Material for its **40 dp day cell** rather than 48 dp of interactive
+  padding — the token the cell's own disc is drawn at — and 7 × 40 + 2 × 12 = **304 dp**
+  is what the grid then needs, so the 320 dp box the stories and the README use fits with
+  every column equal. Below 304 dp the calendar still cannot fit and is not made to
+  pretend it did: it comes out clipped at the right, measured at a 240 dp box as six
+  40 dp columns and a 15.6 dp sliver. That is a box too small for its content saying so;
+  give the picker a wider box rather than scaling a touch target down further. The
+  `compact` dialog is untouched by all of this — it is a window of its own, laid out at
+  Material's 360 dp.
 - Declared fallbacks (the D17 first-frame size for a cold configuration, registered at
   startup by `NitroUiDeclaredFallbacks`): **107 × 36.33 pt** on iOS, **131 × 48 dp** on
   Android — the `compact` `date` field, which is the default configuration and the one a

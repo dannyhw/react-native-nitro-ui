@@ -47,6 +47,11 @@ import {
   parseHierarchy,
 } from './uiautomator.mjs';
 import { nativeChecked } from './android-tree.mjs';
+import {
+  DAY_CELL_MIN_DP,
+  calendarGridProblems,
+  measureCalendarGrid,
+} from './android-calendar.mjs';
 import { runA11ySweep } from './a11y-sweep.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { assertFreshApp, colorize } from '../app-stamp.mjs';
@@ -1681,6 +1686,10 @@ const CHECKS = {
     // reach it either: the test seam writes through the model, which is exactly what
     // the guard exists to ignore. So it is the inline calendar, tapped for real.
     await tapBackToTheDisplayedDay(t);
+
+    // And the thing no press can see: that the calendar in the README's 320 dp box is
+    // laid out as a week rather than as six columns and a sliver.
+    await checkNarrowCalendarGrid(t);
   },
   /**
    * A menu picker: a real tap must open a popup, a real tap on a row must bring the
@@ -2465,6 +2474,81 @@ function isCancelLabel(node) {
 }
 
 /**
+ * The narrow inline calendar's grid: seven weekday columns, each its full width.
+ *
+ * The rule is in `./android-calendar.mjs`, and the reason it lives outside the app is
+ * there too: an `inline` picker is a `fillWidth` control, so `measureContent()` answers
+ * the box's width whether or not the calendar fits inside it, and the weekday cells are
+ * Compose nodes the in-app queries cannot reach. The dump is the only thing that can see
+ * the columns, and this is the only gate that takes one on a known screen.
+ *
+ * The fixture is the last row of `DatePickerScreen`, in a 320 dp box — the width the
+ * README story uses, and narrow enough to squeeze the grid.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function checkNarrowCalendarGrid(t) {
+  const LABEL = 'Narrow inline calendar';
+  const density = t.density();
+
+  // The search is for a *measurable* grid, not merely for the control's name. Two
+  // reasons, both measured on this page: the fixture is its last row, so it is only
+  // reachable by scrolling, and a calendar whose name is in the dump can still have no
+  // columns in it — Compose keeps naming a scrolled-past node and reports it with
+  // `bounds=[0,0][0,0]`, and the header row itself is ~470 px below the top of a
+  // calendar whose box is 1344 px tall, so a box clipped to the bottom of the screen is
+  // a box with no header in it. Stopping at "the name has a box" is what made this abort
+  // on a run where the calendar was partly on screen and perfectly measurable two
+  // swipes later.
+  //
+  // One dump per throw, and the page is scrolled down: this is the last row, so down is
+  // monotonic. 600 px a throw, twelve throws — the whole scrollable length of a page
+  // carrying four inline calendars, each about 1300 px tall.
+  /** @type {{ grid: import('./android-calendar.mjs').CalendarGrid, box: {x1: number, y1: number, x2: number, y2: number} } | null} */
+  let found = null;
+  let namedWithNoBox = 0;
+  for (let attempt = 0; attempt < 12 && found == null; attempt += 1) {
+    const tree = t.dump();
+    const node = tree.find((candidate) => candidate.contentDesc === LABEL);
+    if (node != null) {
+      if (node.bounds.width > 0 && node.bounds.height > 0) {
+        const grid = measureCalendarGrid(tree, node.bounds, density);
+        if (grid != null) {
+          found = { grid, box: node.bounds };
+        }
+      } else {
+        namedWithNoBox += 1;
+      }
+    }
+    if (found != null) {
+      break;
+    }
+    await t.scrollPage(600);
+  }
+  if (found == null) {
+    t.log.abort(
+      `"${LABEL}" never showed a weekday header row, scrolling to the end of the ` +
+        'page - the calendar is either not laid out at all or is drawn without one'
+    );
+  }
+  const { grid, box } = found;
+  const problems = calendarGridProblems(grid);
+  const widthDp = (box.x2 - box.x1) / density;
+  if (namedWithNoBox > 0) {
+    t.log.note(
+      `"${LABEL}" was named with a zero-sized box ${String(namedWithNoBox)} time` +
+        `${namedWithNoBox === 1 ? '' : 's'} before its columns came on screen`
+    );
+  }
+  t.log.check(
+    `the ${widthDp.toFixed(0)} dp inline calendar lays out a whole week: ${grid.detail} ` +
+      `(narrowest ${grid.minWidthDp.toFixed(1)} dp, Material's floor is ` +
+      `${String(DAY_CELL_MIN_DP)} dp)${problems.length === 0 ? '' : ` — ${problems.join('; ')}`}`,
+    problems.length === 0
+  );
+}
+
+/**
  * Wait for a dialog's month grid to leave the accessibility tree.
  *
  * This is what "the dialog is closed" means on Android for this control: a `Dialog` is
@@ -2668,6 +2752,37 @@ class DeviceHarness {
       );
     }
     return { width: Number(match[1]), height: Number(match[2]) };
+  }
+
+  /**
+   * The device's density — how many pixels one React Native point (one dp) is.
+   *
+   * Read from the device rather than assumed, for the same reason `wm size` is: every
+   * geometry assertion this suite makes is in pixels, and the ones that want to say
+   * something about a *design* number ("40 dp", "320 dp") can only do it by converting.
+   *
+   * `wm density` answers a **dpi** — "Physical density: 420" on the lease's Pixel 9
+   * profile — and one dp is 160 dpi, so this returns 2.625. The factor is also what
+   * `PixelRatio.get()` answers inside the app, which is what makes a dp measured here
+   * and a dp measured by a harness test the same number.
+   *
+   * An `Override density:` line wins when it is there: `wm density -d` and the
+   * developer-option override both write one, and a device whose density is overridden
+   * lays its controls out at the override.
+   *
+   * @returns {number}
+   */
+  density() {
+    const out = this.shell('wm density');
+    const override = out.stdout.match(/Override density:\s*(\d+(?:\.\d+)?)/);
+    const physical = out.stdout.match(/Physical density:\s*(\d+(?:\.\d+)?)/);
+    const dpi = Number(override?.[1] ?? physical?.[1]);
+    if (!Number.isFinite(dpi) || dpi <= 0) {
+      throw new Error(
+        `real-input: \`adb shell wm density\` said nothing useful: ${out.stdout.trim()}`
+      );
+    }
+    return dpi / 160;
   }
 
   /**
@@ -3137,6 +3252,20 @@ function makeContext(harness, log) {
      */
     nodeByTestId(testID) {
       return findByTestId(harness.hierarchy(), testID);
+    },
+
+    /**
+     * The device's density: how many pixels one dp is.
+     *
+     * A check that wants to say "40 dp" about a dump's pixels needs this, and needs it
+     * from the device rather than from a comment: the widths the calendar rules were
+     * measured at belong to the lease's Pixel 9 profile at 2.625, and a device at
+     * another density gets the same rules in its own pixels.
+     *
+     * @returns {number}
+     */
+    density() {
+      return harness.density();
     },
 
     /**

@@ -13,6 +13,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SelectableDates
@@ -24,6 +25,7 @@ import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
@@ -45,6 +47,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -1125,15 +1128,41 @@ private class DatePickerHost(
       // second control nobody asked for, and for the `wheel` variant - "the picker, not
       // a dialog" - one whose keyboard would take over the screen. The calendar is what
       // this variant means.
-      DatePicker(
-        state = state,
-        showModeToggle = false,
-        modifier = Modifier.nuiControlSemantics(
-          label = model.accessibilityLabel,
-          value = DatePickerFieldText.format(mode, shown),
-          enabled = model.enabled,
-        ),
-      )
+      //
+      // `LocalMinimumInteractiveComponentSize = 40.dp`, because Material 3's calendar
+      // lays its seven weekday columns out with `Arrangement.SpaceEvenly` and gives each
+      // cell `sizeIn(minWidth = 40.dp).size(LocalMinimumInteractiveComponentSize)`. With
+      // the default 48 dp the grid needs 7 × 48 + 2 × 12 = 360 dp, and a narrower box
+      // does not get a narrower calendar: `Modifier.size` *enforces* its incoming
+      // maximum, so the columns past the squeeze simply lose width. Measured on
+      // emulator-5574 inside a 320 dp box - the width the README story and this repo's
+      // own example use - Friday's cell was 73 px (27.8 dp) beside Saturday's 105 px
+      // (40 dp), and the day's own `requiredSize(40.dp)` disc drew over its neighbour.
+      // At 240 dp one column was 31 px wide.
+      //
+      // 40 dp is the token the *cell* is built around (`DateContainerWidth`), so the grid
+      // keeps its exact proportions and the only thing given up is the 8 dp of
+      // touch-target padding Material adds around a 40 dp target - and that padding was
+      // never being delivered anyway, which is the whole bug: a squeezed cell is neither
+      // 48 dp nor 40 dp. It is also the same shape iOS's inline calendar has at this
+      // width: measuring `date-picker-ios.png` puts that control's seven columns on a
+      // 42.8 pt pitch inside its 320 pt box, so Android at 40 dp cells plus Material's
+      // 12 dp of padding lands in the same place instead of needing 360 dp to be legible.
+      // Below 7 × 40 + 24 = 304 dp the calendar still cannot fit and is not made to
+      // pretend otherwise - a 240 dp box measures six 40 dp columns and a 15.6 dp sliver,
+      // which is what "too narrow for its content" looks like. See
+      // `docs/components/date-picker.md`.
+      CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp) {
+        DatePicker(
+          state = state,
+          showModeToggle = false,
+          modifier = Modifier.nuiControlSemantics(
+            label = model.accessibilityLabel,
+            value = DatePickerFieldText.format(mode, shown),
+            enabled = model.enabled,
+          ),
+        )
+      }
     }
   }
 
