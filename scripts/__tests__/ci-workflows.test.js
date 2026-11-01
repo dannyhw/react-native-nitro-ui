@@ -952,8 +952,8 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
      * With `sudo: 'hang'` it is instead a `sudo` that never answers, which is one of
      * the shapes run 41269235234's 90-minute step is thought to have hit: `-n` should
      * refuse rather than prompt, but a `sudo` that prompts reads a tty that never
-     * replies. `SANDBOX_SUDO_HANG` is printed *before* the sleep, so a test can tell
-     * "the stub was asked and the script gave up on it" from "the script never got
+     * replies. `SANDBOX_SUDO_HANG` is printed *before* it stops answering, so a test can
+     * tell "the stub was asked and the script gave up on it" from "the script never got
      * here at all" — without the first, a passing run proves nothing.
      */
     fs.writeFileSync(
@@ -962,7 +962,15 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         '#!/bin/sh',
         ...(hangTools
           ? [
+              // The marker is printed and then stdout is *closed*, so the script has
+              // already read the line into its own buffer long before the deadline, rather
+              // than the test racing a kernel pipe. Both halves matter: a shell builtin's
+              // `echo` into a pipe is block-buffered and SIGKILL destroys the buffer (which
+              // is how this case went red inside `check` under jest's workers), and a line
+              // still in the pipe when the child dies is a line no assertion may rely on.
+              // Closing the write end is what makes the witness deterministic.
               'echo "SANDBOX_SUDO_HANG ran: $*"',
+              'exec 1>&-',
               // `exec`, so the stub *is* the sleep: killing it leaves no orphan behind,
               // which matters on a machine where other tasks are running emulators.
               'exec sleep 600',
@@ -1007,14 +1015,15 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     const hangingAdb = [
       '#!/bin/sh',
       'case "$1" in',
-      '  devices) echo "SANDBOX_ADB_HANG devices"; exec sleep 600;;',
+      '  devices) echo "SANDBOX_ADB_HANG devices"; exec 1>&-; exec sleep 600;;',
       '  -e)',
       '    case "$2" in',
-      '      shell) echo "SANDBOX_ADB_HANG shell"; exec sleep 600;;',
-      '      logcat) echo "SANDBOX_ADB_HANG logcat"; exec sleep 600;;',
+      '      shell) echo "SANDBOX_ADB_HANG shell"; exec 1>&-; exec sleep 600;;',
+      '      logcat) echo "SANDBOX_ADB_HANG logcat"; exec 1>&-; exec sleep 600;;',
       '    esac;;',
       'esac',
       'echo "SANDBOX_ADB_HANG other: $*"',
+      'exec 1>&-',
       'exec sleep 600',
       '',
     ].join('\n');
