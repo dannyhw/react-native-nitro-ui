@@ -296,6 +296,45 @@ export default function DatePickerScreen() {
           mode="time"
           testID="inline-time"
         />
+        {/*
+          Android only, and placed just after the pickers it looks like rather than at
+          the foot of the page: this screen carries three full-height inline calendars,
+          so a fixture below them sits ~9 000 px down — measured, and the reason the
+          first version of this check spent its whole scroll budget arriving and gave
+          up. Adding it here moves nothing above it.
+
+          The width *is* the check. Material 3 lays a calendar's seven weekday columns
+          out with `Arrangement.SpaceEvenly` and gives each one
+          `LocalMinimumInteractiveComponentSize` (48 dp) of interactive minimum, so the
+          grid wants 7 × 48 + 2 × 12 = 360 dp. In a narrower box the columns past the
+          squeeze simply lose width, and nothing inside React Native can see it: an
+          `inline` picker is a `fillWidth` control, so Compose is asked "what height at
+          320 dp" and answers 320 wide whether or not the grid fits (measured at boxes
+          of 240, 320 and 361 dp: 240, 320 and 361 back). The weekday cells are Compose
+          nodes, not `View`s, so the in-app queries cannot reach them either — the same
+          gap `scripts/real-input/a11y.mjs` records for a control's *name*. What can see
+          them is `uiautomator dump`, which is why the rule runs in
+          `real-input:android` (`CHECKS['date-picker']`) and this row is its fixture.
+
+          Measured here before the fix, at 320 dp: the header columns came back 126 px
+          six times and then 20 px — Saturday at 7.6 dp, with the 40 dp disc a day draws
+          overlapping its neighbour. That is the clipping
+          `docs/images/components/date-picker-android.png` used to show. The pickers
+          above cannot catch it: this device gives them 393 dp, past the squeeze.
+
+          iOS renders nothing here, so `RealInputTests.swift` sees the page it always
+          saw and the popover check's last row stays where it was.
+        */}
+        {Platform.OS === 'android' ? (
+          <View style={styles.narrowBox}>
+            <DatePicker
+              defaultValue={new Date(2026, 9, 31)}
+              variant="inline"
+              accessibilityLabel="Narrow inline calendar"
+              testID="narrow-inline"
+            />
+          </View>
+        ) : null}
 
         <Text style={[styles.section, { color: ink.ink }]}>
           Wheel (iOS&apos;s wheel picker; Android has none and renders the
@@ -410,6 +449,11 @@ const styles = StyleSheet.create({
   },
   column: {
     gap: 6,
+  },
+  /** The 320 dp box `DatePickerScreen`'s narrow inline calendar is laid out in. */
+  narrowBox: {
+    width: 320,
+    maxWidth: '100%',
   },
   buttonRow: {
     flexDirection: 'row',
