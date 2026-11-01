@@ -434,10 +434,12 @@ namespace margelo::nitro::nitroui {
       static constexpr size_t kForgottenCapacity = 512;
       /**
        * How long a layout that arrived for a finished id may be held before the
-       * engine stops waiting for its bind, and how many are held at once. Together
-       * they are the whole cost of the leak rule: a bounded table of at most
-       * `kLateFilingCapacity` ledger rows (about 24 KiB), and one pass over the
-       * front of it per `measure`, only while anything is held.
+       * engine stops waiting for its bind, and the ceiling on how many are held at
+       * once.
+       *
+       * The window is what bounds the table, and `kLateFilingCapacity` is only the
+       * backstop behind it (see below). Together they are the whole cost of the leak
+       * rule: at most one second's worth of holds, and never more than the ceiling.
        *
        * The window has to cover the gap between a shadow-tree layout and the mount
        * transaction that binds the same instance: one React commit, so milliseconds
@@ -449,7 +451,33 @@ namespace margelo::nitro::nitroui {
        * user changing their clock can neither hold an entry nor release one early.
        */
       static constexpr int64_t kLateFilingGraceNs = 1000000000;
-      static constexpr size_t kLateFilingCapacity = 256;
+      /**
+       * The memory backstop on {@link lateFilings_}, *not* the working bound. What
+       * actually bounds that table is {@link kLateFilingGraceNs}: an entry is dropped
+       as soon as it can no longer be claimed, and never before.
+       *
+       * It used to be the working bound, at 256, and that was a cliff. A commit that
+       * re-shows 300 hidden controls stages 300 holds in the same millisecond, all of
+       * them inside their window, and a capacity of 256 evicted the oldest 44 *for
+       * being numerous* — losing 44 corrections in a commit that had done nothing
+       * wrong. `kUnboundFilingCapacity`'s overflow lands in the same table, so a
+       * first commit of 1,324 views (a real number, from F8's own harness) lost 44
+       * corrections the same way. Before F8 neither case lost anything, so capacity
+       * eviction of an in-window entry was a regression the leak fix had introduced.
+       *
+       * So the ceiling is set above any commit this project has measured, not above
+       * what a tidy constant looks like. 2,048 rows is about 192 KiB of ledger
+       * entries — 1.5x the 1,324-layout commit, which was itself the largest single
+       * commit found by asking, and a commit that big is a flat list's first frame,
+       * one second of a fast app's scrolling, or nothing.
+       *
+       * What happens *at* the ceiling: the oldest hold is dropped even though it is
+       * still inside its window, so that one control keeps the size it was laid out
+       * at and loses the correction it was owed (see `stageLateFilingLocked`). That
+       * is the same cost as letting the window close, paid early, and it is the price
+       * of the table being finite; it is not a leak in either direction.
+       */
+      static constexpr size_t kLateFilingCapacity = 2048;
       /**
        * How many rows may be waiting for a bind at once (see {@link UnboundFiling}).
        *
@@ -522,6 +550,13 @@ namespace margelo::nitro::nitroui {
         uint32_t componentHash = 0;
         NitroUiPushFn push = nullptr;
         NitroUiWeakState state{};
+        /**
+         * This instance was bound with nothing to its name — see
+         * {@link registerInstance}'s debt rule — so its next props turn has to re-ask
+         * for a measurement instead of trusting what Yoga is holding. Cleared by the
+         * `measure` that answers it.
+         */
+        bool owesFreshMeasure = false;
       };
 
       struct Report final {
@@ -678,6 +713,35 @@ namespace margelo::nitro::nitroui {
        * window that matters is one layout pass, not five hundred drops.
        */
       std::array<int64_t, kForgottenCapacity> forgotten_{};
+      /**
+       * The ids whose filing this engine gave up on — a hold it dropped rather than let
+       * a bind claim — direct-mapped by their low bits. Same shape, capacity and
+       * exactness argument as {@link forgotten_}: ids are monotonic, so a slot answers
+       * for its own id and a false positive is impossible; the only failure is a false
+       * *negative*, which costs the mild thing described below. It is a ring rather than
+       * a set because every id in it is one whose bind may never come (an orphan's never
+       * does), so a set would be a leak introduced by a leak fix. Four KiB, forever.
+       *
+       * What it answers is the one question `registerInstance` cannot ask any other way,
+       * for a bind that arrives after both windows have closed (~2 s in the worst
+       * ordering): "this id had an entry, this engine threw it away, and it is binding
+       * now with nothing to its name". The alternative reading — a fresh mount that was
+       * simply never laid out yet — has never had an entry at all and owes nothing. The
+       * ring is the whole difference between the two, and its false negative is mild: an
+       * id whose slot was taken by one exactly `kForgottenCapacity` newer is charged no
+       * debt, which is how every instance behaved before this existed.
+       */
+      std::array<int64_t, kForgottenCapacity> abandonedFilings_{};
+      /**
+       * Record that a filing was given up on rather than claimed, so a bind that
+       * eventually turns up is owed a second look. Caller holds the lock.
+       */
+      void markFilingAbandonedLocked(int64_t instanceId);
+      /**
+       * Read {@link abandonedFilings_} and clear the mark in one step, so the debt it
+       * charges can only be paid once. Caller holds the lock.
+       */
+      bool consumeFilingAbandonedLocked(int64_t instanceId);
       /**
        * An entry a layout produced for a finished id, and when it was put on hold.
        * Same shape as a ledger row because that is exactly what it becomes if the id
