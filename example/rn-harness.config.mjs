@@ -24,6 +24,13 @@ import {
 } from '../scripts/app-stamp-core.mjs';
 import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
 import {
+  NITRO_UI_TEST_LANGUAGES_ENV,
+  NITRO_UI_TEST_LOCALE_ENV,
+  NITRO_UI_TEST_TZ_ENV,
+  appLaunchOptionsFromEnv,
+  describeAppLaunchOptions,
+} from '../scripts/app-launch-env.mjs';
+import {
   suiteTimingPluginFromEnv,
   SUITE_TIMING_ENV,
 } from '../scripts/harness-suite-timing.mjs';
@@ -207,6 +214,65 @@ function avd() {
 }
 
 /**
+ * The app's own clock and locale, pinned for one run.
+ *
+ * Rendered by `appLaunchOptionsFromEnv` in `scripts/app-launch-env.mjs`, which
+ * states why a hosted runner needs it (the DatePicker's DST premise and its
+ * locale-dependent field width) and what each variable does. Kept in a script
+ * because that decision is unit-tested there: this file cannot be imported by a
+ * test without running the Node check, the `app.stamp` gate and a device lookup.
+ */
+/**
+ * Defaults for {@link appLaunchOptionsFromEnv} when a run says nothing.
+ *
+ * The DatePicker's rules have a premise about the app's own clock and locale:
+ *
+ *   - its DST round trip can only be exercised in a zone that observes a
+ *     transition, and its declared `103 x 36.33` fallback is the width the
+ *     *measuring* locale's date formatter produces;
+ *   - both numbers were measured on the gate simulator, whose `AppleLocale` is
+ *     `en_PT` (`HybridNitroUiDatePicker.swift`'s `fallbackSize`, G5's report).
+ *
+ * A hosted runner inherits neither: GitHub's macOS images boot a simulator at
+ * `UTC` and `en_US`, and run 41230848294 lost exactly those two tests. That is
+ * now reproducible on demand — pinning `en_US` on the gate simulator measures
+ * `107.00 x 36.33`, and pinning `UTC` fails the DST precondition with the same
+ * `expected +0 not to be +0` CI printed — so the fix is to stop inheriting a
+ * premise and name one: every iOS harness run launches in the configuration the
+ * numbers were measured in, and prints that it did.
+ *
+ * This is a test-configuration choice, not a product one: nothing in
+ * `src/`, `ios/` or `android/` reads these variables, and an app in the wild
+ * still follows the user's settings. Override per shell with
+ * `NITRO_UI_TEST_LOCALE`/`NITRO_UI_TEST_TZ` (an empty value means "ask the
+ * device", which is what a developer's own machine already does when they set
+ * one deliberately).
+ */
+const DEFAULT_APP_TEST_LOCALE = 'en_PT';
+const DEFAULT_APP_TEST_TZ = 'Europe/Lisbon';
+
+function appLaunchEnvironment() {
+  const env = { ...process.env };
+  if (env[NITRO_UI_TEST_LOCALE_ENV] == null) {
+    env[NITRO_UI_TEST_LOCALE_ENV] = DEFAULT_APP_TEST_LOCALE;
+  }
+  if (env[NITRO_UI_TEST_TZ_ENV] == null) {
+    env[NITRO_UI_TEST_TZ_ENV] = DEFAULT_APP_TEST_TZ;
+  }
+  const options = appLaunchOptionsFromEnv(env);
+  const described = describeAppLaunchOptions(options);
+  if (described != null) {
+    console.log(
+      `app-launch: the app runs at ${described} — the configuration the ` +
+        'locale- and zone-dependent assertions were measured in (iOS launch ' +
+        `arguments; override with ${NITRO_UI_TEST_LOCALE_ENV}/` +
+        `${NITRO_UI_TEST_TZ_ENV}, which the emulator ignores either way)`
+    );
+  }
+  return options;
+}
+
+/**
  * Which console port the emulator may boot on, checked before the first device
  * is touched (review S5).
  *
@@ -277,6 +343,9 @@ export default {
       name: 'ios',
       bundleId: 'nitroui.example',
       device: iosDevice(),
+      // Empty unless a run asked for a zone or locale (see
+      // `appLaunchEnvironment`), so a local run launches exactly as it did before.
+      appLaunchOptions: appLaunchEnvironment(),
     }),
     androidPlatform({
       name: 'android',
