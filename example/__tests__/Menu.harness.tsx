@@ -99,6 +99,7 @@ type MenuHandle = {
   measureContent(): { width: number; height: number };
   nuiTestSelectRow(id: string): void;
   nuiTestMenuReport(): string;
+  nuiTestMenuProbe(): void;
 };
 
 /** Handles by testID, so a test can ask each control what it holds. */
@@ -162,6 +163,12 @@ type MenuReport = {
   anchor: number[];
   menu: number[];
   rows: number;
+  /**
+   * The menu the platform itself built, in `Menu.nitro.ts`'s notation, as the
+   * last `nuiTestMenuProbe` read it; `null` for `-1` (no probe yet, or Android,
+   * which has no second renderer to ask).
+   */
+  drawn: string | null;
 };
 
 function parseMenuReport(line: string): MenuReport {
@@ -187,6 +194,7 @@ function parseMenuReport(line: string): MenuReport {
     anchor: rect('anchor'),
     menu: rect('menu'),
     rows: Number(field('rows')),
+    drawn: field('drawn') === '-1' ? null : field('drawn'),
   };
 }
 
@@ -619,6 +627,63 @@ const BIG_GROUP: MenuGroup = {
 
 /** `BIG_GROUP`'s pickable rows: nine actions plus a section's two. */
 const BIG_PICKABLE = 11;
+
+/**
+ * An untitled group between two titled ones (G9), holding both row roles: a
+ * destructive row and a disabled one. The titled neighbours are the barrier - a
+ * reading that lost every group would fail on them too, so a missing untitled
+ * group cannot pass as "the probe read nothing".
+ */
+const UNTITLED_GROUP: MenuGroup = {
+  actions: [{ id: 'open', title: 'Open' }],
+  sections: [
+    {
+      id: 'share',
+      title: 'Share',
+      items: [
+        { id: 'airdrop', title: 'AirDrop' },
+        { id: 'mail', title: 'Mail' },
+      ],
+    },
+    {
+      id: 'danger',
+      items: [
+        { id: 'delete', title: 'Delete', destructive: true },
+        { id: 'archive', title: 'Archive', disabled: true },
+      ],
+    },
+    {
+      id: 'more',
+      title: 'More',
+      items: [{ id: 'info', title: 'Get Info' }],
+    },
+  ],
+};
+
+/** `UNTITLED_GROUP`'s rows: one action and three sections' one, two and two. */
+const UNTITLED_PICKABLE = 6;
+
+/**
+ * The untitled group's rows in `drawn` notation (`!` destructive, `~` disabled):
+ * what iOS must draw, and the rows Android composes under a bare divider.
+ */
+const UNTITLED_ROWS = ['Delete!', 'Archive~'];
+
+/**
+ * The rows of the inline group titled `title` in a `drawn` tree, or `null` when the
+ * tree has no such group. Inline groups do not nest (D29), so a group's rows run
+ * from its `(` to the next `)`.
+ */
+function drawnGroup(drawn: string, title: string): string[] | null {
+  const open = `(${title}:`;
+  const start = drawn.indexOf(open);
+  if (start < 0) {
+    return null;
+  }
+  const end = drawn.indexOf(')', start);
+  const rows = drawn.slice(start + open.length, end);
+  return rows === '' ? [] : rows.split(',');
+}
 
 /** The trigger presses reach the app's own window, so a trigger really opens. */
 async function pressTrigger(testId: string): Promise<void> {
@@ -1492,13 +1557,87 @@ describe('Menu · G7a', () => {
     // box and go red under this line. The wide test above measures this same floor in
     // its own render, because comparing a wide popup against a floor needs both in one
     // place; this test keeps it as a standalone claim as well.
-    expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(MATERIAL_LIST_MIN_DP);
+    expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(
+      MATERIAL_LIST_MIN_DP
+    );
     console.log(
       `short list: popup ${String(menuRight - menuLeft)} px = ` +
         `${((menuRight - menuLeft) / scale).toFixed(1)} dp (floor ` +
         `${String(MATERIAL_LIST_MIN_DP)}), trigger ${String(anchorRight - anchorLeft)} px`
     );
     unmount();
+  });
+
+  it('draws every row of an untitled group, with its role (G9)', async () => {
+    await render(
+      <Menu
+        title="File"
+        group={UNTITLED_GROUP}
+        testID="untitled"
+        hybridRef={captureHybrid('untitled')}
+        onSelect={recordSelect('untitled')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('untitled');
+    const handle = await waitForHandle('untitled', 'the untitled-group menu');
+    const before = report('untitled');
+    // Nothing has asked yet, so nothing may be claimed: a `drawn` before the probe
+    // would be an answer this test did not cause.
+    expect(before.drawn).toBeNull();
+
+    if (Platform.OS === 'ios') {
+      // The model has all six - it did before G9 too. `rows` is what we asked
+      // SwiftUI to draw, which is why it could not see the bug.
+      expect(before.rows).toBe(UNTITLED_PICKABLE);
+      handle.nuiTestMenuProbe();
+      const probed = await waitForMenu('untitled', (r) => r.drawn != null);
+      const drawn = probed.drawn ?? '';
+      console.log(`untitled group: ios drawn=${drawn}`);
+      // The titled groups first: the barrier that the probe read a real menu.
+      expect(drawnGroup(drawn, 'Share')).toEqual(['AirDrop', 'Mail']);
+      expect(drawnGroup(drawn, 'More')).toEqual(['Get Info']);
+      // The claim: the untitled group is its own group, with both of its rows and
+      // their roles. Before G9 this read `[]` - the group was there, empty.
+      expect(drawnGroup(drawn, '')).toEqual(UNTITLED_ROWS);
+      // And the whole menu, in order, so a row moved between groups is red too.
+      expect(drawn).toBe(
+        `Open,(Share:AirDrop,Mail),(:${UNTITLED_ROWS.join(',')}),(More:Get Info)`
+      );
+    } else {
+      const liveBefore = before.live ?? 0;
+      // Android has no second renderer, so the probe must leave the report alone.
+      handle.nuiTestMenuProbe();
+      await settle(150);
+      expect(report('untitled').drawn).toBeNull();
+      await pressTrigger('untitled');
+      // `rows` here is counted from the rows the popup composed, so six is the
+      // untitled group drawn - the parity iOS is held to above.
+      const open = await waitForMenu(
+        'untitled',
+        (r) => r.expanded === true && r.live === liveBefore + 1
+      );
+      expect(open.rows).toBe(UNTITLED_PICKABLE);
+      expect(open.drawn).toBeNull();
+    }
+
+    // The destructive row of the untitled group is a row like any other: picked, it
+    // reports; its disabled neighbour reports nothing.
+    await pickRow('untitled', 'archive');
+    expect(selectLog).toEqual([]);
+    if (Platform.OS === 'android') {
+      // A press on a disabled row still takes the popup down (D32); reopen for the
+      // pick that reports.
+      await waitForMenu('untitled', (r) => r.expanded === false);
+      await pressTrigger('untitled');
+      await waitForMenu('untitled', (r) => r.expanded === true);
+    }
+    await pickRow('untitled', 'delete');
+    await waitForLog(selectLog, 1, "the untitled group's destructive row");
+    expect(selectLog).toEqual(['untitled:delete']);
+    if (Platform.OS === 'android') {
+      await waitForMenu('untitled', (r) => r.expanded === false);
+    }
   });
 
   it('relays the rows when the group changes while it is open', async () => {

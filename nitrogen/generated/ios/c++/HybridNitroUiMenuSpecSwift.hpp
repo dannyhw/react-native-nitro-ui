@@ -213,6 +213,12 @@ namespace margelo::nitro::nitroui {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline void nuiTestMenuProbe() override {
+      auto __result = _swiftPart.nuiTestMenuProbe();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
 
   private:
     NitroUi::HybridNitroUiMenuSpec_cxx _swiftPart;
