@@ -57,6 +57,15 @@ type PublishedGate = {
   readonly busyLoad1: number;
   readonly metroPort: number;
   readonly updatedAt: number;
+  /**
+   * Whether the *run* said it meant to test a locale the declared-fallback table
+   * was not measured in. Read by the conformance rule, not by a duration gate; it
+   * is published here because a test inside the app cannot see the runner's
+   * environment, and a premise someone opted out of has to be stated rather than
+   * inferred. Absent means false: the answer that can only produce a red, never a
+   * quiet green.
+   */
+  readonly allowLocaleMismatch?: boolean;
 };
 
 /**
@@ -210,6 +219,43 @@ function describeMachine(gate: PublishedGate): string {
     `${String(gate.cores)} cores`
   );
 }
+
+/**
+ * Did this run say it means to compare a locale-dependent row in a locale other than
+ * the one the table names?
+ *
+ * `false` unless the run's own published state says otherwise, which is the only
+ * direction that can produce a red rather than a quiet green: no gate file, a gate
+ * from another run, a stale one, or a publisher too old to carry the field all answer
+ * "not allowed", and the rule then compares the box and fails on a mismatch. The
+ * reason travels back for the log, so an unexpected red says whether the opt-out was
+ * absent or merely unreadable.
+ */
+export async function localeMismatchAllowed(): Promise<{
+  readonly allowed: boolean;
+  readonly note: string;
+}> {
+  const origin = devServerOrigin();
+  if (origin === null) {
+    return {
+      allowed: false,
+      note: 'no dev server to ask (this bundle did not come from one)',
+    };
+  }
+  const read = await readGate(origin);
+  if (read.kind !== 'ok') {
+    return { allowed: false, note: `${read.kind}: ${read.reason}` };
+  }
+  return {
+    allowed: read.gate.allowLocaleMismatch === true,
+    note: `${ALLOW_LOCALE_MISMATCH_ENV}=${String(
+      read.gate.allowLocaleMismatch === true
+    )}`,
+  };
+}
+
+/** The variable the opt-out is set with, named in the failure message a run reads. */
+export const ALLOW_LOCALE_MISMATCH_ENV = 'NITRO_UI_ALLOW_LOCALE_MISMATCH';
 
 /**
  * Report one wall-clock measurement, and gate it only when this run asked for a

@@ -94,6 +94,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { deviceLocale, deviceLocaleNote } from './deviceContext';
 import { waitForHandle } from './handles';
+import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
   Button,
   DatePicker,
@@ -186,13 +187,12 @@ const SHARED = {
     "NitroUiDatePicker": {
       "android": {
         "width": 131,
-        "height": 48,
-        "measuredUnderLocale": "en-US"
+        "height": 48
       },
       "ios": {
-        "width": 103,
+        "width": 107,
         "height": 36.33,
-        "measuredUnderLocale": "en-PT"
+        "measuredUnderLocale": "en-US"
       }
     },
     "NitroUiPicker": {
@@ -753,7 +753,10 @@ function fmt(size: Size | null): string {
  * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
  *
  * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
- * prefix the engine itself reports, and compare it with the locale the row was measured in.
+ * prefix the engine itself reports, compare it with the locale the row was measured in, and
+ * carry whether *this run* published the opt-out. Without that third field a mismatch would
+ * have to be either always a failure (so nobody could ever probe another locale) or always a
+ * skip (so the comparison silently stops happening) — both of which are wrong.
  */
 function canonicalLocale(identifier: string): string {
   const parts = String(identifier).replace(/_/g, '-').split('-');
@@ -770,13 +773,14 @@ function canonicalLocale(identifier: string): string {
 
 function localePremiseMiss(
   row: DeclaredRow | undefined,
-  deviceLocale: string | null
-): { expected: string; actual: string } | null {
+  deviceLocale: string | null,
+  mismatchAllowed: boolean
+): { expected: string; actual: string; tolerated: boolean } | null {
   const expected = row?.measuredUnderLocale;
   if (expected == null) return null;
   if (deviceLocale == null || deviceLocale === '') return null;
   if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;
-  return { expected, actual: deviceLocale };
+  return { expected, actual: deviceLocale, tolerated: mismatchAllowed };
 }
 
 /**
@@ -789,8 +793,10 @@ function localePremiseMiss(
  *   never worked out here. See `boxRuleFor` in `scripts/conformance-core.mjs` for why a
  *   `fillWidth` control's width and a content-sized control's box are not its declaration.
  * @param input.deviceLocale the locale this run's app reports
- *   (`deviceContext.ts`). Only the box comparison consults it, and only for a row that
- *   declares it was measured in one (`measuredUnderLocale`); see `localePremiseMiss`.
+ *   (`deviceContext.ts`), and `input.mismatchAllowed` whether the run published
+ *   `NITRO_UI_ALLOW_LOCALE_MISMATCH`. Only the box comparison consults them, and only for a
+ *   row that declares it was measured in one (`measuredUnderLocale`): a mismatch then FAILS
+ *   unless the run said it meant it. See `localePremiseMiss`.
  */
 function fallbackFindings(input: {
   component: string;
@@ -801,6 +807,7 @@ function fallbackFindings(input: {
   expected: DeclaredRow;
   boxRule: 'both' | 'height' | 'none';
   deviceLocale?: string | null;
+  mismatchAllowed?: boolean;
 }): Finding[] {
   const {
     component,
@@ -845,7 +852,11 @@ function fallbackFindings(input: {
   // The premise the DatePicker's row needs (see `measuredUnderLocale` in the shared
   // table), read from the app itself. `null` for every other control, so nothing here
   // changes for them.
-  const miss = localePremiseMiss(expected, input.deviceLocale ?? null);
+  const miss = localePremiseMiss(
+    expected,
+    input.deviceLocale ?? null,
+    input.mismatchAllowed ?? false
+  );
 
   if (boxRule === 'none') {
     if (near(measured, expected, tolerance)) {
@@ -857,26 +868,34 @@ function fallbackFindings(input: {
       );
     }
   } else if (miss != null && !ownsAgrees(measured, expected)) {
-    // One finding for both claims the same number suspends: the box comparison, and the
-    // warm-corrections claim below. `HybridNitroUiDatePicker.swift`'s `fallbackSize` states
-    // the second in words — a locale wider than the measured one costs its first instance
-    // one horizontal correction — so `corrections > 0` here is the design working, not a
-    // declaration failing to arrive. Everything else still runs: the poison must still be
-    // corrected, and a mount that settles at nothing still fails. A configured run never
-    // reaches this: `example/rn-harness.config.mjs` pins the launch locale to this row's
-    // value, so it means a run forgot to pin.
-    problems.push({
-      component,
-      rule: 'declared-fallback',
-      problem: null,
-      skipped:
-        `box and warm-corrections comparison skipped: ${fmt(expected)} is what this ` +
-        `control measures in ${miss.expected} and this run's app locale is ` +
-        `${miss.actual}, so the measured ${fmt(measured)} is the same formatter ` +
-        'answering a different question, not a stale declaration. Re-run with ' +
-        'NITRO_UI_TEST_LOCALE=' +
-        `${miss.expected.replace(/-/g, '_')} to check this row for real`,
-    });
+    // A locale mismatch is a failed premise, and a failed premise is a FAILURE: the harness
+    // pins the launch locale, so the app reporting another one means the pin was lost, was
+    // overridden without being said, or the formatter stopped following the locale it was
+    // handed. The skip exists only behind the run's own opt-out (see `localeMismatchAllowed`
+    // in `timingGate.ts`), and names the two claims it suspends — the box comparison and the
+    // warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s `fallbackSize`
+    // prices in words. Everything else still runs either way: the poison must still be
+    // corrected, and a mount that settles at nothing still fails.
+    const both =
+      `the app runs in ${miss.actual} and this row’s ${fmt(expected)} is what the ` +
+      `control measures in ${miss.expected}, so the measured ${fmt(measured)} is the ` +
+      'same formatter answering a different question. Launch the app in the pinned ' +
+      `locale (${miss.expected.replace(/-/g, '_')}) or set ` +
+      'NITRO_UI_ALLOW_LOCALE_MISMATCH=1 to say you meant this';
+    if (miss.tolerated) {
+      problems.push({
+        component,
+        rule: 'declared-fallback',
+        problem: null,
+        skipped:
+          `box and warm-corrections comparison skipped ` +
+          `(NITRO_UI_ALLOW_LOCALE_MISMATCH=1): ${fmt(expected)} is what this control ` +
+          `measures in ${miss.expected} and this run's app locale is ${miss.actual}, ` +
+          `so the measured ${fmt(measured)} proves nothing about the declaration`,
+      });
+    } else {
+      report(both);
+    }
   } else if (!ownsAgrees(measured, expected)) {
     report(
       `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} for a ` +
@@ -890,6 +909,11 @@ function fallbackFindings(input: {
     !poisoned &&
     corrections > 0 &&
     boxRule === 'both' &&
+    // Same premise as the box comparison above, and suspended by it whether or not the run
+    // opted out: `fallbackSize`'s own comment says a locale wider than the measured one costs
+    // its first instance one correction, so `corrections > 0` cannot distinguish a dead
+    // declaration from a formatter answering in another locale. The box finding is the
+    // accurate headline either way, so nothing is hidden by suspending this.
     !(miss != null && !ownsAgrees(measured, expected))
   ) {
     report(
@@ -2217,6 +2241,17 @@ describe('conformance · every control, four rules', () => {
         // formatter ran in. Printed per control so the log names the configuration the
         // numbers below were taken in.
         const appLocale = deviceLocale();
+        // And whether *this run* said it meant to test a locale the table was not measured in.
+        // The app cannot read the runner's environment, so the answer is published by
+        // `example/rn-harness.config.mjs` with the machine state and read back here; the
+        // default when it cannot be read is `false`, i.e. the comparison is enforced.
+        const mismatchAllowed = await localeMismatchAllowed();
+        if (mismatchAllowed.allowed) {
+          console.log(
+            `    · ${ALLOW_LOCALE_MISMATCH_ENV}=1: a locale mismatch will be a ` +
+              'printed skip rather than a failure, for this file only'
+          );
+        }
         const boxRule = boxRuleFor(fixture.component);
 
         // 1. The engine knows a fallback at all — read once for the whole file, before any
@@ -2253,6 +2288,7 @@ describe('conformance · every control, four rules', () => {
               expected,
               boxRule,
               deviceLocale: appLocale,
+              mismatchAllowed: mismatchAllowed.allowed,
             })
           );
           cold.unmount();
@@ -2287,6 +2323,7 @@ describe('conformance · every control, four rules', () => {
             expected,
             boxRule,
             deviceLocale: appLocale,
+            mismatchAllowed: mismatchAllowed.allowed,
           })
         );
         warm.unmount();

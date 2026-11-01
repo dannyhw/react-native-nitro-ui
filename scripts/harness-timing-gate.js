@@ -60,12 +60,20 @@ function timingGatesRequested() {
  *
  * @param {object} [options]
  * @param {NodeJS.ProcessEnv} [options.env]
- * @returns {{ harnessTiming: boolean, load1: number, load5: number, cores: number }}
+ * @returns {{ harnessTiming: boolean, load1: number, load5: number, cores: number, allowLocaleMismatch: boolean }}
  */
 function timingGateState({ env = process.env } = {}) {
   const [load1 = 0, load5 = 0] = os.loadavg();
   return {
     harnessTiming: env.HARNESS_TIMING === '1',
+    // The other thing an app cannot see about its own run: whether the run said "I
+    // meant to test a locale the table was not measured in". It rides along here
+    // because it is the same problem as the load average — the app's JS cannot read
+    // the runner's environment, so a premise a *run* opted out of has to be
+    // published rather than guessed at. `localePremiseMiss` in
+    // `scripts/conformance-core.mjs` fails a locale-dependent comparison unless this
+    // is true, which is what stops that rule degrading into a silent skip.
+    allowLocaleMismatch: env.NITRO_UI_ALLOW_LOCALE_MISMATCH === '1',
     load1,
     load5,
     cores: os.cpus().length,

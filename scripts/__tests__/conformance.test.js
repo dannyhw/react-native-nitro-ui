@@ -38,6 +38,7 @@ import {
   checkLaunchPinAgreesWithTable,
   checkSharedTableMirror,
   classifyFindings,
+  ALLOW_LOCALE_MISMATCH_ENV,
   coverageMatrix,
   findingKey,
   formatMatrix,
@@ -277,18 +278,21 @@ describe('the declared-fallback rule', () => {
     ).toEqual([]);
   });
 
-  /* The locale premise (F8). CI run 41230848294 reported the DatePicker row as a
-   * drifted declaration because the runner's simulator was `en_US` and the row was
-   * measured in `en_PT` — same binary, same engine, 103 pt versus 107 pt. Both
-   * numbers are correct, so the comparison has a premise, and a premise that is not
-   * met has to be *said* rather than silently accepted. */
+  /* The locale premise (F8). The DatePicker's iOS width is a formatter's output, so
+   * the same binary measures 107 pt in `en_US` and 103 pt in `en_PT`, and both are
+   * correct. Round 1 handled a mismatch by skipping the comparison; the reviewer's
+   * objection was right — the harness *pins* the locale, so an app reporting another
+   * one means the pin was lost, was overridden without being said, or the formatter
+   * stopped following it. A skip turns that into a green run that compared nothing, so
+   * a mismatch is a failure and the skip needs an opt-out the run publishes. */
 
   it('compares a locale-dependent row when the app is in the locale it was measured in', () => {
     // The strictness proof: with the premise met, a wrong width is still red. The
     // row is the DatePicker's, and the numbers are the two real measurements, so
     // the fixture cannot coincide with a fudge.
     const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    expect(row.measuredUnderLocale).toBe('en-PT');
+    expect(row.measuredUnderLocale).toBe('en-US');
+    expect(row.width).toBe(107);
     expect(
       fallbackFindings({
         component: 'DatePicker',
@@ -296,7 +300,7 @@ describe('the declared-fallback rule', () => {
         declared: row,
         measured: row,
         corrections: 0,
-        deviceLocale: 'en-PT',
+        deviceLocale: 'en-US',
       })
     ).toEqual([]);
     const drifted = fallbackFindings({
@@ -305,30 +309,54 @@ describe('the declared-fallback rule', () => {
       declared: row,
       measured: { width: row.width + 4, height: row.height },
       corrections: 0,
-      deviceLocale: 'en-PT',
+      deviceLocale: 'en-US',
     });
     expect(drifted[0].problem).toContain('is not the measured');
   });
 
-  it('reports the locale mismatch as a skipped comparison, not a failure or a pass', () => {
+  it('fails a locale mismatch rather than skipping it', () => {
+    // 103x36.33 is what the control measures in `en_PT`, measured locally on the gate
+    // simulator by launching it with `-AppleLocale en_PT`. With the run pinned to
+    // `en_US`, that is this row compared in the wrong locale: the finding must name
+    // the premise, because a bare "not the measured" would send the next reader to
+    // `NitroUiDatePickerField` for a bug that is not there — and must be a *problem*,
+    // because a lost pin is not something a run gets to be quiet about.
     const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    // 107x36.33 is what the control measures in `en_US`, measured locally on the
-    // gate simulator by launching it with `-AppleLocale en-US`: CI's exact number.
     const findings = fallbackFindings({
       component: 'DatePicker',
       platform: 'ios',
       declared: row,
-      measured: { width: 107, height: 36.33333333333333 },
+      measured: { width: 103, height: 36.33 },
       corrections: 1,
-      deviceLocale: 'en-US',
+      deviceLocale: 'en-PT',
     });
     expect(findings).toHaveLength(1);
+    expect(findings[0].problem).toContain('the app runs in en-PT');
+    expect(findings[0].problem).toContain('measures in en-US');
+    expect(findings[0].problem).toContain(ALLOW_LOCALE_MISMATCH_ENV);
+    expect(findings[0].skipped).toBeUndefined();
+    // A premise failure is a failure of the run, so the classifier routes it there.
+    const classified = classifyFindings(findings);
+    expect(classified.skipped).toEqual([]);
+    expect(classified.failures).toHaveLength(1);
+  });
+
+  it('skips the comparison only when the run published the opt-out', () => {
+    const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
+    const findings = fallbackFindings({
+      component: 'DatePicker',
+      platform: 'ios',
+      declared: row,
+      measured: { width: 103, height: 36.33 },
+      corrections: 1,
+      deviceLocale: 'en-PT',
+      mismatchAllowed: true,
+    });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].problem).toBeNull();
     expect(findings[0].skipped).toContain('comparison skipped');
     expect(findings[0].skipped).toContain('en-PT');
     expect(findings[0].skipped).toContain('en-US');
-    expect(findings[0].problem ?? null).toBeNull();
-    // And the classifier keeps it out of both `failures` and `known`, printing it
-    // as its own line: a run that compared less than it claims must say so.
     const classified = classifyFindings(findings);
     expect(classified.failures).toEqual([]);
     expect(classified.known).toEqual([]);
@@ -338,23 +366,29 @@ describe('the declared-fallback rule', () => {
 
   it('does not call the extra correction a locale costs a missing declaration', () => {
     // The second claim the same premise suspends, and the one that only shows up on
-    // a device: in `en_US` the engine holds `en_PT`'s 103 pt, so the first frame has
-    // to be corrected and `corrections` is 1. `HybridNitroUiDatePicker.swift`'s
-    // `fallbackSize` documents that cost in words. Seen locally on the gate
-    // simulator, where pinning `en_US` made this row red with `needed 1
-    // correction(s) …` after the box comparison had already been skipped.
+    // a device: with the app outside the pinned locale the engine holds the pinned
+    // locale's width, so the first frame has to be corrected and `corrections` is 1.
+    // `HybridNitroUiDatePicker.swift`'s `fallbackSize` documents that cost in words.
+    // The box finding is the accurate headline in both branches, so this one is
+    // suspended whether the run failed on the premise or opted out of it.
     const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
-    const wrongLocale = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: 107, height: 36.33 },
-      corrections: 1,
-      deviceLocale: 'en-US',
-    });
-    expect(
-      wrongLocale.map((finding) => finding.problem).filter(Boolean)
-    ).toEqual([]);
+    for (const mismatchAllowed of [false, true]) {
+      const findings = fallbackFindings({
+        component: 'DatePicker',
+        platform: 'ios',
+        declared: row,
+        measured: { width: 103, height: 36.33 },
+        corrections: 1,
+        deviceLocale: 'en-PT',
+        mismatchAllowed,
+      });
+      expect(
+        findings
+          .map((finding) => finding.problem)
+          .filter(Boolean)
+          .join('\n')
+      ).not.toContain('correction(s)');
+    }
     // The same correction count where the premise *does* hold is still the bug the
     // claim exists for: the engine had the right number and did not use it.
     const rightLocale = fallbackFindings({
@@ -363,51 +397,58 @@ describe('the declared-fallback rule', () => {
       declared: row,
       measured: row,
       corrections: 1,
-      deviceLocale: 'en-PT',
+      deviceLocale: 'en-US',
     });
     expect(rightLocale[0].problem).toContain('needed 1 correction(s)');
   });
 
   it.each(['en_US', 'en-US-POSIX', 'EN-us'])(
-    'reads %s as the same locale CI measured in, so the skip needs an exact miss',
+    'reads %s as the pinned locale, so a premise failure needs an exact miss',
     (locale) => {
-      const row = DECLARED_FALLBACKS.NitroUiDatePicker.android;
-      expect(row.measuredUnderLocale).toBe('en-US');
+      const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
       expect(localePremiseMiss(row, locale)).toBeNull();
     }
   );
 
   it('does not skip anything for a row that names no locale', () => {
-    // The guard on the guard: an unconditional skip would turn the whole rule off.
-    // Only the DatePicker's formatter-derived row declares a locale, and every
-    // other control's box does not depend on one — Slider's width is its parent's,
-    // Switch's is a track.
+    // The guard on the guard: a premise check that fired everywhere would turn the
+    // whole rule off. Only the DatePicker's iOS row declares a locale — its width is a
+    // formatter's output and the run pins that formatter. Every other box does not
+    // depend on one (Slider's width is its parent's, Switch's is a track), and
+    // Android's DatePicker row names none because nothing pins the emulator's locale:
+    // see `checkLaunchPinAgreesWithTable`, which makes that a red `check` rather than
+    // a premise nobody checks.
+    const localed = [];
     for (const [hybridView, row] of Object.entries(DECLARED_FALLBACKS)) {
       for (const platform of ['android', 'ios']) {
-        if (hybridView === 'NitroUiDatePicker') {
-          expect(row[platform].measuredUnderLocale).toEqual(expect.any(String));
+        if (row[platform].measuredUnderLocale != null) {
+          localed.push(`${hybridView}.${platform}`);
           continue;
         }
-        expect(row[platform].measuredUnderLocale).toBeUndefined();
         expect(localePremiseMiss(row[platform], 'zh-CN')).toBeNull();
       }
     }
+    expect(localed).toEqual(['NitroUiDatePicker.ios']);
   });
 
   it('keeps the strict comparison when the app cannot name its locale', () => {
     // "Unknown" must never read as "premise met", or a runtime without `Intl`
-    // would quietly stop comparing.
+    // would quietly stop comparing. And the opt-out cannot rescue it either: an
+    // unnamed locale is not a mismatch anyone opted into.
     const row = DECLARED_FALLBACKS.NitroUiDatePicker.ios;
     expect(localePremiseMiss(row, null)).toBeNull();
-    const findings = fallbackFindings({
-      component: 'DatePicker',
-      platform: 'ios',
-      declared: row,
-      measured: { width: 107, height: 36.33 },
-      corrections: 0,
-      deviceLocale: null,
-    });
-    expect(findings[0].problem).toContain('is not the measured');
+    for (const mismatchAllowed of [false, true]) {
+      const findings = fallbackFindings({
+        component: 'DatePicker',
+        platform: 'ios',
+        declared: row,
+        measured: { width: row.width + 4, height: row.height },
+        corrections: 0,
+        deviceLocale: null,
+        mismatchAllowed,
+      });
+      expect(findings[0].problem).toContain('is not the measured');
+    }
   });
 
   it('still requires a poisoned guess to be corrected, whatever the locale', () => {
@@ -1192,11 +1233,12 @@ describe('the in-app table mirror', () => {
     expect(checkSharedTableMirror(harnessText)).toEqual([]);
   });
 
-  it('pins the launch locale the table needs, not one it will skip', () => {
+  it('pins the launch locale the table needs, and refuses an unpinnable one', () => {
     // Two files, one contract. The config's default pin is what makes a
-    // locale-dependent row comparable on any runner; `measuredUnderLocale` is what
-    // makes a mismatch a printed skip rather than a failure. If they drift, no test
-    // goes red — the row is simply never compared again, everywhere, quietly.
+    // locale-dependent row comparable on any runner, and a mismatch is a device-run
+    // failure, so drift between the two cannot hide: it is either red here (a row the
+    // pin contradicts), red on every device run (a row the pin does not match), or
+    // red here for the row that names a locale nothing pins.
     const configText = readFileSync(
       join(repoRoot(), 'example/rn-harness.config.mjs'),
       'utf8'
@@ -1205,11 +1247,11 @@ describe('the in-app table mirror', () => {
     expect(
       checkLaunchPinAgreesWithTable(
         configText.replace(
-          "const DEFAULT_APP_TEST_LOCALE = 'en_PT'",
+          "const DEFAULT_APP_TEST_LOCALE = 'en_US'",
           "const DEFAULT_APP_TEST_LOCALE = 'de_DE'"
         )
       ).join('\n')
-    ).toContain('measured in en-PT');
+    ).toContain('measured in en-US');
     // And the case that starts the drift: the pin deleted, so the app inherits the
     // machine's locale.
     expect(
@@ -1217,6 +1259,15 @@ describe('the in-app table mirror', () => {
         configText.replace(/const DEFAULT_APP_TEST_LOCALE = '[^']*'/, '')
       ).join('\n')
     ).toContain('no DEFAULT_APP_TEST_LOCALE');
+    // A locale on the Android row would be a premise no run could check, because the
+    // emulator's locale is an AVD setting nothing here passes. Built as data rather
+    // than by editing the source: the check takes the table, and the table it must
+    // refuse is one field wide.
+    const withAndroidLocale = structuredClone(DECLARED_FALLBACKS);
+    withAndroidLocale.NitroUiDatePicker.android.measuredUnderLocale = 'en-US';
+    expect(
+      checkLaunchPinAgreesWithTable(configText, withAndroidLocale).join('\n')
+    ).toContain('nothing pins the emulator');
   });
 
   it('goes red when the region is missing, corrupt, or stale', () => {

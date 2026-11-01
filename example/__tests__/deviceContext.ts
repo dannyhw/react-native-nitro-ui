@@ -11,24 +11,24 @@
  *
  * So the app asks the runtime instead. `example/rn-harness.config.mjs` pins a
  * locale and zone for every harness launch, and these helpers read back what the
- * process really got, so a suite can (a) name the configuration its numbers were
- * taken in and (b) report a missing premise as a printed skip rather than either a
- * silent pass or a misleading failure.
- *
- * Nothing here weakens a claim on a machine where the premise holds.
+ * process really got, so a suite can name the configuration its numbers were taken
+ * in. A locale the row and the app disagree about is a FAILURE — the pin is the
+ * premise, and losing it is worth a red row. Only a DST zone with no transition
+ * becomes a printed skip, because no launch argument can give a device a clock that
+ * shifts.
  */
 
 /**
  * The locale the app's formatters will use, canonicalised to `en-US` style
- * (`en-US`, `pt-PT`). `''` when the runtime cannot say.
+ * (`en-US`, `en-PT`). `''` when the runtime cannot say.
  *
- * `Intl` is the only channel both platforms answer through, and it answers with
- * the process's real setting rather than with what the run asked for: launching
- * the pool simulator with `-AppleLocale en-US` makes it report `en-US` (that is
- * how CI's `103x36.33` was reproduced locally), and launching it with the
- * `en_PT` the harness config now pins makes it report `pt-PT`. A hosted
- * simulator that was never given a locale reports its image default, which is the
- * premise miss this file exists to catch.
+ * `Intl` is the only channel both platforms answer through, and it answers with the
+ * process's real setting rather than with what the run asked for — which is the
+ * point: a row compared against what the launcher *requested* would pass while the
+ * formatter ignored it. Measured here, `-AppleLocale en-US` makes this report
+ * `en-US` and the DatePicker measure CI's 107 pt, and `-AppleLocale en-PT` makes it
+ * report `en-PT` at 103 pt. Note it is the *region* that moves: the language stays
+ * English either way, so the tag reads `en-<region>`, not `pt-PT`.
  */
 export function deviceLocale(): string {
   try {
