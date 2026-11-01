@@ -1,0 +1,206 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-01T09:41:42.428Z on code tree `9f59f702c0fe` at HEAD `f800766` (branch `task/F8-ci-harness-hosted`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 850756 ms
+- Load: start 3.71, end 2.74, median 2.29, max 4.17
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F8b-hmgcw`
+- Full log: `task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-41-42.027Z.log` (<store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-41-42.027Z.log)
+- Scrubbed: 69 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Host.harness.tsx`
+- `● Test suite failed to run`
+- `FAIL __tests__/HostControls.harness.tsx`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `FAIL __tests__/MountChurn.harness.tsx`
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `FAIL __tests__/SegmentedControl.harness.tsx`
+- `FAIL __tests__/Recycling.harness.tsx`
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `FAIL __tests__/Sizing.harness.tsx`
+- `FAIL __tests__/Picker.harness.tsx`
+- `FAIL __tests__/Menu.harness.tsx`
+- `FAIL __tests__/Slider.harness.tsx`
+- `FAIL __tests__/Button.harness.tsx`
+- `FAIL __tests__/Progress.harness.tsx`
+- `FAIL __tests__/Switch.harness.tsx`
+- `FAIL __tests__/ColdSizing.harness.tsx`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-41-42.027Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F8b-hmgcw (still live)
+  |   F8b-hmgcw                F8b          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.74 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 285 — the rest is in the full log above)
+
+```
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Sizing.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Picker.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Menu.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Slider.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Button.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Progress.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/Switch.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+FAIL __tests__/ColdSizing.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command failed with exit code 149: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:40:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+
+Test Suites: 16 failed, 16 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        849.669 s
+Ran all test suites.
+SubprocessError: Command failed with exit code 149: xcrun simctl spawn 49D5024D-967B-4B93-ACF6-F73BA0A19E9F defaults read nitroui.example react_native_harness_RCT_jsLocation_backup
+    at checkFailure (file://<repo>/node_modules/nano-spawn/source/result.js:40:9)
+    at getResult (file://<repo>/node_modules/nano-spawn/source/result.js:17:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async getDefaultsValue (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:260:28)
+    at async Module.clearHarnessJsLocationOverride (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:318:25)
+    at async Object.dispose (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:145:13)
+    at async Promise.allSettled (index 1)
+    at async disposeOnce (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:591:43)
+    at async Object.dispose (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:817:21)
+    at async JestHarness.runTests (file:[scrubbed]@react-native-harness/jest/dist/index.js:44:17)
+gate: harness:ios FAIL in 850.8 s
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+
+
+gate: appended the device context to task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-41-42.027Z.log (4 probe(s))
+
+```

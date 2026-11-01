@@ -211,3 +211,69 @@ fails as designed (`the app runs in en-PT …`), and with `NITRO_UI_ALLOW_LOCALE
 
 1. Push `task/F8-ci-harness-hosted` and dispatch `ci.yml` — both jobs. Expect the diagnostics artifact inside 5 minutes of the harness step ending, whatever the emulator is doing.
 2. If `Picker × no-leak-on-drop` is green, that closes the leak CI saw; if it is red again, `unboundFilingCount()` is the next thing to instrument.
+
+## F8b
+
+**Lease:** `F8b-oqxzi` (pair-b). Four code commits. iOS could not run — see Questions.
+
+**The cliff was capacity.** A re-show stages every hold in one millisecond, all inside their window,
+and a ceiling of 256 evicted the excess *for being numerous*: 300 re-showns lost 44 corrections, and a
+1,324-view first commit landed its 300-row overflow in the same table and lost 44 more. Closing the
+window before taking a slot makes the ceiling a backstop (2,048 ≈ 192 KiB); nothing in-window is
+evicted while an expired entry exists. A bind later than both windows is charged a fresh measure
+instead of being left with nothing to report against, and `flush` prunes the held set too — a reclaim
+is a demotion, which restarts the clock.
+
+**CI 1a is not an engine bug:** `reportsConfirmed` counts *reports*. One instance, three
+measure-and-report cycles → three confirmations, zero corrections; Compose measures twice per mount
+(`measures=100` for n=50) and the epoch bump marks every mounted row of that configuration inexact.
+Instance count is a floor, never a ceiling; `corrections` stays exact. **CI 2 and CI 3 are both
+test-side ordering races**, fixed by snapshotting before posting, and waiting for a handle and a
+measured size.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1590 tests / 59 suites | `9f59f702c0fe` | 2 m 35 s | start 2.0 / med 4.5 / max 6.3 |
+| `harness:ios` | **FAIL** | — | `9f59f702c0fe` (ios tree) | 15 m 28 s | start 3.2 / med 2.0 / max 3.2 |
+| `harness:android` | **PASS** | 280 tests / 16 suites | `9f59f702c0fe` (android tree) | 8 m 11 s | start 3.1 / med 2.0 / max 3.1 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: satisfied except `harness:ios`. Native: **382 checks**, ASan/UBSan clean. Harness
+files changed, so both platforms were run. **The last green `harness:ios` is tree `6fa500535009`
+(`6c7abb1`) — before every F8b commit**, so the engine change and both harness files are iOS-untested
+locally. Nothing under `ios/` changed, but `cpp/` compiles into it.
+
+### Red proofs
+
+Each proof is against the thing it guards: nine assertions red on the brief's base `8f05a44`, the rest
+by mutation.
+
+- `re-show > old capacity` -> `8f05a44` -> `got 256, want 300` (holds, claims, pushes)
+- `first commit above 1,280` -> `8f05a44` -> `got 1280, want 1324` (rows and pushes)
+- `flush closes windows` -> `8f05a44` -> `got 10, want 0`; Picker churn -> `got 25, want 0`
+- `bind later than both windows` -> `8f05a44` -> `is told it owes itself a measure`
+- `the ceiling's eviction charges its debt` -> `8f05a44` -> red; also red with that marking deleted alone
+- `flush` stops pruning holds -> `the demoted rows are reclaimed by a flush alone (got 10, want 0)`
+- `a confirmation counts reports` -> per-instance confirm counter -> `got 1, want 3`
+- same -> a batch stops recognising an already-right size -> `costs no state update (got 5, want 0)`
+- the false red proof (item 1) -> burst ids 5588-6099 still marked finished -> `filed on the unbound path (got 0, want 1)`; ids moved, assertion now names the path
+- `the preflight does not wait forever for -accel-check` -> unbounded call -> `saidItGaveUp: false`
+
+### Questions for orchestrator
+
+**`harness:ios` cannot run on this machine, and not because of this tree.** No iOS app launches here:
+Settings fails to launch on pair-a, on pair-b, and on a simulator I created, erased and rebooted, on
+iOS 27.0 and 27.1. Boot, `spawn`, `appinfo` and screenshots answer; `launch` and `terminate` never
+return (150 s+). `launchd_sim` reports runtime files missing (`tipsd … No such file or directory`).
+Restarting `CoreSimulatorService` and erasing my device did not help. I killed the wedged run, so the
+ledger line is my SIGTERM, not a test failure. The last green `harness:ios` anywhere on this branch is
+`6fa500535009`, which predates every F8b commit. Options: **(a) restart the machine, re-run
+`harness:ios` — recommended**; (b) dispatch CI and read iOS there. `emulator-5560` untouched.
+
+### Follow-ups
+
+- ios-sim-launch: `simctl launch`/`terminate` hang machine-wide while every other subcommand answers. A preflight that launches a throwaway app (bounded, like `accel-check`'s) would say so before a gate spends 15 minutes on it.
+- lease-pair-health: the pool hands out a pair whose simulator cannot launch an app; nothing in `acquire --boot` checks that.
+- harness-ios-device-env: `gate.mjs harness:ios` without the lease env exported silently booted an *unleased* "iPhone 17". Exporting `IOS_SIM_UDID` is required; the config could refuse instead.
+- bench-confirmed: `wrongGuess n=50` logs `measurements=592` against 100 for the other guesses. Uninvestigated, out of scope.
