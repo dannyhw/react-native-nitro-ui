@@ -97,12 +97,34 @@ function listRow(labels) {
   });
 }
 
+/**
+ * A whole row of day cells: clickable, same height, seven of them, and at a width no
+ * header column has. This is the shape the real dump reports — the day `Surface`s pick
+ * up Material's touch-target expansion, so they read 110-126 px beside a header's 105.
+ *
+ * They come *before* the header in the tree, as they do in a real dump of a calendar
+ * that has been opened before: composition order is not the order these nodes are
+ * reported in, so a rule that stopped filtering on `clickable` and simply took the
+ * longest same-height row would land on this one — seven boxes with an 8 px spread —
+ * and report a healthy calendar's columns as a squeeze.
+ *
+ * @param {number[]} widths
+ */
+function dayRow(widths) {
+  let x = 22;
+  return widths.map((width) => {
+    const cell = dayCell('Sunday, October 4, 2026', x, width);
+    x += width + 12;
+    return cell;
+  });
+}
+
 /** What the real dumps measured, as a fixture pair. */
 const BROKEN_320 = headerRow([126, 126, 126, 126, 126, 126, 20]);
 const FIXED_320 = headerRow([105, 105, 105, 105, 105, 105, 105]);
 
-/** The calendar's grid, with the app's other text and its day cells around it. */
-function screen(cells) {
+/** The app's and Material's own named nodes inside a calendar's box, no rows. */
+function calendarChrome() {
   return [
     parseHierarchy(
       '<hierarchy><node content-desc="" text="Select date" class="android.widget.TextView" ' +
@@ -114,6 +136,13 @@ function screen(cells) {
       '<hierarchy><node text="October 2026" clickable="true" enabled="true" ' +
         'class="android.widget.TextView" bounds="[64,435][285,488]" /></hierarchy>'
     )[0],
+  ];
+}
+
+/** The calendar's grid, with the app's other text and its day cells around it. */
+function screen(cells) {
+  return [
+    ...calendarChrome(),
     ...cells,
     dayCell('Sunday, October 4, 2026', 22, 105),
     dayCell('Monday, October 5, 2026', 137, 105),
@@ -203,6 +232,27 @@ describe('real-input Android calendar grid', () => {
     expect(grid.columns).toHaveLength(7);
     expect(grid.columns[0].x1).toBe(32);
     expect(calendarGridProblems(grid)).toEqual([]);
+  });
+
+  it('calls a clipped header missing rather than measuring a week of day cells', () => {
+    // The failure mode the `clickable` filter exists for. A calendar scrolled so its
+    // header is clipped keeps naming its day cells, and a week of them looks exactly
+    // like a header row structurally: seven boxes, one row, equal heights. Here they are
+    // the real dump's day cells at a 320 dp box — 105 × 123 px each, an even spread — so
+    // a rule that let clickable nodes in would answer "40 dp floor cleared, columns
+    // equal" for a calendar whose header is off screen, which is the pass this check must
+    // never give. With the filter the row is not found at all and the answer is null:
+    // "not on screen", which the caller aborts on.
+    const grid = measureCalendarGrid(
+      [
+        ...calendarChrome(),
+        headerCell('Sunday', 0, 0),
+        ...dayRow([105, 105, 105, 105, 105, 105, 105]),
+      ],
+      BOX,
+      DENSITY
+    );
+    expect(grid).toBeNull();
   });
 
   it('says so when this calendar is not on screen at all', () => {
