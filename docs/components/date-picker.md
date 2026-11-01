@@ -123,7 +123,7 @@ behind either way.
   saying so; give the picker a wider box rather than scaling a touch target down further.
   What the cut does **not** change is the picker's height: an `inline` or `wheel` calendar
   measures 512 dp tall at 320 dp wide and at 411 dp wide, in `date` and `datetime`, and for
-  a month of four rows as well as one of six — eight in-app reads, all the same number. So
+  a month of four rows as well as one of six — twelve in-app reads, all the same number. So
   the height does not depend on the width the way a wrapping label's would, and the size
   the engine caches under one `inline|date` key is the right answer in both width regimes;
   that is why the key stays as it is, where `docs/architecture/sizing.md` §5 would ask for
