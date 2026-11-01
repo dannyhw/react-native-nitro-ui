@@ -76,7 +76,7 @@ Round 3 of 3 · lease `G8-clgez` (`emulator-5574`) · **no shared TS touched** (
 
 **Item 1: the height does not move with the width.** In-app `measureContent()` puts an `inline` and a `wheel` calendar at **512.00 dp tall, both at 320 dp and at 411.43 dp wide** — `date` and `datetime`, and a four-row month (Feb 2026) beside a six-row one (May 2026). Twelve reads, one number, so the key stays `${variant}|${mode}`: sizing.md §5 wants the width in the key only where height follows it. The `uiautomator` boxes (198.86 vs 246.10 dp) are viewport clipping, not the control; `date-picker.md` carries the numbers.
 
-Also: the wrapper's cost is a recomposition of its own lambda, not a measure of the calendar, and its no-modifier reason is not that `fillMaxWidth()` throws (a no-op unbounded); `MENU_CONTENT_MAX_DP` back above `MenuHost`'s doc; the changeset's 360 dp. Two more invented measurements surfaced there — fixed where reachable, one left as a FOLLOWUPS line because that file is both-platform.
+Also: the wrapper's cost is a recomposition of its own lambda, not a measure of the calendar, and its no-modifier reason is not that `fillMaxWidth()` throws (a no-op unbounded); `MENU_CONTENT_MAX_DP` back above `MenuHost`'s doc; the changeset says 360 dp. Two more invented numbers surfaced there — fixed where reachable, the both-platform file left to FOLLOWUPS.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
