@@ -1,6 +1,6 @@
 {
   "task": "G8",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 4-9 are round 0's rule unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first three rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574. Rows marked `round: 1` are fix round 1's, on lease G8-6ih23 / emulator-5570; the code tree is named per row because the tree moved as the round's commits landed. The last row is a negative control: a mutant that was expected to go red and did not, kept because it is the reason a check was not written.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 4-9 are round 0's rule unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first three rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574. Rows marked `round: 1` are fix round 1's, on lease G8-6ih23 / emulator-5570; the code tree is named per row because the tree moved as the round's commits landed. The last row of round 1 is a negative control: a mutant that was expected to go red and did not, kept because it is the reason a check was not written. Round 2's rows are at the bottom, on lease G8-clgez / emulator-5574.",
   "mutations": [
     {
       "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › gives the list the width its items need, not the trigger's",
@@ -160,6 +160,15 @@
       "before": "      ExposedDropdownMenu(\n        expanded = expanded,\n        matchAnchorWidth = false,",
       "after": "      ExposedDropdownMenu(\n        expanded = expanded,\n        modifier = Modifier.offset(x = 12.dp),\n        matchAnchorWidth = false,",
       "red": "DID NOT GO RED: 19 passed, 19 total. The witness's `menu=` rect is the popup's window, and `Modifier.offset` on the list moves the rows inside that window, not the window - Material's own `ExposedDropdownMenuPositionProvider` still places it at the anchor. So an assertion that the popup's start edge equals the trigger's could not be shown to fail by any product-level lever this call exposes, and it was removed rather than shipped unfalsifiable; the start edges are printed instead. Horizontal placement stays guarded by the hosted test's `Math.abs(mLeft - aLeft) < 40`, whose red proof is G7b round 1's `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` - the mutant that really did move a window, 16 px below the anchor's bottom to 168 px."
+    },
+    {
+      "round": 2,
+      "tree": "d3be8bf7c71b",
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid ₷ calls a clipped header missing rather than measuring a week of day cells",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "    if (node.clickable === 'true') {",
+      "after": "    if (false) {",
+      "red": "expect(grid).toBeNull() - 1 failed, 12 passed. Re-run after the fixture's day cells were given the widths the dump actually reports (105 px each, replacing 110/111/126 numbers that are nowhere in `g8-320-postfix.xml`), which is the point: the row is now geometrically identical to a healthy header, so nothing but the `clickable` filter and the fixture's deliberate names stand between the rule and a clean report for a calendar whose header is off screen. Round 1 proved this same mutant against the invented widths, where the mutant could also have been caught by the 16 px spread it invented - that escape route is gone."
     }
   ]
 }
