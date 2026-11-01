@@ -641,24 +641,47 @@ function handleFor(testId: string): Handle {
 }
 
 /**
+ * Forget any handle held for `testId`, so the next `ensureHandle` can only be answered by a
+ * mount that has not happened yet.
+ *
+ * Call this immediately before every `render` whose control the test then reads. Without it
+ * the map answers with a handle from an *earlier* owner: `hybridRef` fires once per native
+ * view at mount and is never called with `null` (`useStableCallback.ts`'s own caveat — "a
+ * callback prop that is already installed is never re-invoked"), and `handles` is cleared only
+ * in `afterEach`. So for the second owner of the recycle rule, for the warm mount of the
+ * fallback rule, and for both second owners of the residue probes, `ensureHandle` used to find
+ * the first owner's handle sitting in the map and return it without waiting at all.
+ *
+ * That is CI run 41256853746's DatePicker failure: the uncontrolled second owner "kept its
+ * identity across lifetimes" and the day it showed was `1799971200000`, which is precisely the
+ * *first* owner's pick, read through the first owner's handle. It also hid the race the wait
+ * exists for, since a lookup that always succeeds proves nothing about timing.
+ *
+ * What this cannot hide: if a remount really never re-fires the callback, `ensureHandle` now
+ * times out and says so, which is the accurate finding — the control did not hand back its own
+ * state.
+ */
+function expectANewHandle(testId: string): void {
+  handles.delete(testId);
+}
+
+/**
  * Wait until the callback for this testID has run, then hand the handle back.
  *
- * Called once before the first read after each `render`, because `hybridRef`
- * fires on a commit *after* the view is created: a box can exist (that is what
- * `waitForTestId`/`queryByTestId` see) while the handle has not arrived. Run
- * 41230848294, at load1 152 on 3 cores, is what proved the difference is real
- * rather than theoretical — `Conformance · is named on its own box` died on this
- * sentence for the DatePicker, while the same test passed on the next dispatch of
- * the same tree (41234953779). "The control never handed back its state" was a
- * statement about a callback that was 20 ms late.
+ * Called once after each `render` (and only meaningful after
+ * {@link expectANewHandle} has run before it), because `hybridRef` fires on a commit *after*
+ * the view is created: a box can exist (that is what `waitForTestId`/`queryByTestId` see)
+ * while the handle has not arrived. Run 41230848294, at load1 152 on 3 cores, is what proved
+ * the difference is real rather than theoretical — `Conformance · is named on its own box`
+ * died on this sentence for the DatePicker, while the same test passed on the next dispatch of
+ * the same tree (41234953779). "The control never handed back its state" was a statement about
+ * a callback that was 20 ms late.
  *
- * It waits for the handle only, never for an *answer*: every rule below still
- * reads the control exactly once, so the recycle rule in particular keeps its
- * "do not wait for the reset" property (see the comment on its read).
+ * It waits for the handle only, never for an *answer*: every rule below still reads the
+ * control exactly once, so the recycle rule in particular keeps its "do not wait for the
+ * reset" property (see the comment on its read).
  */
 async function ensureHandle(testId: string): Promise<Handle> {
-  const existing = handles.get(testId);
-  if (existing != null) return existing;
   return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
 }
 
@@ -2266,6 +2289,7 @@ describe('conformance · every control, four rules', () => {
         try {
           poison(fixture.component);
           const coldBefore = stats();
+          expectANewHandle(fixture.testId);
           const cold = await render(fixture.owner(false), RENDER);
           await settle(600);
           const coldHandle = await ensureHandle(fixture.testId);
@@ -2305,6 +2329,7 @@ describe('conformance · every control, four rules', () => {
         //    finding if a correction was needed where the declaration should have made it
         //    unnecessary.
         const warmBefore = stats();
+        expectANewHandle(fixture.testId);
         const warm = await render(fixture.owner(false), RENDER);
         await settle(600);
         const warmHandle = await ensureHandle(fixture.testId);
@@ -2465,6 +2490,7 @@ describe('conformance · every control, four rules', () => {
         // which is the other way this class of bug arrives (a prop that goes unset never
         // reaches native at all, so the next mount keeps whatever was there). It is not what
         // notices a missing reset, and the log says which half is which.
+        expectANewHandle(fixture.testId);
         const first = await render(fixture.owner(false), RENDER);
         await settle();
         await ensureHandle(fixture.testId);
@@ -2478,6 +2504,7 @@ describe('conformance · every control, four rules', () => {
         first.unmount();
         await settle(400);
 
+        expectANewHandle(fixture.testId);
         const second = await render(fixture.owner(true), RENDER);
         await settle();
         await ensureHandle(fixture.testId);
@@ -2540,6 +2567,7 @@ describe('conformance · every control, four rules', () => {
               run.probe.leaveBehind
           );
           recycleEvents.length = 0;
+          expectANewHandle(fixture.testId);
           const firstOwner = await render(run.probe.first(), RENDER);
           await settle();
           await ensureHandle(fixture.testId);
@@ -2551,11 +2579,19 @@ describe('conformance · every control, four rules', () => {
           // mounting transaction that removes the view.
           await settle(500);
 
+          expectANewHandle(fixture.testId);
           const secondOwner = await render(run.probe.second(), RENDER);
           await settle();
-          // The handle, not the answer: React hands the previous callback `null` when the
-          // first owner unmounts, so this is the second owner's own handle arriving — the
-          // read below stays a single read, with no wait for the reset itself.
+          // The second owner's own handle, which is why the line above deleted the entry
+          // first. What this file used to claim here — that React hands the previous callback
+          // `null` on unmount, so a stale entry could not survive — is wrong: `hybridRef` is
+          // installed once per native view and never re-invoked or cleared
+          // (`src/core/useStableCallback.ts`), and `handles` was emptied only in `afterEach`.
+          // So the lookup found the *first* owner's handle and returned it without waiting,
+          // and this probe read the first owner's day and its open presentation count. That is
+          // CI's `reads 1799971200000 where the props say 1740787200000` with
+          // `presented 1`, on both hosted runs, in the one rule that cannot be explained by
+          // load. The read below still stays a single read, with no wait for the reset.
           await ensureHandle(fixture.testId);
           // Then wait for the *bookkeeping* to be quiescent, which is a different thing
           // from waiting for the answer. Run 41230848294 read
@@ -2593,6 +2629,7 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('is named on its own box, not on a wrapper around it', async () => {
+        expectANewHandle(fixture.testId);
         const mounted = await render(fixture.owner(false), RENDER);
         await settle();
         await ensureHandle(fixture.testId);
