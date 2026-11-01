@@ -345,6 +345,21 @@ jobs:
                 echo "$prop=$("$ADB" -e shell getprop "$prop" 2>&1)"
               done
             fi
+            # The clock and locale the emulator booted with. These are in the
+            # artifact because the Android job's DatePicker DST rule prints
+            # `DST PREMISE MISSING` on a zone with no transition, and the run
+            # cannot otherwise say which zone that was: the zone is a *device*
+            # setting (`persist.sys.timezone`), and nothing in this repo passes
+            # one — `appLaunchOptions` for Android has only `extras`, no
+            # environment. Read from the device rather than asserted, so the
+            # artifact is the answer.
+            echo "== device clock and locale =="
+            if [ -n "$ADB" ]; then
+              for prop in persist.sys.timezone persist.sys.locale ro.product.locale ro.build.version.sdk; do
+                echo "$prop=$("$ADB" -e shell getprop "$prop" 2>&1)"
+              done
+              echo "date=$("$ADB" -e shell date 2>&1)"
+            fi
             echo "== dmesg (kvm) =="
             # Needs CAP_SYSLOG, which the job user does not have: plain `dmesg`
             # printed "read kernel buffer failed: Operation not permitted" twice on

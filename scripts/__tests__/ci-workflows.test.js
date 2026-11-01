@@ -900,7 +900,12 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       '  devices) echo "List of devices attached"; echo "emulator-5554   device product:sdk_gphone64 model:sdk_gphone64";;',
       '  -e)',
       '    case "$2" in',
-      '      shell) echo 1;;',
+      '      shell)',
+      '        case "$4" in',
+      '          persist.sys.timezone) echo Europe/Lisbon;;',
+      '          persist.sys.locale|ro.product.locale) echo en-US;;',
+      '          *) echo 1;;',
+      '        esac;;',
       '      logcat) echo "I/BootReceiver( 1234): sys.boot_completed=1";;',
       '    esac;;',
       'esac',
@@ -1010,6 +1015,12 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       );
       expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
         'sys.boot_completed=1'
+      );
+      // And the device's own clock and locale, which is how the Android job's
+      // `DST PREMISE MISSING` line becomes readable: the zone is an emulator
+      // setting nothing in this repo passes, so the artifact has to carry it.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'persist.sys.timezone='
       );
       // The hardware lines, in the artifact, from the AVD the job really used.
       expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
