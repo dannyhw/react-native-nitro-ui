@@ -1,0 +1,85 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-01T09:57:24.378Z on code tree `9f59f702c0fe` at HEAD `f800766` (branch `task/F8-ci-harness-hosted`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 1086090 ms
+- Load: start 31.38, end 2.57, median 2.25, max 31.38
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `F8b-hmgcw`
+- Full log: `task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log` (<store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log)
+- Scrubbed: 8 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Host.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: F8b-hmgcw (still live)
+  |   F8b-hmgcw                F8b          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.57 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 9f59f702c0fe at HEAD f800766
+gate: git tree d5484e8caa99
+gate: log task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log
+gate:       <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9f59f702c0fe, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 31.38/13.26 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Host.harness.tsx
+  ● Test suite failed to run
+
+    SubprocessError: Command was terminated with SIGTERM: xcrun simctl appinfo 49D5024D-967B-4B93-ACF6-F73BA0A19E9F nitroui.example
+
+      at checkFailure (file:<repo>/node_modules/nano-spawn/source/result.js:36:9)
+      at getResult (file:<repo>/node_modules/nano-spawn/source/result.js:17:3)
+      at async Module.getAppInfo (file:[scrubbed]@react-native-harness/platform-apple/dist/xcrun/simctl.js:102:36)
+      at async Object.createAppSession (file:[scrubbed]@react-native-harness/platform-apple/dist/instance.js:125:29)
+      at async restartAppSession (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:457:29)
+      at async startAttempt (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:137:13)
+      at async waitForMetroBackedAppReady (file:[scrubbed]@react-native-harness/bundler-metro/dist/startup.js:184:13)
+      at async waitForAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:128:12)
+      at async Object.ensureAppReady (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:661:17)
+      at async executeRun (file:[scrubbed]@react-native-harness/jest/dist/execute-run.js:189:21)
+
+gate: harness:ios FAIL in 1086.1 s (signal SIGTERM)
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+
+
+gate: appended the device context to task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-57-24.092Z.log (4 probe(s))
+gate: re-raising SIGTERM
+
+```
