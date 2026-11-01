@@ -139,14 +139,34 @@ describe('emulator launch args have one source', () => {
   const patch = readFileSync(PATCH_FILE, 'utf8');
   const added = addedTextFrom(patch);
 
-  it('boots on host GPU rendering, not the software default', () => {
+  it('boots on host GPU rendering where the machine can host-render', () => {
     expect(HARNESS_GPU_MODE).toBe('host');
     expect(SOFTWARE_GPU_MODE).toBe('swiftshader_indirect');
-    expect(emulatorLaunchArgs({ avd: 'nitroui_a' })).toContain('host');
+    // The machine is named, not assumed: `check` runs on `ubuntu-latest` in CI,
+    // where the rule answers `swiftshader_indirect`, and this file used to read
+    // `host` out of the argv of the box that happened to run it.
+    expect(
+      emulatorLaunchArgs({
+        avd: 'nitroui_a',
+        host: { env: {}, platform: 'darwin' },
+      })
+    ).toContain(HARNESS_GPU_MODE);
+    expect(
+      emulatorLaunchArgs({
+        avd: 'nitroui_a',
+        host: { env: {}, platform: 'linux' },
+      })
+    ).toContain(SOFTWARE_GPU_MODE);
   });
 
   it('names the port, snapshot and gpu args in one argv', () => {
-    expect(emulatorLaunchArgs({ avd: 'nitroui_a', port: 5574 })).toEqual([
+    expect(
+      emulatorLaunchArgs({
+        avd: 'nitroui_a',
+        port: 5574,
+        host: { env: {}, platform: 'darwin' },
+      })
+    ).toEqual([
       '@nitroui_a',
       '-port',
       '5574',
@@ -155,6 +175,28 @@ describe('emulator launch args have one source', () => {
       '-no-window',
       '-gpu',
       'host',
+      '-noaudio',
+      '-no-boot-anim',
+      '-no-metrics',
+    ]);
+    // Same argv on every axis but that one, on a runner with nothing to
+    // host-render on. Written out rather than derived from the row above, so the
+    // two cannot agree with each other by accident.
+    expect(
+      emulatorLaunchArgs({
+        avd: 'nitroui_a',
+        port: 5574,
+        host: { env: {}, platform: 'linux' },
+      })
+    ).toEqual([
+      '@nitroui_a',
+      '-port',
+      '5574',
+      '-no-snapshot-load',
+      '-no-snapshot-save',
+      '-no-window',
+      '-gpu',
+      'swiftshader_indirect',
       '-noaudio',
       '-no-boot-anim',
       '-no-metrics',
