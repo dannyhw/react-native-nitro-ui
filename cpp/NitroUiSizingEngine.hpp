@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -402,6 +403,22 @@ namespace margelo::nitro::nitroui {
       /// Walk the registry for states that died without a `forget` once it has
       /// grown this much since the last walk.
       static constexpr size_t kRegistrySweepStride = 512;
+      /**
+       * How many finished instance ids the engine keeps, to answer "is this id
+       * done?" in O(1). Four KiB, always, whatever an app does.
+       *
+       * Must be a power of two: {@link forgotten_} is direct-mapped by the id's
+       * low bits, and ids are monotonic, so a capacity of 2^n means the last 2^n
+       * ids land in 2^n distinct slots and an older one can only be evicted by an
+       * id exactly `capacity` newer than it.
+       */
+      static constexpr size_t kForgottenCapacity = 512;
+      /**
+       * How many finished instance ids `measure` remembers refusing (see
+       * {@link rememberForgottenLocked}). Four KiB, always, and the only cost of
+       * the rule.
+       */
+      static constexpr size_t kForgottenRingCapacity = 512;
 
       /// Trace on/off (off by default: `measure` only compares two floats).
       void setTraceEnabled(bool enabled);
@@ -510,6 +527,15 @@ namespace margelo::nitro::nitroui {
 
       /// Drop every trace of an instance (see `forget`). Caller holds the lock.
       void forgetLocked(int64_t instanceId);
+
+      /// Mark an id finished, so a layout that arrives for it afterwards files
+      /// nothing (see {@link forgotten_}). Caller holds the lock.
+      void rememberForgottenLocked(int64_t instanceId);
+      /// Undo {@link rememberForgottenLocked}: an id that binds again is live.
+      /// Caller holds the lock.
+      void clearForgottenLocked(int64_t instanceId);
+      /// Has this id been forgotten and not re-bound since? Caller holds the lock.
+      bool isForgottenLocked(int64_t instanceId) const;
       /// Walk the registry for states that died without a `forget`. Caller holds
       /// the lock, and it runs rarely on purpose (see `flush`).
       void sweepExpiredLocked();
@@ -538,6 +564,37 @@ namespace margelo::nitro::nitroui {
        */
       std::unordered_map<uint64_t, GuessEntry> guesses_;
       std::unordered_map<int64_t, LedgerEntry> ledger_;
+      /**
+       * The ids `forget` has finished, direct-mapped by their low bits.
+       *
+       * Why this exists: a correction is an `Asynchronous` state update, and RN runs
+       * its callback later, scheduling a layout pass over the tree revision that
+       * carried it. Drop the view in between — which is what a list that scrolls
+       * does constantly, and what an iOS `Menu` costs extra because its popup makes
+       * the drop land a transaction later — and that pass re-enters
+       * `measureContent` for an id whose `onDropView` has already run. `measure`
+       * recorded what it laid out in `ledger_` without asking, and nothing ever
+       * reclaimed it: the sweep walks `registry_`, and a forgotten instance has no
+       * registry row. One orphaned entry per occurrence, for the life of the
+       * process. That is F8's `Menu × no-leak-on-drop: 1 ledger entry(ies) survived
+       * 50 drops`, in a run whose registry read `0→0` across the same window.
+       *
+       * Why the shape is safe: ids come from `nextInstanceId()`, a monotonic counter
+       * whose values are never reused, so recording a slot per id answers "is this id
+       * the one I finished?" *exactly* — a false positive would need an id equal to
+       * the one stored in its own slot, which is that id. The price is the opposite
+       * error: an id whose slot was taken by the id exactly `kForgottenCapacity`
+       * newer is no longer remembered, so a layout arriving *that* late re-files its
+       * orphan. The window that matters is one layout pass, not five hundred drops.
+       *
+       * The alternative that would also work — refusing an id merely because it is
+       * not bound — cannot: `measure` legitimately runs *before* `registerInstance`
+       * on a real mount (layout is on the shadow thread, the bind is on the mount
+       * transaction), and swallowing a correction is the failure S7 exists to stop.
+       * Hence a memory of finished ids rather than a rule about live ones, and
+       * `registerInstance` clearing the mark: an id that binds again is live.
+       */
+      std::array<int64_t, kForgottenCapacity> forgotten_{};
       /// hash -> instances that last laid out with a size that is not the cache's.
       std::unordered_map<uint64_t, std::vector<int64_t>> needsCorrection_;
       std::unordered_map<int64_t, BoundInstance> registry_;
