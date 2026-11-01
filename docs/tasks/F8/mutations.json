@@ -1,0 +1,90 @@
+{
+  "task": "F8",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 1-7 were run by a script that verifies the restore; rows 8-11 edit `.github/workflows/ci.yml` the same way. Run on maintainer-mac-1 overnight 31 Oct/1 Nov 2026, lease F8-wbpsf, code tree 6d317aac80fd. The two device-side proofs at the end are not mutations: they are the shipped code run in a configuration that must fail, which is what the brief asks of a premise guard.",
+  "mutations": [
+    {
+      "test": "scripts/__tests__/app-launch-env.test.js · what an app launch is told about its machine › passes the locale as -AppleLocale, in BCP-47 form",
+      "file": "scripts/app-launch-env.mjs",
+      "before": "    options.arguments = ['-AppleLocale', tag];",
+      "after": "    options.arguments = [];",
+      "red": "expect(received).toEqual(expected) — the launch arguments no longer contain ['-AppleLocale', 'en-US']"
+    },
+    {
+      "test": "scripts/__tests__/app-launch-env.test.js · what an app launch is told about its machine › passes the zone as TZ, which is what Foundation and Hermes answer from",
+      "file": "scripts/app-launch-env.mjs",
+      "before": "    options.environment = { TZ: zone };",
+      "after": "    options.environment = {};",
+      "red": "expect(received).toEqual(expected) — `environment` is empty, so the app would boot in the device's own zone"
+    },
+    {
+      "test": "scripts/__tests__/conformance.test.js · the in-app table mirror › pins the launch locale the table needs, not one it will skip",
+      "file": "example/rn-harness.config.mjs",
+      "before": "const DEFAULT_APP_TEST_LOCALE = 'en_PT';",
+      "after": "const DEFAULT_APP_TEST_LOCALE = 'en_GB';",
+      "red": "expect(received).toEqual(expected) — the pin/table cross-check reports that the launch pin names a locale the `measuredUnderLocale` row would skip"
+    },
+    {
+      "test": "scripts/__tests__/conformance.test.js · the declared-fallback rule › reports the locale mismatch as a skipped comparison, not a failure or a pass",
+      "file": "scripts/conformance-core.mjs",
+      "before": "  if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;",
+      "after": "  if (expected != null && deviceLocale != null) return null;",
+      "red": "Received array: [{ component: 'DatePicker', problem: 'the fallback 103x36.33 is not the measured 107x36.33 …' }] — the row CI went red on, reported as a stale declaration instead of a premise skip"
+    },
+    {
+      "test": "scripts/__tests__/conformance.test.js · the declared-fallback rule › does not call the extra correction a locale costs a missing declaration",
+      "file": "scripts/conformance-core.mjs",
+      "before": "    boxRule === 'both' &&\n    !(localeMiss != null && !ownsAgrees(measured, expected))",
+      "after": "    boxRule === 'both'",
+      "red": "expect(received).toEqual(expected) — `needed 1 correction(s)` becomes a finding, which is the claim `HybridNitroUiDatePicker.swift`'s `fallbackSize` contradicts"
+    },
+    {
+      "test": "scripts/__tests__/emulator-launch.test.js · the installed harness module agrees with this file › chooses the GPU mode by what the machine has, on both sides",
+      "file": "scripts/emulator-launch.mjs",
+      "before": "  return hasDisplayServer ? HARNESS_GPU_MODE : SOFTWARE_GPU_MODE;",
+      "after": "  return HARNESS_GPU_MODE;",
+      "red": "- \"pooled\": \"swiftshader_indirect\" / + \"pooled\": \"host\" for machine 'GitHub hosted Linux runner (headless)' — CI's exact boot configuration, asking for a GPU it does not have"
+    },
+    {
+      "test": "scripts/__tests__/emulator-launch.test.js · the installed harness module agrees with this file › renders the GPU rule into the patch as an expression, not a copy",
+      "file": "scripts/emulator-launch.mjs",
+      "before": "    return displayServer ? '${HARNESS_GPU_MODE}' : '${SOFTWARE_GPU_MODE}';",
+      "after": "    return '${HARNESS_GPU_MODE}';",
+      "red": "expect(received).toContain(expected) — the installed patched launcher answers `host` where `emulatorGpuModeForHost` answers `swiftshader_indirect`, i.e. the two runtimes drift"
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js · the dispatch-only harness jobs › the Android job leaves evidence when the emulator never becomes ready",
+      "file": ".github/workflows/ci.yml",
+      "before": "      - name: Collect emulator boot diagnostics\n        if: always()",
+      "after": "(step deleted)",
+      "red": "expect(received).not.toBeUndefined()"
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js · the dispatch-only harness jobs › the Android job leaves evidence when the emulator never becomes ready",
+      "file": ".github/workflows/ci.yml",
+      "before": "      - name: Upload emulator boot diagnostics\n        if: always()",
+      "after": "      - name: Upload emulator boot diagnostics",
+      "red": "expect(String(step.if)).toBe('always()') — Received: \"undefined\", so the artifact would be skipped by the failure it exists to capture"
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js · the dispatch-only harness jobs › the Android job leaves evidence when the emulator never becomes ready",
+      "file": ".github/workflows/ci.yml",
+      "before": "console.log('gpu mode:', m.emulatorGpuModeForHost",
+      "after": "console.log('gpu mode:', 'host'",
+      "red": "expect(show).toContain('emulatorGpuModeForHost') — the preflight would print a mode it invented rather than the one scripts/emulator-launch.mjs chooses"
+    },
+    {
+      "test": "scripts/__tests__/ci-workflows.test.js · the dispatch-only harness jobs › the Android job leaves evidence when the emulator never becomes ready",
+      "file": ".github/workflows/ci.yml",
+      "before": "preRunHook: ",
+      "after": "preRunHookX: ",
+      "red": "expect(String(harness.with.preRunHook)).toContain('pre-run:') — Received string: \"undefined\""
+    },
+    {
+      "test": "example/__tests__/Conformance.harness.tsx · the declared-fallback rule, on device (a configuration run, not a source mutation)",
+      "file": "(none — same shipped code, two configurations)",
+      "before": "NITRO_UI_TEST_LOCALE=en_PT NITRO_UI_TEST_TZ=Europe/Lisbon (the default pin): 40 passed",
+      "after": "NITRO_UI_TEST_LOCALE=en_US NITRO_UI_TEST_TZ=UTC (GitHub's macOS defaults), with the locale guard absent: 1 failed — `the fallback 103x36.33 is not the measured 107x36.33333333333333`, CI's failure word for word; a second variant with the box comparison guarded but not the corrections one went red on `needed 1 correction(s) from a warm engine`",
+      "red": "Those two reds are the on-device proof that both claims are live in that configuration; with both guarded the same run is 40 passed, and the only branch that turns 103-vs-107 into a pass is the skip. The skip sentence itself is asserted by `scripts/__tests__/conformance.test.js` (it names `comparison skipped`, `en-PT`, `en-US`) because the harness only forwards client `console.log` for failing suites locally — see Follow-ups."
+    }
+  ]
+}
