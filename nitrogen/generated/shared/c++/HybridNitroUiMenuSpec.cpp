@@ -51,6 +51,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("measureContent", &HybridNitroUiMenuSpec::measureContent);
       prototype.registerHybridMethod("nuiTestSelectRow", &HybridNitroUiMenuSpec::nuiTestSelectRow);
       prototype.registerHybridMethod("nuiTestMenuReport", &HybridNitroUiMenuSpec::nuiTestMenuReport);
+      prototype.registerHybridMethod("nuiTestMenuProbe", &HybridNitroUiMenuSpec::nuiTestMenuProbe);
     });
   }
 

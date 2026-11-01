@@ -32,6 +32,7 @@ public protocol HybridNitroUiMenuSpec_protocol: HybridObject, HybridView {
   func measureContent() throws -> NitroUiMenuSize
   func nuiTestSelectRow(id: String) throws -> Void
   func nuiTestMenuReport() throws -> String
+  func nuiTestMenuProbe() throws -> Void
 }
 
 public extension HybridNitroUiMenuSpec_protocol {
