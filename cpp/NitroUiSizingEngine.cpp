@@ -305,6 +305,12 @@ namespace margelo::nitro::nitroui {
     // Overwrite: after our own push the family has a new `State` object, and the
     // platform calls this again with it from the resulting `updateState`.
     const std::lock_guard<std::shared_mutex> lock(mutex_);
+    // Binding is the proof of life that `measure`'s forgotten-id guard needs: an
+    // id that reaches this line has a `State` in the shadow tree, whatever it was
+    // doing in an earlier mount. Recycle is the case that makes the order matter —
+    // the *same native view* is re-mounted, and if its new props happen to carry an
+    // id the engine finished, `updateState:oldState:` binds it here.
+    clearForgottenLocked(instanceId);
     registry_[instanceId] = BoundInstance{componentHash, push, state};
   }
 
@@ -316,7 +322,28 @@ namespace margelo::nitro::nitroui {
     forgetLocked(instanceId);
   }
 
+  void NitroUiSizingEngine::rememberForgottenLocked(int64_t instanceId) {
+    // Direct-mapped by the low bits, which is exact for a monotonic id sequence:
+    // see the `forgotten_` declaration for why a false positive is impossible.
+    forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
+  }
+
+  void NitroUiSizingEngine::clearForgottenLocked(int64_t instanceId) {
+    int64_t& slot = forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)];
+    if (slot == instanceId) {
+      slot = NitroUiSizing::NO_INSTANCE;
+    }
+  }
+
+  bool NitroUiSizingEngine::isForgottenLocked(int64_t instanceId) const {
+    return forgotten_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] == instanceId;
+  }
+
   void NitroUiSizingEngine::forgetLocked(int64_t instanceId) {
+    // Before anything else, and even for an id with nothing to erase: this is the
+    // moment the id stops being a live instance, and the only thing that makes a
+    // layout arriving after it harmless. See `forgotten_`.
+    rememberForgottenLocked(instanceId);
     registry_.erase(instanceId);
     auto ledger = ledger_.find(instanceId);
     if (ledger != ledger_.end() && ledger->second.key) {
@@ -422,6 +449,26 @@ namespace margelo::nitro::nitroui {
       // configuration, and `valid()` is how the rest of the code tells a guess
       // from an answer. The ledger still records the key, so the real size
       // reported later finds this instance and corrects it.
+    }
+
+    /**
+     * A finished instance gets an answer and no bookkeeping.
+     *
+     * The answer stays exactly what it would have been, because this is a real
+     * layout of a real shadow node and the return value is what Yoga commits for
+     * it: refusing *the size* would be a behaviour change on a thread that cannot
+     * be told about a dropped view. What stops here is the per-instance state —
+     * `ledger_`, the needs-correction set, the trace — all of which outlive a view
+     * only if they are written after it is gone. Nothing is lost: a correction for
+     * a dead instance is precisely the thing `forget` already dropped from
+     * `pending_`, and an id that mounts again is a *new* id, because `useSizingId`
+     * mints one per native mount.
+     *
+     * See `forgotten_` for why the test has no false positives, and for why the
+     * rule cannot simply be "not bound yet".
+     */
+    if (isForgottenLocked(instanceId)) {
+      return result;
     }
 
     // Record what this instance laid out with, and whether that is the answer we

@@ -189,6 +189,156 @@ namespace {
 
   // MARK: - Cases
 
+  // MARK: - F8: the late-layout orphan
+
+  /**
+   * F8: a layout that arrives after the instance was forgotten must file nothing.
+   *
+   * This is `Menu × no-leak-on-drop: 1 ledger entry(ies) survived 50 drops` from
+   * CI run 41256853746, where the registry read `0→0` across the same window.
+   * Those two halves together say what survived: a ledger entry with no registry
+   * row. And the registry sweep — the only thing in the engine that reclaims an
+   * instance whose `State` died without a `forget` — walks `registry_`, so an
+   * entry that lives only in `ledger_` is invisible to it for the life of the
+   * process. One per occurrence, in an app that scrolls a list.
+   *
+   * How one gets made: a correction is an `Asynchronous` state update, and RN runs
+   * its callback later, scheduling a layout pass over the tree revision that
+   * carried it. Drop the view in between — which is what a churn of 50
+   * mount/unmount pairs is, and what an iOS `Menu` costs extra because its popup
+   * makes the drop land a transaction later — and that pass re-enters
+   * `measureContent` for an id whose `onDropView` has already run. `measure`
+   * records what it laid out in `ledger_[instanceId]` without asking whether the
+   * instance is still bound.
+   *
+   * It cannot simply refuse an unbound id: `measure` legitimately runs *before*
+   * `registerInstance` on a real mount (layout is on the shadow thread, the bind
+   * is on the mount transaction), which is the same ordering `applyReports`'s
+   * "not bound yet — put it back rather than lose the correction" branch exists
+   * for. The rule that holds is narrower — an id this engine has already
+   * *forgotten* is finished, and ids are never reused — so that is what the fix
+   * enforces, and the case after this one is the guard on it.
+   */
+  void testALateLayoutAfterForgetFilesNothing() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    bind(4100, 4100);
+    measure(4100, "");
+    engine().report(4100, 61, 28, 0);
+    engine().flush();
+    engine().forget(4100);
+    kept_.erase(4100);
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a dropped instance leaves no ledger entry");
+
+    // The late layout, from the commit this instance caused before it died.
+    measure(4100, "");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a layout arriving after `forget` files nothing");
+    checkEquals(engine().stats().registryEntries, int64_t{0}, "and there is no registry row that would let it be reclaimed later");
+
+    // The same churn the device rule runs, so a fix that only handles one
+    // occurrence cannot pass: 50 drops, and nothing left afterwards. Note the
+    // registry never rises here — the CI failure's other half, and the reason the
+    // sweep was never going to see the survivor.
+    for (int64_t cycle = 0; cycle < 50; cycle++) {
+      const int64_t id = 4300 + cycle;
+      bind(id, static_cast<int>(id));
+      measure(id, "");
+      engine().report(id, 61, 28, 0);
+      engine().flush();
+      engine().forget(id);
+      kept_.erase(id);
+      // The orphaning measure, one cycle late, as an async commit is.
+      measure(id, "");
+    }
+    const NitroUiSizingCounters after = engine().stats();
+    checkEquals(after.ledgerEntries, int64_t{0}, "50 drops with a late layout each leave no ledger entry");
+    checkEquals(after.registryEntries, int64_t{0}, "and no registry entry");
+
+    // A mounted instance is still correctable afterwards: the guard is about
+    // finished ids, not about unbound ones. Its own key, because the churn above
+    // warmed `""` and a warm mount has nothing left to be corrected for.
+    bind(4500, 4500);
+    measure(4500, "late-live");
+    engine().report(4500, 61, 28, 0);
+    check(engine().flush(), "a live instance is still corrected after all that");
+    checkEquals(engine().stats().ledgerEntries, int64_t{1}, "with exactly its own entry");
+  }
+
+  /**
+   * The guard on the guard: `measure` before `registerInstance` is the normal
+   * ordering for a mount in flight, and an entry filed in that window must
+   * survive and still be owed its correction. Dropping entries merely because
+   * nothing is bound yet would silently swallow corrections — the failure mode S7
+   * was written against — which is worse than the leak it would fix.
+   */
+  void testALayoutBeforeItsBindStillGetsCorrected() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    // Laid out first, bound after: what the shadow thread and the mount
+    // transaction really do.
+    measure(4600, "");
+    checkEquals(engine().stats().ledgerEntries, int64_t{1}, "a mount files its entry before it binds");
+    // Lost in between, and laid out again after — the shape from the case above,
+    // so the two rules have to hold at the same time.
+    bind(4601, 4601);
+    measure(4601, "");
+    engine().forget(4601);
+    kept_.erase(4601);
+    measure(4601, "");
+
+    bind(4600, 4600);
+    engine().report(4600, 61, 28, 0);
+    check(engine().flush(), "the in-flight mount still gets its correction");
+    checkEquals(pushes.size(), size_t{1}, "exactly one push, and it is the live one's");
+    const NitroUiSizingCounters stats = engine().stats();
+    checkEquals(stats.ledgerEntries, int64_t{1}, "the forgotten id filed nothing while the in-flight one kept its entry");
+    checkEquals(stats.registryEntries, int64_t{1}, "and only the live instance is bound");
+  }
+
+  /**
+   * An id that binds again is alive, whatever the engine was told about it before.
+   *
+   * `registerInstance` is the engine's only evidence that an id has a `State` in
+   * the shadow tree, and `updateState:oldState:` calls it on mount as well as on
+   * every later state change — so it is also the seam that would otherwise make the
+   * forgotten-id rule permanent for an id the platform decided to use again. Without
+   * that line, a re-bound instance answers layouts with a size and files nothing:
+   * it is never corrected, never traced, and reports itself as never measured — a
+   * silent, per-instance regression that no device rule would attribute to this
+   * commit.
+   */
+  void testAnIdThatBindsAgainIsNotTreatedAsFinished() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    bind(4700, 4700);
+    measure(4700, "");
+    engine().report(4700, 61, 28, 0);
+    engine().flush();
+    engine().forget(4700);
+    kept_.erase(4700);
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "the instance is finished");
+
+    // Refused while finished, so the case below cannot pass by accident.
+    measure(4700, "rebound");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "a finished id files nothing before it rebinds");
+
+    // The rebind: the same id, a fresh `State`, as a mount hands one out.
+    bind(4700, 4700);
+    measure(4700, "rebound");
+    checkEquals(engine().stats().ledgerEntries, int64_t{1}, "rebinding clears the mark, so the layout is filed again");
+
+    // And it is correctable again: the entry the engine filed is one it will use.
+    // `pushes` still holds the first mount's correction, so count from here.
+    pushes.clear();
+    engine().report(4700, 61, 28, 0);
+    check(engine().flush(), "and the re-bound instance still gets its correction");
+    checkEquals(pushes.size(), size_t{1}, "one push, for the instance that is live");
+    checkEquals(pushes[0].tag, 4700, "and it went to the re-bound instance");
+  }
+
   void testColdMountFallsBackAndCorrects() {
     resetEngine();
     engine().setFallback("NitroUiSwitch", 52, 48, 0);
@@ -1293,6 +1443,9 @@ int main() {
   testPrewarmMakesTheFirstMountExact();
   testStatsCountCorrectionsAndDroppedReports();
   testMountUnmountCyclesKeepTheEngineFlat();
+  testALateLayoutAfterForgetFilesNothing();
+  testALayoutBeforeItsBindStillGetsCorrected();
+  testAnIdThatBindsAgainIsNotTreatedAsFinished();
   testExpiredStatesAreSweptWithoutForget();
   testInstanceIdsAreMonotonic();
   testImmediateBudgetCapsOneFlush();
