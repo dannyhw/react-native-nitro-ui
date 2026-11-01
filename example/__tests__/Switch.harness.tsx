@@ -31,6 +31,7 @@ import {
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
 import { Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { waitForHandle } from './handles';
 import { expectTimingBudget } from './timingGate';
 
 /**
@@ -70,6 +71,23 @@ let hybrid: SwitchHandle | null = null;
 const captureHybrid = (view: SwitchHandle) => {
   hybrid = view;
 };
+
+/**
+ * `hybrid`, once the ref callback has actually run.
+ *
+ * The two box tests read `hybrid?.measureContent()` one statement after a
+ * `waitForTestId`, and that poll answers for the *box*: a `hybridRef` callback
+ * lands on a commit after the view is created. On CI's 3-core runner the gap was
+ * wide enough to matter — `keeps the control inside its default box` failed
+ * `expected null not to be null` while its own log line printed
+ * `fabric=61x28` (run 41230848294), i.e. the layout was right and only the
+ * handle was missing. The `?.`/`?? null` made a late callback look like a
+ * control that reports no content, which is the one thing that test exists to
+ * detect; waiting for the handle keeps that assertion meaning what it says.
+ */
+async function hybridWhenReady(): Promise<SwitchHandle> {
+  return waitForHandle(() => hybrid, { what: 'the Switch under test' });
+}
 
 /**
  * The box a Switch with no `style` is supposed to get, spelled out here rather
@@ -261,7 +279,7 @@ describe('Switch · core runtime', () => {
     );
     await waitForTestId('box');
     const box = harnessUi.queryByTestId('box');
-    const content = hybrid?.measureContent() ?? null;
+    const content = (await hybridWhenReady()).measureContent() ?? null;
     console.log(
       `Switch box: fabric=${box?.width}x${box?.height} at ${box?.x},${box?.y} hosted=${content?.width}x${content?.height} expected=${expectedBox?.width}x${expectedBox?.height}`
     );
@@ -367,7 +385,7 @@ describe('Switch · core runtime', () => {
     await waitForTestId('sized');
     // Both numbers come from the native side: `measureContent()` from the
     // hosted control's own measure pass, the box from the Fabric node's frame.
-    const content = hybrid?.measureContent() ?? null;
+    const content = (await hybridWhenReady()).measureContent() ?? null;
     const box = harnessUi.queryByTestId('sized');
     console.log(
       `Switch size: measureContent=${content?.width}x${content?.height} box=${box?.width}x${box?.height}`
@@ -396,7 +414,7 @@ describe('Switch · core runtime', () => {
       />
     );
     await waitForTestId('roomy');
-    const content = hybrid?.measureContent() ?? null;
+    const content = (await hybridWhenReady()).measureContent() ?? null;
     const box = harnessUi.queryByTestId('roomy');
     console.log(
       `Switch in a roomy box: measureContent=${content?.width}x${content?.height} box=${box?.width}x${box?.height}`
