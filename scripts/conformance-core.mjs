@@ -560,17 +560,23 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 256, height: 48 },
     ios: { width: 165, height: 31 },
   },
-  // The one row whose width belongs to a *locale* as well as a control. Both numbers
-  // are measurements of a formatter's output — `NitroUiDatePickerField`'s widest
-  // `.medium` date on iOS, `DatePickerFieldText`'s on Android — so each is the right
-  // answer only while the run is in the locale it was measured in, and
-  // `measuredUnderLocale` says which that is. The harness reads the app's own locale
-  // and reports the mismatch as a premise miss rather than a drifted declaration
-  // (`fallbackFindings`); `example/rn-harness.config.mjs` pins the iOS launch locale
-  // to the one named here, which is why a hosted runner no longer trips it.
+  // The one row whose iOS width belongs to a *locale* as well as a control: it is
+  // `NitroUiDatePickerField`'s widest `.medium` date, i.e. a formatter's output, so
+  // it is the right answer only in the locale it was measured in —
+  // `measuredUnderLocale` says which that is, `example/rn-harness.config.mjs` pins
+  // the iOS launch locale to it, and a run whose app reports another locale FAILS
+  // rather than skipping (`localePremiseMiss`; the opt-out is explicit and loud).
+  //
+  // The Android row names no locale, and that is a claim rather than an oversight:
+  // nothing pins the emulator's locale (its locale is an AVD/boot setting, not a
+  // launch argument this repo passes), so a `measuredUnderLocale` there would be a
+  // premise no run checks and a comparison that could skip on every machine without
+  // a red test. It measured 131 wide both times it was measured, on a `UTC`
+  // emulator and a Lisbon one. If Android ever pins a locale, name it here and
+  // `checkLaunchPinAgreesWithTable` will hold the two together.
   NitroUiDatePicker: {
-    android: { width: 131, height: 48, measuredUnderLocale: 'en-US' },
-    ios: { width: 103, height: 36.33, measuredUnderLocale: 'en-PT' },
+    android: { width: 131, height: 48 },
+    ios: { width: 107, height: 36.33, measuredUnderLocale: 'en-US' },
   },
   NitroUiPicker: {
     android: { width: 280, height: 56 },
@@ -894,39 +900,58 @@ export function checkContentSizedBox(manifests, list = CONTENT_SIZED_BOX) {
 
 /* --------------------------- the locale the table is valid in --------------------------- */
 
+/** Set this to compare a locale-dependent row in some *other* locale, deliberately. */
+export const ALLOW_LOCALE_MISMATCH_ENV = 'NITRO_UI_ALLOW_LOCALE_MISMATCH';
+
 /**
- * Is the device this control was measured on speaking the language the declared number was
- * measured in?
+ * Is the app under test running in the locale the declared number was measured in?
  *
- * Every `boxRule: 'both'` comparison below is a *localised* measurement against a *localised*
- * declaration, and both sides move with the locale. `DECLARED_FALLBACKS.NitroUiDatePicker` is the
- * proof: `103×36.33` is what the engine reports for a US `MM/dd/yyyy`, and the same control on a
- * simulator that is not in `en-US` settles at 145, 268 or 250 points — CI run 41230848294's iOS job,
- * whose simulator's locale was the runner's, not ours. That is the same fallback answering a
- * different question, so it cannot be a FAIL.
+ * A `boxRule: 'both'` comparison of a localised measurement against a localised
+ * declaration is only a comparison while both sides are in the same locale: the
+ * DatePicker's iOS width is its locale's formatter's widest date, so the same
+ * binary settles at 107 in `en_US` and 103 in `en_PT`, and both are correct.
  *
- * The answer is a **premise of the comparison**, not a fudge factor, and it does not weaken a
- * correctly configured run: `example/rn-harness.config.mjs` pins the iOS app's locale and time zone
- * for every harness run to the configuration this table was measured in, so on such a run this
- * returns `null` and every check below runs exactly as it always did. It speaks up only when a run
- * forgot to pin (or deliberately pinned something else, as a local experiment may).
+ * A mismatch is therefore a **failed premise**, and a failed premise is a failure:
+ * `example/rn-harness.config.mjs` pins the launch locale, so the app reporting a
+ * different one means the pin was dropped, overridden by someone who did not say
+ * so, or that the formatter stopped following the locale it is handed. Each of
+ * those is worth a red row. Reporting a *skip* instead is what round 1 of this task
+ * did, and the reviewer's objection was right — a suite that reads green while
+ * comparing less than its name claims is worse than one that stops.
  *
- * Returns `null` when the premise holds, when the row's numbers do not depend on a locale, or
- * when the app cannot name its own locale — the last case keeps the strict comparison, because
- * "we do not know" must never read as "the premise holds". Else `{ expected, actual }`.
+ * So this returns `{ expected, actual, tolerated }` on a mismatch and the caller
+ * decides: the finding is a failure unless `tolerated`, which only an explicit
+ * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` in the run's environment grants (published to
+ * the app by `example/rn-harness.config.mjs`, and read back through
+ * `example/__tests__/deviceContext.ts` — the app cannot see the runner's own
+ * environment any more than it can see `CI`). That is the escape hatch for someone
+ * probing another locale on purpose; it prints which two claims it suspended, so a
+ * run that compared less is legible.
+ *
+ * `null` — the premise holds — when the row names no locale, when the app reports
+ * the one it names, or… not when the app cannot tell: an app that reports no locale
+ * keeps the strict comparison, because "we do not know" must not read as "the
+ * premise holds".
  *
  * @param {{ measuredUnderLocale?: string } | undefined} row One platform's
  *   {@link DECLARED_FALLBACKS} entry: the locale its numbers were measured in, if they depend on
  *   one.
  * @param {string | null | undefined} deviceLocale As the *app* reports it
  *   (`example/__tests__/deviceContext.ts`), which is what the engine actually rendered under.
+ * @param {boolean | null} [mismatchAllowed] Whether this run published
+ *   {@link ALLOW_LOCALE_MISMATCH_ENV}. `null`/`false` means it did not, which is the
+ *   default and the safe answer for a reader that cannot check.
  */
-export function localePremiseMiss(row, deviceLocale) {
+export function localePremiseMiss(row, deviceLocale, mismatchAllowed = null) {
   const expected = row?.measuredUnderLocale;
   if (expected == null) return null;
   if (deviceLocale == null || deviceLocale === '') return null;
   if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;
-  return { expected, actual: deviceLocale };
+  return {
+    expected,
+    actual: deviceLocale,
+    tolerated: mismatchAllowed === true,
+  };
 }
 
 /**
@@ -953,39 +978,59 @@ export function canonicalLocale(identifier) {
 }
 
 /**
- * Static check: does the launch locale the harness pins match the table's rows?
+ * Static check: does the launch locale the harness pins agree with the table's rows?
  *
  * `example/rn-harness.config.mjs` pins the iOS app's locale so the locale-dependent rows above
- * are comparable on every runner, and {@link localePremiseMiss} skips a row whose locale does
- * not match. Those two are one contract held in two files, and the failure if they drift is the
- * worst kind: not a red run, a *green* one that quietly stops comparing the DatePicker's box on
- * every machine. So the pin is read back out of the config and required to be the table's value.
+ * are comparable on every runner, and a mismatch between that pin and a row is a failing run
+ * rather than a skip. The two halves live in different files and the failure mode of drift is
+ * asymmetric: a row the pin does not match makes every device run red, so it cannot be missed,
+ * but a row that names a locale *nothing* pins is invisible — it can only ever be compared in
+ * whatever locale a machine happens to be in. Hence the two directions below.
  *
  * @param {string} configText the text of `example/rn-harness.config.mjs`
+ * @param {Readonly<Record<string, any>>} [declared]
  * @returns {string[]} problems
  */
-export function checkLaunchPinAgreesWithTable(configText) {
+export function checkLaunchPinAgreesWithTable(
+  configText,
+  declared = DECLARED_FALLBACKS
+) {
   const problems = [];
   const pinned = /const DEFAULT_APP_TEST_LOCALE = '([^']*)'/.exec(configText);
   if (pinned == null) {
     return [
       'example/rn-harness.config.mjs: no DEFAULT_APP_TEST_LOCALE, so the app ' +
         'launches in whatever locale the machine is in — the DatePicker row’s ' +
-        'box comparison then skips on every runner that is not in the locale it ' +
-        'was measured in, and the run still reads green',
+        'box comparison then fails on every runner that is not in the locale it ' +
+        'was measured in (and if that comparison ever becomes a skip again, it ' +
+        'would skip everywhere and still read green)',
     ];
   }
   const pinTag = canonicalLocale(pinned[1]);
-  for (const [hybridView, row] of Object.entries(DECLARED_FALLBACKS)) {
+  for (const [hybridView, row] of Object.entries(declared)) {
     const want = row.ios?.measuredUnderLocale;
-    if (want == null) continue;
-    if (canonicalLocale(want) !== pinTag) {
+    if (want != null && canonicalLocale(want) !== pinTag) {
       problems.push(
         `example/rn-harness.config.mjs pins the app to locale ${pinned[1]} ` +
           `(${pinTag}), and DECLARED_FALLBACKS.${hybridView}.ios says its ` +
-          `numbers were measured in ${want} — every run of the suite would report ` +
-          'that row’s box comparison as skipped, which is a silently weaker rule. ' +
-          'Make the pin match the row, or the row match the pin'
+          `numbers were measured in ${want} — every device run of that row’s box ` +
+          'comparison would fail on the premise alone. Make the pin match the ' +
+          'row, or the row match the pin'
+      );
+    }
+    // Android has no pin to agree with: the emulator's locale is an AVD/boot
+    // setting, and nothing here passes one (see the row comment in
+    // DECLARED_FALLBACKS). So a locale named there would be a premise no run ever
+    // checks — which is only dangerous if it goes unnoticed, hence a red `check`.
+    const androidWant = row.android?.measuredUnderLocale;
+    if (androidWant != null) {
+      problems.push(
+        `DECLARED_FALLBACKS.${hybridView}.android names measuredUnderLocale ` +
+          `${androidWant}, but nothing pins the emulator’s locale — that premise ` +
+          'could never be checked, so the comparison it guards would depend on ' +
+          'the AVD. Either drop the locale from the row, or pin the emulator ' +
+          'locale at boot (a `device-pool.mjs` boot arg) and teach this check ' +
+          'where to read it'
       );
     }
   }
@@ -1015,7 +1060,10 @@ export function checkLaunchPinAgreesWithTable(configText) {
  *   supposed to describe — see {@link boxRuleFor}. Callers pass what they read from the
  *   shared table; the default is the strictest rule, so forgetting to pass one can
  *   produce a false red but never a false green.
- * @returns {Array<{component: string, rule: string, problem: string}>}
+ * @param {boolean | null} [input.mismatchAllowed] Whether this run published
+ *   {@link ALLOW_LOCALE_MISMATCH_ENV}. Default `null`: a caller that cannot check
+ *   gets the failure, not the skip.
+ * @returns {Array<{component: string, rule: string, problem: string | null, skipped?: string}>}
  */
 export function fallbackFindings(input) {
   const {
@@ -1030,6 +1078,7 @@ export function fallbackFindings(input) {
     tolerance = SIZE_TOLERANCE_DP,
     boxRule = 'both',
     deviceLocale = null,
+    mismatchAllowed = null,
   } = input;
   const problems = [];
   const hybridView = `NitroUi${component}`;
@@ -1100,20 +1149,7 @@ export function fallbackFindings(input) {
   // Is this row's locale the app is actually running in? `null` means the row does not
   // depend on one, or the app could not name its locale (in which case nothing is skipped:
   // "unknown" must never read as "premise met").
-  const localeMiss = localePremiseMiss(expected, deviceLocale);
-  /**
-   * Record a comparison the run's own configuration makes meaningless. Kept apart from
-   * `report` because it is neither a failure nor debt, and it has to arrive on the far
-   * side as its own line: a run that compared less than it claims must say so in the log,
-   * or "green" and "the box was never compared" are the same thing to whoever reads it.
-   */
-  const skipClaim = (reason) =>
-    problems.push({
-      component,
-      rule: 'declared-fallback',
-      problem: null,
-      skipped: reason,
-    });
+  const localeMiss = localePremiseMiss(expected, deviceLocale, mismatchAllowed);
 
   if (boxRule === 'none') {
     // The exemption has to be *earned*, every run. A control whose box came to equal its
@@ -1128,33 +1164,44 @@ export function fallbackFindings(input) {
       );
     }
   } else if (localeMiss != null && !ownsAgrees(measured, expected)) {
-    // A row that declares `measuredUnderLocale` describes this control's box in *that* locale
-    // only, and the mismatch moves both sides of the comparison: CI's first hosted run measured
-    // the DatePicker at 107×36.33 against a declared 103×36.33 because its simulator was
-    // `en_US`, while the same binary on the gate simulator in `en_PT` measures the declared
-    // number exactly (reproduced locally by launching with `-AppleLocale en-US`). Printing that
-    // as a drifted declaration sends the next reader to `NitroUiDatePickerField` for a bug that
-    // is not there, so the rule states its premise instead of asserting one.
+    // The row's locale and the app's disagree, and the mismatch moves both sides of the
+    // comparison, so it cannot be read as a stale declaration. What it *is* depends on whether
+    // this run asked to be in another locale:
     //
-    // One finding, naming both claims it suspends, because both rest on the same number and
-    // this is the only place the run learns they do not hold:
-    //  - the box comparison above;
-    //  - the warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s
-    //    `fallbackSize` already prices in words — "a locale wider than this one costs that
-    //    configuration's first instance one horizontal correction". `corrections > 0` is a bug
-    //    only if the engine was already holding this control's size.
-    // Everything else in this rule still runs: the poison must still be corrected, and a mount
-    // that settles at nothing is still a failure. And a correctly configured run never comes
-    // here at all — `example/rn-harness.config.mjs` pins the launch locale to this row's value,
-    // so reaching this branch means a run forgot to pin.
-    skipClaim(
-      `box and warm-corrections comparison skipped: ${fmt(expected)} is what this ` +
-        `control measures in ${localeMiss.expected} and this run's app locale is ` +
-        `${localeMiss.actual}, so the measured ${fmt(measured)} is the same formatter ` +
-        'answering a different question, not a stale declaration. Re-run with ' +
-        'NITRO_UI_TEST_LOCALE=' +
-        `${localeMiss.expected.replace(/-/g, '_')} to check this row for real`
-    );
+    //  - It did not (`NITRO_UI_ALLOW_LOCALE_MISMATCH` unset, the default): a FAILURE. The
+    //    harness pins the launch locale, so the app reporting a different one means the pin
+    //    was lost, was overridden without being said, or the formatter stopped following its
+    //    locale. Any of those deserves a red row; printing a skip here is how a suite ends up
+    //    green while comparing nothing, which is the mistake this branch used to make.
+    //  - It did: the printed skip, naming both claims it suspends, because both rest on this
+    //    one number — the box comparison above, and the warm-corrections claim below that
+    //    `HybridNitroUiDatePicker.swift`'s `fallbackSize` prices in words (“a locale *narrower*
+    //    than this one … pays a horizontal correction to lose it”).
+    //
+    // Either way the rest of the rule runs: a poisoned guess must still be corrected, and a
+    // mount that settles at nothing is still a failure.
+    const both =
+      `the app runs in ${localeMiss.actual} and ${hybridView}’s declared ` +
+      `${fmt(expected)} is what it measures in ${localeMiss.expected}, so the ` +
+      `measured ${fmt(measured)} is the same formatter answering a different ` +
+      'question. Either launch the app in the pinned locale (the harness does ' +
+      `this by default; ${localeMiss.expected.replace(/-/g, '_')} here) or run ` +
+      `with ${ALLOW_LOCALE_MISMATCH_ENV}=1 to say you meant it`;
+    if (localeMiss.tolerated) {
+      problems.push({
+        component,
+        rule: 'declared-fallback',
+        problem: null,
+        skipped:
+          `box and warm-corrections comparison skipped (${ALLOW_LOCALE_MISMATCH_ENV}` +
+          `=1): ${fmt(expected)} is what this control measures in ` +
+          `${localeMiss.expected} and this run's app locale is ` +
+          `${localeMiss.actual}, so the measured ${fmt(measured)} proves nothing ` +
+          'about the declaration',
+      });
+    } else {
+      report(both);
+    }
   } else if (!ownsAgrees(measured, expected)) {
     report(
       `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} for a ` +
