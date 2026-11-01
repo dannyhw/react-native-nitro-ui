@@ -56,6 +56,30 @@ function triggers(file) {
 }
 
 /**
+ * The diagnostics script the Android job's collect step runs, and the step's own call
+ * of it. F8 round 2 moved that step's body out of the workflow and into a file, because
+ * the body hung for 90 minutes on run 41269235234 and a shell step cannot bound its own
+ * commands on a macOS test host (`timeout(1)` is not installed there, and these tests
+ * run the step for real). So the thing under test is this file.
+ */
+const DIAGNOSTICS_SCRIPT = path.join('scripts', 'ci-emulator-diagnostics.mjs');
+
+function diagnosticsScript() {
+  return fs.readFileSync(path.join(root, DIAGNOSTICS_SCRIPT), 'utf8');
+}
+
+/**
+ * A workflow job by id, from `ci.yml`.
+ *
+ * @param {string} jobId
+ */
+function ciJob(jobId) {
+  const job = readYaml('ci.yml').jobs?.[jobId];
+  expect(job).not.toBeUndefined();
+  return job;
+}
+
+/**
  * A small evaluator for the subset of Actions expression syntax these workflows
  * use, so the guards can ask what an expression **decides** instead of matching
  * its text.
@@ -689,6 +713,862 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       .map((step) => String(step.run))
       .join('\n');
     expect(run).toContain(command);
+  });
+
+  it('the Android job leaves evidence when the emulator never becomes ready', () => {
+    // Both dispatch runs of this job ended identically: `The platform did not
+    // become ready within 900000ms`, qemu still alive at cleanup, and the last
+    // harness line was `Using cached Android emulator nitroui...` (41230848294,
+    // 41234953779). A quarter of an hour produced no words at all, because the
+    // harness keeps the emulator's output to itself unless `HARNESS_DEBUG` is set.
+    // So the job now asks the machine directly, before and after the run, and
+    // uploads what it gets. Without this step the next timeout is again a
+    // 900-second shrug, and the GPU-mode question this job's fix turns on stays
+    // unanswerable from the log.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const steps = job.steps ?? [];
+    const stepNamed = (needle) =>
+      steps.find((step) =>
+        String(step.name ?? '')
+          .toLowerCase()
+          .includes(needle.toLowerCase())
+      );
+    // All three must survive a failing run: `if: always()` on the two that read
+    // the machine after the failure, since every later step is skipped by default
+    // once the job has one. The preflight runs before the harness, so it only has
+    // to exist.
+    expect(stepNamed('Show the emulator configuration')).not.toBeUndefined();
+    // And it has to *run*. The first version of this step died before it printed
+    // a single line: its `AVD_NAME=` helper took file contents where it took a
+    // path, so it exited with `ENAMETOOLONG` and the whole preflight — and the
+    // evidence it was written to gather — never existed. Reading the YAML cannot
+    // find that, so this executes the real prefix of the real step body under the
+    // same shell flags Actions uses, and asks it for the name the config declares.
+    const preflight = String(stepNamed('Show the emulator configuration').run);
+    const lines = preflight.split('\n');
+    const through = lines.findIndex((line) =>
+      line.includes('avd (from rn-harness.config.mjs)')
+    );
+    expect(through).toBeGreaterThan(0);
+    const ran = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-eo',
+        'pipefail',
+        '-c',
+        lines.slice(0, through + 1).join('\n'),
+      ],
+      { cwd: root, encoding: 'utf8' }
+    );
+    const want = fs
+      .readFileSync(path.join(root, 'example', 'rn-harness.config.mjs'), 'utf8')
+      .match(/const DEFAULT_AVD = '([^']+)'/u)?.[1];
+    expect({
+      status: ran.status,
+      stderr:
+        String(ran.stderr ?? '')
+          .split('\n')
+          .find(Boolean) ?? '',
+      printed: String(ran.stdout ?? '').trim(),
+    }).toEqual({
+      status: 0,
+      stderr: '',
+      printed: `avd (from rn-harness.config.mjs): ${want}`,
+    });
+    for (const needle of [
+      'Collect emulator boot diagnostics',
+      'Upload emulator boot diagnostics',
+    ]) {
+      const step = stepNamed(needle);
+      expect(step).not.toBeUndefined();
+      expect(String(step.if)).toBe('always()');
+    }
+    // The pre/post hooks are the harness's own, so the timeline of the boot is
+    // stamped by the action rather than by a guess at its step boundaries.
+    const harness = harnessStep('harness-android');
+    expect(String(harness.with.preRunHook)).toContain('pre-run:');
+    expect(String(harness.with.afterRunHook)).toContain('HARNESS_EXIT_CODE');
+    // And the printout must be the rule the code uses, not a copy of it: a second
+    // GPU-mode expression here would drift from `emulator-launch.mjs` silently.
+    const show = String(stepNamed('Show the emulator configuration').run);
+    expect(show).toContain('emulatorGpuModeForHost');
+    expect(show).toContain('accel-check');
+    // The AVD's hardware lines must be collected *somewhere* in the job, or moving
+    // them out of the preflight would just be losing them. The collect step is a
+    // script call now, so the check follows the script.
+    const collect = String(stepNamed('Collect emulator boot diagnostics').run);
+    const script = diagnosticsScript();
+    expect(collect).toContain(DIAGNOSTICS_SCRIPT);
+    expect(script).toContain('config.ini');
+    // Every step that reads the machine after a failure must be bounded: the whole
+    // reason the script exists is that this one hung for 90 minutes.
+    expect(
+      stepNamed('Collect emulator boot diagnostics')['timeout-minutes']
+    ).toBe(5);
+    for (const name of ['harness-android', 'harness-ios']) {
+      expect(ciJob(name)['timeout-minutes']).toBeGreaterThan(0);
+    }
+  });
+
+  it('the preflight prints nothing about an AVD that does not exist yet', () => {
+    // The other half of the ordering claim, executed. The harness creates or restores
+    // the AVD in the step *after* this one, so on a cache miss the AVD directory is
+    // empty here and run 41256853746's preflight spent three lines on
+    // `grep: …/nitroui.avd/config.ini: No such file or directory` — evidence that
+    // reads like a misconfigured AVD, about a file that cannot exist yet. So this
+    // runs the whole body on a machine shaped like the runner's first minute — no
+    // AVD, `adb` nowhere — and requires that it completes and never mentions the
+    // file. Re-adding the read here, or writing it into any other pre-run step, is
+    // red.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Show the emulator configuration')
+    );
+    const box = sandbox();
+    try {
+      const ran = runStepBody(String(step.run), box);
+      const out = String(ran.stdout ?? '') + String(ran.stderr ?? '');
+      expect({
+        status: ran.status,
+        mentionsAvdFile: out.includes('config.ini'),
+      }).toEqual({
+        status: 0,
+        mentionsAvdFile: false,
+      });
+      // And it still says the things the preflight exists to say.
+      expect(out).toContain('avd (from rn-harness.config.mjs): nitroui');
+      expect(out).toContain('accel: kvm usable');
+      expect(out).toContain('gpu mode:');
+    } finally {
+      box.dispose();
+    }
+  });
+
+  /**
+   * `-accel-check` cannot be allowed to decide how long the preflight takes.
+   *
+   * The step's own purpose is to describe a machine whose emulator is misbehaving, so
+   * the binary that answers "is KVM usable?" is asked exactly when it may never answer —
+   * and this job has already lost a 90-minute step to a diagnostics command that blocked
+   * on a tool. So the preflight asks it with a deadline, and the deadline is what this
+   * executes: a `-accel-check` that never returns must still leave a preflight that
+   * finishes, exits 0, and prints the rest of the machine.
+   *
+   * The budget is overridden to two seconds so the case is fast, and paired with the
+   * healthy stub everywhere else — the same rule `ci-emulator-diagnostics.mjs` follows,
+   * that a shortened deadline must be tested alongside a tool that is merely alive,
+   * since a guard that only fires for a knob nobody sets is not a guard.
+   */
+  it('the preflight does not wait forever for -accel-check', () => {
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const step = (job.steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Show the emulator configuration')
+    );
+    const box = sandbox({ accel: 'hang' });
+    const startedAt = Date.now();
+    try {
+      const ran = runStepBody(String(step.run), {
+        ...box,
+        env: { ...box.env, NITRO_UI_CI_ACCEL_TIMEOUT: '2' },
+      });
+      const out = String(ran.stdout ?? '') + String(ran.stderr ?? '');
+      expect({
+        status: ran.status,
+        // The stub really was asked — otherwise "it did not hang" would only mean the
+        // step never reached the line the bound is for.
+        asked: out.includes('SANDBOX_ACCEL_HANG'),
+        saidItGaveUp: out.includes('gave no answer in 2s'),
+        // And the rest of the step still ran, which is the reason this is a per-command
+        // deadline rather than a whole-step one.
+        printedRest:
+          out.includes('gpu mode:') &&
+          out.includes('avd (from rn-harness.config.mjs): nitroui'),
+        elapsedMs: Date.now() - startedAt,
+      }).toEqual(
+        expect.objectContaining({
+          status: 0,
+          asked: true,
+          saidItGaveUp: true,
+          printedRest: true,
+        })
+      );
+      // Two seconds of patience plus the rest of the step's own work. The stub stops
+      // answering for 25 s, so this is the line that separates a bounded call from an
+      // unbounded one: without the guard the body waits for the stub and lands at ~26 s.
+      expect(Date.now() - startedAt).toBeLessThan(20_000);
+    } finally {
+      box.dispose();
+    }
+  });
+
+  /* The diagnostics pair, executed. Both of these steps exist only to leave
+   * evidence, and both managed not to: run 41256853746's Android job reached them
+   * with nothing to explain, and the collect step's last command was
+   * `tail -80 "$DIAG"/emulator-*.log`, which exits 1 when the glob matches nothing
+   * — so the step that existed to report a failure reported one of its own, on a job
+   * whose harness had not even started. Then the upload step, pointed at
+   * `.harness-diag`, printed "No files were found with the provided path" while the
+   * step before it had listed two files, because `upload-artifact` v4 resolves a path
+   * with `omitHidden: include-hidden-files` and that input defaults to false (the
+   * run's own log prints `include-hidden-files: false`). A green harness run would
+   * have been turned red by the first, and every run's evidence dropped by the
+   * second. Reading the YAML cannot see either, so this runs the real bodies. */
+
+  /**
+   * Run one step body the way a runner does: `bash -e {0}`, no profile, no rcfile.
+   *
+   * `-e` and nothing else, because that is what the log of this very job shows
+   * (`shell: /usr/bin/bash -e {0}`) — no `pipefail`, which matters: with `pipefail`
+   * the `grep | tail` in this step would fail on a quiet emulator, and the test would
+   * be asserting a shell the job does not use.
+   *
+   * @param {string} body the `run:` text, verbatim from the workflow
+   * @param {{cwd: string, env: Record<string,string>}} sandbox
+   */
+  function runStepBody(body, { cwd, env }) {
+    return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-c', body], {
+      cwd,
+      env,
+      encoding: 'utf8',
+    });
+  }
+
+  /**
+   * A checkout-shaped working directory and a HOME, both throwaway, so a CI step
+   * body can be run for real without writing inside the repo.
+   *
+   * `scripts` and `example` are symlinks to the real ones: the step calls
+   * `node scripts/ci-avd-name.mjs`, and that line is part of what is under test, so
+   * it reads the real config rather than a copy that could disagree with it.
+   *
+   * @param {{avd?: boolean, adb?: 'none' | 'path' | 'platform-tools' | 'hang' | 'slow',
+   *   accel?: 'ok' | 'hang', hangTools?: boolean}} options shape what the machine
+   *   looks like: whether the harness got as far as creating an AVD, where (or
+   *   whether) `adb` can be found, and whether `-accel-check` answers at all.
+   * @returns {{cwd: string, home: string, env: Record<string,string>, androidHome: string,
+   *   diag: (name: string) => string, dispose: () => void}}
+   */
+  function sandbox({
+    avd = false,
+    adb = 'none',
+    accel = 'ok',
+    hangTools = adb === 'hang',
+  } = {}) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nui-ci-diag-'));
+    const cwd = path.join(dir, 'checkout');
+    const home = path.join(dir, 'home');
+    const androidHome = path.join(dir, 'sdk');
+    const bin = path.join(dir, 'bin');
+    for (const sub of [cwd, home, androidHome, bin]) {
+      fs.mkdirSync(sub, { recursive: true });
+    }
+    for (const link of ['scripts', 'example']) {
+      fs.symlinkSync(path.join(root, link), path.join(cwd, link), 'dir');
+    }
+    // `-accel-check` is the one external binary the preflight needs, and the
+    // machine running this test may not have an SDK. The stub says what the real one
+    // says on a runner with KVM, so the assertion is about the step plumbing to it.
+    // `accel: 'hang'` is the shape that bound exists for: the question asked of a
+    // machine whose emulator is wedged, which is the machine that gets here.
+    const emulatorBin = path.join(androidHome, 'emulator');
+    fs.mkdirSync(emulatorBin, { recursive: true });
+    fs.writeFileSync(
+      path.join(emulatorBin, 'emulator'),
+      accel === 'hang'
+        ? [
+            '#!/bin/sh',
+            '/bin/echo "SANDBOX_ACCEL_HANG ran: $*" >&2',
+            // Self-limiting rather than `sleep 600`: the mutation this case exists to
+            // catch leaves the step body with nothing to kill it, and a stub that outlives
+            // the test is an orphan on a machine running other tasks' emulators. Long
+            // enough to outlast any budget the step might honestly set.
+            'exec sleep 25',
+            '',
+          ].join('\n')
+        : '#!/bin/sh\nif [ "$1" = "-accel-check" ]; then echo "kvm usable"; fi\n',
+      { mode: 0o755 }
+    );
+    const avdDir = path.join(home, '.android', 'avd', 'nitroui.avd');
+    if (avd) {
+      fs.mkdirSync(avdDir, { recursive: true });
+      // The line this job's GPU change is judged by, and a fixture that cannot
+      // coincide with a plausible default (`auto` is what an unpatched AVD says).
+      fs.writeFileSync(
+        path.join(avdDir, 'config.ini'),
+        'hw.gpu.enabled=yes\nhw.gpu.mode=swift_ind\nhw.cpu.ncore=4\nimage.sysdir.1=system-images/android-35/\n'
+      );
+      fs.writeFileSync(
+        path.join(avdDir, 'emulator-5554.log'),
+        'emulator: Waiting for the emulator to become ready…\nqemu: FIREFOX_MARKER_LINE\n'
+      );
+    }
+    /**
+     * `sudo`, stubbed.
+     *
+     * The diagnostics step reads the kernel ring buffer with `sudo -n dmesg`, and
+     * the sandbox's `PATH` had `/usr/bin` in it — so running that step body *here*
+     * ran the real macOS `sudo`: a call into the privilege machinery, on a machine
+     * where whether it succeeds depends on the developer's sudoers rather than on
+     * anything under test. A runner grants the tool user passwordless sudo; a
+     * laptop does not, so the step's exit status doubled as a statement about the
+     * person's machine.
+     *
+     * The stub deliberately does not execute its arguments: it prints what a runner
+     * would have printed and exits 0. So `dmesg` never runs either, which is fine —
+     * what this job tests is that the step tolerates a missing tool and still writes
+     * its log, not the kernel's output. `SANDBOX_SUDO_MARKER` is what the assertions
+     * read to know the stub, not the real binary, answered.
+     *
+     * With `sudo: 'hang'` it is instead a `sudo` that never answers, which is one of
+     * the shapes run 41269235234's 90-minute step is thought to have hit: `-n` should
+     * refuse rather than prompt, but a `sudo` that prompts reads a tty that never
+     * replies. `SANDBOX_SUDO_HANG` is printed *before* it stops answering, so a test can
+     * tell "the stub was asked and the script gave up on it" from "the script never got
+     * here at all" — without the first, a passing run proves nothing.
+     */
+    fs.writeFileSync(
+      path.join(bin, 'sudo'),
+      [
+        '#!/bin/sh',
+        ...(hangTools
+          ? [
+              // `/bin/echo`, to stderr: an *external* command's output is its own
+              // process's write-and-exit, so the bytes are in the pipe before the shell
+              // moves on, and nothing the script does to the shell later — including
+              // SIGKILL — can un-write them. The shell builtin's `echo` was tried first
+              // and went red inside `check` and green standalone: bash buffers a builtin's
+              // stdout, and a killed process's buffer dies with it. A witness that is
+              // sometimes missing is worse than no witness, because the green case would
+              // then be green for the wrong reason.
+              '/bin/echo "SANDBOX_SUDO_HANG ran: $*" >&2',
+              // `exec`, so the stub *is* the sleep: killing it leaves no orphan behind,
+              // which matters on a machine where other tasks are running emulators.
+              'exec sleep 600',
+            ]
+          : [
+              'echo "SANDBOX_SUDO_MARKER ran: $*"',
+              'echo "kvm: emulator started with kvm support"',
+              'exit 0',
+            ]),
+        '',
+      ].join('\n'),
+      { mode: 0o755 }
+    );
+    /**
+     * The `adb` the machine has, if any.
+     *
+     * The healthy stubs answer what a booted emulator answers. `adb: 'hang'` is the
+     * machine the diagnostics step was written for: an emulator that has just died
+     * under the harness, where `adb devices` waits on a server that is starting, a
+     * `shell` waits on a device that will never arrive, and `logcat` is a stream that
+     * does not end even with `-d` — because a device that is gone cannot honour the
+     * flag. Every one of those must be survivable, and the only way to show that is to
+     * hand the script tools that do it.
+     */
+    const fakeAdb = [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  devices) echo "List of devices attached"; echo "emulator-5554   device product:sdk_gphone64 model:sdk_gphone64";;',
+      '  -e)',
+      '    case "$2" in',
+      '      shell)',
+      '        case "$4" in',
+      '          persist.sys.timezone) echo Europe/Lisbon;;',
+      '          persist.sys.locale|ro.product.locale) echo en-US;;',
+      '          *) echo 1;;',
+      '        esac;;',
+      '      logcat) echo "I/BootReceiver( 1234): sys.boot_completed=1";;',
+      '    esac;;',
+      'esac',
+      '',
+    ].join('\n');
+    const hangingAdb = [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  devices) /bin/echo "SANDBOX_ADB_HANG devices" >&2; exec sleep 600;;',
+      '  -e)',
+      '    case "$2" in',
+      '      shell) /bin/echo "SANDBOX_ADB_HANG shell" >&2; exec sleep 600;;',
+      '      logcat) /bin/echo "SANDBOX_ADB_HANG logcat" >&2; exec sleep 600;;',
+      '    esac;;',
+      'esac',
+      '/bin/echo "SANDBOX_ADB_HANG other: $*" >&2',
+      'exec sleep 600',
+      '',
+    ].join('\n');
+    /**
+     * `adb: 'slow'` answers everything, three seconds late. A tool that is *merely
+     * slow* is the case a guard with an over-tight budget would break, and the timing
+     * fake has to be paired with the real budgets for that reason — the hang case
+     * shortens the deadlines to stay fast, and a script that only honoured a small
+     * deadline would pass it.
+     */
+    const slowAdb = [
+      '#!/bin/sh',
+      'sleep 3',
+      'echo "SANDBOX_ADB_SLOW answered: $*"',
+      'case "$1" in',
+      '  devices) echo "List of devices attached";;',
+      '  -e)',
+      '    case "$2" in',
+      '      shell) case "$4" in',
+      '        persist.sys.timezone) echo Europe/Lisbon;;',
+      '        *) echo 1;;',
+      '      esac;;',
+      '      logcat) echo "I/BootReceiver( 1234): sys.boot_completed=1";;',
+      '    esac;;',
+      'esac',
+      '',
+    ].join('\n');
+    const body = hangTools ? hangingAdb : adb === 'slow' ? slowAdb : fakeAdb;
+    if (adb === 'path' || adb === 'slow') {
+      fs.writeFileSync(path.join(bin, 'adb'), body, { mode: 0o755 });
+    } else if (adb === 'platform-tools' || adb === 'hang') {
+      // The runner's own shape for a step body that has not been told where the SDK
+      // is: `adb` is on the *harness action's* PATH and nowhere else, so only an
+      // `$ANDROID_HOME/platform-tools/adb` candidate can find it. Run 41256853746's
+      // host.log is eight "command not found" lines, which is the whole reason this
+      // resolution exists. `hang` is the same placement with the hostile behaviour.
+      fs.mkdirSync(path.join(androidHome, 'platform-tools'), {
+        recursive: true,
+      });
+      fs.writeFileSync(path.join(androidHome, 'platform-tools', 'adb'), body, {
+        mode: 0o755,
+      });
+    }
+    /**
+     * Warm the hostile stubs once, so the case measures the script and not the machine.
+     *
+     * The failing assertion was the *first* stub the script execs, every time, and only
+     * under `check`'s load: the first exec of a file that was just written pays for the
+     * path lookup, the code-signing check and the vnode work, and under a load average in
+     * the tens that alone can outrun a 700 ms budget — so the stub was killed before it
+     * had printed anything, and the witness for "this command really was asked" was
+     * missing. That is test-setup cost being measured as script behaviour. Running each
+     * stub once here, with its output discarded, pays that cost up front; the case's own
+     * timing then says something about the script rather than about the file system.
+     *
+     * The healthy stubs need no warm-up: they exit, and an exiting command is answered
+     * however long it took to start.
+     *
+     * @param {string[]} command
+     */
+    const warm = (command) =>
+      spawnSync(command[0], command.slice(1), {
+        // Killed on purpose — these stubs never return. The point is the exec, not the
+        // answer, so the deadline only has to outlast process startup.
+        timeout: 1000,
+        killSignal: 'SIGKILL',
+        stdio: 'ignore',
+      });
+    if (hangTools) {
+      warm([path.join(androidHome, 'platform-tools', 'adb'), 'devices']);
+      warm([path.join(bin, 'sudo'), '-n', 'dmesg']);
+    }
+    if (accel === 'hang') {
+      warm([path.join(androidHome, 'emulator', 'emulator'), '-accel-check']);
+    }
+    return {
+      cwd,
+      home,
+      androidHome,
+      diag: (file) => path.join(cwd, 'harness-diag', file),
+      dispose: () => fs.rmSync(dir, { recursive: true, force: true }),
+      env: {
+        // Nothing inherited: a CI step body that works only with a developer's
+        // `$PATH`/`$HOME` is the thing being tested for. The stub `bin` is always
+        // first, so `sudo` resolves to it and never to `/usr/bin/sudo`.
+        PATH: [
+          bin,
+          adb === 'path' ? bin : null,
+          path.dirname(process.execPath),
+          '/usr/bin',
+          '/bin',
+        ]
+          .filter(Boolean)
+          .join(path.delimiter),
+        HOME: home,
+        ANDROID_HOME: androidHome,
+      },
+    };
+  }
+
+  /**
+   * Run the diagnostics script the collect step calls, in a sandbox, and say how long
+   * it took.
+   *
+   * The step body is one line that calls this file, so running the file *is* running the
+   * step for everything the step controls — and the timing is the point: run
+   * 41269235234's step ran 90 minutes, so a duration is not incidental detail, it is the
+   * property under test. `spawnSync` here has its own hard timeout, larger than any
+   * budget the script may use, so a script that hangs makes the test fail by *timing
+   * out* rather than by hanging the suite.
+   *
+   * @param {ReturnType<typeof sandbox>} box
+   * @param {Record<string,string>} [env] budget overrides for the script
+   * @param {number} [killAfterMs]
+   */
+  function runDiagnostics(box, env = {}, killAfterMs = 180_000) {
+    const startedAt = Date.now();
+    const ran = spawnSync(
+      process.execPath,
+      [path.join(root, DIAGNOSTICS_SCRIPT), '--out', 'harness-diag'],
+      {
+        cwd: box.cwd,
+        env: { ...box.env, ...env },
+        encoding: 'utf8',
+        timeout: killAfterMs,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    return {
+      ...ran,
+      elapsedMs: Date.now() - startedAt,
+      /** The script's own count line, with the elapsed part it appends removed. */
+      countLine:
+        String(ran.stdout ?? '')
+          .trim()
+          .split('\n')
+          .slice(-1)[0]
+          ?.replace(/ \(elapsed \d+s\)$/u, '') ?? '',
+    };
+  }
+
+  it('the diagnostics step exits 0 with nothing on the machine to collect', () => {
+    // Run 41256853746 exactly: no AVD (the job died in the preflight, so the
+    // harness never created one), hence no `emulator-*.log`, and no `logcat.txt`
+    // because there was no `adb`. That is the shape the old last line could not
+    // survive.
+    const step = (ciJob('harness-android').steps ?? []).find((candidate) =>
+      String(candidate.name ?? '').includes('Collect emulator boot diagnostics')
+    );
+    expect(step).not.toBeUndefined();
+    // The step is a call into a script, which is what makes it testable at all: a
+    // shell body cannot bound its own commands on a host without `timeout(1)`.
+    expect(String(step.run)).toContain(DIAGNOSTICS_SCRIPT);
+    const box = sandbox();
+    try {
+      const ran = runDiagnostics(box);
+      expect({
+        status: ran.status,
+        err:
+          String(ran.stderr ?? '')
+            .split('\n')
+            .find(Boolean) ?? '',
+        tail: ran.countLine,
+      }).toEqual({
+        status: 0,
+        err: '',
+        tail: 'diagnostics: 2 file(s) in harness-diag',
+      });
+      // `host.log` and `avd.log` are written before anything can fail, which is the
+      // whole point of the step: some evidence, whatever else happened.
+      expect(fs.existsSync(box.diag('host.log'))).toBe(true);
+      // And the tool that is missing is *named* as missing rather than swallowed:
+      // "command not found" inside the file is what let the first version of this
+      // step look like a healthy report about a machine with no emulator in it.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        '== adb ==\nnot found'
+      );
+      // And the kernel line went through the stub, not through the machine's real
+      // `sudo`. Without this the step would be a privilege call whose result
+      // depends on who runs the tests, and it would still look green.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'SANDBOX_SUDO_MARKER ran: -n dmesg'
+      );
+    } finally {
+      box.dispose();
+    }
+  });
+
+  /**
+   * The step must finish, on a machine whose every tool is waiting for something that
+   * will never arrive.
+   *
+   * Run 41269235234's harness failed at 03:34–03:46, and the diagnostics step that ran
+   * after it did not finish until the run was cancelled, past 05:15. Nothing in that job
+   * said which command: the step's log had nothing in it, because a step's stdout is not
+   * streamed while it runs, and `host.log` was in an artifact that was never uploaded.
+   * A command that never returns is therefore the failure mode this case is about, and
+   * the only honest way to test it is to hand the script commands that never return.
+   *
+   * The budget here is shortened by env, because a test that proved the bound by waiting
+   * through the real one would take six minutes per hanging command — and shortening it
+   * is only legitimate because the next case runs the *real* budget against a tool that
+   * is merely slow.
+   */
+  it('the diagnostics step returns when every tool it asks would hang', () => {
+    const box = sandbox({ avd: true, adb: 'hang' });
+    try {
+      const ran = runDiagnostics(
+        box,
+        {
+          NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '700',
+          // Comfortably above what the hanging commands add up to (a dozen at 700 ms),
+          // so this case proves the *per-command* bound keeps the run moving and every
+          // section still gets asked. The overall budget is the second guard, and the
+          // case named below exhausts it on purpose. CI's own numbers are 20 s and
+          // 240 s against ten-odd commands; the ratios here are the same, at a scale a
+          // test can wait through.
+          NITRO_UI_DIAG_BUDGET_MS: '60000',
+        },
+        // Less than the 60 s budget on purpose: a script that ignored its deadlines
+        // would still be running when this kills it, which is the red this case wants.
+        30_000
+      );
+      expect({
+        status: ran.status,
+        countLine: ran.countLine,
+        elapsedMs: Math.round(ran.elapsedMs / 1000),
+      }).toEqual({
+        status: 0,
+        countLine: 'diagnostics: 4 file(s) in harness-diag',
+        // The assertion the whole case exists for: bounded, not "eventually". Four
+        // orders of magnitude short of the 90 minutes this step took on run
+        // 41269235234, and the 30 s kill above is what makes "it hung" a failure
+        // rather than a stalled suite.
+        elapsedMs: expect.any(Number),
+      });
+      expect(ran.elapsedMs).toBeLessThan(30_000);
+      // The hanging tools were really reached, and really given up on: without these
+      // lines, a script that quietly skipped adb and sudo would pass the same
+      // assertions for the wrong reason.
+      const host = fs.readFileSync(box.diag('host.log'), 'utf8');
+      expect(host).toContain('SANDBOX_ADB_HANG devices');
+      expect(host).toContain('SANDBOX_SUDO_HANG ran: -n dmesg');
+      expect(host).toMatch(/timed out after .+s and was killed/u);
+      /**
+       * The `dmesg` section says so too, rather than reporting an *answer*.
+       *
+       * A killed command keeps its partial output and appends the reason, so "did it
+       * answer" cannot be a prefix test: the first version of this check read the start of
+       * the string, saw the stub's own line, concluded the kernel ring had been read, and
+       * printed `<nothing mentions kvm or binder>` about a machine whose `sudo` never
+       * answered. That is the failure mode this whole step exists to avoid — an evidence
+       * file that looks healthy — and it survived a green run until `check` under load
+       * reordered the sections and someone read them.
+       */
+      const dmesgSection = host.slice(
+        host.indexOf('== dmesg (kvm) =='),
+        host.indexOf('== kernel tail ==')
+      );
+      expect(dmesgSection).toMatch(/timed out|gave up/u);
+      expect(dmesgSection).not.toContain('nothing mentions kvm');
+      // And the run says so in its own output, so the artifact is not the only place
+      // the truth exists.
+      expect(String(ran.stdout)).toContain('incomplete');
+      // Evidence survived the hostile machine: the AVD's config was readable, and the
+      // AVD's own log copied, even though adb and sudo never answered.
+      expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+        'hw.gpu.mode=swift_ind'
+      );
+      expect(fs.existsSync(box.diag('emulator-5554.log'))).toBe(true);
+    } finally {
+      box.dispose();
+    }
+  }, 90_000);
+
+  /**
+   * The same guarantee at the budget CI actually runs with.
+   *
+   * Per this repo's own rule about fakes that change timing: the shortened budgets above
+   * could be satisfied by a script that only respects a small deadline (a `setTimeout`
+   * that races a promise that never settles, say). So one command gets a stub that is
+   * merely slow — 3 s, well inside the real 20 s per-command budget and well inside the
+   * real overall one — and the run must be green, complete, and carry that command's
+   * answer. Fast, and correct, at the numbers that ship.
+   */
+  it('the real budgets still let a slow-but-alive tool through', () => {
+    const box = sandbox({ avd: true, adb: 'slow' });
+    try {
+      const ran = runDiagnostics(box, {}, 120_000);
+      expect(ran.status).toBe(0);
+      const host = fs.readFileSync(box.diag('host.log'), 'utf8');
+      // Answered, not timed out: the stub is slower than a healthy adb and faster than
+      // the budget, which is exactly the case a too-tight guard would break.
+      expect(host).toContain('SANDBOX_ADB_SLOW answered');
+      expect(host).not.toMatch(/timed out/u);
+      // Nothing was skipped, and the real budget was nowhere near spent.
+      expect(String(ran.stdout)).not.toContain('incomplete');
+      expect(ran.elapsedMs).toBeLessThan(60_000);
+    } finally {
+      box.dispose();
+    }
+  }, 90_000); // Six slow commands at the real per-command budget: the point is that they all fit.
+
+  /**
+   * The overall budget, as opposed to a single command's.
+   *
+   * A machine where every command times out is worse than one where a single command does:
+   * twelve 20-second timeouts is four minutes of nothing, and the step's own 5 minutes is
+   * next. So the script stops asking once its budget is gone, and says which questions it
+   * never got to ask. That branch is its own behaviour, and it needs its own case — an
+   * untested "gave up" path in a diagnostics tool is exactly the kind of thing that turns
+   * out not to work when it matters.
+   */
+  it('the diagnostics step gives up on its own budget and says what it skipped', () => {
+    const box = sandbox({ avd: true, adb: 'hang' });
+    try {
+      const ran = runDiagnostics(box, {
+        // Per-command and overall in the same ratio CI has (20 s and 240 s), taken small:
+        // the budget is roughly one command's worth, so everything after the first hang is
+        // skipped rather than asked.
+        NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '700',
+        NITRO_UI_DIAG_BUDGET_MS: '1500',
+      });
+      expect(ran.status).toBe(0);
+      expect(ran.elapsedMs).toBeLessThan(20_000);
+      const host = fs.readFileSync(box.diag('host.log'), 'utf8');
+      // Named as skipped, not silently absent.
+      expect(host).toContain('skipped, the diagnostics budget is spent');
+      expect(String(ran.stdout)).toContain('incomplete');
+      // And giving up did not lose the cheap evidence, because the cheap evidence was
+      // read first: the AVD's hardware config is still in the artifact.
+      expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+        'hw.gpu.mode=swift_ind'
+      );
+    } finally {
+      box.dispose();
+    }
+  });
+
+  it('the diagnostics step still prints what exists, including the AVD config', () => {
+    // The other half of "tolerate a missing log while still printing the ones that
+    // exist": with a booted emulator, its stderr, its `config.ini` and its
+    // properties must all reach the log and the artifact. `config.ini` is here and
+    // not in the preflight because the harness creates or restores the AVD in the
+    // step after the preflight, where the preflight's read of it could only ever
+    // print "No such file" on a cache miss — which is what run 41256853746 showed.
+    const box = sandbox({ avd: true, adb: 'platform-tools' });
+    try {
+      const ran = runDiagnostics(box);
+      expect(ran.status).toBe(0);
+      const out = String(ran.stdout ?? '');
+      // Found through `$ANDROID_HOME/platform-tools`, with `adb` nowhere on PATH.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        path.join(box.androidHome, 'platform-tools', 'adb')
+      );
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'sys.boot_completed=1'
+      );
+      // And the device's own clock and locale, which is how the Android job's
+      // `DST PREMISE MISSING` line becomes readable: the zone is an emulator
+      // setting nothing in this repo passes, so the artifact has to carry it.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'persist.sys.timezone='
+      );
+      // The hardware lines, in the artifact, from the AVD the job really used.
+      expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+        'hw.gpu.mode=swift_ind'
+      );
+      // Copied, and printed: a log that exists must be readable in the step's own
+      // output, not only in the artifact someone has to download.
+      expect(fs.existsSync(box.diag('emulator-5554.log'))).toBe(true);
+      expect(out).toContain('qemu: FIREFOX_MARKER_LINE');
+      expect(out).toContain('sys.boot_completed=1');
+    } finally {
+      box.dispose();
+    }
+  });
+
+  it('uploads a directory the uploader can actually see, and the one the step wrote', () => {
+    // Two steps, one path, and a default that bites: `upload-artifact` v4 resolves
+    // `path` with hidden entries excluded unless `include-hidden-files: true`, so a
+    // dot-directory collects files and uploads nothing, silently, under
+    // `if-no-files-found: ignore`. Run 41256853746 is the proof: the collect step
+    // listed `host.log` and `logcat.txt`, and the upload step's own input dump shows
+    // `include-hidden-files: false` next to "No files were found with the provided
+    // path: .harness-diag". So the path must be visible, and must be the same string
+    // the collect step writes to — drift between the two is the same bug in a
+    // different spelling.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const steps = job.steps ?? [];
+    const collect = steps.find((candidate) =>
+      String(candidate.name ?? '').includes('Collect emulator boot diagnostics')
+    );
+    const upload = steps.find((candidate) =>
+      String(candidate.name ?? '').includes('Upload emulator boot diagnostics')
+    );
+    expect(upload).not.toBeUndefined();
+    const withs = upload.with ?? {};
+    const target = String(withs.path ?? '').replace(/\/+$/u, '');
+    expect(target).not.toBe('');
+    // Not hidden, in any segment, because the uploader's globber drops a hidden
+    // *segment*, not just hidden file names.
+    expect(target.split('/').some((segment) => segment.startsWith('.'))).toBe(
+      false
+    );
+    /**
+     * The same directory the step writes into, read out of the step body rather than
+     * repeated here as a second copy of the answer. The step calls the script with
+     * `--out <dir>`, so that argument *is* the answer, and it is the argument the run
+     * below actually passes — a test that hardcoded `harness-diag` while the step said
+     * something else would leave the artifact empty and still be green.
+     */
+    const assigned = String(collect.run).match(/--out\s+(\S+)/u)?.[1];
+    expect(assigned).toBe(target);
+    expect(String(collect.run)).toContain(DIAGNOSTICS_SCRIPT);
+    // And "we found nothing" has to be a red step. `ignore` is what made the
+    // uploader's silence indistinguishable from a run that needed no diagnostics.
+    expect(String(withs['if-no-files-found'])).toBe('error');
+    // Behaviourally: after a real run of the body, the uploader's `path` resolves to
+    // a directory holding at least one visible file.
+    const box = sandbox();
+    try {
+      expect(runStepBody(String(collect.run), box).status).toBe(0);
+      const uploaded = fs
+        .readdirSync(path.join(box.cwd, target))
+        .filter((name) => !name.startsWith('.'));
+      expect(uploaded.length).toBeGreaterThan(0);
+    } finally {
+      box.dispose();
+    }
+  });
+});
+
+describe('the AVD name CI prints is the name the harness boots', () => {
+  /**
+   * `scripts/ci-avd-name.mjs` exists because a workflow step cannot import the
+   * harness config, and it reads the config as *text* to stay honest about the
+   * default. That covers one of the three things `avd()` does: the other two are
+   * the `ANDROID_AVD` and `AVD` overrides, and a step that prints the default while
+   * the harness boots an override is not reporting what the job is doing. Every
+   * leased device on this repo's dev boxes sets `ANDROID_AVD`, which is how this
+   * was found: the diagnostics step looked in `~/.android/avd/nitroui.avd` for a
+   * run whose emulator lived in `nitroui_a.avd`.
+   */
+  function avdName(env) {
+    const ran = spawnSync(
+      process.execPath,
+      [path.join(root, 'scripts', 'ci-avd-name.mjs')],
+      { cwd: root, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' }
+    );
+    expect(ran.status).toBe(0);
+    return ran.stdout.trim();
+  }
+
+  it('follows the same precedence as avd(): ANDROID_AVD, AVD, then the default', () => {
+    const config = fs.readFileSync(
+      path.join(root, 'example', 'rn-harness.config.mjs'),
+      'utf8'
+    );
+    const fallback = /const DEFAULT_AVD = '([^']+)'/u.exec(config)[1];
+
+    expect(avdName({})).toBe(fallback);
+    expect(avdName({ AVD: 'avd-override' })).toBe('avd-override');
+    expect(avdName({ ANDROID_AVD: 'lease-avd', AVD: 'avd-override' })).toBe(
+      'lease-avd'
+    );
+    /**
+     * An empty override is not a name. `set -a; . <(lease.mjs acquire)` style
+     * sourcing produces one, and the harness's own `??` treats `''` as a value — so
+     * this is the one place where the two are deliberately *not* identical, in the
+     * direction that keeps a report from printing a blank line and looking like a
+     * machine with no AVD in it.
+     */
+    expect(avdName({ ANDROID_AVD: '', AVD: '' })).toBe(fallback);
   });
 });
 

@@ -504,15 +504,28 @@ describe('the lease owns the device lifecycle', () => {
   it('starts a device that is down, and records the boot on the lease', () => {
     // Nothing is up, and the emulator stays "down" as far as the stub is concerned: the lease still
     // has to come back (bounded), and it still has to have *asked* for the boot.
-    const acquired = cli([
-      'acquire',
-      '--task',
-      'T2',
-      '--boot',
-      '--boot-timeout-minutes',
-      '0.02',
-      '--no-reset',
-    ]);
+    //
+    // The two env entries describe the machine rather than inherit one. The GPU mode is the
+    // machine-aware rule's answer (`host` where a display server exists, software rendering where
+    // there is none), and this file asserts a literal `-gpu host` — which used to be true only
+    // because `check` ran on a Mac. `check` runs on `ubuntu-latest` in CI, where the same line
+    // went red. A display server is named so the answer is `host` on either runner, and the
+    // override is cleared so a maintainer's own profile cannot decide the assertion. Which mode
+    // belongs to which machine is pinned per host, on both launcher halves, by the fixture table
+    // in emulator-launch.test.js; what is proved here is that the pool puts the rule's answer in
+    // the argv it spawns.
+    const acquired = cli(
+      [
+        'acquire',
+        '--task',
+        'T2',
+        '--boot',
+        '--boot-timeout-minutes',
+        '0.02',
+        '--no-reset',
+      ],
+      { DISPLAY: ':99', NITRO_UI_EMULATOR_GPU: '' }
+    );
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
     expect(acquired.stderr).toContain('did not come up');

@@ -24,6 +24,12 @@ import {
 } from '../scripts/app-stamp-core.mjs';
 import { checkEmulatorEnv, emulatorSerial } from '../scripts/lease-core.mjs';
 import {
+  NITRO_UI_TEST_LOCALE_ENV,
+  NITRO_UI_TEST_TZ_ENV,
+  appLaunchOptionsFromEnv,
+  describeAppLaunchOptions,
+} from '../scripts/app-launch-env.mjs';
+import {
   suiteTimingPluginFromEnv,
   SUITE_TIMING_ENV,
 } from '../scripts/harness-suite-timing.mjs';
@@ -207,6 +213,61 @@ function avd() {
 }
 
 /**
+ * The app's own clock and locale, pinned for one run.
+ *
+ * Defaults for {@link appLaunchOptionsFromEnv} when a run says nothing. Kept in
+ * this file because they are the run's configuration, not a library's; the
+ * rendering and validation of the values is unit-tested in
+ * `scripts/app-launch-env.mjs`, which this file cannot import as a test without
+ * running the Node check, the `app.stamp` gate and a device lookup.
+ *
+ * `en_US` because it is both GitHub's runner default and the most common user
+ * locale, so it is the configuration worth gating: the DatePicker's field width
+ * is its *locale's* formatter's widest date, and the declared fallback now states
+ * that number (`107 x 36.33`, `HybridNitroUiDatePicker.swift`). Pinning it means
+ * the assertion measures what the majority of users see rather than what one
+ * maintainer's simulator happened to be set to — round 1 pinned `en_PT`, which was
+ * the measuring configuration of the old number and backwards as a default.
+ *
+ * `Europe/Lisbon` because the DST round trip can only be exercised in a zone that
+ * shifts its clock, and GitHub's images boot at `UTC`, where it silently is not
+ * (run 41230848294: `expected +0 not to be +0`). Lisbon shifts in both directions
+ * the suite covers, and it is the zone the case was written against.
+ *
+ * A locale this run pins and a table row disagreeing is a FAILURE, not a skip:
+ * the pin exists to make the comparison meaningful, and a run that reported a skip
+ * instead would read green while comparing less than it claims. Only
+ * `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` turns it into the printed skip, and it is for
+ * someone deliberately probing another locale — see `localePremiseMiss`.
+ *
+ * Override per shell with `NITRO_UI_TEST_LOCALE`/`NITRO_UI_TEST_TZ`; an empty
+ * value means "ask the device", which is what a developer's own machine already
+ * does when they set one deliberately.
+ */
+const DEFAULT_APP_TEST_LOCALE = 'en_US';
+const DEFAULT_APP_TEST_TZ = 'Europe/Lisbon';
+
+function appLaunchEnvironment() {
+  const env = { ...process.env };
+  if (env[NITRO_UI_TEST_LOCALE_ENV] == null) {
+    env[NITRO_UI_TEST_LOCALE_ENV] = DEFAULT_APP_TEST_LOCALE;
+  }
+  if (env[NITRO_UI_TEST_TZ_ENV] == null) {
+    env[NITRO_UI_TEST_TZ_ENV] = DEFAULT_APP_TEST_TZ;
+  }
+  const options = appLaunchOptionsFromEnv(env);
+  const described = describeAppLaunchOptions(options);
+  if (described != null) {
+    console.log(
+      `app-launch: the app runs at ${described} — ${NITRO_UI_TEST_LOCALE_ENV}/` +
+        `${NITRO_UI_TEST_TZ_ENV}, pinned by this file (iOS launch arguments; ` +
+        'the emulator takes neither, its zone is a device setting)'
+    );
+  }
+  return options;
+}
+
+/**
  * Which console port the emulator may boot on, checked before the first device
  * is touched (review S5).
  *
@@ -277,6 +338,10 @@ export default {
       name: 'ios',
       bundleId: 'nitroui.example',
       device: iosDevice(),
+      // The locale and zone this run pins (see `appLaunchEnvironment`). Both have
+      // defaults here, so every harness launch carries them — a local run is no
+      // longer at the mercy of the machine's own region settings.
+      appLaunchOptions: appLaunchEnvironment(),
     }),
     androidPlatform({
       name: 'android',

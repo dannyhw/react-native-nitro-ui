@@ -92,6 +92,9 @@ import {
   waitFor,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
+import { deviceLocale, deviceLocaleNote } from './deviceContext';
+import { waitForHandle } from './handles';
+import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
   Button,
   DatePicker,
@@ -187,8 +190,9 @@ const SHARED = {
         "height": 48
       },
       "ios": {
-        "width": 103,
-        "height": 36.33
+        "width": 107,
+        "height": 36.33,
+        "measuredUnderLocale": "en-US"
       }
     },
     "NitroUiPicker": {
@@ -246,6 +250,12 @@ const EXEMPTIONS = SHARED.exemptions as ReadonlyArray<Exemption>;
 /* --------------------------------- the seams --------------------------------- */
 
 type Size = { width: number; height: number };
+/**
+ * A `DECLARED_FALLBACKS` row for one platform: the box, plus the locale its numbers were
+ * measured in when they depend on one (`measuredUnderLocale` — the DatePicker's field width
+ * is a date formatter's output). From the mirrored table, never written here.
+ */
+type DeclaredRow = Size & { measuredUnderLocale?: string };
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
@@ -630,6 +640,51 @@ function handleFor(testId: string): Handle {
   return handle;
 }
 
+/**
+ * Forget any handle held for `testId`, so the next `ensureHandle` can only be answered by a
+ * mount that has not happened yet.
+ *
+ * Call this immediately before every `render` whose control the test then reads. Without it
+ * the map answers with a handle from an *earlier* owner: `hybridRef` fires once per native
+ * view at mount and is never called with `null` (`useStableCallback.ts`'s own caveat — "a
+ * callback prop that is already installed is never re-invoked"), and `handles` is cleared only
+ * in `afterEach`. So for the second owner of the recycle rule, for the warm mount of the
+ * fallback rule, and for both second owners of the residue probes, `ensureHandle` used to find
+ * the first owner's handle sitting in the map and return it without waiting at all.
+ *
+ * That is CI run 41256853746's DatePicker failure: the uncontrolled second owner "kept its
+ * identity across lifetimes" and the day it showed was `1799971200000`, which is precisely the
+ * *first* owner's pick, read through the first owner's handle. It also hid the race the wait
+ * exists for, since a lookup that always succeeds proves nothing about timing.
+ *
+ * What this cannot hide: if a remount really never re-fires the callback, `ensureHandle` now
+ * times out and says so, which is the accurate finding — the control did not hand back its own
+ * state.
+ */
+function expectANewHandle(testId: string): void {
+  handles.delete(testId);
+}
+
+/**
+ * Wait until the callback for this testID has run, then hand the handle back.
+ *
+ * Called once after each `render` (and only meaningful after
+ * {@link expectANewHandle} has run before it), because `hybridRef` fires on a commit *after*
+ * the view is created: a box can exist (that is what `waitForTestId`/`queryByTestId` see)
+ * while the handle has not arrived. Run 41230848294, at load1 152 on 3 cores, is what proved
+ * the difference is real rather than theoretical — `Conformance · is named on its own box`
+ * died on this sentence for the DatePicker, while the same test passed on the next dispatch of
+ * the same tree (41234953779). "The control never handed back its state" was a statement about
+ * a callback that was 20 ms late.
+ *
+ * It waits for the handle only, never for an *answer*: every rule below still reads the
+ * control exactly once, so the recycle rule in particular keeps its "do not wait for the
+ * reset" property (see the comment on its read).
+ */
+async function ensureHandle(testId: string): Promise<Handle> {
+  return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
+}
+
 function stats(): NitroUiSizingStats {
   return nitroUiCore.sizingStats();
 }
@@ -695,7 +750,13 @@ const RENDER = { timeout: 20000 } as const;
  * What is asserted about these bodies is that a control's fixture row exists and carries a
  * probe (`checkInAppFixtures`), and that the tables match. Nothing asserts their prose. */
 
-type Finding = { component: string; rule: string; problem: string };
+type Finding = {
+  component: string;
+  rule: string;
+  problem?: string | null;
+  /** A comparison the run's own configuration makes meaningless; see `skippedFindings`. */
+  skipped?: string;
+};
 
 function near(a: Size, b: Size, tolerance: number): boolean {
   return (
@@ -711,6 +772,42 @@ function fmt(size: Size | null): string {
 }
 
 /**
+ * The in-app half of `canonicalLocale` / `localePremiseMiss` in
+ * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
+ *
+ * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
+ * prefix the engine itself reports, compare it with the locale the row was measured in, and
+ * carry whether *this run* published the opt-out. Without that third field a mismatch would
+ * have to be either always a failure (so nobody could ever probe another locale) or always a
+ * skip (so the comparison silently stops happening) — both of which are wrong.
+ */
+function canonicalLocale(identifier: string): string {
+  const parts = String(identifier).replace(/_/g, '-').split('-');
+  const out = [(parts[0] ?? '').toLowerCase()];
+  for (const part of parts.slice(1)) {
+    if (part.length === 4 || part.length === 2 || /^\d{3}$/.test(part)) {
+      out.push(part.toLowerCase());
+    } else {
+      break;
+    }
+  }
+  return out.join('-');
+}
+
+function localePremiseMiss(
+  row: DeclaredRow | undefined,
+  reportedLocale: string | null,
+  mismatchAllowed: boolean
+): { expected: string; actual: string; tolerated: boolean } | null {
+  const expected = row?.measuredUnderLocale;
+  if (expected == null) return null;
+  if (reportedLocale == null || reportedLocale === '') return null;
+  if (canonicalLocale(expected) === canonicalLocale(reportedLocale))
+    return null;
+  return { expected, actual: reportedLocale, tolerated: mismatchAllowed };
+}
+
+/**
  * Rule 1: is the fallback the control's own, and does a wrong guess still get corrected?
  *
  * @param input.declared what the engine reports for the control (`null` = nothing
@@ -719,6 +816,11 @@ function fmt(size: Size | null): string {
  * @param input.boxRule which axes the declaration describes — from the mirrored table,
  *   never worked out here. See `boxRuleFor` in `scripts/conformance-core.mjs` for why a
  *   `fillWidth` control's width and a content-sized control's box are not its declaration.
+ * @param input.deviceLocale the locale this run's app reports
+ *   (`deviceContext.ts`), and `input.mismatchAllowed` whether the run published
+ *   `NITRO_UI_ALLOW_LOCALE_MISMATCH`. Only the box comparison consults them, and only for a
+ *   row that declares it was measured in one (`measuredUnderLocale`): a mismatch then FAILS
+ *   unless the run said it meant it. See `localePremiseMiss`.
  */
 function fallbackFindings(input: {
   component: string;
@@ -726,8 +828,10 @@ function fallbackFindings(input: {
   measured: Size | null;
   corrections: number;
   poisoned: boolean;
-  expected: Size;
+  expected: DeclaredRow;
   boxRule: 'both' | 'height' | 'none';
+  deviceLocale?: string | null;
+  mismatchAllowed?: boolean;
 }): Finding[] {
   const {
     component,
@@ -769,6 +873,15 @@ function fallbackFindings(input: {
     );
     return problems;
   }
+  // The premise the DatePicker's row needs (see `measuredUnderLocale` in the shared
+  // table), read from the app itself. `null` for every other control, so nothing here
+  // changes for them.
+  const miss = localePremiseMiss(
+    expected,
+    input.deviceLocale ?? null,
+    input.mismatchAllowed ?? false
+  );
+
   if (boxRule === 'none') {
     if (near(measured, expected, tolerance)) {
       report(
@@ -777,6 +890,35 @@ function fallbackFindings(input: {
           'always measures its declared size is not sizing itself from its content, ' +
           'so the exemption is no longer true'
       );
+    }
+  } else if (miss != null && !ownsAgrees(measured, expected)) {
+    // A locale mismatch is a failed premise, and a failed premise is a FAILURE: the harness
+    // pins the launch locale, so the app reporting another one means the pin was lost, was
+    // overridden without being said, or the formatter stopped following the locale it was
+    // handed. The skip exists only behind the run's own opt-out (see `localeMismatchAllowed`
+    // in `timingGate.ts`), and names the two claims it suspends — the box comparison and the
+    // warm-corrections claim below, which `HybridNitroUiDatePicker.swift`'s `fallbackSize`
+    // prices in words. Everything else still runs either way: the poison must still be
+    // corrected, and a mount that settles at nothing still fails.
+    const both =
+      `the app runs in ${miss.actual} and this row’s ${fmt(expected)} is what the ` +
+      `control measures in ${miss.expected}, so the measured ${fmt(measured)} is the ` +
+      'same formatter answering a different question. Launch the app in the pinned ' +
+      `locale (${miss.expected.replace(/-/g, '_')}) or set ` +
+      'NITRO_UI_ALLOW_LOCALE_MISMATCH=1 to say you meant this';
+    if (miss.tolerated) {
+      problems.push({
+        component,
+        rule: 'declared-fallback',
+        problem: null,
+        skipped:
+          `box and warm-corrections comparison skipped ` +
+          `(NITRO_UI_ALLOW_LOCALE_MISMATCH=1): ${fmt(expected)} is what this control ` +
+          `measures in ${miss.expected} and this run's app locale is ${miss.actual}, ` +
+          `so the measured ${fmt(measured)} proves nothing about the declaration`,
+      });
+    } else {
+      report(both);
     }
   } else if (!ownsAgrees(measured, expected)) {
     report(
@@ -787,7 +929,17 @@ function fallbackFindings(input: {
         ' — a mismatch means the declaration drifted from the component'
     );
   }
-  if (!poisoned && corrections > 0 && boxRule === 'both') {
+  if (
+    !poisoned &&
+    corrections > 0 &&
+    boxRule === 'both' &&
+    // Same premise as the box comparison above, and suspended by it whether or not the run
+    // opted out: `fallbackSize`'s own comment says a locale wider than the measured one costs
+    // its first instance one correction, so `corrections > 0` cannot distinguish a dead
+    // declaration from a formatter answering in another locale. The box finding is the
+    // accurate headline either way, so nothing is hidden by suspending this.
+    !(miss != null && !ownsAgrees(measured, expected))
+  ) {
     report(
       `needed ${String(corrections)} correction(s) from a warm engine whose ` +
         `fallback ${fmt(expected)} already describes this control’s whole box — ` +
@@ -875,6 +1027,13 @@ function recycleFindings(input: {
 function expectConformance(findings: Finding[]): void {
   const failures: string[] = [];
   for (const finding of findings) {
+    if (finding.skipped != null) {
+      // Its own channel, and printed rather than swallowed: a run that compared less than it
+      // claims has to say so in the log, or "green" and "premise missing, box never compared"
+      // are the same line to anyone reading the gate afterwards.
+      console.log(`    · ${finding.skipped}`);
+      continue;
+    }
     const exemption = EXEMPTIONS.find(
       (row) => row.component === finding.component && row.rule === finding.rule
     );
@@ -1007,10 +1166,10 @@ function restore(component: string): void {
   nitroUiCore.invalidateSizingEnvironment();
 }
 
-function declaredFallback(component: string): Size {
+function declaredFallback(component: string): DeclaredRow {
   const table = SHARED.declaredFallbacks as Record<
     string,
-    Record<'ios' | 'android', Size>
+    Record<'ios' | 'android', DeclaredRow>
   >;
   const entry = table[component];
   if (entry == null) {
@@ -2102,6 +2261,21 @@ describe('conformance · every control, four rules', () => {
         // because that is a host-side fact about its sizing policy — the suite that asserts
         // does not get to decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
         const expected = declaredFallback(fixture.component);
+        // The premise, read from the app rather than assumed: what locale this run's
+        // formatter ran in. Printed per control so the log names the configuration the
+        // numbers below were taken in.
+        const appLocale = deviceLocale();
+        // And whether *this run* said it meant to test a locale the table was not measured in.
+        // The app cannot read the runner's environment, so the answer is published by
+        // `example/rn-harness.config.mjs` with the machine state and read back here; the
+        // default when it cannot be read is `false`, i.e. the comparison is enforced.
+        const mismatchAllowed = await localeMismatchAllowed();
+        if (mismatchAllowed.allowed) {
+          console.log(
+            `    · ${ALLOW_LOCALE_MISMATCH_ENV}=1: a locale mismatch will be a ` +
+              'printed skip rather than a failure, for this file only'
+          );
+        }
         const boxRule = boxRuleFor(fixture.component);
 
         // 1. The engine knows a fallback at all — read once for the whole file, before any
@@ -2116,15 +2290,18 @@ describe('conformance · every control, four rules', () => {
         try {
           poison(fixture.component);
           const coldBefore = stats();
+          expectANewHandle(fixture.testId);
           const cold = await render(fixture.owner(false), RENDER);
           await settle(600);
-          const coldMeasure = handleFor(fixture.testId).measureContent();
+          const coldHandle = await ensureHandle(fixture.testId);
+          const coldMeasure = coldHandle.measureContent();
           const coldBox = harnessUi.queryByTestId(fixture.testId);
           const coldCorrections = correctionsSince(coldBefore);
           console.log(
             `    · poisoned measured=${describeBox(coldMeasure)} box=` +
               `${describeBox(coldBox)} corrections=${String(coldCorrections)} ` +
-              `poison=${describeBox(SHARED.poisonSizes[PLATFORM])}`
+              `poison=${describeBox(SHARED.poisonSizes[PLATFORM])} ` +
+              `locale=${deviceLocaleNote()}`
           );
           expectConformance(
             fallbackFindings({
@@ -2135,6 +2312,8 @@ describe('conformance · every control, four rules', () => {
               poisoned: true,
               expected,
               boxRule,
+              deviceLocale: appLocale,
+              mismatchAllowed: mismatchAllowed.allowed,
             })
           );
           cold.unmount();
@@ -2151,12 +2330,14 @@ describe('conformance · every control, four rules', () => {
         //    finding if a correction was needed where the declaration should have made it
         //    unnecessary.
         const warmBefore = stats();
+        expectANewHandle(fixture.testId);
         const warm = await render(fixture.owner(false), RENDER);
         await settle(600);
-        const warmMeasure = handleFor(fixture.testId).measureContent();
+        const warmHandle = await ensureHandle(fixture.testId);
+        const warmMeasure = warmHandle.measureContent();
         console.log(
           `    · warm measured=${describeBox(warmMeasure)} declared=${describeBox(expected)} ` +
-            `boxRule=${boxRule}`
+            `boxRule=${boxRule} locale=${deviceLocaleNote()}`
         );
         expectConformance(
           fallbackFindings({
@@ -2167,6 +2348,8 @@ describe('conformance · every control, four rules', () => {
             poisoned: false,
             expected,
             boxRule,
+            deviceLocale: appLocale,
+            mismatchAllowed: mismatchAllowed.allowed,
           })
         );
         warm.unmount();
@@ -2268,15 +2451,22 @@ describe('conformance · every control, four rules', () => {
         const warmUp = await render(fixture.owner(false), RENDER);
         await settle();
         warmUp.unmount();
-        await settle(500);
 
-        const baseline = stats();
+        // A *quiescent* baseline, for the reason the positive-control test above
+        // states: an iOS instance reaches `onDropView` after its unmount, so the
+        // warm-up's own drop can still be in flight when the read happens, and the
+        // run that measures it reads one legitimate release as a leak. CI proved
+        // the shape — run 41230848294 reported `Menu × no-leak-on-drop: 1 ledger
+        // entry(ies) survived 50 drops` at load1 152-380 on 3 cores, and the same
+        // tree passed the same test on the next dispatch. `stats()` after a fixed
+        // `settle` was the fixture asserting about a number still on its way
+        // somewhere; `settledStats` refuses rather than comparing against one.
+        const baseline = await settledStats('the churn baseline');
         for (let cycle = 0; cycle < CHURN; cycle += 1) {
           const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
           mounted.unmount();
         }
-        await settle(700);
-        const after = stats();
+        const after = await settledStats('the churn after-read');
         console.log(
           `    · ledger ${String(baseline.ledgerEntries)}→` +
             `${String(after.ledgerEntries)} registry ${String(
@@ -2301,8 +2491,10 @@ describe('conformance · every control, four rules', () => {
         // which is the other way this class of bug arrives (a prop that goes unset never
         // reaches native at all, so the next mount keeps whatever was there). It is not what
         // notices a missing reset, and the log says which half is which.
+        expectANewHandle(fixture.testId);
         const first = await render(fixture.owner(false), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         expect(
           recycleFindings({
             component: fixture.name,
@@ -2313,8 +2505,10 @@ describe('conformance · every control, four rules', () => {
         first.unmount();
         await settle(400);
 
+        expectANewHandle(fixture.testId);
         const second = await render(fixture.owner(true), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         const propChecks = fixture.state(handleFor(fixture.testId), true);
         console.log(
           `    · ${fixture.testId} props after the second owner: ` +
@@ -2374,8 +2568,10 @@ describe('conformance · every control, four rules', () => {
               run.probe.leaveBehind
           );
           recycleEvents.length = 0;
+          expectANewHandle(fixture.testId);
           const firstOwner = await render(run.probe.first(), RENDER);
           await settle();
+          await ensureHandle(fixture.testId);
           await run.probe.act();
           firstOwner.unmount();
           // Long enough for the drop to have run and, on iOS, for the instance to reach the
@@ -2384,8 +2580,35 @@ describe('conformance · every control, four rules', () => {
           // mounting transaction that removes the view.
           await settle(500);
 
+          expectANewHandle(fixture.testId);
           const secondOwner = await render(run.probe.second(), RENDER);
           await settle();
+          // The second owner's own handle, which is why the line above deleted the entry
+          // first. What this file used to claim here — that React hands the previous callback
+          // `null` on unmount, so a stale entry could not survive — is wrong: `hybridRef` is
+          // installed once per native view and never re-invoked or cleared
+          // (`src/core/useStableCallback.ts`), and `handles` was emptied only in `afterEach`.
+          // So the lookup found the *first* owner's handle and returned it without waiting,
+          // and this probe read the first owner's day and its open presentation count. That is
+          // CI's `reads 1799971200000 where the props say 1740787200000` with
+          // `presented 1`, on both hosted runs, in the one rule that cannot be explained by
+          // load. The read below still stays a single read, with no wait for the reset.
+          await ensureHandle(fixture.testId);
+          // Then wait for the *bookkeeping* to be quiescent, which is a different thing
+          // from waiting for the answer. Run 41230848294 read
+          // `the day the field shows = 1799971200000` (the first owner's pick) and
+          // `a presentation left open = 1` for this control at load1 152-380 on 3 cores,
+          // and the same tree read `1740787200000 / 0` on the next dispatch. One fixed
+          // `settle(500)` was the fixture assuming the device had processed the
+          // unmount-and-mount by then; on a starved main thread it had not, so the read
+          // was of a view whose previous owner's lifetime was still in flight.
+          //
+          // Two consecutive equal ledger/registry reads says no mount or drop is still in
+          // flight. It cannot say the reset happened — the reset writes no counters — so a
+          // control that never re-arms its one-shot settles quietly at the wrong day and the
+          // read below still goes red. Same discipline the leak rule uses for its baseline,
+          // for the same reason: only a quiescent read is evidence about a mount.
+          await settledStats(`after "${fixture.testId}" changed owner`);
           const checks = await run.probe.read();
           for (const check of checks) {
             console.log(
@@ -2407,8 +2630,10 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('is named on its own box, not on a wrapper around it', async () => {
+        expectANewHandle(fixture.testId);
         const mounted = await render(fixture.owner(false), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
         if (PLATFORM !== 'ios') {

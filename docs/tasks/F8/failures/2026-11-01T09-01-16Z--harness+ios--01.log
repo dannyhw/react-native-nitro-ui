@@ -1,0 +1,68 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-01T09:01:16.763Z on code tree `5043460371d2` at HEAD `0720727` (branch `task/F8-ci-harness-hosted`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 2267242 ms
+- Load: start 4.64, end 2.90, median 2.73, max 43.30
+- Device: ios
+- Full log: `task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log` (<store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   F8b-hmgcw                F8b          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.90 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 26 log line(s)
+
+```
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 5043460371d2 at HEAD 0720727
+gate: git tree 9347b0226ad9
+gate: log task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log
+gate:       <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 5043460371d2, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.64/3.80 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+gate: harness:ios FAIL in 2267.2 s (signal SIGTERM) - note: the code tree moved during the run (9f59f702c0fe now), so this line describes 5043460371d2
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/F8-ci-harness-hosted/harness+ios-2026-11-01T09-01-16.427Z.log (4 probe(s))
+gate: re-raising SIGTERM
+
+```
