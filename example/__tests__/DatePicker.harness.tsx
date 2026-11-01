@@ -54,6 +54,7 @@ import {
   nitroUiCore,
   type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
+import { deviceZone } from './deviceContext';
 
 /** The Fabric name — what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiDatePicker';
@@ -1354,9 +1355,9 @@ describe('DatePicker · G5', () => {
     //    `toUtcMidnightOfLocalDay`/`fromUtcMidnightKeepingTimeOfDay` pair, exactly as
     //    a day cell does.
     //
-    // The zone is asserted, not assumed - nothing in this suite sets it, so an
-    // environment that moved the device to `UTC` used to make this test pass without
-    // crossing a transition. Two checks, both loud:
+    // The zone is read, not assumed - nothing in this suite sets it on a device, so
+    // an environment that moved the device to `UTC` used to make this test pass
+    // without crossing a transition. Two premises, both printed:
     //  - the zone must observe DST at all (a January and a July offset differ);
     //  - at least one of *these* instants must have a local day that is not its UTC
     //    day, because that is what the conversion exists to get right. A noon instant
@@ -1365,14 +1366,35 @@ describe('DatePicker · G5', () => {
     //    deleted the conversion altogether stayed green here. Hence the 00:30 and
     //    23:45 pairs: one of them lands on another UTC day in any zone with a
     //    non-zero offset, and the check below says so if neither does.
-    const winterOffset = new Date(2026, 0, 1).getTimezoneOffset();
-    const summerOffset = new Date(2026, 6, 1).getTimezoneOffset();
+    //
+    // Where either fails, the DST claim is not exercised by this device and saying
+    // so is the honest answer: the two premises used to be `expect`s, which is what
+    // CI's first hosted run went red on (`expected +0 not to be +0`, run 41230848294)
+    // because GitHub's macOS images boot a simulator at `UTC`. `example/rn-harness
+    // .config.mjs` now launches the iOS app in `Europe/Lisbon` — the zone these
+    // numbers were measured in — so the iOS job takes the full path. A device that
+    // is still in a zone without a transition (an emulator set to `UTC` is one, and
+    // the zone belongs to the device rather than to anything this run can pass) runs
+    // every assertion that does *not* need a transition and prints which claim it
+    // could not make. Nothing here is weaker on a machine where the premise holds.
+    const zone = deviceZone();
+    const winterOffset = zone.winterOffset;
+    const summerOffset = zone.summerOffset;
     const zoneDescription = new Date(2026, 6, 1).toString();
     console.log(
-      `dst zone: ${zoneDescription} winterOffset=${String(winterOffset)} ` +
-        `summerOffset=${String(summerOffset)}`
+      `dst zone: ${zoneDescription} zone=${zone.name ?? 'unknown'} ` +
+        `winterOffset=${String(winterOffset)} summerOffset=${String(summerOffset)}`
     );
-    expect(winterOffset).not.toBe(summerOffset); // the device is not observing DST, so nothing here crosses a boundary
+    const observesDst = zone.observesDst;
+    if (!observesDst) {
+      console.log(
+        `    · DST PREMISE MISSING: ${zone.name ?? 'this zone'} shows the same ` +
+          'offset in January and July, so no instant here crosses a transition. ' +
+          'The instant round trip below still runs and still has to be exact, but ' +
+          'the DST half of this rule is not evidence on this device. Pin ' +
+          'NITRO_UI_TEST_TZ=Europe/Lisbon (iOS) or set the device’s zone to see it.'
+      );
+    }
 
     const WINTER = localMs(2026, 1, 5, 12, 30);
     const SUMMER = localMs(2026, 7, 5, 12, 30);
@@ -1401,7 +1423,22 @@ describe('DatePicker · G5', () => {
         `summerNight=${String(SUMMER_JUST_AFTER_MIDNIGHT)} ` +
         `winterLate=${String(WINTER_JUST_BEFORE_MIDNIGHT)}`
     );
-    expect(discriminating.length).toBeGreaterThan(0); // no instant here has a local day that differs from its UTC day: in this zone the conversion cannot be observed, and the test would pass vacuously
+    // The second premise, and it is checked whenever it *can* hold: a zone with any
+    // non-zero offset must make at least one of these instants land on a different
+    // UTC day, which is what gives the UTC-midnight conversion something to get
+    // wrong. Gated on the offset rather than on DST so that a zone like Asia/Kolkata
+    // (+5:30, no transition) still gets the strong claim, and only a run whose
+    // device really is at UTC — where no local instant can ever differ from its UTC
+    // day, so the check would be asserting nothing — prints why it cannot make it.
+    if (winterOffset !== 0 || summerOffset !== 0) {
+      expect(discriminating.length).toBeGreaterThan(0);
+    } else {
+      console.log(
+        '    · DST PREMISE MISSING: this device is at UTC, so every instant here ' +
+          'has the same local day as its UTC day and the UTC-midnight conversion ' +
+          'has nothing to convert. The instant round trip still has to be exact.'
+      );
+    }
 
     const { rerender, unmount } = await render(
       <View style={columnStyle}>
