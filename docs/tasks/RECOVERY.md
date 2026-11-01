@@ -77,6 +77,10 @@
 > **F8's iOS gate exception closed (V1, PR #16, `eaedc73`):** on maintainer-mac-1, `real-input:ios` 14/14 and `harness:ios`
 > 227 passed on `main` at `161e7d2` (which carries 0.4.2), so every merge gate has now run on a device. Stale duplicate
 > Version Packages PR #15 closed.
+> **G9 merged (2026-11-01, `baf9811`, PR #17):** iOS `Menu` now draws an untitled section's rows (its header was a
+> `Divider()`, which UIKit built as an empty inline menu). Run on maintainer-mac-1 by **Claude Opus 5.5 at `auto`**: the
+> first linked task in auto mode, with nothing blocked. iOS gates ran there on the same code tree; check and both Android
+> gates ran here on the merged tree, plus an Android red proof the orchestrator added (`ce4ba14`).
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
