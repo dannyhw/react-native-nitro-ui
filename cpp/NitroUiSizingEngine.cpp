@@ -380,7 +380,12 @@ namespace margelo::nitro::nitroui {
          */
         const int64_t oldest = lateFilingQueue_.front();
         lateFilingQueue_.pop_front();
-        lateFilings_.erase(oldest);
+        if (lateFilings_.erase(oldest) > 0) {
+          // Same marking the window's own expiry makes, for the same reason: this is
+          // an entry that can no longer be claimed, and a bind that turns up later is
+          // owed the second look rather than a silent nothing.
+          markFilingAbandonedLocked(oldest);
+        }
       }
       lateFilingQueue_.push_back(instanceId);
     }
