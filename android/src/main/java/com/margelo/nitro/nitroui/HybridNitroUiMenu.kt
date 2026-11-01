@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -528,6 +529,20 @@ internal class MenuModel : NitroUiModel() {
  * subclass rather than being handed in as a lambda - there is no `setContent`
  * anywhere in this library after construction.
  */
+/**
+ * The widest any one child of a `Menu`'s popup may ask to be.
+ *
+ * Material caps a *row* at 280 dp (`DropdownMenuItemDefaultMaxWidth`, which
+ * `DropdownMenuItemContent` puts in the row's own `sizeIn`), and the popup's width is
+ * whatever its widest child wants now that it no longer matches the trigger's. So a
+ * child that is not a row needs the same cap or it becomes the one thing that can
+ * stretch the list: that was `MenuHeader`, whose submenu title could be any length.
+ * Read from Material's own value rather than a copy of it? No - it is private, so this
+ * is the one number in this file that mirrors a token instead of reading it, and
+ * `Menu.harness.tsx`'s cap assertion is what says it still matches.
+ */
+private val MENU_CONTENT_MAX_DP = 280.dp
+
 private class MenuHost(
   context: ThemedReactContext,
   activity: Activity?,
@@ -761,7 +776,16 @@ private class MenuHost(
     )
   }
 
-  /** A group's title: drawn, and deliberately not a row. */
+  /**
+   * A group's title: drawn, and deliberately not a row.
+   *
+   * The width cap is the same one the rows live under. A header is not a `Row`, so it
+   * does not inherit a row's measure, and once the popup stopped matching the trigger's
+   * width its width is whatever its widest child asks for - so an uncapped header was the
+   * one child that could stretch the list past the width a Material menu is meant to
+   * stop at. Ellipsised like a row, because a header that cannot be read in full is a
+   * worse outcome than a menu that cannot say the whole name.
+   */
   @Composable
   private fun MenuHeader(title: String) {
     Text(
@@ -770,7 +794,9 @@ private class MenuHost(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+      modifier = Modifier
+        .widthIn(max = MENU_CONTENT_MAX_DP)
+        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
     )
   }
 
