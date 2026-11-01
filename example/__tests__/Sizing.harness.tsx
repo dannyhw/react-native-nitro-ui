@@ -1543,37 +1543,27 @@ describe('Sizing · intrinsic (T11)', () => {
   });
 
   /**
-   * A control hidden with `display: 'none'` and shown again keeps its correction.
+   * The control the two cases below drive: the same `Switch`, optionally hidden with
+   * `display: 'none'`, and optionally given a different `nuiTestWidth` — the only
+   * size-affecting prop a Switch has (`SwitchProps.nuiTestWidth`, TEMPORARY per S1).
    *
    * Round 1's forgotten-id guard refused to file a layout for an id the engine had
    * finished, on the assumption that an id which mounts again is a new id. It is not:
-   * `useSizingId` mints one per **React** mount (`src/core/useSizingId.ts`), so a hide
-   * that tears the native view down (`onDropView` → `host.drop()` → `forget(id)`)
+   * `useSizingId` mints one per **React** mount (`src/core/useSizingId.ts`), so on iOS a
+   * hide that tears the native view down (`onDropView` → `host.drop()` → `forget(id)`)
    * without ending the React mount leaves an id that comes back later attached to a
-   * brand-new native view — laid out one step *before* the mount transaction re-binds
-   * it. Round 1 refused that layout, the bind then cleared the mark, and the instance
-   * was left bound with no ledger entry: `report` returns at its first line without
-   * one, and `invalidateSizingEnvironment` re-keys `ledger_` and so cannot reach it.
-   * The control kept the size it was laid out at for the rest of its life, and a size
-   * change made while hidden was never corrected. One lost correction per hide/show.
+   * brand-new native view — laid out one step *before* the mount transaction re-binds it.
+   * Round 1 refused that layout, the bind then cleared the mark, and the instance was
+   * left bound with no ledger entry: `report` returns at its first line without one, and
+   * `invalidateSizingEnvironment` re-keys `ledger_` and so cannot reach it. The control
+   * kept the size it was laid out at for the rest of its life — one lost correction per
+   * hide/show, and a `sizingKey` change made while hidden was the visible case.
    *
-   * These two cases drive that sequence — a size-affecting prop moved while hidden,
-   * then the re-show — once with the correction owed by the configuration and once
-   * with the environment moved in between. The wrong guess is seeded first (review S8)
-   * so a correction that never arrives shows up as a box that stays wrong instead of
-   * passing quietly.
-   *
-   * The first `console.log` in each is the witness for *which* platform path ran. iOS
-   * Fabric creates no native view for a `display: none` node, so the hide is a real
-   * teardown and the ledger drops; Android honours `display: none` as `INVISIBLE`
-   * (`NitroComposeHost.kt:424`), so its view survives, nothing is forgotten, and the
-   * re-show is a visibility flip. Both platforms have to end up with the corrected box,
-   * and the correction is counted across the whole hide→show window rather than after
-   * the re-show, because which half of it Android pays for in is exactly what differs.
-   * The log names the path so a run cannot bank Android's easy pass as the regression
-   * guard. The ordering the regression is about is pinned natively, in the engine both
-   * platforms ship, by `testAReshownViewIsStillCorrectedAfterItsLateLayout` and its
-   * environment-change sibling in `scripts/native-tests/sizing.test.cpp`.
+   * Both cases therefore move the size *while hidden* and then re-show, with a guess
+   * seeded to a size that is not the control's (review S8), so a correction that never
+   * arrives leaves the box visibly at 40x20 instead of passing quietly. Every prop is
+   * passed on every render, `nuiTestWidth` included (nitro#1184); `null` is that prop's
+   * own default, i.e. the control's normal configuration.
    */
   const reShownSwitch = (hidden: boolean, width: number | null) => (
     <Switch
@@ -1586,15 +1576,65 @@ describe('Sizing · intrinsic (T11)', () => {
     />
   );
 
-  /** What the ledger did across a hide, and a note naming the platform path it proves. */
-  function describeHide(before: number, after: number) {
-    const tornDown = after < before;
-    return (
-      `ledger ${String(before)}->${String(after)} — display:none ` +
-      (tornDown
-        ? 'tore the native view down: this run exercised the re-show path'
-        : 'left the native view alive: this run exercised the visibility flip only')
-    );
+  /**
+   * Assert which of the two `display: none` paths a run actually took, and describe it.
+   *
+   * The property is platform-divergent, and the difference is the whole point of the two
+   * cases below. iOS Fabric creates **no native view** for a hidden node, so hiding one is
+   * a real teardown and the engine forgets the instance (`ledgerEntries` falls) — the
+   * re-show path the forgotten-id rule exists for. Android reaches the view as `INVISIBLE`
+   * (`NitroComposeHost.kt:424`), so nothing is torn down, nothing is forgotten, and its
+   * "re-show" is a visibility flip that cannot lose a correction.
+   *
+   * Asserted rather than printed, because `console.log` from a harness file reaches
+   * neither the gate log nor the report (X4 round 2 found that for this suite's own
+   * findings): a note about which path ran is worth nothing if nobody can read it. And
+   * asserted in both directions — if iOS ever starts leaving a hidden view alive, these
+   * cases would pass for the same reason Android's does, and the regression guard would
+   * be gone with no red anywhere to notice. Measured, not assumed: `1→0` on iOS and
+   * `1→1` on Android, both read from runs of this case.
+   *
+   * On iOS the drop arrives with the transaction that removes the view and the
+   * deallocation with it, so the fall is waited for rather than read once — the same
+   * reason `Conformance`'s leak rule waits for its drops instead of assuming unmount is
+   * synchronous.
+   */
+  async function expectHidePath(
+    mountedLedger: number,
+    expected: 'torn-down' | 'kept-alive'
+  ) {
+    if (expected === 'torn-down') {
+      const after = await pollUntil(
+        () => {
+          const now = stats().ledgerEntries;
+          return now < mountedLedger ? now : null;
+        },
+        () =>
+          new Error(
+            `display:none did not tear the hidden view down on iOS (ledger stayed at ` +
+              `${String(mountedLedger)}), so this run never exercised the re-show path ` +
+              'this case exists to guard: it would have passed for Android’s reason.'
+          ),
+        4000
+      );
+      return `tore the hidden view down (ledger ${String(mountedLedger)}→${String(
+        after
+      )}): the re-show path`;
+    }
+    const now = stats().ledgerEntries;
+    if (now < mountedLedger) {
+      throw new Error(
+        `display:none tore the view down on Android (ledger ${String(
+          mountedLedger
+        )}→${String(now)}), which is not what \`NitroComposeHost.kt:424\` says happens ` +
+          '(RN’s `display: none` reaches a view as INVISIBLE). If that changed, this ' +
+          'suite has a second platform on the re-show path and the expectation here ' +
+          'needs updating deliberately, not by a green run.'
+      );
+    }
+    return `left the hidden view alive (ledger ${String(mountedLedger)}→${String(
+      now
+    )}): the visibility-flip path`;
   }
 
   it('corrects a control hidden with display:none when it is shown again', async () => {
@@ -1612,16 +1652,16 @@ describe('Sizing · intrinsic (T11)', () => {
     const mounted = stats();
     expect(mounted.ledgerEntries).toBeGreaterThan(0);
 
-    // Hidden, with its size-affecting prop moved while it has no visible layout.
+    // Hidden, with its size-affecting prop moved while it is hidden — the case the
+    // reviewer reproduced, where the new configuration has never been laid out.
     await rerender(reShownSwitch(true, TEST_WIDTH));
-    await settle(600);
-    const hidden = stats();
-    console.log(
-      `  hide + new key: ${describeHide(mounted.ledgerEntries, hidden.ledgerEntries)}`
+    const hidePath = await expectHidePath(
+      mounted.ledgerEntries,
+      Platform.OS === 'ios' ? 'torn-down' : 'kept-alive'
     );
 
     // Shown again with no further change: the re-shown view's own layout is the first
-    // the engine sees for this configuration, and it is the one round 1 threw away.
+    // thing the engine sees for this configuration, and round 1 refused to file it.
     await rerender(reShownSwitch(false, TEST_WIDTH));
     const box = await waitForBoxWidth(
       'reshown',
@@ -1630,22 +1670,18 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     const d = delta(mounted, stats());
     console.log(
-      `  re-show: box=${describeBox(box)} corrections=${String(d.corrections)} ` +
-        `dropped=${String(d.dropped)}`
+      `  hide ${hidePath}; re-show box=${describeBox(box)} ` +
+        `corrections=${String(d.corrections)}`
     );
     expect(boxMatches(box, wideBox)).toBe(true);
-    // Exactly one, counted across the hide: a platform that corrected it while hidden
-    // and again after is two commits for one size change, which is its own bug.
+    // Exactly one, counted across the whole hide→show window: correcting the size while
+    // hidden and again afterwards is paying for one change twice.
     expect(d.corrections).toBe(1);
 
+    // And the entry that came back left nothing on hold for the rest of the run.
     unmount();
     await settle(600);
     const dropped = stats();
-    console.log(
-      `  unmount: ledger ${String(before.ledgerEntries)}->` +
-        `${String(dropped.ledgerEntries)} registry ` +
-        `${String(before.registryEntries)}->${String(dropped.registryEntries)}`
-    );
     expect(dropped.ledgerEntries).toBeLessThanOrEqual(before.ledgerEntries);
     expect(dropped.registryEntries).toBeLessThanOrEqual(before.registryEntries);
   });
@@ -1665,15 +1701,15 @@ describe('Sizing · intrinsic (T11)', () => {
     const mounted = stats();
 
     await rerender(reShownSwitch(true, TEST_WIDTH));
-    await settle(600);
-    const hidden = stats();
-    console.log(
-      `  hide: ${describeHide(mounted.ledgerEntries, hidden.ledgerEntries)}`
+    const hidePath = await expectHidePath(
+      mounted.ledgerEntries,
+      Platform.OS === 'ios' ? 'torn-down' : 'kept-alive'
     );
 
     // The environment moves while it is hidden: every ledger entry is re-keyed and
-    // marked inexact so the next report is a correction (`invalidateEnvironment`,
-    // review S2). An instance with no entry is not in that walk at all.
+    // marked inexact so that its next report is a correction (`invalidateEnvironment`,
+    // review S2). An instance with no entry is not in that walk at all — the second way
+    // round 1 lost a correction, and the one no later re-measure repairs.
     nitroUiCore.invalidateSizingEnvironment();
     await settle(300);
     expect(stats().environmentEpoch).toBe(epoch + 1);
@@ -1686,8 +1722,8 @@ describe('Sizing · intrinsic (T11)', () => {
     );
     const d = delta(mounted, stats());
     console.log(
-      `  re-show after an environment change: box=${describeBox(box)} ` +
-        `corrections=${String(d.corrections)} dropped=${String(d.dropped)}`
+      `  hide ${hidePath}; re-show after an environment change ` +
+        `box=${describeBox(box)} corrections=${String(d.corrections)}`
     );
     expect(boxMatches(box, wideBox)).toBe(true);
     expect(d.corrections).toBe(1);
