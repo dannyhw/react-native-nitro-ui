@@ -92,6 +92,8 @@ import {
   waitFor,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
+import { deviceLocale, deviceLocaleNote } from './deviceContext';
+import { waitForHandle } from './handles';
 import {
   Button,
   DatePicker,
@@ -184,11 +186,13 @@ const SHARED = {
     "NitroUiDatePicker": {
       "android": {
         "width": 131,
-        "height": 48
+        "height": 48,
+        "measuredUnderLocale": "en-US"
       },
       "ios": {
         "width": 103,
-        "height": 36.33
+        "height": 36.33,
+        "measuredUnderLocale": "en-PT"
       }
     },
     "NitroUiPicker": {
@@ -246,6 +250,12 @@ const EXEMPTIONS = SHARED.exemptions as ReadonlyArray<Exemption>;
 /* --------------------------------- the seams --------------------------------- */
 
 type Size = { width: number; height: number };
+/**
+ * A `DECLARED_FALLBACKS` row for one platform: the box, plus the locale its numbers were
+ * measured in when they depend on one (`measuredUnderLocale` — the DatePicker's field width
+ * is a date formatter's output). From the mirrored table, never written here.
+ */
+type DeclaredRow = Size & { measuredUnderLocale?: string };
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
@@ -630,6 +640,28 @@ function handleFor(testId: string): Handle {
   return handle;
 }
 
+/**
+ * Wait until the callback for this testID has run, then hand the handle back.
+ *
+ * Called once before the first read after each `render`, because `hybridRef`
+ * fires on a commit *after* the view is created: a box can exist (that is what
+ * `waitForTestId`/`queryByTestId` see) while the handle has not arrived. Run
+ * 41230848294, at load1 152 on 3 cores, is what proved the difference is real
+ * rather than theoretical — `Conformance · is named on its own box` died on this
+ * sentence for the DatePicker, while the same test passed on the next dispatch of
+ * the same tree (41234953779). "The control never handed back its state" was a
+ * statement about a callback that was 20 ms late.
+ *
+ * It waits for the handle only, never for an *answer*: every rule below still
+ * reads the control exactly once, so the recycle rule in particular keeps its
+ * "do not wait for the reset" property (see the comment on its read).
+ */
+async function ensureHandle(testId: string): Promise<Handle> {
+  const existing = handles.get(testId);
+  if (existing != null) return existing;
+  return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
+}
+
 function stats(): NitroUiSizingStats {
   return nitroUiCore.sizingStats();
 }
@@ -695,7 +727,13 @@ const RENDER = { timeout: 20000 } as const;
  * What is asserted about these bodies is that a control's fixture row exists and carries a
  * probe (`checkInAppFixtures`), and that the tables match. Nothing asserts their prose. */
 
-type Finding = { component: string; rule: string; problem: string };
+type Finding = {
+  component: string;
+  rule: string;
+  problem?: string | null;
+  /** A comparison the run's own configuration makes meaningless; see `skippedFindings`. */
+  skipped?: string;
+};
 
 function near(a: Size, b: Size, tolerance: number): boolean {
   return (
@@ -711,6 +749,37 @@ function fmt(size: Size | null): string {
 }
 
 /**
+ * The in-app half of `canonicalLocale` / `localePremiseMiss` in
+ * `scripts/conformance-core.mjs` (same re-implementation note as the file header's).
+ *
+ * Only the shape the rule needs: strip a launch identifier to the language(+script)+region
+ * prefix the engine itself reports, and compare it with the locale the row was measured in.
+ */
+function canonicalLocale(identifier: string): string {
+  const parts = String(identifier).replace(/_/g, '-').split('-');
+  const out = [(parts[0] ?? '').toLowerCase()];
+  for (const part of parts.slice(1)) {
+    if (part.length === 4 || part.length === 2 || /^\d{3}$/.test(part)) {
+      out.push(part.toLowerCase());
+    } else {
+      break;
+    }
+  }
+  return out.join('-');
+}
+
+function localePremiseMiss(
+  row: DeclaredRow | undefined,
+  deviceLocale: string | null
+): { expected: string; actual: string } | null {
+  const expected = row?.measuredUnderLocale;
+  if (expected == null) return null;
+  if (deviceLocale == null || deviceLocale === '') return null;
+  if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;
+  return { expected, actual: deviceLocale };
+}
+
+/**
  * Rule 1: is the fallback the control's own, and does a wrong guess still get corrected?
  *
  * @param input.declared what the engine reports for the control (`null` = nothing
@@ -719,6 +788,9 @@ function fmt(size: Size | null): string {
  * @param input.boxRule which axes the declaration describes — from the mirrored table,
  *   never worked out here. See `boxRuleFor` in `scripts/conformance-core.mjs` for why a
  *   `fillWidth` control's width and a content-sized control's box are not its declaration.
+ * @param input.deviceLocale the locale this run's app reports
+ *   (`deviceContext.ts`). Only the box comparison consults it, and only for a row that
+ *   declares it was measured in one (`measuredUnderLocale`); see `localePremiseMiss`.
  */
 function fallbackFindings(input: {
   component: string;
@@ -726,8 +798,9 @@ function fallbackFindings(input: {
   measured: Size | null;
   corrections: number;
   poisoned: boolean;
-  expected: Size;
+  expected: DeclaredRow;
   boxRule: 'both' | 'height' | 'none';
+  deviceLocale?: string | null;
 }): Finding[] {
   const {
     component,
@@ -769,6 +842,11 @@ function fallbackFindings(input: {
     );
     return problems;
   }
+  // The premise the DatePicker's row needs (see `measuredUnderLocale` in the shared
+  // table), read from the app itself. `null` for every other control, so nothing here
+  // changes for them.
+  const miss = localePremiseMiss(expected, input.deviceLocale ?? null);
+
   if (boxRule === 'none') {
     if (near(measured, expected, tolerance)) {
       report(
@@ -778,6 +856,27 @@ function fallbackFindings(input: {
           'so the exemption is no longer true'
       );
     }
+  } else if (miss != null && !ownsAgrees(measured, expected)) {
+    // One finding for both claims the same number suspends: the box comparison, and the
+    // warm-corrections claim below. `HybridNitroUiDatePicker.swift`'s `fallbackSize` states
+    // the second in words — a locale wider than the measured one costs its first instance
+    // one horizontal correction — so `corrections > 0` here is the design working, not a
+    // declaration failing to arrive. Everything else still runs: the poison must still be
+    // corrected, and a mount that settles at nothing still fails. A configured run never
+    // reaches this: `example/rn-harness.config.mjs` pins the launch locale to this row's
+    // value, so it means a run forgot to pin.
+    problems.push({
+      component,
+      rule: 'declared-fallback',
+      problem: null,
+      skipped:
+        `box and warm-corrections comparison skipped: ${fmt(expected)} is what this ` +
+        `control measures in ${miss.expected} and this run's app locale is ` +
+        `${miss.actual}, so the measured ${fmt(measured)} is the same formatter ` +
+        'answering a different question, not a stale declaration. Re-run with ' +
+        'NITRO_UI_TEST_LOCALE=' +
+        `${miss.expected.replace(/-/g, '_')} to check this row for real`,
+    });
   } else if (!ownsAgrees(measured, expected)) {
     report(
       `the fallback ${fmt(expected)} is not the measured ${fmt(measured)} for a ` +
@@ -787,7 +886,12 @@ function fallbackFindings(input: {
         ' — a mismatch means the declaration drifted from the component'
     );
   }
-  if (!poisoned && corrections > 0 && boxRule === 'both') {
+  if (
+    !poisoned &&
+    corrections > 0 &&
+    boxRule === 'both' &&
+    !(miss != null && !ownsAgrees(measured, expected))
+  ) {
     report(
       `needed ${String(corrections)} correction(s) from a warm engine whose ` +
         `fallback ${fmt(expected)} already describes this control’s whole box — ` +
@@ -875,6 +979,13 @@ function recycleFindings(input: {
 function expectConformance(findings: Finding[]): void {
   const failures: string[] = [];
   for (const finding of findings) {
+    if (finding.skipped != null) {
+      // Its own channel, and printed rather than swallowed: a run that compared less than it
+      // claims has to say so in the log, or "green" and "premise missing, box never compared"
+      // are the same line to anyone reading the gate afterwards.
+      console.log(`    · ${finding.skipped}`);
+      continue;
+    }
     const exemption = EXEMPTIONS.find(
       (row) => row.component === finding.component && row.rule === finding.rule
     );
@@ -1007,10 +1118,10 @@ function restore(component: string): void {
   nitroUiCore.invalidateSizingEnvironment();
 }
 
-function declaredFallback(component: string): Size {
+function declaredFallback(component: string): DeclaredRow {
   const table = SHARED.declaredFallbacks as Record<
     string,
-    Record<'ios' | 'android', Size>
+    Record<'ios' | 'android', DeclaredRow>
   >;
   const entry = table[component];
   if (entry == null) {
@@ -2102,6 +2213,10 @@ describe('conformance · every control, four rules', () => {
         // because that is a host-side fact about its sizing policy — the suite that asserts
         // does not get to decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
         const expected = declaredFallback(fixture.component);
+        // The premise, read from the app rather than assumed: what locale this run's
+        // formatter ran in. Printed per control so the log names the configuration the
+        // numbers below were taken in.
+        const appLocale = deviceLocale();
         const boxRule = boxRuleFor(fixture.component);
 
         // 1. The engine knows a fallback at all — read once for the whole file, before any
@@ -2118,13 +2233,15 @@ describe('conformance · every control, four rules', () => {
           const coldBefore = stats();
           const cold = await render(fixture.owner(false), RENDER);
           await settle(600);
-          const coldMeasure = handleFor(fixture.testId).measureContent();
+          const coldHandle = await ensureHandle(fixture.testId);
+          const coldMeasure = coldHandle.measureContent();
           const coldBox = harnessUi.queryByTestId(fixture.testId);
           const coldCorrections = correctionsSince(coldBefore);
           console.log(
             `    · poisoned measured=${describeBox(coldMeasure)} box=` +
               `${describeBox(coldBox)} corrections=${String(coldCorrections)} ` +
-              `poison=${describeBox(SHARED.poisonSizes[PLATFORM])}`
+              `poison=${describeBox(SHARED.poisonSizes[PLATFORM])} ` +
+              `locale=${deviceLocaleNote()}`
           );
           expectConformance(
             fallbackFindings({
@@ -2135,6 +2252,7 @@ describe('conformance · every control, four rules', () => {
               poisoned: true,
               expected,
               boxRule,
+              deviceLocale: appLocale,
             })
           );
           cold.unmount();
@@ -2153,10 +2271,11 @@ describe('conformance · every control, four rules', () => {
         const warmBefore = stats();
         const warm = await render(fixture.owner(false), RENDER);
         await settle(600);
-        const warmMeasure = handleFor(fixture.testId).measureContent();
+        const warmHandle = await ensureHandle(fixture.testId);
+        const warmMeasure = warmHandle.measureContent();
         console.log(
           `    · warm measured=${describeBox(warmMeasure)} declared=${describeBox(expected)} ` +
-            `boxRule=${boxRule}`
+            `boxRule=${boxRule} locale=${deviceLocaleNote()}`
         );
         expectConformance(
           fallbackFindings({
@@ -2167,6 +2286,7 @@ describe('conformance · every control, four rules', () => {
             poisoned: false,
             expected,
             boxRule,
+            deviceLocale: appLocale,
           })
         );
         warm.unmount();
@@ -2268,15 +2388,22 @@ describe('conformance · every control, four rules', () => {
         const warmUp = await render(fixture.owner(false), RENDER);
         await settle();
         warmUp.unmount();
-        await settle(500);
 
-        const baseline = stats();
+        // A *quiescent* baseline, for the reason the positive-control test above
+        // states: an iOS instance reaches `onDropView` after its unmount, so the
+        // warm-up's own drop can still be in flight when the read happens, and the
+        // run that measures it reads one legitimate release as a leak. CI proved
+        // the shape — run 41230848294 reported `Menu × no-leak-on-drop: 1 ledger
+        // entry(ies) survived 50 drops` at load1 152-380 on 3 cores, and the same
+        // tree passed the same test on the next dispatch. `stats()` after a fixed
+        // `settle` was the fixture asserting about a number still on its way
+        // somewhere; `settledStats` refuses rather than comparing against one.
+        const baseline = await settledStats('the churn baseline');
         for (let cycle = 0; cycle < CHURN; cycle += 1) {
           const mounted = await render(fixture.owner(cycle % 2 === 1), RENDER);
           mounted.unmount();
         }
-        await settle(700);
-        const after = stats();
+        const after = await settledStats('the churn after-read');
         console.log(
           `    · ledger ${String(baseline.ledgerEntries)}→` +
             `${String(after.ledgerEntries)} registry ${String(
@@ -2303,6 +2430,7 @@ describe('conformance · every control, four rules', () => {
         // notices a missing reset, and the log says which half is which.
         const first = await render(fixture.owner(false), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         expect(
           recycleFindings({
             component: fixture.name,
@@ -2315,6 +2443,7 @@ describe('conformance · every control, four rules', () => {
 
         const second = await render(fixture.owner(true), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         const propChecks = fixture.state(handleFor(fixture.testId), true);
         console.log(
           `    · ${fixture.testId} props after the second owner: ` +
@@ -2376,6 +2505,7 @@ describe('conformance · every control, four rules', () => {
           recycleEvents.length = 0;
           const firstOwner = await render(run.probe.first(), RENDER);
           await settle();
+          await ensureHandle(fixture.testId);
           await run.probe.act();
           firstOwner.unmount();
           // Long enough for the drop to have run and, on iOS, for the instance to reach the
@@ -2386,6 +2516,25 @@ describe('conformance · every control, four rules', () => {
 
           const secondOwner = await render(run.probe.second(), RENDER);
           await settle();
+          // The handle, not the answer: React hands the previous callback `null` when the
+          // first owner unmounts, so this is the second owner's own handle arriving — the
+          // read below stays a single read, with no wait for the reset itself.
+          await ensureHandle(fixture.testId);
+          // Then wait for the *bookkeeping* to be quiescent, which is a different thing
+          // from waiting for the answer. Run 41230848294 read
+          // `the day the field shows = 1799971200000` (the first owner's pick) and
+          // `a presentation left open = 1` for this control at load1 152-380 on 3 cores,
+          // and the same tree read `1740787200000 / 0` on the next dispatch. One fixed
+          // `settle(500)` was the fixture assuming the device had processed the
+          // unmount-and-mount by then; on a starved main thread it had not, so the read
+          // was of a view whose previous owner's lifetime was still in flight.
+          //
+          // Two consecutive equal ledger/registry reads says no mount or drop is still in
+          // flight. It cannot say the reset happened — the reset writes no counters — so a
+          // control that never re-arms its one-shot settles quietly at the wrong day and the
+          // read below still goes red. Same discipline the leak rule uses for its baseline,
+          // for the same reason: only a quiescent read is evidence about a mount.
+          await settledStats(`after "${fixture.testId}" changed owner`);
           const checks = await run.probe.read();
           for (const check of checks) {
             console.log(
@@ -2409,6 +2558,7 @@ describe('conformance · every control, four rules', () => {
       it('is named on its own box, not on a wrapper around it', async () => {
         const mounted = await render(fixture.owner(false), RENDER);
         await settle();
+        await ensureHandle(fixture.testId);
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
         if (PLATFORM !== 'ios') {
