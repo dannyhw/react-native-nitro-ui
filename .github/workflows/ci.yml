@@ -256,6 +256,28 @@ jobs:
           NITRO_UI_CCACHE: '0'
         run: node scripts/build-app.mjs --platform android --arch x86_64
 
+      # What the emulator will actually be booted with, printed before the run
+      # rather than reconstructed after it. Both dispatch runs of this job ended the
+      # same way — `The platform did not become ready within 900000ms`, the qemu
+      # process still alive at cleanup (41230848294 on a cold AVD, 41234953779 on a
+      # cached one) — and nothing in that log said which GPU mode, cores or AVD it
+      # had tried. The harness keeps those to itself, so this asks the same
+      # questions of the machine: is KVM there, what does the AVD claim, what does
+      # this repo's patched rule choose.
+      - name: Show the emulator configuration this job will boot
+        run: |
+          AVD_NAME="$(node -e "const c=(s)=>require('node:fs').readFileSync(s,'utf8').match(/const DEFAULT_AVD = '([^']+)'/)[1]; console.log(c(require('node:fs').readFileSync('example/rn-harness.config.mjs','utf8')))")"
+          echo "avd (from rn-harness.config.mjs): $AVD_NAME"
+          echo "nproc: $(nproc)  mem: $(free -g | awk '/^Mem:/{print $2}')GiB  load: $(cut -d' ' -f1-3 /proc/loadavg)"
+          echo "kvm: $(ls -l /dev/kvm 2>&1)"
+          "$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | sed 's/^/accel: /'
+          echo "--- AVD dir ---"
+          ls -la "$HOME/.android/avd" 2>&1 | sed 's/^/  /'
+          echo "--- config.ini (hardware lines) ---"
+          grep -E 'hw\.|disk|image\.sys' "$HOME/.android/avd/$AVD_NAME.avd/config.ini" 2>&1 | sed 's/^/  /'
+          echo "--- the GPU mode this repo's rule chooses on this machine ---"
+          node -e "import('./scripts/emulator-launch.mjs').then((m)=>{console.log('gpu mode:', m.emulatorGpuModeForHost({env: process.env, platform: process.platform})); console.log('DISPLAY:', JSON.stringify(process.env.DISPLAY ?? null), 'WAYLAND_DISPLAY:', JSON.stringify(process.env.WAYLAND_DISPLAY ?? null));})"
+
       - name: Run Harness tests
         uses: callstackincubator/react-native-harness@3e3e25b8ddfd0018fbc0700e0932448ffe5a95db # v1.6.0
         with:
@@ -269,6 +291,55 @@ jobs:
           # file that does not exist, the app is never installed, and the run dies
           # as an opaque `AbortError` (A2 lost three runs to that message).
           app: ${{ github.workspace }}/example/android/app/build/outputs/apk/debug/app-debug.apk
+          # The boot diagnostics below need the emulator's own words, and the
+          # harness keeps them unless `HARNESS_DEBUG` is set (its logger is silent
+          # without it). Costs a noisy step; worth it while this job's failure is
+          # "the platform never became ready" and nothing else.
+          preRunHook: 'echo "pre-run: booting at $(date -u +%H:%M:%S) load=$(cut -d" " -f1 /proc/loadavg)"'
+          afterRunHook: |
+            echo "after-run: harness exited ${HARNESS_EXIT_CODE:-?} at $(date -u +%H:%M:%S) load=$(cut -d' ' -f1 /proc/loadavg)"
+            pgrep -a qemu || echo 'after-run: no qemu process'
+
+      # Everything the 900 s timeout swallowed. On both dispatch runs the last
+      # harness line was "Using cached Android emulator nitroui..." and the next was
+      # the timeout, so this is the only place the emulator's own side of that
+      # quarter hour can be read: qemu's log, logcat's boot progress, and whether
+      # KVM was actually usable by the user the job runs as.
+      - name: Collect emulator boot diagnostics
+        if: always()
+        run: |
+          set +e
+          DIAG=.harness-diag
+          mkdir -p "$DIAG"
+          {
+            echo "== date =="; date -u
+            echo "== qemu processes =="; pgrep -a qemu || echo none
+            echo "== adb devices =="; adb devices -l
+            echo "== boot properties =="
+            for p in sys.boot_completed init.svc.zygote init.svc.surfaceflinger; do
+              echo "$p=$(adb -e shell getprop $p 2>&1)"
+            done
+            echo "== dmesg (kvm) =="; dmesg | grep -iE 'kvm|binder' | tail -40
+            echo "== kernel tail =="; dmesg | tail -60
+          } > "$DIAG/host.log" 2>&1
+          adb -e logcat -d -v brief > "$DIAG/logcat.txt" 2>&1
+          for f in "$HOME"/.android/avd/*.avd/*.log "$HOME"/.android/avd/*.avd/emulator-launch-params.txt; do
+            [ -e "$f" ] && cp "$f" "$DIAG/" 2>/dev/null
+          done
+          ls -la "$DIAG"
+          echo "--- host.log ---"; tail -40 "$DIAG/host.log"
+          echo "--- logcat (FATAL / boot) ---"
+          grep -aiE 'FATAL|AndroidRuntime|boot_completed|bootanim|zygote' "$DIAG/logcat.txt" | tail -40
+          echo "--- qemu stderr (last 80 lines) ---"
+          tail -80 "$DIAG"/emulator-*.log 2>/dev/null
+
+      - name: Upload emulator boot diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: harness-boot-diagnostics-android
+          path: .harness-diag
+          if-no-files-found: ignore
 
   # Builds a Debug simulator app and runs the Harness tests on it. Xcode 27 is
   # required because rn-harness.config.mjs asks for an iOS 27 simulator. The

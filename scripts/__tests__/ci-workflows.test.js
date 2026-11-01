@@ -690,6 +690,49 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       .join('\n');
     expect(run).toContain(command);
   });
+
+  it('the Android job leaves evidence when the emulator never becomes ready', () => {
+    // Both dispatch runs of this job ended identically: `The platform did not
+    // become ready within 900000ms`, qemu still alive at cleanup, and the last
+    // harness line was `Using cached Android emulator nitroui...` (41230848294,
+    // 41234953779). A quarter of an hour produced no words at all, because the
+    // harness keeps the emulator's output to itself unless `HARNESS_DEBUG` is set.
+    // So the job now asks the machine directly, before and after the run, and
+    // uploads what it gets. Without this step the next timeout is again a
+    // 900-second shrug, and the GPU-mode question this job's fix turns on stays
+    // unanswerable from the log.
+    const job = readYaml('ci.yml').jobs['harness-android'];
+    const steps = job.steps ?? [];
+    const stepNamed = (needle) =>
+      steps.find((step) =>
+        String(step.name ?? '')
+          .toLowerCase()
+          .includes(needle.toLowerCase())
+      );
+    // All three must survive a failing run: `if: always()` on the two that read
+    // the machine after the failure, since every later step is skipped by default
+    // once the job has one. The preflight runs before the harness, so it only has
+    // to exist.
+    expect(stepNamed('Show the emulator configuration')).not.toBeUndefined();
+    for (const needle of [
+      'Collect emulator boot diagnostics',
+      'Upload emulator boot diagnostics',
+    ]) {
+      const step = stepNamed(needle);
+      expect(step).not.toBeUndefined();
+      expect(String(step.if)).toBe('always()');
+    }
+    // The pre/post hooks are the harness's own, so the timeline of the boot is
+    // stamped by the action rather than by a guess at its step boundaries.
+    const harness = harnessStep('harness-android');
+    expect(String(harness.with.preRunHook)).toContain('pre-run:');
+    expect(String(harness.with.afterRunHook)).toContain('HARNESS_EXIT_CODE');
+    // And the printout must be the rule the code uses, not a copy of it: a second
+    // GPU-mode expression here would drift from `emulator-launch.mjs` silently.
+    const show = String(stepNamed('Show the emulator configuration').run);
+    expect(show).toContain('emulatorGpuModeForHost');
+    expect(show).toContain('accel-check');
+  });
 });
 
 describe('the release pipeline does not share machine state with a publish', () => {
