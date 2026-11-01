@@ -1263,7 +1263,7 @@ describe('the in-app table mirror', () => {
     // emulator's locale is an AVD setting nothing here passes. Built as data rather
     // than by editing the source: the check takes the table, and the table it must
     // refuse is one field wide.
-    const withAndroidLocale = structuredClone(DECLARED_FALLBACKS);
+    const withAndroidLocale = clone(DECLARED_FALLBACKS);
     withAndroidLocale.NitroUiDatePicker.android.measuredUnderLocale = 'en-US';
     expect(
       checkLaunchPinAgreesWithTable(configText, withAndroidLocale).join('\n')

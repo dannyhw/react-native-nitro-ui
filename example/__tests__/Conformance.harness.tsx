@@ -796,14 +796,15 @@ function canonicalLocale(identifier: string): string {
 
 function localePremiseMiss(
   row: DeclaredRow | undefined,
-  deviceLocale: string | null,
+  reportedLocale: string | null,
   mismatchAllowed: boolean
 ): { expected: string; actual: string; tolerated: boolean } | null {
   const expected = row?.measuredUnderLocale;
   if (expected == null) return null;
-  if (deviceLocale == null || deviceLocale === '') return null;
-  if (canonicalLocale(expected) === canonicalLocale(deviceLocale)) return null;
-  return { expected, actual: deviceLocale, tolerated: mismatchAllowed };
+  if (reportedLocale == null || reportedLocale === '') return null;
+  if (canonicalLocale(expected) === canonicalLocale(reportedLocale))
+    return null;
+  return { expected, actual: reportedLocale, tolerated: mismatchAllowed };
 }
 
 /**
