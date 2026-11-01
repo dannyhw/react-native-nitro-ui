@@ -1241,6 +1241,135 @@ describe('Menu · G7a', () => {
     }
   });
 
+  /**
+   * A trigger whose title is shorter than any of its rows, which is the case the
+   * list has to survive: the README's `menu-android.png` showed this shape and the
+   * popup lost the tail of every label in it.
+   */
+  const WIDE_GROUP: MenuGroup = {
+    actions: [
+      { id: 'move', title: 'Move' },
+      { id: 'folder', title: 'Move into a folder' },
+    ],
+  };
+
+  /** Two rows, both shorter than Material's own 112 dp list floor. */
+  const NARROW_GROUP: MenuGroup = {
+    actions: [
+      { id: 'a', title: 'Up' },
+      { id: 'b', title: 'Down' },
+    ],
+  };
+
+  it('gives the list the width its items need, not the trigger\u2019s', async () => {
+    const { unmount } = await render(
+      <Menu
+        title="Move"
+        group={WIDE_GROUP}
+        testID="wide-list"
+        hybridRef={captureHybrid('wide-list')}
+        onSelect={recordSelect('wide-list')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wide-list');
+    const closed = report('wide-list');
+
+    if (Platform.OS !== 'android') {
+      // iOS presents through the system's menu, which sizes to its items by
+      // definition and reports no window to measure (D23). The claim that is
+      // checkable here is the one that holds on both platforms: the trigger's own
+      // box stays the size of its title, however long the rows are.
+      const iosBox = await waitForBox(
+        'wide-list',
+        await waitForMeasured('wide-list', 'the trigger'),
+        'the trigger'
+      );
+      expectUnanswerable(closed);
+      console.log(
+        `wide list on iOS: trigger ${describeSize(iosBox)} (rows are not measurable here)`
+      );
+      unmount();
+      return;
+    }
+
+    const liveBefore = closed.live ?? 0;
+    const trigger = await waitForBox(
+      'wide-list',
+      await waitForMeasured('wide-list', 'the trigger'),
+      'the trigger'
+    );
+    await pressTrigger('wide-list');
+    const open = await waitForMenu(
+      'wide-list',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    const [anchorLeft, , anchorRight] = edges(open.anchor, 'anchor');
+    const [menuLeft, , menuRight] = edges(open.menu, 'menu');
+    const triggerWidth = anchorRight - anchorLeft;
+    const popupWidth = menuRight - menuLeft;
+    // The bug, in one line: `ExposedDropdownMenu` passes `matchAnchorWidth = true`
+    // by default, and its own `exposedDropdownSize` sets `minWidth = maxWidth =
+    // anchorWidth`, so the window came back exactly as wide as the button and every
+    // longer row lost its tail. Nothing here could see that: the rows are Compose
+    // nodes, not views, so `queryByTestId` cannot reach them, and the trigger's own
+    // rect is the box that is *not* clipped. The witness's `menu=` rect is the
+    // popup's window, which is where the clipping happened. Both numbers are device
+    // pixels from the same witness, so they compare directly.
+    expect(triggerWidth).toBeGreaterThan(0);
+    expect(popupWidth).toBeGreaterThan(triggerWidth);
+    // …and the reason the line above is not just "grow forever": the list grows to
+    // what its items need, so Material's floor still shows up as the *lower* bound
+    // on a short list below, and this one stays under the 280 dp ceiling Material
+    // caps a row's content at.
+    expect(popupWidth / PixelRatio.get()).toBeLessThan(280);
+    console.log(
+      `wide list: trigger ${String(triggerWidth)} px, popup ${String(popupWidth)} px, ` +
+        `trigger box ${describeSize(trigger)}`
+    );
+    unmount();
+  });
+
+  it('keeps Material\u2019s 112 dp floor on a list of short items', async () => {
+    const { unmount } = await render(
+      <Menu
+        title="Up"
+        group={NARROW_GROUP}
+        testID="narrow-list"
+        hybridRef={captureHybrid('narrow-list')}
+        onSelect={recordSelect('narrow-list')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('narrow-list');
+    if (Platform.OS !== 'android') {
+      expectUnanswerable(report('narrow-list'));
+      unmount();
+      return;
+    }
+    const liveBefore = report('narrow-list').live ?? 0;
+    await pressTrigger('narrow-list');
+    const open = await waitForMenu(
+      'narrow-list',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    const [menuLeft, , menuRight] = edges(open.menu, 'menu');
+    const [anchorLeft, , anchorRight] = edges(open.anchor, 'anchor');
+    const scale = PixelRatio.get();
+    // The other half of the fix: switching the anchor's width off must not let the
+    // list shrink to the trigger. Both rows here are shorter than Material's
+    // minimum, so a correct popup is exactly its floor, and a mutant that forced
+    // *some* width (rather than letting content decide) would land on the trigger's
+    // box and go red under this line.
+    expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(112);
+    console.log(
+      `short list: popup ${String(menuRight - menuLeft)} px = ` +
+        `${((menuRight - menuLeft) / scale).toFixed(1)} dp (floor 112), trigger ` +
+        `${String(anchorRight - anchorLeft)} px`
+    );
+    unmount();
+  });
+
   it('relays the rows when the group changes while it is open', async () => {
     const { rerender, unmount } = await render(
       <Menu

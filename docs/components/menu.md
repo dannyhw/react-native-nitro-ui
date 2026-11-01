@@ -159,9 +159,10 @@ deliberate departure from `docs/tasks/Q1-menu-design.md` §3, which asks for a
 `Modifier.clickable` trigger beside a plain `DropdownMenu`. `ExposedDropdownMenuBox` with
 `menuAnchor` is the documented way to say "position this popup against *this* control"
 rather than relying on what a container happens to be, and `Menu` inside a `<Host>` is
-exactly the case where that distinction should matter; `exposedDropdownSize()` is
-deliberately not used, because it sizes the list to the anchor and a menu's list is as
-wide as its items need. The anchor still reports through `onGloballyPositioned`, so the
+exactly the case where that distinction should matter; the list is opened with
+`matchAnchorWidth = false`, because the default is `true` and it forces the popup to the
+trigger's width, while a menu's list is as wide as its items need. The anchor still
+reports through `onGloballyPositioned`, so the
 witness's `anchor=` rect is the trigger's box in composition space, and dismissal on a
 layout move is H2b's, unchanged.
 

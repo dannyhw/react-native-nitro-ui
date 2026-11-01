@@ -661,10 +661,16 @@ private class MenuHost(
         // opens and never calls the callback (`docs/components/menu.md`).
         onClick = { model.setOpen(true) },
       )
-      // No `exposedDropdownSize()`: that sizes the list to the anchor, and a menu's
-      // list is as wide as its items need, which is what iOS's menu does.
+      // `matchAnchorWidth = false`, which switches off the `exposedDropdownSize()`
+      // this call would otherwise get *inside* Material: that modifier sets
+      // `minWidth = maxWidth = anchorWidth`, so with the default the list came back
+      // exactly as wide as the button and any label longer than the title lost its
+      // tail. Left to its content, the list is as wide as its items need — between
+      // Material's own 112 dp floor and the 280 dp a row's content caps at — which
+      // is what iOS's menu does.
       ExposedDropdownMenu(
         expanded = expanded,
+        matchAnchorWidth = false,
         onDismissRequest = {
           // Everything that closes a popup without a choice: outside tap, the
           // system back gesture, the composition going away.
