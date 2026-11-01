@@ -66,6 +66,12 @@
 > **A6b merged (2026-11-01, `fa99b05`, PR #13):** mac-1's iOS baseline gained Menu's 28 cells (quiet run after 1am:
 > median load 2.42 of 7.0), so Menu is now in both machines' baselines on both platforms. The link to mac-1 runs through
 > T3 Connect's relay, not Tailscale; the owner is to revoke it on mac-1.
+> **F8 + F8b merged (2026-11-01, `e011d8e`, PR #12):** both CI harness jobs green on hosted runners for the first time
+> (dispatch 41301942271: iOS 227 passed, Android 280 passed). Product changes: DatePicker's iOS fallback re-measured at
+> `en_US`; the sizing engine reclaims late-filed and never-bound ledger rows (the Menu/Picker leaks) and keeps corrections
+> for re-shown views. **Merge exception:** this host's simulators could not launch apps, so `harness:ios` was taken from
+> the CI run on the same head (92ffe64) and `real-input:ios` was not run; check, real-input:android and harness:android
+> ran locally on the merged tree. Three patch changesets are pending for 0.4.2.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
