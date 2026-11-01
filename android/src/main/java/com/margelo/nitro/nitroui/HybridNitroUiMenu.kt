@@ -525,13 +525,6 @@ internal class MenuModel : NitroUiModel() {
 }
 
 /**
- * The Menu's host: [NitroComposeHost] plus this component's composable.
- *
- * [Component] is fixed for the lifetime of the view, which is why it lives in a
- * subclass rather than being handed in as a lambda - there is no `setContent`
- * anywhere in this library after construction.
- */
-/**
  * The widest any one child of a `Menu`'s popup may ask to be.
  *
  * Material caps a *row* at 280 dp (`DropdownMenuItemDefaultMaxWidth`, which
@@ -539,12 +532,19 @@ internal class MenuModel : NitroUiModel() {
  * whatever its widest child wants now that it no longer matches the trigger's. So a
  * child that is not a row needs the same cap or it becomes the one thing that can
  * stretch the list: that was `MenuHeader`, whose submenu title could be any length.
- * Read from Material's own value rather than a copy of it? No - it is private, so this
- * is the one number in this file that mirrors a token instead of reading it, and
- * `Menu.harness.tsx`'s cap assertion is what says it still matches.
+ * Material's own token is private, so this is the one number in this file that mirrors
+ * a constant instead of reading it, and `Menu.harness.tsx`'s cap assertion is what says
+ * it still matches.
  */
 private val MENU_CONTENT_MAX_DP = 280.dp
 
+/**
+ * The Menu's host: [NitroComposeHost] plus this component's composable.
+ *
+ * [Component] is fixed for the lifetime of the view, which is why it lives in a
+ * subclass rather than being handed in as a lambda - there is no `setContent`
+ * anywhere in this library after construction.
+ */
 private class MenuHost(
   context: ThemedReactContext,
   activity: Activity?,
