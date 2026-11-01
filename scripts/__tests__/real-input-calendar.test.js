@@ -101,15 +101,19 @@ function listRow(labels) {
 }
 
 /**
- * A whole row of day cells: clickable, same height, seven of them, and at a width no
- * header column has. This is the shape the real dump reports — the day `Surface`s pick
- * up Material's touch-target expansion, so they read 110-126 px beside a header's 105.
+ * A whole row of day cells: same height, seven of them, at the 105 px a 320 dp box
+ * gives them.
  *
- * They come *before* the header in the tree, as they do in a real dump of a calendar
- * that has been opened before: composition order is not the order these nodes are
- * reported in, so a rule that stopped filtering on `clickable` and simply took the
- * longest same-height row would land on this one — seven boxes with an 8 px spread —
- * and report a healthy calendar's columns as a squeeze.
+ * Two deliberate departures from the real dump, together the reason this fixture exists.
+ * In `g8-320-postfix.xml` a day cell is an unnamed, non-clickable `Button` of the same
+ * 105 px as its header column, so the label filter alone already keeps the rule off it.
+ * Here the cells are *named* — the case that needs guarding is a Material build that
+ * publishes a date per cell — and *clickable*, which is all that is left between the rule
+ * and a false read once the names are there. They also come *before* the header in the
+ * tree, as they do in a real dump of a calendar that has been opened before: composition
+ * order is not the order these nodes are reported in, so a rule that stopped filtering on
+ * `clickable` would take this row and report a clean grid for a calendar whose header is
+ * off screen.
  *
  * @param {number[]} widths
  */
@@ -294,9 +298,12 @@ describe('real-input Android calendar grid', () => {
   });
 
   it('tolerates the pixel rounding a real seven-column grid reports', () => {
-    // Measured at a 361 dp box: `110, 110, 111, 110, 110, 110, 110`. Compose rounds
-    // each column's `SpaceEvenly` share to whole pixels, so 1 px apart is the same
-    // column, and a rule that demanded equality would call a healthy calendar broken.
+    // Synthetic, and the arithmetic says why it is the right shape: `SpaceEvenly` divides
+    // a box's leftover among the gaps and Compose rounds each share to whole pixels, so a
+    // seven-column row can report 110 px six times and 111 once for the same set of dp
+    // requests. One px apart is therefore the same column asked twice, and a rule that
+    // demanded equality would call a healthy calendar broken. (The dumps this task
+    // measured all happened to land equal: 105 px each at 320 dp, 126 each at 411 dp.)
     const grid = measureCalendarGrid(
       screen(headerRow([110, 110, 111, 110, 110, 110, 110])),
       BOX,
@@ -334,18 +341,20 @@ describe('real-input Android calendar grid', () => {
 
   it('calls a clipped header missing rather than measuring a week of day cells', () => {
     // The failure mode the `clickable` filter exists for. A calendar scrolled so its
-    // header is clipped keeps naming its day cells, and a week of them looks exactly
-    // like a header row structurally: seven boxes, one row, equal heights. Here they are
-    // the real dump's day cells at a 320 dp box — `110, 110, 111, 110, 110, 110, 126` over
-    // a 123 px height, the uneven row the module docs describe — so a rule that let
-    // clickable nodes in would answer either "a squeeze" (the 16 px spread it invented) or
-    // "fine", for a calendar whose header is off screen. With the filter the row is not
-    // found at all and the answer is null: "not on screen", which the caller aborts on.
+    // header is clipped keeps its day cells in the tree, and a week of them looks exactly
+    // like a header row structurally: seven boxes, one row, equal heights. The widths are
+    // the real dump's — 105 px each at a 320 dp box, which is what a correctly laid-out
+    // calendar reports for both rows — so a rule that let those nodes in would answer
+    // "40 dp floor cleared, columns equal": a clean bill of health for a calendar whose
+    // header is not on screen, which is the pass this check must never give. With the
+    // filter the row is not found at all and the answer is null: "not on screen", which
+    // the caller aborts on. The cells are named here even though the real dump leaves them
+    // unnamed, so the label filter cannot be what makes this test pass.
     const grid = measureCalendarGrid(
       [
         ...calendarChrome(),
         headerCell('Sunday', 0, 0),
-        ...dayRow([110, 110, 111, 110, 110, 110, 126]),
+        ...dayRow([105, 105, 105, 105, 105, 105, 105]),
       ],
       BOX,
       DENSITY

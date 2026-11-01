@@ -149,7 +149,7 @@
       "file": "scripts/real-input/android-calendar.mjs",
       "before": "    if (node.clickable === 'true') {",
       "after": "    if (false) {",
-      "red": "expect(grid).toBeNull() - the day row is returned as the week. The fixture is now the real dump's day cells (`110, 110, 111, 110, 110, 110, 126`), so the mutant's answer is a 16 px spread it invented, which is the other way this check lies about a healthy calendar."
+      "red": "expect(grid).toBeNull() - the day row is returned as the week. Round 1 recorded this fixture as \"the real dump's day cells (110, 110, 111, 110, 110, 110, 126)\"; fix round 2 re-read the dump on disk and those numbers are not in it (see the round 2 rows), so the fixture now carries the 105 px the dump does report and is named on purpose."
     },
     {
       "round": 1,

@@ -1151,8 +1151,9 @@ private class DatePickerHost(
       // narrower box does not get a narrower calendar: `Modifier.size` *enforces* its
       // incoming maximum, so the columns past the squeeze simply lose width. Measured at
       // a 320 dp box before any of this, the header columns were 126 px six times and
-      // then 20 px (Saturday at 7.6 dp), over day cells of 126, 126, 126, 126, 126, 73,
-      // 105 - the clipping `docs/images/components/date-picker-android.png` used to show.
+      // then 20 px (Saturday at 7.6 dp), and the day rows below them 126 px six times and
+      // then 73 px - the clipping `docs/images/components/date-picker-android.png` used to
+      // show.
       //
       // So the calendar asks for the 40 dp token its own cell is built around
       // (`DateContainerWidth`) - but only in a box too narrow for 48 dp, which is what
@@ -1162,8 +1163,9 @@ private class DatePickerHost(
       // measure-dirty (the loop `NitroComposeHost` warns about in its own measure block).
       // At [CALENDAR_WIDE_MIN_DP] and above the inherited value is re-provided untouched,
       // so a full-width phone keeps Material's 48 dp targets. Below 7 × 40 + 2 × 12 =
-      // 304 dp the calendar still cannot fit and is not made to pretend otherwise: a 240
-      // dp box measures six 40 dp columns and a 15.6 dp sliver.
+      // 304 dp the calendar still cannot fit and is not made to pretend otherwise: the
+      // header of a 240 dp box measures five 40 dp columns, a 15.6 dp sliver, and no
+      // seventh column at all.
       //
       // What the narrow branch gives up is 8 dp of touch-target padding, on the day cells
       // *and* on the month's prev/next buttons and year toggle, which read the same local
