@@ -26,7 +26,9 @@ tooling and tests, and the brief leaves those two to CI.
 
 ## Red proofs
 
-Recorded as data in `docs/tasks/G8-android-visual-fixes/mutations.json`.
+Recorded as data in `docs/tasks/G8-android-visual-fixes/mutations.json`, which carries both
+rounds. The line numbers below are round 0's, against the test file as it then was; round 1
+rewrote that file, so they do not resolve in it any more — the assertions themselves still do.
 
 - `Menu.harness.tsx · gives the list the width its items need, not the trigger's` -> shipped code, before the fix -> `expect(popupWidth).toBeGreaterThan(triggerWidth)` — popup 216 px, trigger 216 px, on a "Move" trigger beside a "Move into a folder" row.
 - `Menu.harness.tsx · keeps Material's 112 dp floor on a list of short items` -> shipped code, before the fix -> a two-row list of "Up"/"Down" measured 65.5 dp against the 112 dp floor.
