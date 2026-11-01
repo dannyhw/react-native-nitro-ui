@@ -155,3 +155,58 @@ platforms.
 
 1. Push `task/F8-ci-harness-hosted` and dispatch `ci.yml` on it — both jobs, no AVD-cache wipe.
 2. Read `harness-boot-diagnostics-android`: `host.log` carries the GPU mode, `config.ini`'s hardware lines and the device's zone/locale; the step cannot fail on an absent log, and an empty artifact is red.
+
+## Fix round 2
+
+**Lease:** `F8-a6ro7` (pair-a). Eleven commits, ending `64916aa`.
+
+**Picker's leak is real and is a second route to the same leaked entry.** Its clue is the
+half CI did not report as failing: `registry` stayed flat. `measure` is the only creator of a
+ledger row and files one for an *unbound* id too (layout precedes the bind), so a layout whose
+mount never arrives leaves a row `forget` is never told about and the registry sweep cannot
+reach — its trigger is the registry *growing*. Rows now get the held set's one-second mount
+window and are then **demoted** into it rather than deleted, so a bind that is merely very late
+still claims its correction. The window is closed on flush too, because the leaking workload is
+a churn that has already stopped. The sweep's trigger now follows the registry *down*. The
+Picker-shaped native churn CI asked for exists and covers both routes.
+
+**The 90-minute step is now `scripts/ci-emulator-diagnostics.mjs`:** every command killed at its
+own deadline, cheap file evidence first, the step at 5 min and the jobs at 75/60.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1589 tests / 59 suites | `6fa500535009` | 2 m 39 s | start 1.8 / med 4.1 / max 5.0 |
+| `harness:ios` | **PASS** | 229 tests / 16 suites | `6fa500535009` (ios tree) | 3 m 50 s | start 4.5 / med 4.6 / max 5.4 |
+| `harness:android` | **PASS** | 280 tests / 16 suites | `6fa500535009` (android tree) | 8 m 21 s | start 4.4 / med 3.3 / max 4.6 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:ios:Conformance` | **PASS** | 40 tests / 1 suites | `6fa500535009` (ios tree) | 1 m 28 s | start 2.9 / med 3.4 / max 4.0 |
+
+`need --for review` is satisfied. Locale pair re-recorded on this tree: `NITRO_UI_TEST_LOCALE=en_PT`
+fails as designed (`the app runs in en-PT …`), and with `NITRO_UI_ALLOW_LOCALE_MISMATCH=1` it is
+`40 passed`. Native: **340 checks**, ASan/UBSan clean.
+
+### Red proofs
+
+- `sizing · a layout that never binds is reclaimed` -> no prune in `measure` -> 5 red, `got 111, want 61`
+- same -> reclaim deletes instead of demoting -> 6 red, incl. `a control whose mount was a second late is still corrected`
+- same -> a bind stops closing its own window -> `nothing is waiting for a bind any more (got 1024, want 0)`
+- same -> the file site stops checking `registry_` -> 4 red, `the window releases a hold whose bind never came`
+- `sizing · a flush with nothing to apply still closes windows` -> prune only from `measure` -> `got 10, want 0`
+- `sizing · the sweep still runs after the registry has shrunk` -> no gate re-anchor -> 4 red, both sweep cases
+- `harness · Sizing · re-shown switch` -> engine back to `fb397d2`, both platforms -> `never reached 100 wide - last box 40.00x20.00`
+- `ci-workflows · returns when every tool would hang` -> `timeout: 0` -> the case runs to its own 30 s kill
+- same -> partial output discarded on kill -> `Expected substring: "SANDBOX_ADB_HANG devices"`
+- same -> a hung command not recorded -> `Expected substring: "incomplete"`
+- same -> answer/no-answer tested by prefix -> `<nothing mentions kvm or binder>` on a `sudo` that never answered
+
+### Follow-ups
+
+- android-ci-harness-failure: the `Run Harness tests` failure on `fb397d2` is still unexplained — the job log is to be forwarded; this round changed nothing in that path.
+- picker-leak-repro: Picker's leak never reproduced locally (16 iOS + Android Conformance runs); the engine case is the proof, and both platforms are green.
+- sizing-stats: `unboundFilingCount()` is C++-only. Surfacing it in `sizingStats()` would let a device rule name the table it is looking at instead of inferring it.
+
+### CI to dispatch
+
+1. Push `task/F8-ci-harness-hosted` and dispatch `ci.yml` — both jobs. Expect the diagnostics artifact inside 5 minutes of the harness step ending, whatever the emulator is doing.
+2. If `Picker × no-leak-on-drop` is green, that closes the leak CI saw; if it is red again, `unboundFilingCount()` is the next thing to instrument.
