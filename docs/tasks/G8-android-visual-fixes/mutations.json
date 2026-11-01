@@ -1,6 +1,6 @@
 {
   "task": "G8",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 1-6 are the rule's own unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first two rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored byte for byte and its sha256 re-checked (X14/X15/F4's convention, unchanged): `before` is the shipped source the row was run against and `after` is the text that replaced it. Rows 4-9 are the rule's own unit tests, run on maintainer-mac-1 on 2026-11-01 against code tree 8342fd0bb41b. The first three rows are not mutations: they are the shipped Menu code and the shipped DatePicker code run in the configuration the brief says is broken - which is what a red proof of a visual fix is, since the defect is the unmutated program. Lease G8-ty8hr, emulator-5574. Round 1's rows are at the bottom, on lease G8-6ih23 / emulator-5570 against code tree 3ec81511c2fa.",
   "mutations": [
     {
       "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › gives the list the width its items need, not the trigger's",
@@ -67,6 +67,62 @@
       "before": "const MIN_COLUMNS_TO_BE_A_WEEK = 5;",
       "after": "const MIN_COLUMNS_TO_BE_A_WEEK = 7;",
       "red": "expect(calendarGridProblems(grid)) — Received: null: a clipped calendar is reported as 'no calendar here' rather than as broken"
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › picks the touch target from the measured box, at the boundary",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "  return widthDp < CALENDAR_WIDE_MIN_DP\n    ? DAY_CELL_MIN_DP\n    : INTERACTIVE_DEFAULT_DP;",
+      "after": "  return DAY_CELL_MIN_DP;",
+      "red": "expected 40 to be 48 at scripts/__tests__/real-input-calendar.test.js:207 - the rule has one floor for every box, which is the shape that let a 40 dp-everywhere control through"
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › picks the touch target from the measured box, at the boundary",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "export const CALENDAR_WIDE_MIN_DP = 360;",
+      "after": "export const CALENDAR_WIDE_MIN_DP = 400;",
+      "red": "expected 40 to be 48 at scripts/__tests__/real-input-calendar.test.js:208 - a threshold that drifts from Material's own 7 x 48 + 24 arithmetic measures the wrong box (the same test asserts the arithmetic against the constant)"
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › refuses 40 dp columns in a box wide enough for Material's 48 dp",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "  const floorPx = minColumnDp * grid.density - DP_FLOOR_TOLERANCE_PX;",
+      "after": "  const floorPx = DAY_CELL_MIN_DP * grid.density - DP_FLOOR_TOLERANCE_PX;",
+      "red": "expect(calendarGridProblems(grid, { minColumnDp: INTERACTIVE_DEFAULT_DP })).toEqual([...]) - the parameter was ignored, so the rule had one floor again no matter what the caller measured"
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-calendar.test.js · real-input Android calendar grid › forgives the half pixel a non-integer density costs a 40 dp column",
+      "file": "scripts/real-input/android-calendar.mjs",
+      "before": "const DP_FLOOR_TOLERANCE_PX = 0.5;",
+      "after": "const DP_FLOOR_TOLERANCE_PX = 0;",
+      "red": "expect(calendarGridProblems(grid)).toEqual([]) - 40 dp at 213 dpi is 53 px, which is 39.8 dp, and the calendar is called broken for rounding"
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › gives the list the width its items need, not the trigger's",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "before": "      ExposedDropdownMenu(\n        expanded = expanded,\n        matchAnchorWidth = false,",
+      "after": "      ExposedDropdownMenu(\n        expanded = expanded,\n        modifier = Modifier.width(112.dp),\n        matchAnchorWidth = false,",
+      "red": "expected 294 to be greater than 294 at Menu.harness.tsx:1389 - a popup pinned to Material's floor is exactly the floor's width, so the short list beside it is the same width and the wide list is not measurably wider. This is the mutant the review asked for: the old `> 112 dp` assertion stayed green under it, and the new one does not survive it."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a › caps a section header at the width a row stops at",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "before": "        .widthIn(max = MENU_CONTENT_MAX_DP)\n        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),",
+      "after": "        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),",
+      "red": "expected 411.42857142857144 to be less than or equal to 280 at Menu.harness.tsx:1450 - an uncapped group title stretches the popup 131 dp past the width Material caps a row at, so every row inside it is ellipsised inside a window wider than it needs"
+    },
+    {
+      "round": 1,
+      "test": "real-input:android --control date-picker · date-picker › the 411 dp inline calendar lays a whole week out on 48 dp targets",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt",
+      "before": "        val narrow =\n          constraints.hasBoundedWidth &&\n            with(LocalDensity.current) { constraints.maxWidth.toDp() < CALENDAR_WIDE_MIN_DP }",
+      "after": "        val narrow = true",
+      "red": "✗ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 105px x7 (narrowest 40.0 dp) - the narrowest column is 40.0 dp, under the 48 dp touch target this box should have produced. The 320 dp row in the same run stayed green (40 dp is right there), which is the pair proving the decision rather than one size: this is the shipped round-0 control, which asked for 40 dp at every width."
     }
   ]
 }
