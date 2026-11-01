@@ -1,0 +1,86 @@
+# Failure excerpt — harness:ios:Conformance
+
+- Ran: 2026-11-01T05:01:48.329Z on code tree `4b72a51b72d1` at HEAD `2cb8c39` (branch `task/F8-ci-harness-hosted`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance`
+- Result: fail, exit 1, 86969 ms
+- Load: start 4.39, end 3.34, median 3.48, max 4.39
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F`
+- Full log: `task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log` (<store>/task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · DatePicker › has its own declared fallback, and still corrects a wrong guess`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   F8-a6ro7                 F8           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.34 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Conformance
+gate: node ../scripts/harness.mjs --harnessRunner ios Conformance (cwd example)
+gate: code tree 4b72a51b72d1 at HEAD 2cb8c39
+gate: git tree c3a5a85f920b
+gate: log task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log
+gate:       <store>/task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4b72a51b72d1, 9 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.20/5.72 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-PT — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · DatePicker › has its own declared fallback, and still corrects a wrong guess
+
+    1 conformance finding(s):
+
+        - DatePicker × declared-fallback: the app runs in en-PT and this row’s 107x36.33 is what the control measures in en-US, so the measured 103x36.33333333333333 is the same formatter answering a different question. Launch the app in the pinned locale (en_US) or set NITRO_UI_ALLOW_LOCALE_MISMATCH=1 to say you meant this
+      [0m [90m 1057 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1058 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1059 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1060 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1061 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1062 |[39m [32m        .join('\n')}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 39 passed, 40 total
+Snapshots:   0 total
+Time:        85.917 s
+Ran all test suites matching Conformance.
+gate: harness:ios:Conformance FAIL in 87.0 s
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+
+
+gate: appended the device context to task/F8-ci-harness-hosted/harness+ios+Conformance-2026-11-01T05-01-48.136Z.log (4 probe(s))
+
+```

@@ -1,0 +1,175 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-01T05:58:45.231Z on code tree `fde3f00b578b` at HEAD `1c8dc99` (branch `task/F8-ci-harness-hosted`)
+- Command: `bun run check`
+- Result: fail, exit 1, 145006 ms
+- Load: start 2.88, end 3.13, median 3.74, max 4.87
+- Device: none recorded (not a device gate)
+- Full log: `task/F8-ci-harness-hosted/check-2026-11-01T05-58-45.038Z.log` (<store>/task/F8-ci-harness-hosted/check-2026-11-01T05-58-45.038Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/ci-workflows.test.js (48.429 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "SANDBOX_ADB_HANG devices"`
+- `Received string:    "== diagnostics start == 2026-11-01T05:58:54.333Z (budget 60s, per command 1s)`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 478 — the rest is in the full log above)
+
+```
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/component-coverage.test.js
+PASS src/__tests__/useSizingId.test.tsx
+PASS src/__tests__/hostReport.test.tsx
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/real-input-a11y-ios.test.js
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/task-ready.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/check-runner.test.js (12.145 s)
+PASS scripts/__tests__/gate.test.js (46.695 s)
+PASS scripts/__tests__/gate-logs.test.js (46.926 s)
+FAIL scripts/__tests__/ci-workflows.test.js (48.429 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "SANDBOX_ADB_HANG devices"
+    Received string:    "== diagnostics start == 2026-11-01T05:58:54.333Z (budget 60s, per command 1s)
+    == date ==
+    Sun Nov  1 05:58:54 UTC 2026
+    == adb ==
+    <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb
+    == qemu processes ==
+    14611
+    14779
+    == adb devices ==
+    no output (timed out after 1s and was killed): <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb devices -l
+    == boot properties ==
+    sys.boot_completed=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop sys.boot_completed
+    init.svc.zygote=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop init.svc.zygote
+    init.svc.surfaceflinger=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop init.svc.surfaceflinger
+    == device clock and locale ==
+    persist.sys.timezone=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop persist.sys.timezone
+    persist.sys.locale=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop persist.sys.locale
+    ro.product.locale=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop ro.product.locale
+    ro.build.version.sdk=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop ro.build.version.sdk
+    date=SANDBOX_ADB_HANG shell
+    <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell date
+    == dmesg (kvm) ==
+    no output (timed out after 1s and was killed): sudo -n dmesg
+    == kernel tail ==
+    no output (timed out after 1s and was killed): sudo -n dmesg
+    "
+
+      1225 |       // assertions for the wrong reason.
+      1226 |       const host = fs.readFileSync(box.diag('host.log'), 'utf8');
+    > 1227 |       expect(host).toContain('SANDBOX_ADB_HANG devices');
+           |                    ^
+      1228 |       expect(host).toContain('SANDBOX_SUDO_HANG ran: -n dmesg');
+      1229 |       expect(host).toMatch(/timed out after .+s and was killed/u);
+      1230 |       // And the run says so in its own output, so the artifact is not the only place
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1227:20)
+
+PASS scripts/__tests__/bench-baseline-merge.test.js (74.788 s)
+PASS scripts/__tests__/bench-gate.test.js (140.061 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/ci-workflows.test.js (48.429 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "SANDBOX_ADB_HANG devices"
+    Received string:    "== diagnostics start == 2026-11-01T05:58:54.333Z (budget 60s, per command 1s)
+    == date ==
+    Sun Nov  1 05:58:54 UTC 2026
+    == adb ==
+    <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb
+    == qemu processes ==
+    14611
+    14779
+    == adb devices ==
+    no output (timed out after 1s and was killed): <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb devices -l
+    == boot properties ==
+    sys.boot_completed=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop sys.boot_completed
+    init.svc.zygote=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop init.svc.zygote
+    init.svc.surfaceflinger=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop init.svc.surfaceflinger
+    == device clock and locale ==
+    persist.sys.timezone=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop persist.sys.timezone
+    persist.sys.locale=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop persist.sys.locale
+    ro.product.locale=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop ro.product.locale
+    ro.build.version.sdk=SANDBOX_ADB_HANG shell <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell getprop ro.build.version.sdk
+    date=SANDBOX_ADB_HANG shell
+    <timed out after 1s and was killed>: <tmp>/nui-ci-diag-zRmbmC/sdk/platform-tools/adb -e shell date
+    == dmesg (kvm) ==
+    no output (timed out after 1s and was killed): sudo -n dmesg
+    == kernel tail ==
+    no output (timed out after 1s and was killed): sudo -n dmesg
+    "
+
+      1225 |       // assertions for the wrong reason.
+      1226 |       const host = fs.readFileSync(box.diag('host.log'), 'utf8');
+    > 1227 |       expect(host).toContain('SANDBOX_ADB_HANG devices');
+           |                    ^
+      1228 |       expect(host).toContain('SANDBOX_SUDO_HANG ran: -n dmesg');
+      1229 |       expect(host).toMatch(/timed out after .+s and was killed/u);
+      1230 |       // And the run says so in its own output, so the artifact is not the only place
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1227:20)
+
+
+Test Suites: 1 failed, 58 passed, 59 total
+Tests:       1 failed, 1588 passed, 1589 total
+Snapshots:   0 total
+Time:        140.364 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 145.0 s
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+
+```
