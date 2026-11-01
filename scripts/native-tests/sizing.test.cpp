@@ -210,7 +210,7 @@ namespace {
                                           : kWindow + std::chrono::milliseconds(300);
 
     for (int64_t cycle = 0; cycle < 10; cycle++) {
-      measure(6500 + cycle, "settled");
+      measure(40000 + cycle, "settled");
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{10}, "ten layouts, no mounts");
 
@@ -220,6 +220,22 @@ namespace {
     check(!engine().flush(), "there is genuinely no report to apply");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and the expired rows are gone anyway");
     checkEquals(engine().unboundFilingCount(), size_t{0}, "with nothing left waiting for a bind");
+
+    /**
+     * And the walk has to run the whole way down without a layout to start it.
+     *
+     * A reclaim is a *demotion*, which restarts the clock on the held table's own
+     * window: the ten rows are off the ledger and now wait a second there. So the
+     * state a leak rule reads one turn after a churn is "empty ledger, ten holds", and
+     * the only thing that turns that into nothing is `flush` pruning the held set too.
+     * Without it the row is eventually reclaimed — by the next `measure`, whenever the
+     * app next lays anything out — which is correct but leaves the engine looking leaked
+     * to exactly the reading that F8 was chasing.
+     */
+    std::this_thread::sleep_for(kWaitAfterWindow);
+    check(!engine().flush(), "still nothing to apply");
+    checkEquals(engine().lateFilingCount(), size_t{0}, "and the demoted rows are reclaimed by a flush alone");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "with the ledger still empty");
   }
 
   // MARK: - Cases
@@ -531,11 +547,11 @@ namespace {
                                           : kGrace + std::chrono::milliseconds(300);
 
     // Mount, drop, and let one layout arrive late: a hold.
-    bind(5200, 5200);
-    measure(5200, "");
-    engine().forget(5200);
-    kept_.erase(5200);
-    measure(5200, "reshown");
+    bind(36000, 36000);
+    measure(36000, "");
+    engine().forget(36000);
+    kept_.erase(36000);
+    measure(36000, "reshown");
     checkEquals(engine().lateFilingCount(), size_t{1}, "the late layout is on hold");
     checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and it is not in the ledger while it is");
 
@@ -547,22 +563,22 @@ namespace {
      * take the hold away early, and the assertion is that it does not.
      */
     std::this_thread::sleep_for(kWaitInsideWindow);
-    bind(5201, 5201);
-    measure(5201, "");
+    bind(36001, 36001);
+    measure(36001, "");
     checkEquals(engine().lateFilingCount(), size_t{1}, "a bind that is merely slow has not lost its layout");
-    bind(5200, 5200);
+    bind(36000, 36000);
     checkEquals(engine().lateFilingCount(), size_t{0}, "binding claims it");
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "as that instance's own row, beside its neighbour's");
 
     // Past the window, with no bind ever arriving.
-    engine().forget(5200);
-    kept_.erase(5200);
-    measure(5200, "orphaned");
+    engine().forget(36000);
+    kept_.erase(36000);
+    measure(36000, "orphaned");
     checkEquals(engine().lateFilingCount(), size_t{1}, "the second late layout is on hold too");
     std::this_thread::sleep_for(kWaitAfterWindow);
 
-    bind(5202, 5202);
-    measure(5202, "");
+    bind(36002, 36002);
+    measure(36002, "");
     checkEquals(engine().lateFilingCount(), size_t{0}, "the window releases a hold whose bind never came");
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "and only that hold — the two live instances are untouched");
   }
@@ -607,7 +623,7 @@ namespace {
     // 50 layouts whose mounts never arrive. Nothing else happens in between, so this
     // is the leak on its own rather than mixed with a churn.
     for (int64_t cycle = 0; cycle < 50; cycle++) {
-      measure(5300 + cycle, "");
+      measure(37000 + cycle, "");
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{50},
                 "a layout for an id that has not bound yet files its entry — the mount may still be on its way");
@@ -616,9 +632,9 @@ namespace {
     // mount is unbound for as long as its commit takes, and the row is what its
     // correction will be measured against. This instance binds after the others were
     // filed, and must not have been reclaimed with them.
-    bind(5400, 5400);
-    measure(5400, "in-flight");
-    engine().report(5400, 61, 28, 0);
+    bind(37100, 37100);
+    measure(37100, "in-flight");
+    engine().report(37100, 61, 28, 0);
     check(engine().flush(), "the mount that did arrive is still corrected after the ones that did not were filed");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, and it is the live one's");
 
@@ -627,8 +643,8 @@ namespace {
     // out other things while a leak sits there.
     std::this_thread::sleep_for(kWaitAfterWindow);
     for (int64_t cycle = 0; cycle < 60; cycle++) {
-      bind(5500 + cycle, static_cast<int>(5500 + cycle));
-      measure(5500 + cycle, "later");
+      bind(37200 + cycle, static_cast<int>(37200 + cycle));
+      measure(37200 + cycle, "later");
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{61},
                 "the fifty layouts that never bound are gone, and only the sixty live ones and the in-flight mount remain");
@@ -636,7 +652,7 @@ namespace {
 
     // A reclaimed id is a *finished* id: a further layout for it must not file a row
     // again, which is the same rule the forgotten-id guard enforces for a dropped view.
-    measure(5300, "after");
+    measure(37000, "after");
     checkEquals(engine().stats().ledgerEntries, int64_t{61}, "a layout after the reclaim files nothing");
   }
 
@@ -702,20 +718,20 @@ namespace {
                                           ? std::chrono::seconds(5)
                                           : kWindow + std::chrono::milliseconds(300);
 
-    measure(5800, "slow-mount");
+    measure(38000, "slow-mount");
     std::this_thread::sleep_for(kWaitAfterWindow);
     // Something else lays out, which is what runs the walk.
-    bind(5801, 5801);
-    measure(5801, "neighbour");
+    bind(38001, 38001);
+    measure(38001, "neighbour");
     checkEquals(engine().stats().ledgerEntries, int64_t{1}, "the slow row has left the ledger");
     checkEquals(engine().lateFilingCount(), size_t{1}, "and is held, waiting for the bind it is owed");
 
-    bind(5800, 5800);
+    bind(38000, 38000);
     checkEquals(engine().stats().ledgerEntries, int64_t{2}, "and the late bind claims it back");
     checkEquals(engine().lateFilingCount(), size_t{0}, "from the hold");
 
     // The control is still owed its correction, which is the whole reason for the hold.
-    engine().report(5800, 61, 28, 0);
+    engine().report(38000, 61, 28, 0);
     check(engine().flush(), "a control whose mount was a second late is still corrected");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, for the slow instance");
     checkEquals(pushes[0].width, 61.0f, "at the size it reported");
@@ -749,22 +765,33 @@ namespace {
     // Layout first, as the shadow thread does; bind a moment later, as the mount
     // transaction does. At this instant the row is indistinguishable from an abandoned
     // mount, and the binding is the only thing that says otherwise.
-    measure(5900, "mounted-in-order");
-    bind(5900, 5900);
+    //
+    // These ids are 35900/35910 rather than the 5900/5910 this case was written with,
+    // and that is load-bearing: `forgotten_` is a 512-slot ring, and the burst case
+    // above forgets 5100-6099, which leaves 5588-6099 marked finished. A measure for an
+    // id in that window takes the *held* path and never reaches the unbound row this
+    // case is about, so the case would test the hold and pass while claiming to test the
+    // window - and deleting `waitingForBind_.erase` in `registerInstance` stayed green
+    // with it. The assertion below is the durable half: it names the path, so a future
+    // id collision cannot hide again.
+    measure(35900, "mounted-in-order");
+    checkEquals(engine().unboundFilingCount(), size_t{1},
+                "the row was filed on the *unbound* path — if this is 0 the id collided with an earlier forget and this case tests the hold instead");
+    bind(35900, 35900);
     checkEquals(engine().unboundFilingCount(), size_t{0}, "binding takes the row out of the waiting set");
 
     // Now the window closes on everything, and other views keep laying out, which is
     // what drives the walk.
     std::this_thread::sleep_for(kWaitAfterWindow);
     for (int64_t cycle = 0; cycle < 10; cycle++) {
-      bind(5910 + cycle, static_cast<int>(5910 + cycle));
-      measure(5910 + cycle, "neighbour");
+      bind(35910 + cycle, static_cast<int>(35910 + cycle));
+      measure(35910 + cycle, "neighbour");
     }
     checkEquals(engine().stats().ledgerEntries, int64_t{11}, "the bound instance kept its row through its own window");
 
     // And it is still a correctable instance, which is the only way to observe the row
     // from the outside.
-    engine().report(5900, 61, 28, 0);
+    engine().report(35900, 61, 28, 0);
     check(engine().flush(), "and it is still corrected");
     checkEquals(pushes.size(), size_t{1}, "exactly one push, for the mounted instance");
     checkEquals(pushes[0].width, 61.0f, "at the size it reported");
@@ -807,7 +834,7 @@ namespace {
     const char* const firstOwnersKey = "menu|3|One|Two|Three|sel:One|lbl:";
     const char* const secondOwnersKey = "menu|3|One|Two|Three|sel:Three|lbl:";
     for (int64_t cycle = 0; cycle < 50; cycle++) {
-      const int64_t id = 6000 + cycle * 2;
+      const int64_t id = 39000 + cycle * 2;
       const std::string key = cycle % 2 == 0 ? firstOwnersKey : secondOwnersKey;
       if (cycle % 2 == 0) {
         // A mount that completes and is dropped, with its layout arriving late.
@@ -827,13 +854,241 @@ namespace {
     std::this_thread::sleep_for(kWaitAfterWindow);
     // Something keeps laying out, as it would in an app, and drives the reclaim.
     for (int64_t cycle = 0; cycle < 20; cycle++) {
-      bind(7000 + cycle, static_cast<int>(7000 + cycle));
-      measure(7000 + cycle, "menu|3|One|Two|Three|sel:Two|lbl:");
+      bind(39200 + cycle, static_cast<int>(39200 + cycle));
+      measure(39200 + cycle, "menu|3|One|Two|Three|sel:Two|lbl:");
     }
     const NitroUiSizingCounters after = engine().stats();
     checkEquals(after.ledgerEntries - baseline, int64_t{20},
                 "fifty Picker cycles — dropped views with a late layout, and mounts that never arrived — leave nothing but the live instances");
     checkEquals(after.registryEntries, int64_t{20}, "and the registry holds only those");
+
+    /**
+     * …and the *held* table too, because that is the number a leak rule cannot see and
+     * F8b's capacity fix depends on.
+     *
+     * The reclaim is a demotion, so half of what the churn abandoned is sitting in
+     * `lateFilings_` at this point with a clock that restarted when it got there — off
+     * the ledger, which is the point, and invisible to `ledgerEntries`, which is why
+     * `lateFilingCount()` is assertable. The Picker churn has stopped laying out by now,
+     * exactly as CI's rule has, so the only thing left that can empty it is `flush`.
+     */
+    std::this_thread::sleep_for(kWaitAfterWindow);
+    check(!engine().flush(), "the churn has settled, so there is nothing left to apply");
+    checkEquals(engine().lateFilingCount(), size_t{0}, "and a flush with no layouts left clears the holds");
+    checkEquals(engine().unboundFilingCount(), size_t{0}, "and everything owed a mount window");
+    checkEquals(engine().stats().ledgerEntries - baseline, int64_t{20}, "with only the twenty live instances still on the ledger");
+  }
+
+  /**
+   * F8b: the held table's capacity must not cost a control its correction.
+   *
+   * F8 round 2 bounded {@link lateFilings_} at 256 entries and closed any overflow by
+   * evicting the oldest hold — which is a cliff disguised as a budget. A commit that
+   * re-shows three hundred hidden controls lays all three hundred out before its mount
+   * transaction binds any of them, so three hundred holds are staged in the same
+   * millisecond, every one of them inside its window, and the oldest forty-four gave up
+   * their slots for being numerous. Each of those is a control that keeps the size a
+   * *guess* laid it out at, for the rest of its mount: the exact failure the held table
+   * was written to prevent, reintroduced by its own capacity. The same shape reaches the
+   * unbound rows' overflow, which is demoted into this table.
+   *
+   * The fix is the order in `stageLateFilingLocked`: close the window first, take a slot
+   * only if that did not free one. So this lays out a re-show larger than the old cap,
+   * asserts the holds are all still there, and then asserts the thing that matters —
+   * every one of the three hundred is corrected.
+   */
+  void testAReshowOfMoreControlsThanTheOldCapacityLosesNoCorrection() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    // Comfortably past the 256 this table used to hold, and below the backstop, so the
+    // only thing that can lose a control here is a capacity that is too small.
+    const int64_t count = 300;
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      const int64_t id = 41000 + cycle;
+      bind(id, static_cast<int>(id));
+      // Cold key per control, as 300 rows of a list are: distinct titles. Deliberately
+      // no report here — warming the key would make the re-show `exact` and leave this
+      // case with no correction to lose.
+      measure(id, "row-" + std::to_string(cycle));
+      // Hidden: iOS deletes the native view, which finishes the id.
+      engine().forget(id);
+      kept_.erase(id);
+    }
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "hiding them all leaves the ledger empty");
+
+    // Shown again in one commit: three hundred layouts, then three hundred mounts.
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      measure(41000 + cycle, "row-" + std::to_string(cycle));
+    }
+    checkEquals(engine().lateFilingCount(), static_cast<size_t>(count),
+                "every layout of the re-show is still on hold — one is one lost correction");
+
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      bind(41000 + cycle, static_cast<int>(41000 + cycle));
+    }
+    checkEquals(engine().stats().ledgerEntries, count, "and each mount claimed its own entry back");
+
+    pushes.clear();
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      engine().report(41000 + cycle, 61, 28, 0);
+    }
+    check(engine().flush(), "the re-shown commit is corrected");
+    checkEquals(pushes.size(), static_cast<size_t>(count), "one push per re-shown control, none lost to capacity");
+  }
+
+  /**
+   * The backstop is still a backstop: the table cannot grow without bound.
+   *
+   * F8b moved the working bound from the capacity to the window, which is only safe if
+   * the ceiling behind it still holds under a burst that genuinely outpaces a second —
+   * more orphans than the ceiling, with no sleep for age to do any work. That is the one
+   * case where an in-window hold is dropped, and the cost is stated in
+   * {@link kLateFilingCapacity}: that control keeps the size it was laid out at. What
+   * must not happen, either way, is state that outlives the burst.
+   *
+   * The burst is expressed in multiples of the ceiling rather than a fixed number so the
+   * case stays honest if the constant moves again: it proves the ceiling was *reached*,
+   * which is the thing that makes "and it stayed bounded" mean anything.
+   */
+  void testTheHeldTableStillCannotGrowWithoutBound() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    const int64_t capacity = static_cast<int64_t>(NitroUiSizingEngine::kLateFilingCapacity);
+    const int64_t count = capacity * 2 + 17;
+    int64_t peak = 0;
+    for (int64_t cycle = 0; cycle < count; cycle++) {
+      const int64_t id = 42000 + cycle;
+      bind(id, static_cast<int>(id));
+      measure(id, "burst-" + std::to_string(cycle % 7));
+      engine().forget(id);
+      kept_.erase(id);
+      // The orphaning layout, one step late, as an async commit is.
+      measure(id, "burst-" + std::to_string(cycle % 7));
+      const int64_t held = static_cast<int64_t>(engine().lateFilingCount());
+      peak = held > peak ? held : peak;
+    }
+    checkEquals(peak, capacity, "the burst reached the ceiling, and never grew past it");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and none of it reached the ledger");
+    checkEquals(engine().stats().registryEntries, int64_t{0}, "nor the registry");
+  }
+
+  /**
+   * F8b: a bind later than *both* windows is not allowed to be forgotten about.
+   *
+   * An unbound row gets a second; when that closes it is demoted to the held table,
+   * which gets another. So the engine gives up on an entry two seconds after its first
+   * layout, and on a runner saturated enough to take longer than that (F8 measured load1
+   * 380 on 3 cores) the mount eventually does arrive — to nothing. `report` then finds
+   * no row and returns at its first line, and the control is frozen at the size it was
+   * first laid out at for the life of its mount. That is the same failure every other
+   * case here is about, arriving through the reclaim instead of through a missing entry.
+   *
+   * The engine cannot resurrect an entry it threw away — inventing a row would be
+   * filing a size for a configuration `report` never named — but it can stop pretending
+   * nothing happened: the id is remembered as one it abandoned, and a bind that turns up
+   * with nothing to claim is charged a fresh-measure debt, the FIX2 channel. The next
+   * layout files the row, and the report that follows is an ordinary correction.
+   */
+  void testABindLaterThanBothWindowsIsChargedAFreshMeasure() {
+    using namespace std::chrono_literals;
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    constexpr auto kWindow = std::chrono::nanoseconds(NitroUiSizingEngine::kLateFilingGraceNs);
+    constexpr auto kWaitAfterWindow = kWindow + std::chrono::milliseconds(300) > std::chrono::seconds(5)
+                                          ? std::chrono::seconds(5)
+                                          : kWindow + std::chrono::milliseconds(300);
+
+    // A layout with no mount behind it, which is the shape that leaks.
+    measure(43000, "very-late-mount");
+    checkEquals(engine().unboundFilingCount(), size_t{1}, "filed, and owed a mount window");
+
+    // Window one closes: the row is demoted, not deleted.
+    std::this_thread::sleep_for(kWaitAfterWindow);
+    bind(43001, 43001);
+    measure(43001, "neighbour");
+    checkEquals(engine().lateFilingCount(), size_t{1}, "demoted into the held table");
+
+    // Window two closes too: the entry is gone, and nothing else can bring it back.
+    std::this_thread::sleep_for(kWaitAfterWindow);
+    bind(43002, 43002);
+    measure(43002, "neighbour");
+    checkEquals(engine().lateFilingCount(), size_t{0}, "the hold is released");
+
+    // And the mount finally arrives, two seconds after the layout that needed it.
+    bind(43000, 43000);
+    checkEquals(engine().stats().ledgerEntries, int64_t{2}, "it binds with no row of its own");
+    check(engine().requiresFreshMeasure(43000),
+          "and is told it owes itself a measure — the entry it was owed is gone");
+
+    // The re-ask, which is what the shadow node's `shouldNewRevisionDirtyMeasurement`
+    // causes. That layout files the row `report` needs.
+    measure(43000, "very-late-mount");
+    checkEquals(engine().stats().ledgerEntries, int64_t{3}, "the debt is paid by the layout it asked for");
+    check(!engine().requiresFreshMeasure(43000), "and it is not asked for twice");
+
+    pushes.clear();
+    engine().report(43000, 61, 28, 0);
+    check(engine().flush(), "so the control is corrected after all");
+    checkEquals(pushes.size(), size_t{1}, "exactly one push, for the very late instance");
+    checkEquals(pushes[0].width, 61.0f, "at the size it reported");
+  }
+
+  /**
+   * The debt is only charged to an instance this engine actually owes.
+   *
+   * Two innocent mounts must not pay for it. A first mount that has never been laid out
+   * had no entry thrown away, so charging it would put every control in the app on the
+   * re-measure path — the fast path review S1 exists to protect, and the reason the
+   * answer is "was this id's filing abandoned?" rather than "did this id bind with no
+   * row?". Second, an id that merely shares a ring slot with an abandoned id: the mark
+   * is direct-mapped, and the exactness argument for {@link forgotten_} says a slot
+   * answers for its own id only. Getting that wrong charges a control a measure for an
+   * abandonment that happened to someone else five hundred ids earlier.
+   *
+   * The abandonment here is made by the capacity backstop, not by a timer, so the case
+   * costs no sleeps and cannot drift with the window.
+   */
+  void testTheFreshMeasureDebtIsNotChargedToAnInnocentMount() {
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    // A plain mount, never measured: binds with nothing to its name, exactly like the
+    // very late one above did, and owes nothing because nothing was taken from it.
+    bind(44000, 44000);
+    check(!engine().requiresFreshMeasure(44000), "an instance that was never measured asks for nothing");
+
+    // Enough late layouts to overrun the ceiling, which marks the evicted ids as
+    // abandoned. The first one is the evictee.
+    const int64_t capacity = static_cast<int64_t>(NitroUiSizingEngine::kLateFilingCapacity);
+    for (int64_t cycle = 0; cycle < capacity + 4; cycle++) {
+      const int64_t id = 45000 + cycle;
+      bind(id, static_cast<int>(id));
+      measure(id, "debt");
+      engine().forget(id);
+      kept_.erase(id);
+      measure(id, "debt");
+    }
+    check(!engine().requiresFreshMeasure(44000), "an unrelated live instance is untouched by another id's abandonment");
+
+    // The aliased id: same ring slot as the evicted one, never itself abandoned. It is
+    // five capacities newer so it sits outside the burst's own id range.
+    const int64_t aliased = 45000 + 5 * static_cast<int64_t>(NitroUiSizingEngine::kForgottenCapacity);
+    checkEquals(aliased & (static_cast<int64_t>(NitroUiSizingEngine::kForgottenCapacity) - 1),
+                45000 & (static_cast<int64_t>(NitroUiSizingEngine::kForgottenCapacity) - 1),
+                "the fixture really does land in the marked slot");
+    bind(aliased, static_cast<int>(aliased));
+    check(!engine().requiresFreshMeasure(aliased), "and a slot collision charges nobody");
+
+    // Both were bound without ever being measured, so they are not in `usedIds` and
+    // `resetEngine` would not find them; drop them here rather than let them show up in
+    // a later case's registry count.
+    engine().forget(44000);
+    engine().forget(aliased);
+    kept_.erase(44000);
+    kept_.erase(aliased);
   }
 
   void testColdMountFallsBackAndCorrects() {
@@ -2001,6 +2256,10 @@ int main() {
   testABigFirstCommitKeepsEveryCorrection();
   testABindThatArrivesAfterItsWindowStillClaimsItsRowBack();
   testAPickerShapedChurnOfDroppedAndUnboundMountsLeavesNothingBehind();
+  testAReshowOfMoreControlsThanTheOldCapacityLosesNoCorrection();
+  testTheHeldTableStillCannotGrowWithoutBound();
+  testABindLaterThanBothWindowsIsChargedAFreshMeasure();
+  testTheFreshMeasureDebtIsNotChargedToAnInnocentMount();
   testAFlushWithNothingToApplyStillClosesExpiredMountWindows();
   testExpiredStatesAreSweptWithoutForget();
   testTheSweepStillRunsAfterTheRegistryHasShrunk();

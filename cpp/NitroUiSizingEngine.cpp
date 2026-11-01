@@ -314,10 +314,27 @@ namespace margelo::nitro::nitroui {
     // The layout of a re-shown view ran before this line and is held, not filed;
     // it belongs to the instance being bound, and `report` cannot be answered
     // without it. Claiming here is what makes a hide/show lose nothing.
-    claimLateFilingLocked(instanceId);
+    const bool claimedHold = claimLateFilingLocked(instanceId);
     // And this row is no longer owed a mount window: it has its instance.
     waitingForBind_.erase(instanceId);
-    registry_[instanceId] = BoundInstance{componentHash, push, state};
+    /**
+     * A bind that found nothing to claim, and whose entry this engine is on record
+     * having thrown away, is a mount that arrived after both windows closed — the
+     * unbound row's second plus the hold's. That is not hypothetical on a saturated
+     * runner (F8 measured load1 380 on 3 cores), and its cost is asymmetric in the
+     * usual way: the instance is live and correctable forever, but it has no row, so
+     * the report that is on its way is dropped at `report`'s first line and the
+     * control sits at the size a *guess* laid it out at.
+     *
+     * What is owed is a fresh measure, not a resurrection: the entry is gone, and
+     * inventing one here would mean filing a size for a configuration `report` never
+     * named. So the instance is marked as owing itself a re-ask, which is the same
+     * FIX2 channel a corrected instance uses — `shouldNewRevisionDirtyMeasurement`
+     * asks `requiresFreshMeasure`, and the layout that follows files the row that
+     * `report` needs. See {@link BoundInstance::owesFreshMeasure}.
+     */
+    const bool owedASecondLook = !claimedHold && consumeFilingAbandonedLocked(instanceId);
+    registry_[instanceId] = BoundInstance{componentHash, push, state, owedASecondLook};
   }
 
   void NitroUiSizingEngine::forget(int64_t instanceId) {
@@ -330,16 +347,37 @@ namespace margelo::nitro::nitroui {
 
   void NitroUiSizingEngine::stageLateFilingLocked(int64_t instanceId, const LedgerEntry& entry) {
     /**
-     * The queue is the memory budget. It holds one slot per id currently on hold
-     * while it holds it, in staged order; a slot whose entry has gone (claimed, or
-     * forgotten) is left behind and dropped by the prune rather than chased, because
-     * removing an arbitrary id from a deque is a scan and `forget` runs on every
-     * dropped view. So its size is what a burst of orphans can grow, and at capacity
-     * the front - the oldest hold, the one whose bind is furthest overdue - gives up
-     * its slot. See {@link kLateFilingCapacity} and {@link lateFilingQueue_}.
+     * The queue holds one slot per id currently on hold while it holds it, in staged
+     * order; a slot whose entry has gone (claimed, or forgotten) is left behind and
+     * dropped by the prune rather than chased, because removing an arbitrary id from a
+     * deque is a scan and `forget` runs on every dropped view.
+     *
+     * At capacity, the *window* is closed first and the ceiling only then takes a slot.
+     * The order is the whole fix for the cliff F8b found: a commit that re-shows three
+     * hundred hidden controls stages three hundred holds inside the same millisecond,
+     * and evicting the oldest for being numerous throws away a correction that was
+     * still owed its window - for a control that had done nothing wrong but arrive with
+     * company. Nothing in-window is ever evicted while there is an expired entry to
+     * take instead, so the working bound is the rate of orphans over one second, which
+     * is what the table was sized for. See {@link kLateFilingCapacity}.
      */
     if (lateFilings_.find(instanceId) == lateFilings_.end()) {
+      if (lateFilingQueue_.size() >= kLateFilingCapacity) {
+        // The cheap half: everything at the front whose bind has already missed the
+        // window. One compare per entry it frees, and it stops at the first hold that
+        // is still in time.
+        pruneLateFilingsLocked();
+      }
       while (lateFilingQueue_.size() >= kLateFilingCapacity) {
+        /**
+         * The memory backstop, and the only place a hold is given up while it is still
+         * in time. Reaching it means more than `kLateFilingCapacity` orphans staged in
+         * under a second - far past any commit this project has measured - and what it
+         * costs is that one control keeps the size it was laid out at instead of the
+         * correction it was owed. Bounded, and never a leak: the entry is gone either
+         * way, and the ledger never saw it. Recorded as abandoned, the same cost the
+         * window's own expiry pays.
+         */
         const int64_t oldest = lateFilingQueue_.front();
         lateFilingQueue_.pop_front();
         lateFilings_.erase(oldest);
@@ -391,7 +429,27 @@ namespace margelo::nitro::nitroui {
       }
       lateFilings_.erase(held);
       lateFilingQueue_.pop_front();
+      // This is the abandonment a late bind is paid for: the entry is gone and
+      // nothing else can bring it back, so if that bind does turn up, the instance
+      // has to be told it owes itself a second look.
+      markFilingAbandonedLocked(instanceId);
     }
+  }
+
+  void NitroUiSizingEngine::markFilingAbandonedLocked(int64_t instanceId) {
+    // Direct-mapped by the low bits, for the same reason and with the same exactness as
+    // `rememberForgottenLocked`: ids are monotonic, so a slot answers for its own id and
+    // no other. See {@link abandonedFilings_}.
+    abandonedFilings_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)] = instanceId;
+  }
+
+  bool NitroUiSizingEngine::consumeFilingAbandonedLocked(int64_t instanceId) {
+    int64_t& slot = abandonedFilings_[static_cast<size_t>(instanceId) & (kForgottenCapacity - 1)];
+    if (slot != instanceId) {
+      return false;
+    }
+    slot = NitroUiSizing::NO_INSTANCE;
+    return true;
   }
 
   void NitroUiSizingEngine::pruneUnboundFilingsLocked() {
@@ -531,6 +589,12 @@ namespace margelo::nitro::nitroui {
     // that is gone, and this id is finished again.
     // (Its queue slot is left behind; the prune drops a slot that has no entry.)
     lateFilings_.erase(instanceId);
+    // Same for a filing we gave up on: the debt behind that mark was "you bound with
+    // nothing, so re-ask", and an id that is finished again has no mount to pay it.
+    // Clearing here is also what makes the ring safe to reuse an id over — the only
+    // situation where a slot could be read against the wrong mount is one where ids are
+    // minted again, which is a test's id space, not `nextInstanceId()`'s.
+    consumeFilingAbandonedLocked(instanceId);
     // A correction on its way to an instance that is gone must not be applied
     // later, when some other code may have taken over the id (`unboundTries`
     // aside, the ledger check in `applyReports` is the second guard).
@@ -761,8 +825,19 @@ namespace margelo::nitro::nitroui {
      * lookup on a path that already did two, and a bound instance never enters it, so
      * the cost of the rule is on the layout of a view that has not mounted yet.
      */
-    if (freshRow && registry_.find(instanceId) == registry_.end()) {
-      fileAwaitingBindLocked(instanceId);
+    /**
+     * A row that did not exist and now does, for an id that was bound with nothing to
+     * its name, is the debt being paid: this is the re-ask {@link
+     * BoundInstance::owesFreshMeasure} existed to cause, and leaving the flag set would
+     * put the instance on the paying path for the rest of its mount.
+     */
+    if (freshRow) {
+      const auto bound = registry_.find(instanceId);
+      if (bound == registry_.end()) {
+        fileAwaitingBindLocked(instanceId);
+      } else {
+        bound->second.owesFreshMeasure = false;
+      }
     }
     return result;
   }
@@ -773,7 +848,11 @@ namespace margelo::nitro::nitroui {
     }
     const std::shared_lock<std::shared_mutex> lock(mutex_);
     auto ledger = ledger_.find(instanceId);
-    return ledger != ledger_.end() && ledger->second.answerChanged;
+    if (ledger != ledger_.end() && ledger->second.answerChanged) {
+      return true;
+    }
+    auto instance = registry_.find(instanceId);
+    return instance != registry_.end() && instance->second.owesFreshMeasure;
   }
 
   void NitroUiSizingEngine::setFallback(const char* componentName, float width, float height, uint32_t flags) {
@@ -922,7 +1001,7 @@ namespace margelo::nitro::nitroui {
     {
       const std::lock_guard<std::shared_mutex> lock(mutex_);
       /**
-       * The mount-window reclaim also runs from here, not only from `measure`.
+       * Both mount windows are closed from here, not only from `measure`.
        *
        * A churn of mounts and drops is exactly the workload that *stops* laying out when
        * it finishes, and CI's rule reads the ledger after the churn has settled — so a
@@ -931,7 +1010,14 @@ namespace margelo::nitro::nitroui {
        * included (the observer fires on `kCFRunLoopBeforeWaiting`), so one abandoned row
        * costs one turn rather than the silence after the last animation. The call is one
        * compare when nothing is waiting, which is every turn of a healthy app.
+       *
+       * The held table needs it for the same reason, and needed it before this round:
+       * a hold's other reclaimer is `forget`, and an orphan's `forget` has already run.
+       * With the prune only in `measure`, a churn that stopped left its holds on the
+       * table until the *next* layout came by — correct, but a set the leak rule could
+       * read as a survivor, which is exactly the reading F8 was chasing.
        */
+      pruneLateFilingsLocked();
       pruneUnboundFilingsLocked();
       if (pending_.empty()) {
         return false;
