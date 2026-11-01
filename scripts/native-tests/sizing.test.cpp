@@ -1082,6 +1082,20 @@ namespace {
     bind(aliased, static_cast<int>(aliased));
     check(!engine().requiresFreshMeasure(aliased), "and a slot collision charges nobody");
 
+    /**
+     * …and the *positive* half, which is what makes the two above mean anything: the
+     * first id of the burst is the one the ceiling evicted, so a debt has to be waiting
+     * for it. Without that, "an innocent mount is not charged" would only be the
+     * evidence that nothing is ever charged — a ring nobody ever fills also passes.
+     *
+     * The eviction here is the ceiling's, not the window's: no sleep drives this case,
+     * so the marking on that path is covered as well as the one on expiry.
+     */
+    bind(45000, 45000);
+    check(engine().requiresFreshMeasure(45000),
+          "the control the ceiling evicted is charged the second look it is owed");
+    engine().forget(45000);
+
     // Both were bound without ever being measured, so they are not in `usedIds` and
     // `resetEngine` would not find them; drop them here rather than let them show up in
     // a later case's registry count.
