@@ -74,6 +74,9 @@
 > ran locally on the merged tree. Three patch changesets are pending for 0.4.2.
 > **0.4.2 staged on npm (2026-11-01):** Version Packages PR #14 merged (`323818a`), Release run 41308986511 green with
 > `Stage on npm` succeeded (two patch notes: DatePicker's iOS fallback at `en_US`; the sizing-engine leak and re-show fix).
+> **F8's iOS gate exception closed (V1, PR #16, `eaedc73`):** on maintainer-mac-1, `real-input:ios` 14/14 and `harness:ios`
+> 227 passed on `main` at `161e7d2` (which carries 0.4.2), so every merge gate has now run on a device. Stale duplicate
+> Version Packages PR #15 closed.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
