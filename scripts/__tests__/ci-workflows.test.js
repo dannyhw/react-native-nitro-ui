@@ -894,6 +894,34 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         'emulator: Waiting for the emulator to become ready…\nqemu: FIREFOX_MARKER_LINE\n'
       );
     }
+    /**
+     * `sudo`, stubbed.
+     *
+     * The diagnostics step reads the kernel ring buffer with `sudo -n dmesg`, and
+     * the sandbox's `PATH` had `/usr/bin` in it — so running that step body *here*
+     * ran the real macOS `sudo`: a call into the privilege machinery, on a machine
+     * where whether it succeeds depends on the developer's sudoers rather than on
+     * anything under test. A runner grants the tool user passwordless sudo; a
+     * laptop does not, so the step's exit status doubled as a statement about the
+     * person's machine.
+     *
+     * The stub deliberately does not execute its arguments: it prints what a runner
+     * would have printed and exits 0. So `dmesg` never runs either, which is fine —
+     * what this job tests is that the step tolerates a missing tool and still writes
+     * its log, not the kernel's output. `SANDBOX_SUDO_MARKER` is what the assertions
+     * read to know the stub, not the real binary, answered.
+     */
+    fs.writeFileSync(
+      path.join(bin, 'sudo'),
+      [
+        '#!/bin/sh',
+        'echo "SANDBOX_SUDO_MARKER ran: $*"',
+        'echo "kvm: emulator started with kvm support"',
+        'exit 0',
+        '',
+      ].join('\n'),
+      { mode: 0o755 }
+    );
     const fakeAdb = [
       '#!/bin/sh',
       'case "$1" in',
@@ -936,8 +964,10 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       dispose: () => fs.rmSync(dir, { recursive: true, force: true }),
       env: {
         // Nothing inherited: a CI step body that works only with a developer's
-        // `$PATH`/`$HOME` is the thing being tested for.
+        // `$PATH`/`$HOME` is the thing being tested for. The stub `bin` is always
+        // first, so `sudo` resolves to it and never to `/usr/bin/sudo`.
         PATH: [
+          bin,
           adb === 'path' ? bin : null,
           path.dirname(process.execPath),
           '/usr/bin',
@@ -987,6 +1017,12 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       // step look like a healthy report about a machine with no emulator in it.
       expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
         '== adb ==\nnot found'
+      );
+      // And the kernel line went through the stub, not through the machine's real
+      // `sudo`. Without this the step would be a privilege call whose result
+      // depends on who runs the tests, and it would still look green.
+      expect(fs.readFileSync(box.diag('host.log'), 'utf8')).toContain(
+        'SANDBOX_SUDO_MARKER ran: -n dmesg'
       );
     } finally {
       box.dispose();
@@ -1082,6 +1118,50 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     } finally {
       box.dispose();
     }
+  });
+});
+
+describe('the AVD name CI prints is the name the harness boots', () => {
+  /**
+   * `scripts/ci-avd-name.mjs` exists because a workflow step cannot import the
+   * harness config, and it reads the config as *text* to stay honest about the
+   * default. That covers one of the three things `avd()` does: the other two are
+   * the `ANDROID_AVD` and `AVD` overrides, and a step that prints the default while
+   * the harness boots an override is not reporting what the job is doing. Every
+   * leased device on this repo's dev boxes sets `ANDROID_AVD`, which is how this
+   * was found: the diagnostics step looked in `~/.android/avd/nitroui.avd` for a
+   * run whose emulator lived in `nitroui_a.avd`.
+   */
+  function avdName(env) {
+    const ran = spawnSync(
+      process.execPath,
+      [path.join(root, 'scripts', 'ci-avd-name.mjs')],
+      { cwd: root, env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' }
+    );
+    expect(ran.status).toBe(0);
+    return ran.stdout.trim();
+  }
+
+  it('follows the same precedence as avd(): ANDROID_AVD, AVD, then the default', () => {
+    const config = fs.readFileSync(
+      path.join(root, 'example', 'rn-harness.config.mjs'),
+      'utf8'
+    );
+    const fallback = /const DEFAULT_AVD = '([^']+)'/u.exec(config)[1];
+
+    expect(avdName({})).toBe(fallback);
+    expect(avdName({ AVD: 'avd-override' })).toBe('avd-override');
+    expect(avdName({ ANDROID_AVD: 'lease-avd', AVD: 'avd-override' })).toBe(
+      'lease-avd'
+    );
+    /**
+     * An empty override is not a name. `set -a; . <(lease.mjs acquire)` style
+     * sourcing produces one, and the harness's own `??` treats `''` as a value — so
+     * this is the one place where the two are deliberately *not* identical, in the
+     * direction that keeps a report from printing a blank line and looking like a
+     * machine with no AVD in it.
+     */
+    expect(avdName({ ANDROID_AVD: '', AVD: '' })).toBe(fallback);
   });
 });
 
