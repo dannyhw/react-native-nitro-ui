@@ -1,0 +1,26 @@
+# Failure excerpt — bench:--help
+
+- Ran: 2026-11-01T01:26:04.505Z on code tree `115bf375d0e8` at HEAD `f334eb7` (branch `task/A6b-mac1-ios-menu`)
+- Command: `node scripts/bench/run.mjs --help`
+- Result: fail, exit 2, 150 ms
+- Load: start 13.84, end 13.84, median 13.84, max 13.84
+- Device: none recorded (not a device gate)
+- Full log: `task/A6b-mac1-ios-menu/bench+--help-2026-11-01T01-26-04.505Z.log` (<store>/task/A6b-mac1-ios-menu/bench+--help-2026-11-01T01-26-04.505Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Last 8 log line(s)
+
+```
+usage: bun bench --platform ios|android [--plan quick|full] [--compare <ref|file>]
+           [--check] [--update-baseline] [--force] [--skip-build] [--only <impl,impl>]
+           [--launches N] [--prebuild] [--shutdown] [--perf-marks]
+           [--component <name>] [--dry-run]
+
+  --dry-run  print what this run would resolve and whether it would be
+             refused, then stop: no boot, no build, no measurement.
+
+```
