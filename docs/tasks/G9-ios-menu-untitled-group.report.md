@@ -80,3 +80,8 @@ because the API report was stale; it is fixed in `etc/react-native-nitro-ui.api.
   the X4 recycle rule line) and for an iOS open-state read-out.
 - iOS Menu: the probe reads `menu` right after presenting, and that held on iOS 27. If a later SwiftUI fills it
   asynchronously, `drawn` will read a stale or empty tree, and the G9 test will go red rather than pass silently.
+
+## Orchestrator note: Android red proof (review)
+
+- `Menu.harness.tsx` "draws every row of an untitled group, with its role (G9)" -> Android only, `HybridNitroUiMenu.kt` `MenuEntry.Section` composes no rows for an untitled section -> `expected 4 to be 6` (`harness:android -- Menu` on maintainer-mac-2, 1 failed / 15 passed); reverted.
+
