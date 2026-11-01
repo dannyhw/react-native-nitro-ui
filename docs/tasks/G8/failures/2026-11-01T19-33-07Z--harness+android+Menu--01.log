@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-11-01T19:33:07.532Z on code tree `aff4727fdee3` at HEAD `843849a` (branch `task/G8-android-visual-fixes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 19306 ms
+- Load: start 2.05, end 2.20, median 2.20, max 2.30
+- Device: android / device `emulator-5570` / lease `G8-6ih23`
+- Full log: `task/G8-android-visual-fixes/harness+android+Menu-2026-11-01T19-33-07.532Z.log` (<store>/task/G8-android-visual-fixes/harness+android+Menu-2026-11-01T19-33-07.532Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · G7a › gives the list the width its items need, not the trigger’s`
+- `expected 294 to be greater than 294`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G8-android-visual-fixes/harness+android+Menu-2026-11-01T19-33-07.532Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G8-6ih23 (still live)
+  |   G8-6ih23                 G8           android           pair-b
+gate: load
+  |   load1 at the moment of failure: 2.20 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree aff4727fdee3, 9 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.28/2.33 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G8-android-visual-fixes/harness+android+Menu-2026-11-01T19-33-07.532Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · G7a › gives the list the width its items need, not the trigger’s
+
+    expected 294 to be greater than 294
+
+      [0m [90m 1387 |[39m     [90m// that needed nothing but the floor. Either the trigger's width (the shipped bug) or[39m
+       [90m 1388 |[39m     [90m// a hard 112 dp goes red on this line, which is what the line above alone cannot do.[39m
+      [31m[1m>[22m[39m[90m 1389 |[39m     expect(popupWidth)[33m.[39mtoBeGreaterThan(floorPopup)[33m;[39m
+       [90m      |[39m                                       [31m[1m^[22m[39m
+       [90m 1390 |[39m
+       [90m 1391 |[39m     [90m// …and the reason that is not "grow forever": the popup stays inside the 280 dp[39m
+       [90m 1392 |[39m     [90m// ceiling Material caps a row's content at. `<=`, not `<`, because a popup whose[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 17 passed, 18 total
+Snapshots:   0 total
+Time:        18.688 s
+Ran all test suites matching Menu.
+
+
+
+```
