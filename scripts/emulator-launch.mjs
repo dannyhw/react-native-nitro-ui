@@ -211,11 +211,20 @@ export function emulatorSnapshotArgs(mode = 'cold') {
  * form matters only in that the drift test compares the two launchers token by
  * token.
  *
+ * The GPU mode is asked of a *host*, not baked: `check` runs on `ubuntu-latest`
+ * and the pool boots on whatever machine a lease was taken on, and the two
+ * answers differ (see {@link emulatorGpuModeForHost} for why that difference is
+ * a boot that never finishes rather than an error). So a caller — or a test
+ * proving what a hosted runner gets — can name the machine instead of having to
+ * be one.
+ *
  * @param {object} options
  * @param {string} options.avd the AVD name
  * @param {number | string | null} [options.port] console port to claim
  * @param {'reuse' | 'generate' | 'cold'} [options.snapshot]
  * @param {string | null} [options.gpuMode] overrides the env/`HARNESS_GPU_MODE` choice
+ * @param {{env?: NodeJS.ProcessEnv, platform?: string} | null} [options.host]
+ *   the machine to ask for the mode, when `gpuMode` does not settle it
  * @returns {string[]}
  */
 export function emulatorLaunchArgs({
@@ -223,6 +232,7 @@ export function emulatorLaunchArgs({
   port = null,
   snapshot = 'cold',
   gpuMode = null,
+  host = null,
 }) {
   if (typeof avd !== 'string' || avd === '') {
     throw new Error('emulatorLaunchArgs needs an avd name');
@@ -252,7 +262,7 @@ export function emulatorLaunchArgs({
     ...emulatorSnapshotArgs(snapshot),
     '-no-window',
     '-gpu',
-    gpuMode ?? emulatorGpuModeForHost(),
+    gpuMode ?? emulatorGpuModeForHost(host ?? {}),
     '-noaudio',
     '-no-boot-anim',
     '-no-metrics'
