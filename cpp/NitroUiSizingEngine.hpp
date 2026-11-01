@@ -610,14 +610,15 @@ namespace margelo::nitro::nitroui {
       void forgetLocked(int64_t instanceId);
 
       /**
-       * Hold the entry a layout produced for an id the engine has finished, until
-       * a bind claims it or the horizon passes it. Caller holds the lock. See
+       * Hold the entry a layout produced for an id the engine has finished, until a
+       * bind claims it or the window on it closes. Caller holds the lock. See
        * {@link lateFilings_}.
        */
       void stageLateFilingLocked(int64_t instanceId, const LedgerEntry& entry);
       /**
-       * Drop held entries the id horizon has passed. Caller holds the lock, and
-       * `measure` runs it from inside the lock it already holds.
+       * Drop held entries whose window has closed — the ones a bind can no longer
+       * claim. Caller holds the lock; `measure` runs it from inside the lock it already
+       * holds, and `flush` runs it so a churn that stopped laying out is still reclaimed.
        */
       void pruneLateFilingsLocked();
       /**

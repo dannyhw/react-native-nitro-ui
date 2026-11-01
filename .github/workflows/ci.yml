@@ -280,11 +280,40 @@ jobs:
       # anything?" is a real pre-run question.
       - name: Show the emulator configuration this job will boot
         run: |
+          # Bounded, and that is the whole point of the function. `-accel-check` asks a
+          # binary that touches /dev/kvm, and this step exists to describe a machine whose
+          # emulator is misbehaving — so it is exactly the moment the question can go
+          # unanswered forever. Run 41269235234 lost 90 minutes to a diagnostics step that
+          # blocked on a tool, and a preflight that hangs costs the run its evidence *and*
+          # its harness job. `timeout(1)` is the obvious answer and the wrong one here for
+          # the reason `scripts/ci-emulator-diagnostics.mjs` gives: it is not installed
+          # everywhere this repo's tests execute step bodies, and a guard nobody can run is
+          # not a guard. The budget is one knob, overridable so a test can prove the bound
+          # in seconds rather than half a minute.
+          bounded() {
+            local secs=$1; shift
+            "$@" &
+            local pid=$!
+            local waited=0
+            while kill -0 "$pid" 2>/dev/null; do
+              if [ "$waited" -ge "$secs" ]; then
+                echo "bounded: $* gave no answer in ${secs}s" >&2
+                kill -KILL "$pid" 2>/dev/null || true
+                break
+              fi
+              sleep 1
+              waited=$((waited + 1))
+            done
+            # Reap it: a step body that leaves a zombie behind it would trade one mess for
+            # another, and `-e` must not see the kill's exit status as the step's.
+            wait "$pid" 2>/dev/null || true
+          }
+          ACCEL_TIMEOUT="${NITRO_UI_CI_ACCEL_TIMEOUT:-30}"
           AVD_NAME="$(node scripts/ci-avd-name.mjs)"
           echo "avd (from rn-harness.config.mjs): $AVD_NAME"
           echo "nproc: $(nproc)  mem: $(free -g | awk '/^Mem:/{print $2}')GiB  load: $(cut -d' ' -f1-3 /proc/loadavg)"
           echo "kvm: $(ls -l /dev/kvm 2>&1)"
-          "$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | sed 's/^/accel: /'
+          bounded "$ACCEL_TIMEOUT" "$ANDROID_HOME/emulator/emulator" -accel-check 2>&1 | sed 's/^/accel: /'
           echo "--- AVD dir (empty before the run is normal: the harness creates it next step) ---"
           ls -la "$HOME/.android/avd" 2>&1 | sed 's/^/  /'
           echo "--- the GPU mode this repo's rule chooses on this machine ---"
