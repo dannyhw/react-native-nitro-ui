@@ -189,6 +189,39 @@ namespace {
     return count;
   }
 
+  /**
+   * The reclaim runs with nothing else happening.
+   *
+   * `Conformance`'s leak rule renders, unmounts fifty times, and *then* reads the ledger
+   * after it has settled. If reclaiming an abandoned row needed another view to lay out,
+   * the rule would be measuring a state the engine had already given up on, and the
+   * finding would be correct and unfixable from the engine's side. So `flush` runs the
+   * walk even when it has no report to apply — on iOS that is every run-loop turn, idle
+   * included.
+   */
+  void testAFlushWithNothingToApplyStillClosesExpiredMountWindows() {
+    using namespace std::chrono_literals;
+    resetEngine();
+    engine().setFallback("NitroUiSwitch", 52, 48, 0);
+
+    constexpr auto kWindow = std::chrono::nanoseconds(NitroUiSizingEngine::kLateFilingGraceNs);
+    constexpr auto kWaitAfterWindow = kWindow + std::chrono::milliseconds(300) > std::chrono::seconds(5)
+                                          ? std::chrono::seconds(5)
+                                          : kWindow + std::chrono::milliseconds(300);
+
+    for (int64_t cycle = 0; cycle < 10; cycle++) {
+      measure(6500 + cycle, "settled");
+    }
+    checkEquals(engine().stats().ledgerEntries, int64_t{10}, "ten layouts, no mounts");
+
+    std::this_thread::sleep_for(kWaitAfterWindow);
+    // Nothing is pending, and nothing else lays out: this is the quiet the device rule
+    // measures in. It still has to be enough.
+    check(!engine().flush(), "there is genuinely no report to apply");
+    checkEquals(engine().stats().ledgerEntries, int64_t{0}, "and the expired rows are gone anyway");
+    checkEquals(engine().unboundFilingCount(), size_t{0}, "with nothing left waiting for a bind");
+  }
+
   // MARK: - Cases
 
   // MARK: - F8: the late-layout orphan
@@ -1968,6 +2001,7 @@ int main() {
   testABigFirstCommitKeepsEveryCorrection();
   testABindThatArrivesAfterItsWindowStillClaimsItsRowBack();
   testAPickerShapedChurnOfDroppedAndUnboundMountsLeavesNothingBehind();
+  testAFlushWithNothingToApplyStillClosesExpiredMountWindows();
   testExpiredStatesAreSweptWithoutForget();
   testTheSweepStillRunsAfterTheRegistryHasShrunk();
   testInstanceIdsAreMonotonic();
