@@ -29,6 +29,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace margelo::nitro::nitroui {
@@ -383,6 +384,14 @@ namespace margelo::nitro::nitroui {
       size_t lateFilingCount() const;
 
       /**
+       * How many ledger rows are currently waiting for a bind that has not arrived
+       * (see {@link UnboundFiling}). Public for the same reason `lateFilingCount` is:
+       * `ledgerEntries` cannot tell a row that is owed a window from one whose instance
+       * is bound, and a leak test needs to be able to say which table it is looking at.
+       */
+      size_t unboundFilingCount() const;
+
+      /**
        * Adopt a component's declared size as this environment's *provisional*
        * answer for its default configuration (the empty sizing key): the first
        * instance is laid out with it, and the first control that measures either
@@ -441,6 +450,21 @@ namespace margelo::nitro::nitroui {
        */
       static constexpr int64_t kLateFilingGraceNs = 1000000000;
       static constexpr size_t kLateFilingCapacity = 256;
+      /**
+       * How many rows may be waiting for a bind at once (see {@link UnboundFiling}).
+       *
+       * Looser than the held table on purpose, because of what one commit does: a commit
+       * that mounts N views lays all N out on the shadow thread *before* its mount
+       * transaction binds any of them, so a long list's first frame legitimately has N
+       * rows in "filed, not bound yet" at the same moment. Overflow is not fatal — a
+       * demoted row is claimed back by the bind that follows — but it is not free either:
+       * it moves the row into a table whose window is the same one second, so the more
+       * rows this drops, the more of them depend on their bind arriving inside it.
+       * `testABigFirstCommitKeepsEveryCorrection` lays out a commit bigger than this
+       * number, so the number cannot silently become the thing that decides whether a
+       * list's first frame is correct.
+       */
+      static constexpr size_t kUnboundFilingCapacity = 1024;
 
       /// Trace on/off (off by default: `measure` only compares two floats).
       void setTraceEnabled(bool enabled);
@@ -562,6 +586,23 @@ namespace margelo::nitro::nitroui {
        */
       void pruneLateFilingsLocked();
       /**
+       * Close the mount window on ledger rows filed by a layout whose bind never came.
+       * Called from `measure`, like the held table's prune, so a trickle leaks no
+       * longer than one window.
+       */
+      void pruneUnboundFilingsLocked();
+      /**
+       * Note that the row just filed for an unbound id is owed a mount window
+       * (see {@link UnboundFiling}). Called from `measure`, on the lock.
+       */
+      void fileAwaitingBindLocked(int64_t instanceId);
+      /**
+       * Take one row out of `ledger_` and hand it to the held table, where a late bind
+       * can still claim it (see `pruneUnboundFilingsLocked`). Also marks the id
+       * forgotten, so later layouts for it are held rather than filed again.
+       */
+      void demoteUnboundFilingLocked(int64_t instanceId);
+      /**
        * Move a held entry into the ledger, and hand back whether there was one.
        * `registerInstance` calls it for the id it binds — the only proof that a
        * held layout was meant for a live instance. Caller holds the lock.
@@ -647,6 +688,36 @@ namespace margelo::nitro::nitroui {
         int64_t stagedAtNs = 0;
       };
       /**
+       * A ledger row filed by a layout whose mount has not bound yet: the id, and the
+       * moment the row was filed.
+       *
+       * `measure` is the only place a `ledger_` row is created, and it creates one for
+       * any id — including one that is not bound, because layout legitimately runs on
+       * the shadow thread before the mount transaction binds (that ordering is what
+       * `testALayoutBeforeItsBindStillGetsCorrected` guards, and refusing it would
+       * swallow corrections). So a row can be filed for an instance that never arrives:
+       * the commit that laid the node out is dropped, no view is created, and *neither*
+       * of the engine's reclaimers is ever told. `forget` is called from `onDropView`,
+       * and a view that never existed has no drop to call it; `sweepExpiredLocked` walks
+       * `registry_`, and an id that never bound has no row there — worse, its gate is
+       * `registry_` having grown by a stride, so a row that never binds is precisely a
+       * row that cannot move the counter that would ever trigger that walk. That is how
+       * CI 41269235234's `Picker × no-leak-on-drop: 1 ledger entry(ies) survived 50
+       * drops` stayed leaked with `registry` flat, on a tree that already had the
+       * forgotten-id guard.
+       *
+       * So an unbound row is owed a window, and this is the list of who owes it, oldest
+       * filed first. The window is {@link kLateFilingGraceNs}, for the same reasons as
+       * the held table's: what it covers is a commit and not a lifetime, and the two
+       * failure directions are not symmetric — releasing early costs a mounted control
+       * its correction for the rest of its life, letting a row sit costs one ledger
+       * entry.
+       */
+      struct UnboundFiling final {
+        int64_t instanceId = 0;
+        int64_t filedAtNs = 0;
+      };
+      /**
        * Entries that arrived for a finished id, held until a bind claims one or the
        * window on it closes.
        *
@@ -692,6 +763,19 @@ namespace margelo::nitro::nitroui {
        * has slots for.
        */
       std::deque<int64_t> lateFilingQueue_{};
+      /**
+       * Ids whose ledger row was filed by a layout and is still waiting for its bind
+       * (see {@link UnboundFiling}), and the same ids in filed order.
+       *
+       * Same two-piece shape as {@link lateFilings_} and {@link lateFilingQueue_} for
+       * the same reason: the set is the O(1) "is it still owed?" answer that
+       * `registerInstance` clears, and the deque is the reclaim order and the capacity.
+       * A slot whose id has since bound is left behind and dropped by the prune rather
+       * than chased, because removing an arbitrary id from a deque is a scan and a bind
+       * happens on every mounted view.
+       */
+      std::unordered_set<int64_t> waitingForBind_{};
+      std::deque<UnboundFiling> unboundQueue_{};
       /// hash -> instances that last laid out with a size that is not the cache's.
       std::unordered_map<uint64_t, std::vector<int64_t>> needsCorrection_;
       std::unordered_map<int64_t, BoundInstance> registry_;
