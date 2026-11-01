@@ -278,5 +278,9 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toStdString();
   }
+  void JHybridNitroUiMenuSpec::nuiTestMenuProbe() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestMenuProbe");
+    method(_javaPart);
+  }
 
 } // namespace margelo::nitro::nitroui

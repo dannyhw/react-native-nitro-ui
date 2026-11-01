@@ -94,6 +94,7 @@ namespace margelo::nitro::nitroui {
       virtual NitroUiMenuSize measureContent() = 0;
       virtual void nuiTestSelectRow(const std::string& id) = 0;
       virtual std::string nuiTestMenuReport() = 0;
+      virtual void nuiTestMenuProbe() = 0;
 
     protected:
       // Hybrid Setup

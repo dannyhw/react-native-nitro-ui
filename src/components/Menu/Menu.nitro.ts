@@ -211,7 +211,7 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * side that renders them measured them. One line:
    *
    * ```
-   * expanded=<0|1|-1>;live=<n|-1>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n|-1>
+   * expanded=<0|1|-1>;live=<n|-1>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n|-1>;drawn=<tree|-1>
    * ```
    *
    * `expanded` is the model's own flag. `live` is how many menus this **process**
@@ -219,18 +219,49 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * number answers is "did a popup outlive the view that opened it?", and a mount
    * dropped mid-menu has nothing left to ask: the next mount reads the leak.
    * `anchor`/`menu` are screen pixel rects as the composing side measured them, and
-   * `rows` is how many rows the menu has. `-1` means "this platform cannot
-   * measure that".
+   * `rows` is how many rows the menu has. `drawn` is what ``nuiTestMenuProbe`` last
+   * found in the platform's own menu. `-1` means "this platform cannot measure
+   * that".
    *
-   * Android answers with all five. iOS answers `rows` (it builds the menu's
-   * content) and `-1` for the other four: SwiftUI keeps a `Menu`'s open state and
-   * its window to itself, so there is no popup here to measure - the same answer
-   * `HybridNitroUiPicker.nuiTestMenuReport` gives, and never a `0` that would read
-   * as "checked".
+   * Android answers with the first five, and `-1` for `drawn`: its `rows` is
+   * already read from the rows the popup composed. iOS answers `rows` from its
+   * model, `drawn` from the probe, and `-1` for the other four: SwiftUI keeps a
+   * `Menu`'s open state and its window to itself, so there is no popup here to
+   * measure - the same answer `HybridNitroUiPicker.nuiTestMenuReport` gives, and
+   * never a `0` that would read as "checked".
+   *
+   * `drawn`'s tree, written in the menu's order with `,` between siblings: a row is
+   * its title, with `!` after it when it is destructive and `~` when it is
+   * disabled; an inline group (a section) is `(<title>:<rows>)`, with an empty
+   * title for an untitled one; a submenu is `{<title>:<rows>}`; anything else is
+   * `?`. Titles are written as they are, so a fixture that reads this keeps `,`,
+   * `:`, `;`, `!`, `~` and brackets out of its titles.
    *
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestMenuReport(): string;
+
+  /**
+   * TEMPORARY, test-only: read the menu the platform itself builds from this
+   * control's rows, for ``nuiTestMenuReport``'s `drawn` field.
+   *
+   * On iOS a SwiftUI `Menu` is drawn by UIKit: SwiftUI turns the content into a
+   * `UIMenu` on the trigger's `UIButton`, and only when the menu is presented, so
+   * that tree - not the model's rows - is what a person sees. The probe opens the
+   * menu with `UIControl.performPrimaryAction()` (iOS 17.4), copies the tree, and
+   * dismisses it again in the same main-thread turn. A Menu with a
+   * `primaryAction`, a disabled one, an OS below 17.4, or a trigger whose button
+   * cannot be found leaves `drawn` at `-1`, because pressing those would act
+   * rather than open, or cannot be done. Runs on the UI thread, so a call from JS
+   * hops there; poll the report for the answer.
+   *
+   * Android has no second renderer to ask - its `rows` already counts the
+   * composed rows - so this is a no-op there and `drawn` stays `-1`.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can open a
+   * SwiftUI `Menu` and read its rows itself.
+   */
+  nuiTestMenuProbe(): void;
 }
 
 /**
