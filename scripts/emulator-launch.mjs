@@ -111,16 +111,81 @@ export function isEmulatorConsolePort(port) {
 }
 
 /**
- * The GPU mode this process should launch with: the override, or `host`.
+ * Environment variables that name a display server the emulator could bind to.
+ *
+ * Read by both the launchers and the harness patch (the list is interpolated into
+ * it), so the two cannot disagree about what "headless" means.
+ */
+export const DISPLAY_SERVER_ENV_VARS = Object.freeze([
+  'DISPLAY',
+  'WAYLAND_DISPLAY',
+]);
+
+/**
+ * The GPU mode a machine can actually honour, from its environment.
+ *
+ * `host` hands the guest to the host's GPU drivers. That is the right answer on
+ * every macOS box this repo gates on, and on a Linux workstation with a display:
+ * it is why the Android harness stopped costing three times iOS (X11). It is the
+ * wrong answer on a headless Linux CI runner, which has no display server for the
+ * emulator to bind a GL context to — and the emulator does not fail fast when it
+ * cannot get one. Both dispatch runs of the harness job ended the same way
+ * (`41230848294`, `41234953779`, F8): `The platform did not become ready within
+ * 900000ms`, the emulator process still alive at job cleanup, on a cold AVD and
+ * on a cached one — so the AVD's state was not the difference, and the launch
+ * arguments were the only thing about this repo's Android run that differs from
+ * upstream's. Upstream ships `swiftshader_indirect`, and its own hosted Android
+ * job (`.github/workflows/e2e-tests.yml`, the same action, an `ubuntu` runner)
+ * boots a fresh AVD in about 40 seconds on it. That string is also what an AVD's
+ * own `hw.gpu.mode` carries, which is why the emulator still accepts it although
+ * `emulator -help-gpu` lists only the newer names.
+ *
+ * So: `host` where there is something to host-render on, upstream's mode where
+ * there is not. macOS is `host` unconditionally — Hypervisor.Framework and the
+ * system's Metal device are always there, and a headless Mac CI box is not a
+ * configuration this repo gates on.
+ *
+ * This replaces the flat `host` default this file had until F8, which is what
+ * made the repo's Android CI run the only one of the two that differed from
+ * upstream's — and the emulator never says why it cannot render, so a boot
+ * timeout was the only symptom. It is the one rule: every launcher here calls it,
+ * the harness patch renders it verbatim (see {@link gpuModeExpression}), and
+ * `scripts/__tests__/emulator-launch.test.js` executes both sides against the
+ * same fixtures.
+ *
+ * @param {object} [host]
+ * @param {NodeJS.ProcessEnv} [host.env] the environment to read
+ * @param {string} [host.platform] `process.platform`
+ * @returns {string} the mode to boot with
+ */
+export function emulatorGpuModeForHost({
+  env = process.env,
+  platform = process.platform,
+} = {}) {
+  const override = String(env[EMULATOR_GPU_ENV] ?? '').trim();
+  if (override !== '') return override;
+  if (platform === 'darwin') return HARNESS_GPU_MODE;
+  const hasDisplayServer = DISPLAY_SERVER_ENV_VARS.some(
+    (name) => String(env[name] ?? '').trim() !== ''
+  );
+  return hasDisplayServer ? HARNESS_GPU_MODE : SOFTWARE_GPU_MODE;
+}
+
+/**
+ * The GPU mode one launcher should use, for every launcher that does *not* run
+ * inside the harness.
+ *
+ * A one-line wrapper, kept because the choice it makes is the thing that broke CI:
+ * the harness patch, the lease pool's boots and `real-input`'s expected command
+ * all read {@link emulatorGpuModeForHost}, so no path can boot a pool device on a
+ * mode the machine cannot honour. Benches are deliberately excluded — see
+ * {@link BENCH_GPU_MODE_NOTE}.
  *
  * @param {NodeJS.ProcessEnv} [env]
  * @returns {string}
  */
 export function emulatorGpuMode(env = process.env) {
-  const override = env[EMULATOR_GPU_ENV];
-  return typeof override === 'string' && override.trim() !== ''
-    ? override.trim()
-    : HARNESS_GPU_MODE;
+  return emulatorGpuModeForHost({ env });
 }
 
 /**
@@ -187,7 +252,7 @@ export function emulatorLaunchArgs({
     ...emulatorSnapshotArgs(snapshot),
     '-no-window',
     '-gpu',
-    gpuMode ?? emulatorGpuMode(),
+    gpuMode ?? emulatorGpuModeForHost(),
     '-noaudio',
     '-no-boot-anim',
     '-no-metrics'
@@ -209,6 +274,31 @@ export function emulatorLaunchCommand(options, emulatorBinary = 'emulator') {
   return [emulatorBinary, '-avd', avd, ...args.slice(1)].join(' ');
 }
 
+/**
+ * The GPU rule as an expression, rendered into the harness patch.
+ *
+ * Both launchers evaluate *this* text: `emulatorGpuModeForHost` below is the
+ * Node-side form, and the drift test executes the installed patched function
+ * against it over the same fixtures. That is the only way one rule can live in
+ * two runtimes.
+ *
+ * @param {string} envExpr how to reach the environment (`process.env`, or a local)
+ * @param {string} platformExpr how to reach `process.platform`
+ * @returns {string}
+ */
+function gpuModeExpression(envExpr, platformExpr) {
+  const vars = DISPLAY_SERVER_ENV_VARS.map((name) => `'${name}'`).join(', ');
+  return [
+    `(function nitroUiGpuMode() {`,
+    `    const override = (${envExpr}['${EMULATOR_GPU_ENV}'] ?? '').trim();`,
+    `    if (override !== '') return override;`,
+    `    if (${platformExpr} === 'darwin') return '${HARNESS_GPU_MODE}';`,
+    `    const displayServer = [${vars}].some((name) => (${envExpr}[name] ?? '').trim() !== '');`,
+    `    return displayServer ? '${HARNESS_GPU_MODE}' : '${SOFTWARE_GPU_MODE}';`,
+    `  })()`,
+  ].join('\n    ');
+}
+
 /* ------------------------- the patch's rendered blocks ---------------------- */
 
 /**
@@ -228,20 +318,27 @@ export function emulatorLaunchCommand(options, emulatorBinary = 'emulator') {
  */
 export function harnessLaunchBlock() {
   return `    // nitro-ui patch: boot on the console port the caller was assigned, on the
-    // GPU this repo's launch configuration names. Several tasks share one
-    // machine, each with its own AVD, its own private adb server and a device
-    // the person owns that must never be used. Without \`-port\` the emulator
-    // takes the lowest free console port, so a leased AVD can land on a serial
-    // another task was told not to touch, and the serial the lease exported
+    // GPU this machine can actually honour. Several tasks share one machine,
+    // each with its own AVD, its own private adb server and a device the person
+    // owns that must never be used. Without \`-port\` the emulator takes the
+    // lowest free console port, so a leased AVD can land on a serial another
+    // task was told not to touch, and the serial the lease exported
     // (\`emulator-5574\`) is not the one that exists. When EMULATOR_PORT is set
-    // the emulator either gets that port or fails to start - which is the
-    // answer a lease needs; a port that cannot be a console port at all is a
-    // mistake in the environment, and dropping \`-port\` there would boot the AVD
-    // on any free serial, which is the very thing this patch prevents. The GPU
-    // mode is \`host\` rather than upstream's \`swiftshader_indirect\`: software
-    // rendering is most of why the Android harness costs three times iOS. Set
-    // NITRO_UI_EMULATOR_GPU to override for one shell (an A/B run, or a bench
-    // host pinning its baseline's mode).
+    // the emulator either gets that port or fails to start - which is the answer
+    // a lease needs; a port that cannot be a console port at all is a mistake in
+    // the environment, and dropping \`-port\` there would boot the AVD on any free
+    // serial, which is the very thing this patch prevents.
+    //
+    // The GPU mode is the other half of this block, and it is why the repo
+    // patched it at all: upstream's \`swiftshader_indirect\` renders on the CPU,
+    // which is most of why the Android harness cost three times iOS (X11). \`host\`
+    // is the fix on a machine with a GPU and something to draw into - and the
+    // failure mode when it has neither is not an error, it is an emulator that
+    // never finishes booting (F8: both hosted Android runs, 900 s, cache miss and
+    // cache hit). So the rule is machine-aware, and it is one rule: the text
+    // below is rendered from \`scripts/emulator-launch.mjs\`, whose
+    // \`emulatorGpuModeForHost\` is the Node-side form and the local that follows
+    // is its twin.
     // Drop this patch once react-native-harness accepts a port and a GPU mode.
     //
     // nitro-ui: the block below is rendered verbatim by
@@ -258,7 +355,7 @@ export function harnessLaunchBlock() {
         }
         nitroUiPortArgs = ['-port', nitroUiPort];
     }
-    const nitroUiGpu = (process.env.${EMULATOR_GPU_ENV} ?? '').trim() || '${HARNESS_GPU_MODE}';
+    const nitroUiGpu = ${gpuModeExpression('process.env', 'process.platform')};
     return [\`@\${name}\`, ...nitroUiPortArgs, ...modeArgs, '-no-window', '-gpu', nitroUiGpu, '-noaudio', '-no-boot-anim', '-no-metrics'];`;
 }
 

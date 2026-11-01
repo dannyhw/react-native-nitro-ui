@@ -31,11 +31,13 @@ import { join } from 'node:path';
 import {
   ACCELERATION_UNUSABLE_PHRASES,
   ACCELERATION_USABLE_PHRASES,
+  DISPLAY_SERVER_ENV_VARS,
   EMULATOR_GPU_ENV,
   HARNESS_ACCEL_CALLER_BEFORE,
   HARNESS_GPU_MODE,
   SOFTWARE_GPU_MODE,
   accelerationUsable,
+  emulatorGpuModeForHost,
   emulatorLaunchArgs,
   harnessAccelBlock,
   harnessAccelCallerLines,
@@ -85,7 +87,7 @@ function addedTextFrom(patchText) {
  *
  * @returns {{getEmulatorStartupArgs: Function, isAccelerationUsable: Function}}
  */
-function loadInstalledModule() {
+function loadInstalledModule(env = process.env, platform = process.platform) {
   const source = readFileSync(INSTALLED, 'utf8')
     .split('\n')
     .filter((line) => !/^import\s/.test(line))
@@ -95,6 +97,9 @@ function loadInstalledModule() {
   // The one place in this repo that evaluates a string, and it is a test reading the *installed*
   // file: `import()` is unavailable under jest's CJS transform (node_modules is deliberately
   // untransformed), and a copy of the module would test the copy rather than the patch.
+  // `process` is the caller's rather than the real one, because the GPU rule reads it: a test
+  // that could only ask about *this* machine could not prove what the patch does on a CI runner
+  // it has never been on.
   // eslint-disable-next-line no-new-func
   const factory = new Function(
     'process',
@@ -108,7 +113,7 @@ function loadInstalledModule() {
   );
   const noop = () => undefined;
   return factory(
-    process,
+    { env, platform },
     () => 4,
     { child: () => ({ debug: noop, warn: noop, info: noop }), warn: noop },
     async () => ({ stdout: '', stderr: '' }),
@@ -228,7 +233,118 @@ describe('the installed harness module agrees with this file', () => {
     expect(source).not.toContain(HARNESS_ACCEL_CALLER_BEFORE);
   });
 
-  maybe('boots a leased AVD on the port and GPU this repo names', () => {
+  maybe('chooses the GPU mode by what the machine has, on both sides', () => {
+    // The rule F8 added, proved on machines this run is not on. The Android harness
+    // job died twice with `The platform did not become ready within 900000ms` and an
+    // emulator still alive at cleanup (runs 41230848294, 41234953779): this repo
+    // boots `-gpu host` where upstream ships software rendering, and a hosted Linux
+    // runner has no display server to bind a GL context to. The emulator does not
+    // fail fast about that, so the only symptom was a boot that never finished.
+    //
+    // Each row is the environment as that machine has it, the mode it must get, and
+    // why. The patch's rendered expression and `emulatorGpuModeForHost` are both
+    // evaluated against every row, so neither half can drift from the other, and the
+    // expected mode is written out rather than derived, so a rule that always said
+    // `host` cannot pass by agreeing with itself.
+    const fixtures = [
+      [
+        'GitHub hosted Linux runner (headless)',
+        { platform: 'linux', env: {} },
+        SOFTWARE_GPU_MODE,
+      ],
+      [
+        'hosted Linux runner with the X server xvfb sets up',
+        { platform: 'linux', env: { DISPLAY: ':99' } },
+        HARNESS_GPU_MODE,
+      ],
+      [
+        'hosted Linux runner on Wayland only',
+        { platform: 'linux', env: { WAYLAND_DISPLAY: 'wayland-0' } },
+        HARNESS_GPU_MODE,
+      ],
+      [
+        'a Linux workstation with a display',
+        {
+          platform: 'linux',
+          env: { DISPLAY: ':0', ANDROID_ADB_SERVER_PORT: '5043' },
+        },
+        HARNESS_GPU_MODE,
+      ],
+      [
+        'this repo’s macOS gate host',
+        { platform: 'darwin', env: {} },
+        HARNESS_GPU_MODE,
+      ],
+      [
+        'a headless macOS box, still host: Hypervisor.Framework and the Metal device are always there',
+        { platform: 'darwin', env: { DISPLAY: '' } },
+        HARNESS_GPU_MODE,
+      ],
+      [
+        'the override wins on any machine, which is how an A/B run is possible',
+        {
+          platform: 'linux',
+          env: { [EMULATOR_GPU_ENV]: SOFTWARE_GPU_MODE, DISPLAY: ':0' },
+        },
+        SOFTWARE_GPU_MODE,
+      ],
+      [
+        'and the override can force host on a headless runner, to reproduce what CI saw',
+        {
+          platform: 'linux',
+          env: { [EMULATOR_GPU_ENV]: HARNESS_GPU_MODE },
+        },
+        HARNESS_GPU_MODE,
+      ],
+    ];
+    for (const [what, host, want] of fixtures) {
+      const env = { EMULATOR_PORT: '5574', ...host.env };
+      expect({
+        machine: what,
+        patched: loadInstalledModule(env, host.platform).getEmulatorStartupArgs(
+          'nitroui_a',
+          'default-boot'
+        ),
+      }).toEqual({
+        machine: what,
+        patched: emulatorLaunchArgs({
+          avd: 'nitroui_a',
+          port: '5574',
+          gpuMode: want,
+        }),
+      });
+      // And the Node-side rule the pool and real-input use agrees with the patch, on
+      // the same fixtures rather than on this machine's own environment.
+      expect({
+        machine: what,
+        pooled: emulatorGpuModeForHost({ env, platform: host.platform }),
+      }).toEqual({ machine: what, pooled: want });
+    }
+  });
+
+  it('renders the GPU rule into the patch as an expression, not a copy', () => {
+    // The patch has to evaluate the rule, not carry a constant: `harnessLaunchBlock`
+    // once hardcoded `host`, which is exactly what made the hosted Android job the
+    // only Android run in the repo that could not boot.
+    const block = harnessLaunchBlock();
+    expect(block).toContain(`'${HARNESS_GPU_MODE}'`);
+    expect(block).toContain(`'${SOFTWARE_GPU_MODE}'`);
+    for (const name of DISPLAY_SERVER_ENV_VARS) {
+      expect(block).toContain(`'${name}'`);
+    }
+    // The old shape: a constant with no branch. If it comes back, the mode is decided
+    // by the file again rather than by the machine.
+    expect(block).not.toMatch(new RegExp(`\\|\\| '${HARNESS_GPU_MODE}'`));
+  });
+
+  it('names the headless case in the block that decides it', () => {
+    // The comment is part of the guard: a reader inside node_modules is the one who
+    // has to know why this differs from upstream, and the symptom (a boot that never
+    // finishes) points at nothing without it.
+    expect(harnessLaunchBlock()).toContain('never finishes booting');
+  });
+
+  it('boots a leased AVD on the port and GPU this repo names', () => {
     const harness = loadInstalledModule();
     const previous = {
       port: process.env.EMULATOR_PORT,
