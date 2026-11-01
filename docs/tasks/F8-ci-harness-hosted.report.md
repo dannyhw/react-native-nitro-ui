@@ -96,8 +96,9 @@ harness forwards client `console.log` only for failing suites locally.
 
 **Lease:** `F8-3lo05` (pair-a, same pair as round 1).
 
-Nine commits on `45280e2`. The **Menu leak is real**: a correction is an `Asynchronous` state
-update, RN re-lays out the revision that carried it, and for a view dropped meanwhile `measure`
+Nine code commits on `45280e2` (plus this report and the ledger export). The **Menu leak is
+real**: a correction is an `Asynchronous` state update, RN re-lays out the revision that carried
+it, and for a view dropped meanwhile `measure`
 re-files a forgotten id — a ledger entry with no registry row, so the sweep never sees it.
 `measure` now answers a finished id with the same size and files nothing per instance (4 KiB
 ring; monotonic ids, no false positives). 286 native checks, ASan clean, patch changeset.

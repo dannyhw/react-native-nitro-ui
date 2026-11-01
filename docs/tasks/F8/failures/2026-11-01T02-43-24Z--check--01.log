@@ -1,0 +1,170 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-01T02:43:24.160Z on code tree `2acd1e05546a` at HEAD `60aca34` (branch `task/F8-ci-harness-hosted`)
+- Command: `bun run check`
+- Result: fail, exit 1, 144382 ms
+- Load: start 2.46, end 4.29, median 3.89, max 5.27
+- Device: none recorded (not a device gate)
+- Full log: `task/F8-ci-harness-hosted/check-2026-11-01T02-43-23.889Z.log` (<store>/task/F8-ci-harness-hosted/check-2026-11-01T02-43-23.889Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `error: script "lint" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 395 — the rest is in the full log above)
+
+```
+  ok    a tie in a negative range counts steps up from the minimum (got -2.0, want -2.0)
+  ok    a tie in a fraction goes up to the next stop (got 0.5, want 0.5)
+  ok    an integer-valued tie is the same either way (got 2.0, want 2.0)
+  ok    0...1 by tenths ends on a step
+  ok    0...1 by 0.3 does not
+  ok    one whole step ends on a step
+  ok    a step past the range does not end on a step
+  ok    ...and has no whole steps
+  ok    a range far shorter than a step is not one step wide
+  ok    step 0 is continuous
+  ok    an empty range is not stepped
+  ok    0...10 step 3: up from the bottom (got 3.0, want 3.0)
+  ok    0...10 step 3: up again (got 6.0, want 6.0)
+  ok    0...10 step 3: up again (got 9.0, want 9.0)
+  ok    0...10 step 3: the last move is to the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: nothing above the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: down from the maximum (got 9.0, want 9.0)
+  ok    0...10 step 3: down again (got 6.0, want 6.0)
+  ok    0...10 step 3: down again (got 3.0, want 3.0)
+  ok    0...10 step 3: down to the bottom (got 0.0, want 0.0)
+  ok    0...10 step 3: nothing below the minimum (got 0.0, want 0.0)
+  ok    a step is always a whole step, whatever it starts from (got 3.0, want 3.0)
+  ok    0...100 step 25: up (got 25.0, want 25.0)
+  ok    0...100 step 25: up from the middle (got 75.0, want 75.0)
+  ok    0...100 step 25: up to the top (got 100.0, want 100.0)
+  ok    0...100 step 25: no overshoot (got 100.0, want 100.0)
+  ok    0...100 step 25: down (got 75.0, want 75.0)
+  ok    0...100 step 25: no undershoot (got 0.0, want 0.0)
+  ok    tenths: up from 0.3 clears the binary fraction (got 0.4, want 0.4)
+  ok    tenths: down from 0.3 (got 0.2, want 0.2)
+  ok    tenths: up to the top (got 1.0, want 1.0)
+  ok    continuous: one twentieth of the range up (got 0.05, want 0.05)
+  ok    continuous: back down to the bottom (got 0.0, want 0.0)
+  ok    continuous: down from the top (got 0.95, want 0.95)
+  ok    continuous: nothing above the top (got 1.0, want 1.0)
+  ok    continuous: nothing below the bottom (got 0.0, want 0.0)
+  ok    an empty range cannot be incremented (got 0.0, want 0.0)
+  ok    an inverted range cannot be incremented (got 5.0, want 5.0)
+  ok    a step past the range has two stops: up (got 1.0, want 1.0)
+  ok    ...and down (got 0.0, want 0.0)
+  ok    ...and nothing past the top (got 1.0, want 1.0)
+  ok    -10...-1 step 3: up (got -7.0, want -7.0)
+  ok    -10...-1 step 3: up to the maximum (got -1.0, want -1.0)
+  ok    -10...-1 step 3: down (got -4.0, want -4.0)
+  ok    -10...-1 step 3: nothing below (got -10.0, want -10.0)
+  ok    a step down from off-grid lands on a stop, not between (got -10.0, want -10.0)
+slider-value.test: PASS
+── sizing.test (C++ / ASan + UBSan)
+sizing.test.cpp
+  286 checks passed
+test:native: PASS
+──────── test:native:android — pass, 0.0s ────────────────────────────────────────
+$ bash scripts/native-tests-android.sh
+test:native:android: no Android SDK (ANDROID_HOME unset and no local.properties) - skipped
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — pass, 1.0s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 10/10 HybridObjects in 0.6s!
+💡  Your code is in <tmp>/nitrogen-check-zD6cmZ/nitrogen/generated
+‼️   Added 298 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: no drift (226 generated files match, 33 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (8 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.3s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — pass, 0.0s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 9 blocks match example/src/readme-examples.tsx
+check: 11 passed, 1 failed, 5 skipped in 144.3s
+check: failed step(s): lint
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/example/__tests__/Conformance.harness.tsx
+  799:3  warning  'deviceLocale' is already declared in the upper scope on line 95 column 10  @typescript-eslint/no-shadow
+
+<repo>/scripts/__tests__/bench-baseline-merge.test.js
+  1113:11  warning  'built' is already declared in the upper scope on line 968 column 9  no-shadow
+
+<repo>/scripts/__tests__/build-speed.test.js
+  251:45  warning  Spaces are hard to count. Use {2}  no-regex-spaces
+
+<repo>/scripts/__tests__/ci-workflows.test.js
+    55:24  warning  [true] is better written in dot notation  dot-notation
+  1365:7   warning  Spaces are hard to count. Use {2}         no-regex-spaces
+
+<repo>/scripts/__tests__/conformance.test.js
+  1266:31  error    'structuredClone' is not defined                                        no-undef
+  1507:11  warning  'harness' is already declared in the upper scope on line 1429 column 9  no-shadow
+
+<repo>/scripts/__tests__/real-input-a11y-ios.test.js
+  385:11  warning  'node' is already declared in the upper scope on line 44 column 10  no-shadow
+  409:11  warning  'node' is already declared in the upper scope on line 44 column 10  no-shadow
+
+<repo>/scripts/__tests__/registry.test.js
+  662:13  warning  'manifests' is already declared in the upper scope on line 441 column 11  no-shadow
+  717:11  warning  'manifests' is already declared in the upper scope on line 441 column 11  no-shadow
+
+<repo>/scripts/harness-suite-timing.mjs
+  25:19  warning  'join' is defined but never used  no-unused-vars
+
+✖ 12 problems (1 error, 11 warnings)
+  0 errors and 3 warnings potentially fixable with the `--fix` option.
+
+error: script "lint" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 144.4 s
+gate: recorded in .gates/task/F8-ci-harness-hosted.jsonl
+
+```
