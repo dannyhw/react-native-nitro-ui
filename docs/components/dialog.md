@@ -91,7 +91,10 @@ confirmation dialog), the Android sheet shows it. `'hidden'` hides it on both.
   Cancel button UIKit (and SwiftUI) put on an action sheet, labelled with UIKit's own
   localised word. Its tap — and a tap outside the sheet, which UIKit routes to it — is a
   dismissal without an action. It is not added while `dismissible` is false. Android adds
-  no row: outside and Back are the sheet's way out.
+  no row: outside and Back are the sheet's way out. Measured by real input on an iOS 27
+  iPhone: UIKit does not *draw* that Cancel — the sheet's buttons were only the app's
+  three actions — but it is in the controller, and the tap outside it is routed to
+  closes the sheet with `onIsPresentedChange(false)` alone.
 
 ## Platform mapping
 
