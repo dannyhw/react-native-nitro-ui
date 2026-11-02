@@ -630,6 +630,15 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 280, height: 56 },
     ios: { width: 72, height: 35 },
   },
+  // `HybridNitroUiChip.swift` (`fallbackSize`) and `HybridNitroUiChip.kt`
+  // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`): a short label's capsule on iOS, and a
+  // Material 3 chip's 48 dp touch target on Android. Chip is a `CONTENT_SIZED_BOX`
+  // control — its width is its label's — so the suite never asks a measured Chip to
+  // equal these.
+  NitroUiChip: {
+    android: { width: 96, height: 48 },
+    ios: { width: 80, height: 28 },
+  },
 });
 
 /**
@@ -685,6 +694,10 @@ export const CONTENT_SIZED_BOX = Object.freeze([
   // `checkContentSizedBox` accepts the claim, and the suite still refuses a fixture that
   // happens to measure exactly the declaration.
   'NitroUiMenu',
+  // A chip is its label plus padding (`docs/components/chip.md` measures "Sized" at 58
+  // and "Measured" at 88 wide on iOS), and on Android a selected filter chip grows by
+  // its check mark, so no measured configuration is any single number. `intrinsic`.
+  'NitroUiChip',
 ]);
 
 /**

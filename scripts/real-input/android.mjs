@@ -91,6 +91,11 @@ const ECHO = {
   pickerGone: 'real-input-drop-gone',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
+  chipValue: 'real-input-chip-value',
+  chipEvents: 'real-input-chip-events',
+  chipRefusedLast: 'real-input-chip-refused-last',
+  chipRefusedEvents: 'real-input-chip-refused-events',
+  chipPresses: 'real-input-chip-presses',
   dialogLog: 'dialog-log',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
@@ -1303,6 +1308,162 @@ const CHECKS = {
       pollMs: DUMP_POLL_MS,
     });
     await t.requireControlOnScreen('Hosted date picker');
+  },
+
+  /**
+   * A real tap toggles a Material 3 FilterChip, a toggle the parent refuses snaps back,
+   * an AssistChip presses, and a disabled chip of either kind takes nothing (G12).
+   * `RealInputTests.testRealInputChip` on the other platform, assertion for assertion.
+   *
+   * The chip's own state is read from the tree as well as from the echo: Compose
+   * publishes a FilterChip's `selected` as `checkable`/`checked` (the same mapping the
+   * Picker's rows reach the dump through), so `nativeChecked` is both the a11y read of
+   * "selected" and the witness that tells a dropped tap from a lost event.
+   *
+   * The refusing chip's oracle is SegmentedControl's: the parent keeps `selected={false}`,
+   * so every tap asks for `true`. A chip that kept the refused selection would ask for
+   * `false` on the second tap.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'chip': async (t) => {
+    const named = (label) => t.requireControl(label);
+    t.log.checkEquals(
+      'the filter chip starts unselected',
+      t.requireEcho(ECHO.chipValue),
+      'off'
+    );
+    t.log.checkEquals(
+      "the filter chip's own node starts not checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 1. On, then off.
+    t.log.checkEquals(
+      'one real tap selects the filter chip (React renders "on")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'on',
+        'the real tap that selects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'on'
+    );
+    t.log.checkEquals(
+      "the selected chip's node says it is checked",
+      t.nativeChecked('Real-input chip'),
+      'on'
+    );
+    t.log.checkEquals(
+      'a second real tap deselects it (React renders "off")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'off',
+        'the real tap that deselects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes',
+      t.requireEcho(ECHO.chipEvents),
+      '2'
+    );
+    t.log.checkEquals(
+      "the deselected chip's node stops saying it is checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 2. The refusing parent: two requests, both for `true`, and the chip's node still
+    //    unchecked after each.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onSelectedChange`,
+        await t.tapUntilValue(
+          () => named('Real-input refusing chip'),
+          ECHO.chipRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true (a chip that kept the refused ` +
+          'selection would ask for false on the second tap)',
+        t.requireEcho(ECHO.chipRefusedLast),
+        'true'
+      );
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused chip snaps back to unchecked after request ${request}`,
+        t.nativeChecked('Real-input refusing chip'),
+        'off'
+      );
+    }
+
+    // 3. The assist chip presses once per tap.
+    t.log.checkEquals(
+      'one real tap on the assist chip reaches onPress once',
+      await t.tapUntilValue(
+        () => named('Real-input assist chip'),
+        ECHO.chipPresses,
+        '1',
+        'the real tap on the assist chip'
+      ),
+      '1'
+    );
+
+    // 4. Neither disabled chip takes a tap. Each is wired to its enabled twin's
+    //    counter, so a stray delivery is a number that moved. Not retried: the claim
+    //    is about a period in which nothing may move.
+    const disabledFilter = named('Real-input disabled chip');
+    const disabledAssist = named('Real-input disabled assist chip');
+    t.log.checkEquals(
+      "the disabled filter chip's node says it is not enabled",
+      disabledFilter.enabled,
+      'false'
+    );
+    t.log.checkEquals(
+      "the disabled assist chip's node says it is not enabled",
+      disabledAssist.enabled,
+      'false'
+    );
+    await t.tapNode(disabledFilter);
+    t.log.checkEquals(
+      'a real tap on the disabled filter chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipEvents,
+        '2',
+        'a tap on the disabled filter chip to be refused'
+      ),
+      '2'
+    );
+    await t.tapNode(disabledAssist);
+    t.log.checkEquals(
+      'a real tap on the disabled assist chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipPresses,
+        '1',
+        'a tap on the disabled assist chip to be refused'
+      ),
+      '1'
+    );
+
+    // 5. The barrier: the enabled twin, tapped the same way, still presses.
+    t.log.checkEquals(
+      'the enabled assist chip still presses after the refused taps',
+      await t.tapUntilValue(
+        () => named('Real-input assist chip'),
+        ECHO.chipPresses,
+        '2',
+        'the barrier tap on the assist chip'
+      ),
+      '2'
+    );
   },
 
   /**
@@ -3178,6 +3339,7 @@ class DeviceHarness {
       datepicker: 'Dates',
       picker: 'Picker',
       menu: 'Menu',
+      chip: 'Chip',
       dialog: 'Dialogs',
       host: 'Host',
     }[screen];
@@ -3189,6 +3351,7 @@ class DeviceHarness {
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
+      chip: ECHO.chipValue,
       dialog: ECHO.dialogLog,
       host: ECHO.hostValue,
     }[screen];
