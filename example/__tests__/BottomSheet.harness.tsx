@@ -707,7 +707,10 @@ describe('BottomSheet', () => {
  * tests (react-native-harness 1.6 has one timeout for every test).
  */
 describe('BottomSheet · presenting over a sheet that is still arriving', () => {
-  let rounds = 0;
+  afterEach(async () => {
+    reset();
+    await sleep(700);
+  });
 
   /** Both sheets up: each holds its content, and the process counts two windows. */
   const upWithTwo = (report: Report) =>
@@ -718,70 +721,46 @@ describe('BottomSheet · presenting over a sheet that is still arriving', () => 
       ? report.onScreen === '1' && report.inSheet === '1'
       : report.sheetValue !== 'none' && report.sheetValue !== 'Hidden');
 
-  function Pair() {
-    const [open, setOpen] = useState(false);
-    setters.set('pair', setOpen);
-    return (
+  it('presents every time, round after round, on one mount', async () => {
+    await render(
       <>
-        <Stage testId="under" />
-        <Stage testId="over" />
-        <PairDriver open={open} />
+        <Stage testId="under" base={120} />
+        <Stage testId="over" base={160} />
       </>
     );
-  }
-  /** Opens both in one commit, the way an app opening two at once would. */
-  function PairDriver({ open }: { open: boolean }) {
-    useEffect(() => {
-      setters.get('under')?.(open);
-      setters.get('over')?.(open);
-    }, [open]);
-    return null;
-  }
-
-  for (const part of [1, 2]) {
-    it(`presents every time, round after round (part ${part} of 2)`, async () => {
-      if (part === 1) {
-        await render(<Pair />);
-        await waitForHandle('under');
-        await waitForHandle('over');
-      }
-      for (let i = 0; i < 6; i += 1) {
-        eventLog.length = 0;
-        setters.get('pair')?.(true);
-        await waitForReport(
-          'under',
-          upWithTwo,
-          `round ${rounds + 1}: the first up`
-        );
-        await waitForReport(
-          'over',
-          upWithTwo,
-          `round ${rounds + 1}: the second up over it`
-        );
-        // The top one goes first: closing a sheet under another is a different case.
-        setters.get('over')?.(false);
-        await waitForEvent('over:dismiss');
-        setters.get('under')?.(false);
-        await waitForEvent('under:dismiss');
-        setters.get('pair')?.(false);
-        await waitForReport(
-          'under',
-          (r) => r.live === '0',
-          `round ${rounds + 1}: closed`
-        );
-        rounds += 1;
-      }
-      if (part === 2) {
-        const over = reportOf('over');
-        if (IOS) {
-          // The run went past the budget a mount used to have (60), on this mount.
-          expect(num(over, 'presentWaitsTotal')).toBeGreaterThan(60);
-        }
-        console.log(`busy-chain rounds=${rounds} report=${over.raw}`);
-        reset();
-      }
-    });
-  }
+    await waitForHandle('under');
+    await waitForHandle('over');
+    const rounds = IOS ? 9 : 4;
+    for (let round = 1; round <= rounds; round += 1) {
+      // Both in one commit, as an app opening two at once would: React batches the
+      // two writes, and the second sheet's present meets the first one arriving.
+      setters.get('under')?.(true);
+      setters.get('over')?.(true);
+      await waitForReport(
+        'over',
+        upWithTwo,
+        `round ${round}: the second up over the first`
+      );
+      // The top one goes first: closing a sheet under another is a different case.
+      setters.get('over')?.(false);
+      await waitForReport(
+        'over',
+        (r) => r.live === '1',
+        `round ${round}: the second gone`
+      );
+      setters.get('under')?.(false);
+      await waitForReport(
+        'under',
+        (r) => r.live === '0',
+        `round ${round}: both gone`
+      );
+    }
+    if (IOS) {
+      const over = await waitForReport('over', (r) => r.raw !== '', 'a report');
+      // The run went past the 60 waits a mount used to get in all, on this one mount.
+      expect(num(over, 'presentWaitsTotal')).toBeGreaterThan(60);
+    }
+  });
 });
 
 /**

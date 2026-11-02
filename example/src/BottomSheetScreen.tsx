@@ -8,6 +8,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   useColorScheme,
   View,
 } from 'react-native';
@@ -79,6 +80,8 @@ export default function BottomSheetScreen() {
   const [fitOpen, setFitOpen] = useState(false);
   const [extra, setExtra] = useState(0);
   const [presses, setPresses] = useState(0);
+  const [inputIn, setInputIn] = useState(0);
+  const [inputOut, setInputOut] = useState(0);
   const [twoOpen, setTwoOpen] = useState(false);
   const [fractionOpen, setFractionOpen] = useState(false);
   const [stickyOpen, setStickyOpen] = useState(false);
@@ -142,6 +145,24 @@ export default function BottomSheetScreen() {
             </Pressable>
             <Text testID="sheet-presses" style={{ color: ink.ink }}>
               {`Pressed ${presses} times`}
+            </Text>
+            {/* A TextInput disallows its parents' interception from every touch-down
+                (React Native's `ReactEditText`), so a tap's UP reaches JS only if the
+                sheet's root keeps intercepting regardless - real input taps it and
+                reads both halves of the press. No soft keyboard: the check is about
+                the touch, not the IME. */}
+            <TextInput
+              testID="sheet-input"
+              accessibilityLabel="Notes"
+              multiline
+              showSoftInputOnFocus={false}
+              defaultValue="Notes"
+              onPressIn={() => setInputIn((count) => count + 1)}
+              onPressOut={() => setInputOut((count) => count + 1)}
+              style={[styles.input, { color: ink.ink, borderColor: ink.button }]}
+            />
+            <Text testID="sheet-input-touches" style={{ color: ink.ink }}>
+              {`Input touches: in ${inputIn} out ${inputOut}`}
             </Text>
             {/* A horizontal list: dragging it disallows its parents' interception for
                 that gesture, which must not cost JS the gesture's end (real input
@@ -348,6 +369,7 @@ const styles = StyleSheet.create({
   value: { fontSize: 13, fontWeight: '600' },
   row: { padding: 14, borderRadius: 10 },
   chips: { gap: 8 },
+  input: { borderWidth: 1, borderRadius: 10, padding: 10, height: 56 },
   chip: { width: 110, padding: 12, borderRadius: 10 },
   opener: {
     alignSelf: 'flex-start',
