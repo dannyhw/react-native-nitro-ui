@@ -201,12 +201,11 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
   /// The size to lay a Chip out with before anything has been measured, in points.
   ///
   /// One number for every configuration, for the reason Button's is (the engine
-  /// keys fallbacks by component alone): the middle of the measured table in
-  /// `docs/components/chip.md` rather than any one chip, rounded *up*, because a
-  /// fallback smaller than the control makes SwiftUI paint outside its box.
-  /// Measured on iOS 27 (iPhone 17 simulator): a filter chip labelled "Vegan" is
-  /// 62.7 x 28.0 pt and "Gluten-free" is 97.3 x 28.0; the height is the part that
-  /// matters, and `.small` is 28 pt at every label.
+  /// keys fallbacks by component alone): inside the measured table in
+  /// `docs/components/chip.md` rather than any one chip. Measured on iOS 27
+  /// (iPhone 17 simulator): "Sized" is 58 x 28 pt, "Re-keyed" 85.33 x 28 and
+  /// "Measured" 88 x 28. The height is the part that matters, and `.small` is
+  /// 28 pt at every label measured.
   private static let fallbackSize = (width: 80.0, height: 28.0)
 
   private static let declaresFallback: Bool = {
