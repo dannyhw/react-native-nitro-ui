@@ -85,6 +85,9 @@
 > `DatePicker` fits 320 dp (40 dp touch targets only below 360 dp, height unchanged at 512 dp). iOS gates ran first on
 > maintainer-mac-1 (V3, V3b), and then all five merge gates ran here after the host restart, which fixed the simulators'
 > `DataMigrationFailed` boots. Two patch changesets are pending.
+> **X16 merged (2026-11-02, `f2a6f2c`, PR #20):** tooling sweep 2. Tests scrub the lease env; `acquire --exclusive --boot` needs
+> `--platform` and an explicit flag; `--help` probes record nothing; `real-input:ios` re-reads a11y boxes until two agree.
+> All five merge gates ran here. Five small follow-ups from its re-review are in FOLLOWUPS.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
