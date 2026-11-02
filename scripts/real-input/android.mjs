@@ -1628,8 +1628,31 @@ const CHECKS = {
       });
       t.waitForOption(witness, description);
     };
-    const enabledOf = (text) =>
-      t.dump().find((node) => node.text === text)?.enabled;
+    // The node a person acts on is not the label's own: measured on this screen, each
+    // action is a clickable `View` whose child `TextView` carries the text, and that
+    // child reads `enabled="true"` whatever the action is (a disabled one's `View` reads
+    // `enabled="false" focusable="false"`). So this reads the innermost clickable node
+    // that contains the label's centre - the one TalkBack stops on and a tap lands on.
+    const actionNodeOf = (text) => {
+      const nodes = t.dump();
+      const label = nodes.find((node) => node.text === text);
+      if (label == null) return undefined;
+      const { cx, cy } = label.bounds;
+      return nodes
+        .filter(
+          (node) =>
+            node.clickable === 'true' &&
+            node.bounds.x1 <= cx &&
+            cx <= node.bounds.x2 &&
+            node.bounds.y1 <= cy &&
+            cy <= node.bounds.y2
+        )
+        .sort(
+          (a, b) =>
+            a.bounds.width * a.bounds.height - b.bounds.width * b.bounds.height
+        )[0];
+    };
+    const enabledOf = (text) => actionNodeOf(text)?.enabled;
 
     // 1. Before a touch: nothing reported, nothing up.
     t.log.checkEquals(
