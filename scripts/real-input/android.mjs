@@ -1864,6 +1864,32 @@ const CHECKS = {
       'Pressed 1 times'
     );
 
+    // 2a. A real tap on a TextInput inside the sheet. `ReactEditText` disallows its
+    //     parents' interception on touch-down, so the tap's UP reaches JS only because
+    //     the sheet's root keeps intercepting regardless (RN's `ReactRootView` rule);
+    //     without it JS sees the press go in and never come out.
+    const touches = await t.pressUntil({
+      what: 'the TextInput inside the sheet',
+      waitingFor: "a real tap on the TextInput to reach JS, in and out",
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Input touches: in 0 out 0')() === 0) return;
+        const input = t.nodeByTestId('sheet-input');
+        if (input == null) t.log.abort('no TextInput sheet-input in the sheet');
+        await t.tapNode(input);
+      },
+      reading: () =>
+        t
+          .dump()
+          .find((node) => node.text.startsWith('Input touches:'))?.text ?? '-',
+      raised: (shown) => shown === 'Input touches: in 1 out 1',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      "a real tap on the sheet's TextInput reaches JS as a whole press",
+      touches.shown,
+      'Input touches: in 1 out 1'
+    );
+
     // 2b. A horizontal drag on the list inside the sheet: the ScrollView disallows its
     //     parents' interception for that gesture. The sheet's root must still see the
     //     gesture's end (RN's `ReactRootView` rule), or JS keeps a touch that never
