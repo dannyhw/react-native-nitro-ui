@@ -645,12 +645,20 @@ describe('BottomSheet', () => {
     setters.get('own-fit')?.(true);
     const up = await waitForUp('own-fit', 'up over the Modal');
     if (IOS) expect(up.ownWindow).toBe('1');
-    await settledLayout('own-fit', (l) => Math.abs(l.height - 240) < 1, 'at 240');
+    await settledLayout(
+      'own-fit',
+      (l) => Math.abs(l.height - 240) < 1,
+      'at 240'
+    );
     await sleep(500);
     const key = IOS ? 'sheetH' : 'contentH';
     const first = reportOf('own-fit');
     rowSetters.get('own-fit')?.(2);
-    await settledLayout('own-fit', (l) => Math.abs(l.height - 400) < 1, 'at 400');
+    await settledLayout(
+      'own-fit',
+      (l) => Math.abs(l.height - 400) < 1,
+      'at 400'
+    );
     await waitForReport(
       'own-fit',
       (r) => Math.abs(num(r, key) - num(first, key) - 160) <= 2,

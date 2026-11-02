@@ -2486,7 +2486,10 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         const presented = dialogReportOf(handle).presented;
         const deadline = Date.now() + 6000;
         let report = dialogReportOf(handle);
-        while (!sheetShows(report, SHEET_SECOND_HEIGHT) && Date.now() < deadline) {
+        while (
+          !sheetShows(report, SHEET_SECOND_HEIGHT) &&
+          Date.now() < deadline
+        ) {
           await sleep(100);
           report = dialogReportOf(handle);
         }
