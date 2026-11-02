@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 const CLI = join(REPO_ROOT, 'scripts', 'lease.mjs');
@@ -273,7 +274,9 @@ describe('the lease owns the device lifecycle', () => {
     spawnSync(process.execPath, [CLI, ...args, '--config', config], {
       encoding: 'utf8',
       env: {
-        ...process.env,
+        // Never the calling shell's lease: an exported `NITRO_UI_LEASE_BOOT=1` turned three of the
+        // "boots nothing" cases red (X17 item 4). A case that wants it passes it in `extraEnv`.
+        ...withoutLeaseEnv(process.env),
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '20',
         // A boot-wait must not sit behind a real three-minute load wait in a unit test either.
@@ -403,6 +406,27 @@ describe('the lease owns the device lifecycle', () => {
     // 58-74 on this box (X11 report item 6), and a cold boot is the whole reason the pool exists.
     expect(log()).toBe('');
     expect(poolDevices()).toEqual([]);
+  });
+
+  it('boots nothing when the shell running the suite has NITRO_UI_LEASE_BOOT=1', () => {
+    // CONTRIBUTING tells an agent to export `NITRO_UI_LEASE_BOOT=1` for its whole shell, and
+    // `check` is run from that shell. The CLI child must see the test's environment rather than the
+    // caller's, or every "boots nothing until asked" case here is really "boots nothing unless the
+    // person running the tests followed the docs" - three of them went red that way (X17 item 4).
+    // Poisoned on `process.env` itself, exactly as a sourced lease does, so this holds in any shell.
+    tools({ stateful: true });
+    const saved = process.env.NITRO_UI_LEASE_BOOT;
+    process.env.NITRO_UI_LEASE_BOOT = '1';
+    try {
+      const acquired = cli(['acquire', '--task', 'T1']);
+      expect(acquired.status).toBe(0);
+      expect(acquired.stderr).toContain('devices not booted');
+      expect(log()).not.toContain('emulator @');
+      expect(log()).not.toContain('simctl boot');
+    } finally {
+      if (saved === undefined) delete process.env.NITRO_UI_LEASE_BOOT;
+      else process.env.NITRO_UI_LEASE_BOOT = saved;
+    }
   });
 
   it('does not reset a pair when the task already held the lease and nothing booted', () => {
