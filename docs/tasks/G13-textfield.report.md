@@ -136,8 +136,8 @@ Conformance, real input, unit:
 - `src/components/TextField/*` (spec, wrapper, host config, manifest, perf test), `src/index.ts`, `src/components/Host/HostChildren.ts`
 - `ios/components/TextField/HybridNitroUiTextField.swift`; `android/…/HybridNitroUiTextField.kt`; registry-generated tables and `nitrogen/generated`
 - `example/__tests__/TextField.harness.tsx`, `Conformance.harness.tsx`; `example/ios/…/RealInputTests.swift`; `example/android/…/NitroUiProbePackage.kt` (`imeInput`)
-- `example/src/TextFieldScreen.tsx`, `stories/TextField.stories.tsx`, `readme-examples.tsx`; `README.md`; `docs/components/text-field.md`
-- `scripts/real-input/{android,a11y,screens}.mjs`, `scripts/conformance-core.mjs`, `scripts/__tests__/*` and `fixtures/a11y/text-field.xml`, `scripts/smoke/App.tsx`
+- `example/src/TextFieldScreen.tsx`, `example/src/stories/TextField.stories.tsx`, `example/src/readme-examples.tsx`; `README.md`; `docs/components/text-field.md`
+- `scripts/real-input/{android,a11y,screens}.mjs`, `scripts/conformance-core.mjs`, `scripts/__tests__/*` and `scripts/__tests__/fixtures/a11y/text-field.xml`, `scripts/smoke/App.tsx`
 - `bench/src/implementations/*` (TextField vs `TextInput` and `@expo/ui`), `bench/baselines/renders.json`; `etc/*`; `.changeset/text-field.md`
 
 ## Follow-ups
