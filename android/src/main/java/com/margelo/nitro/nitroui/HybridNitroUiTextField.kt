@@ -826,5 +826,11 @@ class HybridNitroUiTextField(
   /** Android has no public API that opens a composition outside an IME: a no-op. */
   override fun nuiTestSetMarkedText(text: String) {}
 
+  /** iOS-only, like [nuiTestSetMarkedText]: the example app's probe drives Android's IME. */
+  override fun nuiTestCancelMarkedText() {}
+
+  /** iOS-only: UIKit's `paste(_:)` is the path it exercises. */
+  override fun nuiTestPaste(text: String, at: Double) {}
+
   override fun nuiTestLifetimeReport(): String = host.lifetimeReport()
 }

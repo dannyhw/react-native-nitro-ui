@@ -596,6 +596,28 @@ open class HybridNitroUiTextFieldSpec_cxx {
   }
   
   @inline(__always)
+  public final func nuiTestCancelMarkedText() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.nuiTestCancelMarkedText()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func nuiTestPaste(text: std.string, at: Double) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.nuiTestPaste(text: String(text), at: at)
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
   public final func nuiTestLifetimeReport() -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.nuiTestLifetimeReport()

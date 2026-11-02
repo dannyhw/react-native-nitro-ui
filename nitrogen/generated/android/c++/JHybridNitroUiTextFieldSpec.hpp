@@ -98,6 +98,8 @@ namespace margelo::nitro::nitroui {
     void blur() override;
     NitroUiTextFieldTestState nuiTestState() override;
     void nuiTestSetMarkedText(const std::string& text) override;
+    void nuiTestCancelMarkedText() override;
+    void nuiTestPaste(const std::string& text, double at) override;
     std::string nuiTestLifetimeReport() override;
 
   private:

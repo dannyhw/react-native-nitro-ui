@@ -59,6 +59,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("blur", &HybridNitroUiTextFieldSpec::blur);
       prototype.registerHybridMethod("nuiTestState", &HybridNitroUiTextFieldSpec::nuiTestState);
       prototype.registerHybridMethod("nuiTestSetMarkedText", &HybridNitroUiTextFieldSpec::nuiTestSetMarkedText);
+      prototype.registerHybridMethod("nuiTestCancelMarkedText", &HybridNitroUiTextFieldSpec::nuiTestCancelMarkedText);
+      prototype.registerHybridMethod("nuiTestPaste", &HybridNitroUiTextFieldSpec::nuiTestPaste);
       prototype.registerHybridMethod("nuiTestLifetimeReport", &HybridNitroUiTextFieldSpec::nuiTestLifetimeReport);
     });
   }

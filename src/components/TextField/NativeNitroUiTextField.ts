@@ -47,6 +47,10 @@ export interface NitroUiTextFieldHandle {
   nuiTestState(): NitroUiTextFieldTestState;
   /** See `NitroUiTextFieldMethods.nuiTestSetMarkedText`. */
   nuiTestSetMarkedText(text: string): void;
+  /** See `NitroUiTextFieldMethods.nuiTestCancelMarkedText`. */
+  nuiTestCancelMarkedText(): void;
+  /** See `NitroUiTextFieldMethods.nuiTestPaste`. */
+  nuiTestPaste(text: string, at: number): void;
   /** See `NitroUiTextFieldMethods.nuiTestLifetimeReport`. */
   nuiTestLifetimeReport(): string;
 }
