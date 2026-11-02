@@ -98,6 +98,7 @@ import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
   AlertDialog,
   Button,
+  Chip,
   DatePicker,
   Menu,
   Picker,
@@ -205,6 +206,16 @@ const SHARED = {
         "width": 72,
         "height": 35
       }
+    },
+    "NitroUiChip": {
+      "android": {
+        "width": 96,
+        "height": 48
+      },
+      "ios": {
+        "width": 80,
+        "height": 28
+      }
     }
   },
   "poisonSizes": {
@@ -226,7 +237,8 @@ const SHARED = {
     "NitroUiProgress": "height",
     "NitroUiSegmentedControl": "both",
     "NitroUiDatePicker": "both",
-    "NitroUiPicker": "both"
+    "NitroUiPicker": "both",
+    "NitroUiChip": "none"
   },
   "exemptions": [
     {
@@ -330,6 +342,17 @@ type Handle = {
   readonly presented?: boolean;
   /** Dialog's test hook: dismiss as a user would, through the real path. */
   nuiTestDismiss?(): void;
+  /**
+   * Chip's label, the props half of its recycle rule. `null` is Picker's: its handle
+   * carries an optional field label of the same name.
+   */
+  readonly label?: string | null;
+  /**
+   * Chip's press, through the tap's own path (`ChipModel.press()`): the iOS harness's
+   * HID-less touch reaches no SwiftUI button gesture, so this is how a probe presses a
+   * Chip there (`Chip.harness.tsx` measured it).
+   */
+  nuiTestPress?(): void;
 };
 
 /**
@@ -437,6 +460,25 @@ async function eventsSettled(from: number, wanted: string): Promise<string> {
 /** Press a control at its own box. */
 const pressControl = async (testId: string): Promise<void> => {
   await userEvent.press(await screen.findByTestId(testId));
+};
+
+/**
+ * Press a Chip: a real harness tap on Android, the control's own press path on iOS, where
+ * the harness's HID-less touch reaches neither chip variant (measured in G12 -
+ * `Chip.harness.tsx`'s `pressChip` says why). Both go through `press()`, which is where
+ * the residue a reset has to clear is written.
+ */
+const pressChip = async (testId: string): Promise<void> => {
+  if (PLATFORM === 'ios') {
+    await screen.findByTestId(testId);
+    const handle = handleFor(testId);
+    if (handle.nuiTestPress == null) {
+      throw new Error(`"${testId}" is not a Chip - it has no nuiTestPress()`);
+    }
+    handle.nuiTestPress();
+    return;
+  }
+  await pressControl(testId);
 };
 
 /**
@@ -2396,6 +2438,137 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: 'the title its window shows',
             expected: DIALOG_TITLE_SECOND,
             actual: report.title,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'Chip',
+    component: 'NitroUiChip',
+    label: 'Conformance chip',
+    testId: 'conformance-chip',
+    owner: (second) => (
+      <Chip
+        label={second ? 'Second owner chip' : 'Conformance chip label'}
+        testID="conformance-chip"
+        accessibilityLabel={
+          second ? `Conformance chip, ${SECOND}` : 'Conformance chip'
+        }
+        hybridRef={captureFor('conformance-chip')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Chip
+        label={variant ? 'Leak chip B' : 'Leak chip A'}
+        variant={variant ? 'assist' : 'filter'}
+        testID={testId}
+        accessibilityLabel={`Leak chip ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'label',
+        expected: second ? 'Second owner chip' : 'Conformance chip label',
+        actual: handle.label,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second ? `Conformance chip, ${SECOND}` : 'Conformance chip',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): an uncontrolled chip
+    // that started selected and was pressed off, then a second owner whose own default is
+    // selected. The residue (`false`) is what `prepareForRecycle` writes, so the display
+    // alone cannot be the evidence; the first press after the second mount is. A chip whose
+    // `didApplyDefault` was re-armed shows selected and reports `false`; one that kept
+    // the flag shows the previous owner's unselected and reports `true`.
+    probe: {
+      leaveBehind:
+        'an uncontrolled filter chip that started selected and was pressed off, then a ' +
+        'second owner whose own default is selected - which the control can only be ' +
+        'showing because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      act: async () => {
+        await pressChip('conformance-chip');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-chip:false'])
+        );
+      },
+      second: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressChip('conformance-chip');
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-chip:false',
+            actual: await eventsSettled(from, 'conformance-chip:false'),
+          },
+        ];
+      },
+    },
+    // The handshake's counters: a press on an uncontrolled chip, then a second owner
+    // controlled at `false`. Counters left over make the write look stale, the chip keeps
+    // the previous owner's `true`, and its first press reports `false`.
+    controlledProbe: {
+      leaveBehind:
+        'a press on an uncontrolled filter chip, then a second owner that is ' +
+        '*controlled* at `false` - the only shape that reads the handshake’s counters, ' +
+        'which is what `model.state = NitroUiControlledValue(…)` uniquely owns',
+      first: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected={false}
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      act: async () => {
+        await pressChip('conformance-chip');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-chip:true'])
+        );
+      },
+      second: () => (
+        <Chip
+          label="Conformance chip label"
+          selected={false}
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressChip('conformance-chip');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-chip:true',
+            actual: await eventsSettled(from, 'conformance-chip:true'),
           },
         ];
       },

@@ -173,10 +173,11 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the nine controls today', () => {
+  it('is complete for the ten controls today', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
       'Button',
+      'Chip',
       'DatePicker',
       'Dialog',
       'Menu',
@@ -1904,6 +1905,7 @@ describe('the a11y sweep, against a fake device', () => {
         'datepicker',
         'picker',
         'menu',
+        'chip',
         'host',
       ]);
     });

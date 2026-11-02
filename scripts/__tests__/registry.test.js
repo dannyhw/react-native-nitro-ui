@@ -676,8 +676,22 @@ describe('the generated tables cover what they claim', () => {
       [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
         (m) => m[1]
       );
+    // The refused side, read the same way. G12's Chip is the first control a Host
+    // refuses since H2b, so the imports are the two tables together, not the
+    // allowlist alone.
+    const refused = (text) => {
+      const start = text.indexOf('export const UNHOSTABLE_CONTROLS');
+      return [
+        ...text
+          .slice(start, text.indexOf(';', start))
+          .matchAll(/\[([A-Z]\w*), '[A-Z]\w*'\]/g),
+      ].map((m) => m[1]);
+    };
     const before = readRepo('src/components/Host/HostChildren.ts');
-    expect(imports(before)).toEqual(rows(before));
+    expect(refused(before)).toEqual(['Chip']);
+    expect([...imports(before)].sort()).toEqual(
+      [...rows(before), ...refused(before)].sort()
+    );
 
     const flipped = repoManifests().map((m) =>
       m.name === 'Switch' ? { ...m, hostable: false } : m

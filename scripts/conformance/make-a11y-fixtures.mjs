@@ -31,6 +31,7 @@ const TAB_LABEL = {
   datepicker: 'Dates',
   picker: 'Picker',
   menu: 'Menu',
+  chip: 'Chip',
   host: 'Host',
 };
 
