@@ -9,17 +9,16 @@
 handshake, detents in SwiftUI's names (`'fit'` default, `'medium'`, `'large'`, `{ height }`,
 `{ fraction }`; index reported via `onDetentChange`, not controlled), `onDismiss` once the
 sheet has gone, `dismissible`, `showsGrabber`, `cornerRadius`, `containerColor`,
-`accessibilityLabel` (names the sheet, not a box), `testID` (`<testID>-sheet`). Content is
-mounted only while presented. Not hostable; `sizing: null`. No `style` prop (the node is the
-content box; a background on it would paint the app window) — deviation from C1's `ViewProps`.
+`accessibilityLabel` (names the sheet), `testID` (`<testID>-sheet`). Content mounts only
+while presented; not hostable; `sizing: null`. No `style` prop (the node is the content box,
+so a background would paint the app window) — a deviation from C1's `ViewProps`.
 
 **Decision a reviewer must read — S2's iOS mount premise was wrong.** In RN 0.88
 `RCTViewComponentView` mounts children into `currentContainerView`, which is the component
 view itself, *beside* the Hybrid View's `contentView`: S2's children never moved into the
-sheet (its witnesses read the container, not the children). `patch-nitrogen.mjs` gains a
-content-children step (C2's original `.mm` plan) that mounts them into the content view;
-hard-fails on a missing anchor or a generated override. Real input now presses a `Pressable`
-inside the sheet with a real finger on both platforms.
+sheet (its witnesses read the container). `patch-nitrogen.mjs` gains a content-children
+step (C2's original `.mm` plan) mounting them into the content view, hard-failing on a
+missing anchor. Real input now presses a `Pressable` inside the sheet on both platforms.
 
 **iOS** presents in the screen's chain, or from G11's own window when the top presented
 controller is an RN `Modal` host (D35); the unasked-exit witness is
@@ -32,10 +31,9 @@ the mount transaction's layout. **Android** registers a hand-written `ViewGroupM
 a copy of RN's `Modal` root inside Material 3's `ModalBottomSheet`. Back from expanded steps
 to `medium` first (Material's behaviour, documented).
 
-**Isolation:** `__tests__/isolated/` is left out of the shared harness run
-(`jest.harness.config.mjs`); `NITRO_UI_HARNESS_ISOLATED=1` runs it alone. The stranded-Modal
-case lives there; with D35's rule removed it reproduces the strand and the next test in that
-instance cannot present.
+**Isolation:** `__tests__/isolated/` is left out of the shared harness run;
+`NITRO_UI_HARNESS_ISOLATED=1` runs it alone. The stranded-Modal case lives there; with D35's
+rule removed it reproduces the strand.
 
 **react-native-screens 4.30.1** (commit `edb090b`, reverted `9174970`): iOS — in-chain from a
 native-stack screen, a push closes and reports, a `formSheet` closing under the sheet leaves
