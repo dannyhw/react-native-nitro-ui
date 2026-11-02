@@ -62,7 +62,9 @@ const USAGE =
   'usage: node scripts/lease.mjs acquire --task <id> [--platform ios|android|both]\n' +
   '                                          [--exclusive] [--wait-minutes N]\n' +
   '                                          [--ttl-minutes N] [--out <file>] [--config <file>] [--json]\n' +
-  '                                          [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
+  '                                          [--boot] [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
+  '         (--exclusive --boot needs --platform ios|android|both: an exclusive lease boots only\n' +
+  '          the half it names, and never for NITRO_UI_LEASE_BOOT alone)\n' +
   '       node scripts/lease.mjs renew <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]   (the only reaper)\n' +
