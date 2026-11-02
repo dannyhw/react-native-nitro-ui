@@ -14,6 +14,7 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiMenuManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
 
 /**
  * The React package of `react-native-nitro-ui`.
@@ -53,6 +54,7 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiDatePickerManager(),
     HybridNitroUiPickerManager(),
     HybridNitroUiMenuManager(),
+    HybridNitroUiDialogManager(),
     // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the
     // `IViewGroupManager` half. See `NitroUiHostViewManager`.

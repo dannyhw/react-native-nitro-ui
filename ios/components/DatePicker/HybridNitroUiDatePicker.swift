@@ -828,39 +828,22 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
 
   // MARK: - Live presentations
 
-  /// How many presentations this process has open right now.
+  /// How many DatePicker presentations this process has open right now.
   ///
   /// Process-wide rather than per mount, because the property it guards is "no
   /// presentation outlives the mount that opened it" - and a mount that has been
-  /// dropped has nothing left to report. ``countOpened()`` runs in `present`'s
-  /// completion and ``countClosed()`` on each terminal path (UIKit's own dismissal,
-  /// and our `dismissNow`), so the number returns to zero only when the window is
-  /// really gone. `presents nothing after the mount that opened it is gone` reads it
-  /// through a *fresh* mount's `nuiTestStateReport()`, which is the only witness that
-  /// survives the drop.
-  ///
-  /// Locked rather than a plain `static var`: the writes are all on main, but
-  /// ``DatePickerModel/readReport()`` is documented safe from any thread and reads it
-  /// from JS, and JS must never hop to main for it (`core.md` §1.4).
-  private static let countLock = NSLock()
-  private static var count = 0
+  /// dropped has nothing left to report. The count goes up in `present`'s completion
+  /// and down on each terminal path (UIKit's own dismissal, and the helper's
+  /// programmatic one), so the number returns to zero only when the window is really
+  /// gone. `presents nothing after the mount that opened it is gone` reads it through a
+  /// *fresh* mount's `nuiTestStateReport()`, which is the only witness that survives the
+  /// drop. The counter and the lifecycle around it live in ``NitroUiPresentation``,
+  /// shared with the dialogs since G11; this control keeps a counter of its own, so a
+  /// dialog can never make a DatePicker assertion read wrong.
+  static let live = NitroUiPresentationCounter()
 
   static var livePresentations: Int {
-    countLock.lock()
-    defer { countLock.unlock() }
-    return count
-  }
-
-  private static func countOpened() {
-    countLock.lock()
-    count += 1
-    countLock.unlock()
-  }
-
-  private static func countClosed() {
-    countLock.lock()
-    count -= 1
-    countLock.unlock()
+    live.value
   }
 
   private let model: DatePickerModel
@@ -871,16 +854,9 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
   /// because it reads a view controller, which is what the closure is for.
   private let presenterProvider: @MainActor () -> UIViewController?
   private var controller: UIHostingController<DatePickerPopoverContent>?
-  /// Whether `present()`'s entry transition is still running.
-  private var isPresenting = false
-  /// A dismissal that arrived during that transition, carried to its completion.
-  private var dismissWhenPresented = false
-  /// Whether this instance's presentation is counted in
-  /// ``livePresentations``. One presentation, one decrement: a programmatic
-  /// ``dismissNow()`` whose completion lands next to a `presentationControllerDidDismiss`
-  /// from the same teardown must not take the count below zero, or the harness's
-  /// witness would read "nothing presented" while a window is still up.
-  private var countedOpen = false
+  /// When UIKit is asked, how the count moves, and the teardown during the entry
+  /// transition - the part of this class G11 factored out for the dialogs.
+  private let presentation = NitroUiPresentation(counter: NitroUiDatePickerPresentation.live)
 
   init(
     model: DatePickerModel,
@@ -917,7 +893,7 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
       // mount's replacement asking for the same window. Cancelling the pending close
       // is what makes the flag the caller just wrote true; obeying it would leave the
       // new mount claiming an open popover that is on its way out.
-      dismissWhenPresented = false
+      presentation.cancelPendingDismissal()
       return
     }
     guard let anchor, let presenter = presenterProvider() else {
@@ -950,88 +926,21 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
     // the 44 pt target this class's `calendarWidth` exists to guarantee.
     popover.permittedArrowDirections = [.up, .down]
     popover.delegate = self
-    isPresenting = true
-    dismissWhenPresented = false
-    presenter.present(hosted, animated: true) { [weak self] in
-      guard let self else { return }
-      self.isPresenting = false
-      if !self.countedOpen {
-        self.countedOpen = true
-        Self.countOpened()
-      }
-      if self.dismissWhenPresented {
-        self.dismissWhenPresented = false
-        self.dismissNow()
-      }
-    }
+    presentation.present(hosted, from: presenter, animated: true)
   }
 
   /// Close the bubble. Not animated: the callers are recycle and drop, where the
   /// view that owned it is going away in the same turn.
+  ///
+  /// UIKit refuses a dismissal that arrives while the presentation is still animating
+  /// in, and a dropped view does not wait for the animation: the refusal is then not a
+  /// delay but a leak, and the popover goes on covering the app that no longer owns it.
+  /// So ``NitroUiPresentation/dismissForTeardown()`` hides the presentation's container
+  /// at once and carries the real dismissal to the presentation's own completion. (This
+  /// is how the leak showed up: presenting the popover with its platform animation made
+  /// the harness's "dropped while open" check fail.)
   func dismiss() {
-    nitroUiAssertMainThread()
-    MainActor.assumeIsolated {
-      // UIKit refuses a dismissal that arrives while the presentation is still
-      // animating in, and a dropped view does not wait for the animation: the
-      // refusal is then not a delay but a leak, and the popover goes on covering the
-      // app that no longer owns it. So the request is remembered and carried out by
-      // the presentation's own completion, which is the earliest moment UIKit can
-      // honour it. (This is how the leak showed up: presenting the popover with its
-      // platform animation made the harness's "dropped while open" check fail.)
-      if isPresenting {
-        hideImmediately()
-        dismissWhenPresented = true
-        return
-      }
-      dismissNow()
-    }
-  }
-
-  /// Take the bubble out of the app's way without waiting for UIKit's teardown.
-  ///
-  /// A presentation UIKit is still animating in cannot be dismissed - but it can be
-  /// *unplugged*, and that is the difference between a control the app dropped
-  /// costing a fraction of a second and costing a stuck screen. UIKit installs a
-  /// presentation in one full-screen view (measured on iOS 27: the window's child
-  /// `presentationController.containerView`, holding `_UIPopoverDimmingView` at the
-  /// window's size and the `_UIPopoverView` bubble), so hiding that one view takes
-  /// both the calendar *and* its dimming layer out of the draw and out of `hitTest:`
-  /// in the same turn. Without this the dimming view is what the next touch belongs
-  /// to: measured here, a `DatePicker` dropped 140 ms after its field was pressed
-  /// kept swallowing touches for another 500 ms - the length of the entry
-  /// transition - while the app underneath was untouchable under a control it had
-  /// already deleted.
-  ///
-  /// Nothing here is UIKit's teardown: `dismissWhenPresented` still dismisses for
-  /// real at the completion, so UIKit removes its own views and releases the
-  /// presentation controller the way it expects. Hiding may stay set because
-  /// `popoverPresentationController` is rebuilt per presentation (see
-  /// ``presentIsolated()``), so the next bubble arrives with a fresh container.
-  @MainActor
-  private func hideImmediately() {
-    controller?.presentationController?.containerView?.isHidden = true
-  }
-
-  /// The dismissal UIKit can perform right now. Split from ``dismiss()`` so the
-  /// completion above can reach it without re-asking about the transition.
-  @MainActor
-  private func dismissNow() {
-    guard let controller, controller.presentingViewController != nil else {
-      return
-    }
-    // Take the ticket before asking, and hand *that* to the completion: this can be
-    // called for a presentation that was never counted (a `dismiss()` on a control that
-    // never got a presenter), and an unearned decrement would put the harness's witness
-    // at "nothing presented" while a window is still up. The completion deliberately
-    // does not capture `self` - it has to run even when the view that owned the
-    // presentation is already gone, which is the normal case for a drop.
-    let wasCounted = countedOpen
-    countedOpen = false
-    controller.dismiss(animated: false) {
-      if wasCounted {
-        Self.countClosed()
-      }
-    }
+    presentation.dismissForTeardown()
   }
 
   // MARK: - UIPopoverPresentationControllerDelegate
@@ -1052,10 +961,7 @@ final class NitroUiDatePickerPresentation: NSObject, UIPopoverPresentationContro
   /// has to follow - that write is what makes "closed on unmount" (`test 6`) a real
   /// assertion instead of a claim about a state nothing ever reads.
   func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
-    if countedOpen {
-      countedOpen = false
-      Self.countClosed()
-    }
+    presentation.noteClosedByUIKit()
     model.setPresented(false)
   }
 }
