@@ -139,13 +139,8 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
     await sleep(600);
     setters.get('sheet')?.(true);
     const shown = await waitForReport('sheet', up, 'up over the Modal');
-    if (IOS) {
-      // D35: an RN Modal on top means a window of its own, above the alerts.
-      expect(shown.ownWindow).toBe('1');
-      expect(shown.appTop).toContain('ModalHostViewController');
-      expect(Number(shown.windowLevel)).toBeGreaterThan(1000);
-    }
-    // The move that strands a sheet in the Modal's chain.
+    // The move that strands a sheet in the Modal's chain. Asserted first, so a
+    // regression reads as the strand itself, not as a field that predicts it.
     setters.get('modal')?.(false);
     await sleep(1200);
     const after = await waitForReport(
@@ -157,6 +152,12 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
     expect(up(after)).toBe(true);
     expect(after.unasked).toBe('0');
     expect(eventLog).toEqual([]);
+    if (IOS) {
+      // Why: D35 - an RN Modal on top means a window of its own, above the alerts.
+      expect(shown.ownWindow).toBe('1');
+      expect(shown.appTop).toContain('ModalHostViewController');
+      expect(Number(shown.windowLevel)).toBeGreaterThan(1000);
+    }
     setters.get('sheet')?.(false);
     await waitForReport('sheet', (r) => r.live === '0', 'closed');
     expect(eventLog).toEqual(['dismiss']);
