@@ -1,0 +1,56 @@
+# Failure excerpt — real-input:android:--control:spike-latency-in-app
+
+- Ran: 2026-11-02T12:27:35.919Z on code tree `9f488f4f4f32` at HEAD `efbb1e6` (branch `task/T19-textfield-measurements`)
+- Command: `node scripts/real-input/android.mjs --control spike-latency-in-app`
+- Result: fail, exit 1, 456 ms
+- Load: start 5.24, end 5.24, median 5.24, max 5.24
+- Device: android / device `emulator-5570` / lease `T19-18jd1`
+- Full log: `task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-27-35.919Z.log` (<store>/task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-27-35.919Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-27-35.919Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: T19-18jd1 (still live)
+  |   T19-18jd1                T19          both              pair-b
+  |   S2-7bluv                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.24 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 12 log line(s)
+
+```
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 9046dd4e at efbb1e6f8df0056e80561300e9dfc1e2e747092a, now 9f488f4f at efbb1e6f8df0056e80561300e9dfc1e2e747092a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 9046dd4e at efbb1e6f8df0056e80561300e9dfc1e2e747092a, now 9f488f4f at efbb1e6f8df0056e80561300e9dfc1e2e747092a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+
+
+```

@@ -59,7 +59,6 @@ import {
   Switch,
   nitroUiCore,
 } from 'react-native-nitro-ui';
-
 import {
   forgetPromisedHandles,
   handleOf,
@@ -216,12 +215,16 @@ function settle(ms: number) {
 }
 
 /**
- * A `hybridRef` handle the test needs, or a failure that names it.
+ * A `hybridRef` handle the test already waited for, or a failure that names it.
  *
  * `noUncheckedIndexedAccess` makes every `log.pickers[id]` an `| undefined`, and the
  * alternative - optional chaining through a gate - turns a handle that never arrived
  * into `undefined === undefined`, which is green. Naming the handle in the message is
  * what makes the red legible.
+ *
+ * This reads once, so it is for a handle that is already known to exist. The first
+ * read after a mount goes through `handleOf`, because `render` resolves on the box and
+ * the callback lands on a later commit.
  */
 function need<T>(value: T | undefined, what: string): T {
   if (value == null) {
@@ -836,9 +839,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 
   it('takes a real press on a segment, through the Host’s composition', async () => {
     await mount(<SegRows log={log} />);
-    // The handle lands a turn after the mount on iOS (`handles.ts`): `need` straight
-    // after `mount` failed intermittently on main (G11-merge) and on G12's branch.
-    const control = await handleOf(log.segments, 'first', 'segmented row');
+    const control = await handleOf(() => log.segments.first, 'segmented row');
     expect(control.selectedIndex).toBe(0);
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
@@ -855,7 +856,8 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 
   it('goes back to what React kept when the app refuses a change', async () => {
     await mount(<SegRows log={log} refuse />);
-    const control = await handleOf(log.segments, 'first', 'segmented row');
+    const control = await handleOf(() => log.segments.first, 'segmented row');
+    const twinRow = await handleOf(() => log.segments.second, 'twin row');
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
     expect(control.selectedIndex).toBe(0);
@@ -878,30 +880,25 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
       'twin row press, after the first was refused'
     );
     expect(twinAnswer).toBeGreaterThan(0);
-    expect(need(log.segments.second, 'twin row').selectedIndex).toBe(
-      twinAnswer
-    );
+    expect(twinRow.selectedIndex).toBe(twinAnswer);
   });
 
   it('answers nothing while disabled, and the twin beside it still does', async () => {
     await mount(<SegRows log={log} disableFirst />);
+    const firstRow = await handleOf(() => log.segments.first, 'first row');
+    const twinRow = await handleOf(() => log.segments.second, 'twin row');
     const hostBox = await boxOf('seg-host');
-    // The Host's box says nothing about the row's handle (`handles.ts`).
-    expect((await handleOf(log.segments, 'first', 'first row')).disabled).toBe(
-      true
-    );
+    expect(firstRow.disabled).toBe(true);
     const aim = await aimAt(hostBox, 0, 'seg-first');
     await userEvent.pressAt(aim.x, aim.y);
     await settle(350);
     expect(log.acceptedSegments.first).toBeUndefined();
-    expect(need(log.segments.first, 'first row').selectedIndex).toBe(0);
+    expect(firstRow.selectedIndex).toBe(0);
     const twin = await aimAt(hostBox, 1, 'seg-second');
     await userEvent.pressAt(twin.x, twin.y);
     await settle(350);
     expect(log.acceptedSegments.second).not.toBeUndefined();
-    expect(need(log.segments.second, 'twin row').selectedIndex).toBe(
-      log.acceptedSegments.second
-    );
+    expect(twinRow.selectedIndex).toBe(log.acceptedSegments.second);
   });
 
   it('draws its own width at the leading edge, not the Host’s (D24)', async () => {
@@ -911,7 +908,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
     // — the same row answering a press inside the drawing — is what stops "the Host
     // composed nothing" from reading the same as "the row is narrower than the Host".
     await mount(<SegRows log={log} />);
-    const control = await handleOf(log.segments, 'first', 'segmented row');
+    const control = await handleOf(() => log.segments.first, 'segmented row');
     const hostBox = await boxOf('seg-host');
     await userEvent.pressAt(hostBox.x + hostBox.width - 6, hostBox.y + 14);
     await settle(350);
@@ -942,7 +939,7 @@ if (Platform.OS === 'android') {
       // absolute `menuTop - anchorBottom` would only state what Material insets are, and
       // would stay green if the anchor reading were pinned to nothing.
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       const first = await pressWitnessedAndOpen(picker);
       const [aLeft, aTop, aRight, aBottom] = edges(first.anchor, 'anchor');
       const [mLeft, mTop, , mBottom] = edges(first.menu, 'menu');
@@ -999,7 +996,7 @@ if (Platform.OS === 'android') {
       // so closing here is the same code a row reaches — and the menu really disappears,
       // which is what `live === 0` measures.
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessed(picker);
       const open = await waitForMenu(picker, (r) => r.expanded && r.rows > 0);
       expect(open.menu).not.toEqual(open.anchor);
@@ -1038,7 +1035,7 @@ if (Platform.OS === 'android') {
 
     it('relays the rows when the options change while it is open', async () => {
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessed(picker);
       const open = await waitForMenu(picker, (r) => r.rows === OPTIONS.length);
       expect(open.rows).toBe(OPTIONS.length);
@@ -1065,7 +1062,7 @@ if (Platform.OS === 'android') {
 
     it('closes when the control is disabled while the menu is open', async () => {
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessed(picker);
       await waitForMenu(picker, (r) => r.expanded && r.live === 1);
       log.setPickerDisabled?.(true);
@@ -1087,8 +1084,11 @@ if (Platform.OS === 'android') {
 
     it('leaves no window behind when the composition that opened one goes away', async () => {
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
-      const witness = need(log.pickers.witness, 'witness picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
+      const witness = await handleOf(
+        () => log.pickers.witness,
+        'witness picker'
+      );
       expect(parseMenuReport(witness.nuiTestMenuReport()).live).toBe(0);
 
       // (a) remove the child from the Host's list while its menu is open.
@@ -1100,11 +1100,13 @@ if (Platform.OS === 'android') {
 
       // (b) put it back, open, and change its key — a reorder is a removal and a
       // mount, and a reopened window on the new identity is what must not happen.
+      delete log.pickers.picker;
       log.setPickerPresent?.(true);
       await settle(400);
-      const second = need(log.pickers.picker, 'hosted picker');
+      const second = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessed(second);
       await waitForMenu(second, (r) => r.live === 1);
+      delete log.pickers.picker;
       log.setPickerKey?.('picker-b');
       await waitForMenu(
         need(log.pickers.witness, 'witness picker'),
@@ -1117,17 +1119,17 @@ if (Platform.OS === 'android') {
         ).live
       ).toBe(0);
       // …and it did not silently reopen itself on the new key.
-      expect(
-        parseMenuReport(
-          need(log.pickers.picker, 'hosted picker').nuiTestMenuReport()
-        ).expanded
-      ).toBe(false);
+      const rekeyed = await handleOf(
+        () => log.pickers.picker,
+        'hosted picker, new key'
+      );
+      expect(parseMenuReport(rekeyed.nuiTestMenuReport()).expanded).toBe(false);
     });
 
     it('opens two popup owners in one Host, one after the other', async () => {
       await mount(<TwoPopupOwners log={log} />);
-      const picker = need(log.pickers.first, 'first picker');
-      const date = need(log.dates.first, 'first date picker');
+      const picker = await handleOf(() => log.pickers.first, 'first picker');
+      const date = await handleOf(() => log.dates.first, 'first date picker');
       await pressWitnessed(picker);
       const opened = await waitForMenu(
         picker,
@@ -1160,7 +1162,7 @@ if (Platform.OS === 'android') {
 
     it('leaves nothing behind when the Host itself is dropped mid-menu', async () => {
       const { unmount } = await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessed(picker);
       await waitForMenu(picker, (r) => r.live === 1);
       unmount();
@@ -1169,7 +1171,10 @@ if (Platform.OS === 'android') {
       // same process-wide counter.
       const after = newLog();
       await mount(<PopupHost log={after} />);
-      const reader = need(after.pickers.witness, 'witness picker');
+      const reader = await handleOf(
+        () => after.pickers.witness,
+        'witness picker'
+      );
       expect(parseMenuReport(reader.nuiTestMenuReport()).live).toBe(0);
     });
   });
@@ -1184,7 +1189,7 @@ if (Platform.OS === 'android') {
 
     it('opens its dialog as a window of the Host\u2019s composition', async () => {
       await mount(<PopupHost log={log} />);
-      const date = need(log.dates.date, 'hosted date picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
       const before = parseDateReport(date.nuiTestStateReport());
       expect(before.presented).toBe(false);
       expect(before.livePresentations).toBe(0);
@@ -1222,7 +1227,7 @@ if (Platform.OS === 'android') {
 
     it('follows a value React writes while the dialog is open (G5)', async () => {
       await mount(<PopupHost log={log} />);
-      const date = need(log.dates.date, 'hosted date picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
       date.nuiTestPresent();
       const open = await waitForDate(date, (r) => r.presented);
       // A different month, written with no touch: the dialog moves to it rather than sits
@@ -1250,7 +1255,7 @@ if (Platform.OS === 'android') {
 
     it('closes when the control is disabled while the dialog is open (G5)', async () => {
       await mount(<PopupHost log={log} />);
-      const date = need(log.dates.date, 'hosted date picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
       date.nuiTestPresent();
       await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
       log.setDateDisabled?.(true);
@@ -1283,7 +1288,7 @@ if (Platform.OS === 'android') {
      */
     it('does not reopen a dialog that a hidden child left behind', async () => {
       await mount(<PopupHost log={log} />);
-      const date = need(log.dates.date, 'hosted date picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
       date.nuiTestPresent();
       await waitForDate(date, (r) => r.presented && r.livePresentations === 1);
       // Hide it. The window goes because the composition dropped the child; `presented`
@@ -1315,7 +1320,7 @@ if (Platform.OS === 'android') {
      */
     it('takes a hosted dialog down when only its child leaves the Host', async () => {
       const { unmount } = await mount(<PopupHost log={log} />);
-      const date = need(log.dates.date, 'hosted date picker');
+      const date = await handleOf(() => log.dates.date, 'hosted date picker');
       await waitForNoDateWindows(
         date,
         (closed) => log.setDateDisabled?.(closed),
@@ -1328,7 +1333,7 @@ if (Platform.OS === 'android') {
       expect(gone.presented).toBe(false);
       // And the rest of the Host is alive: the hosted Picker still opens its menu on a
       // press aimed by its own witness, in the same composition the dialog just left.
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       await pressWitnessedAndOpen(picker);
       expect(parseDateReport(date.nuiTestStateReport()).livePresentations).toBe(
         0
@@ -1344,7 +1349,7 @@ if (Platform.OS === 'android') {
       const after = newLog();
       await mount(<PopupHost log={after} />);
       await expectDateWindowsAt(
-        need(after.dates.date, 'fresh hosted date picker'),
+        await handleOf(() => after.dates.date, 'fresh hosted date picker'),
         0,
         'child leaves the Host (fresh mount reader)'
       );
@@ -1352,7 +1357,7 @@ if (Platform.OS === 'android') {
 
     it('comes down with its row, and leaves nothing when the Host is dropped', async () => {
       await mount(<PopupHost log={log} />);
-      const first = need(log.dates.date, 'hosted date picker');
+      const first = await handleOf(() => log.dates.date, 'hosted date picker');
       // Everything below counts relative to this: `livePresentations` is the whole
       // process, so a window another gate left mid-disposal would otherwise be
       // charged to this one as `expected 1 to be 0`.
@@ -1397,8 +1402,9 @@ if (Platform.OS === 'android') {
       await settle(300);
       // ... and dropping the Host while a dialog is up must take the window with it. Read
       // on a fresh mount, because the dropped one cannot report its own leak.
+      delete log.dates.date;
       const { unmount } = await mount(<PopupHost log={log} />);
-      const second = need(log.dates.date, 'hosted date picker');
+      const second = await handleOf(() => log.dates.date, 'hosted date picker');
       second.nuiTestPresent();
       await waitForDate(
         second,
@@ -1408,7 +1414,10 @@ if (Platform.OS === 'android') {
       await settle(600);
       const after = newLog();
       await mount(<PopupHost log={after} />);
-      const reader = need(after.dates.date, 'hosted date picker');
+      const reader = await handleOf(
+        () => after.dates.date,
+        'hosted date picker'
+      );
       await expectDateWindowsAt(
         reader,
         0,
@@ -1422,7 +1431,10 @@ if (Platform.OS === 'android') {
         const { unmount } = await mount(
           <PopupHost log={modeLog} mode={mode} />
         );
-        const date = need(modeLog.dates.date, 'hosted ' + mode + ' picker');
+        const date = await handleOf(
+          () => modeLog.dates.date,
+          'hosted ' + mode + ' picker'
+        );
         expect(date.mode).toBe(mode);
         await waitForNoDateWindows(
           date,
@@ -1454,7 +1466,7 @@ if (Platform.OS === 'android') {
       // witness has to report a real box, and the press that follows it has to open the
       // menu - which is the same evidence that makes the anchoring gates above honest.
       await mount(<PopupHost log={log} />);
-      const picker = need(log.pickers.picker, 'hosted picker');
+      const picker = await handleOf(() => log.pickers.picker, 'hosted picker');
       const own = harnessUi.queryByTestId('pop-picker');
       expect(own).not.toBeNull();
       expect(own!.width * own!.height).toBe(0);
@@ -1657,6 +1669,14 @@ if (Platform.OS === 'android') {
         const kind = kindOf(id);
         return kind === 'pk' || kind === 'dp';
       });
+      // `popupIsUp` reads a missing handle as "no window", which would undercount
+      // `windows`, and `closePopup` needs one. A row added since the last sweep may not
+      // have handed its handle back yet, so wait for each before the first band.
+      for (const id of popupIds) {
+        await (kindOf(id) === 'pk'
+          ? handleOf(() => log.pickers[id], `seven picker ${id}`)
+          : handleOf(() => log.dates[id], `seven date picker ${id}`));
+      }
       const opened = new Set<string>();
       const seen: string[] = [];
       for (let offset = 6; offset <= 300; offset += 24) {
@@ -1740,12 +1760,16 @@ if (Platform.OS === 'android') {
         // a real React Native frame, which is what this distinguishes.
         expect(own.width * own.height).toBe(0);
       }
-      expect(need(log.pickers['mix-pk-5'], 'seven picker').options.length).toBe(
-        OPTIONS.length
+      const picker = await handleOf(
+        () => log.pickers['mix-pk-5'],
+        'seven picker'
       );
-      expect(need(log.dates['mix-dp-6'], 'seven date picker').variant).toBe(
-        'compact'
+      const date = await handleOf(
+        () => log.dates['mix-dp-6'],
+        'seven date picker'
       );
+      expect(picker.options.length).toBe(OPTIONS.length);
+      expect(date.variant).toBe('compact');
       expect(log.pickers['mix-pk-5']).toBeDefined();
     });
 
@@ -1803,7 +1827,10 @@ if (Platform.OS === 'android') {
       // the case named `anchors under the box the Host drew` is the witness for
       // `dropOpenMenu` itself.
       await mount(<SevenList log={log} ids={SEVEN} />);
-      const picker = need(log.pickers['mix-pk-5'], 'seven picker');
+      const picker = await handleOf(
+        () => log.pickers['mix-pk-5'],
+        'seven picker'
+      );
       await pressWitnessedAndOpen(picker);
       log.setIds?.([
         'mix-pk-5',
@@ -1878,9 +1905,17 @@ if (Platform.OS === 'android') {
       // own windows.
       const witness = newLog();
       for (let cycle = 0; cycle < 4; cycle += 1) {
+        delete log.pickers['mix-pk-5'];
+        delete log.dates['mix-dp-6'];
         const { unmount } = await mount(<SevenList log={log} ids={SEVEN} />);
-        const picker = need(log.pickers['mix-pk-5'], 'seven picker');
-        const date = need(log.dates['mix-dp-6'], 'seven date picker');
+        const picker = await handleOf(
+          () => log.pickers['mix-pk-5'],
+          'seven picker'
+        );
+        const date = await handleOf(
+          () => log.dates['mix-dp-6'],
+          'seven date picker'
+        );
         if (cycle % 2 === 0) {
           await pressWitnessed(picker);
           await waitForMenu(picker, (r) => r.expanded && r.live === 1);
@@ -1895,8 +1930,14 @@ if (Platform.OS === 'android') {
         await settle(500);
       }
       await mount(<SevenList log={witness} ids={SEVEN} />);
-      const reader = need(witness.pickers['mix-pk-5'], 'reader picker');
-      const dateReader = need(witness.dates['mix-dp-6'], 'reader date');
+      const reader = await handleOf(
+        () => witness.pickers['mix-pk-5'],
+        'reader picker'
+      );
+      const dateReader = await handleOf(
+        () => witness.dates['mix-dp-6'],
+        'reader date'
+      );
       expect(parseMenuReport(reader.nuiTestMenuReport()).live).toBe(0);
       // The count is process-wide, so the baseline is earned on the reader's own
       // mount rather than assumed: a previous gate's unmount can still be in flight

@@ -1,0 +1,47 @@
+# Failure excerpt — real-input:ios:--control:spike-text-reject-rate:--background
+
+- Ran: 2026-11-02T14:07:54.392Z on code tree `b447972ba1f7` at HEAD `37d7971` (branch `task/T19-textfield-measurements`)
+- Command: `node scripts/real-input/ios.mjs --control spike-text-reject-rate --background`
+- Result: fail, exit 1, 332 ms
+- Load: start 4.83, end 4.52, median 4.67, max 4.83
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `T19-18jd1`
+- Full log: `task/T19-textfield-measurements/real-input+ios+--control+spike-text-reject-rate+--background-2026-11-02T14-07-54.392Z.log` (<store>/task/T19-textfield-measurements/real-input+ios+--control+spike-text-reject-rate+--background-2026-11-02T14-07-54.392Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/T19-textfield-measurements/real-input+ios+--control+spike-text-reject-rate+--background-2026-11-02T14-07-54.392Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: T19-18jd1 (no longer live)
+  |   S2-7bluv                 S2           both              pair-a
+  |   T19-c14ka                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.52 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (ios): Error: real-input: unknown argument "--background".
+
+
+
+```

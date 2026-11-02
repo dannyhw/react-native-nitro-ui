@@ -254,6 +254,54 @@ class SliderModelTest {
   }
 
   @Test
+  fun anAccessibilityStepInsideAFingerDragIsASampleNotAGesture() {
+    // A screen reader's increment while a finger is on the track. Two sources can
+    // drive one Slider, and the a11y path opens and closes its own one-gesture
+    // triple because nothing tells it whether a drag is already open. If it closes
+    // the *finger's* drag, the app gets an `onSlidingComplete` for a thumb that is
+    // still under the user's finger, the pump that drag armed is stopped so the
+    // finger's next sample waits for no frame, and the lift reports a second
+    // complete for one gesture.
+    //
+    // Inside a drag there already is a gesture, so the step is a sample of it: the
+    // value moves at once, the change reaches JS on the drag's own next frame like
+    // any other sample, and the gesture edges stay with the finger that owns them.
+    val world = fixture(0.0, 10.0, 3.0, 0.0)
+    world.model.dragTo(1.0)
+    assertEquals("the finger opened a drag", listOf(0.0), world.events.starts)
+
+    assertTrue("the step still reports that it moved something", world.model.accessibilityStepToward(0.5))
+    assertEquals("it moved the value", 3.0, world.model.displayed, 0.0)
+    assertEquals("…without a second start", listOf(0.0), world.events.starts)
+    assertEquals("…and without closing the finger's drag", emptyList<Double>(), world.events.completes)
+    assertTrue("…and without disarming the pump that drag armed", world.model.isFramePumpArmed)
+
+    // The finger keeps going, and the drag behaves as if the step were another move.
+    world.model.dragTo(7.0)
+    world.pump.tick()
+    assertEquals(
+      "one frame, one event, whatever touched the track in between",
+      listOf(6.0),
+      world.events.changes,
+    )
+
+    world.model.endDrag()
+    assertEquals(
+      "and the gesture ends exactly once, when the finger lifts",
+      listOf(6.0),
+      world.events.completes,
+    )
+    assertFalse(world.model.isFramePumpArmed)
+
+    // With no finger on the track, a step still makes its own complete triple - the
+    // contract the two tests above pin, and this must not lose it.
+    assertTrue(world.model.accessibilityStepToward(6.5))
+    assertEquals(listOf(0.0, 6.0), world.events.starts)
+    assertEquals(listOf(6.0, 9.0), world.events.changes)
+    assertEquals(listOf(6.0, 9.0), world.events.completes)
+  }
+
+  @Test
   fun recyclingCancelsTheDragAndThePump() {
     val world = Fixture()
     world.model.dragTo(4.0)

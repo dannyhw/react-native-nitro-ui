@@ -1,0 +1,50 @@
+# Failure excerpt — real-input:ios:--control:spike-latency-in-app
+
+- Ran: 2026-11-02T11:47:48.269Z on code tree `37212e088684` at HEAD `b973f98` (branch `task/T19-textfield-measurements`)
+- Command: `node scripts/real-input/ios.mjs --control spike-latency-in-app`
+- Result: fail, exit 1, 9235 ms
+- Load: start 2.28, end 3.03, median 2.65, max 3.03
+- Device: ios
+- Full log: `task/T19-textfield-measurements/real-input+ios+--control+spike-latency-in-app-2026-11-02T11-47-48.269Z.log` (<store>/task/T19-textfield-measurements/real-input+ios+--control+spike-latency-in-app-2026-11-02T11-47-48.269Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/T19-textfield-measurements/real-input+ios+--control+spike-latency-in-app-2026-11-02T11-47-48.269Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   T19-18jd1                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.03 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 9 log line(s)
+
+```
+real-input (ios): nitro-ui B · 3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 · Metro 8291 · scheme NitroUiExampleUITests · configuration Debug
+metro: started on 8291 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+
+
+
+```

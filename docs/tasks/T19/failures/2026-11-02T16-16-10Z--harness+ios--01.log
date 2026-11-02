@@ -1,0 +1,143 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T16:16:10.103Z on code tree `fbf16a74407c` at HEAD `337be64` (branch `task/T19-textfield-measurements`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 265083 ms
+- Load: start 2.81, end 3.32, median 3.47, max 7.63
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `T19-c14ka`
+- Full log: `task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log` (<store>/task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextFieldSpike.harness.tsx`
+- `● Console`
+- `● T18 spike — TextField › P1 both iOS shapes host, round-trip, and coexist`
+- `expected 'textfield' to be 'swiftui' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: T19-c14ka (still live)
+  |   T19-c14ka                T19          both              pair-b
+  |   S2-g2lpi                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.32 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 98 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree fbf16a74407c at HEAD 337be64
+gate: git tree 0b255d65487e
+gate: log task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log
+gate:       <store>/task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree fbf16a74407c, 10 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.81/4.06 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextFieldSpike.harness.tsx
+  ● Console
+
+    console.log
+      nui-spike focus_capability platform=ios rn=1 spike_plain=1 spike_boxed=0 plain_write=none boxed_write=no-control
+
+
+    console.log
+      nui-spike p1_attach platform=ios askedA=swiftui askedB=textfield frozenA=swiftui frozenB=textfield liveA=1 liveB=1 implA=textfield implB=textfield attached_by=mount specB=textfield askedA_=tts askedB_=t recyclesA=2 recyclesB=0 dropsA=2 dropsB=0
+
+
+    console.warn
+      react-native-nitro-ui: a component changed from controlled to uncontrolled. Keep `value` either always defined or always undefined - passing it conditionally is not supported.
+
+
+    console.log
+      nui-spike p3 platform=ios controlled_refuses=1 emoji_cps=4 emoji_utf16_units=8 maxlength_on_write_path=uncapped unreported=0 secure=hunter2 nfd_equal=1 nfd_cps=2 nfd_js_units=2
+
+
+    console.log
+      nui-spike p3_marked_text platform=ios shape_a=textfield shape_a_marked_text=1 shape_a_selection=0-0 shape_a_composing=0 shape_b=textfield shape_b_marked_text=1 shape_b_selection=5-0 swiftui_guard_impossible=1
+
+
+    console.log
+      nui-spike p4 platform=ios heights=120:86.3,200:86.3,280:44.0,360:44.0 bucket=208 key_200=multi|4|w208 cache_before=6 growth_across_buckets=4 growth_within_bucket=0 corrections=2 corrections_per_bucket=0.5 measurements=11 lines=-1 ledger_delta=-1
+
+
+    console.log
+      nui-spike p4_auto_grow platform=ios steps=3 heights=1:22.0,2:44.0,3:66.0,4:86.3 lines=-1 corrections=1,1,1 max_corrections_per_step=1 cache_growth=0 measurements=6
+
+
+    console.log
+      nui-spike p5_mount platform=ios n=50 spike_commit_ms=34.9 rn_commit_ms=35.3 ratio=0.99 spike_per_field_ms=0.70 rn_per_field_ms=0.71 spike_all_reporting_ms=36.9
+
+
+    console.log
+      nui-spike p5_focus platform=ios samples=6 spike_p95_ms=66 spike_median_ms=57.5 spike_samples=55-66-56-59-56-59 rn_p95_ms=69 rn_median_ms=62.5 rn_samples=61-59-63-63-69-62 ratio=0.96 spike_focus_events=6 spike_blur_events=6 rn_takes_focus=1 probe_rn=1 probe_spike_plain=1 probe_spike_boxed=0 probe_plain_write=none probe_boxed_write=no-control late_focus_lands=1 late_mirror_focused=1 late_attached=1 late_blur_ask1=1 late_blur_ask2=1 late_mirror_after_blur1=0 late_mirror_after_blur2=0 other_arm=textfield other_arm_focus=does not land other_arm_focus_events=0 other_arm_mirror_focused=0 other_arm_last_write=focus:no-field latency_arm=swiftui
+
+
+    console.log
+      timing: focus() → onFocus p95, spike field vs RN TextInput 1.0ms (limit 1.5ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 4.59/load5 3.96 over 10 cores · Q2 §7 go line: ≤1.5× RN TextInput, no-go above 2×
+
+
+    console.log
+      nui-spike x4 platform=ios height=22.0 width=420.0 attached_by=mounted focus_ask=focus:no-field live=0 focus_before_prop=0 rebuild_on_prop=unobserved rebuild_on_text=unobserved churn=30 ledger_delta=1 registry_delta=1 cache_delta=0 rule1_a11y_name_on_focusable_node=measured by the real-input a11y rule (Android: a11y-sweep; iOS: testRealInputSpikeA11y) rule2_no_leak_on_drop=engine deltas above; memory half in p5_memory rule3_fallback_declared=44 rule3_fallback_vs_measured=differs rule4_recycle_reset=measured by the x4_rule4_recycle scenario
+
+
+    console.log
+      nui-spike x4_rule4_recycle platform=ios rounds=3 arm=textfield saw_recycles=6 detail=r0:first asked=tstttsssssssssssssssssssssssssssssst frozen=textfield impl=textfield disp=previous-owner rec=35 | r0:recycled asked=tstttsssssssssssssssssssssssssssssstt frozen=textfield impl=textfield disp= rec=36 | r1:first asked=tstttssssssssssssssssssssssssssssssttt frozen=textfield impl=textfield disp=previous-owner rec=37 | r1:recycled asked=tstttsssssssssssssssssssssssssssssstttt frozen=textfield impl=textfield disp= rec=38 | r2:first asked=tstttssssssssssssssssssssssssssssssttttt frozen=textfield impl=textfield disp=previous-owner rec=39 | r2:recycled asked=tstttsssssssssssssssssssssssssssssstttttt frozen=textfield impl=textfield disp= rec=40 recycled_at_all=1
+
+
+    console.log
+      nui-spike p5_memory platform=ios n=200 cycles=3 baseline_managed_miB=unavailable baseline_native_miB=unavailable baseline_private_miB=unavailable spike_mounted_native_miB=unavailable,unavailable,unavailable spike_retained_managed_miB=unavailable,unavailable,unavailable spike_retained_native_miB=unavailable,unavailable,unavailable spike_retained_private_miB=unavailable,unavailable,unavailable spike_retained_pss_miB=unavailable,unavailable,unavailable spike_retained_worst_native_miB=unavailable spike_retained_climb_native_miB=unavailable spike_retained_worst_managed_miB=unavailable spike_per_field_kib=unavailable switch_retained_native_miB=unavailable,unavailable,unavailable switch_retained_worst_native_miB=unavailable switch_retained_climb_native_miB=unavailable switch_per_field_kib=unavailable
+
+  ● T18 spike — TextField › P1 both iOS shapes host, round-trip, and coexist
+
+    expected 'textfield' to be 'swiftui' // Object.is equality
+
+      [0m [90m 682 |[39m     [90m// (one shape, no branch to choose), and asking this scenario to translate `swiftui` into `compose` is how[39m
+       [90m 683 |[39m     [90m// the first Android run of P1 failed — it read the test's iOS vocabulary as Android's.[39m
+      [31m[1m>[22m[39m[90m 684 |[39m     expect(mirrorA[33m.[39mimpl)[33m.[39mtoBe(expectedA)[33m;[39m
+       [90m     |[39m                              [31m[1m^[22m[39m
+       [90m 685 |[39m     expect(armedB[33m.[39mfrozen)[33m.[39mtoBe(expectedB)[33m;[39m
+       [90m 686 |[39m     expect(armedB[33m.[39mimpl)[33m.[39mtoBe(expectedB)[33m;[39m
+       [90m 687 |[39m     [90m// Same keys on both shapes, so the A/B compares like with like.[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 15 passed, 16 of 17 total
+Tests:       1 failed, 2 skipped, 240 passed, 243 total
+Snapshots:   0 total
+Time:        263.992 s
+Ran all test suites.
+gate: harness:ios FAIL in 265.1 s
+gate: recorded in .gates/task/T19-textfield-measurements.jsonl
+
+
+gate: appended the device context to task/T19-textfield-measurements/harness+ios-2026-11-02T16-16-09.822Z.log (4 probe(s))
+
+```

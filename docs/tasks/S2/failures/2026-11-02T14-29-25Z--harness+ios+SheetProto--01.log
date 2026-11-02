@@ -1,0 +1,168 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T14:29:25.376Z on code tree `c9210b2165d6` at HEAD `3d99d1b` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 155182 ms
+- Load: start 12.93, end 5.23, median 6.85, max 12.93
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T14-29-25.376Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T14-29-25.376Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › reports a box that never reached Yoga as a collapsed layout`
+- `● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one`
+- `● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open`
+- `● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in its own presentation chain`
+- `● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in a window of its own`
+- `● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain`
+- `● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T14-29-25.376Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (still live)
+  |   S2-7bluv                 S2           both              pair-a
+  |   T19-c14ka                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.23 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 118 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree c9210b2165d6, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.93/9.74 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T14-29-25.376Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › reports a box that never reached Yoga as a collapsed layout
+
+    No content box while withheld within 15000ms. events=[] box=null content={"width":0,"height":240} native=closes=1;dismissals=1;drops=1;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;presentations=2;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=1;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;windows=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one
+
+    No box for medium within 15000ms. events=[] box=null content={"width":0,"height":3200} native=closes=2;dismissals=1;drops=2;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;presentations=2;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=0;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;windows=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open
+
+    No a dismissal of any kind within 8000ms. events=[] box=null content={"width":0,"height":0} native=closes=2;dismissals=1;drops=3;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;presentations=2;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=0;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;s24.attached=0;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s24.userDismissals=0;windows=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in its own presentation chain
+
+    No sheet box in a Modal (in chain) within 10000ms.
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in a window of its own
+
+    No sheet box in a Modal (own window) within 10000ms.
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain
+
+    No sheet box under a Modal (in chain) within 15000ms. events=[] box=null content={"width":0,"height":240} native=appMarkerOwner=modal;appMarkerView=RCTViewComponentView;appTopController=RCTFabricModalHostViewController;closes=2;dismissals=1;drops=6;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;modalHostsHolding=0;modalHostsInWindow=1;presentations=2;presentedDepth=2;probesAt=1793629860;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=0;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;s24.attached=0;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s24.userDismissals=0;s25.attached=0;s25.detent=large;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;s25.userDismissals=0;s26.attached=0;s26.detent=large;s26.ownWindow=1;s26.presented=1;s26.touchHandler=1;s26.userDismissals=0;s27.attached=0;s27.detent=fit;s27.ownWindow=0;s27.presented=1;s27.touchHandler=1;s27.userDismissals=0;sheetPointOwner=modal;sheetPointView=RCTViewComponentView;topController=RCTFabricModalHostViewController;windows=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own
+
+    No sheet box under a Modal (own window) within 15000ms. events=[] box=null content={"width":0,"height":240} native=appMarkerOwner=modal;appMarkerView=RCTViewComponentView;appTopController=RCTFabricModalHostViewController;closes=2;dismissals=1;drops=7;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;modalHostsHolding=0;modalHostsInWindow=1;presentations=2;presentedDepth=2;probesAt=1793629881;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=0;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;s24.attached=0;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s24.userDismissals=0;s25.attached=0;s25.detent=large;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;s25.userDismissals=0;s26.attached=0;s26.detent=large;s26.ownWindow=1;s26.presented=1;s26.touchHandler=1;s26.userDismissals=0;s27.attached=0;s27.detent=fit;s27.ownWindow=0;s27.presented=1;s27.touchHandler=1;s27.userDismissals=0;s28.attached=0;s28.detent=fit;s28.ownWindow=1;s28.presented=1;s28.touchHandler=1;s28.userDismissals=0;sheetPointOwner=modal;sheetPointView=RCTViewComponentView;topController=RCTFabricModalHostViewController;windows=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing
+
+    the first cycle did not complete: events=[] box=null content={"width":0,"height":240} native=appMarkerOwner=modal;appMarkerView=RCTViewComponentView;appTopController=RCTFabricModalHostViewController;closes=2;dismissals=1;drops=8;entryLandedFirst=1;handlerViews=1;lastControllerAlive=1;liveControllers=2;modalHostsHolding=0;modalHostsInWindow=1;presentations=2;presentedDepth=2;probesAt=1793629881;s21.attached=0;s21.boundsChanges=1;s21.boxSent=3;s21.chromeH=34;s21.contentChanges=2;s21.contentH=400;s21.contentW=402;s21.corrections=1;s21.detent=fit;s21.firstBoundsH=308;s21.firstVisibleH=304;s21.framesToSettle=29;s21.maxVisibleH=457;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.samples=60;s21.settledBoundsH=468;s21.settledVisibleH=457;s21.touchHandler=1;s21.userDismissals=0;s22.attached=0;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;s24.attached=0;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s24.userDismissals=0;s25.attached=0;s25.detent=large;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;s25.userDismissals=0;s26.attached=0;s26.detent=large;s26.ownWindow=1;s26.presented=1;s26.touchHandler=1;s26.userDismissals=0;s27.attached=0;s27.detent=fit;s27.ownWindow=0;s27.presented=1;s27.touchHandler=1;s27.userDismissals=0;s28.attached=0;s28.detent=fit;s28.ownWindow=1;s28.presented=1;s28.touchHandler=1;s28.userDismissals=0;s29.attached=0;s29.detent=fit;s29.ownWindow=0;s29.presented=1;s29.touchHandler=1;s29.userDismissals=0;sheetPointOwner=modal;sheetPointView=RCTViewComponentView;topController=RCTFabricModalHostViewController;windows=1: expected +0 to be 1 // Object.is equality
+
+      [0m [90m 1023 |[39m     [90m// charged to the loop they introduced.[39m
+       [90m 1024 |[39m     [36mconst[39m warmed [33m=[39m [36mawait[39m churn(mounted[33m,[39m p[33m,[39m [35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1025 |[39m     expect(warmed[33m,[39m [32m`the first cycle did not complete: ${dump(p)}`[39m)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m      |[39m                                                                        [31m[1m^[22m[39m
+       [90m 1026 |[39m     [36mconst[39m before [33m=[39m handle[33m.[39mspikeMemoryBytes()[33m;[39m
+       [90m 1027 |[39m     [36mconst[39m cycles [33m=[39m [36mawait[39m churn(mounted[33m,[39m p[33m,[39m [33mCYCLES[39m)[33m;[39m
+       [90m 1028 |[39m     [36mconst[39m after [33m=[39m handle[33m.[39mspikeMemoryBytes()[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 2 passed, 10 total
+Snapshots:   0 total
+Time:        153.547 s
+Ran all test suites matching SheetProto.
+
+
+
+```

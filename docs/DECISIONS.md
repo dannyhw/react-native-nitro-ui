@@ -393,3 +393,39 @@ candidates. The orchestrator took Q5's recommendations on its seven questions; t
 - **BottomSheet content:** mounted only while presented. No `keepMounted` in v1.
 - **Order:** the dialog build (G11) starts now. The BottomSheet spike (S2), which needs RN children in a presented
   window, runs in parallel as soon as a device slot frees up.
+
+## D34 — TextField is built, on `UITextField` (2026-11-02)
+
+T19 (`docs/tasks/T19-textfield-measurements.report.md`; prototype on `task/T19-textfield-measurements`, never merged)
+measured what D31 required. Android passes every Q2 §7 line it can measure: typing oracle, latency at 0.77× of
+`TextInput` p95, reject, `maxLength`. The orchestrator's answers to T19's questions:
+
+1. **iOS keystroke latency can't be measured yet** (XCUITest keystrokes don't arrive as `UIEvent`s). Build anyway: iOS
+   mount is 0.99× and focus 0.96–1.00×. The component's own perf gate measures typing latency once it exists.
+2. **"Leak-free at N=200" means no unbounded growth**, not a return to baseline. A shipped `Switch` keeps 30.8 MiB
+   on the same rig, against TextField's 29.1 MiB. Q2's wording is taken in that sense.
+3. **iOS hosts `UITextField`** (arm B). It alone can see marked text and drop a JS write mid-composition, which
+   Q2 §2.2's guard needs. SwiftUI's `TextField` can't.
+4. **The spike's arm-shape recycle bug is moot.** It came from pooling two shapes behind one view, and the
+   component has one shape.
+
+The build is G13.
+
+## D35 — BottomSheet's presentation (2026-11-02)
+
+S2 (`docs/tasks/S2-bottomsheet-spike.report.md`; prototype on `task/S2-bottomsheet-spike`, never merged) answered GO on
+both platforms: RN children mount at the sheet's width, take touches (also over an open RN `Modal`), follow a `fit`
+detent, and leave nothing behind after 50 cycles. It also confirmed G11's finding: presented in the screen's own chain,
+a sheet over an RN `Modal` strands the Modal, and only an own window avoids it. In an own window, though, `fit` doesn't
+follow the content. The orchestrator's answers to S2's questions:
+
+1. **iOS presents in the screen's chain by default,** and from an own window (G11's `NitroUiPresentation`) only when
+   the top presented controller is an RN `Modal` host when the sheet presents. `fit` inside an own window is a known
+   gap, to fix or document in the build.
+2. **An exit the app didn't ask for** is detected from `presentationControllerDidDismiss` and `isBeingDismissed`, not
+   `viewDidDisappear` alone.
+3. **react-native-screens:** the build measures it with the dependency added for one commit and reverted, as G11 did.
+4. **iOS real input** uses the XCUITest pattern (G11 and G12). The Android real tap moves into `real-input:android`.
+5. **The stranded-Modal hazard case** runs in its own app instance, never in the shared harness process.
+
+Android needs no equivalent. Q5 Appendix C6's presentation choice is reversed accordingly. The build is G14.

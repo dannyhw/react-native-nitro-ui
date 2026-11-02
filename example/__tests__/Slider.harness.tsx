@@ -263,6 +263,35 @@ async function pollUntil<T>(
 }
 
 /**
+ * Wait until `events` holds `completions` gestures' worth of releases.
+ *
+ * `drag`'s wait, split out for a test that started the drag itself - through the
+ * seam directly rather than through `drag`, because it has to drive something else
+ * into the middle of it.
+ */
+async function dragCompleted(
+  events: SlideEvents,
+  completions: number,
+  budgetMs: number
+): Promise<void> {
+  const deadline = nitroUiCore.now() + budgetMs;
+  for (;;) {
+    if (events.complete.length >= completions) {
+      return;
+    }
+    if (nitroUiCore.now() > deadline) {
+      throw new Error(
+        `Wanted ${String(completions)} onSlidingComplete(s), have ` +
+          `${String(events.complete.length)} after ${String(budgetMs)}ms ` +
+          `(start=${JSON.stringify(events.start)} change=${JSON.stringify(
+            events.change
+          )} complete=${JSON.stringify(events.complete)}).`
+      );
+    }
+    await sleep(25);
+  }
+}
+
 /**
  * Drive a drag and wait for it to finish.
  *
@@ -1608,6 +1637,121 @@ describe('Slider', () => {
     expect(aligned.complete[aligned.complete.length - 1]).toBe(6);
     expect(aligned.start.length).toBe(aligned.complete.length);
     expect(alignedHandle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
+  it('folds a screen reader step into a drag the finger has not released', async () => {
+    // Two sources, one control: a finger is on the track and a reader asks for the
+    // next value. The a11y path opens and closes its own start/change/complete
+    // triple when nothing else is happening (the test above), because an app cannot
+    // tell an increment from a thumb release. Inside a drag there already *is* a
+    // gesture, and `endDrag` is the only thing that emits a completion — so closing
+    // the pair here reported an `onSlidingComplete` for a thumb still under the
+    // user's finger, stopped the frame pump that drag armed, and left the finger's
+    // own sample starting a second gesture. One drag, then: one start with the
+    // value the drag began from, one complete with the value the finger left on.
+    //
+    // Both seams post to the main thread in call order, so the step is guaranteed
+    // to land after the drag has opened and before its first queued move.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={0}
+          maximumValue={12}
+          step={3}
+          defaultValue={0}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="step-in-drag"
+          hybridRef={captureFor('step-in-drag')}
+        />
+      </View>
+    );
+    await waitForBox('step-in-drag');
+    const handle = await handleFor('step-in-drag');
+
+    // Three moves 200 ms apart: the drag is open for ~650 ms, which is the window
+    // the step has to land inside.
+    handle.nuiTestDrag(9, 3, 200);
+    const report = await accessibilityStepReport(handle, 1);
+    console.log(`step in drag: ${report}`);
+    expectPerformed(report, 'a11y step inside a finger drag');
+
+    // The first complete may be the spurious one, so this waits out the whole
+    // gesture rather than stopping at the first release: 3 moves at 200 ms plus the
+    // seam's own 50 ms, then a second of slack for the coalesced change behind it.
+    await dragCompleted(events, 1, 4000);
+    await sleep(1200);
+    console.log(
+      `step in drag: starts=${JSON.stringify(events.start)} ` +
+        `change=${JSON.stringify(events.change)} ` +
+        `complete=${JSON.stringify(events.complete)}`
+    );
+    expect(events.start).toEqual([0]);
+    expect(events.complete).toEqual([9]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
+  it('renders a range whose two ends are the wrong way round', async () => {
+    // G1's verifier follow-up: `min == max` has had a device test since review fix
+    // 7, and `min > max` never did, even though it is the case the platform controls
+    // actually reject - `ClosedRange(a...b)` traps when `a > b`, and Kotlin's
+    // `coerceIn` throws for the same shape, which is why both platforms hand their
+    // control a widened span (`trackBounds` on iOS, `trackRange` on Android) rather
+    // than the one React described. Neither widening was asserted anywhere, and a
+    // control that traps here takes the app's whole tree with it - the failure mode
+    // is a crash, not a wrong pixel.
+    //
+    // The documented rule (`docs/components/slider.md`, Limits): an inverted range is
+    // a one-value range whose value is `minimumValue`, with the thumb at an end. So
+    // this asserts the three things that rule has to survive: the control lays out,
+    // every interaction lands on 5, and the reader's increment has nowhere to go.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={5}
+          maximumValue={1}
+          defaultValue={5}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="inverted-range"
+          hybridRef={captureFor('inverted-range')}
+        />
+      </View>
+    );
+    // Merely getting here is most of the test: the control has hosted, measured and
+    // laid out without trapping.
+    const box = await waitForBox('inverted-range');
+    const handle = await handleFor('inverted-range');
+    expect(Math.abs(box.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+    expect(box.width).toBeGreaterThan(100);
+
+    await drag(handle, events, 3, 6, 0);
+    console.log(
+      `inverted range: starts=${JSON.stringify(events.start)} ` +
+        `change=${JSON.stringify(events.change)} ` +
+        `complete=${JSON.stringify(events.complete)}`
+    );
+    expect(events.start).toEqual([5]);
+    expect(events.complete).toEqual([5]);
+    expect(events.change.every((value) => value === 5)).toBe(true);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+
+    // And the reader gets the same answer: there is no other value to go to, so the
+    // platform's action runs and reports a gesture that moved nothing.
+    expectPerformed(
+      await accessibilityStepReport(handle, 1),
+      'inverted range, forward'
+    );
+    expectPerformed(
+      await accessibilityStepReport(handle, -1),
+      'inverted range, back'
+    );
+    expect(events.complete).toEqual([5]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
   });
 
   it('renders a range whose two ends are the same value', async () => {

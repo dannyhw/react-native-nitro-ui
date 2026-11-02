@@ -1,0 +1,68 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T13:56:23.702Z on code tree `c15793cd7c6d` at HEAD `3630ed3` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 9436 ms
+- Load: start 2.92, end 3.36, median 3.14, max 3.36
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-56-23.702Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-56-23.702Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-56-23.702Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (still live)
+  |   S2-7bluv                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.36 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 26 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree c15793cd7c6d, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.92/4.39 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-56-23.702Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        8.031 s, estimated 50 s
+Ran all test suites matching SheetProto.
+
+
+
+```

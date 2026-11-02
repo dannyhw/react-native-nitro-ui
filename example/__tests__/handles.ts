@@ -80,7 +80,10 @@ const promisedHandles = new Map<string, () => unknown>();
  * time any box with this `testID` can be found, the promise is already on file.
  * That is what lets a box helper wait for "the box and, if one is coming, its
  * handle" without each call site naming the handle again (G12 fix round 1: the
- * Host suites raced the ref callback at four sites a per-site wait had missed).
+ * Host suites raced the ref callback at sites a per-site wait had missed).
+ *
+ * The promise reads `map[key]`, so {@link handleOf}'s remount rule holds here too:
+ * a test that mounts the same id again deletes the old entry first.
  *
  * @param map where the suite keeps handles of this kind
  * @param key the entry in `map`
@@ -112,17 +115,27 @@ export async function waitForPromisedHandle(
 }
 
 /**
- * The handle filed under `key`, once it exists: {@link waitForHandle} on a map
- * entry, for a read that is not behind a box lookup.
+ * Wait for a control's `hybridRef` handle to exist, then hand it back: the Host
+ * suites' first read of a handle that no box lookup has waited for.
  *
- * @param what how a miss names the control; defaults to `key`
+ * `render` and `boxOf` resolve when the view is laid out, and the callback runs on
+ * a commit after that, so a read straight after a mount can find nothing: on a
+ * loaded machine HostPopups failed `No hybrid handle for "segmented row"` twice in
+ * one merge run, and HostControls lost a Slider's handle the same way. The wait is
+ * on existence only. Every value a test asserts is still read after it, unchanged.
+ *
+ * A test that mounts the same id again (a re-add, or a fresh `render` into the same
+ * log) deletes the old entry first. Otherwise this would return the dropped view's
+ * handle at once.
+ *
+ * @param read the entry, re-read every tick
+ * @param what how a miss names the control
  */
-export async function handleOf<T>(
-  map: Record<string, T>,
-  key: string,
-  what: string = key
+export function handleOf<T>(
+  read: () => T | null | undefined,
+  what: string
 ): Promise<T> {
-  return waitForHandle(() => map[key], { what: `"${what}"` });
+  return waitForHandle(read, { what: `"${what}"` });
 }
 
 /**

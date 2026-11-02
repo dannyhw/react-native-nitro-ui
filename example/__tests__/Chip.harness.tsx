@@ -43,6 +43,8 @@ import {
   type NitroUiSizingStats,
 } from 'react-native-nitro-ui';
 
+import { waitForHandle } from './handles';
+
 /** The Chip's Fabric name - what the sizing engine files sizes under. */
 const COMPONENT = 'NitroUiChip';
 
@@ -150,11 +152,7 @@ async function waitForTestId(testId: string, timeoutMs = 10000) {
 }
 
 async function handleOf(testId: string): Promise<ChipHandle> {
-  return pollUntil(
-    () => handles.get(testId) ?? null,
-    () => new Error(`no hybridRef handle for "${testId}"`),
-    5000
-  );
+  return waitForHandle(() => handles.get(testId), { what: `"${testId}"` });
 }
 
 /** Poll until the control reports a size. */

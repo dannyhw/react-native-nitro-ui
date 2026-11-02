@@ -1,0 +1,211 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T17:14:42.333Z on code tree `1805c810d6d2` at HEAD `25afecf` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 2472373 ms
+- Load: start 5.24, end 4.02, median 3.46, max 6.06
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-14-42.034Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-14-42.034Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Switch › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · Switch › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Switch › shows none of its previous owner under one identity`
+- `Unable to find element with testID: conformance-switch`
+- `● conformance · every control, four rules › · Switch › is named on its own box, not on a wrapper around it`
+- `expected null not to be null`
+- `● conformance · every control, four rules › · Slider › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · Slider › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Slider › is named on its own box, not on a wrapper around it`
+- `● conformance · every control, four rules › · Button › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · Button › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Button › is named on its own box, not on a wrapper around it`
+- `● conformance · every control, four rules › · Progress › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · Progress › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · Progress › is named on its own box, not on a wrapper around it`
+- `● conformance · every control, four rules › · SegmentedControl › has its own declared fallback, and still corrects a wrong guess`
+- `● conformance · every control, four rules › · SegmentedControl › is known to the engine while mounted, and unknown after`
+- `● conformance · every control, four rules › · SegmentedControl › shows none of its previous owner under one identity`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-14-42.034Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (no longer live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 2910 — the rest is in the full log above)
+
+```
+      [0m [90m 141 |[39m     }
+       [90m 142 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m         [32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m
+       [90m 145 |[39m       )[33m;[39m
+       [90m 146 |[39m     }[0m
+
+  ● Switch · core runtime › marks props applied and first frame for one instance
+
+    No element with testID "marked" within 10000ms.
+
+      [0m [90m 141 |[39m     }
+       [90m 142 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m         [32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m
+       [90m 145 |[39m       )[33m;[39m
+       [90m 146 |[39m     }[0m
+
+  ● Switch · core runtime › mounts many instances at once
+
+    No element with testID "many-39" within 10000ms.
+
+      [0m [90m 141 |[39m     }
+       [90m 142 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m         [32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m
+       [90m 145 |[39m       )[33m;[39m
+       [90m 146 |[39m     }[0m
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › takes a real press on a segment, through the Host’s composition
+
+    No element with testID "seg-host" within 15000ms.
+
+      [0m [90m 263 |[39m     }
+       [90m 264 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 265 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 266 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 267 |[39m       )[33m;[39m
+       [90m 268 |[39m     }[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › goes back to what React kept when the app refuses a change
+
+    No element with testID "seg-host" within 15000ms.
+
+      [0m [90m 263 |[39m     }
+       [90m 264 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 265 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 266 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 267 |[39m       )[33m;[39m
+       [90m 268 |[39m     }[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › answers nothing while disabled, and the twin beside it still does
+
+    No element with testID "seg-host" within 15000ms.
+
+      [0m [90m 263 |[39m     }
+       [90m 264 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 265 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 266 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 267 |[39m       )[33m;[39m
+       [90m 268 |[39m     }[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › draws its own width at the leading edge, not the Host’s (D24)
+
+    No element with testID "seg-host" within 15000ms.
+
+      [0m [90m 263 |[39m     }
+       [90m 264 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 265 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 266 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 267 |[39m       )[33m;[39m
+       [90m 268 |[39m     }[0m
+
+FAIL __tests__/ColdSizing.harness.tsx
+  ● Console
+
+    console.log
+      t14 NOT COLD process (on entry): measurements=2978
+
+
+    console.log
+      t14 NOT COLD process (on entry): measurements=2980
+
+  ● Sizing · declared before the first measure (T14) › has a declared height ready for the first Slider this process measures
+
+    No element with testID "t14-slider" within 15000ms.
+
+      [0m [90m 223 |[39m     }
+       [90m 224 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 225 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 226 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 227 |[39m       )[33m;[39m
+       [90m 228 |[39m     }[0m
+
+  ● Sizing · declared before the first measure (T14) › still corrects a Slider whose declared height is wrong
+
+    No element with testID "t14-slider-wrong" within 15000ms.
+
+      [0m [90m 223 |[39m     }
+       [90m 224 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 225 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 226 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 227 |[39m       )[33m;[39m
+       [90m 228 |[39m     }[0m
+
+  ● Sizing · declared before the first measure (T14) › has a declared size ready for the first Switch this process measures
+
+    No element with testID "t14-switch" within 15000ms.
+
+      [0m [90m 223 |[39m     }
+       [90m 224 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 225 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 226 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 227 |[39m       )[33m;[39m
+       [90m 228 |[39m     }[0m
+
+  ● Sizing · declared before the first measure (T14) › still corrects a Switch whose declared size is wrong
+
+    No element with testID "t14-switch-wrong" within 15000ms.
+
+      [0m [90m 223 |[39m     }
+       [90m 224 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 225 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 226 |[39m         [32m`No element with testID "${testId}" within ${String(timeoutMs)}ms.`[39m
+       [90m 227 |[39m       )[33m;[39m
+       [90m 228 |[39m     }[0m
+
+Test Suites: 15 failed, 1 skipped, 1 passed, 16 of 17 total
+Tests:       216 failed, 2 skipped, 25 passed, 243 total
+Snapshots:   0 total
+Time:        2471.001 s
+Ran all test suites.
+gate: harness:ios FAIL in 2472.4 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-14-42.034Z.log (4 probe(s))
+
+```
