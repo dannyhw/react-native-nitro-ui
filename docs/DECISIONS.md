@@ -377,3 +377,19 @@ The owner's rulings on G7a's draft PR #7 amend D29 and `Q1-menu-design.md` §5:
 - **A pick fires `onSelect`, then `onClose`** (where `onClose` fires, i.e. Android). The choice is
   reported before the close. Q1 §5's "never for a pick" is superseded: every open is paired with
   one close, including the open a pick ends.
+
+## D33 — Next components: dialogs, then BottomSheet (2026-11-02)
+
+The owner made new components the priority (2026-11-02). Q5 (`docs/tasks/Q5-next-components.report.md`) ranked the
+candidates. The orchestrator took Q5's recommendations on its seven questions; the owner can override any of them:
+
+- **Names:** `AlertDialog` and `ConfirmationDialog`, two exports over one native view. Not `Alert`, which collides
+  with RN's.
+- **iOS dialog:** UIKit `UIAlertController`, presented through a core helper factored out of DatePicker's popover
+  presentation.
+- **Android `ConfirmationDialog`:** a Material 3 `ModalBottomSheet` with one row per action.
+- **A dismissal the app refuses** (`isPresented` stays true): present it again, with a dev warning.
+- **BottomSheet detents on Android:** Material 3's two, with the limit documented. No custom non-Material sheet.
+- **BottomSheet content:** mounted only while presented. No `keepMounted` in v1.
+- **Order:** the dialog build (G11) starts now. The BottomSheet spike (S2), which needs RN children in a presented
+  window, runs in parallel as soon as a device slot frees up.

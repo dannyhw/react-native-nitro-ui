@@ -76,4 +76,5 @@
 | G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | running |
 | X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | running |
 | T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | running |
-| Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | running |
+| Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
+| G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
