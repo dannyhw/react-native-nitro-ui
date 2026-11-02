@@ -111,9 +111,9 @@ export type AlertDialogProps = DialogProps;
 export interface ConfirmationDialogProps extends DialogProps {
   /**
    * Whether the title is shown - SwiftUI's `Visibility` for a confirmation
-   * dialog. Default: `'automatic'`, which hides it on an iOS action sheet unless
-   * there is a message, as SwiftUI does. Android shows the title unless this is
-   * `'hidden'`.
+   * dialog. Default: `'automatic'`, which follows each platform's default: an iOS
+   * action sheet hides the title (with or without a message), as SwiftUI does;
+   * Android shows it. `'visible'` shows it on both, `'hidden'` hides it on both.
    */
   titleVisibility?: 'automatic' | 'visible' | 'hidden' | undefined;
 }
@@ -277,13 +277,19 @@ function NitroDialog({
   const processedTint = useProcessedColor(tintColor);
 
   // A dismissal the app refused (DECISIONS D33): native has said `false`, JS has
-  // echoed that event, and `isPresented` is still `true`. Native presents the
-  // dialog again on that same commit; the warning is the developer's half.
+  // echoed that event, and `isPresented` is still `true` *in the commit that
+  // echoes it*. Native presents the dialog again on that same commit; the warning
+  // is the developer's half. Only that commit counts: a parent that followed the
+  // dismissal to `false` and opens the dialog again later re-runs this effect with
+  // the same echoed count, and that is an ordinary open, not a refusal.
   const warnedRefusal = useRef(false);
+  const echoedAtLastCheck = useRef(0);
   const echoed = controlled.mostRecentEventCount;
   useEffect(() => {
-    if (!__DEV__ || warnedRefusal.current) return;
-    if (echoed > 0 && lastNativeWasDismissal.current && presented) {
+    const echoedNow = echoed !== echoedAtLastCheck.current;
+    echoedAtLastCheck.current = echoed;
+    if (!__DEV__ || warnedRefusal.current || !echoedNow) return;
+    if (lastNativeWasDismissal.current && presented) {
       warnedRefusal.current = true;
       console.warn(
         'react-native-nitro-ui: a dialog was dismissed by the user but `isPresented` ' +
