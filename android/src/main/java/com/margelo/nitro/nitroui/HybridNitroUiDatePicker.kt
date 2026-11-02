@@ -13,6 +13,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SelectableDates
@@ -24,6 +25,7 @@ import androidx.compose.material3.TimePickerState
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
@@ -32,7 +34,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -45,6 +49,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -931,6 +936,19 @@ private fun Modifier.nuiDisabledLook(enabled: Boolean): Modifier =
 private const val DISABLED_ALPHA = 0.38f
 
 /**
+ * The narrowest box in which the inline calendar keeps Material's 48 dp interactive
+ * minimum rather than asking for its 40 dp day cell.
+ *
+ * 360 dp is not a taste number: it is what Material's own calendar wants at the 48 dp
+ * token — seven weekday columns spread evenly, plus the 12 dp the grid keeps at each
+ * edge — so it is exactly the width at which keeping 48 dp stops being possible. At or
+ * above it the default is provided untouched; below it the calendar would otherwise take
+ * the shortfall out of the columns on the right. See [DatePickerHost.InlinePicker] and
+ * `docs/components/date-picker.md`.
+ */
+private val CALENDAR_WIDE_MIN_DP = 360.dp
+
+/**
  * The control's host: [NitroComposeHost] plus this component's composable.
  *
  * [Component] is fixed for the lifetime of the view, which is why it lives in a subclass
@@ -1125,16 +1143,89 @@ private class DatePickerHost(
       // second control nobody asked for, and for the `wheel` variant - "the picker, not
       // a dialog" - one whose keyboard would take over the screen. The calendar is what
       // this variant means.
-      DatePicker(
-        state = state,
-        showModeToggle = false,
-        modifier = Modifier.nuiControlSemantics(
-          label = model.accessibilityLabel,
-          value = DatePickerFieldText.format(mode, shown),
-          enabled = model.enabled,
-        ),
-      )
+      //
+      // Material 3's calendar lays its seven weekday columns out with
+      // `Arrangement.SpaceEvenly` and gives each cell
+      // `sizeIn(minWidth = 40.dp).size(LocalMinimumInteractiveComponentSize)`, so at
+      // Material's 48 dp interactive default the grid wants 7 × 48 + 2 × 12 = 360 dp. A
+      // narrower box does not get a narrower calendar: `Modifier.size` *enforces* its
+      // incoming maximum, so the columns past the squeeze simply lose width. Measured at
+      // a 320 dp box before any of this, the header columns were 126 px six times and
+      // then 20 px (Saturday at 7.6 dp), and the day rows below them 126 px six times and
+      // then 73 px - the clipping `docs/images/components/date-picker-android.png` used to
+      // show.
+      //
+      // So the calendar asks for the 40 dp token its own cell is built around
+      // (`DateContainerWidth`) - but only in a box too narrow for 48 dp, which is what
+      // [BoxWithConstraints] below is for: the value a `CompositionLocalProvider` hands
+      // down has to exist at composition time, while an `onSizeChanged` read is a
+      // measure-pass value, and writing one to state from a measure block marks this node
+      // measure-dirty (the loop `NitroComposeHost` warns about in its own measure block).
+      // At [CALENDAR_WIDE_MIN_DP] and above the inherited value is re-provided untouched,
+      // so a full-width phone keeps Material's 48 dp targets. Below 7 × 40 + 2 × 12 =
+      // 304 dp the calendar still cannot fit and is not made to pretend otherwise: the
+      // header of a 240 dp box measures five 40 dp columns, a 15.6 dp sliver, and no
+      // seventh column at all.
+      //
+      // What the narrow branch gives up is 8 dp of touch-target padding, on the day cells
+      // *and* on the month's prev/next buttons and year toggle, which read the same local
+      // and cannot be held at 48 dp from here. 40 dp is above WCAG 2.2 AA's 24 px minimum
+      // and below Material's recommended 48 dp; it is not padding that was being delivered
+      // at that width anyway - a squeezed cell was neither 48 dp nor 40 dp, which is the
+      // whole bug - and it is the shape iOS's inline calendar has there
+      // (`date-picker-ios.png` puts its seven columns on a 42.8 pt pitch in its 320 pt
+      // box). `docs/components/date-picker.md` states the rule, and `real-input:android`
+      // measures one narrow and one wide calendar on every run.
+      //
+      // No modifier, deliberately: `BoxWithConstraints` with none forwards the incoming
+      // constraints to its content with only the minimums cleared and reports the
+      // content's own size, so the host measures the calendar's size as it always did. A
+      // `fillMaxWidth()` here would not throw under the host's unbounded-parent arm -
+      // `fillMaxWidth` is a no-op when the incoming maximum is infinite - but it would make
+      // the box the thing that decides this node's width wherever the parent *is* bounded,
+      // and the width the host reports has to stay the calendar's own. What the wrapper
+      // costs one recomposition of *this lambda* per measure pass - `BoxWithConstraints`
+      // re-runs its content to re-derive the constraints, so `narrow` is recomputed from two
+      // constraint fields - and nothing more. The calendar under it is called with the same
+      // state it had, in the same slot, so it is not rebuilt: see the single
+      // `CompositionLocalProvider` below, which is what keeps it that way across this
+      // threshold. `DatePicker.harness.tsx`'s "lays each variant out at the size the
+      // control measured" is the test that says the height report and the engine's
+      // corrections survived it.
+      BoxWithConstraints {
+        val narrow =
+          constraints.hasBoundedWidth &&
+            with(LocalDensity.current) { constraints.maxWidth.toDp() < CALENDAR_WIDE_MIN_DP }
+        // One call site for one calendar: an `if`/`else` around the picker would put it in
+        // two composition slots, and the sizing engine's own passes move a mounted control
+        // across this very threshold (the provisional fallback box is narrower than the
+        // corrected one), which would rebuild the calendar the user is looking at.
+        CompositionLocalProvider(
+          LocalMinimumInteractiveComponentSize provides
+            if (narrow) 40.dp else LocalMinimumInteractiveComponentSize.current,
+        ) {
+          InlineCalendar(model, state, mode)
+        }
+      }
     }
+  }
+
+  /** The calendar itself, so the two branches above differ only in what they provide. */
+  @Composable
+  private fun InlineCalendar(
+    model: DatePickerModel,
+    state: DatePickerState,
+    mode: String,
+  ) {
+    DatePicker(
+      state = state,
+      showModeToggle = false,
+      modifier = Modifier.nuiControlSemantics(
+        label = model.accessibilityLabel,
+        value = DatePickerFieldText.format(mode, model.displayed),
+        enabled = model.enabled,
+      ),
+    )
   }
 
   /** The dialog, or the pair of them, behind the `compact` field. */

@@ -1,0 +1,187 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-01T17:47:25.089Z on code tree `0b1dbaf71795` at HEAD `3818ff0` (branch `task/G8-android-visual-fixes`)
+- Command: `bun run check`
+- Result: fail, exit 1, 148691 ms
+- Load: start 2.62, end 2.93, median 4.94, max 6.63
+- Device: android / device `emulator-5574` / lease `G8-ty8hr`
+- Full log: `task/G8-android-visual-fixes/check-2026-11-01T17-47-24.759Z.log` (<store>/task/G8-android-visual-fixes/check-2026-11-01T17-47-24.759Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/gate-check.test.js (31.703 s)`
+- `● gate.mjs check records the step timings › only the check gate is asked for a timing file`
+- `FAIL scripts/__tests__/gate.test.js (32.143 s)`
+- `● gate.mjs (the CLI, in a throwaway checkout) › records a filtered run under its own name, and need still wants the gate`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 0`
+- `Received: 1`
+- `● gate.mjs (the CLI, in a throwaway checkout) › records the full run under the bare name, and review then passes`
+- `● gate.mjs --background and wait › starts detached, records the same line a foreground run would, and wait reports it`
+- `● gate.mjs --background and wait › passes a filtered run through to the gate, recorded under its own name`
+- `● gate.mjs claims the device it runs on › claims the platform it runs on, and releases it when the run ends`
+- `● gate.mjs claims the device it runs on › refuses a device another live run holds, before the run starts`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "real-input:android"`
+- `Received string:    "gate: refused before the run - Metro port 8295 (pair leased) is served by pid 95107 (node) - a run is still using that port, and two Metro servers on one port is the 'app bridge was replaced by a newer app connection' failure`
+- `● gate.mjs claims the device it runs on › runs anyway under NITRO_UI_GATE_DEVICE_FORCE=1`
+- `● gate.mjs claims the device it runs on › has the claim live while the run is in flight`
+- `● Console`
+- `FAIL scripts/__tests__/gate-logs.test.js (45.068 s)`
+- `● logs survive git worktree remove › puts a harness run's timings in the store, named from its log (X11 v6)`
+
+## Last 150 log line(s) (of 1299 — the rest is in the full log above)
+
+```
+    > 2794 |     const asked = fs.readFileSync(run.calls, 'utf8');
+           |                      ^
+      2795 |     expect(asked).toContain('adb -s emulator-5574 shell pidof nitroui.example');
+      2796 |     expect(asked).toContain('adb -s emulator-5574 logcat -d --pid 4242');
+      2797 |     const context = splitDeviceContext(logOf(dir)).context;
+
+      at Object.readFileSync (scripts/__tests__/gate-logs.test.js:2794:22)
+
+  ● a failed device gate records its device context › takes the serial from the lease record, not from the environment
+
+    ENOENT: no such file or directory, open '<tmp>/x12-gate-kpBt3e/fake-bin/calls.log'
+
+      2810 |     const { run } = failedDeviceRun(dir, { ANDROID_SERIAL: 'emulator-5576' });
+      2811 |     expect(run.status).toBe(1);
+    > 2812 |     const asked = fs.readFileSync(run.calls, 'utf8');
+           |                      ^
+      2813 |     expect(asked).toContain('adb -s emulator-5574 get-state');
+      2814 |     expect(asked).not.toContain('-s emulator-5576');
+      2815 |   });
+
+      at Object.readFileSync (scripts/__tests__/gate-logs.test.js:2812:22)
+
+  ● a failed device gate records its device context › never addresses the maintainer’s reserved emulator, and says why
+
+    TypeError: Cannot read properties of undefined (reading 'logPath')
+
+      2659 |   function logOf(dir) {
+      2660 |     const [line] = ledgerIn(dir, 'task/x12-fixture');
+    > 2661 |     return fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+           |                                                         ^
+      2662 |   }
+      2663 |
+      2664 |   it('appends simctl, the device state, the lease list and load1 to the log', () => {
+
+      at logPath (scripts/__tests__/gate-logs.test.js:2661:57)
+      at Object.logOf (scripts/__tests__/gate-logs.test.js:2849:17)
+
+  ● a failed device gate records its device context › probes no device at all when the run holds no lease
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "simctl"
+    Received string:    ""
+
+      2865 |     // simctl is still fine to ask (it is host-wide, not another task's device), but
+      2866 |     // adb has no business being run by a task that holds nothing.
+    > 2867 |     expect(asked).toContain('simctl');
+           |                   ^
+      2868 |     expect(asked).not.toContain('adb');
+      2869 |     const log = logOf(dir);
+      2870 |     expect(log).toContain('holds no lease');
+
+      at Object.toContain (scripts/__tests__/gate-logs.test.js:2867:19)
+
+  ● a failed device gate records its device context › probes nothing for an expired or stolen lease, and says which
+
+    TypeError: Cannot read properties of undefined (reading 'logPath')
+
+      2659 |   function logOf(dir) {
+      2660 |     const [line] = ledgerIn(dir, 'task/x12-fixture');
+    > 2661 |     return fs.readFileSync(path.join(storeOf(dir), line.logPath), 'utf8');
+           |                                                         ^
+      2662 |   }
+      2663 |
+      2664 |   it('appends simctl, the device state, the lease list and load1 to the log', () => {
+
+      at logPath (scripts/__tests__/gate-logs.test.js:2661:57)
+      at Object.logOf (scripts/__tests__/gate-logs.test.js:2906:12)
+
+  ● a failed device gate records its device context › still records the gate result when a probe itself fails
+
+    TypeError: Cannot read properties of undefined (reading 'result')
+
+      2912 |     expect(run.status).toBe(1);
+      2913 |     const [line] = ledgerIn(dir, 'task/x12-fixture');
+    > 2914 |     expect(line.result).toBe('fail');
+           |                 ^
+      2915 |     expect(line.exitCode).toBe(1);
+      2916 |     expect(logOf(dir)).toContain('[unavailable]');
+      2917 |     // And the excerpt is still worth committing.
+
+      at Object.result (scripts/__tests__/gate-logs.test.js:2914:17)
+
+  ● a failed device gate records its device context › does not feed a failed probe’s error text to the next command
+
+    ENOENT: no such file or directory, open '<tmp>/x12-gate-zy4Wk7/fake-bin/calls.log'
+
+      2930 |     const { run } = failedDeviceRun(dir, { FAKE_ADB_PIDOF_FAIL: '1' });
+      2931 |     expect(run.status).toBe(1);
+    > 2932 |     const asked = fs.readFileSync(run.calls, 'utf8');
+           |                      ^
+      2933 |     expect(asked).toContain('pidof');
+      2934 |     expect(asked).not.toContain('logcat');
+      2935 |     const log = logOf(dir);
+
+      at Object.readFileSync (scripts/__tests__/gate-logs.test.js:2932:22)
+
+  ● a failed device gate records its device context › the excerpt separates the device block from the tail for real logs too
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      2950 |     const { run } = failedDeviceRun(dir);
+      2951 |     expect(run.status).toBe(1);
+    > 2952 |     expect(runCli(dir, ['export', '--task', 'X12']).status).toBe(0);
+           |                                                             ^
+      2953 |     const failures = fs.readdirSync(
+      2954 |       path.join(dir, 'docs', 'tasks', 'X12', 'failures')
+      2955 |     );
+
+      at Object.toBe (scripts/__tests__/gate-logs.test.js:2952:61)
+
+FAIL scripts/__tests__/ci-workflows.test.js (53.903 s)
+  ● the dispatch-only harness jobs are given what the action needs › the Android job leaves evidence when the emulator never becomes ready
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "printed": "avd (from rn-harness.config.mjs): nitroui",
+    +   "printed": "avd (from rn-harness.config.mjs): nitroui_a",
+        "status": 0,
+        "stderr": "",
+      }
+
+      773 |           .find(Boolean) ?? '',
+      774 |       printed: String(ran.stdout ?? '').trim(),
+    > 775 |     }).toEqual({
+          |        ^
+      776 |       status: 0,
+      777 |       stderr: '',
+      778 |       printed: `avd (from rn-harness.config.mjs): ${want}`,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:775:8)
+
+
+Test Suites: 4 failed, 56 passed, 60 total
+Tests:       25 failed, 1573 passed, 1598 total
+Snapshots:   0 total
+Time:        144.998 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 148.7 s
+gate: recorded in .gates/task/G8-android-visual-fixes.jsonl
+
+```

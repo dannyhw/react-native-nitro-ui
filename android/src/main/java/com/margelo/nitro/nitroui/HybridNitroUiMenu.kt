@@ -4,6 +4,7 @@ import android.app.Activity
 import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -524,6 +525,20 @@ internal class MenuModel : NitroUiModel() {
 }
 
 /**
+ * The widest any one child of a `Menu`'s popup may ask to be.
+ *
+ * Material caps a *row* at 280 dp (`DropdownMenuItemDefaultMaxWidth`, which
+ * `DropdownMenuItemContent` puts in the row's own `sizeIn`), and the popup's width is
+ * whatever its widest child wants now that it no longer matches the trigger's. So a
+ * child that is not a row needs the same cap or it becomes the one thing that can
+ * stretch the list: that was `MenuHeader`, whose submenu title could be any length.
+ * Material's own token is private, so this is the one number in this file that mirrors
+ * a constant instead of reading it, and `Menu.harness.tsx`'s cap assertion is what says
+ * it still matches.
+ */
+private val MENU_CONTENT_MAX_DP = 280.dp
+
+/**
  * The Menu's host: [NitroComposeHost] plus this component's composable.
  *
  * [Component] is fixed for the lifetime of the view, which is why it lives in a
@@ -663,10 +678,16 @@ private class MenuHost(
         // opens and never calls the callback (`docs/components/menu.md`).
         onClick = { model.setOpen(true) },
       )
-      // No `exposedDropdownSize()`: that sizes the list to the anchor, and a menu's
-      // list is as wide as its items need, which is what iOS's menu does.
+      // `matchAnchorWidth = false`, which switches off the `exposedDropdownSize()`
+      // this call would otherwise get *inside* Material: that modifier sets
+      // `minWidth = maxWidth = anchorWidth`, so with the default the list came back
+      // exactly as wide as the button and any label longer than the title lost its
+      // tail. Left to its content, the list is as wide as its items need — between
+      // Material's own 112 dp floor and the 280 dp a row's content caps at — which
+      // is what iOS's menu does.
       ExposedDropdownMenu(
         expanded = expanded,
+        matchAnchorWidth = false,
         onDismissRequest = {
           // Everything that closes a popup without a choice: outside tap, the
           // system back gesture, the composition going away.
@@ -757,7 +778,16 @@ private class MenuHost(
     )
   }
 
-  /** A group's title: drawn, and deliberately not a row. */
+  /**
+   * A group's title: drawn, and deliberately not a row.
+   *
+   * The width cap is the same one the rows live under. A header is not a `Row`, so it
+   * does not inherit a row's measure, and once the popup stopped matching the trigger's
+   * width its width is whatever its widest child asks for - so an uncapped header was the
+   * one child that could stretch the list past the width a Material menu is meant to
+   * stop at. Ellipsised like a row, because a header that cannot be read in full is a
+   * worse outcome than a menu that cannot say the whole name.
+   */
   @Composable
   private fun MenuHeader(title: String) {
     Text(
@@ -766,7 +796,9 @@ private class MenuHost(
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       maxLines = 1,
       overflow = TextOverflow.Ellipsis,
-      modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+      modifier = Modifier
+        .widthIn(max = MENU_CONTENT_MAX_DP)
+        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
     )
   }
 

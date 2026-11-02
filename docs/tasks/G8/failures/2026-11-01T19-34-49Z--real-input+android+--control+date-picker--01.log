@@ -1,0 +1,125 @@
+# Failure excerpt — real-input:android:--control:date-picker
+
+- Ran: 2026-11-01T19:34:49.100Z on code tree `658688cf8e7d` at HEAD `843849a` (branch `task/G8-android-visual-fixes`)
+- Command: `node scripts/real-input/android.mjs --control date-picker`
+- Result: fail, exit 1, 494566 ms
+- Load: start 3.01, end 1.89, median 2.18, max 3.13
+- Device: android / device `emulator-5570` / lease `G8-6ih23`
+- Full log: `task/G8-android-visual-fixes/real-input+android+--control+date-picker-2026-11-01T19-34-49.100Z.log` (<store>/task/G8-android-visual-fixes/real-input+android+--control+date-picker-2026-11-01T19-34-49.100Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp) - the narrowest column is 40.0 dp, under the 48 dp touch target this box should have produced`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G8-android-visual-fixes/real-input+android+--control+date-picker-2026-11-01T19-34-49.100Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G8-6ih23 (still live)
+  |   G8-6ih23                 G8           android           pair-b
+gate: load
+  |   load1 at the moment of failure: 1.89 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ the DatePicker has reported no day before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input date picker" occupies 42,781 → 386,907
+    · tapping dialog day "Monday, November 16, 2026"
+    ✓ a real tap on a dialog day (Monday, November 16, 2026) reaches JS as a change — expected 1, saw 1
+    ✓ the day JS was told is the day React paints: "2026-11-16" is Y-M-D, written by hand so that no locale can move the assertion
+    ✓ the refusing parent pins its DatePicker to one day — expected 2024-06-15, saw 2024-06-15
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting date picker" occupies 42,1133 → 386,1259
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the day it sends is unchanged — expected 2024-06-15, saw 2024-06-15
+    · "Real-input rejecting date picker" occupies 42,1133 → 386,1259
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a second pick is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 2024-06-15, saw 2024-06-15
+    · grid: 31 cells in the band, first = "Thursday, January 1, 2026", value = "2026-01-01 08:30"
+    ✓ the tap moved the value it is echoing: "2026-01-08 08:30" is not "2026-01-01 08:30"
+    ✓ and the day it accepted is the instant that day echoed before, time of day kept — expected 2026-01-01 08:30, saw 2026-01-01 08:30
+    ✓ "Wide inline calendar" is laid out in a 411 dp box, at the 360 dp width that decides the touch target
+    ✗ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp) - the narrowest column is 40.0 dp, under the 48 dp touch target this box should have produced
+    ✓ "Narrow inline calendar" is laid out in a 320 dp box, under the 360 dp width that decides the touch target
+    ✓ the 320 dp inline calendar lays a whole week out on 40 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp)
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,738][1038,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,738][492,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2054][1038,2180]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2107][714,2233]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+date-picker: FAIL (no retries)
+    failed: the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp) - the narrowest column is 40.0 dp, under the 48 dp touch target this box should have produced
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 14/14 auxiliary checks passed
+
+
+
+```

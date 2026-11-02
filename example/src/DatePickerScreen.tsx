@@ -296,6 +296,60 @@ export default function DatePickerScreen() {
           mode="time"
           testID="inline-time"
         />
+        {/*
+          Android only, and placed just after the pickers it looks like rather than at
+          the foot of the page: this screen carries full-height inline calendars, so a
+          fixture below them sits ~9 000 px down — measured, and the reason the first
+          version of this check spent its whole scroll budget arriving and gave up.
+          Adding them here moves nothing above them.
+
+          The width *is* the check, in both directions. Material 3 lays a calendar's
+          seven weekday columns out with `Arrangement.SpaceEvenly` and gives each one
+          `LocalMinimumInteractiveComponentSize` (48 dp) of interactive minimum, so the
+          grid wants 7 × 48 + 2 × 12 = 360 dp. In a narrower box the columns past the
+          squeeze simply lose width, and nothing inside React Native can see it: an
+          `inline` picker is a `fillWidth` control, so Compose is asked "what height at
+          320 dp" and answers 320 wide whether or not the grid fits (measured at boxes
+          of 240, 320 and 361 dp: 240, 320 and 361 back). The weekday cells are Compose
+          nodes, not `View`s, so the in-app queries cannot reach them either — the same
+          gap `scripts/real-input/a11y.mjs` records for a control's *name*. What can see
+          them is `uiautomator dump`, which is why the rule runs in
+          `real-input:android` (`CHECKS['date-picker']`) and these two rows are its
+          fixtures.
+
+          Measured here before any fix, at 320 dp: the header columns came back 126 px
+          six times and then 20 px — Saturday at 7.6 dp, over day cells of 126, 126,
+          126, 126, 126, 73, 105. That is the clipping
+          `docs/images/components/date-picker-android.png` used to show. The narrow
+          calendar answers with 40 dp cells now, which is what fits, and the wide one
+          exists to keep that honest: it spans the page edge to edge (the negative
+          margins reclaim the page's own 16 dp of padding) so its box is past 360 dp and
+          its columns have to still be Material's 48 dp. Without that second row, a
+          calendar that shaved 8 dp off every touch target at *every* width would have
+          nothing saying so.
+
+          iOS renders neither row, so `RealInputTests.swift` sees the page it always
+          saw and the popover check's last row stays where it was.
+        */}
+        {Platform.OS === 'android' ? (
+          <DatePicker
+            defaultValue={new Date(2026, 9, 31)}
+            variant="inline"
+            accessibilityLabel="Wide inline calendar"
+            testID="wide-inline"
+            style={styles.wideBox}
+          />
+        ) : null}
+        {Platform.OS === 'android' ? (
+          <View style={styles.narrowBox}>
+            <DatePicker
+              defaultValue={new Date(2026, 9, 31)}
+              variant="inline"
+              accessibilityLabel="Narrow inline calendar"
+              testID="narrow-inline"
+            />
+          </View>
+        ) : null}
 
         <Text style={[styles.section, { color: ink.ink }]}>
           Wheel (iOS&apos;s wheel picker; Android has none and renders the
@@ -410,6 +464,24 @@ const styles = StyleSheet.create({
   },
   column: {
     gap: 6,
+  },
+  /** The 320 dp box `DatePickerScreen`'s narrow inline calendar is laid out in. */
+  narrowBox: {
+    width: 320,
+    maxWidth: '100%',
+  },
+  /**
+   * Reclaims the page's own 16 dp of padding on both sides, so the wide inline calendar
+   * is measured at the screen's width rather than the page's content width.
+   *
+   * A `width` would not do: the `inline` variant is a `fillWidth` control, so whatever
+   * the box is, that is what the calendar is laid out at — and the point of this row is
+   * that the box is past the 360 dp where Material's own 48 dp grid fits. Negative
+   * margins make a stretched child wider than its parent's content box without touching
+   * the page's layout for anything else.
+   */
+  wideBox: {
+    marginHorizontal: -16,
   },
   buttonRow: {
     flexDirection: 'row',
