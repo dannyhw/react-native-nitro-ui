@@ -8,6 +8,14 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.4.3
+
+### Patch Changes
+
+- 5f67844: The Android `inline` / `wheel` `DatePicker`'s calendar is no longer clipped inside a box narrower than 360 dp. Its seven weekday columns used to be laid out unevenly there, so the ones on the right lost width and the day's own highlight drew over its neighbour; all seven are equal now. In a box narrower than 360 dp the calendar lays its grid out at 40 dp touch targets instead of Material's 48 dp, which is what lets them fit; the month's previous/next buttons and the year toggle shrink with it. 40 dp is above WCAG 2.2 AA's 24 px minimum and below Material's recommended 48 dp, so a squeezed calendar is smaller to tap than a roomy one, and nothing is lost at widths where 48 dp already fitted — a calendar 360 dp or wider is unchanged. A box narrower than 304 dp is still too small for a week's worth of days and is not made to pretend otherwise. `compact` is unchanged: its dialog is a window laid out at Material's 360 dp.
+- b7693b0: The Android `Menu`'s list is now as wide as its items need instead of as wide as the trigger. Every row used to be measured against the button's width, so a label longer than the title lost its tail — the README screenshot rendered "AirDrop" as "AirDr". The list keeps Material's own sizing, so it is no narrower than its 112 dp floor and no wider than the 280 dp a row's content caps at, and a long group title is shortened with an ellipsis rather than stretching the list past that. Short items still get the 112 dp floor, and the list stays aligned with the trigger's start edge, so it still opens under its trigger.
+- 5be8e1e: The iOS `Menu` now draws the rows of a section that has no `title`. Such a section was rendered as a SwiftUI `Section` with a `Divider()` header, and SwiftUI built that as an empty group, so every row in it (a destructive "Delete" under a bare divider, say) was missing from the menu on iOS while Android showed it. An untitled section is now a `Section` with no header: its rows appear, in their own group, set off from the rows above by the system's separator. Android is unchanged.
+
 ## 0.4.2
 
 ### Patch Changes
