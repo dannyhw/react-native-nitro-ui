@@ -171,7 +171,37 @@ export const MANIFEST_SCHEMA = {
     readBy:
       "the title of that row when the generator adds it: what the control's check proves, on both platforms",
   },
+  /**
+   * The public component names the directory's wrapper module exports, when they
+   * are not just `name`. Optional, and absent for every control that is one
+   * component: `exportsOf` answers `[name]` then.
+   *
+   * It exists for one native view behind more than one public component - the
+   * dialog, whose `AlertDialog` and `ConfirmationDialog` share `NitroUiDialog`
+   * (DECISIONS D33). Everything keyed to the *native* view (`nitro.json`, the
+   * Android manager, the example tab, the real-input row) stays one row per
+   * manifest; what is keyed to the *public* name - the Host's import and its
+   * `HOSTABLE_CONTROLS` rows, and the barrel check - takes one per export.
+   */
+  exports: {
+    type: 'array',
+    items: /^[A-Z][A-Za-z0-9]*$/,
+    optional: true,
+    readBy:
+      "HOSTABLE_CONTROLS rows and the Host's import in HostChildren.ts, and the barrel check of src/index.ts - one per public name",
+  },
 };
+
+/**
+ * The public component names a manifest's wrapper module exports: its `exports`,
+ * or just its `name` (see `MANIFEST_SCHEMA.exports`).
+ *
+ * @param {any} manifest a validated manifest
+ * @returns {string[]}
+ */
+export function exportsOf(manifest) {
+  return Array.isArray(manifest.exports) ? manifest.exports : [manifest.name];
+}
 
 /** Every key a manifest may carry; anything else is an unknown key. */
 export const MANIFEST_FIELDS = Object.keys(MANIFEST_SCHEMA);
@@ -209,6 +239,21 @@ export function validateManifest(parsed, directoryName, where) {
     if (value === null) {
       if (!rule.nullable)
         problems.push(`${where}: key "${key}" may not be null`);
+      continue;
+    }
+    if (rule.type === 'array') {
+      if (
+        !Array.isArray(value) ||
+        value.length === 0 ||
+        value.some(
+          (item) => typeof item !== 'string' || !rule.items.test(item)
+        ) ||
+        new Set(value).size !== value.length
+      ) {
+        problems.push(
+          `${where}: key "${key}" must be a non-empty array of distinct names matching ${rule.items}, got ${JSON.stringify(value)}`
+        );
+      }
       continue;
     }
     if (typeof value !== rule.type) {
@@ -310,6 +355,19 @@ export function manifestsFromEntries(entries) {
         );
       }
       seen.set(value, manifest.name);
+    }
+  }
+  // A public name is one component: two manifests exporting it would make the Host
+  // table key one identity twice, and the barrel export one name from two modules.
+  const exportedBy = new Map();
+  for (const manifest of manifests) {
+    for (const name of exportsOf(manifest)) {
+      if (exportedBy.has(name)) {
+        problems.push(
+          `duplicate export "${name}": ${exportedBy.get(name)} and ${manifest.name} cannot both claim it`
+        );
+      }
+      exportedBy.set(name, manifest.name);
     }
   }
   if (problems.length > 0) {
@@ -683,18 +741,27 @@ export function regionsFor(manifests) {
       // `tsc` would then not find the name.
       entries: manifests,
       keyOf: NAME,
-      entryStart: /^import \{ ([A-Z]\w*) \} from '\.\.\/\1\/\1';$/,
-      render: (m) => `import { ${m.name} } from '../${m.name}/${m.name}';`,
+      // Keyed on the directory, which a module path names once whatever it exports:
+      // one import line per manifest, naming every public component it has
+      // (`exportsOf`) - the dialog's two over one module.
+      entryStart: /^import \{ [A-Z][\w, ]* \} from '\.\.\/([A-Z]\w*)\/\1';$/,
+      render: (m) =>
+        `import { ${exportsOf(m).join(', ')} } from '../${m.name}/${m.name}';`,
     }),
     withManifests({
       path: 'src/components/Host/HostChildren.ts',
       anchor: 'export const HOSTABLE_CONTROLS = new Map<unknown, string>([',
       describe: 'HOSTABLE_CONTROLS rows',
       shipped: true,
-      entries: where('hostable'),
-      keyOf: NAME,
+      // One row per public component, not per manifest: the table is keyed by the
+      // component identity an app writes in JSX, and `<ConfirmationDialog>` is not
+      // `<AlertDialog>` even though one native view draws both.
+      entries: where('hostable').flatMap((m) =>
+        exportsOf(m).map((exportName) => ({ ...m, exportName }))
+      ),
+      keyOf: (entry) => entry.exportName,
       entryStart: /^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/,
-      render: (m) => `  [${m.name}, '${m.name}'],`,
+      render: (entry) => `  [${entry.exportName}, '${entry.exportName}'],`,
     }),
     withManifests({
       path: 'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt',
@@ -1152,7 +1219,11 @@ export function checkExampleScreens(manifests, appText, readFile) {
  * @param {any[]} manifests
  * @param {string[]} exportedNames the `<Name>` of every component the barrel exports
  */
-export function checkIndexExports(manifests, exportedNames) {
+export function checkIndexExports(
+  manifests,
+  exportedNames,
+  exportedValues = null
+) {
   const problems = [];
   const exported = new Set(exportedNames);
   for (const manifest of manifests) {
@@ -1160,6 +1231,18 @@ export function checkIndexExports(manifests, exportedNames) {
       problems.push(
         `src/index.ts: ${manifest.name} is in the registry and is not exported, so an app cannot import it`
       );
+      continue;
+    }
+    // A manifest that names its public components (`exports`) is held to each name:
+    // the module being exported proves nothing about which of its components are.
+    if (exportedValues == null || !Array.isArray(manifest.exports)) continue;
+    const fromModule = exportedValues.get(manifest.name) ?? new Set();
+    for (const name of manifest.exports) {
+      if (!fromModule.has(name)) {
+        problems.push(
+          `src/index.ts: ${name} is in ${manifest.name}'s exports and src/index.ts does not export it from ./components/${manifest.name}/`
+        );
+      }
     }
   }
   const manifested = new Set([
@@ -1214,6 +1297,27 @@ export function exportedComponents(indexText) {
   return [
     ...(indexText ?? '').matchAll(/from '\.\/components\/([A-Z]\w+)\//g),
   ].map((match) => match[1]);
+}
+
+/**
+ * The value names `src/index.ts` exports from each component directory: `type`
+ * members are left out, because a type is not a component an app can render.
+ *
+ * @returns {Map<string, Set<string>>} directory -> exported value names
+ */
+export function exportedValuesByComponent(indexText) {
+  const byDirectory = new Map();
+  for (const match of (indexText ?? '').matchAll(
+    /export \{([^}]*)\} from '\.\/components\/([A-Z]\w+)\//g
+  )) {
+    const names = byDirectory.get(match[2]) ?? new Set();
+    for (const member of match[1].split(',')) {
+      const name = member.trim();
+      if (name.length > 0 && !name.startsWith('type ')) names.add(name);
+    }
+    byDirectory.set(match[2], names);
+  }
+  return byDirectory;
 }
 
 /**
@@ -1296,7 +1400,8 @@ export function planRegistry(manifests, readFile) {
   problems.push(
     ...checkIndexExports(
       manifests,
-      exportedComponents(readFile('src/index.ts'))
+      exportedComponents(readFile('src/index.ts')),
+      exportedValuesByComponent(readFile('src/index.ts'))
     )
   );
   problems.push(

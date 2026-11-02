@@ -1,0 +1,75 @@
+# Failure excerpt — harness:ios:Dialog:-t:status%20bar%7Ckey%20window
+
+- Ran: 2026-11-02T13:42:28.942Z on code tree `b91da82a05b2` at HEAD `7a9aa10` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Dialog -t status bar|key window`
+- Result: fail, exit 1, 12280 ms
+- Load: start 4.84, end 4.69, median 4.76, max 4.84
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-askae`
+- Full log: `task/G11-dialogs/harness+ios+Dialog+-t+status+20bar+7Ckey+20window-2026-11-02T13-42-28.942Z.log` (<store>/task/G11-dialogs/harness+ios+Dialog+-t+status+20bar+7Ckey+20window-2026-11-02T13-42-28.942Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · behaviour (G11, Q5 B7) › answers for the status bar and orientations as the screen it covers does`
+- `expected '0,0,30' to be '0,0,2' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+ios+Dialog+-t+status+20bar+7Ckey+20window-2026-11-02T13-42-28.942Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-askae (still live)
+  |   G11-askae                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.69 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Dialog -t status bar|key window
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree b91da82a05b2, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.84/5.40 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+ios+Dialog+-t+status+20bar+7Ckey+20window-2026-11-02T13-42-28.942Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · behaviour (G11, Q5 B7) › answers for the status bar and orientations as the screen it covers does
+
+    expected '0,0,30' to be '0,0,2' // Object.is equality
+
+      [0m [90m 846 |[39m       [90m// Not hidden, `.default`, `.portrait`.[39m
+       [90m 847 |[39m       expect(up[33m.[39mappChrome)[33m.[39mtoBe([32m'0,0,2'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 848 |[39m       expect(up[33m.[39mchrome)[33m.[39mtoBe(up[33m.[39mappChrome)[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 849 |[39m       setters[33m.[39m[36mget[39m([32m'chrome'[39m)[33m?[39m[33m.[39m([36mfalse[39m)[33m;[39m
+       [90m 850 |[39m       [36mawait[39m waitForLive([32m'chrome'[39m[33m,[39m [35m0[39m[33m,[39m [32m'closed'[39m)[33m;[39m
+       [90m 851 |[39m     })[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 27 skipped, 1 passed, 29 total
+Snapshots:   0 total
+Time:        11.181 s, estimated 125 s
+Ran all test suites matching Dialog with tests matching "status bar|key window".
+
+
+
+```

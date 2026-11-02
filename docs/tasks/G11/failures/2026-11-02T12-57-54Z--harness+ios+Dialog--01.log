@@ -1,0 +1,126 @@
+# Failure excerpt — harness:ios:Dialog
+
+- Ran: 2026-11-02T12:57:54.506Z on code tree `0a43dc5567ca` at HEAD `0a124f2` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Dialog`
+- Result: fail, exit 1, 82536 ms
+- Load: start 8.20, end 4.86, median 6.29, max 8.20
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-57-54.506Z.log` (<store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-57-54.506Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · presentation spike (G11, Q5 B9) › leaves no window when dropped 80 ms after presenting`
+- `● Dialog · presentation spike (G11, Q5 B9) › leaves no window when dropped 150 ms after presenting`
+- `● Dialog · behaviour (G11, Q5 B7) › does nothing on a user dismissal while not dismissible`
+- `● Dialog · behaviour (G11, Q5 B7) › gives a recycled view none of the open dialog it came from`
+- `● Dialog · behaviour (G11, Q5 B7) › presents from inside a <Host>, and goes when the Host is dropped`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-57-54.506Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.86 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Dialog
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 0a43dc5567ca, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.20/9.91 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-57-54.506Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · presentation spike (G11, Q5 B9) › leaves no window when dropped 80 ms after presenting
+
+    "probe-128279334.058291" never reached nothing presented in the app window and no dialog window left (after a drop 80 ms in); its report is "presented=0;js=0;live=1;presentCount=0;onScreen=0;kind=none;appTop=-;ownWindow=0;topPresented=-;windows=1;drops=5;recycles=5"
+
+      [0m [90m 164 |[39m     }[33m,[39m
+       [90m 165 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 166 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 167 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 168 |[39m       )[33m,[39m
+       [90m 169 |[39m     timeoutMs[0m
+
+  ● Dialog · presentation spike (G11, Q5 B9) › leaves no window when dropped 150 ms after presenting
+
+    "probe-128288234.119041" never reached nothing presented in the app window and no dialog window left (after a drop 150 ms in); its report is "presented=0;js=0;live=1;presentCount=0;onScreen=0;kind=none;appTop=-;ownWindow=0;topPresented=-;windows=1;drops=7;recycles=7"
+
+      [0m [90m 164 |[39m     }[33m,[39m
+       [90m 165 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 166 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 167 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 168 |[39m       )[33m,[39m
+       [90m 169 |[39m     timeoutMs[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › does nothing on a user dismissal while not dismissible
+
+    "sticky" never reached live=0 (closed by its action); its report is "presented=0;js=0;live=1;presentCount=1;onScreen=0;kind=none;appTop=-;ownWindow=0;topPresented=-;windows=1;drops=10;recycles=10"
+
+      [0m [90m 164 |[39m     }[33m,[39m
+       [90m 165 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 166 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 167 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 168 |[39m       )[33m,[39m
+       [90m 169 |[39m     timeoutMs[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › gives a recycled view none of the open dialog it came from
+
+    "recycled" never reached the old dialog up; its report is "presented=1;js=1;live=3;presentCount=1;onScreen=1;kind=alert;title=Old title;message=-;actions=3;ids=cancel,delete,later;enabled=1,1,1;implicitCancel=0;appTop=-;ownWindow=1;topPresented=-;windows=3;drops=12;recycles=12"
+
+      [0m [90m 164 |[39m     }[33m,[39m
+       [90m 165 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 166 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 167 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 168 |[39m       )[33m,[39m
+       [90m 169 |[39m     timeoutMs[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › presents from inside a <Host>, and goes when the Host is dropped
+
+    "hosted" never reached up from inside the Host; its report is "presented=1;js=1;live=3;presentCount=1;onScreen=1;kind=alert;title=Hosted dialog;message=-;actions=3;ids=cancel,delete,later;enabled=1,1,1;implicitCancel=0;appTop=-;ownWindow=1;topPresented=-;windows=3;drops=13;recycles=13"
+
+      [0m [90m 164 |[39m     }[33m,[39m
+       [90m 165 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 166 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 167 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 168 |[39m       )[33m,[39m
+       [90m 169 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 15 passed, 20 total
+Snapshots:   0 total
+Time:        80.902 s
+Ran all test suites matching Dialog.
+
+
+
+```

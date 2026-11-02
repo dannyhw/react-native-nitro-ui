@@ -11,6 +11,12 @@ import { ReactNode } from 'react';
 import { ViewProps } from 'react-native';
 
 // @public
+export function AlertDialog(props: AlertDialogProps): JSX.Element;
+
+// @public
+export type AlertDialogProps = DialogProps;
+
+// @public
 export function Button(input: ButtonProps): JSX.Element;
 
 // @public
@@ -45,6 +51,14 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 
 // @public
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
+
+// @public
+export function ConfirmationDialog(props: ConfirmationDialogProps): JSX.Element;
+
+// @public
+export interface ConfirmationDialogProps extends DialogProps {
+    titleVisibility?: 'automatic' | 'visible' | 'hidden' | undefined;
+}
 
 // @public
 export function DatePicker(input: DatePickerProps): JSX.Element;
@@ -88,6 +102,41 @@ export interface DatePickerProps extends ViewProps {
 
 // @public
 export type DatePickerVariant = 'compact' | 'inline' | 'wheel';
+
+// @public
+export interface DialogAction {
+    disabled?: boolean | undefined;
+    id: string;
+    role?: 'default' | 'cancel' | 'destructive' | undefined;
+    title: string;
+}
+
+// @public
+export interface DialogProps extends ViewProps {
+    actions: readonly DialogAction[];
+    dismissible?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly variant: string;
+        readonly presented: boolean;
+        readonly mostRecentEventCount: number;
+        readonly title: string;
+        readonly message: string | null;
+        readonly dismissible: boolean;
+        readonly tintColor: number | null;
+        nuiTestStateReport(): string;
+        nuiTestPerformAction(id: string): void;
+        nuiTestDismiss(): void;
+    }) => void) | undefined;
+    isPresented: boolean;
+    message?: string | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onAction?: ((id: string) => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    tintColor?: ColorValue | undefined;
+    title: string;
+}
 
 // @public
 export function Host(input: HostProps): JSX.Element;

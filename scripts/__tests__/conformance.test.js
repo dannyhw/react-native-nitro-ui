@@ -53,7 +53,11 @@ import {
   staleDebt,
   staleExemptions,
 } from '../conformance-core.mjs';
-import { A11Y_CONTROLS, A11Y_EXEMPTIONS } from '../real-input/a11y.mjs';
+import {
+  A11Y_CONTROLS,
+  A11Y_EXEMPTIONS,
+  A11Y_PRESENTATIONS,
+} from '../real-input/a11y.mjs';
 import { runA11ySweep, SCROLL_PROBE_LIMIT } from '../real-input/a11y-sweep.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 import { readFileSync } from 'node:fs';
@@ -169,11 +173,12 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the eight controls today', () => {
+  it('is complete for the nine controls today', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
       'Button',
       'DatePicker',
+      'Dialog',
       'Menu',
       'Picker',
       'Progress',
@@ -1222,6 +1227,77 @@ describe('the a11y table cross-check', () => {
   });
 });
 
+describe('the a11y presentation cases', () => {
+  // A component with no box that presents a window (G11's dialogs) cannot be read by the
+  // sweep, so its case says where the presentation-aware rule runs instead. The rows are
+  // coverage only for what they claim, and each way a row can claim too much is red here.
+  const withDialog = (patch) =>
+    repoManifests().map((m) => (m.name === 'Dialog' ? { ...m, ...patch } : m));
+
+  it('covers Dialog, and only through its real-input check', () => {
+    expect(A11Y_PRESENTATIONS.map((entry) => entry.component)).toEqual([
+      'Dialog',
+    ]);
+    expect(checkA11yTable(repoManifests(), read)).toEqual([]);
+  });
+
+  it('goes red for a Dialog with neither kind of case', () => {
+    const problems = checkA11yTable(
+      repoManifests(),
+      read,
+      A11Y_CONTROLS,
+      undefined,
+      []
+    );
+    expect(problems.join('\n')).toContain('no a11y case for Dialog (dialog)');
+  });
+
+  it('goes red when the presented component turns out to have a box', () => {
+    const problems = checkA11yTable(withDialog({ sizing: 'intrinsic' }), read);
+    expect(problems.join('\n')).toContain(
+      'a control with a box is read by the sweep'
+    );
+  });
+
+  it('goes red when nothing opens the window it says is read', () => {
+    const problems = checkA11yTable(withDialog({ realInput: false }), read);
+    expect(problems.join('\n')).toContain(
+      'nothing ever opens the window this case says is read'
+    );
+  });
+
+  it('goes red when its hybridView drifts, or it guards no manifest', () => {
+    expect(
+      checkA11yTable(repoManifests(), read, A11Y_CONTROLS, undefined, [
+        { ...A11Y_PRESENTATIONS[0], hybridView: 'NitroUiDialgo' },
+      ]).join('\n')
+    ).toContain('says hybridView "NitroUiDialgo"');
+    expect(
+      checkA11yTable(repoManifests(), read, A11Y_CONTROLS, undefined, [
+        ...A11Y_PRESENTATIONS,
+        { id: 'ghost', component: 'Ghost', hybridView: 'NitroUiGhost' },
+      ]).join('\n')
+    ).toContain('the presentation case "ghost" guards "Ghost"');
+  });
+
+  it('goes red for a component in both tables', () => {
+    const problems = checkA11yTable(repoManifests(), read, [
+      ...A11Y_CONTROLS,
+      {
+        id: 'dialog-box',
+        component: 'Dialog',
+        hybridView: 'NitroUiDialog',
+        screen: 'host',
+        label: 'Hosted switch 0',
+        labelAttribute: 'accessibilityLabel={`Hosted switch ${String(index)}`}',
+      },
+    ]);
+    expect(problems.join('\n')).toContain(
+      'is in both A11Y_CONTROLS and A11Y_PRESENTATIONS'
+    );
+  });
+});
+
 /* ------------------------------- the shared mirror --------------------------- */
 
 describe('the in-app table mirror', () => {
@@ -1445,6 +1521,25 @@ describe('the in-app fixture table cross-check', () => {
     ];
     expect(checkInAppFixtures(withTooltip, harness()).join('\n')).toContain(
       'no fixture for Tooltip'
+    );
+  });
+
+  it('goes red when a box-less control does not opt out of the sizing rules', () => {
+    const optedIn = harness().replace('    selfSizing: false,\n', '');
+    expect(optedIn).not.toBe(harness());
+    expect(checkInAppFixtures(repoManifests(), optedIn).join('\n')).toContain(
+      'Dialog declares no sizing policy (sizing: null) and its fixture does not say'
+    );
+  });
+
+  it('goes red when a self-sizing control opts out of its sizing rules', () => {
+    const optedOut = harness().replace(
+      "    component: 'NitroUiPicker',\n",
+      "    component: 'NitroUiPicker',\n    selfSizing: false,\n"
+    );
+    expect(optedOut).not.toBe(harness());
+    expect(checkInAppFixtures(repoManifests(), optedOut).join('\n')).toContain(
+      'a self-sizing control cannot opt out of its fallback and leak rules'
     );
   });
 

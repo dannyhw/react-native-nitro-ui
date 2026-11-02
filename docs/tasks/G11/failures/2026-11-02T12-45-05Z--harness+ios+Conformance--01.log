@@ -1,0 +1,90 @@
+# Failure excerpt — harness:ios:Conformance
+
+- Ran: 2026-11-02T12:45:05.410Z on code tree `48152bc52ff9` at HEAD `0a124f2` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance`
+- Result: fail, exit 1, 99044 ms
+- Load: start 4.71, end 6.54, median 5.43, max 6.90
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/harness+ios+Conformance-2026-11-02T12-45-05.410Z.log` (<store>/task/G11-dialogs/harness+ios+Conformance-2026-11-02T12-45-05.410Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · Dialog › shows none of its previous owner under one identity`
+- `● conformance · every control, four rules › · Dialog › is named on its own box, not on a wrapper around it`
+- `expected { y: +0, …(4) } to be null`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+ios+Conformance-2026-11-02T12-45-05.410Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.54 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 48 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 48152bc52ff9, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.74/6.18 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+ios+Conformance-2026-11-02T12-45-05.410Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · Dialog › shows none of its previous owner under one identity
+
+    2 conformance finding(s):
+
+        - Dialog × recycle-reset: testID "conformance-dialog" (uncontrolled second owner) kept its identity across lifetimes and the dialog the second owner asked for is presented reads 0 where the props say 1 — the view came back wearing its previous owner
+        - Dialog × recycle-reset: testID "conformance-dialog" (uncontrolled second owner) kept its identity across lifetimes and the title its window shows reads undefined where the props say Second owner’s dialog — the view came back wearing its previous owner
+      [0m [90m 1062 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1063 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1064 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1065 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1066 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1067 |[39m [32m        .join('\n')}`[39m[0m
+
+  ● conformance · every control, four rules › · Dialog › is named on its own box, not on a wrapper around it
+
+    expected { y: +0, …(4) } to be null
+
+      [0m [90m 2836 |[39m               [32m`${describeBox(labelled)} - the window's name is asserted by real input`[39m
+       [90m 2837 |[39m           )[33m;[39m
+      [31m[1m>[22m[39m[90m 2838 |[39m           expect(labelled)[33m.[39mtoBeNull()[33m;[39m
+       [90m      |[39m                                    [31m[1m^[22m[39m
+       [90m 2839 |[39m           mounted[33m.[39munmount()[33m;[39m
+       [90m 2840 |[39m           [36mreturn[39m[33m;[39m
+       [90m 2841 |[39m         }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 43 passed, 45 total
+Snapshots:   0 total
+Time:        97.969 s
+Ran all test suites matching Conformance.
+
+
+
+```
