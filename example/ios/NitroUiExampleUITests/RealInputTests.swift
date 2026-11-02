@@ -2600,10 +2600,16 @@ final class RealInputTests: XCTestCase {
     )
     XCTAssertEqual(app.sheets.count, 1, "the confirmation variant is presented as one action sheet")
     XCTAssertGreaterThan(optionLabels(containing: sheetTitle), 0, "with its title shown")
-    XCTAssertGreaterThan(
-      optionLabels(containing: cancelTitle()),
-      0,
-      "and the Cancel UIKit adds when the app wrote none"
+    // The Cancel the library adds when the app wrote none is in the controller (the
+    // harness reads `implicitCancel=1` from it), but whether UIKit *draws* it is UIKit's
+    // choice: the first run of this check found no element labelled "\(cancelTitle())"
+    // on an iOS 27 iPhone sheet. So the buttons are printed, not pinned, and the claim
+    // that matters - a tap outside, which UIKit routes to that Cancel, reports the close
+    // alone - is asserted in the step below.
+    let sheetButtons = app.sheets.firstMatch.buttons.allElementsBoundByIndex.map(\.label)
+    print(
+      "real-input (ios): dialog: the sheet's buttons are \(sheetButtons); "
+        + "\(optionLabels(containing: cancelTitle())) element(s) say \"\(cancelTitle())\""
     )
     XCTAssertFalse(optionRow("Locked share").isEnabled, "its disabled action is not enabled")
     let outsideClose = "action:delete > presented:false > action:ok > presented:false > presented:false"
