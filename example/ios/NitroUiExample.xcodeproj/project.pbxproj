@@ -10,6 +10,7 @@
 		0C80B921A6F3F58F76C31292 /* libPods-NitroUiExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-NitroUiExample.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		604D1B03BCF670E20D71C157 /* RealInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54FBBD80A535C1716DDA821 /* RealInputTests.swift */; };
+		A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11CF00000000000000000F0 /* A11yFrameStability.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
 		761780F02CA45674006654F0 /* NitroUiProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780F12CA45674006654F1 /* NitroUiProbe.swift */; };
@@ -42,6 +43,7 @@
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = NitroUiExample/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		862EA38750FC85F10CC19780 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		99990586B7273888D1E27672 /* NitroUiExampleUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = NitroUiExampleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A11CF00000000000000000F0 /* A11yFrameStability.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = A11yFrameStability.swift; path = A11yFrameStability.swift; sourceTree = "<group>"; };
 		C54FBBD80A535C1716DDA821 /* RealInputTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RealInputTests.swift; path = RealInputTests.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -93,6 +95,7 @@
 		42A34C307B4C72141B94B37E /* NitroUiExampleUITests */ = {
 			isa = PBXGroup;
 			children = (
+				A11CF00000000000000000F0 /* A11yFrameStability.swift */,
 				C54FBBD80A535C1716DDA821 /* RealInputTests.swift */,
 			);
 			name = NitroUiExampleUITests;
@@ -331,6 +334,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */,
 				604D1B03BCF670E20D71C157 /* RealInputTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

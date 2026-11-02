@@ -92,6 +92,21 @@ run_case "slider-value.test (Swift)" \
       -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
+# The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
+# reads agree" wait that `RealInputTests.measure` runs before it prints a control's
+# boxes. It is here rather than only on a device because the three things worth
+# proving are a stuck loop, a wait that chases the answer it wants, and a tree that
+# never holds still - none of which a device run produces on demand, and all of
+# which would turn an accessibility rule into a coin flip. It compiles the shipping
+# UI-test file itself, so the host proves the code that runs on the simulator.
+run_case "a11y-frame-stability.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/example/ios/NitroUiExampleUITests/A11yFrameStability.swift' \
+      '$ROOT/scripts/native-tests/a11y-frame-stability.test.swift' \
+      -o '$OUT/a11y-frame-stability' && '$OUT/a11y-frame-stability'
+  "
+
 # The same test again under the sanitizers, because the properties worth checking
 # here are lifetime and UB rather than arithmetic: a correction is handed to a
 # push that may run it later, and the engine's maps are walked while being

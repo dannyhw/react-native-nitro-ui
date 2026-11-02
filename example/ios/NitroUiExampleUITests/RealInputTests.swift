@@ -212,16 +212,54 @@ final class RealInputTests: XCTestCase {
   }
 
   /// One control's box, its tree, and the control's own name — as `a11y.mjs` expects.
+  ///
+  /// The tree is read until two consecutive reads agree (`A11yFrameStability`), not once. The
+  /// reason is measured, not theoretical: `a11y:switch` failed twice on maintainer-mac-1 with the
+  /// React Native wrapper's box at exactly ⅓ of the switch's own — every component divided by the
+  /// screen scale — and passed on a re-run of the same tree twenty minutes later. Deciding on a
+  /// single read of `XCUIElement.frame` reports whatever snapshot the test manager happened to be
+  /// holding. Agreement is with the previous read only: this never waits for the two boxes to
+  /// *match each other*, and a control whose boxes are stably wrong prints on the second read, the
+  /// finding intact.
   private func measure(_ one: A11yCase) throws {
     try goToTab(one.tab, showing: one.screenAnchor)
     bringIntoView(one.testId)
     let anchor = try required(one.testId, as: "the control \"\(one.testId)\"")
-    let anchorFrame = anchor.frame
-    let nodes = [A11yNode(element: anchor)]
-      + anchor
-        .descendants(matching: .any)
-        .allElementsBoundByIndex
-        .map(A11yNode.init(element:))
+    // One read is the wrapper plus its descendants, resolved afresh: the descendants query is
+    // re-run as well, so a subtree that gained or lost an element between reads is a disagreement
+    // the settle notices rather than a tree quietly measured twice in different shapes.
+    func readCase() -> A11ySnapshot {
+      A11ySnapshot(
+        nodes: [A11yNode(element: anchor)]
+          + anchor
+            .descendants(matching: .any)
+            .allElementsBoundByIndex
+            .map(A11yNode.init(element:))
+      )
+    }
+
+    let settled = A11yFrameStability.settle(
+      framesOf: { $0.frames },
+      read: readCase
+    )
+    // Printed before the tree, so a reader sees the provenance of the boxes below it. `reads=2`
+    // is the ordinary case and costs one line; anything more is the interesting case, and an
+    // unsettled one says the comparison the rule is about to make rests on a tree that would not
+    // hold still — which is a measurement to discount, not a pass. `a11y.mjs` skips this line.
+    if settled.reads > 2 || !settled.settled {
+      let previousBox = settled.previous?.frames.first
+      print(
+        "real-input a11y case=\(one.id) kind=stability reads=\(settled.reads) "
+          + "settled=\(settled.settled) moved=\(settled.moved) "
+          + "elapsedMs=\(settled.elapsedMs)"
+          + (previousBox.map {
+            " previousAnchorX=\($0.origin.x) previousAnchorY=\($0.origin.y) "
+              + "previousAnchorW=\($0.size.width) previousAnchorH=\($0.size.height)"
+          } ?? "")
+      )
+    }
+    let nodes = settled.snapshot.nodes
+    let anchorFrame = nodes[0].frame
     // Key=value rather than one positional `|`-separated row, and the four frame numbers
     // spelled out instead of interpolating a `CGRect`: Swift picks that description's shape
     // and precision, and a parser that has to guess it is a parser that silently reads zero
@@ -331,6 +369,18 @@ final class RealInputTests: XCTestCase {
                label: "Mixed linear progress",
                tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
     ]
+  }
+
+  /// One read of one control's whole tree — the snapshot the stability wait compares.
+  ///
+  /// `frames` is what agreement is judged on: the anchor's box plus every node's, in print order.
+  /// Everything not in that list is deliberately not stability-checked — the labels, traits and
+  /// values are copied from whichever read settled, and the only thing observed to go wrong is a
+  /// box read out of a stale snapshot.
+  private struct A11ySnapshot {
+    let nodes: [A11yNode]
+
+    var frames: [CGRect] { nodes.map(\.frame) }
   }
 
   /// One read of one accessibility element.
