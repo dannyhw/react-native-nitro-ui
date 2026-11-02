@@ -84,3 +84,16 @@ export {
   type MenuSection,
   type MenuSubmenu,
 } from './components/Menu/Menu';
+
+// Two dialogs over one native view (G11, DECISIONS D33): UIKit's `UIAlertController`
+// on iOS, Material 3's `AlertDialog` and `ModalBottomSheet` on Android. `isPresented`
+// is controlled through the event-count handshake, an action reports `onAction` before
+// `onIsPresentedChange(false)` (D32), and neither has a box (`sizing: null`).
+export {
+  AlertDialog,
+  ConfirmationDialog,
+  type AlertDialogProps,
+  type ConfirmationDialogProps,
+  type DialogAction,
+  type DialogProps,
+} from './components/Dialog/Dialog';

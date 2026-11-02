@@ -47,6 +47,7 @@ final class RealInputTests: XCTestCase {
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
     static let menuTab = "tab-menu"
+    static let dialogTab = "tab-dialog"
     static let hostTab = "tab-host"
   }
 
@@ -69,6 +70,7 @@ final class RealInputTests: XCTestCase {
     static let pickerEvents = "real-input-picker-events"
     static let menuPick = "real-input-menu-pick"
     static let menuEvents = "real-input-menu-events"
+    static let dialogLog = "dialog-log"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -2490,6 +2492,171 @@ final class RealInputTests: XCTestCase {
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
     )
+  }
+
+  // MARK: - Dialog
+
+  /// A real tap opens each dialog, a real tap on an action reaches JS before the
+  /// close, a disabled action takes no tap, and a tap outside closes only a dialog
+  /// that may be dismissed (G11, DECISIONS D32 / D33).
+  ///
+  /// The dialog is UIKit's `UIAlertController`, presented from a window of the
+  /// library's own, so nothing the harness injects can press its buttons: a finger
+  /// is the only proof that a button is wired to the `onAction` the app wrote. The
+  /// witness of every press is the screen's event log (`dialog-log`), which records
+  /// every callback in arrival order, so "the action before the close" is a string
+  /// comparison and a retried tap that double-reported would show as a longer one.
+  func testRealInputDialog() throws {
+    try goToTab(Tab.dialogTab, showing: Echo.dialogLog)
+    let alertTitle = "Delete the draft?"
+    let stickyTitle = "Back and outside do nothing"
+    let sheetTitle = "Share the photo"
+
+    // 1. Before a touch: no event, and no dialog on screen.
+    XCTAssertEqual(try read(Echo.dialogLog), "none", "no dialog has reported anything before a touch")
+    XCTAssertEqual(optionLabels(containing: alertTitle), 0, "no alert is up before a touch")
+
+    // 2. A real tap on the opener presents the alert. Opening is the app's own write
+    //    (`isPresented` true), so it reports nothing.
+    try tapUntilOption(
+      "dialog-open-alert",
+      as: "the alert's opener",
+      option: alertTitle,
+      waitingFor: "the real tap that opens the alert"
+    )
+    XCTAssertEqual(app.alerts.count, 1, "the alert variant is presented as one UIKit alert")
+    print("real-input (ios): dialog: the alert's identifier is \"\(app.alerts.firstMatch.identifier)\"")
+    XCTAssertEqual(try read(Echo.dialogLog), "none", "presenting from JS reports no event")
+
+    // 3. The disabled action is disabled to VoiceOver too, and its twin is not.
+    XCTAssertFalse(
+      optionRow("Locked action").isEnabled,
+      "a disabled action should be a button that is not enabled (twin \"Delete draft\" "
+        + "isEnabled=\(optionRow("Delete draft").isEnabled))"
+    )
+    XCTAssertTrue(optionRow("Delete draft").isEnabled, "and an ordinary action should be enabled")
+
+    // 4. A real tap on the disabled action takes nothing and leaves the alert up. One
+    //    press, deliberately: the right outcome is silence, so there is nothing to retry
+    //    towards; step 5 is the barrier that turns the silence into a refusal.
+    try waitForOption("Locked action", "the disabled action to be on screen").fingerTap()
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertEqual(try read(Echo.dialogLog), "none", "a real tap on a disabled action reports nothing")
+    XCTAssertGreaterThan(optionLabels(containing: alertTitle), 0, "and the alert stays up")
+
+    // 5. The action that does report, before the close it causes (D32).
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: "Delete draft",
+        echo: Echo.dialogLog,
+        expected: "action:delete > presented:false",
+        waitingFor: "the real tap on \"Delete draft\""
+      ),
+      "action:delete > presented:false",
+      "a real tap on an action reports its id, then the close - once each, in that order"
+    )
+    waitUntilOptionGone(alertTitle, "the action to take the alert down")
+    XCTAssertEqual(optionLabels(containing: alertTitle), 0, "an action closes its alert")
+
+    // 6. A dialog that only an action may close. A tap outside an alert does nothing
+    //    on iOS whatever `dismissible` says (UIKit offers no way out of an alert but
+    //    its buttons), so this pins that a non-dismissible alert is still an alert
+    //    and still closes from its one action.
+    try tapUntilOption(
+      "dialog-open-sticky",
+      as: "the sticky alert's opener",
+      option: stickyTitle,
+      waitingFor: "the real tap that opens the sticky alert"
+    )
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertGreaterThan(optionLabels(containing: stickyTitle), 0, "a tap outside leaves the alert up")
+    XCTAssertEqual(
+      try read(Echo.dialogLog),
+      "action:delete > presented:false",
+      "and reports nothing"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: "Understood",
+        echo: Echo.dialogLog,
+        expected: "action:delete > presented:false > action:ok > presented:false",
+        waitingFor: "the real tap on \"Understood\""
+      ),
+      "action:delete > presented:false > action:ok > presented:false",
+      "its action reports, then the close"
+    )
+    waitUntilOptionGone(stickyTitle, "the action to take the sticky alert down")
+
+    // 7. The confirmation dialog: an action sheet whose title is shown (`'visible'`),
+    //    with the Cancel UIKit adds because the app gave no cancel action. A tap
+    //    outside an action sheet is that Cancel, so it closes the sheet and reports
+    //    the close alone - no action, because the app wrote none (B1 "Events").
+    try tapUntilOption(
+      "dialog-open-sheet",
+      as: "the sheet's opener",
+      option: "Copy link",
+      waitingFor: "the real tap that opens the confirmation sheet"
+    )
+    XCTAssertEqual(app.sheets.count, 1, "the confirmation variant is presented as one action sheet")
+    XCTAssertGreaterThan(optionLabels(containing: sheetTitle), 0, "with its title shown")
+    // The Cancel the library adds when the app wrote none is in the controller (the
+    // harness reads `implicitCancel=1` from it), but whether UIKit *draws* it is UIKit's
+    // choice: the first run of this check found no element labelled "\(cancelTitle())"
+    // on an iOS 27 iPhone sheet. So the buttons are printed, not pinned, and the claim
+    // that matters - a tap outside, which UIKit routes to that Cancel, reports the close
+    // alone - is asserted in the step below.
+    let sheetButtons = app.sheets.firstMatch.buttons.allElementsBoundByIndex.map(\.label)
+    print(
+      "real-input (ios): dialog: the sheet's buttons are \(sheetButtons); "
+        + "\(optionLabels(containing: cancelTitle())) element(s) say \"\(cancelTitle())\""
+    )
+    XCTAssertFalse(optionRow("Locked share").isEnabled, "its disabled action is not enabled")
+    let outsideClose = "action:delete > presented:false > action:ok > presented:false > presented:false"
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the dimming view outside the sheet",
+        waitingFor: "the tap outside the sheet to close it",
+        press: { attempt in
+          if attempt > 1 && optionLabels(containing: "Copy link") == 0 {
+            return
+          }
+          app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        },
+        reading: { self.echoText(Echo.dialogLog) }
+      ) { shown in
+        shown == outsideClose
+      },
+      outsideClose,
+      "a tap outside a dismissible sheet closes it and reports the close alone"
+    )
+    waitUntilOptionGone("Copy link", "the tap outside to take the sheet down")
+
+    // 8. And a row of the sheet reports like an alert's button.
+    try tapUntilOption(
+      "dialog-open-sheet",
+      as: "the sheet's opener",
+      option: "Copy link",
+      waitingFor: "the real tap that reopens the sheet"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: "Copy link",
+        echo: Echo.dialogLog,
+        expected: outsideClose + " > action:copy > presented:false",
+        waitingFor: "the real tap on \"Copy link\""
+      ),
+      outsideClose + " > action:copy > presented:false",
+      "a sheet's action reports its id, then the close"
+    )
+    waitUntilOptionGone("Copy link", "the action to take the sheet down")
+  }
+
+  /// UIKit's own word for Cancel, which is what the library puts on the implicit
+  /// Cancel - read from UIKit's bundle the way the library reads it, so a test
+  /// device in another language still names the right button.
+  private func cancelTitle() -> String {
+    Bundle(for: UIApplication.self).localizedString(forKey: "Cancel", value: "Cancel", table: nil)
   }
 
   // MARK: - Reading the screen

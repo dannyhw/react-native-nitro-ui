@@ -1,0 +1,130 @@
+# Failure excerpt — harness:ios:Dialog
+
+- Ran: 2026-11-02T10:04:06.070Z on code tree `66e02cdc6089` at HEAD `6bc1ef3` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Dialog`
+- Result: fail, exit 1, 46404 ms
+- Load: start 5.96, end 4.82, median 4.82, max 5.96
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/harness+ios+Dialog-2026-11-02T10-04-06.070Z.log` (<store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T10-04-06.070Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · presentation spike (G11, Q5 B9) › leaves no Modal behind when the RN Modal under an open dialog closes`
+- `expected [ …(2) ] to deeply equal [ …(2) ]`
+- `● Dialog · behaviour (G11, Q5 B7) › reports an action before the close it causes`
+- `expected [] to deeply equal [ 'act:action:delete', …(1) ]`
+- `● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled`
+- `expected [ 'act:action:delete', …(1) ] to deeply equal []`
+- `● Dialog · behaviour (G11, Q5 B7) › presents again when the app refuses a dismissal, and warns once`
+- `● Dialog · behaviour (G11, Q5 B7) › gives a recycled view none of the open dialog it came from`
+- `expected 'alert' to be 'none' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T10-04-06.070Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.82 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Dialog
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 66e02cdc6089, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.96/5.63 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T10-04-06.070Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · presentation spike (G11, Q5 B9) › leaves no Modal behind when the RN Modal under an open dialog closes
+
+    expected [ …(2) ] to deeply equal [ …(2) ]
+
+      [0m [90m 402 |[39m       [32m'the outer dialog closed too'[39m
+       [90m 403 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 404 |[39m     expect(eventLog)[33m.[39mtoEqual([
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 405 |[39m       [32m'over-closing-modal:action:later'[39m[33m,[39m
+       [90m 406 |[39m       [32m'over-closing-modal:presented:false'[39m[33m,[39m
+       [90m 407 |[39m     ])[33m;[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › reports an action before the close it causes
+
+    expected [] to deeply equal [ 'act:action:delete', …(1) ]
+
+      [0m [90m 447 |[39m     handles[33m.[39m[36mget[39m([32m'act'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'delete'[39m)[33m;[39m
+       [90m 448 |[39m     [36mawait[39m waitForLive([32m'act'[39m[33m,[39m [35m0[39m[33m,[39m [32m'closed by the action'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 449 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'act:action:delete'[39m[33m,[39m [32m'act:presented:false'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 450 |[39m     expect(reportOf([32m'act'[39m)[33m.[39mpresented)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 451 |[39m   })[33m;[39m
+       [90m 452 |[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled
+
+    expected [ 'act:action:delete', …(1) ] to deeply equal []
+
+      [0m [90m 464 |[39m     handles[33m.[39m[36mget[39m([32m'locked'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'locked'[39m)[33m;[39m
+       [90m 465 |[39m     [36mawait[39m sleep([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 466 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 467 |[39m     expect(reportOf([32m'locked'[39m)[33m.[39mpresented)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 468 |[39m     [90m// Barrier: an enabled action on the same dialog does report.[39m
+       [90m 469 |[39m     handles[33m.[39m[36mget[39m([32m'locked'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'go'[39m)[33m;[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › presents again when the app refuses a dismissal, and warns once
+
+    "refused" never reached presented a second time after the refused dismissal; its report is "presented=1;js=1;live=1;presentCount=1;onScreen=1;kind=alert;title=Dialog;message=-;actions=3;ids=cancel,delete,later;enabled=1,1,1;implicitCancel=0;appTop=-;ownWindow=1;topPresented=-;windows=1;drops=8;recycles=8"
+
+      [0m [90m 163 |[39m     }[33m,[39m
+       [90m 164 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 165 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 166 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 167 |[39m       )[33m,[39m
+       [90m 168 |[39m     timeoutMs[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › gives a recycled view none of the open dialog it came from
+
+    expected 'alert' to be 'none' // Object.is equality
+
+      [0m [90m 618 |[39m         [36mconst[39m report [33m=[39m reportOf([32m'recycled'[39m)[33m;[39m
+       [90m 619 |[39m         expect(report[33m.[39mpresented)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 620 |[39m         expect(report[33m.[39mkind)[33m.[39mtoBe([32m'none'[39m)[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 621 |[39m         reuses[33m.[39mpush(report[33m.[39mrecycles [33m?[39m[33m?[39m [32m'?'[39m)[33m;[39m
+       [90m 622 |[39m       } [36melse[39m {
+       [90m 623 |[39m         [36mawait[39m waitForReport([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 13 passed, 18 total
+Snapshots:   0 total
+Time:        45.467 s
+Ran all test suites matching Dialog.
+
+
+
+```

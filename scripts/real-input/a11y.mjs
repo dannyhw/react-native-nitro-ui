@@ -309,6 +309,42 @@ export const A11Y_CONTROLS = Object.freeze([
 ]);
 
 /**
+ * A component with no box of its own that presents a platform window - G11's dialogs.
+ *
+ * The sweep cannot read one. It walks every screen as it stands, and a presentation's
+ * view is a `0 x 0` anchor hidden from accessibility on purpose (Q5 Appendix B5): the
+ * name a screen reader hears is the presented window's title, and that window exists
+ * only while something has opened it. So this rule has a presentation-aware variant,
+ * and it runs inside the component's own real-input check, which is the one thing that
+ * opens the window with a finger: the window is up and carries its title, a disabled
+ * action is `isEnabled == false` / `enabled="false"` in the tree while its twin is
+ * enabled, and a real tap on the disabled one reports nothing.
+ *
+ * A case here is coverage only if that check exists, and only for a component that
+ * really has no box: `checkA11yTable` refuses a row whose manifest is self-sizing (a
+ * control with a box belongs in {@link A11Y_CONTROLS}, where the sweep reads it) or
+ * asks for no real-input check (then nothing reads the window at all).
+ *
+ * @typedef {object} A11yPresentation
+ * @property {string} id the manifest id, which is also the real-input check's id
+ * @property {string} component the manifest `name`
+ * @property {string} hybridView the component's Fabric name
+ * @property {string} assertedBy where the presentation-aware rule runs, by name
+ */
+
+/** @type {ReadonlyArray<A11yPresentation>} */
+export const A11Y_PRESENTATIONS = Object.freeze([
+  {
+    id: 'dialog',
+    component: 'Dialog',
+    hybridView: 'NitroUiDialog',
+    assertedBy:
+      '`testRealInputDialog` (RealInputTests.swift) and `CHECKS.dialog` ' +
+      '(scripts/real-input/android.mjs)',
+  },
+]);
+
+/**
  * A rule a control is known to fail, recorded rather than fixed.
  *
  * @typedef {object} A11yExemption

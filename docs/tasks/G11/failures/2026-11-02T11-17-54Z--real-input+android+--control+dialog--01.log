@@ -1,0 +1,115 @@
+# Failure excerpt — real-input:android:--control:dialog
+
+- Ran: 2026-11-02T11:17:54.589Z on code tree `6f2f51cfaabd` at HEAD `1478b67` (branch `task/G11-dialogs`)
+- Command: `node scripts/real-input/android.mjs --control dialog`
+- Result: fail, exit 1, 400791 ms
+- Load: start 14.13, end 2.60, median 2.45, max 14.13
+- Device: android / device `emulator-5574` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/real-input+android+--control+dialog-2026-11-02T11-17-54.589Z.log` (<store>/task/G11-dialogs/real-input+android+--control+dialog-2026-11-02T11-17-54.589Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a disabled action is a node that is not enabled — expected false, saw true`
+- `✗ the sheet's disabled row is not enabled — expected false, saw true`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/real-input+android+--control+dialog-2026-11-02T11-17-54.589Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.60 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 73 log line(s)
+
+```
+real-input (android): emulator-5574 · nitroui_t03 · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    ✓ no dialog has reported anything before a touch — expected none, saw none
+    ✓ no alert is up before a touch — expected 0, saw 0
+    ✗ a disabled action is a node that is not enabled — expected false, saw true
+    ✓ and an ordinary action is enabled — expected true, saw true
+    ✓ a real tap on a disabled action leaves the alert up — expected 1, saw 1
+    ✓ a real tap on an action reports its id, then the close - once each, in order — expected action:delete > presented:false, saw action:delete > presented:false
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✗ the sheet's disabled row is not enabled — expected false, saw true
+    ✓ a sheet's row reports its id, then the close; Back before it reported a close alone — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,738][1038,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,738][492,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2054][1038,2180]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2080][714,2206]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+dialog: FAIL (no retries)
+    failed: a disabled action is a node that is not enabled — expected false, saw true
+    failed: the sheet's disabled row is not enabled — expected false, saw true
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 14/14 auxiliary checks passed
+
+
+
+```

@@ -1,0 +1,22 @@
+{
+  "uiViewClassName": "NitroUiDialog",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "variant": true,
+    "presented": true,
+    "mostRecentEventCount": true,
+    "title": true,
+    "message": true,
+    "titleVisibility": true,
+    "actions": true,
+    "dismissible": true,
+    "tintColor": true,
+    "testID": true,
+    "nuiPerfId": true,
+    "onPresentedChange": true,
+    "onAction": true,
+    "hybridRef": true
+  }
+}

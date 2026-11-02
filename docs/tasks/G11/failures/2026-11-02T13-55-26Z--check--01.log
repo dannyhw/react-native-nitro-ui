@@ -1,0 +1,176 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T13:55:26.294Z on code tree `6470cdb9f93f` at HEAD `9807a97` (branch `task/G11-dialogs`)
+- Command: `bun run check`
+- Result: fail, exit 1, 111788 ms
+- Load: start 8.34, end 9.72, median 14.36, max 19.13
+- Device: android / device `emulator-5574` / lease `G11-askae`
+- Full log: `task/G11-dialogs/check-2026-11-02T13-55-26.294Z.log` (<store>/task/G11-dialogs/check-2026-11-02T13-55-26.294Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/device-ops.test.js`
+- `● what an emulator is started with › launches the emulator on the adb server the pair owns`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: "5043"`
+- `Received: ""`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 629 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/example-lock.test.js (14.447 s)
+PASS scripts/__tests__/check-runner.test.js (14.687 s)
+PASS scripts/__tests__/lease.test.js (15.229 s)
+PASS scripts/__tests__/lease-pool-cli.test.js (16.083 s)
+PASS scripts/__tests__/lease-metro-port.test.js (23.699 s)
+PASS scripts/__tests__/gate-check.test.js (35.25 s)
+PASS scripts/__tests__/ci-workflows.test.js (52.633 s)
+PASS scripts/__tests__/gate-logs.test.js (57.354 s)
+PASS scripts/__tests__/gate.test.js (57.439 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (58.828 s)
+PASS scripts/__tests__/bench-gate.test.js (106.478 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/device-ops.test.js
+  ● what an emulator is started with › launches the emulator on the adb server the pair owns
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "5043"
+    Received: ""
+
+      289 |     });
+      290 |     expect(result).toBe(true);
+    > 291 |     expect(await recorded('emu.adb_server')).toBe('5043');
+          |                                              ^
+      292 |     expect(await recorded('emu.argv')).toContain('-port 5574');
+      293 |   });
+      294 |
+
+      at Object.toBe (scripts/__tests__/device-ops.test.js:291:46)
+
+
+Test Suites: 1 failed, 62 passed, 63 total
+Tests:       1 failed, 1654 passed, 1655 total
+Snapshots:   0 total
+Time:        106.81 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+
+```

@@ -7,7 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { fireEvent, render } from '@testing-library/react-native';
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, Fragment, createElement, type ReactNode } from 'react';
 import { ScrollView, Switch as RNCoreSwitch, Text, View } from 'react-native';
@@ -546,10 +546,23 @@ describe('Host children · components the library does not know', () => {
 describe('Host children · tables cover the library', () => {
   it('has an opinion on every control in src/components', () => {
     const componentsDir = join(__dirname, '..', 'components');
+    // A directory exports the names its manifest lists (`exports`, G11's two dialogs over
+    // one native view), or its own name - the same rule the registry uses.
     const controls = readdirSync(componentsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name !== 'Host')
-      .map((entry) => entry.name);
+      .flatMap((entry) => {
+        const manifest = JSON.parse(
+          readFileSync(
+            join(componentsDir, entry.name, 'component.json'),
+            'utf8'
+          )
+        ) as { exports?: string[] };
+        return manifest.exports ?? [entry.name];
+      });
     expect(controls.length).toBeGreaterThanOrEqual(6);
+    expect(controls).toEqual(
+      expect.arrayContaining(['AlertDialog', 'ConfirmationDialog'])
+    );
     for (const name of controls) {
       // Imported through the index an app uses, so a component that stops being
       // exported there cannot hide from this.
