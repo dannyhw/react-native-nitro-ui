@@ -1,0 +1,84 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T21:05:24.382Z on code tree `cf687d111606` at HEAD `4f2a06d` (branch `task/M2-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 295792 ms
+- Load: start 9.79, end 5.81, median 7.40, max 10.40
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `M2-pd4m5`
+- Full log: `task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log` (<store>/task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted SegmentedControl is still a SegmentedControl › takes a real press on a segment, through the Host’s composition`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: M2-pd4m5 (still live)
+  |   M2-pd4m5                 M2           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.81 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed ios:331EF109-21DD-422B-AEF8-DFFFC6998DC3 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree cf687d111606 at HEAD 4f2a06d
+gate: git tree 8681cb28680b
+gate: log task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log
+gate:       <store>/task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree cf687d111606, 10 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.79/15.22 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Using booted iOS simulator iPhone Air...
+HARNESS Runner ios ready
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › takes a real press on a segment, through the Host’s composition
+
+    No hybrid handle for "segmented row" - the control never mounted.
+
+      [0m [90m 219 |[39m [36mfunction[39m need[33m<[39m[33mT[39m[33m>[39m(value[33m:[39m [33mT[39m [33m|[39m undefined[33m,[39m what[33m:[39m string)[33m:[39m [33mT[39m {
+       [90m 220 |[39m   [36mif[39m (value [33m==[39m [36mnull[39m) {
+      [31m[1m>[22m[39m[90m 221 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 222 |[39m       [32m`No hybrid handle for "${what}" - the control never mounted.`[39m
+       [90m 223 |[39m     )[33m;[39m
+       [90m 224 |[39m   }[0m
+
+
+Test Suites: 1 failed, 1 skipped, 15 passed, 16 of 17 total
+Tests:       1 failed, 2 skipped, 270 passed, 273 total
+Snapshots:   0 total
+Time:        294.26 s
+Ran all test suites.
+gate: harness:ios FAIL in 295.8 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+
+gate: appended the device context to task/M2-merge/harness+ios-2026-11-02T21-05-23.963Z.log (4 probe(s))
+
+```

@@ -231,6 +231,18 @@ internal class SliderModel(
     if (to == from) {
       return false
     }
+    if (dragging) {
+      // A finger is on the track. Its drag is the gesture in progress, and a
+      // second one would report a complete for a thumb the user is still holding
+      // ([endDrag] is the only thing that emits one, and [beginDrag] is
+      // idempotent, so a step here that ran the pair would *end* the finger's
+      // drag rather than make its own). The step is a sample of the drag that is
+      // already open: the value moves at once, its change reaches JS on the drag's
+      // next frame like any other sample, and the gesture edges stay with the
+      // finger.
+      dragTo(to)
+      return true
+    }
     beginDrag()
     dragTo(to)
     endDrag()

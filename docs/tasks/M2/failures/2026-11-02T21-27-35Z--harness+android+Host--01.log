@@ -1,0 +1,110 @@
+# Failure excerpt — harness:android:Host
+
+- Ran: 2026-11-02T21:27:35.691Z on code tree `77f7d9252deb` at HEAD `ba95562` (branch `task/M2-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Host`
+- Result: fail, exit 1, 303403 ms
+- Load: start 9.54, end 4.70, median 6.86, max 9.54
+- Device: android / device `emulator-5570` / lease `M2-rmz6t`
+- Full log: `task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log` (<store>/task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Host.harness.tsx`
+- `● Console`
+- `● Host · geometry (D24) › applies a value written while the hosted child was hidden`
+- `expected undefined to be true // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: M2-rmz6t (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.70 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 65 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: harness:android:Host
+gate: node ../scripts/harness.mjs --harnessRunner android Host (cwd example)
+gate: code tree 77f7d9252deb at HEAD ba95562
+gate: git tree b35858240ddd with a DIRTY worktree (not reusable)
+gate: log task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log
+gate:       <store>/task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Host
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 77f7d9252deb, 10 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.54/9.59 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Host.harness.tsx
+  ● Console
+
+    console.error
+      A <Host> cannot compose a ReactViewGroup (not a nitro-ui control): it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+
+    console.error
+      A <Host> cannot compose a ReactViewGroup (not a nitro-ui control): it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+
+    console.error
+      A <Host> cannot compose a ReactViewGroup (not a nitro-ui control): it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+
+    console.error
+      A <Host> cannot compose another <Host>: it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+
+    console.warn
+      react-native-nitro-ui: a <Host> measured 0 tall, so nothing inside it is visible. A Host measures nothing: its box is its own `style` plus the boxes RN computes for its children, and nothing inside it can grow it back. Give it a `height` or `flex: 1`, or take the height away from whatever parent is refusing it (D24, docs/architecture/sizing.md).
+
+  ● Host · geometry (D24) › applies a value written while the hosted child was hidden
+
+    expected undefined to be true // Object.is equality
+
+      [0m [90m 1163 |[39m       [90m// premise. (Read off the handle rather than `accepted`: this is a JS write, which[39m
+       [90m 1164 |[39m       [90m// never passes through `onValueChange`.)[39m
+      [31m[1m>[22m[39m[90m 1165 |[39m       expect(s2Log[33m.[39mhandles[[32m's2-b'[39m][33m?[39m[33m.[39mvalue)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m      |[39m                                                [31m[1m^[22m[39m
+       [90m 1166 |[39m
+       [90m 1167 |[39m       [90m// Hidden is still hidden: a value change must not put the child back in the[39m
+       [90m 1168 |[39m       [90m// drawing, so the only answer a sweep can get is from the shown child.[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       1 failed, 68 passed, 69 total
+Snapshots:   0 total
+Time:        302.404 s
+Ran all test suites matching Host.
+gate: harness:android:Host FAIL in 303.4 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+
+gate: appended the device context to task/M2-merge/harness+android+Host-2026-11-02T21-27-35.328Z.log (5 probe(s))
+
+```

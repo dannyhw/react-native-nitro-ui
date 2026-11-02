@@ -20,6 +20,9 @@
  * grid still broken, and each names the line that refuses it.
  */
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { describe, expect, it } from '@jest/globals';
 
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
@@ -126,9 +129,25 @@ function dayRow(widths) {
   });
 }
 
+/**
+ * Both rows of the two real 320 dp dumps, in px (G8 report; FOLLOWUPS before X17). The day
+ * cells are the unnamed `Button`s under the header, read by geometry alone: nothing in the
+ * tree says which one is which day, which is the reason the rule reads the header.
+ */
+const DUMP_320 = {
+  'g8-320-prefix': {
+    header: [126, 126, 126, 126, 126, 126, 20],
+    days: [126, 126, 126, 126, 126, 126, 73],
+  },
+  'g8-320-postfix': {
+    header: [105, 105, 105, 105, 105, 105, 105],
+    days: [105, 105, 105, 105, 105, 105, 105],
+  },
+};
+
 /** What the real dumps measured, as a fixture pair. */
-const BROKEN_320 = headerRow([126, 126, 126, 126, 126, 126, 20]);
-const FIXED_320 = headerRow([105, 105, 105, 105, 105, 105, 105]);
+const BROKEN_320 = headerRow(DUMP_320['g8-320-prefix'].header);
+const FIXED_320 = headerRow(DUMP_320['g8-320-postfix'].header);
 
 /** The app's and Material's own named nodes inside a calendar's box, no rows. */
 function calendarChrome() {
@@ -157,6 +176,33 @@ function screen(cells) {
 }
 
 describe('real-input Android calendar grid', () => {
+  it("quotes the real dumps' widths in the module's own table", () => {
+    // The module's header explains why the rule reads the weekday header, with a table of
+    // measured widths. Its first version quoted day cells of 110, 110, 111, 110, 110, 110,
+    // 126 px that are in neither dump, and argued from that invented spread (X17 item 6).
+    // A comment cannot be run, so this pins its numbers to the fixtures that are.
+    const source = readFileSync(
+      join(__dirname, '..', 'real-input', 'android-calendar.mjs'),
+      'utf8'
+    );
+    const widths = (cell) =>
+      cell
+        .split(',')
+        .map((value) => Number(value.trim()))
+        .filter((value) => Number.isFinite(value) && value > 0);
+    const table = Object.fromEntries(
+      [
+        ...source.matchAll(
+          /^ \* \| `(g8-320-\w+)\.xml`\s*\|([^|]+)\|([^|]+)\|/gm
+        ),
+      ].map((match) => [
+        match[1],
+        { header: widths(match[2]), days: widths(match[3]) },
+      ])
+    );
+    expect(table).toEqual(DUMP_320);
+  });
+
   it('reads the seven weekday columns out of a laid-out calendar', () => {
     const grid = measureCalendarGrid(screen(FIXED_320), BOX, DENSITY);
     expect(grid).not.toBeNull();
@@ -354,7 +400,7 @@ describe('real-input Android calendar grid', () => {
       [
         ...calendarChrome(),
         headerCell('Sunday', 0, 0),
-        ...dayRow([105, 105, 105, 105, 105, 105, 105]),
+        ...dayRow(DUMP_320['g8-320-postfix'].days),
       ],
       BOX,
       DENSITY

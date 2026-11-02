@@ -311,11 +311,22 @@ extension SliderModel {
   /// emitting a triple for a value that did not change is a gesture that never
   /// happened - so nothing is emitted. (Android has the same rule, in
   /// `SliderModel.accessibilityStepToward`.)
+  ///
+  /// Unless a finger is already on the track, in which case there is already a
+  /// gesture and this is a sample of it: ``endDrag()`` is what emits a completion,
+  /// so running the pair here would report one for a thumb the user is still
+  /// holding, stop the display link that drag armed, and then report a second
+  /// completion when the finger lifts. The value moves at once and its change
+  /// reaches JS on the drag's own next frame, like any other sample.
   func accessibilityStep(up: Bool) {
     guard !disabled else { return }
     let from = state.displayed
     let to = stepped(from: from, up: up)
     guard to != from else { return }
+    if dragging {
+      drag(to: to)
+      return
+    }
     beginDrag()
     drag(to: to)
     endDrag()

@@ -643,6 +643,36 @@ describe('the accessibility re-read', () => {
     expect(iosStabilityWarning(arbitrary, SWITCH_BOX)).toBeNull();
   });
 
+  it('warns nothing for a uniform ratio that is not a screen scale', () => {
+    // The shape test alone is not the claim: every component dividing by one ratio is also what a
+    // control that is still animating in, or a layout pass at another size, looks like. Only the
+    // scales a screen actually has (⅓, ½, ¼, 2×, 3×) are the stale-snapshot bug, so 0.8× on all
+    // four components is a box that moved, and the note — not the summary — is where it belongs.
+    const uniform = {
+      x: SWITCH_BOX.x * 0.8,
+      y: SWITCH_BOX.y * 0.8,
+      width: SWITCH_BOX.width * 0.8,
+      height: SWITCH_BOX.height * 0.8,
+    };
+    // The fixture really is uniform, so a pass below is the named-scale rule and not the shape
+    // rule refusing a ratio that only nearly lines up.
+    expect(firstReadScale(uniform, SWITCH_BOX)).toBe('0.800×');
+    const stability = {
+      reads: 3,
+      settled: true,
+      moved: 1,
+      elapsedMs: 240,
+      firstAnchor: uniform,
+    };
+    expect(iosStabilityWarning(stability, SWITCH_BOX)).toBeNull();
+    // And the note beside it, which still quotes the ratio, does not call it a render-scale
+    // snapshot: a note that named the bug the summary declined to warn about would be the
+    // contradiction `firstReadScale` exists to prevent.
+    const note = iosStabilityNote(stability, SWITCH_BOX);
+    expect(note).toContain('0.800×');
+    expect(note).not.toContain('render scale');
+  });
+
   it('has one definition of the scale shape, shared by the note and the warning', () => {
     // The note and the WARN ask the same question in two places. If they answered it separately they
     // would eventually disagree, and a summary that warns about a box the note beside it declines to

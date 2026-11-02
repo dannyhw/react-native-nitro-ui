@@ -1,0 +1,193 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-02T22:17:42.430Z on code tree `e99634813021` at HEAD `28dcde3` (branch `task/M2-merge`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 1080461 ms
+- Load: start 11.28, end 7.53, median 6.96, max 19.77
+- Device: android / device `emulator-5570` / lease `M2-rmz6t`
+- Full log: `task/M2-merge/real-input+android-2026-11-02T22-17-41.812Z.log` (<store>/task/M2-merge/real-input+android-2026-11-02T22-17-41.812Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/M2-merge/real-input+android-2026-11-02T22-17-41.812Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: M2-rmz6t (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+  |   G12-sigr7                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.53 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 276 — the rest is in the full log above)
+
+```
+    ✓ cycle 3: the drop picker's menu is open as a popup window — expected 1, saw 1
+    ✓ cycle 3: unmounting with the menu open leaves no popup window — expected 0, saw 0
+    · "Real-input disabled picker" needed 1 scroll to come on screen
+    · "Real-input disabled picker" occupies 42,1631 → 777,1799
+    ✓ a real tap on the disabled picker opens no menu — expected 0, saw 0
+    · "Real-input enabled picker" occupies 42,1815 → 777,1983
+    ✓ the ordinary picker, tapped the same way, opens one - so the line above measured a refusal — expected 1, saw 1
+    ✓ and that menu goes away again — expected 0, saw 0
+    ✓ one node carries the enabled picker's name, so it is announced once — expected 1, saw 1
+    ✓ and that same node carries the value it shows — expected Mica, saw Mica
+    ✓ it is the node a tap is aimed at, too (the name is not parked on a container) — expected true, saw true
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the disabled picker is one node as well — expected 1, saw 1
+    ✓ and that node is the one that says it is disabled — expected false, saw false
+    · name node reports focusable=false - kept as evidence, not asserted
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ one node carries the trigger's name, so TalkBack announces it once — expected 1, saw 1
+    ✓ and that same node carries the title it paints as its value — expected Actions, saw Actions
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the Menu has reported no pick before a touch — expected -, saw -
+    ✓ and no event of any kind — expected none, saw none
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ a real tap on the trigger opens the menu as a popup window — expected 1, saw 1
+    ✓ the popup carries all three rows in the accessibility tree — expected 3, saw 3
+    · row "Alpha": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Bravo": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Locked row": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no pick — expected -, saw -
+    ✓ and the pair the platform does report: one open, one close — expected open > close, saw open > close
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ a real tap on the row "Bravo" reaches JS — expected bravo, saw bravo
+    ✓ a pick closes its own popup — expected 0, saw 0
+    ✓ one pick reports open, then select, then close - in that order — expected open > close > open > select bravo > close, saw open > close > open > select bravo > close
+    · "Real-input menu" occupies 42,918 → 294,1044
+    · the disabled row's tap left popup windows = 1
+    · that popup came down on the back gesture, after a scrim tap left it up; popup windows now 0
+    ✓ a tap on the disabled row reports no pick — expected bravo, saw bravo
+    · "Real-input menu" occupies 42,918 → 294,1044
+    ✓ the enabled row "Alpha", tapped the same way, does report a pick — expected alpha, saw alpha
+    ✓ so the line above measured a refusal, not a dead screen — expected 0, saw 0
+    ✓ the whole echo pairs every open with a close, in the order the gestures happened — expected open > close > open > select bravo > close > open > close > open > select alpha > close, saw open > close > open > select bravo > close > open > close > open > select alpha > close
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    ✓ no dialog has reported anything before a touch — expected none, saw none
+    ✓ no alert is up before a touch — expected 0, saw 0
+    ✓ a disabled action is a node that is not enabled — expected false, saw false
+    ✓ and an ordinary action is enabled — expected true, saw true
+    ✓ a real tap on a disabled action leaves the alert up — expected 1, saw 1
+    ✓ a real tap on an action reports its id, then the close - once each, in order — expected action:delete > presented:false, saw action:delete > presented:false
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✓ the sheet's disabled row is not enabled — expected false, saw false
+    ✓ a sheet's row reports its id, then the close; Back before it reported a close alone — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,899 → 179,983
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,899 → 179,983
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=35, hosted=41/45/49, note=52; named nodes: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Menu | 25:Menu | 26:Dialogs | 27:Dialogs | 28:Host | 29:Host | 33:react-native-nitro-ui  | 34:Everything inside a Ho | 35:THREE SWITCHES, ONE CO | 41:Hosted switch 0 | 45:Hosted switch 1 | 49:Hosted switch 2 | 52:The Host has a height; | 53:first switch, as JS se | 54:off | 55:changes JS has accepte | 56:2 | 57:flip the first from JS | 58:flip the first from JS | 59:A SLIDER AND A BUTTON, | 60:hosted Slider, as JS s | 61:0.40 | 62:presses the hosted But | 63:0 | 68:Hosted slider | 70:Hosted button | 71:Hosted action | 74:Hosted disabled button | 75:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 41,45,49, saw 41,45,49
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2191 → 397,2296
+    · "Hosted disabled button" occupies 42,2317 → 551,2422
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,2191 → 397,2296
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,2191 → 397,2296
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2054 → 1038,2180
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.88)
+    ✓ dragging back moves a hosted Slider the other way (0.88 -> 0.13)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2091 → 377,2196
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Menu | 25:Menu | 26:Dialogs | 27:Dialogs | 28:Host | 29:Host | 38:Hosted switch 0 | 42:Hosted switch 1 | 46:Hosted switch 2 | 49:The Host has a height; | 50:first switch, as JS se | 51:off | 52:changes JS has accepte | 53:2 | 54:flip the first from JS | 55:flip the first from JS | 56:A SLIDER AND A BUTTON, | 57:hosted Slider, as JS s | 58:0.13 | 59:presses the hosted But | 60:2 | 65:Hosted slider | 67:Hosted button | 68:Hosted action | 71:Hosted disabled button | 72:Hosted action, disable | 74:The Slider fills the H | 75:FOUR KINDS OF CONTROL, | 76:mixed Host, as JS sees | 77:off 0.50 0 | 83:Mixed switch | 86:Mixed slider | 87:Mixed linear progress | 88:Mixed circular progres | 90:Mixed button | 91:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 83,86,87,88,90, saw 83,86,87,88,90
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2091 → 377,2196
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1733 → 179,1817
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 2 scrolls to come on screen
+    · "Hosted segmented" occupies 42,1964 → 714,2090
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,1964 → 714,2090
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,1964 → 714,2090
+    ✓ the drawing did not move out from under the finger — expected 42,1964 → 714,2090, saw 42,1964 → 714,2090
+    · "Hosted segmented" occupies 42,1964 → 714,2090
+    ✓ a real tap on the last segment reaches JS as index 2 — expected 2, saw 2
+    ✓ and a SegmentedControl opens no window of its own, hosted or not — expected 0, saw 0
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · "Hosted picker" needed 2 scrolls to come on screen
+    · "Hosted picker" occupies 42,1368 → 777,1536
+    ✓ the hosted Picker shows the index JS gave it — expected 1, saw 1
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1368 → 777,1536
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 74,1846 -> 202,1899; hosted anchor at 42,1368 -> 777,1536
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1368 → 777,1536
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+
+real-input (android): Error: real-input: tapping the "Host" tab did not bring up its screen.
+gate: real-input:android FAIL in 1080.5 s
+gate: recorded in .gates/task/M2-merge.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/M2-merge/real-input+android-2026-11-02T22-17-41.812Z.log (5 probe(s))
+
+```
