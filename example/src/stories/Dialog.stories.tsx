@@ -279,6 +279,38 @@ export const NotDismissible: Story = {
 };
 
 /**
+ * The same confirmation with nothing else on screen: one trigger, and the sheet.
+ *
+ * iOS 27 draws a confirmation as a popover anchored to the dialog's own box, so
+ * in `Confirmation` the showcase's copy ends up half-covered behind it - right to
+ * read, wrong to photograph. This is the story
+ * `docs/images/components/confirmation-dialog-ios.png` is taken from: the button,
+ * the popover it points at, and a clean background behind both.
+ */
+export const ConfirmationPlain: Story = {
+  render: function ConfirmationPlainStory() {
+    const [open, setOpen] = useState(false);
+    return (
+      <View style={styles.plain}>
+        {/* The dialog's box is its anchor: over the button, so the popover points
+            at it from wherever the button landed. */}
+        <View>
+          <Opener label="Share the photo" onPress={() => setOpen(true)} />
+          <ConfirmationDialog
+            isPresented={open}
+            onIsPresentedChange={setOpen}
+            title="Share the photo"
+            titleVisibility="visible"
+            actions={ACTION_LISTS.three}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      </View>
+    );
+  },
+};
+
+/**
  * The app refuses a dismissal: it ignores `onIsPresentedChange(false)`, so the
  * dialog comes back (DECISIONS D33) and a development build warns once.
  */
@@ -319,6 +351,9 @@ export const RefusedDismissal: Story = {
 
 const styles = StyleSheet.create({
   playground: { padding: 24, gap: 16, alignItems: 'flex-start' },
+  // The screenshot story: the trigger centred, so the iOS popover drops onto it
+  // with the same margin either side and no copy behind it.
+  plain: { flex: 1, alignItems: 'center', paddingTop: 48 },
   opener: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,
