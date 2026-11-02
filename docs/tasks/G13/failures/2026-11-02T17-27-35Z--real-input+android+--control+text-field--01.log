@@ -1,0 +1,76 @@
+# Failure excerpt — real-input:android:--control:text-field
+
+- Ran: 2026-11-02T17:27:35.990Z on code tree `1f6b9b447cd3` at HEAD `535b77c` (branch `task/G13-textfield`)
+- Command: `node scripts/real-input/android.mjs --control text-field`
+- Result: fail, exit 1, 102212 ms
+- Load: start 3.93, end 2.71, median 3.55, max 4.18
+- Device: android / device `emulator-5570` / lease `G13-houpr`
+- Full log: `task/G13-textfield/real-input+android+--control+text-field-2026-11-02T17-27-35.990Z.log` (<store>/task/G13-textfield/real-input+android+--control+text-field-2026-11-02T17-27-35.990Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the field shows what React was told — expected abc12, saw`
+- `✗ and each one is reverted: the field still shows what JS kept — expected frozen, saw`
+- `✗ and the field holds the same five — expected abcde, saw`
+- `✗ no control with accessibilityLabel "Focus from JS" in the accessibility tree — the hosted control offers nothing a real tap could be aimed at`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/real-input+android+--control+text-field-2026-11-02T17-27-35.990Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G13-houpr (still live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.71 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 29 log line(s)
+
+```
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  text-field: real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it
+    ✓ the typing field starts empty — expected typed:  (0), saw typed:  (0)
+    · "Typing field" occupies 73,646 → 1006,709
+    ✓ real keystrokes reach the field, and React sees its text — expected typed: abc12 (5), saw typed: abc12 (5)
+    · "Typing field" occupies 73,646 → 1006,709
+    ✗ the field shows what React was told — expected abc12, saw 
+    · "Frozen field" occupies 73,922 → 1006,985
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    · "Frozen field" occupies 73,922 → 1006,985
+    ✗ and each one is reverted: the field still shows what JS kept — expected frozen, saw 
+    · "Capped field" occupies 73,1199 → 1006,1262
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    · "Capped field" occupies 73,1199 → 1006,1262
+    ✗ and the field holds the same five — expected abcde, saw 
+    · "Focus field" occupies 73,1475 → 1006,1538
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ Enter submits the text and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✗ no control with accessibilityLabel "Focus from JS" in the accessibility tree — the hosted control offers nothing a real tap could be aimed at
+
+  a11y:switch: Switch a11y
+
+real-input (android): Error: real-input: no "Switch" tab in the accessibility tree, so the screen this check needs cannot be reached.
+
+
+
+```

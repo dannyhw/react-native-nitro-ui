@@ -1,0 +1,78 @@
+# Failure excerpt — harness:ios:TextField:-t:single-line%20field
+
+- Ran: 2026-11-02T18:42:48.308Z on code tree `853846df2617` at HEAD `47ef1a3` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios TextField -t single-line field`
+- Result: fail, exit 1, 10607 ms
+- Load: start 6.39, end 6.15, median 6.27, max 6.39
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G13-houpr`
+- Full log: `task/G13-textfield/harness+ios+TextField+-t+single-line+20field-2026-11-02T18-42-48.308Z.log` (<store>/task/G13-textfield/harness+ios+TextField+-t+single-line+20field-2026-11-02T18-42-48.308Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● TextField › sizes a single-line field to one line, at its parent width, whatever its text`
+- `expected 28 to be less than 1`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+ios+TextField+-t+single-line+20field-2026-11-02T18-42-48.308Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G13-houpr (still live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.15 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios TextField -t single-line field
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 853846df2617, 11 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.39/7.81 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G13-textfield/harness+ios+TextField+-t+single-line+20field-2026-11-02T18-42-48.308Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● TextField › sizes a single-line field to one line, at its parent width, whatever its text
+
+    expected 28 to be less than 1
+
+      [0m [90m 583 |[39m     expect(emptyBox[33m?[39m[33m.[39mwidth)[33m.[39mtoBeCloseTo([35m300[39m[33m,[39m [35m0[39m)[33m;[39m
+       [90m 584 |[39m     [90m// The box is what the field measured...[39m
+      [31m[1m>[22m[39m[90m 585 |[39m     expect([33mMath[39m[33m.[39mabs((box[33m?[39m[33m.[39mheight [33m?[39m[33m?[39m [35m0[39m) [33m-[39m measured[33m.[39mheight))[33m.[39mtoBeLessThan([35m1[39m)[33m;[39m
+       [90m     |[39m                                                                        [31m[1m^[22m[39m
+       [90m 586 |[39m     [90m// ...and a field with no text measures the same one line: two fields measured on[39m
+       [90m 587 |[39m     [90m// their own, so a height that followed the text could not hide behind a cache.[39m
+       [90m 588 |[39m     expect([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 11 skipped, 12 total
+Snapshots:   0 total
+Time:        9.066 s
+Ran all test suites matching TextField with tests matching "single-line field".
+
+
+
+```
