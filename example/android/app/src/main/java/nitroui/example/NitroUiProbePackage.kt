@@ -108,10 +108,10 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
    * OS-level oracle is still the real-input runner's `adb shell input text`.
    */
   /**
-   * The connection [imeInput] reuses, and the view it belongs to. One connection per
-   * focused field, the way an IME holds one: a fresh `onCreateInputConnection` per call
-   * hands Compose a new connection each time, and a composition opened on one did not
-   * survive the next (measured in G13 round 1). `connect` makes a new one.
+   * The connection [imeInput] reuses for a composition, and the view it belongs to.
+   * `connect` makes a new one. On the lease's emulator a composition opened this way
+   * is still committed before the app sees it (G13 round 1), so the composing kinds
+   * are kept for a device whose keyboard leaves it open.
    */
   private var connection: android.view.inputmethod.InputConnection? = null
   private var connectionView: android.view.View? = null
@@ -130,7 +130,11 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
           promise.reject("NO_FOCUS", "no view has focus")
           return@runOnUiThread
         }
-        if (kind == "connect" || connectionView !== focused || connection == null) {
+        // A composition is held on one connection, the way an IME holds one; every
+        // other kind gets a fresh connection, because a pooled view that comes back
+        // for another field keeps no session a cached connection could still reach.
+        val composing = kind == "compose" || kind == "finish" || kind == "cancel"
+        if (!composing || kind == "connect" || connectionView !== focused || connection == null) {
           connection = focused.onCreateInputConnection(android.view.inputmethod.EditorInfo())
           connectionView = focused
         }
