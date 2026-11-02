@@ -92,6 +92,18 @@ run_case "slider-value.test (Swift)" \
       -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
+# The TextField's `maxLength` cut and text equality (G13). The delegate's cut keeps
+# the part of an *inserted* text that fits; for typing at the end of the text the
+# post-edit backstop gives the same answer, so only mid-text vectors - which no
+# on-device typing test produces - can tell a broken cut from a working one.
+run_case "text-limit.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/TextField/NitroUiTextLimit.swift' \
+      '$ROOT/scripts/native-tests/text-limit.test.swift' \
+      -o '$OUT/text-limit' && '$OUT/text-limit'
+  "
+
 # The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
 # reads agree" wait that `RealInputTests.measure` runs before it prints a control's
 # boxes. It is here rather than only on a device because the three things worth
