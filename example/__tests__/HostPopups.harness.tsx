@@ -60,7 +60,12 @@ import {
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
-import { waitForHandle } from './handles';
+import {
+  forgetPromisedHandles,
+  handleOf,
+  handleRef,
+  waitForPromisedHandle,
+} from './handles';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -255,12 +260,21 @@ async function waitForAnswer<T>(
   }
 }
 
-/** Poll for a `testID`; a hosted control mounts through the Host's composition. */
+/**
+ * Poll for a `testID`; a hosted control mounts through the Host's composition.
+ *
+ * As in `HostControls.harness.tsx`: a box whose control was wired with `handleRef` is
+ * handed back once that control's handle has landed too (`handles.ts`).
+ */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
   for (;;) {
     const box = harnessUi.queryByTestId(testId);
     if (box != null) {
+      await waitForPromisedHandle(
+        testId,
+        Math.max(5000, deadline - nitroUiCore.now())
+      );
       return box;
     }
     if (nitroUiCore.now() > deadline) {
@@ -726,6 +740,7 @@ function TwoPopupOwners({ log }: { log: Log }) {
 
 afterEach(() => {
   cleanup();
+  forgetPromisedHandles();
 });
 
 beforeAll(async () => {
@@ -775,9 +790,7 @@ function SegRows({
         }}
         testID="seg-first"
         accessibilityLabel="Segmented first"
-        hybridRef={(view: SegmentedHandle) => {
-          log.segments.first = view;
-        }}
+        hybridRef={handleRef(log.segments, 'first', 'seg-first')}
       />
       <SegmentedControl
         options={['One', 'Two', 'Three']}
@@ -788,9 +801,7 @@ function SegRows({
         }}
         testID="seg-second"
         accessibilityLabel="Segmented second"
-        hybridRef={(view: SegmentedHandle) => {
-          log.segments.second = view;
-        }}
+        hybridRef={handleRef(log.segments, 'second', 'seg-second')}
       />
     </Host>
   );
@@ -827,9 +838,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
     await mount(<SegRows log={log} />);
     // The handle lands a turn after the mount on iOS (`handles.ts`): `need` straight
     // after `mount` failed intermittently on main (G11-merge) and on G12's branch.
-    const control = await waitForHandle(() => log.segments.first, {
-      what: '"segmented row"',
-    });
+    const control = await handleOf(log.segments, 'first', 'segmented row');
     expect(control.selectedIndex).toBe(0);
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
@@ -846,9 +855,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 
   it('goes back to what React kept when the app refuses a change', async () => {
     await mount(<SegRows log={log} refuse />);
-    const control = await waitForHandle(() => log.segments.first, {
-      what: '"segmented row"',
-    });
+    const control = await handleOf(log.segments, 'first', 'segmented row');
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
     expect(control.selectedIndex).toBe(0);
@@ -879,7 +886,10 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
   it('answers nothing while disabled, and the twin beside it still does', async () => {
     await mount(<SegRows log={log} disableFirst />);
     const hostBox = await boxOf('seg-host');
-    expect(need(log.segments.first, 'first row').disabled).toBe(true);
+    // The Host's box says nothing about the row's handle (`handles.ts`).
+    expect((await handleOf(log.segments, 'first', 'first row')).disabled).toBe(
+      true
+    );
     const aim = await aimAt(hostBox, 0, 'seg-first');
     await userEvent.pressAt(aim.x, aim.y);
     await settle(350);
@@ -901,9 +911,7 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
     // — the same row answering a press inside the drawing — is what stops "the Host
     // composed nothing" from reading the same as "the row is narrower than the Host".
     await mount(<SegRows log={log} />);
-    const control = await waitForHandle(() => log.segments.first, {
-      what: '"segmented row"',
-    });
+    const control = await handleOf(log.segments, 'first', 'segmented row');
     const hostBox = await boxOf('seg-host');
     await userEvent.pressAt(hostBox.x + hostBox.width - 6, hostBox.y + 14);
     await settle(350);
