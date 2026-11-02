@@ -31,6 +31,7 @@ import {
 import {
   AlertDialog,
   ConfirmationDialog,
+  Host,
   nitroUiCore,
   type DialogAction,
 } from 'react-native-nitro-ui';
@@ -674,6 +675,47 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       }
     }
     console.log(`recycled-dialog recycles per round: ${reuses.join(',')}`);
+  });
+
+  it('presents from inside a <Host>, and goes when the Host is dropped', async () => {
+    // Q5 B7 item 11. On Android the Host's one composition composes the dialog, window
+    // and all, so dropping the Host is what has to take the window down; on iOS a Host
+    // is a passthrough and this is the plain drop.
+    function Scene() {
+      const [shown, setShown] = useState(true);
+      setters.set('host-shown', setShown);
+      return shown ? (
+        <Host>
+          <AlertDialog
+            testID="hosted"
+            hybridRef={captureHybrid('hosted')}
+            isPresented
+            onIsPresentedChange={(next) => {
+              eventLog.push(`hosted:presented:${String(next)}`);
+            }}
+            title="Hosted dialog"
+            actions={ACTIONS}
+          />
+        </Host>
+      ) : (
+        <View />
+      );
+    }
+    await render(<Scene />);
+    await waitForHandle('hosted');
+    const up = await waitForReport(
+      'hosted',
+      isUpCounted(1),
+      'up from inside the Host',
+      12000
+    );
+    expect(up.title).toBe('Hosted dialog');
+    if (Platform.OS === 'android') {
+      expect(up.hosted).toBe('1');
+    }
+    setters.get('host-shown')?.(false);
+    const probeId = await probe();
+    await waitForNothingLeft(probeId, 'the Host dropped with its dialog up');
   });
 
   if (Platform.OS === 'android') {
