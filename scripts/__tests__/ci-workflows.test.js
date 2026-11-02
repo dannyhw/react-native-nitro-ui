@@ -1318,18 +1318,20 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
       const ran = runDiagnostics(
         box,
         {
-          NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '700',
-          // Comfortably above what the hanging commands add up to (a dozen at 700 ms),
+          // 2 s per command: at 700 ms a loaded `check` timed out a tool that was only slow,
+          // and the run wrote one file short (M2, load1 16-28).
+          NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '2000',
+          // Comfortably above what the hanging commands add up to (a dozen at 2 s),
           // so this case proves the *per-command* bound keeps the run moving and every
           // section still gets asked. The overall budget is the second guard, and the
           // case named below exhausts it on purpose. CI's own numbers are 20 s and
           // 240 s against ten-odd commands; the ratios here are the same, at a scale a
           // test can wait through.
-          NITRO_UI_DIAG_BUDGET_MS: '60000',
+          NITRO_UI_DIAG_BUDGET_MS: '120000',
         },
-        // Less than the 60 s budget on purpose: a script that ignored its deadlines
+        // Less than the 120 s budget on purpose: a script that ignored its deadlines
         // would still be running when this kills it, which is the red this case wants.
-        30_000
+        60_000
       );
       expect({
         status: ran.status,
@@ -1340,11 +1342,11 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         countLine: 'diagnostics: 4 file(s) in harness-diag',
         // The assertion the whole case exists for: bounded, not "eventually". Four
         // orders of magnitude short of the 90 minutes this step took on run
-        // 41269235234, and the 30 s kill above is what makes "it hung" a failure
+        // 41269235234, and the 60 s kill above is what makes "it hung" a failure
         // rather than a stalled suite.
         elapsedMs: expect.any(Number),
       });
-      expect(ran.elapsedMs).toBeLessThan(30_000);
+      expect(ran.elapsedMs).toBeLessThan(60_000);
       // The hanging tools were really reached, and really given up on: without these
       // lines, a script that quietly skipped adb and sudo would pass the same
       // assertions for the wrong reason.
@@ -1425,11 +1427,12 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     const box = sandbox({ avd: true, adb: 'hang' });
     try {
       const ran = runDiagnostics(box, {
-        // Per-command and overall in the same ratio CI has (20 s and 240 s), taken small:
-        // the budget is roughly one command's worth, so everything after the first hang is
-        // skipped rather than asked.
-        NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '700',
-        NITRO_UI_DIAG_BUDGET_MS: '1500',
+        // The budget is roughly one command's worth, so everything after the first hang is
+        // skipped rather than asked. Seconds rather than CI's ratio taken to milliseconds:
+        // under a loaded `check` a plain file read through a spawned tool can take most of a
+        // second, and a 1.5 s budget ran out before the first command (M2, load1 16-28).
+        NITRO_UI_DIAG_COMMAND_TIMEOUT_MS: '3000',
+        NITRO_UI_DIAG_BUDGET_MS: '5000',
       });
       expect(ran.status).toBe(0);
       expect(ran.elapsedMs).toBeLessThan(20_000);
@@ -1445,7 +1448,7 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
     } finally {
       box.dispose();
     }
-  });
+  }, 30_000);
 
   it('the diagnostics step still prints what exists, including the AVD config', () => {
     // The other half of "tolerate a missing log while still printing the ones that

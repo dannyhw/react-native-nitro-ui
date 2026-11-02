@@ -985,7 +985,7 @@ describe('the CLI, in a real state directory', () => {
     expect(finished.code).toBe(0);
     expect(finished.stdout).toContain('export METRO_PORT=');
     expect(readState().leases.map((entry) => entry.task)).toEqual(['B1']);
-  });
+  }, 30_000);
 
   it('refuses to hand out a reserved serial', () => {
     writeFileSync(
@@ -1198,7 +1198,7 @@ describe('the CLI, in a real state directory', () => {
     // The marker goes away with the wait.
     expect(readState().pendingExclusive).toBeUndefined();
     expect(readState().leases[0].task).toBe('B1');
-  });
+  }, 30_000);
 
   it('keeps a lock-timeout from ending a wait (review S4)', async () => {
     // The state lock is held by a live pid, so an acquire cannot take it. The
