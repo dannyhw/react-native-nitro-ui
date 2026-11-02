@@ -53,6 +53,43 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
 
 // @public
+export function Chip(input: ChipProps): JSX.Element;
+
+// @public
+export interface ChipProps extends ViewProps {
+    defaultSelected?: boolean | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly label: string;
+        readonly variant: string;
+        readonly selected: boolean | null;
+        readonly mostRecentEventCount: number;
+        readonly disabled: boolean;
+        readonly systemImage: string | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPress(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    label: string;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onPress?: (() => void) | undefined;
+    onSelectedChange?: ((selected: boolean) => void) | undefined;
+    selected?: boolean | undefined;
+    systemImage?: string | undefined;
+    variant?: ChipVariant | undefined;
+}
+
+// @public
+export type ChipVariant = 'filter' | 'assist';
+
+// @public
 export function ConfirmationDialog(props: ConfirmationDialogProps): JSX.Element;
 
 // @public
