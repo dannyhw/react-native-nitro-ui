@@ -393,3 +393,20 @@ candidates. The orchestrator took Q5's recommendations on its seven questions; t
 - **BottomSheet content:** mounted only while presented. No `keepMounted` in v1.
 - **Order:** the dialog build (G11) starts now. The BottomSheet spike (S2), which needs RN children in a presented
   window, runs in parallel as soon as a device slot frees up.
+
+## D34 — TextField is built, on `UITextField` (2026-11-02)
+
+T19 (`docs/tasks/T19-textfield-measurements.report.md`; prototype on `task/T19-textfield-measurements`, never merged)
+measured what D31 required. Android passes every Q2 §7 line it can measure: typing oracle, latency at 0.77× of
+`TextInput` p95, reject, `maxLength`. The orchestrator's answers to T19's questions:
+
+1. **iOS keystroke latency can't be measured yet** (XCUITest keystrokes don't arrive as `UIEvent`s). Build anyway: iOS
+   mount is 0.99× and focus 0.96–1.00×. The component's own perf gate measures typing latency once it exists.
+2. **"Leak-free at N=200" means no unbounded growth**, not a return to baseline. A shipped `Switch` keeps 30.8 MiB
+   on the same rig, against TextField's 29.1 MiB. Q2's wording is taken in that sense.
+3. **iOS hosts `UITextField`** (arm B). It alone can see marked text and drop a JS write mid-composition, which
+   Q2 §2.2's guard needs. SwiftUI's `TextField` can't.
+4. **The spike's arm-shape recycle bug is moot.** It came from pooling two shapes behind one view, and the
+   component has one shape.
+
+The build is G13.
