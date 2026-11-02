@@ -709,72 +709,77 @@ export function parseIosA11yLog(log) {
 /**
  * The report's note about one case's re-reads, or `null` when there is nothing to say.
  *
- * A case that settled on the ordinary two reads prints no stability line at all, so fourteen
- * healthy cases add nothing to the report. Anything else belongs in it: a pass that read a control
- * four times, or one that never settled, has to be visible, because *otherwise a fix that retried
- * its way to a green is indistinguishable from a clean run* — which is precisely how an
- * accessibility rule gets quietly turned off.
+ * A case whose two reads agreed prints no stability line, so fourteen healthy cases add nothing to
+ * the report. Anything else belongs in it: a pass that read a control four times, or one that never
+ * settled, has to be visible, because *otherwise a fix that retried its way to a green is
+ * indistinguishable from a clean run* — which is precisely how an accessibility rule gets quietly
+ * turned off.
+ *
+ * The note quotes the **first** read rather than the one before the last, because the first is the
+ * box the old single-read pass would have decided on: that pair is the comparison a reader wants,
+ * and it is the only one that survives a third or fourth read.
  *
  * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
- *   previousAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor] the box actually
+ *   printed, so the note can name the ratio between the two reads instead of leaving a reader to
+ *   divide four numbers in their head.
  * @returns {string | null}
  */
 export function iosStabilityNote(stability, settledAnchor) {
   if (stability == null) return null;
-  const discarded =
-    stability.previousAnchor == null
+  const firstRead =
+    stability.firstAnchor == null
       ? ''
-      : `, and the read before it said (${num(stability.previousAnchor.x)}, ` +
-        `${num(stability.previousAnchor.y)}, ${num(stability.previousAnchor.width)}, ` +
-        `${num(stability.previousAnchor.height)})`;
-  // Said once, at the end, for whichever branch printed the discarded box: a note that named the
-  // ratio twice would read like a bug in the note.
+      : `; the first read said (${num(stability.firstAnchor.x)}, ` +
+        `${num(stability.firstAnchor.y)}, ${num(stability.firstAnchor.width)}, ` +
+        `${num(stability.firstAnchor.height)})`;
+  // Said once, at the end, for whichever branch quoted the first read: naming the ratio twice in
+  // one sentence would read like a bug in the note.
   const scale =
-    stability.previousAnchor == null
+    stability.firstAnchor == null
       ? ''
-      : describeDiscardedScale(stability.previousAnchor, settledAnchor);
+      : describeFirstReadScale(stability.firstAnchor, settledAnchor);
   if (!stability.settled) {
-    // Not a pass and not a failure: a measurement taken off a tree that would not hold still,
-    // which is the one kind of green a reader has to be able to discount. Saying it rather than
-    // silently reporting the boxes is what keeps the bounded wait honest.
+    // Not a pass and not a failure: a measurement taken off a tree that would not hold still, the
+    // one kind of green a reader has to be able to discount. Saying that out loud is what keeps a
+    // bounded wait honest — the alternative is a silent number of reads nobody can interpret.
     return (
-      `the boxes below are the last of ${String(stability.reads)} reads that never agreed ` +
-      `(${String(stability.moved)} frame(s) still moving, ${String(stability.elapsedMs)} ms) — ` +
-      'this case rests on a single read of a tree that would not hold still, so discount it ' +
-      'rather than trusting it' +
+      `the boxes below are read ${String(stability.reads)} times and never agreed ` +
+      `(${String(stability.moved)} frame(s) still different between the first and the last, ` +
+      `${String(stability.elapsedMs)} ms${firstRead}) — this case is one sample of a tree that ` +
+      'would not hold still, so discount it rather than trusting it' +
       scale
     );
   }
   return (
-    `the boxes below were read ${String(stability.reads)} times before two reads agreed ` +
-    `(${String(stability.moved)} frame(s) moved on the first pair, ` +
-    `${String(stability.elapsedMs)} ms${discarded}) — a stale read was thrown away. The ` +
-    'comparison below is unaffected: it compares two elements of this one read, never two ' +
-    'reads' +
+    `the boxes below are read ${String(stability.reads)} times before two agreed ` +
+    `(${String(stability.moved)} frame(s) moved, ${String(stability.elapsedMs)} ms${firstRead}) ` +
+    '— the first read was thrown away rather than decided on. The finding below is unaffected: ' +
+    'the rule compares two elements of this one read, never two reads' +
     scale
   );
 }
 
 /**
- * "…and the discarded box is this one at ⅓ scale" — said only when it is true.
+ * "…and the first read is this box at ⅓ scale" — said only when it is true.
  *
- * The failure this whole guard was written for was a discarded read at exactly ⅓ of the settled
- * one, on every component: the screen scale, which is what identified it as a stale snapshot from
- * a different render pass rather than a control that had genuinely moved. A reader who sees two
- * boxes and the ratio between them can make that call; a reader given two boxes and no ratio has to
- * divide them by hand, in a report, at 2 a.m. The sentence is only printed when all four components
- * share one ratio within a hundredth, so it cannot flatter the reader on a box that merely happens
- * to be smaller.
+ * The failure this guard was written for was a first read at exactly ⅓ of the settled one on every
+ * component: the screen scale, which is what identifies a stale snapshot from another render pass
+ * rather than a control that genuinely moved. Two boxes and their ratio let a reader make that call;
+ * two boxes alone leave them dividing decimals by hand. The sentence is printed only when all four
+ * components share one ratio within half a percent, so it cannot flatter the reader on a box that
+ * merely happens to be smaller.
  *
- * @param {{x: number, y: number, width: number, height: number}} [discarded]
+ * @param {{x: number, y: number, width: number, height: number}} [first]
  * @param {{x: number, y: number, width: number, height: number}} [settled]
  */
-function describeDiscardedScale(discarded, settled) {
-  if (discarded == null || settled == null) return '';
+function describeFirstReadScale(first, settled) {
+  if (first == null || settled == null) return '';
   const components = ['x', 'y', 'width', 'height'];
   let ratio = null;
   for (const key of components) {
-    const before = discarded[key];
+    const before = first[key];
     const after = settled[key];
     if (!Number.isFinite(before) || !Number.isFinite(after) || after === 0) {
       return '';
@@ -788,7 +793,7 @@ function describeDiscardedScale(discarded, settled) {
   }
   if (ratio == null || Math.abs(ratio - 1) < 0.01) return '';
   // Named when it is one of the scales a screen actually has, and the raw ratio otherwise. The
-  // components of two real reads never divide to the same digit exactly - the boxes are rounded on
+  // components of two real reads never divide to the same digit exactly - boxes are rounded on
   // their way out of the test manager, so 108.33/325 is 0.333323 rather than 1/3 - which is why
   // these are comparisons with a tolerance and not key lookups.
   const named = [
@@ -803,8 +808,8 @@ function describeDiscardedScale(discarded, settled) {
   );
   const label = found == null ? `${ratio.toFixed(3)}×` : found.label;
   return (
-    ` — the discarded box is this one at ${label} scale, the shape of a snapshot read ` +
-    'at another render scale rather than a control that moved'
+    ` — the first read is this box at ${label} scale, the shape of a snapshot taken at another ` +
+    'render scale rather than a control that moved'
   );
 }
 
@@ -819,7 +824,7 @@ function describeDiscardedScale(discarded, settled) {
  *
  * @param {string} log the xcodebuild test log
  * @returns {Map<string, {reads: number, settled: boolean, moved: number, elapsedMs: number,
- *   previousAnchor?: {x: number, y: number, width: number, height: number}}>}
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}>}
  */
 export function parseIosA11yStability(log) {
   /** @type {Map<string, any>} */
@@ -843,12 +848,12 @@ export function parseIosA11yStability(log) {
       );
     }
     const entry = { reads, settled, moved, elapsedMs };
-    if (fields.has('previousAnchorX')) {
-      entry.previousAnchor = {
-        x: Number(fields.get('previousAnchorX')),
-        y: Number(fields.get('previousAnchorY')),
-        width: Number(fields.get('previousAnchorW')),
-        height: Number(fields.get('previousAnchorH')),
+    if (fields.has('firstAnchorX')) {
+      entry.firstAnchor = {
+        x: Number(fields.get('firstAnchorX')),
+        y: Number(fields.get('firstAnchorY')),
+        width: Number(fields.get('firstAnchorW')),
+        height: Number(fields.get('firstAnchorH')),
       };
     }
     byControl.set(caseName, entry);

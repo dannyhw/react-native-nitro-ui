@@ -39,14 +39,19 @@ enum A11yFrameStability {
     /// The read to print. When `settled`, the second of the two agreeing reads; otherwise the
     /// last read taken before the cap or the budget ran out.
     let snapshot: Snapshot
-    /// The read before `snapshot`, for the caller that wants to show what moved.
-    let previous: Snapshot?
+    /// The **first** read, or `nil` when there was only one. This is the box the old single-read
+    /// pass would have printed, which is the comparison the log wants: "what one sample said"
+    /// against "what the settled tree says". Keeping "the read before this one" instead would
+    /// print an agreeing box whenever a third read was needed, and quietly lose the stale read the
+    /// guard exists to catch.
+    let first: Snapshot?
     /// How many times `read` was called, including the first.
     let reads: Int
     /// Two consecutive reads agreed on every frame.
     let settled: Bool
-    /// Frames that differed between the last two reads (non-zero whenever `settled` is false
-    /// because the cap was reached, and zero when the budget expired before a second read).
+    /// Frames that differ between `first` and `snapshot` — "how far the tree had to move before
+    /// it held still". 0 only when no second read happened; non-zero whenever a stability line is
+    /// worth printing at all.
     let moved: Int
     /// Wall clock spent, measured with the injected clock.
     let elapsedMs: Int
@@ -89,21 +94,47 @@ enum A11yFrameStability {
 
   /// Read until two consecutive reads agree, or the cap or the budget says stop.
   ///
+  /// ## The budget is a count of reads, not a wall-clock guess
+  ///
+  /// A read here is a round trip to the test manager for a whole subtree, and measured on pair-a
+  /// (`real-input:ios`, 2026-11-02) it costs **2.0 s to 7.9 s** — fourteen cases, none under two
+  /// seconds. The first version of this function took a 1 500 ms budget, checked that budget before
+  /// each re-read, and so stopped after the *first* read on every single case: the run's own log
+  /// says `reads=1 settled=false` fourteen times. That is the bug this guard exists to fix, still
+  /// happening, with a note attached. So the budget is `minReads`-aware: the wait always completes
+  /// its second read — one read is the old single-sample behaviour and is never an answer this
+  /// function is allowed to return — and the budget only refuses reads *after* that.
+  ///
+  /// ## What the fix costs, stated as a measurement
+  ///
+  /// Two reads instead of one, so one extra read per case. Measured on pair-a: the first read across
+  /// the fourteen cases took **63.8 s in total** (2.0 s to 7.9 s each), so the pass costs roughly
+  /// that again — about a minute added to a `real-input:ios` run whose whole a11y pass then runs
+  /// two to three minutes. Paid knowingly. A run whose own log records `reads=2` for all fourteen
+  /// cases is the ordinary case, not the expensive one: reads three and up happen only when a tree
+  /// disagrees with itself, which is exactly when a single sample was not trustworthy.
+  ///
   /// - Parameters:
   ///   - maxReads: hard cap on calls to `read` (at least 2 — one read is what the pass did before
   ///     this type existed, and it is what the ⅓-scale failure arrived on).
-  ///   - budgetMs: wall-clock budget for the whole wait, checked before each re-read.
+  ///   - budgetMs: wall-clock budget for the extra reads, checked before each read past the second.
+  ///     Sized from the measurement above: four reads at eight seconds is ~32 s for one case and
+  ///     ~7 min if all fourteen were pathological, so the cap does the real bounding and this is a
+  ///     runaway guard for a `read` that stops returning at all. In the ordinary case a control
+  ///     settles on read two and none of this is spent.
+  ///   - minReads: how many reads are always paid for, whatever the clock says. Two: the pair whose
+  ///     agreement is the whole question.
   ///   - pauseMs: how long to sit between reads. The point of the wait is to give the test
   ///     manager's snapshot a chance to be rebuilt, so a zero pause re-reads the same snapshot.
   ///   - framesOf: the frames of one snapshot that agreement is judged on. What the caller does
   ///     not hand over here is not stability-checked, so pass the whole tree, not the anchor.
-  ///   - read: one read of the tree. Called on this thread; each call is the round trip, so
-  ///     `maxReads` times the cost of `read` is the real cost of this function.
+  ///   - read: one read of the tree. Called on this thread; each call is the round trip.
   ///   - nowMs / pause: injected, so the cap and the budget are provable in milliseconds rather
   ///     than by a device run that happens to be slow.
   static func settle<Snapshot>(
     maxReads: Int = 6,
-    budgetMs: Int = 1_500,
+    budgetMs: Int = 60_000,
+    minReads: Int = 2,
     pauseMs: Int = 120,
     framesOf: (Snapshot) -> [CGRect],
     read: () -> Snapshot,
@@ -114,40 +145,45 @@ enum A11yFrameStability {
     let startedAt = nowMs()
     var last = read()
     var lastFrames = framesOf(last)
-    var previous: Snapshot? = nil
+    let first = last
+    var hasSecondRead = false
     var reads = 1
-    var moved = 0
 
-    func outcome(settled: Bool, snapshot: Snapshot, before: Snapshot?) -> Outcome<Snapshot> {
+    func outcome(settled: Bool, snapshot: Snapshot) -> Outcome<Snapshot> {
       return Outcome(
         snapshot: snapshot,
-        previous: before,
+        first: hasSecondRead ? first : nil,
         reads: reads,
         settled: settled,
-        moved: moved,
+        moved: hasSecondRead
+          ? movedFrameCount(framesOf(first), framesOf(snapshot))
+          : 0,
         elapsedMs: nowMs() - startedAt
       )
     }
 
     while reads < maxReads {
-      if nowMs() - startedAt >= budgetMs {
+      // `minReads` is paid for before the clock gets a vote. One read is exactly what the pass did
+      // before this type existed, so a budget small enough to stop at one read silently reinstates
+      // the bug: measured on pair-a, a 1 500 ms budget did precisely that on all fourteen cases,
+      // because a read here costs seconds (2.0 s to 7.9 s), not milliseconds.
+      if reads >= minReads && nowMs() - startedAt >= budgetMs {
         // Out of budget rather than out of reads. Same `settled == false`, and the last read is
         // handed back rather than the first: the caller prints a real measurement either way.
-        return outcome(settled: false, snapshot: last, before: previous)
+        return outcome(settled: false, snapshot: last)
       }
       pause(pauseMs)
       let current = read()
       let currentFrames = framesOf(current)
       reads += 1
-      moved = movedFrameCount(lastFrames, currentFrames)
-      if moved == 0 {
-        return outcome(settled: true, snapshot: current, before: last)
+      hasSecondRead = true
+      if movedFrameCount(lastFrames, currentFrames) == 0 {
+        return outcome(settled: true, snapshot: current)
       }
-      previous = last
       last = current
       lastFrames = currentFrames
     }
 
-    return outcome(settled: false, snapshot: last, before: previous)
+    return outcome(settled: false, snapshot: last)
   }
 }

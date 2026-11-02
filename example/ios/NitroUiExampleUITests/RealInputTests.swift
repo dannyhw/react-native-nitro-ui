@@ -242,19 +242,22 @@ final class RealInputTests: XCTestCase {
       framesOf: { $0.frames },
       read: readCase
     )
-    // Printed before the tree, so a reader sees the provenance of the boxes below it. `reads=2`
-    // is the ordinary case and costs one line; anything more is the interesting case, and an
-    // unsettled one says the comparison the rule is about to make rests on a tree that would not
-    // hold still — which is a measurement to discount, not a pass. `a11y.mjs` skips this line.
-    if settled.reads > 2 || !settled.settled {
-      let previousBox = settled.previous?.frames.first
+    // Printed before the tree, so a reader sees the provenance of the boxes below it - and printed
+    // only when there is something to say: two reads that agree add no line at all, which is what
+    // keeps fourteen healthy cases quiet and makes a line mean something. `firstAnchor*` is the box
+    // the old single-read pass would have decided on, which is the comparison worth having in a log:
+    // what one sample said, against what the settled tree says. An unsettled line says the
+    // comparison below rests on a tree that would not hold still - a measurement to discount, not a
+    // pass. `a11y.mjs` skips this line when it reads the elements, and reports it separately.
+    if settled.moved > 0 || !settled.settled {
+      let firstBox = settled.first?.frames.first
       print(
         "real-input a11y case=\(one.id) kind=stability reads=\(settled.reads) "
           + "settled=\(settled.settled) moved=\(settled.moved) "
           + "elapsedMs=\(settled.elapsedMs)"
-          + (previousBox.map {
-            " previousAnchorX=\($0.origin.x) previousAnchorY=\($0.origin.y) "
-              + "previousAnchorW=\($0.size.width) previousAnchorH=\($0.size.height)"
+          + (firstBox.map {
+            " firstAnchorX=\($0.origin.x) firstAnchorY=\($0.origin.y) "
+              + "firstAnchorW=\($0.size.width) firstAnchorH=\($0.size.height)"
           } ?? "")
       )
     }
