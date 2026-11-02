@@ -2082,55 +2082,6 @@ PODS:
     - ReactNativeDependencies
     - RNWorklets
     - Yoga
-  - RNScreens (4.30.1):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-bridging
-    - React-Core
-    - React-Core-prebuilt
-    - React-cxxstableapi
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-RCTImage
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - RNScreens/common (= 4.30.1)
-    - Yoga
-  - RNScreens/common (4.30.1):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-bridging
-    - React-Core
-    - React-Core-prebuilt
-    - React-cxxstableapi
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-RCTImage
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
   - RNSVG (15.16.0):
     - hermes-engine
     - RCTRequired
@@ -2351,7 +2302,6 @@ DEPENDENCIES:
   - "RNDateTimePicker (from `../../node_modules/@react-native-community/datetimepicker`)"
   - RNGestureHandler (from `../../node_modules/react-native-gesture-handler`)
   - RNReanimated (from `../../node_modules/react-native-reanimated`)
-  - RNScreens (from `../../node_modules/react-native-screens`)
   - RNSVG (from `../../node_modules/react-native-svg`)
   - RNWorklets (from `../../node_modules/react-native-worklets`)
   - SocketRocket (from `build/rndeps-facades/SocketRocket`)
@@ -2543,8 +2493,6 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/react-native-gesture-handler"
   RNReanimated:
     :path: "../../node_modules/react-native-reanimated"
-  RNScreens:
-    :path: "../../node_modules/react-native-screens"
   RNSVG:
     :path: "../../node_modules/react-native-svg"
   RNWorklets:
@@ -2647,7 +2595,6 @@ SPEC CHECKSUMS:
   RNDateTimePicker: 4ebf97a8ee633ad5e86a34b1196a9202b8e57760
   RNGestureHandler: b5512a093e6923dd1c31fbdd8e6186cd0ebb3541
   RNReanimated: 8453f9ea9e22896a9f8ad4eddac58a747cc02223
-  RNScreens: f15a5bda1ddeff8575b8ce41d83885b67129f84b
   RNSVG: c35beed3dcf6fd14b50ca1fc0d4214a17ec5334d
   RNWorklets: c3a33449674e0847c3d05bb730f6443290f19e6e
   SocketRocket: 37aec555668fb852ec12e3c0de59a86ca58f0871
