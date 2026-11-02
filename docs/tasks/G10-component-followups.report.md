@@ -33,9 +33,10 @@ Fixed:
 4. Two test gaps closed: no device render for `min > max` (`aa548d9`), and no test for the
    native-only clamp of an **uncontrolled** selection under shrinking options (`e3caeba`).
 
-Three of my four red proofs were run on both platforms' devices; the `min > max` iOS proof
-crashed the app in `SliderModel.trackBounds` rather than merely failing, which is the failure
-mode the guard exists for.
+Three of the six red proofs ran on both platforms' devices; the other three are the host-side
+vector sets and the wrapper test. The `min > max` iOS proof crashed the app in
+`SliderModel.trackBounds` rather than merely failing, which is the failure mode the guard
+exists for.
 
 iOS segmented `tintColor` is the one "needs a decision" item — not implemented; see below.
 
