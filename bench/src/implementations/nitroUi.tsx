@@ -250,6 +250,13 @@ export function NitroUiHostList({
         />
       );
     }
+    if (component === 'text-field') {
+      // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): the plan never asks
+      // this arm for it (`BenchImplementation.components`), and a Host would refuse it.
+      throw new Error(
+        'nitro-ui-host cannot compose text-field: a Host refuses it'
+      );
+    }
     // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.

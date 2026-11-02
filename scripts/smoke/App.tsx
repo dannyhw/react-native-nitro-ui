@@ -10,6 +10,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
 } from 'react-native-nitro-ui';
 import * as React from 'react';
 import {
@@ -286,6 +287,11 @@ export default function App(): React.ReactElement {
           title="Actions"
           group={SMOKE_MENU_GROUP}
           testID="SMOKE-menu"
+        />
+        <TextField
+          onLayout={measureFor('text-field')}
+          placeholder="Name"
+          testID="SMOKE-text-field"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a

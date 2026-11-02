@@ -35,7 +35,7 @@ const READY_LINE =
   'I/ReactNative( 1234): ' +
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
-  'date-picker=138x34 picker=72x35 menu=76x34 host=310x96';
+  'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -55,7 +55,7 @@ const READY_LINE_FRACTIONAL =
   'button=91.04762268066406x48 progress=363.4285583496094x4.19049072265625 ' +
   'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
   'picker=280x56.09523010253906 menu=97.619049072265625x48 ' +
-  'host=363.4285583496094x96';
+  'text-field=363.4285583496094x24 host=363.4285583496094x96';
 
 describe('smoke ready line', () => {
   it('passes on one non-zero box per control', () => {
