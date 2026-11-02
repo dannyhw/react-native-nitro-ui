@@ -1,53 +1,53 @@
 # X16 — Tooling sweep 2
 
-**Branch:** `task/X16-tooling-sweep-2` (from `main` at `3d8cfbf`) · **Rounds:** 1 + fix round 1 of up to 3 (D19) ·
-**Lease:** `X16-np3gj` (`pair-a`: iOS `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / `emulator-5574` / Metro `8295`)
+**Branch:** `task/X16-tooling-sweep-2` (from `main` at `3d8cfbf`) · **Rounds:** 1 (plus its own gate retry) + fix round 1
+of up to 2 (D19) ·
+**Lease:** `X16-np3gj`, then `X16-taq77` (`--exclusive --boot --platform both`, boot wait 209 s; `pair-a`: iOS
+`49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / `emulator-5574` / Metro `8295`)
 
 ## Summary
 
-Four follow-ups, each shown red before green. Item 4's first version was wrong in a way only a device
-run could show (**Fix round 1**).
+Round 1's four follow-ups plus a review round, each change shown red before green. Item 4's first version was wrong in a
+way only a device run could show; item 2's fix, in a way only re-reading the contract showed.
 
 **1 — a spawned test CLI no longer inherits the shell's lease.** `gate.test.js`'s `runCli`/`spawnCli` and
-`gate-logs.test.js`'s `gitEnv` handed children `process.env`, so in a shell that had sourced a lease the
-suites read `METRO_PORT`, `ANDROID_SERIAL` and `NITRO_UI_LEASE_ID` as if the test had set them; `check`'s
-test step went red on 25 tests. The fix is a shared scrubber, `scripts/__tests__/helpers/scrubbed-env.js`,
-applied at every CLI spawn in the four affected suites. A **deny-list, not an allow-list**: the suites need
-`PATH`, `HOME` and `ANDROID_HOME`, and a test must still be able to set a lease-scoped name deliberately,
-so the scrub runs *before* `extraEnv`. Its guard takes the names from `lease-core.mjs`'s own `exportLine`
-calls, so a new lease variable cannot slip past. Red needs a **listener** on the leased port: the Metro
-pre-flight's refusal, not the env, is what lost the ledger line.
+`gate-logs.test.js`'s `gitEnv` handed children `process.env`, so in a lease-sourced shell the suites read `METRO_PORT`,
+`ANDROID_SERIAL` and `NITRO_UI_LEASE_ID` as if the test had set them; `check`'s test step went red on 25 tests. The fix
+is a shared scrubber at every CLI spawn in those suites — a **deny-list, not an allow-list**: they need `PATH`, `HOME`
+and `ANDROID_HOME`, and a test may still set a lease name, so the scrub runs *before* `extraEnv`. Its guard reads the
+names from `lease-core.mjs`'s `exportLine` calls. Red needs a **listener** on the leased port: the Metro refusal, not the
+env, lost the ledger line.
 
-**2 — `acquire --exclusive --boot` boots the pair it just powered the pool off for.** `poolHandoff`
-skipped its body for an exclusive lease, so the documented baseline-mint line left both simulators off.
-The power-off happens in `acquire` *before* it, so the ordering the guard protected was already kept. Its
-stub answered `adb devices` identically whatever happened, so a killed emulator looked attached; it now
-keeps state.
+**2 — what `--exclusive` owes a bench.** `poolHandoff` skipped its body for an exclusive lease, so the documented
+baseline-mint line powered the pool off and booted nothing (A6b booted by hand). Fixing that exposed three more faults,
+all fixed here: it obeyed `--platform`'s `both` *default*, so an Android bench cold-booted a simulator (now refused,
+before the lease exists); `NITRO_UI_LEASE_BOOT` could boot one, where only a typed `--boot` may; and `exceptLeaseId` had
+it kill and restart the bench's own warm device, which an up device of the named platform is now spared.
 
-**3 — `gate.mjs bench --help` is usage, not a gate run.** It resolved as `bench:--help`, exited 2, and
-appended a FAIL row that `table` sorts first and `export` writes a failure excerpt for; it cost two
-reports an explanation paragraph. `main()` now answers a probe with its own usage before anything is
-resolved or recorded, either side of `--` included.
+**3 — `gate.mjs bench --help` is usage, not a gate run.** It resolved as `bench:--help`, exited 2, and appended a FAIL
+row that `table` sorts first and `export` writes an excerpt for. `main()` now answers a probe before recording anything.
 
-**4 — the iOS a11y pass re-reads a control's boxes until two reads agree** (`A11yFrameStability`, new).
-It agrees with the *previous read* and nothing else — no expected frame, no reference box — so a control
-whose boxes are stably wrong settles at once and prints with its finding intact. The report notes the read
-count and the ratio between reads: a fix that retried its way to a green must not look like a clean run.
-**On the ⅓-scale read:** unreproduced here, and the rule still fails on a stable disagreement — the brief's
-"re-read and keep the failure" branch, not a claim that RN is innocent.
+**4 — the iOS a11y pass re-reads a control's boxes until two reads agree** (`A11yFrameStability`, new). It agrees with
+the *previous read* and nothing else — no expected frame — so a control whose boxes are stably wrong settles at once and
+prints with its finding intact. The report notes the read count and the ratio between reads: a fix that retried its way
+to a green must not look clean, and a ⅓-scale first read now reaches the summary as a WARN. That shape is unreproduced
+here, and the rule still fails on a stable disagreement — the brief's "re-read and keep the failure" branch, not a claim
+of innocence.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1619 tests / 61 suites | `dac3eaed3f83` | 2 m 36 s | start 2.4 / med 3.8 / max 5.0 |
-| `harness:ios` | **PASS** | 233 tests / 16 suites | `dac3eaed3f83` (ios tree) | 3 m 51 s | start 2.2 / med 2.6 / max 3.7 |
-| `harness:android` | **PASS** | 284 tests / 16 suites | `dac3eaed3f83` (android tree) | 8 m 17 s | start 8.2 / med 2.0 / max 8.2 |
-| `real-input:ios` | **PASS** | — | `dac3eaed3f83` (ios tree) | 16 m 19 s | start 2.5 / med 3.4 / max 10.5 |
+| `check` | **PASS** | 1640 tests / 62 suites | `1ff5330cba29` | 2 m 34 s | start 1.6 / med 3.3 / max 5.8 |
+| `harness:ios` | **PASS** | 233 tests / 16 suites | `1ff5330cba29` (ios tree) | 3 m 57 s | start 2.2 / med 2.3 / max 2.7 |
+| `harness:android` | **PASS** | 284 tests / 16 suites | `1ff5330cba29` (android tree) | 8 m 12 s | start 2.8 / med 2.0 / max 3.8 |
+| `real-input:ios` | **PASS** | — | `1ff5330cba29` (ios tree) | 16 m 17 s | start 2.8 / med 3.9 / max 20.3 |
 | `real-input:android` | missing | — | — | — | — |
 
 `need --for review`: `need: review is satisfied on this code tree.` (check + both harnesses; it names
 `real-input:android` under merge, not review — this diff's Android half is the harness, which is green.)
+`real-input:ios` printed **zero** stability lines: all fourteen cases settled on two agreeing reads, which is the quiet
+case `shouldReport` exists to keep quiet (it is proved red on the host, not here).
 
 `harness:ios` and `harness:android` are in this round because `need` asks for them, not because the
 brief's "harness only if you change harness-side code" was read loosely: item 4 edits
@@ -81,6 +81,35 @@ above is the ledger's answer, and `need --for review` is the bar this round chec
   first read a scaled one unless every component says so`. That one is the bug I wrote and then checked
   for: the note is now only allowed to name a ratio it measured.
 
+### Fix round 1
+
+- `lease-pool-cli.test.js` "refuses an exclusive boot that did not name a platform" -> drop the
+  `platformGiven` check in `exclusiveBootMisuse` -> that one case (`status` 0 where 2 was expected). Proved
+  narrowly: the first mutation dropped the whole guard and went red on 14 unrelated cases, which is a broken
+  mutation, not a proof.
+- "boots nothing for an exclusive lease when only the environment asked" + "says the environment was ignored"
+  -> `bootForLease` stops special-casing `--exclusive` -> 2 red. The same mutation first failed for the wrong
+  reason: `bootForLease(options, exclusive)` was called with one argument, so `exclusive` was `undefined` and
+  the env booted every lease. Fixed, and the case is what caught it.
+- "leaves the bench's own warm device up…", "spares only the named platform's own device", "spares both of the
+  pair…" -> `spare = []` -> 3 red; -> `upKeysFor(pair, 'both')`, sparing past `--platform` -> 3 red, two of
+  them different cases. The first M3 attempt **did not apply** (prettier had joined the ternary onto one line,
+  so the 45 passes proved nothing) — every mutation from here asserts its own substitution landed.
+- "documents an exclusive boot the CLI actually accepts" -> CONTRIBUTING's bench line back to
+  `--exclusive --boot` -> 1 red. Written by running the doc's own lines through the real CLI, so a doc fix that
+  never happened cannot pass it. Restored files are checked by SHA after every mutation.
+- `a11y-frame-stability.test.swift` -> `shouldReport` loses `reads > 2` -> `a flapped-back tree is still
+  reported` + `five quiet reads are reported`. Binary deleted before each build, as above.
+- `real-input-a11y-ios.test.js` "reports the re-read onto the check" -> the reporter computes the warning and
+  never publishes it -> 1 red; -> `check.warn` downgraded to `check.note` (the item-4 failure exactly) -> 1 red.
+  -> `iosStabilityWarning` returns for any ratio -> `warns nothing for a re-read that is not the screen-scale
+  shape` + 1 more. This test replaced a text assertion on the call site that **stayed green** under the
+  `if (false)` mutation: the text was still in the file, which is why the publish step moved into `a11y.mjs`.
+- `real-input-suite.test.js` (new) is red by construction before the feature: `check.warn` did not exist, and
+  the suite could not even import `Suite` — `support.mjs`'s `import.meta` is unparseable to jest, which is the
+  reason `report.mjs` was split out. It asserts the re-export so the four existing importers cannot silently
+  lose it.
+
 ## Files changed
 
 - `scripts/__tests__/helpers/scrubbed-env.js`, `scripts/__tests__/test-env-scrub.test.js` (new); `gate.test.js`, `gate-check.test.js`, `gate-logs.test.js`, `ci-workflows.test.js`.
@@ -88,13 +117,15 @@ above is the ledger's answer, and `need --for review` is the bar this round chec
 - `scripts/gate.mjs`, `scripts/gate-core.mjs`, `scripts/__tests__/gate.test.js`.
 - `example/ios/NitroUiExampleUITests/A11yFrameStability.swift`, `scripts/native-tests/a11y-frame-stability.test.swift` (new), `RealInputTests.swift`, the project file, `scripts/native-tests.sh`; `scripts/real-input/a11y.mjs`, `scripts/real-input/ios.mjs`, `scripts/__tests__/real-input-a11y-ios.test.js`.
 - `docs/tasks/FOLLOWUPS.md`.
+- **Fix round 1:** `scripts/real-input/report.mjs` (new: `Suite`/`CheckLog`/`AbortedCheck`, moved from `support.mjs`, which re-exports them and gains `warn`), `scripts/__tests__/real-input-suite.test.js` (new), `scripts/lease.mjs` (`bootForLease`, `exclusiveBootMisuse`, the spare), `scripts/device-pool.mjs` (`devicesFor`/`isDeviceUp`/`upKeysFor`, factored out of `ensureBooted` so warm reuse and the spare cannot disagree), `CONTRIBUTING.md`, the two Swift files, and the three test suites above.
 
 ## Follow-ups
 
 - real-input: the ⅓-scale wrapper read is unreproduced here; if it comes back on a *stable* pair of reads, it is an RN/XCUITest bug and not a flake, and the log now distinguishes the two.
+- real-input: a WARN never moves the exit code, on purpose (the case passed), so a host that reads only exit codes still misses it. A `--strict-warn` flag, or a gate that records the WARN count in its ledger row, is the way to close that without making a transient finding red.
 - gate-core: `scripts/lease.mjs` and `scripts/device-pool.mjs` are unmapped, so a lease-only fix re-owns both harness runs. Left alone deliberately — `lease-core.mjs` is listed as a device run's import for exactly this reason — but a lease-only round is the expensive case.
 
-## Fix round 1
+## Round 1, gate retry (the device run round 1 did not get)
 
 `real-input:ios` ran 918 s and died on `iosStabilityNote is not defined` — never imported. Its log then
 said the guard did not work: **`reads=1 settled=false`, fourteen times.** The budget was checked before
@@ -113,3 +144,18 @@ says `no app to test`, and `ANDROID_HOME` being unset in my shell is what made `
 produce the `app.stamp` that message reads — one failure, two lines. Re-ran `check`,
 both harnesses and `real-input:ios`, which prints **zero** stability lines — all fourteen settled on
 reads one and two.
+
+## Fix round 1 — the review's follow-ups
+
+**Exclusive boot (MUST FIX).** `--exclusive --boot` with no typed `--platform` is refused *before the lease exists*:
+`--platform`'s `both` default reached `ensureBooted`, so the documented bench line cold-booted a simulator under an
+Android measurement. `NITRO_UI_LEASE_BOOT` no longer boots an exclusive lease — only a typed `--boot` does, and the
+"devices not booted" line no longer suggests the variable that cannot. One up device of the leased pair is now spared the
+power-off, for the named platform only, by leaving its key out of `shutdownKeys`; `exceptLeaseId` had the bench rebooting
+the device it was handed. CONTRIBUTING says the power-off happens either way and the boot only with `--boot`, the bench
+line names a platform, and a test runs every exclusive doc line through the real CLI.
+
+**6.** Unset `ANDROID_HOME` is why no `app.stamp` was written — the excerpt's `no app to test`: one failure, two lines.
+
+**WARN/print.** A ⅓-scale first read reaches the summary through `reportIosStability` (never a failure, the case passes
+honestly); `shouldReport` prints on `reads > 2`, since A, B, A, A settles with `moved=0` and printed nothing.
