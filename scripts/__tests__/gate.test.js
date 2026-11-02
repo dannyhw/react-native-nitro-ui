@@ -62,6 +62,7 @@ import {
   pidMayBeRunning,
   runningBackgroundGates,
 } from '../gate-core.mjs';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 /** Tree digest used as "the code this ledger line was about" in these tests. */
 const TREE_A =
@@ -1637,7 +1638,10 @@ function runCli(dir, args, extraEnv = {}) {
     encoding: 'utf8',
     timeout: 120_000,
     env: {
-      ...process.env,
+      // The shell's lease never travels into a fixture (X16 item 1): this file's checkouts carry
+      // their own fake `NITRO_UI_HOME` and their own lease ids, and an inherited `METRO_PORT` would
+      // have the CLI run its Metro pre-flight against a port this test never chose.
+      ...withoutLeaseEnv(process.env),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
@@ -1654,7 +1658,9 @@ function spawnCli(dir, args, extraEnv = {}) {
     cwd: dir,
     encoding: 'utf8',
     env: {
-      ...process.env,
+      // Same scrub as `runCli`: a signal test is about the CLI's own process handling, and a lease
+      // inherited from the shell would change which pre-flight it runs before it ever got a signal.
+      ...withoutLeaseEnv(process.env),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
