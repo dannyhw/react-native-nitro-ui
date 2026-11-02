@@ -92,6 +92,7 @@ const ECHO = {
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
   dialogLog: 'dialog-log',
+  sheetLog: 'sheet-log',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -1785,6 +1786,177 @@ const CHECKS = {
     await waitGone(SHEET_ROW, 'the row to take the sheet down');
   },
 
+  'bottom-sheet': async (t) => {
+    // The texts `BottomSheetScreen` gives its sheets' content. Each appears nowhere
+    // else, so a text match names one sheet. A Material sheet is a `Dialog` window of
+    // its own, and while it is up `uiautomator dump` returns its tree - the React
+    // Native content is in there, which is half of what this check proves - so the
+    // screen's log is read only with every sheet down, and the sheet's own echo
+    // (`Pressed N times`) while it is up.
+    const FIT = 'Press inside the sheet';
+    const FIT_TITLE = 'As tall as this';
+    const STICKY = 'Close the sticky sheet';
+    const STICKY_TITLE = 'Swipe, back and outside do nothing';
+    const TWO = 'Drag this up for large';
+    const upCount = (text) => () =>
+      t.dump().filter((node) => node.text === text).length;
+    const opener = (testID) => () => {
+      const node = t.nodeByTestId(testID);
+      if (node == null) {
+        t.log.abort(`no opener with testID "${testID}" on the Sheet screen`);
+      }
+      return node;
+    };
+    const waitGone = async (text, description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount(text)() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    const open = async (testID, witness, description) => {
+      await t.tapUntilUp(opener(testID), description, upCount(witness), {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(witness, description);
+      // The entry animation: a gesture during it lands on a moving sheet.
+      await t.settle(700);
+    };
+    const log = (expected, what) =>
+      t.log.checkEquals(what, t.requireEcho(ECHO.sheetLog), expected);
+
+    // 0. Before a touch: nothing reported, and the content is not mounted.
+    log('none', 'no sheet has reported anything before a touch');
+    t.log.checkEquals(
+      "the sheet's content is not mounted before it is presented",
+      upCount(FIT)(),
+      0
+    );
+
+    // 1. A real tap opens the fit sheet; its React Native content is in its window.
+    await open('sheet-open-fit', FIT, 'the real tap that opens the fit sheet');
+
+    // 2. A real tap on the Pressable inside the sheet reaches JS through the sheet's
+    //    own touch root: the sheet's echo moves.
+    const pressed = await t.pressUntil({
+      what: 'the Pressable inside the sheet',
+      waitingFor: 'the real tap inside the sheet to reach JS',
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Pressed 1 times')() > 0) return;
+        await t.tapNode(t.waitForOption(FIT, 'the Pressable to be up'));
+      },
+      reading: () =>
+        upCount('Pressed 1 times')() > 0 ? 'Pressed 1 times' : '-',
+      raised: (shown) => shown === 'Pressed 1 times',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      'a real tap inside the sheet presses its Pressable once',
+      pressed.shown,
+      'Pressed 1 times'
+    );
+
+    // 3. Back closes it; then a tap outside; then a drag down on its content.
+    await t.pressBack();
+    await waitGone(FIT, 'Back to take the fit sheet down');
+    await open(
+      'sheet-open-fit',
+      FIT,
+      'the real tap that reopens the fit sheet'
+    );
+    await t.tapAtFraction(0.5, 0.12);
+    await waitGone(FIT, 'a tap outside to take the fit sheet down');
+    await open('sheet-open-fit', FIT, 'the real tap that opens it again');
+    await t.swipeFrom(
+      t.waitForOption(FIT_TITLE, 'the fit sheet title'),
+      Math.round(600 * t.density()),
+      250
+    );
+    await waitGone(
+      FIT,
+      'a drag down on the content to take the fit sheet down'
+    );
+    log(
+      'press:1 > presented:false > dismiss > presented:false > dismiss > ' +
+        'presented:false > dismiss',
+      'Back, a tap outside and a drag down each reported the close, then the dismissal'
+    );
+
+    // 4. None of the three closes a sticky sheet; its own button does, and that close
+    //    is the app's (no presented:false).
+    await open(
+      'sheet-open-sticky',
+      STICKY,
+      'the real tap that opens the sticky sheet'
+    );
+    await t.pressBack();
+    await t.settle(1000);
+    t.log.checkEquals('Back leaves the sticky sheet up', upCount(STICKY)(), 1);
+    await t.tapAtFraction(0.5, 0.12);
+    await t.settle(1000);
+    t.log.checkEquals('and so does a tap outside', upCount(STICKY)(), 1);
+    await t.swipeFrom(
+      t.waitForOption(STICKY_TITLE, 'the sticky sheet title'),
+      Math.round(600 * t.density()),
+      250
+    );
+    await t.settle(1200);
+    t.log.checkEquals('and so does a drag down', upCount(STICKY)(), 1);
+    await t.tapUntilUp(
+      () => t.waitForOption(STICKY, 'the sticky sheet button'),
+      'the real tap on the sticky sheet button to close it',
+      () => (upCount(STICKY)() === 0 ? 1 : 0),
+      { pollMs: DUMP_POLL_MS }
+    );
+    await waitGone(STICKY, 'the sticky sheet button to take it down');
+    log(
+      'press:1 > presented:false > dismiss > presented:false > dismiss > ' +
+        'presented:false > dismiss > close > dismiss',
+      'only the sticky sheet button closed it'
+    );
+
+    // 5. The two-detent sheet opens half expanded; a drag up on its header expands it,
+    //    which reports detent 1.
+    await open(
+      'sheet-open-two',
+      TWO,
+      'the real tap that opens the two-detent sheet'
+    );
+    const header = t.waitForOption(TWO, 'the two-detent header');
+    const halfTop = header.bounds.y1;
+    await t.swipeFrom(header, -Math.round(halfTop * 0.8), 400);
+    await t.settle(800);
+    const expandedTop = t.waitForOption(TWO, 'the header after the drag').bounds
+      .y1;
+    t.log.note(
+      `bottom-sheet: the two-detent header moved from y=${String(halfTop)} to y=${String(expandedTop)}`
+    );
+    t.log.checkEquals(
+      'a drag up on the header expands the sheet (its top moves up by more than a third)',
+      halfTop - expandedTop > halfTop / 3,
+      true
+    );
+    // Material's Back steps down a detent before it closes: from expanded it returns to
+    // the half-expanded one (reported as detent 0), and only the next Back closes it.
+    await t.pressBack();
+    await t.settle(1200);
+    t.log.checkEquals(
+      'Back from the expanded detent leaves the sheet up, half expanded',
+      upCount(TWO)(),
+      1
+    );
+    await t.pressBack();
+    await waitGone(TWO, 'a second Back to take the two-detent sheet down');
+    // The screen keeps its last twelve entries, so the first press has scrolled off.
+    log(
+      'presented:false > dismiss > presented:false > dismiss > presented:false > ' +
+        'dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss',
+      'a drag up reported detent 1, Back stepped down to detent 0, and Back closed it'
+    );
+  },
+
   'date-picker': async (t) => {
     t.log.checkEquals(
       'the DatePicker has reported no day before a touch',
@@ -3167,7 +3339,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'dialog' | 'host'} screen
+   *   | 'picker' | 'menu' | 'dialog' | 'sheet' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -3179,6 +3351,7 @@ class DeviceHarness {
       picker: 'Picker',
       menu: 'Menu',
       dialog: 'Dialogs',
+      sheet: 'Sheet',
       host: 'Host',
     }[screen];
     const anchor = {
@@ -3190,6 +3363,7 @@ class DeviceHarness {
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
       dialog: ECHO.dialogLog,
+      sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
@@ -4232,6 +4406,44 @@ function makeContext(harness, log) {
      */
     async pressBack() {
       harness.key(KEY_BACK);
+      await sleep(400);
+    },
+
+    /**
+     * Drag a finger vertically from the centre of a node - a sheet's content, its
+     * header - by `dyPx` pixels (positive is down). One `adb shell input swipe`, so
+     * the drag travels the same InputDispatcher path a finger does.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {number} dyPx
+     * @param {number} [durationMs]
+     */
+    async swipeFrom(node, dyPx, durationMs = 300) {
+      harness.swipe(
+        node.bounds.cx,
+        node.bounds.cy,
+        node.bounds.cx,
+        Math.max(
+          0,
+          Math.min(harness.displayHeight() - 1, node.bounds.cy + dyPx)
+        ),
+        durationMs
+      );
+      await sleep(600);
+    },
+
+    /**
+     * Tap a point given as fractions of the display - above a sheet, say, where its
+     * scrim is.
+     *
+     * @param {number} fx
+     * @param {number} fy
+     */
+    async tapAtFraction(fx, fy) {
+      harness.tapAt(
+        Math.round(harness.displayWidth() * fx),
+        Math.round(harness.displayHeight() * fy)
+      );
       await sleep(400);
     },
 

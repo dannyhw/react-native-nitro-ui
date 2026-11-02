@@ -27,6 +27,7 @@ import {
   MANIFEST_BASENAME,
   NON_CONTROL_AUTOLINKING,
   SIZING_TABLE_FILE,
+  checkAndroidViewManagers,
   checkAutolinking,
   checkExampleScreens,
   checkIndexExports,
@@ -676,8 +677,20 @@ describe('the generated tables cover what they claim', () => {
       [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
         (m) => m[1]
       );
+    // The rows of UNHOSTABLE_CONTROLS: a control a Host refuses by design (G14's
+    // BottomSheet) is imported for that table, not for HOSTABLE_CONTROLS.
+    const refused = (text) => {
+      const at = text.indexOf('export const UNHOSTABLE_CONTROLS');
+      return [
+        ...text
+          .slice(at, text.indexOf(']);', at))
+          .matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm),
+      ].map((m) => m[1]);
+    };
     const before = readRepo('src/components/Host/HostChildren.ts');
-    expect(imports(before)).toEqual(rows(before));
+    expect([...imports(before)].sort()).toEqual(
+      [...rows(before), ...refused(before)].sort()
+    );
 
     const flipped = repoManifests().map((m) =>
       m.name === 'Switch' ? { ...m, hostable: false } : m
@@ -1144,5 +1157,56 @@ describe('gen-registry on a scratch tree', () => {
       expect(text ?? `MISSING ${spec.path}`).toContain(spec.begin);
       expect(text).toContain(spec.end);
     }
+  });
+});
+
+describe('a hand-written Android view manager (androidViewManager, G14)', () => {
+  const sheet = () =>
+    repoManifests().find((manifest) => manifest.name === 'BottomSheet');
+  const packageText = () =>
+    readRepo(
+      'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt'
+    );
+
+  it('keeps the generated manager out of NitroUiPackage for a control that names its own', () => {
+    const { problems, files } = runPlan();
+    expect(problems).toEqual([]);
+    const written =
+      files[
+        'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt'
+      ] ?? packageText();
+    expect(written).not.toContain('HybridNitroUiBottomSheetManager()');
+    expect(written).toContain('NitroUiBottomSheetViewManager(),');
+  });
+
+  it('reports a manifest whose hand-written manager is not registered', () => {
+    const text = packageText().replace(
+      '    NitroUiBottomSheetViewManager(),\n',
+      ''
+    );
+    expect(checkAndroidViewManagers([sheet()], text)).toEqual([
+      expect.stringContaining(
+        'names androidViewManager NitroUiBottomSheetViewManager and createViewManagers does not register it'
+      ),
+    ]);
+  });
+
+  it('reports the generated manager registered as well', () => {
+    const text = packageText().replace(
+      '    NitroUiBottomSheetViewManager(),',
+      '    NitroUiBottomSheetViewManager(),\n    HybridNitroUiBottomSheetManager(),'
+    );
+    expect(checkAndroidViewManagers([sheet()], text)).toEqual([
+      expect.stringContaining(
+        'registers the generated HybridNitroUiBottomSheetManager as well'
+      ),
+    ]);
+  });
+
+  it('rejects a manager name that is not a view manager', () => {
+    const manifest = { ...jsonCopy(sheet()), androidViewManager: 'SheetThing' };
+    expect(
+      validateManifest(manifest, 'BottomSheet', 'component.json').join('\n')
+    ).toContain('androidViewManager');
   });
 });
