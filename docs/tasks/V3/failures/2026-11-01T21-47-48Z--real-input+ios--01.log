@@ -1,0 +1,189 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-11-01T21:47:48.742Z on code tree `aecd47415e31` at HEAD `8c4d2fd` (branch `task/V3-g8-ios-gates`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 707771 ms
+- Load: start 3.01, end 4.71, median 4.33, max 6.74
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `V3-ce6rx`
+- Full log: `task/V3-g8-ios-gates/real-input+ios-2026-11-01T21-47-48.438Z.log` (<store>/task/V3-g8-ios-gates/real-input+ios-2026-11-01T21-47-48.438Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ NitroUiSwitch: "Controlled switch" is announced by the element at (325, 217.33, 61, 28) while the control is drawn at (108.33, 72.44, 20.33, 9.33) — the name is on a box that is not the control's, so VoiceOver stops somewhere else than the thing a person presses`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/V3-g8-ios-gates/real-input+ios-2026-11-01T21-47-48.438Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: V3-ce6rx (still live)
+  |   V3-ce6rx                 V3           ios               pair-a
+gate: load
+  |   load1 at the moment of failure: 4.71 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 259 — the rest is in the full log above)
+
+```
+    ✓ XCUITest reported "passed" for testRealInputHostedDatePicker in 29.137s
+
+  a11y:switch: Switch a11y (XCUITest)
+    · other id="switch-controlled" label="Controlled switch" value="" box (108.33333333333333, 72.44444274902344, 20.33333333333333x9.333333333333329) [the React Native wrapper]
+    · other id="" label="" value="" box (108.33333333333333, 72.44444274902344, 20.33333333333333x9.333333333333329)
+    · other id="" label="" value="" box (325, 217.3333282470703, 61x28)
+    · other id="" label="" value="" box (325, 217.3333282470703, 61x28)
+    · switch id="" label="Controlled switch" value="0" box (325, 217.3333282470703, 61x28)
+    · switch id="" label="" value="0" box (325, 217.3333282470703, 63x28)
+    ✗ NitroUiSwitch: "Controlled switch" is announced by the element at (325, 217.33, 61, 28) while the control is drawn at (108.33, 72.44, 20.33, 9.33) — the name is on a box that is not the control's, so VoiceOver stops somewhere else than the thing a person presses
+
+  a11y:slider: Slider a11y (XCUITest)
+    · other id="slider-controlled" label="Controlled slider" value="" box (16, 217.3333282470703, 370x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 217.3333282470703, 370x31)
+    · other id="" label="Controlled slider" value="0.25" box (16, 217.3333282470703, 370x31)
+    · known failing (X4 a11y: the Slider is announced as other and not as a slider): NitroUiSlider: "Controlled slider" is announced as an other and not as a slider — the announcement lost the kind of control this is, so a person hears a name with no idea what can be done with it
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:button: Button a11y (XCUITest)
+    · other id="real-input-enabled" label="Real-input button" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · button id="" label="Real-input button" value="" box (16, 233.99999237060547, 99.33333333333333x34.333333333333314)
+    ✓ NitroUiButton is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:segmented-control: SegmentedControl a11y (XCUITest)
+    · other id="real-input-segmented" label="Real-input segmented control" value="" box (16, 233.99999237060547, 96x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 233.99999237060547, 96x31)
+    · other id="" label="" value="" box (16, 233.99999237060547, 96x31)
+    · other id="" label="" value="" box (16, 233.99999237060547, 96x31)
+    · segmented control id="" label="Real-input segmented control" value="" box (16, 233.99999237060547, 96x31)
+    · button id="" label="1" value="" box (16, 233.99999237060547, 32x32)
+    · button id="" label="2" value="" box (48, 233.99999237060547, 32x32)
+    · button id="" label="3" value="" box (80, 233.99999237060547, 32x32)
+    ✓ NitroUiSegmentedControl is named on one element, at the control's own box, as the segmented control it claims to be
+
+  a11y:date-picker: DatePicker a11y (XCUITest)
+    · other id="real-input-date" label="Real-input date picker" value="" box (16, 250.66666412353516, 103x36.33332824707031) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 250.66666412353516, 103x36.33332824707031)
+    · other id="" label="" value="" box (16, 250.66666412353516, 103x36.33332824707031)
+    · other id="" label="" value="" box (16, 250.66666412353516, 103x36.33332824707031)
+    · button id="" label="Real-input date picker" value="1 Nov 2026" box (16, 250.66666412353516, 103x36.333333333333314)
+    ✓ NitroUiDatePicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:picker: Picker a11y (XCUITest)
+    · other id="real-input-picker" label="Real-input picker" value="" box (16, 194.3333282470703, 80x34.66667175292969) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 194.3333282470703, 80x34.66667175292969)
+    · other id="" label="" value="" box (16, 194.3333282470703, 80x34.66667175292969)
+    · other id="" label="" value="" box (16, 194.3333282470703, 80x34.66667175292969)
+    · button id="" label="Real-input picker" value="" box (16, 194.66666158040366, 80x34.333333333333314)
+    · static text id="" label="Onyx" value="" box (28, 201.66666158040366, 39.33333333333334x20.333333333333314)
+    ✓ NitroUiPicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:menu: Menu a11y (XCUITest)
+    · other id="real-input-menu" label="Real-input menu" value="" box (16, 304.33333587646484, 81x34.33331298828125) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 304.33333587646484, 81x34.33331298828125)
+    · other id="" label="" value="" box (16, 304.33333587646484, 81x34.33331298828125)
+    · other id="" label="" value="" box (16, 304.33333587646484, 81x34.33331298828125)
+    · button id="" label="Real-input menu" value="" box (16, 304.33333587646484, 81x34.333333333333314)
+    · button id="" label="" value="" box (16, 304.33333587646484, 81x34.333333333333314)
+    · static text id="" label="Actions" value="" box (16, 304.33333587646484, 81x34.333333333333314)
+    ✓ NitroUiMenu is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:hosted-switch: Switch a11y (XCUITest)
+    · other id="host-switch-0" label="Hosted switch 0" value="" box (16, 271.33333587646484, 61x28) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 271.33333587646484, 61x28)
+    · other id="" label="" value="" box (16, 271.33333587646484, 61x28)
+    · other id="" label="" value="" box (16, 271.33333587646484, 61x28)
+    · switch id="" label="Hosted switch 0" value="0" box (16, 271.33333587646484, 61x28)
+    · switch id="" label="" value="0" box (16, 271.33333587646484, 63x28)
+    ✓ NitroUiSwitch is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:hosted-slider: Slider a11y (XCUITest)
+    · other id="host-slider" label="Hosted slider" value="" box (16, 712.9999771118164, 370x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 712.9999771118164, 370x31)
+    · other id="" label="Hosted slider" value="0.4" box (16, 712.9999771118164, 370x31)
+    · known failing (X4 a11y: the Slider is announced as other and not as a slider): NitroUiSlider: "Hosted slider" is announced as an other and not as a slider — the announcement lost the kind of control this is, so a person hears a name with no idea what can be done with it
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:hosted-button: Button a11y (XCUITest)
+    · other id="host-button" label="Hosted button" value="" box (16, 743.9999771118164, 130.3333282470703x34.33331298828125) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 743.9999771118164, 130.3333282470703x34.33331298828125)
+    · other id="" label="" value="" box (16, 743.9999771118164, 130.3333282470703x34.33331298828125)
+    · other id="" label="" value="" box (16, 743.9999771118164, 130.3333282470703x34.33331298828125)
+    · button id="" label="Hosted button" value="" box (16, 743.9999771118164, 130.33333333333331x34.33333333333337)
+    ✓ NitroUiButton is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:hosted-segmented: SegmentedControl a11y (XCUITest)
+    · other id="host-segmented" label="Hosted segmented" value="" box (16, 697.6666641235352, 165x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 697.6666641235352, 165x31)
+    · other id="" label="" value="" box (16, 697.6666641235352, 165x31)
+    · other id="" label="" value="" box (16, 697.6666641235352, 165x31)
+    · segmented control id="" label="Hosted segmented" value="" box (16, 697.6666641235352, 165x31)
+    · button id="" label="One" value="" box (16, 697.6666641235352, 55x32)
+    · button id="" label="Two" value="" box (71, 697.6666641235352, 55x32)
+    · button id="" label="Three" value="" box (126, 697.6666641235352, 55x32)
+    ✓ NitroUiSegmentedControl is named on one element, at the control's own box, as the segmented control it claims to be
+
+  a11y:hosted-picker: Picker a11y (XCUITest)
+    · other id="host-picker" label="Hosted picker" value="" box (16, 728.6666641235352, 75.33333587646484x34.666748046875) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 728.6666641235352, 75.33333587646484x34.666748046875)
+    · other id="" label="" value="" box (16, 728.6666641235352, 75.33333587646484x34.666748046875)
+    · other id="" label="" value="" box (16, 728.6666641235352, 75.33333587646484x34.666748046875)
+    · button id="" label="Hosted picker, Hosted picker" value="" box (16, 728.9999974568685, 75.33333333333333x34.33333333333326)
+    · static text id="" label="Beta" value="" box (27.666666666666668, 735.9999974568685, 35x20.333333333333258)
+    · known failing (X4 a11y: a hosted Picker announces its label twice): NitroUiPicker: the element under "host-picker" announces the control's name twice (button "Hosted picker, Hosted picker" at (16, 729.00, 75.33, 34.33)): the label reaches one element along with the control's own name, so a person hears it stutter, and no element carries the label alone — which is also why this case cannot grade the name, box or trait
+    ✓ NitroUiPicker has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:hosted-date-picker: DatePicker a11y (XCUITest)
+    · other id="host-datepicker" label="Hosted date picker" value="" box (16, 479.33333333333326, 103x36.3333740234375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 479.33333333333326, 103x36.3333740234375)
+    · other id="" label="" value="" box (16, 479.33333333333326, 103x36.3333740234375)
+    · other id="" label="" value="" box (16, 479.33333333333326, 103x36.3333740234375)
+    · button id="" label="Hosted date picker" value="17 May 2026" box (16, 479.33333333333326, 103x36.33333333333337)
+    ✓ NitroUiDatePicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:hosted-progress: Progress a11y (XCUITest)
+    · other id="host-mixed-progress-linear" label="Mixed linear progress" value="" box (16, 172.66668446858728, 370x4) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 172.66668446858728, 370x4)
+    · other id="" label="" value="" box (16, 172.66668446858728, 370x4)
+    · other id="" label="" value="" box (16, 172.66668446858728, 370x4)
+    · progress indicator id="" label="Mixed linear progress" value="35%" box (16, 172.66668446858728, 370x4)
+    · progress indicator id="" label="" value="35%" box (16, 162.66668446858728, 370x24)
+    ✓ NitroUiProgress is named on one element, at the control's own box, as the progress indicator it claims to be
+
+switch: PASS (no retries)
+slider: PASS (no retries)
+button: PASS (no retries)
+segmented-control: PASS (no retries)
+date-picker: PASS (no retries)
+picker: PASS (no retries)
+menu: PASS (no retries)
+hosted-switch: PASS (no retries)
+hosted-button: PASS (no retries)
+hosted-slider: PASS (no retries)
+hosted-mixed: PASS (no retries)
+hosted-segmented: PASS (no retries)
+hosted-picker: PASS (no retries)
+hosted-date-picker: PASS (no retries)
+a11y:switch: failed: NitroUiSwitch: "Controlled switch" is announced by the element at (325, 217.33, 61, 28) while the control is drawn at (108.33, 72.44, 20.33, 9.33) — the name is on a box that is not the control's, so VoiceOver stops somewhere else than the thing a person presses
+
+real-input (ios): 14/14 controls passed · 0 press sequence(s) needed a retry · 13/14 auxiliary checks passed
+gate: real-input:ios FAIL in 707.8 s
+gate: recorded in .gates/task/V3-g8-ios-gates.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/V3-g8-ios-gates/real-input+ios-2026-11-01T21-47-48.438Z.log (4 probe(s))
+
+```
