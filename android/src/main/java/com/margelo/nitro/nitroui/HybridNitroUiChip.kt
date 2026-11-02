@@ -359,7 +359,8 @@ class HybridNitroUiChip(
      * One number for every configuration, for Button's reason (fallbacks are keyed
      * by component). The height is the part worth getting right, and it is 48 dp for
      * every chip: M3's chip is 32 dp tall inside the 48 dp minimum interactive size.
-     * The width is the middle of `docs/components/chip.md`'s measured table.
+     * The width is inside `docs/components/chip.md`'s measured table: "Sized" is
+     * 66.29 dp unselected, "Re-keyed" 89.52 and "Measured" 94.10 (Android 15 emulator).
      */
     private const val FALLBACK_WIDTH_DP = 96.0
     private const val FALLBACK_HEIGHT_DP = 48.0
