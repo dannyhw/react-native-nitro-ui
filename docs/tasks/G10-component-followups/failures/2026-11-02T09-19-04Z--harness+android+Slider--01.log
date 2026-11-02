@@ -1,0 +1,79 @@
+# Failure excerpt — harness:android:Slider
+
+- Ran: 2026-11-02T09:19:04.617Z on code tree `54566da5a119` at HEAD `605b7e7` (branch `task/G10-component-followups`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider`
+- Result: fail, exit 1, 19635 ms
+- Load: start 5.34, end 4.37, median 4.66, max 5.34
+- Device: android / device `emulator-5574` / lease `G10-y963t`
+- Full log: `task/G10-component-followups/harness+android+Slider-2026-11-02T09-19-04.617Z.log` (<store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-19-04.617Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, +0 ] to deeply equal [ 3, 6 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-19-04.617Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G10-y963t (still live)
+  |   G10-y963t                G10          both              pair-a
+  |   T19-18jd1                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.37 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 54566da5a119, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.34/8.33 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-19-04.617Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, +0 ] to deeply equal [ 3, 6 ]
+
+      [0m [90m 1564 |[39m       expectPerformed(report[33m,[39m what)[33m;[39m
+       [90m 1565 |[39m       [36mconst[39m index [33m=[39m events[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m[33m;[39m
+      [31m[1m>[22m[39m[90m 1566 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual(expected[33m.[39mslice([35m0[39m[33m,[39m index [33m+[39m [35m1[39m))[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1567 |[39m       [90m// The start of each step is the value it began from: the control's seed for[39m
+       [90m 1568 |[39m       [90m// the first, and each previously reported value after that. And never more[39m
+       [90m 1569 |[39m       [90m// starts than ends - the drag that never ends would show up here.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        18.693 s
+Ran all test suites matching Slider.
+
+
+
+```

@@ -28,6 +28,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { FREE_LSOF } from './helpers/free-lsof-stub.js';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 const REPO_ROOT = join(__dirname, '..', '..');
 const CLI = join(REPO_ROOT, 'scripts', 'lease.mjs');
@@ -40,6 +41,90 @@ const AVD_A = 'nitro-ui-a';
 const AVD_B = 'nitro-ui-b';
 
 const MINUTE = 60_000;
+
+/**
+ * Every `lease.mjs acquire --exclusive --boot` command a Markdown document prints, as the argv the
+ * CLI would receive (`<ID>` filled in).
+ *
+ * Read the way a shell reads it, in this order: a trailing `# comment` goes first, per physical
+ * line (a `\` inside a comment continues nothing), then a line ending in `\` is joined to the next,
+ * and only then are commands filtered. Filtering first is what let a wrapped command through
+ * unread (X17 item 3), and dropping only `#`-words let the rest of a comment become arguments.
+ *
+ * @param {string} doc
+ * @returns {{line: string, argv: string[]}[]}
+ */
+function exclusiveBootCommands(doc) {
+  const commands = [];
+  let pending = '';
+  for (const physical of doc.split('\n')) {
+    const code = physical.replace(/(^|\s)#.*$/, '').trim();
+    if (code.endsWith('\\')) {
+      pending += `${code.slice(0, -1).trim()} `;
+      continue;
+    }
+    commands.push(`${pending}${code}`.trim());
+    pending = '';
+  }
+  if (pending !== '') commands.push(pending.trim());
+  return commands
+    .filter((line) => /lease\.mjs acquire/.test(line))
+    .filter((line) => line.includes('--exclusive'))
+    .filter((line) => line.includes('--boot'))
+    .map((line) => ({
+      line,
+      argv: line
+        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
+        .split(/\s+/)
+        .filter((word) => word !== '')
+        // The doc's placeholders are the task name and nothing else.
+        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word)),
+    }));
+}
+
+describe('which documented commands the exclusive-boot guard reads', () => {
+  it('reads a backslash-continued command as one command', () => {
+    // A long command in a fenced block is wrapped with `\`, as CONTRIBUTING already wraps its
+    // `bench/run.mjs` and `xcodebuild` lines. Filtered per physical line, the first half has
+    // `--exclusive` but no `--boot` and the second has no `lease.mjs acquire`, so the guard read
+    // neither and a refused form could be documented under it in plain sight (X17 item 3).
+    const doc = [
+      '```sh',
+      'node scripts/lease.mjs acquire --task <ID> --exclusive \\',
+      '  --boot --platform android',
+      'node scripts/bench/run.mjs --platform android --plan full \\',
+      '  --launches 8',
+      '```',
+    ].join('\n');
+    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
+      [
+        'acquire',
+        '--task',
+        'DOC-LINE',
+        '--exclusive',
+        '--boot',
+        '--platform',
+        'android',
+      ],
+    ]);
+  });
+
+  it('still reads a one-line command, and drops its trailing comment', () => {
+    const doc =
+      'node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform ios   # a bench\n';
+    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
+      [
+        'acquire',
+        '--task',
+        'DOC-LINE',
+        '--exclusive',
+        '--boot',
+        '--platform',
+        'ios',
+      ],
+    ]);
+  });
+});
 
 describe('the lease owns the device lifecycle', () => {
   let home;
@@ -273,7 +358,9 @@ describe('the lease owns the device lifecycle', () => {
     spawnSync(process.execPath, [CLI, ...args, '--config', config], {
       encoding: 'utf8',
       env: {
-        ...process.env,
+        // Never the calling shell's lease: an exported `NITRO_UI_LEASE_BOOT=1` turned three of the
+        // "boots nothing" cases red (X17 item 4). A case that wants it passes it in `extraEnv`.
+        ...withoutLeaseEnv(process.env),
         NITRO_UI_HOME: home,
         NITRO_UI_LEASE_POLL_MS: '20',
         // A boot-wait must not sit behind a real three-minute load wait in a unit test either.
@@ -403,6 +490,27 @@ describe('the lease owns the device lifecycle', () => {
     // 58-74 on this box (X11 report item 6), and a cold boot is the whole reason the pool exists.
     expect(log()).toBe('');
     expect(poolDevices()).toEqual([]);
+  });
+
+  it('boots nothing when the shell running the suite has NITRO_UI_LEASE_BOOT=1', () => {
+    // CONTRIBUTING tells an agent to export `NITRO_UI_LEASE_BOOT=1` for its whole shell, and
+    // `check` is run from that shell. The CLI child must see the test's environment rather than the
+    // caller's, or every "boots nothing until asked" case here is really "boots nothing unless the
+    // person running the tests followed the docs" - three of them went red that way (X17 item 4).
+    // Poisoned on `process.env` itself, exactly as a sourced lease does, so this holds in any shell.
+    tools({ stateful: true });
+    const saved = process.env.NITRO_UI_LEASE_BOOT;
+    process.env.NITRO_UI_LEASE_BOOT = '1';
+    try {
+      const acquired = cli(['acquire', '--task', 'T1']);
+      expect(acquired.status).toBe(0);
+      expect(acquired.stderr).toContain('devices not booted');
+      expect(log()).not.toContain('emulator @');
+      expect(log()).not.toContain('simctl boot');
+    } finally {
+      if (saved === undefined) delete process.env.NITRO_UI_LEASE_BOOT;
+      else process.env.NITRO_UI_LEASE_BOOT = saved;
+    }
   });
 
   it('does not reset a pair when the task already held the lease and nothing booted', () => {
@@ -1204,6 +1312,33 @@ describe('the lease owns the device lifecycle', () => {
    * remove. A guess about which half the bench wants is not a lease's to make, so this refuses and
    * names the flag - before the lease exists, so a refusal cannot have already powered the pool off.
    */
+  it('lists --boot in its usage, and says an exclusive boot needs --platform', () => {
+    // The usage is what an unknown flag, a missing value and the refusal below all print, so it is
+    // the help a person actually reads. It listed `--no-boot` and `--boot-timeout-minutes` but not
+    // `--boot`, the flag CONTRIBUTING tells every agent to pass, and said nothing of the one
+    // combination the CLI refuses (X17 item 5). Matched as a flag of its own: `--no-boot` and
+    // `--boot-timeout-minutes` both contain the text `--boot`.
+    const bare = spawnSync(process.execPath, [CLI], {
+      encoding: 'utf8',
+      env: { ...withoutLeaseEnv(process.env), NITRO_UI_HOME: home },
+    });
+    expect(bare.status).toBe(2);
+    expect(bare.stderr).toMatch(/\[--boot\]/);
+    expect(bare.stderr).toMatch(/--exclusive --boot needs --platform/);
+    // And the refusal of that combination prints the same usage, so the line that names the rule
+    // sits under the error that enforced it.
+    tools({ stateful: true });
+    const refused = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+    ]);
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toMatch(/--exclusive --boot needs --platform/);
+  });
+
   it('refuses an exclusive boot that did not name a platform, and takes nothing', () => {
     tools({ androidUp: true, iosUp: true, stateful: true });
     const acquired = cli([
@@ -1393,6 +1528,80 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.stderr).toMatch(/1 shut down/);
   });
 
+  it('counts a spared device once, not again as held by a lease', () => {
+    // The spare works by not naming the key, so the pool keeps it on its own rule - "a live lease
+    // holds it", the lease being this one - and reports it under `kept`. The summary used to add
+    // both up and print "1 spared, 1 held by a lease" for a machine with one device left up, which
+    // reads as somebody else's lease keeping a device under the bench: the one thing an exclusive
+    // lease exists to rule out. No other lease is live here, so nothing is held by one.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_A}`,
+        idleMinutes: 4,
+        serial: SERIAL_A,
+      })
+    );
+    warmDeviceSecond(
+      idleEntry({ key: `ios:${UDID_A}`, idleMinutes: 4, serial: null })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    const summary = acquired.stderr
+      .split('\n')
+      .find((line) => line.startsWith('lease: exclusive - '));
+    expect(summary).toContain('1 spared');
+    expect(summary).not.toContain('held by a lease');
+  });
+
+  it('still counts a device kept for somebody else beside a spared one', () => {
+    // The other direction, so the fix cannot be "drop `kept` from the summary": the simulator here
+    // carries a live run's claim, the pool keeps it up for that run, and the summary must still say
+    // a device was left up for somebody - only the spared emulator leaves the count.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_A}`,
+        idleMinutes: 4,
+        serial: SERIAL_A,
+      })
+    );
+    warmDeviceSecond(
+      idleEntry({
+        key: `ios:${UDID_A}`,
+        idleMinutes: 4,
+        serial: null,
+        claims: CLAIM,
+      })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).not.toContain(`simctl shutdown ${UDID_A}`);
+    const summary = acquired.stderr
+      .split('\n')
+      .find((line) => line.startsWith('lease: exclusive - '));
+    expect(summary).toContain('1 spared');
+    expect(summary).toContain('1 held by a lease');
+  });
+
   it('powers off a pool device that was booted outside the pool, for an exclusive lease', () => {
     // The exclusive power-off is enumerated from devices.json, not from the records, because the
     // harness boots a cold device itself and a person can start one by hand: no `pool.json` record
@@ -1519,23 +1728,13 @@ describe('the lease owns the device lifecycle', () => {
   it('documents an exclusive boot the CLI actually accepts', () => {
     tools({ androidUp: false, iosUp: false, stateful: true });
     const doc = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
-    const lines = doc
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => /lease\.mjs acquire/.test(line))
-      .filter((line) => line.includes('--exclusive'))
-      .filter((line) => line.includes('--boot'));
+    const commands = exclusiveBootCommands(doc);
     // Empty here would mean the guard proves nothing, which is the failure mode of every
     // "does the doc match the code" test written after the doc had already been fixed.
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) {
-      const argv = line
-        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
-        .split(/\s+/)
-        .filter((word) => word !== '' && !word.startsWith('#'))
-        // The doc's placeholders are the task name and nothing else; `--out` keeps the env file
-        // out of stdout so the assertions below read the diagnostics, not the lease.
-        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word));
+    expect(commands.length).toBeGreaterThan(0);
+    for (const { line, argv } of commands) {
+      // `--out` keeps the env file out of stdout so the assertions below read the diagnostics,
+      // not the lease.
       const ran = cli([
         ...argv,
         '--out',

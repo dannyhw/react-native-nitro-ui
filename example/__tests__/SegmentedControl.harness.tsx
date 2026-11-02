@@ -90,6 +90,15 @@ type SegmentedHandle = {
    */
   nuiTestPixelProbe(color: number): void;
   nuiTestPixelReport(): string;
+  /**
+   * What the *hosted row* is painting as its selection (`displayed=<index>`, or
+   * `displayed=none` before it has drawn once). Declared optional for the same
+   * reason as `onValueChange`: D14 keeps it off the public surface. It is the only
+   * reading in this file that can see an uncontrolled selection, because the
+   * handle's `selectedIndex` answers `state.js` - null on a control React does not
+   * control. The Conformance recycle probe depends on it for the same reason.
+   */
+  nuiTestDisplayedIndex?(): string;
 };
 
 /** Handles by testID, so a test can ask each control what it holds. */
@@ -187,6 +196,35 @@ async function pollUntil<T>(
     }
     await sleep(25);
   }
+}
+
+/**
+ * Ask the hosted row what it is painting as its selection, and wait for `want`
+ * (`displayed=<index>`, or `displayed=none` before the first draw).
+ *
+ * The read-out is written from the draw path, so an update that has been applied
+ * but not yet drawn is not visible until the next frame; polling is what makes the
+ * assertion about what was drawn rather than what was stored.
+ */
+async function waitForDisplayed(
+  testId: string,
+  want: string,
+  what: string
+): Promise<string> {
+  const handle = handles.get(testId);
+  expect(handle).toBeDefined();
+  return await pollUntil(
+    () => {
+      const report = handle?.nuiTestDisplayedIndex?.() ?? '';
+      return report === want ? report : null;
+    },
+    () =>
+      new Error(
+        `${what}: "${testId}" never reported ${want}. Last report: ` +
+          `"${handle?.nuiTestDisplayedIndex?.() ?? '<no read-out>'}".`
+      ),
+    8000
+  );
 }
 
 async function waitForTestId(testId: string, timeoutMs = 10000) {
@@ -842,6 +880,61 @@ describe('SegmentedControl · G4', () => {
     // The caller's index 3 does not exist any more; the last remaining one does.
     expect(handles.get('shrink')?.selectedIndex).toBe(1);
     expect(handles.get('shrink')?.options).toEqual(['One', 'Two']);
+    unmount();
+  });
+
+  it('moves an uncontrolled selection into the list when the options shrink', async () => {
+    // The same rule as the test above, but reached with no prop that can show it.
+    // A control driven by `defaultSelectedIndex` answers `selectedIndex` as null -
+    // `state.js` is empty because React never controlled it - so the only reading
+    // that can see where the row sits is `nuiTestDisplayedIndex`, which is the
+    // hosted row's own drawing (Conformance's recycle probe relies on it the same
+    // way). A clamp that only ran where JS is in charge - or a `displayed` that was
+    // fixed up but never re-painted - leaves the third segment on screen here, and
+    // the read-out keeps saying `displayed=2` rather than the `displayed=1` the
+    // clamped model holds. Both steps have to work for this to go green.
+    const LARGE = ['One', 'Two', 'Three', 'Four'];
+    const SMALL = ['One', 'Two'];
+    const { rerender, unmount } = await render(
+      <SegmentedControl
+        options={LARGE}
+        defaultSelectedIndex={0}
+        onChange={recordChange('uncontrolled-shrink')}
+        testID="uncontrolled-shrink"
+        hybridRef={captureHybrid('uncontrolled-shrink')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('uncontrolled-shrink');
+    await waitForMeasured('uncontrolled-shrink', 'four options');
+    expect(handles.get('uncontrolled-shrink')?.selectedIndex).toBeNull();
+
+    // A finger, not a prop: index 2 exists nowhere in what React sent, so the only
+    // way the row can be showing it is the control's own state.
+    await tapSegment('uncontrolled-shrink', 2, LARGE.length);
+    await waitForDisplayed(
+      'uncontrolled-shrink',
+      'displayed=2',
+      'the tap, as the row draws it'
+    );
+
+    await rerender(
+      <SegmentedControl
+        options={SMALL}
+        defaultSelectedIndex={0}
+        onChange={recordChange('uncontrolled-shrink')}
+        testID="uncontrolled-shrink"
+        hybridRef={captureHybrid('uncontrolled-shrink')}
+      />
+    );
+    // The clamp, as the row draws it: index 2 is gone, so the last remaining
+    // segment is 1. `defaultSelectedIndex` is still 0 and was never re-applied, so
+    // 1 is the clamp's answer and not the one-shot's.
+    await waitForDisplayed(
+      'uncontrolled-shrink',
+      'displayed=1',
+      'the clamp of an uncontrolled selection'
+    );
     unmount();
   });
 
