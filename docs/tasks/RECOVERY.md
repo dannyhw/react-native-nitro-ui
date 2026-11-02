@@ -95,6 +95,12 @@
 > **0.4.3 live, 0.5.0 staged (2026-11-02):** the owner approved 0.4.3 (tagged by a dispatched `Release tag`). Version
 > Packages PR #25 merged (`4f931b2`, minor: the dialogs); Release run 41483605054 green with `Stage on npm` succeeded.
 >
+> **M2 merged (2026-11-02, PRs #22/#23): G10 component follow-ups and X17 tooling follow-ups**, with the Host suites'
+> hybrid-handle race fixed (`7833707`, every first handle read waits for the handle). All five merge gates green on
+> maintainer-mac-1 on code tree `e99634813021`; `check` re-run on mac-2 on the merge. G10's patch changesets ride
+> the next release with TextField/Chip/BottomSheet's minors. In flight: G13 TextField fix round 2 (last), G14
+> BottomSheet fix round 1, G12 Chip fix round 1 (mac-1), D4 README screenshots + guard fix round 1.
+>
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
 > excerpts with the ledger.
