@@ -153,19 +153,6 @@ export default function TextFieldScreen() {
           />
         </View>
 
-        <Row title="Autocorrect on (the keyboard composes each word)">
-          <TextField
-            testID="text-autocorrect"
-            accessibilityLabel="Autocorrect field"
-            placeholder="Type words"
-            value={corrected}
-            onChangeText={onCorrectedText}
-          />
-        </Row>
-        <Text testID="text-autocorrect-echo" style={{ color: ink.ink }}>
-          {`autocorrect: ${corrected} (${String(correctedChanges)} changes)`}
-        </Text>
-
         <Row title="Controlled">
           <TextField
             testID="text-typing"
@@ -208,6 +195,19 @@ export default function TextFieldScreen() {
         </Row>
         <Text testID="text-capped-echo" style={{ color: ink.ink }}>
           {`capped: ${capped} (${String(capped.length)})`}
+        </Text>
+
+        <Row title="Autocorrect on (the keyboard composes each word)">
+          <TextField
+            testID="text-autocorrect"
+            accessibilityLabel="Autocorrect field"
+            placeholder="Type words"
+            value={corrected}
+            onChangeText={onCorrectedText}
+          />
+        </Row>
+        <Text testID="text-autocorrect-echo" style={{ color: ink.ink }}>
+          {`autocorrect: ${corrected} (${String(correctedChanges)} changes)`}
         </Text>
 
         <Row title="Password">
