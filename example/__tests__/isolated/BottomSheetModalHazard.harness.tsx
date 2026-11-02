@@ -110,7 +110,14 @@ function Screen({ inside }: { inside: boolean }) {
   return (
     <View style={{ flex: 1 }}>
       {inside ? null : content}
-      <Modal visible={modal} animationType="none">
+      {/* `pageSheet` when the sheet is under the Modal: a full-screen Modal takes the
+          screen under it out of the window, and a sheet whose place is out of the window
+          closes (as a dialog does), which is a different case. */}
+      <Modal
+        visible={modal}
+        animationType="none"
+        presentationStyle={inside ? 'fullScreen' : 'pageSheet'}
+      >
         <View style={{ flex: 1 }}>{inside ? content : null}</View>
       </Modal>
     </View>
