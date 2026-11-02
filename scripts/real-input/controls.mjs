@@ -88,6 +88,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none',
     screen: 'menu',
   },
+  {
+    id: 'dialog',
+    title:
+      'a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one',
+    screen: 'dialog',
+  },
   // @end-generated
 ]);
 

@@ -1,0 +1,16 @@
+{
+  "name": "Dialog",
+  "hybridView": "NitroUiDialog",
+  "implementation": "HybridNitroUiDialog",
+  "id": "dialog",
+  "sizing": null,
+  "hostable": true,
+  "exampleTab": "dialog",
+  "exampleLabel": "Dialogs",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one",
+  "exports": ["AlertDialog", "ConfirmationDialog"]
+}

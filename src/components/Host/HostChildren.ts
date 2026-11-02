@@ -29,6 +29,7 @@ import { SegmentedControl } from '../SegmentedControl/SegmentedControl';
 import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 import { Menu } from '../Menu/Menu';
+import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -64,6 +65,8 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
   [Slider, 'Slider'],
   [Switch, 'Switch'],
   [Menu, 'Menu'],
+  [AlertDialog, 'AlertDialog'],
+  [ConfirmationDialog, 'ConfirmationDialog'],
 ]);
 
 /**
