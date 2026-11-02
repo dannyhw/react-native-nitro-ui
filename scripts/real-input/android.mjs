@@ -1460,16 +1460,20 @@ const CHECKS = {
       '1'
     );
 
-    // 5. The barrier: the enabled twin, tapped the same way, still presses.
-    t.log.checkEquals(
-      'the enabled assist chip still presses after the refused taps',
-      await t.tapUntilValue(
-        () => named('Real-input assist chip'),
-        ECHO.chipPresses,
-        '2',
-        'the barrier tap on the assist chip'
-      ),
-      '2'
+    // 5. The barrier: the enabled twin, tapped the same way, still presses. At
+    //    least once more, not exactly once: a tap that stalls past the window lands
+    //    with its retry (G12: 1 -> 3), and "presses once per tap" is item 3's claim.
+    const barrier = await t.tapUntilValue(
+      () => named('Real-input assist chip'),
+      ECHO.chipPresses,
+      '2',
+      'the barrier tap on the assist chip',
+      { atLeast: true }
+    );
+    t.log.check(
+      'the enabled assist chip still presses after the refused taps — expected ' +
+        `at least 2, saw ${barrier}`,
+      Number(barrier) >= 2
     );
   },
 
@@ -3947,8 +3951,13 @@ function makeContext(harness, log) {
      * @param {string} testID the echo whose value proves the press arrived
      * @param {string} expected what the echo has to say
      * @param {string} waitingFor what this tap was meant to do
-     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string}} [options]
+     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string, atLeast?: boolean}} [options]
      *   `aim` - how to press it, for the taps that aim at a fraction of the control.
+     *   `atLeast` - the echo is a counter and any count from `expected` up passes.
+     *   For a barrier, whose claim is "a press still arrives": a tap that stalled
+     *   past the window can land together with the retry, and the counter then
+     *   skips `expected` (G12: 1 -> 3), which proves the claim twice rather than
+     *   failing it. Not for a check that counts presses per tap.
      *   `nativeLabel` - the control's `accessibilityLabel` when it publishes its own
      *   state, which for a Switch it does: `pressUntil` then refuses to retry a press
      *   whose touch clearly landed (F1 M3). Pass it for every single-value control
@@ -3961,7 +3970,7 @@ function makeContext(harness, log) {
       // options object, and a callsite left behind would keep tapping the
       // middle of the control - which is a wrong-place tap, not a dropped one,
       // and it showed up as two segmented checks going red for the wrong reason.
-      const known = ['aim', 'attempts', 'nativeLabel'];
+      const known = ['aim', 'attempts', 'nativeLabel', 'atLeast'];
       const unknown = Object.keys(options).filter((k) => !known.includes(k));
       if (typeof options === 'function' || unknown.length > 0) {
         log.abort(
@@ -3969,12 +3978,18 @@ function makeContext(harness, log) {
             typeof options === 'function'
               ? 'a positional aim function (it is now { aim })'
               : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
-                '{ aim, attempts, nativeLabel }'
+                '{ aim, attempts, nativeLabel, atLeast }'
           }. Refusing to tap: an ignored aim presses the middle of the control, ` +
             'which fails a segment check and blames delivery.'
         );
       }
-      const { aim, attempts = 3, nativeLabel } = options;
+      const { aim, attempts = 3, nativeLabel, atLeast = false } = options;
+      const target = Number(expected);
+      if (atLeast && !Number.isInteger(target)) {
+        log.abort(
+          `${waitingFor}: atLeast needs a counter, and "${expected}" is not one`
+        );
+      }
       const { delivered, shown } = await this.pressUntil({
         what: `"${testID}"`,
         waitingFor,
@@ -4004,13 +4019,16 @@ function makeContext(harness, log) {
           nativeLabel == null
             ? undefined
             : () => this.nativeChecked(nativeLabel),
-        raised: (current) => current === expected,
+        raised: (current) =>
+          atLeast
+            ? current != null && Number(current) >= target
+            : current === expected,
       });
       if (!delivered) {
         log.abort(
           `${waitingFor}: ${String(attempts)} real taps left ${testID} at "${String(
             shown
-          )}" rather than "${expected}" - either the taps were never delivered ` +
+          )}" rather than ${atLeast ? 'at least ' : ''}"${expected}" - either the taps were never delivered ` +
             '(FOLLOWUPS.md:58) or the control ignores a real touch. One delivered ' +
             'tap was enough to pass, so this is not a control that answers sometimes.'
         );
