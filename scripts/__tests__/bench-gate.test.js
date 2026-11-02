@@ -1353,10 +1353,12 @@ describe('the Button cells (--component button)', () => {
         'date-picker',
         'picker',
         'menu',
+        'text-field',
       ])
     );
     /**
-     * Eight components in the quick plan, each with the same three cells of the four
+     * Nine components in the quick plan (G13's TextField is benched but not hostable, so
+     * the Host arm's scope stays at eight), each with the same three cells of the four
      * unscoped arms, plus one scoped arm's cells for each component it renders. Both
      * halves are measured rather than folded into a product: a component losing a cell
      * moves the first number, and an arm escaping (or losing) its scope moves the second.
@@ -1383,7 +1385,7 @@ describe('the Button cells (--component button)', () => {
       component: 'switch',
     }).filter((entry) => entry.implementation === 'nitro-ui-host').length;
     expect(all.length).toBe(
-      unscoped.length * 8 +
+      unscoped.length * 9 +
         hostCells * ARM_SCOPES['nitro-ui-host'].components.length
     );
   });
