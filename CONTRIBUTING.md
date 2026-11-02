@@ -551,8 +551,11 @@ What that means in practice:
   regenerate its env file - from wiping its own running suite.
   `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
   itself uses `--exclusive`, which powers off every pool device no _other_ lease
-  holds - with or without `--boot`, because the bench host's documented
-  invocation is the one without it.
+  holds, and then boots the pair it hands you - with or without `--boot`,
+  since the power-off runs first and the hand-off brings up what you were
+  just given. An exclusive acquire used to skip that hand-off, so the
+  documented baseline-mint line below left both of its simulators off and
+  the bench host booted its leased device by hand (X16 item 2).
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
   a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
   no claim, so what protects them is the rule above: their pair is leased, and a
