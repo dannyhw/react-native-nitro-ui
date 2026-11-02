@@ -26,6 +26,7 @@ the layout engine, and React never sees a native node.
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                 | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`           | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
+| `TextField`          | `UITextField` / `UITextView` (multi-line)                   | `BasicTextField(TextFieldState)`                             | next   | [text-field.md](docs/components/text-field.md)               |
 | `Host`               | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
@@ -456,6 +457,62 @@ gets the dialog back (D33). `dismissible={false}` leaves only the actions as a
 way out. On iOS the dialog is presented from a window of its own, so it works
 inside and over a React Native `Modal`.
 [dialog.md](docs/components/dialog.md) has the platform details.
+
+### TextField
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/text-field-ios.png" width="300" alt="TextFields: placeholder, text, secure, multi-line and not editable on iOS" /></td>
+    <td><img src="docs/images/components/text-field-android.png" width="300" alt="TextFields: placeholder, text, secure, multi-line and not editable on Android" /></td>
+  </tr>
+</table>
+
+A single- or multi-line text field with React Native `TextInput`'s prop names:
+`UITextField` (a `UITextView` when `multiline`) on iOS, Compose `BasicTextField`
+on Android. It is undecorated, like `TextInput`, so a border or a background is
+your container's. Controlled by `value`; a `value` written while an IME
+composition is open is dropped rather than applied over it, and `ref` gives
+`focus()` and `blur()`.
+
+```tsx name=text-field
+export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const passwordField = useRef<TextFieldHandle>(null);
+
+  return (
+    <>
+      <TextField
+        accessibilityLabel="Email"
+        placeholder="name@example.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        value={email}
+        onChangeText={setEmail}
+        onSubmitEditing={() => passwordField.current?.focus()}
+      />
+      <TextField
+        ref={passwordField}
+        accessibilityLabel="Password"
+        placeholder="Password"
+        secureTextEntry
+        returnKeyType="go"
+        value={password}
+        onChangeText={setPassword}
+        onSubmitEditing={onSignIn}
+      />
+    </>
+  );
+}
+```
+
+`maxLength` counts UTF-16 code units, as `string.length` does, and never cuts
+an emoji in half. A multi-line field grows with its text; Return then inserts a
+newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
+[text-field.md](docs/components/text-field.md) has the details.
 
 ### Host
 

@@ -19,6 +19,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
@@ -49,6 +50,7 @@ ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
 ios/components/Slider/NitroUiSliderValue.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
+ios/components/TextField/HybridNitroUiTextField.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
 ios/core/NitroUiDeclaredFallbacks.swift
@@ -262,9 +264,11 @@ lib/typescript/src/index.d.ts.map
 nitro-ui.sizing.json
 nitro.json
 nitrogen/generated/android/c++/JFunc_void.hpp
+nitrogen/generated/android/c++/JFunc_void_bool.hpp
 nitrogen/generated/android/c++/JFunc_void_bool_double.hpp
 nitrogen/generated/android/c++/JFunc_void_double_double.hpp
 nitrogen/generated/android/c++/JFunc_void_std__string.hpp
+nitrogen/generated/android/c++/JFunc_void_std__string_double.hpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
@@ -285,6 +289,8 @@ nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.hpp
 nitrogen/generated/android/c++/JNitroUiButtonSize.hpp
 nitrogen/generated/android/c++/JNitroUiDatePickerSize.hpp
 nitrogen/generated/android/c++/JNitroUiDialogAction.hpp
@@ -294,6 +300,7 @@ nitrogen/generated/android/c++/JNitroUiPickerSize.hpp
 nitrogen/generated/android/c++/JNitroUiSegmentedControlSize.hpp
 nitrogen/generated/android/c++/JNitroUiSize.hpp
 nitrogen/generated/android/c++/JNitroUiSliderSize.hpp
+nitrogen/generated/android/c++/JNitroUiTextFieldTestState.hpp
 nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
 nitrogen/generated/android/c++/JVariant_Boolean_NullType.hpp
 nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
@@ -320,10 +327,14 @@ nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.hpp
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_double_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDatePickerSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDialogSpec.kt
@@ -334,6 +345,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgres
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTextFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDatePickerSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDialogAction.kt
@@ -343,6 +355,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiPickerSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSegmentedControlSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSliderSize.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiTextFieldTestState.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_Boolean_NullType.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_NullType_Double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_NullType_String.kt
@@ -367,6 +380,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiS
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSliderStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTextFieldManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTextFieldStateUpdater.kt
 nitrogen/generated/android/nitroui+autolinking.cmake
 nitrogen/generated/android/nitroui+autolinking.gradle
 nitrogen/generated/android/nitrouiOnLoad.cpp
@@ -397,6 +412,8 @@ nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDatePickerComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDialogComponent.mm
@@ -407,10 +424,13 @@ nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiTextFieldComponent.mm
 nitrogen/generated/ios/swift/Func_void.swift
+nitrogen/generated/ios/swift/Func_void_bool.swift
 nitrogen/generated/ios/swift/Func_void_bool_double.swift
 nitrogen/generated/ios/swift/Func_void_double_double.swift
 nitrogen/generated/ios/swift/Func_void_std__string.swift
+nitrogen/generated/ios/swift/Func_void_std__string_double.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec.swift
@@ -431,6 +451,8 @@ nitrogen/generated/ios/swift/HybridNitroUiSliderSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSliderSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec_cxx.swift
 nitrogen/generated/ios/swift/NitroUiButtonSize.swift
 nitrogen/generated/ios/swift/NitroUiDatePickerSize.swift
 nitrogen/generated/ios/swift/NitroUiDialogAction.swift
@@ -440,6 +462,7 @@ nitrogen/generated/ios/swift/NitroUiPickerSize.swift
 nitrogen/generated/ios/swift/NitroUiSegmentedControlSize.swift
 nitrogen/generated/ios/swift/NitroUiSize.swift
 nitrogen/generated/ios/swift/NitroUiSliderSize.swift
+nitrogen/generated/ios/swift/NitroUiTextFieldTestState.swift
 nitrogen/generated/ios/swift/Variant_Bool_NullType.swift
 nitrogen/generated/ios/swift/Variant_NullType_Double.swift
 nitrogen/generated/ios/swift/Variant_NullType_String.swift
@@ -465,6 +488,8 @@ nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.hpp
 nitrogen/generated/shared/c++/NitroUiButtonSize.hpp
 nitrogen/generated/shared/c++/NitroUiDatePickerSize.hpp
 nitrogen/generated/shared/c++/NitroUiDialogAction.hpp
@@ -477,6 +502,7 @@ nitrogen/generated/shared/c++/NitroUiSize.hpp
 nitrogen/generated/shared/c++/NitroUiSizingStats.hpp
 nitrogen/generated/shared/c++/NitroUiSizingTraceEvent.hpp
 nitrogen/generated/shared/c++/NitroUiSliderSize.hpp
+nitrogen/generated/shared/c++/NitroUiTextFieldTestState.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
@@ -497,6 +523,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.hpp
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
 nitrogen/generated/shared/json/NitroUiDatePickerConfig.json
 nitrogen/generated/shared/json/NitroUiDialogConfig.json
@@ -507,6 +535,7 @@ nitrogen/generated/shared/json/NitroUiProgressConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
+nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
 package.json
 src/NitroUiCore.nitro.ts
 src/NitroUiCore.ts
@@ -551,6 +580,10 @@ src/components/Switch/NativeNitroUiSwitch.ts
 src/components/Switch/NitroUiSwitchConfig.ts
 src/components/Switch/Switch.nitro.ts
 src/components/Switch/Switch.tsx
+src/components/TextField/NativeNitroUiTextField.ts
+src/components/TextField/NitroUiTextFieldConfig.ts
+src/components/TextField/TextField.nitro.ts
+src/components/TextField/TextField.tsx
 src/core/NitroUiIntrinsicProps.ts
 src/core/index.ts
 src/core/useControlled.ts
