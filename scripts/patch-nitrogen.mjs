@@ -511,14 +511,15 @@ export function patchContentChildrenObjC(
 
 /**
  * The Hybrid View names `nitro.json` declares under `autolinking` (e.g.
- * `NitroUiBottomSheet`), or none when the tree has no `nitro.json`.
+ * `NitroUiBottomSheet`), or `null` when the tree has no `nitro.json` at all. An
+ * unreadable file declares nothing, so every listed view then fails.
  *
  * @param {string} root
- * @returns {Set<string>}
+ * @returns {Set<string> | null}
  */
 function declaredHybridViews(root) {
   const file = join(root, 'nitro.json');
-  if (!existsSync(file)) return new Set();
+  if (!existsSync(file)) return null;
   try {
     return new Set(
       Object.keys(JSON.parse(readFileSync(file, 'utf8')).autolinking ?? {})
@@ -652,14 +653,19 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
     }
   }
 
-  // 3. Content children (G14), for the listed views this tree declares. Keyed on
-  // `nitro.json` (read from where the sizing config is), so a fixture tree without
-  // the view is not asked for it, and a declared view nitrogen did not generate
-  // still fails below.
+  // 3. Content children (G14). The sizing step's rule: a tree with no `nitro.json`
+  // (read from where the sizing config is) declares no views and is not asked for
+  // any; in a tree that has one, every listed view must be declared *and* generated,
+  // so a renamed or dropped spec fails here instead of quietly losing the patch.
   const declared = declaredHybridViews(options.sizingConfigRoot ?? root);
-  for (const className of CONTENT_CHILDREN_VIEWS.filter((name) =>
-    declared.has(name.slice('Hybrid'.length))
-  )) {
+  for (const className of declared == null ? [] : CONTENT_CHILDREN_VIEWS) {
+    if (!declared.has(className.slice('Hybrid'.length))) {
+      record(className, {
+        status: 'error',
+        error: `CONTENT_CHILDREN_VIEWS lists ${className}, and nitro.json declares no ${className.slice('Hybrid'.length)} - remove it from the list, or declare the view.`,
+      });
+      continue;
+    }
     const path = join(
       root,
       'nitrogen/generated/ios/c++/views',

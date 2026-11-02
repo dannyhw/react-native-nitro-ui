@@ -56,6 +56,7 @@ function Opener({
 const DETENTS_TWO: BottomSheetDetent[] = ['medium', 'large'];
 const DETENTS_FRACTION: BottomSheetDetent[] = ['medium', { fraction: 0.85 }];
 const ROWS = Array.from({ length: 30 }, (_, index) => `Row ${index + 1}`);
+const CHIPS = Array.from({ length: 12 }, (_, index) => `Chip ${index + 1}`);
 
 /**
  * Every BottomSheet configuration G14 shows on one screen: a `fit` sheet whose
@@ -142,6 +143,23 @@ export default function BottomSheetScreen() {
             <Text testID="sheet-presses" style={{ color: ink.ink }}>
               {`Pressed ${presses} times`}
             </Text>
+            {/* A horizontal list: dragging it disallows its parents' interception for
+                that gesture, which must not cost JS the gesture's end (real input
+                presses the Pressable again after a scroll here). */}
+            <ScrollView
+              horizontal
+              testID="sheet-hscroll"
+              contentContainerStyle={styles.chips}
+            >
+              {CHIPS.map((chip) => (
+                <View
+                  key={chip}
+                  style={[styles.chip, { backgroundColor: ink.row }]}
+                >
+                  <Text style={{ color: ink.ink }}>{chip}</Text>
+                </View>
+              ))}
+            </ScrollView>
             <Pressable
               accessibilityRole="button"
               testID="sheet-grow"
@@ -329,6 +347,8 @@ const styles = StyleSheet.create({
   note: { color: '#8a8a8f', fontSize: 12, lineHeight: 17 },
   value: { fontSize: 13, fontWeight: '600' },
   row: { padding: 14, borderRadius: 10 },
+  chips: { gap: 8 },
+  chip: { width: 110, padding: 12, borderRadius: 10 },
   opener: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,

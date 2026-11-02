@@ -156,6 +156,21 @@ function Stage({
   );
 }
 
+/**
+ * A sheet that can be dropped while a second, closed BottomSheet - the probe - stays
+ * mounted beside it, to read the process-wide counts after the drop.
+ */
+function DropScene({ testId }: { testId: string }) {
+  const [shown, setShown] = useState(true);
+  setters.set(`${testId}:shown`, setShown);
+  return (
+    <>
+      <Stage testId={`${testId}-probe`} />
+      {shown ? <Stage testId={testId} /> : null}
+    </>
+  );
+}
+
 type Report = Record<string, string>;
 
 function reportOf(testId: string): Report {
@@ -242,6 +257,7 @@ async function probe(): Promise<string> {
   const probeId = `probe-${String(nitroUiCore.now())}`;
   await render(<Stage testId={probeId} />);
   await waitForHandle(probeId);
+  await waitForReport(probeId, (r) => r.raw !== '', 'a report');
   return probeId;
 }
 
@@ -320,7 +336,7 @@ describe('BottomSheet', () => {
   it('lays a fit sheet out at its content height and the sheet width', async () => {
     await render(<Stage testId="fit" />);
     await waitForHandle('fit');
-    expect(reportOf('fit').live).toBe('0');
+    await waitForReport('fit', (r) => r.live === '0', 'nothing up yet');
     setters.get('fit')?.(true);
     const up = await waitForUp('fit');
     // 240 matches no detent: `medium` is about half the screen and `large` all of
@@ -528,15 +544,23 @@ describe('BottomSheet', () => {
 
   for (const delay of [0, 80, 150, 1000]) {
     it(`leaves nothing when dropped ${delay} ms after presenting`, async () => {
-      const baselineId = await probe();
-      const baseline = reportOf(baselineId);
-      reset();
-      await render(<Stage testId={`drop-${delay}`} />);
-      await waitForHandle(`drop-${delay}`);
-      setters.get(`drop-${delay}`)?.(true);
+      // The probe is mounted *before* the drop and stays mounted, so it can never be
+      // the dropped view handed back by the recycle pool: a probe mounted after the
+      // drop was that view, and its first props batch (`presented=false`) closed the
+      // dropped sheet itself - the drop was never what the test read (G14 review).
+      const id = `drop-${delay}`;
+      await render(<DropScene testId={id} />);
+      await waitForHandle(id);
+      const probeId = `${id}-probe`;
+      await waitForHandle(probeId);
+      const baseline = await waitForReport(
+        probeId,
+        (r) => r.raw !== '' && r.live === '0',
+        'a baseline with nothing up'
+      );
+      setters.get(id)?.(true);
       if (delay > 0) await sleep(delay);
-      reset();
-      const probeId = await probe();
+      setters.get(`${id}:shown`)?.(false);
       await waitForReport(
         probeId,
         nothingLeft(baseline),
@@ -671,6 +695,154 @@ describe('BottomSheet', () => {
     await waitForEvent('own-fit:dismiss');
     setters.get('own-modal')?.(false);
     await sleep(800);
+  });
+});
+
+/**
+ * A second sheet asked for in the same commit as a first one presents over it while
+ * the first is still arriving - a busy chain on iOS, which a present waits out in 50 ms
+ * steps. The budget for that wait was once per *mount* (60 steps), so a mount that met
+ * a busy chain often enough stopped presenting at all, with `presented=1` and nothing
+ * up. Rounds enough to spend that budget several times over, on one mount, across two
+ * tests (react-native-harness 1.6 has one timeout for every test).
+ */
+describe('BottomSheet · presenting over a sheet that is still arriving', () => {
+  let rounds = 0;
+
+  /** Both sheets up: each holds its content, and the process counts two windows. */
+  const upWithTwo = (report: Report) =>
+    report.presented === '1' &&
+    report.live === '2' &&
+    Number(report.children) >= 1 &&
+    (IOS
+      ? report.onScreen === '1' && report.inSheet === '1'
+      : report.sheetValue !== 'none' && report.sheetValue !== 'Hidden');
+
+  function Pair() {
+    const [open, setOpen] = useState(false);
+    setters.set('pair', setOpen);
+    return (
+      <>
+        <Stage testId="under" />
+        <Stage testId="over" />
+        <PairDriver open={open} />
+      </>
+    );
+  }
+  /** Opens both in one commit, the way an app opening two at once would. */
+  function PairDriver({ open }: { open: boolean }) {
+    useEffect(() => {
+      setters.get('under')?.(open);
+      setters.get('over')?.(open);
+    }, [open]);
+    return null;
+  }
+
+  for (const part of [1, 2]) {
+    it(`presents every time, round after round (part ${part} of 2)`, async () => {
+      if (part === 1) {
+        await render(<Pair />);
+        await waitForHandle('under');
+        await waitForHandle('over');
+      }
+      for (let i = 0; i < 6; i += 1) {
+        eventLog.length = 0;
+        setters.get('pair')?.(true);
+        await waitForReport(
+          'under',
+          upWithTwo,
+          `round ${rounds + 1}: the first up`
+        );
+        await waitForReport(
+          'over',
+          upWithTwo,
+          `round ${rounds + 1}: the second up over it`
+        );
+        // The top one goes first: closing a sheet under another is a different case.
+        setters.get('over')?.(false);
+        await waitForEvent('over:dismiss');
+        setters.get('under')?.(false);
+        await waitForEvent('under:dismiss');
+        setters.get('pair')?.(false);
+        await waitForReport(
+          'under',
+          (r) => r.live === '0',
+          `round ${rounds + 1}: closed`
+        );
+        rounds += 1;
+      }
+      if (part === 2) {
+        const over = reportOf('over');
+        if (IOS) {
+          // The run went past the budget a mount used to have (60), on this mount.
+          expect(num(over, 'presentWaitsTotal')).toBeGreaterThan(60);
+        }
+        console.log(`busy-chain rounds=${rounds} report=${over.raw}`);
+        reset();
+      }
+    });
+  }
+});
+
+/**
+ * Changing the detents while the sheet is up. On Android, whether `medium` is in the
+ * list decides Material's `skipPartiallyExpanded`, which keys the sheet's saved state:
+ * a new key built a new, hidden `SheetState` under a sheet that was up. The sheet keeps
+ * one state for the whole presentation, and a list that adds or drops `medium` applies
+ * at the next presentation there (docs/components/bottom-sheet.md).
+ */
+describe('BottomSheet · detents changed while up', () => {
+  afterEach(async () => {
+    reset();
+    await sleep(700);
+  });
+
+  it('stays up when medium joins and leaves the list, and opens with the new list next time', async () => {
+    function Changing() {
+      const [two, setTwo] = useState(false);
+      setters.set('two', setTwo);
+      return (
+        <Stage
+          testId="change"
+          initial
+          scroll
+          detents={two ? ['medium', 'large'] : ['large']}
+        />
+      );
+    }
+    await render(<Changing />);
+    await waitForHandle('change');
+    await waitForUp('change');
+    await staysUp('change', 800, 'at large');
+    setters.get('two')?.(true);
+    await waitForReport(
+      'change',
+      (r) => r.detents === 'medium,large',
+      'the new list'
+    );
+    await staysUp('change', 1500, 'after medium joined the list');
+    setters.get('two')?.(false);
+    await waitForReport(
+      'change',
+      (r) => r.detents === 'large',
+      'the list again'
+    );
+    await staysUp('change', 1500, 'after medium left the list');
+    expect(reportOf('change').presentCount).toBe('1');
+    // Next presentation: the new list from the start.
+    setters.get('two')?.(true);
+    setters.get('change')?.(false);
+    await waitForEvent('change:dismiss');
+    setters.get('change')?.(true);
+    const again = await waitForUp('change', 'up again with medium');
+    expect(again.presentCount).toBe('2');
+    if (!IOS) {
+      await waitForReport(
+        'change',
+        (r) => r.sheetValue === 'PartiallyExpanded',
+        'opened half expanded'
+      );
+    }
   });
 });
 

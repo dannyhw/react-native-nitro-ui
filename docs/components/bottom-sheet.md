@@ -79,7 +79,10 @@ when a list has more than one non-`medium` detent, because only the largest is u
 `['medium']` alone opens expanded at half height, since Material has no way to rest at
 half without a taller detent above it. **Back steps down a detent first** on Android:
 from the expanded detent it returns to `medium` (reported as `onDetentChange`), and the
-next Back closes the sheet. That is Material's own behaviour.
+next Back closes the sheet. That is Material's own behaviour. **Changing the list while the sheet is up** applies at once on iOS; on Android a
+change to the expanded height applies at once, and a change to whether `'medium'` is in
+the list applies at the next presentation (Material's sheet state is built for one
+presentation; rebuilding it under an open sheet hid it).
 
 `onDetentChange` reports a drag only — never the detent the sheet opens at, and never a
 change the app made.
@@ -135,7 +138,10 @@ helper). React Native closes a `Modal` by dismissing *its own* controller, and a
 that controller's chain is what UIKit would dismiss instead, leaving the `Modal` on screen
 for good. The isolated harness file `example/__tests__/isolated/BottomSheetModalHazard`
 closes a `Modal` under an open sheet; with the own-window rule removed it reproduces the
-strand (`modalHosts=1`), which is why it runs in an app instance of its own.
+strand (`modalHosts=1`), which is why it runs in an app instance of its own: every
+`harness:<platform>` gate runs `example/__tests__/isolated/` as a second app launch after
+the shared run (`scripts/harness-isolated.mjs`), and a red isolated file turns the gate
+red.
 
 One consequence of presenting in the chain, read from RN's source and not measured: an
 RN `Modal` rendered on the *same screen* as an open sheet presents from that screen's

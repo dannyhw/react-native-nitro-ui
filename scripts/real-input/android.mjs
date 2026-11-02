@@ -1864,6 +1864,37 @@ const CHECKS = {
       'Pressed 1 times'
     );
 
+    // 2b. A horizontal drag on the list inside the sheet: the ScrollView disallows its
+    //     parents' interception for that gesture. The sheet's root must still see the
+    //     gesture's end (RN's `ReactRootView` rule), or JS keeps a touch that never
+    //     ended - and the next press on the Pressable is lost.
+    const chipBefore = t.waitForOption('Chip 1', 'the first chip of the list');
+    await t.swipeAcross(chipBefore, 0.9, 0.1, 400);
+    const chipAfter = findAllByText(t.dump(), 'Chip 1')[0] ?? null;
+    t.log.checkEquals(
+      'a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out)',
+      chipAfter == null || chipAfter.bounds.x1 < chipBefore.bounds.x1,
+      true
+    );
+    t.log.checkEquals('and leaves the sheet up', upCount(FIT)(), 1);
+    const pressedAgain = await t.pressUntil({
+      what: 'the Pressable inside the sheet, after the scroll',
+      waitingFor: 'a real tap after the horizontal scroll to reach JS',
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Pressed 2 times')() > 0) return;
+        await t.tapNode(t.waitForOption(FIT, 'the Pressable to be up'));
+      },
+      reading: () =>
+        upCount('Pressed 2 times')() > 0 ? 'Pressed 2 times' : '-',
+      raised: (shown) => shown === 'Pressed 2 times',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      'the Pressable still takes a real tap after the scroll',
+      pressedAgain.shown,
+      'Pressed 2 times'
+    );
+
     // 3. Back closes it; then a tap outside; then a drag down on its content.
     await t.pressBack();
     await waitGone(FIT, 'Back to take the fit sheet down');
@@ -1885,7 +1916,7 @@ const CHECKS = {
       'a drag down on the content to take the fit sheet down'
     );
     log(
-      'press:1 > presented:false > dismiss > presented:false > dismiss > ' +
+      'press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > ' +
         'presented:false > dismiss',
       'Back, a tap outside and a drag down each reported the close, then the dismissal'
     );
@@ -1918,7 +1949,7 @@ const CHECKS = {
     );
     await waitGone(STICKY, 'the sticky sheet button to take it down');
     log(
-      'press:1 > presented:false > dismiss > presented:false > dismiss > ' +
+      'press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > ' +
         'presented:false > dismiss > close > dismiss',
       'only the sticky sheet button closed it'
     );
@@ -4433,6 +4464,27 @@ function makeContext(harness, log) {
           0,
           Math.min(harness.displayHeight() - 1, node.bounds.cy + dyPx)
         ),
+        durationMs
+      );
+      await sleep(600);
+    },
+
+    /**
+     * Drag a finger horizontally across a node, between two fractions of the display's
+     * width, at the node's own height.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {number} fromFx
+     * @param {number} toFx
+     * @param {number} [durationMs]
+     */
+    async swipeAcross(node, fromFx, toFx, durationMs = 400) {
+      const width = harness.displayWidth();
+      harness.swipe(
+        Math.round(width * fromFx),
+        node.bounds.cy,
+        Math.round(width * toFx),
+        node.bounds.cy,
         durationMs
       );
       await sleep(600);

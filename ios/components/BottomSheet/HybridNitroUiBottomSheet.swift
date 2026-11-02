@@ -5,13 +5,16 @@
 //  BottomSheet (G14, DECISIONS D33/D35): a UIKit sheet presentation
 //  (`UISheetPresentationController`) whose content is React Native views.
 //
-//  Three moves, each measured by S2 (`docs/tasks/S2-bottomsheet-spike.report.md`):
+//  Three moves (S2, `docs/tasks/S2-bottomsheet-spike.report.md`, corrected by G14):
 //
-//  1. **Mount.** Nitro's generated component sets this view as its `contentView`, so
-//     Fabric mounts the BottomSheet's React Native children *into this view*
-//     (`HybridNitroUiBottomSheetComponent.mm`, `[self setContentView:view]`). The
-//     sheet's controller adopts the view while it is up and hands it back after. No
-//     `.mm` patch.
+//  1. **Mount.** Nitro's generated component sets this view as its `contentView`
+//     (`[self setContentView:view]`), but `RCTViewComponentView` mounts children into
+//     `currentContainerView` - the component view itself - *beside* it, where they
+//     would stay in the app's window. So the generated `.mm` is patched
+//     (`scripts/patch-nitrogen.mjs`, `CONTENT_CHILDREN_VIEWS`) to mount the
+//     BottomSheet's React Native children *into this view*, and the sheet's controller
+//     adopts the view while it is up and hands it back after. S2 said no patch was
+//     needed; its witnesses read this view, not the children.
 //  2. **Layout.** Yoga lays the children out at this node's size, so the node has to
 //     be the sheet's content box: native reports it (`onContentBox`) and the wrapper
 //     writes it into the node's `style`. A `fit` sheet leaves the height to Yoga and
@@ -574,8 +577,12 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   /// React asked for the sheet since the wrapper was last told its content can go
   /// (``reportDismissed(ended:)``).
   private var owesDismissal = false
-  /// How often the present waited on a busy chain, for the report.
+  /// How often the present now being asked for has waited on a busy chain. Reset per
+  /// request: the budget is one request's, not one mount's, or a mount that met a busy
+  /// chain often enough would stop presenting at all, with `presented=1` and nothing up.
   private var presentWaits = 0
+  /// How often this mount's presents waited on a busy chain, in all - diagnostics only.
+  private var presentWaitsTotal = 0
   /// Whether this mount has ended (`onDropView`).
   private var dropped = false
   /// Bumped per mount, so a deferred step from a dropped mount stands down.
@@ -712,6 +719,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     contentBox = nil
     presentCount = 0
     presentWaits = 0
+    presentWaitsTotal = 0
     appTopClass = "-"
     lastOwnWindow = false
     lastSelected = 0
@@ -812,7 +820,11 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
           // Leaving: the next sheet presents once this one is gone (`sheetGone`).
           return
         }
-        awaitingPresent = true
+        if !awaitingPresent {
+          // A new request, with a budget of its own.
+          awaitingPresent = true
+          presentWaits = 0
+        }
         schedulePresent()
       } else {
         presentScheduled = false
@@ -864,7 +876,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       // error and no completion (S2's `presentQueued`). Bounded, so a stuck chain ends
       // as a sheet that never came rather than a retry loop.
       presentWaits += 1
-      guard presentWaits <= 60 else { return }
+      presentWaitsTotal += 1
+      guard presentWaits <= Self.presentWaitBudget else { return }
       let generation = mountGeneration
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
         guard let self, self.mountGeneration == generation else { return }
@@ -1016,7 +1029,10 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   // MARK: - Methods
 
   func nuiTestStateReport() throws -> String {
-    // Refresh on main for the next read - never wait for it (`NitroUiMainThread`).
+    // From the first read on, every state change keeps the report fresh; until then
+    // nothing builds it (`reportsWanted`). Refresh on main for the next read - never
+    // wait for it (`NitroUiMainThread`).
+    Self.reportsWanted.add(Self.reportsWanted.value == 0 ? 1 : 0)
     DispatchQueue.main.async { [weak self] in self?.publishReport() }
     reportLock.lock()
     defer { reportLock.unlock() }
@@ -1051,8 +1067,18 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
 
   // MARK: - Report
 
-  /// Snapshot what is on screen for ``nuiTestStateReport()``. Main thread only.
+  /// Whether anything in this process has asked for a report: a test harness. An app
+  /// never calls ``nuiTestStateReport()``, so its sheets never pay for one - the walk of
+  /// the app's window and controllers below runs on every state change otherwise.
+  static let reportsWanted = NitroUiSheetCount()
+
+  /// How many 50 ms waits one present request may spend on a busy chain (3 s).
+  static let presentWaitBudget = 60
+
+  /// Snapshot what is on screen for ``nuiTestStateReport()``. Main thread only, and
+  /// only once a report has been asked for.
   private func publishReport() {
+    guard Self.reportsWanted.value > 0 else { return }
     var fields: [String] = []
     fields.append("presented=\(state.displayed ? 1 : 0)")
     fields.append("js=\(state.js == true ? 1 : 0)")
@@ -1092,6 +1118,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     fields.append("userDismissals=\(userDismissals)")
     fields.append("unasked=\(unaskedExits)")
     fields.append("presentWaits=\(presentWaits)")
+    fields.append("presentWaitsTotal=\(presentWaitsTotal)")
     fields.append("anchored=\(anchor.window != nil ? 1 : 0)")
     fields.append("drops=\(lifetimeDrops)")
     fields.append("recycles=\(lifetimeRecycles)")
