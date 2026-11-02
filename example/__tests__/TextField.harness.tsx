@@ -550,31 +550,47 @@ describe('TextField', () => {
     expect((await handleOf('readonly')).nuiTestState().focused).toBe(false);
   });
 
-  it('sizes a single-line field to one line, at its parent width', async () => {
-    render(<Controlled id="single" initial="Some text" width={300} />);
+  it('sizes a single-line field to one line, at its parent width, whatever its text', async () => {
+    render(
+      <>
+        <Controlled
+          id="single"
+          initial="Some text, quite a lot of it"
+          width={300}
+        />
+        <Controlled id="single-empty" initial="" width={300} />
+      </>
+    );
     await waitForTestId('single');
+    await waitForTestId('single-empty');
     const handle = await handleOf('single');
+    const empty = await handleOf('single-empty');
     await waitFor(
-      () => expect(handle.measureContent().height).toBeGreaterThan(0),
-      {
-        timeout: 5000,
-      }
+      () => {
+        expect(handle.measureContent().height).toBeGreaterThan(0);
+        expect(empty.measureContent().height).toBeGreaterThan(0);
+      },
+      { timeout: 5000 }
     );
-    const box = harnessUi.queryByTestId('single');
-    const measured = handle.measureContent();
-    console.log(
-      `textfield single: measured=${measured.width}x${measured.height} box=${String(box?.width)}x${String(box?.height)}`
-    );
-    expect(box).not.toBeNull();
-    expect(box?.width).toBeCloseTo(300, 0);
-    expect(Math.abs((box?.height ?? 0) - measured.height)).toBeLessThan(1);
-    // The height is the font's line, whatever the text: an empty field measures the same.
-    writers.get('single')?.('');
-    await stateWhen('single', (s) => s.text === '', 'the empty write');
     await sleep(200);
+    const box = harnessUi.queryByTestId('single');
+    const emptyBox = harnessUi.queryByTestId('single-empty');
+    const measured = handle.measureContent();
+    expect(box).not.toBeNull();
+    expect(emptyBox).not.toBeNull();
+    // The width is the parent's, not the text's (`fillWidth`).
+    expect(box?.width).toBeCloseTo(300, 0);
+    expect(emptyBox?.width).toBeCloseTo(300, 0);
+    // The box is what the field measured...
+    expect(Math.abs((box?.height ?? 0) - measured.height)).toBeLessThan(1);
+    // ...and a field with no text measures the same one line: two fields measured on
+    // their own, so a height that followed the text could not hide behind a cache.
     expect(
-      Math.abs(handle.measureContent().height - measured.height)
+      Math.abs(empty.measureContent().height - measured.height)
     ).toBeLessThan(1);
+    expect(Math.abs((emptyBox?.height ?? 0) - (box?.height ?? 0))).toBeLessThan(
+      1
+    );
   });
 
   it('grows a multi-line field with its text, one correction a step, and keeps two fields apart', async () => {
