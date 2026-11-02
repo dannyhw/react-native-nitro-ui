@@ -1421,8 +1421,9 @@ describe('Menu · G7a', () => {
     if (Platform.OS !== 'android') {
       // iOS presents through the system's menu, which reports no window for the
       // composition to measure (D23), so nothing about the list's width can be read
-      // from here on either platform's harness. What this branch keeps deterministic is
-      // the part that is answerable: the model's own rows, and the -1s for the window
+      // from here on iOS's harness. (Android can: the rest of this test measures its
+      // popup through the witness's `menu=` rect.) What this branch keeps deterministic
+      // is the part that is answerable: the model's own rows, and the -1s for the window
       // that is not there.
       expectUnanswerable(closed);
       expectUnanswerable(closedFloor);
