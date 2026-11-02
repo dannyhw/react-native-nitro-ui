@@ -192,6 +192,22 @@ async function probe(): Promise<string> {
   return probeId;
 }
 
+/** Up, and counted: the count goes up in the presentation's completion on iOS. */
+const isUpCounted = (count: number) => (report: Report) =>
+  isUp(report) && report.live === String(count);
+
+/** No dialog window is left anywhere: none counted, and on iOS none in the scene. */
+async function waitForNothingLeft(testId: string, what: string) {
+  await waitForLive(testId, 0, what);
+  if (Platform.OS === 'ios') {
+    await waitForReport(
+      testId,
+      (r) => r.topPresented === '-' && r.windows === '0',
+      `nothing presented in the app window and no dialog window left (${what})`
+    );
+  }
+}
+
 describe('Dialog · presentation spike (G11, Q5 B9)', () => {
   afterEach(async () => {
     cleanup();
@@ -208,21 +224,25 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     await waitForHandle('plain');
     await waitForLive('plain', 0, 'nothing open yet');
     setters.get('plain')?.(true);
-    const up = await waitForReport('plain', isUp, 'presented on screen');
-    expect(up.live).toBe('1');
+    const up = await waitForReport(
+      'plain',
+      isUpCounted(1),
+      'presented and counted'
+    );
     expect(up.presentCount).toBe('1');
     if (Platform.OS === 'ios') {
-      console.log(`plain presenter: ${up.presenter}`);
       expect(up.kind).toBe('alert');
+      expect(up.ownWindow).toBe('1');
+      expect(up.windows).toBe('1');
     }
     setters.get('plain')?.(false);
-    await waitForLive('plain', 0, 'after the JS false');
+    await waitForNothingLeft('plain', 'after the JS false');
     expect(reportOf('plain').presented).toBe('0');
     // A change React made is not a native interaction: nothing was reported.
     expect(eventLog).toEqual([]);
   });
 
-  it('presents inside an RN Modal, from the Modal', async () => {
+  it('presents inside an RN Modal', async () => {
     await render(
       <Modal visible animationType="none">
         <View style={{ flex: 1 }}>
@@ -238,21 +258,22 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     await waitForHandle('in-modal');
     const up = await waitForReport(
       'in-modal',
-      isUp,
+      isUpCounted(1),
       'presented inside the Modal',
       12000
     );
-    expect(up.live).toBe('1');
     if (Platform.OS === 'ios') {
-      console.log(`in-modal presenter: ${up.presenter} kind=${up.kind}`);
-      expect(up.presenter).toContain('Modal');
+      // Over the Modal, from a window of its own.
+      expect(up.appTop).toContain('Modal');
+      expect(up.kind).toBe('sheet');
+      expect(up.ownWindow).toBe('1');
     }
     setters.get('in-modal')?.(false);
     await waitForLive('in-modal', 0, 'closed inside the Modal');
     expect(eventLog).toEqual([]);
   });
 
-  it('presents over an RN Modal from a view under it', async () => {
+  it('presents over an RN Modal from a view under it, mid-slide', async () => {
     await render(
       <View style={{ flex: 1 }}>
         <Stage testId="under-modal" title="Over the Modal" />
@@ -262,21 +283,17 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       </View>
     );
     await waitForHandle('under-modal');
-    // The Modal slides in; the dialog is asked for while it may still be animating,
-    // which is the transition `topPresenter` has to wait out.
+    // Asked for while the Modal may still be sliding in: an in-chain presenter has to
+    // wait that transition out, a window of its own does not.
     await sleep(150);
     setters.get('under-modal')?.(true);
     const up = await waitForReport(
       'under-modal',
-      isUp,
+      isUpCounted(1),
       'presented over the Modal',
       12000
     );
-    expect(up.live).toBe('1');
-    if (Platform.OS === 'ios') {
-      console.log(`under-modal presenter: ${up.presenter}`);
-      expect(up.presenter).toContain('Modal');
-    }
+    if (Platform.OS === 'ios') expect(up.ownWindow).toBe('1');
     setters.get('under-modal')?.(false);
     await waitForLive('under-modal', 0, 'closed over the Modal');
   });
@@ -289,24 +306,20 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       </View>
     );
     await waitForHandle('second');
-    await waitForReport('first', isUp, 'the first dialog up');
+    await waitForReport('first', isUpCounted(1), 'the first dialog up');
     setters.get('second')?.(true);
     const second = await waitForReport(
       'second',
-      isUp,
+      isUpCounted(2),
       'the second dialog up',
       12000
     );
-    expect(second.live).toBe('2');
-    if (Platform.OS === 'ios') {
-      console.log(`second presenter: ${second.presenter}`);
-      expect(second.presenter).toBe('NitroUiAlertController');
-    }
+    if (Platform.OS === 'ios') expect(second.windows).toBe('2');
     handles.get('second')?.nuiTestPerformAction('later');
     await waitForLive('first', 1, 'the second closed, the first still up');
     expect(reportOf('first').presented).toBe('1');
     handles.get('first')?.nuiTestPerformAction('cancel');
-    await waitForLive('first', 0, 'both closed');
+    await waitForNothingLeft('first', 'both closed');
     expect(eventLog).toEqual([
       'second:action:later',
       'second:presented:false',
@@ -321,12 +334,11 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     setters.get('flicker')?.(true);
     await sleep(50);
     setters.get('flicker')?.(false);
-    await waitForLive('flicker', 0, 'the window gone after a mid-entry false');
+    await waitForNothingLeft('flicker', 'after a mid-entry false');
     await sleep(800);
     const settled = reportOf('flicker');
     expect(settled.live).toBe('0');
     expect(settled.presented).toBe('0');
-    if (Platform.OS === 'ios') expect(settled.topPresented).toBe('-');
     expect(eventLog).toEqual([]);
   });
 
@@ -336,44 +348,303 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       await waitForHandle('dropped');
       setters.get('dropped')?.(true);
       if (delay > 0) await sleep(delay);
-      if (delay >= 1000)
-        await waitForReport('dropped', isUp, 'up before the drop');
+      if (delay >= 1000) {
+        await waitForReport('dropped', isUpCounted(1), 'up before the drop');
+      }
       first.unmount();
       handles.clear();
       const probeId = await probe();
-      await waitForLive(probeId, 0, `after a drop ${String(delay)} ms in`);
-      if (Platform.OS === 'ios') {
-        await waitForReport(
-          probeId,
-          (r) => r.topPresented === '-',
-          'nothing presented on top'
-        );
-      }
+      await waitForNothingLeft(probeId, `after a drop ${String(delay)} ms in`);
       // The dropped mount reports nothing: its callbacks went with it.
       expect(eventLog).toEqual([]);
     });
   }
 
-  it('reports a close when the RN Modal under an open dialog goes away', async () => {
+  it('leaves no Modal behind when the RN Modal under an open dialog closes', async () => {
+    // The case an in-chain presenter fails: React Native dismisses its Modal with
+    // `[modalController dismissViewControllerAnimated:]`, which UIKit reads as "dismiss
+    // what this controller presented" - so with a dialog on top, the dialog went and
+    // the Modal stayed on screen with React believing it gone.
     function Scene() {
       const [modal, setModal] = useState(true);
       setters.set('modal', setModal);
       return (
-        <Modal visible={modal} animationType="none">
-          <View style={{ flex: 1 }}>
-            <Stage testId="in-closing-modal" initial title="Doomed" />
-          </View>
-        </Modal>
+        <View style={{ flex: 1 }}>
+          <Stage testId="over-closing-modal" initial title="Over" />
+          <Modal visible={modal} animationType="none">
+            <View style={{ flex: 1 }}>
+              <Stage testId="in-closing-modal" initial title="Inside" />
+            </View>
+          </Modal>
+        </View>
       );
     }
     await render(<Scene />);
     await waitForHandle('in-closing-modal');
-    await waitForReport('in-closing-modal', isUp, 'up inside the Modal', 12000);
+    await waitForReport('in-closing-modal', isUpCounted(2), 'both up', 12000);
     setters.get('modal')?.(false);
-    const probeId = await probe();
-    await waitForLive(probeId, 0, 'the Modal and its dialog gone');
-    console.log(
-      `events after the Modal closed: ${eventLog.join(',') || '(none)'}`
+    // The dialog inside the Modal goes with it; the one under it stays up.
+    await waitForLive(
+      'over-closing-modal',
+      1,
+      'the inner dialog gone with its Modal'
     );
+    if (Platform.OS === 'ios') {
+      await waitForReport(
+        'over-closing-modal',
+        (r) => r.topPresented === '-',
+        'no RN Modal left presented in the app window'
+      );
+    }
+    handles.get('over-closing-modal')?.nuiTestPerformAction('later');
+    await waitForNothingLeft(
+      'over-closing-modal',
+      'the outer dialog closed too'
+    );
+    expect(eventLog).toEqual([
+      'over-closing-modal:action:later',
+      'over-closing-modal:presented:false',
+    ]);
   });
+});
+
+describe('Dialog · behaviour (G11, Q5 B7)', () => {
+  afterEach(async () => {
+    cleanup();
+    handles.clear();
+    setters.clear();
+    eventLog.length = 0;
+    await sleep(600);
+  });
+
+  it('reports a JS close as nothing, and a user close as a close (barrier twin)', async () => {
+    await render(
+      <View>
+        <Stage testId="quiet" initial message="Body" />
+        <Stage testId="twin" />
+      </View>
+    );
+    await waitForHandle('twin');
+    const up = await waitForReport('quiet', isUpCounted(1), 'the dialog up');
+    expect(up.title).toBe('Dialog');
+    expect(up.message).toBe('Body');
+    expect(up.actions).toBe('3');
+    setters.get('quiet')?.(false);
+    await waitForLive('quiet', 0, 'closed by JS');
+    // The barrier: the same channel does report a user close, so the empty log above
+    // is the JS close reporting nothing, not a channel that reports nothing at all.
+    setters.get('twin')?.(true);
+    await waitForReport('twin', isUpCounted(1), 'the twin up');
+    handles.get('twin')?.nuiTestDismiss();
+    await waitForLive('twin', 0, 'the twin dismissed by the user');
+    expect(eventLog).toEqual(['twin:presented:false']);
+  });
+
+  it('reports an action before the close it causes', async () => {
+    await render(<Stage testId="act" initial />);
+    await waitForHandle('act');
+    await waitForReport('act', isUp, 'up');
+    handles.get('act')?.nuiTestPerformAction('delete');
+    await waitForLive('act', 0, 'closed by the action');
+    expect(eventLog).toEqual(['act:action:delete', 'act:presented:false']);
+    expect(reportOf('act').presented).toBe('0');
+  });
+
+  it('takes no tap on a disabled action, and draws it disabled', async () => {
+    const actions: DialogAction[] = [
+      { id: 'cancel', title: 'Cancel', role: 'cancel' },
+      { id: 'locked', title: 'Locked', disabled: true },
+      { id: 'go', title: 'Go' },
+    ];
+    await render(<Stage testId="locked" initial actions={actions} />);
+    await waitForHandle('locked');
+    const up = await waitForReport('locked', isUp, 'up');
+    // Read from the controller iOS built and the model Android composed.
+    expect(up.enabled).toBe(Platform.OS === 'ios' ? '1,0,1' : '1,0,1');
+    handles.get('locked')?.nuiTestPerformAction('locked');
+    await sleep(400);
+    expect(eventLog).toEqual([]);
+    expect(reportOf('locked').presented).toBe('1');
+    // Barrier: an enabled action on the same dialog does report.
+    handles.get('locked')?.nuiTestPerformAction('go');
+    await waitForLive('locked', 0, 'closed by the enabled action');
+    expect(eventLog).toEqual(['locked:action:go', 'locked:presented:false']);
+  });
+
+  it('presents again when the app refuses a dismissal, and warns once', async () => {
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      await render(<Stage testId="refused" initial refuse />);
+      await waitForHandle('refused');
+      await waitForReport('refused', isUp, 'up');
+      handles.get('refused')?.nuiTestDismiss();
+      // The close lands, JS echoes it, `isPresented` is still true: it comes back.
+      await waitForReport(
+        'refused',
+        (r) => isUpCounted(1)(r) && r.presentCount === '2',
+        'presented a second time after the refused dismissal',
+        12000
+      );
+      expect(reportOf('refused').live).toBe('1');
+      handles.get('refused')?.nuiTestDismiss();
+      await waitForReport(
+        'refused',
+        (r) => isUpCounted(1)(r) && r.presentCount === '3',
+        'presented a third time',
+        12000
+      );
+      const refusal = warnings.filter((w) =>
+        w.includes('dismissed by the user')
+      );
+      expect(refusal.length).toBe(1);
+      expect(eventLog).toEqual([
+        'refused:presented:false',
+        'refused:presented:false',
+      ]);
+    } finally {
+      console.warn = original;
+    }
+  });
+
+  it('presents once when mounted presented, after the view has a window', async () => {
+    await render(<Stage testId="at-mount" initial />);
+    await waitForHandle('at-mount');
+    const up = await waitForReport(
+      'at-mount',
+      isUpCounted(1),
+      'up from the first commit'
+    );
+    await sleep(600);
+    expect(reportOf('at-mount').presentCount).toBe('1');
+    expect(up.live).toBe('1');
+    expect(eventLog).toEqual([]);
+  });
+
+  it('does nothing on a user dismissal while not dismissible', async () => {
+    await render(<Stage testId="sticky" initial dismissible={false} />);
+    await waitForHandle('sticky');
+    await waitForReport('sticky', isUp, 'up');
+    handles.get('sticky')?.nuiTestDismiss();
+    await sleep(500);
+    expect(reportOf('sticky').presented).toBe('1');
+    expect(eventLog).toEqual([]);
+    handles.get('sticky')?.nuiTestPerformAction('later');
+    await waitForLive('sticky', 0, 'closed by its action');
+  });
+
+  it('updates title, message and a disabled action in place while up', async () => {
+    function Live() {
+      const [round, setRound] = useState(0);
+      setters.set('round', (next) => setRound(next ? 1 : 0));
+      const actions: DialogAction[] =
+        round === 0
+          ? [
+              { id: 'a', title: 'Alpha' },
+              { id: 'b', title: 'Bravo' },
+            ]
+          : [
+              { id: 'a', title: 'Alpha', disabled: true },
+              { id: 'b', title: 'Bravo' },
+              { id: 'c', title: 'Charlie' },
+            ];
+      return (
+        <AlertDialog
+          testID="live"
+          hybridRef={captureHybrid('live')}
+          isPresented
+          title={round === 0 ? 'Before' : 'After'}
+          message={round === 0 ? 'First body' : 'Second body'}
+          actions={actions}
+        />
+      );
+    }
+    await render(<Live />);
+    await waitForHandle('live');
+    await waitForReport(
+      'live',
+      (r) => isUp(r) && r.title === 'Before',
+      'up with the first title'
+    );
+    setters.get('round')?.(true);
+    const after = await waitForReport(
+      'live',
+      (r) => r.title === 'After' && r.message === 'Second body',
+      'the new title and message on the open dialog'
+    );
+    // The disabled flag follows in place on both platforms...
+    expect(after.enabled?.split(',')[0]).toBe('0');
+    // ...and the action *set* is the platform difference B2 documents: UIKit cannot drop
+    // or add an action on a presented alert, so iOS keeps two until the next
+    // presentation; Compose recomposes, so Android shows three now.
+    expect(after.actions).toBe(Platform.OS === 'ios' ? '2' : '3');
+    expect(after.presentCount).toBe('1');
+  });
+
+  it('gives a recycled view none of the open dialog it came from', async () => {
+    function Swap({ round }: { round: number }) {
+      const old = round % 2 === 0;
+      return (
+        <View>
+          <AlertDialog
+            key={old ? 'a' : 'b'}
+            testID="recycled"
+            hybridRef={captureHybrid('recycled')}
+            isPresented={old}
+            title={old ? 'Old title' : 'New title'}
+            actions={old ? ACTIONS : [{ id: 'only', title: 'Only' }]}
+          />
+        </View>
+      );
+    }
+    const { rerender } = await render(<Swap round={0} />);
+    await waitForHandle('recycled');
+    await waitForReport(
+      'recycled',
+      (r) => isUp(r) && r.title === 'Old title',
+      'the old dialog up'
+    );
+    const reuses: string[] = [];
+    for (const round of [1, 2, 3]) {
+      handles.clear();
+      await rerender(<Swap round={round} />);
+      await waitForHandle('recycled');
+      if (round % 2 === 1) {
+        // The new mount asked for nothing: whatever instance it got shows nothing.
+        await waitForLive('recycled', 0, `round ${String(round)} closed`);
+        const report = reportOf('recycled');
+        expect(report.presented).toBe('0');
+        expect(report.kind).toBe('none');
+        reuses.push(report.recycles ?? '?');
+      } else {
+        await waitForReport(
+          'recycled',
+          (r) => isUp(r) && r.title === 'Old title',
+          'reopened'
+        );
+      }
+    }
+    console.log(`recycled-dialog recycles per round: ${reuses.join(',')}`);
+  });
+
+  if (Platform.OS === 'android') {
+    it('composes the confirmation form as a sheet with one row per action', async () => {
+      await render(
+        <Stage testId="sheet" initial variant="confirmation" title="Pick" />
+      );
+      await waitForHandle('sheet');
+      const up = await waitForReport(
+        'sheet',
+        (r) => r.kind === 'sheet',
+        'a sheet'
+      );
+      expect(up.actions).toBe('3');
+      handles.get('sheet')?.nuiTestPerformAction('later');
+      await waitForLive('sheet', 0, 'the sheet animated out and gone');
+      expect(eventLog).toEqual(['sheet:action:later', 'sheet:presented:false']);
+    });
+  }
 });
