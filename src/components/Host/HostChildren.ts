@@ -30,6 +30,7 @@ import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 import { Menu } from '../Menu/Menu';
 import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
+import { TextField } from '../TextField/TextField';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -78,15 +79,15 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * **Empty since H2b**: every control the library ships is hosted, so there is
- * nothing left to refuse here for being what it is. The table and the check that
- * reads it stay, because they are the row the *next* control goes on - a
- * TextField, anything added before it has been measured inside a Host starts here,
- * refused, until a round measures it. `host.test.tsx` proves the sentence still
- * works by putting a stand-in in this table, because nothing in the library does any
- * more.
+ * Empty from H2b until G13: every control the library shipped was hosted. The
+ * TextField starts here, as this table always said the next control would: a field
+ * inside a shared composition means IME sessions and focus owned by the Host, and no
+ * round has measured that yet (G13 report, follow-ups). `host.test.tsx` proves the
+ * refusal with it.
  */
-export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([]);
+export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
+  [TextField, 'TextField'],
+]);
 
 /**
  * The RN views an app reaches for, so that "no RN views in a Host" is checked

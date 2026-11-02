@@ -92,6 +92,57 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Type into the focused field the way an IME does, for the TextField harness (G13):
+   * `commit` commits [text] through the focused view's `InputConnection`, and `action`
+   * presses the keyboard's Return (an editor action). `compose`/`finish` set and commit
+   * composing text; a composition opened this way does not survive on the emulator's
+   * keyboard (G13 report), so the composition test runs on iOS. Answers the focused view's class name.
+   *
+   * The Android twin of `HarnessUI.typeChar`, which only reaches an `EditText`: a
+   * Compose field has no `EditText` (Q2 §4), and its keystrokes arrive the way every
+   * IME's do, through the `InputConnection` its `AndroidComposeView` creates. Nothing
+   * is a shortcut into the field's state - the connection is Compose's own, and the
+   * edit runs its `InputTransformation` (`maxLength`) as a keyboard's would. The
+   * OS-level oracle is still the real-input runner's `adb shell input text`.
+   */
+  @ReactMethod
+  fun imeInput(kind: String, text: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity")
+      return
+    }
+    activity.runOnUiThread {
+      try {
+        val focused = activity.currentFocus
+        if (focused == null) {
+          promise.reject("NO_FOCUS", "no view has focus")
+          return@runOnUiThread
+        }
+        val connection = focused.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+        if (connection == null) {
+          promise.reject("NO_INPUT", "${focused.javaClass.simpleName} has no input connection")
+          return@runOnUiThread
+        }
+        when (kind) {
+          "commit" -> connection.commitText(text, 1)
+          "compose" -> connection.setComposingText(text, 1)
+          "finish" -> connection.finishComposingText()
+          // Return on the soft keyboard: the editor action a single-line field submits on.
+          "action" -> connection.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
+          else -> {
+            promise.reject("BAD_KIND", "unknown input kind $kind")
+            return@runOnUiThread
+          }
+        }
+        promise.resolve(focused.javaClass.simpleName)
+      } catch (error: Throwable) {
+        promise.reject("IME_INPUT", error)
+      }
+    }
+  }
+
   private companion object {
     /** The name JS asks the module registry for. */
     const val MODULE_NAME = "NitroUiProbe"

@@ -1,0 +1,29 @@
+{
+  "uiViewClassName": "NitroUiTextField",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "placeholder": true,
+    "multiline": true,
+    "keyboardType": true,
+    "autoCapitalize": true,
+    "autoCorrect": true,
+    "secureTextEntry": true,
+    "maxLength": true,
+    "returnKeyType": true,
+    "editable": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "onFocusChange": true,
+    "onSubmitEditing": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}
