@@ -11,7 +11,9 @@
  *  - the events that reached JS, in order (`eventLog`).
  *
  * and drive the dialog through test seams that run the real handlers
- * (`nuiTestPerformAction`, `nuiTestDismiss`). Real taps are `real-input:*`'s job.
+ * (`nuiTestPerformAction`, `nuiTestDismiss`); on iOS the action seam has the alert take
+ * itself down, as a tap does, rather than asking the presentation helper to. Real taps
+ * are `real-input:*`'s job.
  *
  * The first block is the presentation spike (Q5 B9, brief item 1): can a plain view
  * always find a controller to present from - inside an RN `Modal`, over one, over
@@ -355,6 +357,43 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       await waitForNothingLeft(probeId, `after a drop ${String(delay)} ms in`);
       // The dropped mount reports nothing: its callbacks went with it.
       expect(eventLog.join(',')).toBe('');
+    });
+  }
+
+  // The other end of the presentation: the view goes while the dialog is animating
+  // *out*. After an action tap UIKit takes the alert down itself, and the teardown that
+  // lands during that exit found it already leaving and stood down - while the one
+  // report of the exit's end, the alert's witness, is what the teardown detaches. The
+  // window stayed up at `.alert + 1` and `live` at 1 (G11 review, round 2). A JS
+  // `false` is the helper's own dismissal, which already carried both: the barrier.
+  for (const closing of ['an action', 'a JS false'] as const) {
+    it(`leaves no window when dropped 100 ms into the close of ${closing}`, async () => {
+      const first = await render(<Stage testId="closing" initial />);
+      await waitForHandle('closing');
+      await waitForReport('closing', isUpCounted(1), 'up');
+      if (closing === 'an action') {
+        handles.get('closing')?.nuiTestPerformAction('later');
+      } else {
+        setters.get('closing')?.(false);
+      }
+      await sleep(100);
+      if (Platform.OS === 'ios' && closing === 'an action') {
+        // Precondition: the exit is still running when the view goes (the count comes
+        // down at its end, and that end republishes the report).
+        expect(reportOf('closing').live).toBe('1');
+      }
+      first.unmount();
+      handles.clear();
+      const probeId = await probe();
+      await waitForNothingLeft(
+        probeId,
+        `dropped 100 ms into the close of ${closing}`
+      );
+      expect(eventLog.join(',')).toBe(
+        closing === 'an action'
+          ? 'closing:action:later,closing:presented:false'
+          : ''
+      );
     });
   }
 
@@ -762,7 +801,10 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
         } else {
           await waitForReport(
             'swapped',
-            (r) => r.presentCount === '1' && r.presented === '1',
+            (r) =>
+              r.presentCount === '1' &&
+              r.presented === '1' &&
+              r.title === 'Mount b',
             'the new mount presenting'
           );
           if (Platform.OS === 'ios') {
@@ -860,6 +902,57 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       expect(up.chrome).toBe(up.appChrome);
       setters.get('chrome')?.(false);
       await waitForLive('chrome', 0, 'closed');
+    });
+
+    it('keeps answering as the screen it covers when that screen changes under it', async () => {
+      // The answers are worked out when UIKit asks, not when the dialog presented: a
+      // portrait-only Modal the app opens under an open dialog is the screen it covers
+      // from then on, and once that Modal closes the app's own screen is again.
+      function Scene() {
+        const [modal, setModal] = useState(false);
+        setters.set('chrome-modal', setModal);
+        return (
+          <View>
+            <Stage testId="rechrome" initial title="Chrome" />
+            <Modal
+              visible={modal}
+              animationType="none"
+              presentationStyle="pageSheet"
+              supportedOrientations={['portrait']}
+            >
+              <View style={{ flex: 1 }} />
+            </Modal>
+          </View>
+        );
+      }
+      await render(<Scene />);
+      await waitForHandle('rechrome');
+      const up = await waitForReport('rechrome', isUpCounted(1), 'up', 12000);
+      // The fixture: the app's own screen answers something other than the Modal's
+      // `.portrait`, so a root still answering for it reads wrong once the Modal is up.
+      expect(up.appChrome).not.toBe('0,0,2');
+      expect(up.chrome).toBe(up.appChrome);
+      const before = up.appChrome;
+      setters.get('chrome-modal')?.(true);
+      const covered = await waitForReport(
+        'rechrome',
+        (r) => r.appChrome === '0,0,2',
+        'the portrait-only Modal on top of the app window',
+        12000
+      );
+      expect(covered.presented).toBe('1');
+      expect(covered.chrome).toBe(covered.appChrome);
+      setters.get('chrome-modal')?.(false);
+      const uncovered = await waitForReport(
+        'rechrome',
+        (r) => r.topPresented === '-',
+        'the Modal closed',
+        12000
+      );
+      expect(uncovered.appChrome).toBe(before);
+      expect(uncovered.chrome).toBe(uncovered.appChrome);
+      setters.get('rechrome')?.(false);
+      await waitForLive('rechrome', 0, 'closed');
     });
 
     it('hands the key window back to the app when it closes or is dropped', async () => {
