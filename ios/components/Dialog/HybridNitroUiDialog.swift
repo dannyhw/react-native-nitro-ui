@@ -416,7 +416,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     let count = state.user(false)
     presentedChange?(false, Double(count))
     if presentation.isOnScreen, !controller.isBeingDismissed {
-      // A real tap is already on its way out; only the test seam gets here.
+      // A tap - and the test seam, which does what a tap does - is already on its way
+      // out; this is for a handler run while the alert is still up.
       presentation.dismissAnimated()
     }
     publishReport()
@@ -501,6 +502,14 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       }
       // A disabled action does nothing, as a tap on it would.
       guard alert.actions[index].isEnabled else { return }
+      // What a tap does: the alert takes itself down - a dismissal UIKit runs, not one
+      // the helper asked for - and the handler finds it already on its way out. Going
+      // through the helper instead hid a window left up by a view dropped during that
+      // exit (G11 review, round 2). The handler still runs in this turn, so the events
+      // reach JS before the count comes down, as they did.
+      if alert.presentingViewController != nil, !alert.isBeingDismissed {
+        alert.dismiss(animated: true)
+      }
       self.performAction(id, from: alert)
     }
   }
