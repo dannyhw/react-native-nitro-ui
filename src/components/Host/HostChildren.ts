@@ -30,6 +30,7 @@ import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 import { Menu } from '../Menu/Menu';
 import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
+import { Chip } from '../Chip/Chip';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -78,15 +79,14 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * **Empty since H2b**: every control the library ships is hosted, so there is
- * nothing left to refuse here for being what it is. The table and the check that
- * reads it stay, because they are the row the *next* control goes on - a
- * TextField, anything added before it has been measured inside a Host starts here,
- * refused, until a round measures it. `host.test.tsx` proves the sentence still
- * works by putting a stand-in in this table, because nothing in the library does any
- * more.
+ * H2b emptied it, and `Chip` (G12) is the first control to start here again: a
+ * control goes on this table until a round has measured it inside a Host, and G12
+ * built the chip without that round (`docs/components/chip.md`, "Limits"). The
+ * row is hand-written rather than generated: the registry writes the imports and
+ * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable`
+ * flag.
  */
-export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([]);
+export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([[Chip, 'Chip']]);
 
 /**
  * The RN views an app reaches for, so that "no RN views in a Host" is checked

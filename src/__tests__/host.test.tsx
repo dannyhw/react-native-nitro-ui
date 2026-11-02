@@ -19,6 +19,7 @@ import {
   assertHostChildren,
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
+import { Chip } from '../components/Chip/Chip';
 import { Picker } from '../components/Picker/Picker';
 import {
   HOSTABLE_CONTROLS,
@@ -189,16 +190,25 @@ describe('Host children', () => {
   });
 
   /**
-   * H2b hosted the last three controls, so **no control the library ships is refused
-   * for being what it is** any more. The refusal sentence for a nitro-ui control that
-   * has not been measured inside a Host is still the rule the *next* control meets
-   * (`UNHOSTABLE_CONTROLS` is where a Menu or a TextField starts), so it is proved
-   * here the only way it can be: by putting a stand-in in the table, asking the check,
-   * and taking the stand-in back out. A row that was never exercised is a row that can
-   * rot, and this is the difference between a rule and a comment.
+   * `Chip` (G12) is the one control the library ships that a Host refuses: it was
+   * built without a round that measured it inside one. The refusal names it, and
+   * says whose `<Chip>` it is - an app may well have a chip of its own.
+   */
+  it('names the Chip, which no round has measured inside a Host', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['Chip']);
+    const error = errorFor(<Chip label="Vegan" />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/react-native-nitro-ui's <Chip>/);
+  });
+
+  /**
+   * The refusal sentence for a nitro-ui control that has not been measured inside a
+   * Host is the rule the *next* control meets too, so it is also proved on a stand-in:
+   * put one in the table, ask the check, and take it back out. A row that was never
+   * exercised is a row that can rot, and this is the difference between a rule and a
+   * comment.
    */
   it('names a control the Host does not render yet', () => {
-    expect(UNHOSTABLE_CONTROLS.size).toBe(0);
     // The allowlist is consulted first, so a control cannot be refused while it is
     // still on it - which is the right order (a table cannot take back a permission
     // the other table granted). To ask the sentence the question the next control

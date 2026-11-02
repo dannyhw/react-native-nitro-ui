@@ -97,3 +97,9 @@ export {
   type DialogAction,
   type DialogProps,
 } from './components/Dialog/Dialog';
+
+// A compact choice or action (G12): Material 3 `FilterChip` / `AssistChip` on
+// Android, SwiftUI `Toggle(.button)` / a bordered capsule `Button` on iOS, which has
+// no chip. A filter chip's `selected` is controlled through the event-count
+// handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
+export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';

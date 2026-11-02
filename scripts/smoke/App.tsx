@@ -95,6 +95,7 @@ const SMOKE_CONTROLS = [
   'date-picker',
   'picker',
   'menu',
+  'chip',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',

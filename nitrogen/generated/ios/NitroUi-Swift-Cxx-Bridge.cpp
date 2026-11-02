@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiButtonSpecSwift.hpp"
+#include "HybridNitroUiChipSpecSwift.hpp"
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
 #include "HybridNitroUiHostSpecSwift.hpp"
@@ -47,6 +48,30 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
+  // pragma MARK: std::function<void(bool /* selected */, double /* eventCount */)>
+  Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_bool_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](bool selected, double eventCount) mutable -> void {
+      swiftClosure.call(selected, eventCount);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiChipSpec>
+  std::shared_ptr<HybridNitroUiChipSpec> create_std__shared_ptr_HybridNitroUiChipSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiChipSpec_cxx swiftPart = NitroUi::HybridNitroUiChipSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiChipSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiChipSpec_(std__shared_ptr_HybridNitroUiChipSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiChipSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiChipSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiChipSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiChipSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
   // pragma MARK: std::function<void(double /* millis */, double /* eventCount */)>
   Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
     auto swiftClosure = NitroUi::Func_void_double_double::fromUnsafe(swiftClosureWrapper);
@@ -69,14 +94,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     #endif
     NitroUi::HybridNitroUiDatePickerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
-  }
-  
-  // pragma MARK: std::function<void(bool /* presented */, double /* eventCount */)>
-  Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = NitroUi::Func_void_bool_double::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](bool presented, double eventCount) mutable -> void {
-      swiftClosure.call(presented, eventCount);
-    };
   }
   
   // pragma MARK: std::function<void(const std::string& /* id */)>

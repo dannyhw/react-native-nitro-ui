@@ -94,6 +94,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one',
     screen: 'dialog',
   },
+  {
+    id: 'chip',
+    title:
+      'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
+    screen: 'chip',
+  },
   // @end-generated
 ]);
 

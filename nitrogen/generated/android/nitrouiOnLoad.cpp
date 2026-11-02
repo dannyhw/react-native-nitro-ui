@@ -18,11 +18,13 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiChipSpec.hpp"
+#include "JFunc_void_bool_double.hpp"
+#include "views/JHybridNitroUiChipStateUpdater.hpp"
 #include "JHybridNitroUiDatePickerSpec.hpp"
 #include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
 #include "JHybridNitroUiDialogSpec.hpp"
-#include "JFunc_void_bool_double.hpp"
 #include "JFunc_void_std__string.hpp"
 #include "views/JHybridNitroUiDialogStateUpdater.hpp"
 #include "JHybridNitroUiHostSpec.hpp"
@@ -130,6 +132,14 @@ struct JHybridNitroUiDialogSpecImpl: public jni::JavaClass<JHybridNitroUiDialogS
     return javaPart->getJHybridNitroUiDialogSpec();
   }
 };
+struct JHybridNitroUiChipSpecImpl: public jni::JavaClass<JHybridNitroUiChipSpecImpl, JHybridNitroUiChipSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiChip;";
+  static std::shared_ptr<JHybridNitroUiChipSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiChipSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiChipSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiChipSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -139,11 +149,13 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiChipSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiChipStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDatePickerSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDialogSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
   margelo::nitro::nitroui::JFunc_void_std__string_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDialogStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiHostSpec::CxxPart::registerNatives();
@@ -229,6 +241,12 @@ void registerAllNatives() {
     "NitroUiDialog",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiDialogSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiChip",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiChipSpecImpl::create();
     }
   );
 }
