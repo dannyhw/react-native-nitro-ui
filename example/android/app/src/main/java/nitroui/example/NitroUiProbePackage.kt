@@ -94,10 +94,11 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
 
   /**
    * Type into the focused field the way an IME does, for the TextField harness (G13):
-   * `commit` commits [text] through the focused view's `InputConnection`, and `action`
-   * presses the keyboard's Return (an editor action). `compose`/`finish` set and commit
-   * composing text; a composition opened this way does not survive on the emulator's
-   * keyboard (G13 report), so the composition test runs on iOS. Answers the focused view's class name.
+   * `commit` commits [text] through the focused view's `InputConnection`, `compose`
+   * sets it as composing text (an open IME composition, the way Gboard holds every
+   * Latin word while autocorrect is on), `finish` commits the composition, `cancel`
+   * deletes it, `action` presses the keyboard's Return, and `connect` starts over with a
+   * fresh connection for the focused field. Answers the focused view's class name.
    *
    * The Android twin of `HarnessUI.typeChar`, which only reaches an `EditText`: a
    * Compose field has no `EditText` (Q2 §4), and its keystrokes arrive the way every
@@ -106,6 +107,15 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
    * edit runs its `InputTransformation` (`maxLength`) as a keyboard's would. The
    * OS-level oracle is still the real-input runner's `adb shell input text`.
    */
+  /**
+   * The connection [imeInput] reuses, and the view it belongs to. One connection per
+   * focused field, the way an IME holds one: a fresh `onCreateInputConnection` per call
+   * hands Compose a new connection each time, and a composition opened on one did not
+   * survive the next (measured in G13 round 1). `connect` makes a new one.
+   */
+  private var connection: android.view.inputmethod.InputConnection? = null
+  private var connectionView: android.view.View? = null
+
   @ReactMethod
   fun imeInput(kind: String, text: String, promise: Promise) {
     val activity = reactApplicationContext.currentActivity
@@ -120,17 +130,27 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
           promise.reject("NO_FOCUS", "no view has focus")
           return@runOnUiThread
         }
-        val connection = focused.onCreateInputConnection(android.view.inputmethod.EditorInfo())
-        if (connection == null) {
+        if (kind == "connect" || connectionView !== focused || connection == null) {
+          connection = focused.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+          connectionView = focused
+        }
+        val ic = connection
+        if (ic == null) {
           promise.reject("NO_INPUT", "${focused.javaClass.simpleName} has no input connection")
           return@runOnUiThread
         }
         when (kind) {
-          "commit" -> connection.commitText(text, 1)
-          "compose" -> connection.setComposingText(text, 1)
-          "finish" -> connection.finishComposingText()
+          "connect" -> Unit
+          "commit" -> ic.commitText(text, 1)
+          "compose" -> ic.setComposingText(text, 1)
+          "finish" -> ic.finishComposingText()
+          // The user deleting the whole composition: empty composing text, then done.
+          "cancel" -> {
+            ic.setComposingText("", 1)
+            ic.finishComposingText()
+          }
           // Return on the soft keyboard: the editor action a single-line field submits on.
-          "action" -> connection.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
+          "action" -> ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
           else -> {
             promise.reject("BAD_KIND", "unknown input kind $kind")
             return@runOnUiThread
