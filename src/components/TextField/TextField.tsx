@@ -139,6 +139,8 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
           accessibilityLabel: string;
         };
         nuiTestSetMarkedText(text: string): void;
+        nuiTestCancelMarkedText(): void;
+        nuiTestPaste(text: string, at: number): void;
         nuiTestLifetimeReport(): string;
       }) => void)
     | undefined;
@@ -272,10 +274,21 @@ export function TextField({
   // mount with that mount's view, so the ref always holds the live one. The
   // callback is always sent: the `ref` needs it whether or not the app (well,
   // this repo's harness) passed a `hybridRef` of its own.
+  //
+  // The view arrives *after* the parent's effects have run: `hybridRef` reaches JS
+  // on a later turn than the commit that mounted the field. So a `focus()` or
+  // `blur()` asked for before then - `useEffect(() => ref.current?.focus(), [])`,
+  // the way to focus a field on mount - is held here, the newest ask winning, and
+  // run as soon as the view is handed over.
   const nativeView = useRef<NitroUiTextFieldHandle | null>(null);
+  const pendingFocus = useRef<'focus' | 'blur' | null>(null);
   const hybridRefCallback = useStableCallback(
     (view: NitroUiTextFieldHandle) => {
       nativeView.current = view;
+      const pending = pendingFocus.current;
+      pendingFocus.current = null;
+      if (pending === 'focus') view.focus();
+      else if (pending === 'blur') view.blur();
       hybridRef?.(view);
     }
   ) as NitroCallbackProp<(view: NitroUiTextFieldHandle) => void>;
@@ -283,8 +296,14 @@ export function TextField({
   useImperativeHandle(
     ref,
     () => ({
-      focus: () => nativeView.current?.focus(),
-      blur: () => nativeView.current?.blur(),
+      focus: () => {
+        if (nativeView.current != null) nativeView.current.focus();
+        else pendingFocus.current = 'focus';
+      },
+      blur: () => {
+        if (nativeView.current != null) nativeView.current.blur();
+        else pendingFocus.current = 'blur';
+      },
     }),
     []
   );

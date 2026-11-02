@@ -19,7 +19,13 @@
  *
  * @file Gates: `harness:ios`, `harness:android`.
  */
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Platform, TextInput, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -32,7 +38,11 @@ import {
   waitFor,
 } from 'react-native-harness';
 import { screen, userEvent } from '@react-native-harness/ui';
-import { TextField, nitroUiCore } from 'react-native-nitro-ui';
+import {
+  TextField,
+  nitroUiCore,
+  type TextFieldHandle,
+} from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
 import { expectTimingBudget } from './timingGate';
 
@@ -84,6 +94,8 @@ type FieldHandle = {
   blur(): void;
   nuiTestState(): FieldState;
   nuiTestSetMarkedText(text: string): void;
+  nuiTestCancelMarkedText(): void;
+  nuiTestPaste(text: string, at: number): void;
   nuiTestLifetimeReport(): string;
 };
 
@@ -428,14 +440,14 @@ describe('TextField', () => {
   });
 
   /*
-   * iOS only, as the brief scopes it. Android drops a write under an open
-   * `TextFieldState.composition` the same way (`HybridNitroUiTextField.kt`,
-   * `afterUpdate`), but a composition opened through an `InputConnection` from
-   * outside the IME is committed again before a write can reach it on the emulator
-   * (measured: `composing` never reads true after `setComposingText`, with the soft
-   * keyboard up or down), so there is no composition to write into.
+   * iOS only. Android holds a write back under `TextFieldState.composition` the same
+   * way, but a composition opened through an `InputConnection` from outside the IME
+   * is committed again before the app sees it on the lease's emulator - measured with a
+   * fresh connection per call and with one reused connection (G13 round 1) - so there
+   * is no composition to write into here. `TextFieldModelTest` holds the Android rules
+   * (emit while composing, the cap, the settle) on the JVM instead.
    */
-  const itComposes = it;
+  const itComposes = iOS ? it : it.skip;
   itComposes(
     'drops a JS write while a composition is open, and keeps the composition',
     async () => {
@@ -477,6 +489,98 @@ describe('TextField', () => {
       );
       expect(settled.text).toBe('abcか');
       expect(jsValues.get('ime')).toBe('abcか');
+    }
+  );
+
+  itComposes(
+    'settles a write a composition held back when the composition is deleted',
+    async () => {
+      render(<Controlled id="cancel" initial="abc" />);
+      await waitForTestId('cancel');
+      await focusField('cancel');
+      await compose('cancel', 'か');
+      await stateWhen('cancel', (s) => s.composing, 'the composition to open');
+      writers.get('cancel')?.('zzz');
+      await stateWhen(
+        'cancel',
+        (s) => s.lastWrite === 'composing',
+        'the held write'
+      );
+      // The user deletes the whole composition: the text is `abc` again, which native
+      // already counted, so no edit is reported - and the held write must still land.
+      (await handleOf('cancel')).nuiTestCancelMarkedText();
+      const settled = await stateWhen(
+        'cancel',
+        (s) => !s.composing && s.text === 'zzz',
+        'the held write landing once the composition was gone'
+      );
+      expect(settled.lastWrite).toBe('applied');
+      expect(jsValues.get('cancel')).toBe('zzz');
+      expect(eventsOf('cancel').filter((e) => e.startsWith('change:'))).toEqual(
+        []
+      );
+    }
+  );
+
+  it('focuses from its parent’s mount effect', async () => {
+    function FocusOnMount() {
+      const ref = useRef<TextFieldHandle>(null);
+      const onFocus = useCallback(() => log('mount-focus', 'focus'), []);
+      useEffect(() => {
+        // The only autofocus there is in v1: ask on mount, before the native view has
+        // reached JS.
+        ref.current?.focus();
+      }, []);
+      return (
+        <TextField
+          ref={ref}
+          testID="mount-focus"
+          onFocus={onFocus}
+          hybridRef={capture('mount-focus')}
+        />
+      );
+    }
+    render(<FocusOnMount />);
+    await waitForTestId('mount-focus');
+    await stateWhen(
+      'mount-focus',
+      (s) => s.focused,
+      'focus from the mount effect'
+    );
+    await waitFor(() => expect(eventsOf('mount-focus')).toEqual(['focus']), {
+      timeout: 5000,
+    });
+  });
+
+  /*
+   * The keyboard's own edit path, mid-text. `insertText` (what `typeText` uses)
+   * skips the `UITextField` delegate, so for typing at the end the post-edit
+   * backstop's tail cut and the delegate's insertion cut give the same answer; a paste
+   * into the middle is where they differ: `ab xy cd` (the part of the paste that
+   * fits) against `ab xyz c` (the end cut off). Between two spaces, because UIKit's
+   * smart insert pads a paste next to anything else with a space (measured: `xyz`
+   * arrived as ` xyz`, `-+=` as ` -+=`). iOS only - the paste hook is UIKit's.
+   */
+  const itPastes = iOS ? it : it.skip;
+  itPastes(
+    'keeps the part of a mid-text paste that fits, and the text after it',
+    async () => {
+      render(<Controlled id="paste-mid" initial="ab  cd" maxLength={8} />);
+      await waitForTestId('paste-mid');
+      await focusField('paste-mid');
+      (await handleOf('paste-mid')).nuiTestPaste('xyz', 3);
+      const state = await stateWhen(
+        'paste-mid',
+        // Counted and echoed: a snapshot published mid-edit (the selection moving)
+        // can show the new text before the edit is counted.
+        (s) => s.nativeEvents >= 1 && s.jsEvents === s.nativeEvents,
+        'the paste'
+      );
+      // Code units in the message: a space UIKit turned into another one prints alike.
+      expect(Array.from(state.text, (c) => c.charCodeAt(0)).join(',')).toBe(
+        Array.from('ab xy cd', (c) => c.charCodeAt(0)).join(',')
+      );
+      expect(jsValues.get('paste-mid')).toBe('ab xy cd');
     }
   );
 

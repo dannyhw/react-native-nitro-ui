@@ -242,6 +242,18 @@ namespace margelo::nitro::nitroui {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void nuiTestCancelMarkedText() override {
+      auto __result = _swiftPart.nuiTestCancelMarkedText();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline void nuiTestPaste(const std::string& text, double at) override {
+      auto __result = _swiftPart.nuiTestPaste(text, std::forward<decltype(at)>(at));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline std::string nuiTestLifetimeReport() override {
       auto __result = _swiftPart.nuiTestLifetimeReport();
       if (__result.hasError()) [[unlikely]] {

@@ -37,6 +37,8 @@ public protocol HybridNitroUiTextFieldSpec_protocol: HybridObject, HybridView {
   func blur() throws -> Void
   func nuiTestState() throws -> NitroUiTextFieldTestState
   func nuiTestSetMarkedText(text: String) throws -> Void
+  func nuiTestCancelMarkedText() throws -> Void
+  func nuiTestPaste(text: String, at: Double) throws -> Void
   func nuiTestLifetimeReport() throws -> String
 }
 

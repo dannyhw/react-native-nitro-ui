@@ -176,6 +176,24 @@ export interface NitroUiTextFieldMethods extends HybridViewMethods {
    */
   nuiTestSetMarkedText(text: string): void;
   /**
+   * TEMPORARY, test-only (iOS): delete the open composition the way a person does
+   * with Backspace on an IME keyboard - empty marked text, then `unmarkText()` - so the
+   * text goes back to what it was before the composition began. A no-op on Android
+   * (the example app's probe deletes one through the `InputConnection`).
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestCancelMarkedText(): void;
+  /**
+   * TEMPORARY, test-only (iOS): paste `text` at UTF-16 offset `at`, through
+   * `UIResponderStandardEditActions.paste(_:)` - the edit path that runs the field's
+   * `shouldChangeCharactersIn`, which `insertText` does not. Needs a focused
+   * single-line field. A no-op on Android.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPaste(text: string, at: number): void;
+  /**
    * TEMPORARY, test-only (task F6): `drops=<n> recycles=<m>` for this object,
    * as `NitroUiSwitchMethods.nuiTestLifetimeReport` describes.
    *

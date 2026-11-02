@@ -287,6 +287,14 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* text */)>("nuiTestSetMarkedText");
     method(_javaPart, jni::make_jstring(text));
   }
+  void JHybridNitroUiTextFieldSpec::nuiTestCancelMarkedText() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestCancelMarkedText");
+    method(_javaPart);
+  }
+  void JHybridNitroUiTextFieldSpec::nuiTestPaste(const std::string& text, double at) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* text */, double /* at */)>("nuiTestPaste");
+    method(_javaPart, jni::make_jstring(text), at);
+  }
   std::string JHybridNitroUiTextFieldSpec::nuiTestLifetimeReport() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestLifetimeReport");
     auto __result = method(_javaPart);

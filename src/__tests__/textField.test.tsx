@@ -224,8 +224,6 @@ describe('TextField · callbacks and ref', () => {
         hybridRef={(handle) => internal.push(handle)}
       />
     );
-    // Before native hands its view over, a call is a no-op rather than a throw.
-    ref.current?.focus();
     const native = { focus, blur };
     await act(async () =>
       fire(nativeProps(view, 'field'), 'hybridRef', native)
@@ -236,5 +234,35 @@ describe('TextField · callbacks and ref', () => {
     expect(blur).toHaveBeenCalledTimes(1);
     // And the harness's own `hybridRef` still gets the same view.
     expect(internal).toEqual([native]);
+  });
+
+  it('keeps a focus() asked for before the native view arrived, and runs it then', async () => {
+    // The order a parent's mount effect gives: `ref` is attached and the effect runs
+    // in the commit that mounts the field; `hybridRef` reaches JS later.
+    const ref = createRef<TextFieldHandle>();
+    const focus = jest.fn();
+    const blur = jest.fn();
+    const view = await render(<TextField ref={ref} testID="field" />);
+    ref.current?.focus();
+    expect(focus).not.toHaveBeenCalled();
+    await act(async () =>
+      fire(nativeProps(view, 'field'), 'hybridRef', { focus, blur })
+    );
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(blur).not.toHaveBeenCalled();
+  });
+
+  it('runs only the newest of several early asks', async () => {
+    const ref = createRef<TextFieldHandle>();
+    const focus = jest.fn();
+    const blur = jest.fn();
+    const view = await render(<TextField ref={ref} testID="field" />);
+    ref.current?.focus();
+    ref.current?.blur();
+    await act(async () =>
+      fire(nativeProps(view, 'field'), 'hybridRef', { focus, blur })
+    );
+    expect(focus).not.toHaveBeenCalled();
+    expect(blur).toHaveBeenCalledTimes(1);
   });
 });

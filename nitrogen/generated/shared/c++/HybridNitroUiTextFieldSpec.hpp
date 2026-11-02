@@ -101,6 +101,8 @@ namespace margelo::nitro::nitroui {
       virtual void blur() = 0;
       virtual NitroUiTextFieldTestState nuiTestState() = 0;
       virtual void nuiTestSetMarkedText(const std::string& text) = 0;
+      virtual void nuiTestCancelMarkedText() = 0;
+      virtual void nuiTestPaste(const std::string& text, double at) = 0;
       virtual std::string nuiTestLifetimeReport() = 0;
 
     protected:

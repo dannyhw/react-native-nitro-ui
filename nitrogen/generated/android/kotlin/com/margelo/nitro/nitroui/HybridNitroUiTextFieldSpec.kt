@@ -195,6 +195,14 @@ abstract class HybridNitroUiTextFieldSpec: HybridView() {
   
   @DoNotStrip
   @Keep
+  abstract fun nuiTestCancelMarkedText(): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPaste(text: String, at: Double): Unit
+  
+  @DoNotStrip
+  @Keep
   abstract fun nuiTestLifetimeReport(): String
 
   // Default implementation of `HybridObject.toString()`
