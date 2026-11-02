@@ -135,6 +135,16 @@ internal class TextFieldModel : NitroUiModel() {
   private var wasComposing = false
 
   /**
+   * Whether the `maxLength` backstop is owed: an open composition left the field past the
+   * cap, and the cut waits for it to end. Writing an `EditText` inside a composition closes
+   * it and clears the IME's undo state, which takes the half-typed word with it - a cap is
+   * not worth that, and does not have to be: every way out of a composition reports the
+   * field again ([catchUp] through the `snapshotFlow` collector), and the cut is cheap then
+   * (G13 review, fix round 2).
+   */
+  private var capOwed = false
+
+  /**
    * Runs a `value` write a composition held back (`lastWrite == "composing"`) once the
    * composition is over. Installed by the Hybrid View, which owns reconciling and
    * writing the field.
@@ -156,7 +166,9 @@ internal class TextFieldModel : NitroUiModel() {
    * - Text past `maxLength` that grew past what native accounted for is cut back, at a
    *   grapheme boundary. A backstop: [NitroUiTextLimit] cuts an insertion as it
    *   happens, and this catches what reaches the field another way. A JS write is
-   *   accounted for when it is written, so it is never cut here.
+   *   accounted for when it is written, so it is never cut here. While a composition is
+   *   open the cut is deferred ([capOwed]) and applied by the observation that reports the
+   *   field once the composition has ended, so the cap holds afterwards either way.
    * - When a composition ends, a write it held back is settled ([settle]), whether or
    *   not its end changed the text: a composition the user deleted leaves the text
    *   native already counted, so no edit and no commit would ever decide it again.
@@ -164,10 +176,19 @@ internal class TextFieldModel : NitroUiModel() {
   fun observe(observed: String, isComposing: Boolean) {
     var text = observed
     val limit = maxLength
-    if (limit != null && text != accounted && text.length > limit && text.length > accounted.length) {
-      val keep = NitroUiTextLimit.graphemeFloor(text, limit)
-      text = text.substring(0, keep)
-      textState.edit { replace(keep, length, "") }
+    if (limit != null && text.length > limit) {
+      val grewPastCap = text != accounted && text.length > accounted.length
+      if (isComposing) {
+        // The composition keeps its text; the cut is owed until one is reported over.
+        if (grewPastCap) capOwed = true
+      } else if (grewPastCap || capOwed) {
+        val keep = NitroUiTextLimit.graphemeFloor(text, limit)
+        text = text.substring(0, keep)
+        textState.edit { replace(keep, length, "") }
+        capOwed = false
+      }
+    } else {
+      capOwed = false
     }
     val ended = wasComposing && !isComposing
     wasComposing = isComposing
@@ -200,6 +221,7 @@ internal class TextFieldModel : NitroUiModel() {
     textState = TextFieldState("")
     accounted = ""
     wasComposing = false
+    capOwed = false
     defaultValue = null
     didApplyDefault = false
     placeholder = null

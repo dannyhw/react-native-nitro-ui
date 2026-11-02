@@ -1,4 +1,4 @@
-import { useImperativeHandle, useRef, type Ref } from 'react';
+import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
 import { type ViewProps } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
@@ -283,8 +283,14 @@ export function TextField({
   // run as soon as the view is handed over.
   const nativeView = useRef<NitroUiTextFieldHandle | null>(null);
   const pendingFocus = useRef<'focus' | 'blur' | null>(null);
+  // Whether this field is still mounted. Nitro can hand `hybridRef` to JS after the
+  // unmount - React has run its cleanups by then, and the native view it names may
+  // already be recycled into another field - so a queued ask is dropped at the
+  // unmount and a late `hybridRef` is dropped here rather than acted upon.
+  const mounted = useRef(true);
   const hybridRefCallback = useStableCallback(
     (view: NitroUiTextFieldHandle) => {
+      if (!mounted.current) return;
       nativeView.current = view;
       const pending = pendingFocus.current;
       pendingFocus.current = null;
@@ -298,16 +304,27 @@ export function TextField({
     ref,
     () => ({
       focus: () => {
+        if (!mounted.current) return;
         if (nativeView.current != null) nativeView.current.focus();
         else pendingFocus.current = 'focus';
       },
       blur: () => {
+        if (!mounted.current) return;
         if (nativeView.current != null) nativeView.current.blur();
         else pendingFocus.current = 'blur';
       },
     }),
     []
   );
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pendingFocus.current = null;
+      nativeView.current = null;
+    };
+  }, []);
 
   // One native callback for both edges, split here, and always sent (D7b).
   // `useStableCallback` keeps one identity and calls the newest closure.

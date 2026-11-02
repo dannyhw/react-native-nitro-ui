@@ -861,14 +861,20 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView {
       return
     }
     var text = control.nuiText
-    if let limit = model.maxLength, (text as NSString).length > limit,
-      (text as NSString).length > (model.state.displayed.string as NSString).length
-    {
-      // A backstop for text that *grew* past the limit without the delegate's cut - a
-      // composition's commit, or `insertText`. A deletion from text a JS write put past
-      // the limit is left alone, as the delegate leaves it.
-      text = NitroUiTextLimit.truncate(text, to: limit)
-      control.nuiSetText(text)
+    if let limit = model.maxLength, (text as NSString).length > limit {
+      // A backstop for text that got past the delegate's cut - a composition's commit, or
+      // `insertText`. It cuts the *edit*, not the field: what the user typed takes the room
+      // the cap still has wherever they put it, and the text around it keeps its place.
+      // Cutting the tail instead lost the words on either side of a mid-field commit.
+      let kept = NitroUiCommitDelta.clamped(
+        displayed: model.state.displayed.string,
+        incoming: text,
+        limit: limit
+      )
+      if kept != text {
+        text = kept
+        control.nuiSetText(text)
+      }
     }
     let next = NitroUiText(text)
     if next != model.state.displayed {
