@@ -14,17 +14,19 @@ the layout engine, and React never sees a native node.
 
 ## Components
 
-| Component          | iOS                                                         | Android                                                      | Status | Docs                                                         |
-| ------------------ | ----------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
-| `Switch`           | `Toggle(…).toggleStyle(.switch)`                            | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
-| `Slider`           | `Slider(value:in:step:onEditingChanged:)`                   | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
-| `Progress`         | `ProgressView` + `.progressViewStyle(.linear / .circular)`  | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
-| `Button`           | `Button(action:) { Label }` + `.buttonStyle(…)`             | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
-| `SegmentedControl` | `Picker(…).pickerStyle(.segmented)`                         | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`           | `Picker(…).pickerStyle(.menu / .wheel)`                     | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`       | `DatePicker` (`.graphical` / `.wheel`, compact field)       | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`             | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
-| `Host`             | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
+| Component            | iOS                                                         | Android                                                      | Status | Docs                                                         |
+| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`             | `Toggle(…).toggleStyle(.switch)`                            | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`             | `Slider(value:in:step:onEditingChanged:)`                   | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`  | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`             | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                         | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                     | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)       | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
+| `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                 | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
+| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`           | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
+| `Host`               | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It held Switches only
@@ -39,7 +41,9 @@ diagnostics) and `prewarm` (see [Sizing](#sizing)):
 
 ```ts
 import {
+  AlertDialog,
   Button,
+  ConfirmationDialog,
   DatePicker,
   Host,
   Menu,
@@ -404,6 +408,54 @@ fires `onSelect` before the `onClose` that follows it. `systemImage` and
 `primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
 submenu nests on iOS and appears inline under a divider on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
+
+### AlertDialog and ConfirmationDialog
+
+Two exports over one native view. A dialog has no box: the view React Native
+lays out is a `0 × 0` anchor, and the window is the platform's — UIKit's
+`UIAlertController` on iOS (an alert, or an action sheet for a confirmation),
+Material 3's `AlertDialog` on Android, and a `ModalBottomSheet` of rows for a
+confirmation. The actions are data, like a `Menu`'s rows.
+
+```tsx name=dialog
+const DRAFT_ACTIONS: DialogAction[] = [
+  { id: 'keep', title: 'Keep', role: 'cancel' },
+  { id: 'delete', title: 'Delete', role: 'destructive' },
+];
+
+export function DeleteDraft({ onDelete }: { onDelete: () => void }) {
+  const [asking, setAsking] = useState(false);
+
+  return (
+    <>
+      <Button
+        title="Delete draft"
+        variant="text"
+        size="medium"
+        onPress={() => setAsking(true)}
+      />
+      <AlertDialog
+        isPresented={asking}
+        onIsPresentedChange={setAsking}
+        title="Delete the draft?"
+        message="The draft and its photos go for good."
+        actions={DRAFT_ACTIONS}
+        onAction={(id) => {
+          if (id === 'delete') onDelete();
+        }}
+      />
+    </>
+  );
+}
+```
+
+`isPresented` is controlled: every native open or close comes back through
+`onIsPresentedChange`, and a tapped action reports `onAction(id)` before the
+close (DECISIONS D32). An app that keeps `isPresented` true after a dismissal
+gets the dialog back (D33). `dismissible={false}` leaves only the actions as a
+way out. On iOS the dialog is presented from a window of its own, so it works
+inside and over a React Native `Modal`.
+[dialog.md](docs/components/dialog.md) has the platform details.
 
 ### Host
 

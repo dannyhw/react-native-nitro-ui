@@ -12,8 +12,10 @@
  * screens in this folder, and nothing imports this file.
  */
 import {
+  AlertDialog,
   Button,
   DatePicker,
+  type DialogAction,
   Host,
   Menu,
   type MenuGroup,
@@ -150,6 +152,38 @@ export function FileActions() {
         variant="tonal"
         size="medium"
         onSelect={setLast}
+      />
+    </>
+  );
+}
+// #endregion
+
+// #region dialog
+const DRAFT_ACTIONS: DialogAction[] = [
+  { id: 'keep', title: 'Keep', role: 'cancel' },
+  { id: 'delete', title: 'Delete', role: 'destructive' },
+];
+
+export function DeleteDraft({ onDelete }: { onDelete: () => void }) {
+  const [asking, setAsking] = useState(false);
+
+  return (
+    <>
+      <Button
+        title="Delete draft"
+        variant="text"
+        size="medium"
+        onPress={() => setAsking(true)}
+      />
+      <AlertDialog
+        isPresented={asking}
+        onIsPresentedChange={setAsking}
+        title="Delete the draft?"
+        message="The draft and its photos go for good."
+        actions={DRAFT_ACTIONS}
+        onAction={(id) => {
+          if (id === 'delete') onDelete();
+        }}
       />
     </>
   );
