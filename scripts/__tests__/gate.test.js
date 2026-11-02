@@ -62,6 +62,7 @@ import {
   pidMayBeRunning,
   runningBackgroundGates,
 } from '../gate-core.mjs';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 /** Tree digest used as "the code this ledger line was about" in these tests. */
 const TREE_A =
@@ -1637,7 +1638,10 @@ function runCli(dir, args, extraEnv = {}) {
     encoding: 'utf8',
     timeout: 120_000,
     env: {
-      ...process.env,
+      // The shell's lease never travels into a fixture (X16 item 1): this file's checkouts carry
+      // their own fake `NITRO_UI_HOME` and their own lease ids, and an inherited `METRO_PORT` would
+      // have the CLI run its Metro pre-flight against a port this test never chose.
+      ...withoutLeaseEnv(process.env),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
@@ -1654,7 +1658,9 @@ function spawnCli(dir, args, extraEnv = {}) {
     cwd: dir,
     encoding: 'utf8',
     env: {
-      ...process.env,
+      // Same scrub as `runCli`: a signal test is about the CLI's own process handling, and a lease
+      // inherited from the shell would change which pre-flight it runs before it ever got a signal.
+      ...withoutLeaseEnv(process.env),
       PATH: `${bin}${path.delimiter}${process.env.PATH}`,
       ...extraEnv,
     },
@@ -2430,6 +2436,39 @@ describeCli('gate.mjs --background and wait', () => {
     // ledger's: the log is the only place the child's argv appears.
     const log = fs.readFileSync(logFile(dir, lines[0].logPath), 'utf8');
     expect(log).toContain('--platform ios');
+  }, 90_000);
+
+  it('records nothing for a usage probe, on either side of --', async () => {
+    // X16 item 3. `gate.mjs bench --help` used to resolve as the bench gate with a
+    // `--help` filter, run `run.mjs --help` - which prints usage and exits 2 - and
+    // append `bench:--help FAIL` to the branch ledger. A FAIL row is evidence that a
+    // gate ran and lost: `table` puts it first, `status` reports the branch as red,
+    // and `export --task` writes a scrubbed failure excerpt for a command that never
+    // measured anything. Asking how a gate is spelled is not a run.
+    //
+    // `FAKE_EXIT=2` keeps the fixture honest about the shape of the bug: the real
+    // runner's help does exit non-zero, so a pre-fix probe lands a *FAIL* row, the
+    // same one the report shows, rather than a passing one the fake would print.
+    const dir = checkout(iosOnly);
+    for (const args of [
+      ['bench', '--help'],
+      ['bench', '--', '--help'],
+      ['bench', '-h'],
+      ['harness:android', '--help'],
+      ['check', '--help'],
+    ]) {
+      const probe = runCli(dir, args, { FAKE_EXIT: '2' });
+      expect({ args, status: probe.status }).toEqual({ args, status: 0 });
+      expect(probe.stdout).toContain('usage: node scripts/gate.mjs');
+      // The point of the whole case: no ledger line, so `status` and `table` never
+      // see a probe as a gate result.
+      expect(ledgerLines(dir)).toEqual([]);
+    }
+    // And it is the probe that is exempt, not the gate: a real run still records.
+    expect(runCli(dir, ['bench', '--', '--platform', 'ios']).status).toBe(0);
+    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
+      'bench:--platform:ios',
+    ]);
   }, 90_000);
 });
 

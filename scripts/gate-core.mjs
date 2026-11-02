@@ -2944,6 +2944,34 @@ export function canonicalGateName(base, extraArgs = []) {
   return `${base}:${args.map((value) => encodeURIComponent(value)).join(':')}`;
 }
 
+/** The flags that mean "just tell me how this is spelled". */
+export const USAGE_PROBE_FLAGS = ['--help', '-h'];
+
+/**
+ * Is this command line a help probe rather than a gate run?
+ *
+ * `gate.mjs bench --help` used to resolve as the bench gate with a `--help` filter, launch
+ * `scripts/bench/run.mjs --help` - which prints its usage and exits 2 - and append
+ * `bench:--help FAIL` to the branch ledger (X16 item 3, seen in G7b's and A6b's tables). A FAIL
+ * row is evidence: `table` puts it first, `status` calls the branch red, and `export --task`
+ * writes a scrubbed failure excerpt for a command that measured nothing. So a probe never reaches
+ * `runGate`, on either side of `--`, and in the colon-packed form too (`bench:--help`), and the
+ * answer is this script's own usage - which is where "how do I spell the bench gate" is answered.
+ * A runner's own flags come from running that runner directly.
+ *
+ * @param {string} name the gate name as typed
+ * @param {string[]} extraArgs every remaining argument, before or after `--`
+ * @returns {boolean}
+ */
+export function isUsageProbe(name, extraArgs = []) {
+  const packed = String(name ?? '')
+    .split(':')
+    .slice(1);
+  return [...packed, ...extraArgs].some((value) =>
+    USAGE_PROBE_FLAGS.includes(String(value))
+  );
+}
+
 /**
  * Gate name -> the command to run, where, and the name to record it under.
  *

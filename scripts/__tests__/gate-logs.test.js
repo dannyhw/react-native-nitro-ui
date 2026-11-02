@@ -53,6 +53,7 @@ import {
   splitDeviceContext,
   summarizeLoad,
 } from '../gate-core.mjs';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 
@@ -75,15 +76,17 @@ function scratch(prefix) {
  * inherited `GIT_DIR`/`GIT_WORK_TREE` would send a fixture's `git worktree add` or
  * `git commit` into it.
  *
- * The `NITRO_UI_*`, `ANDROID_SERIAL` and `IOS_SIM*` variables are dropped for the
- * same reason in the other direction (review N8): the suite is routinely run from a
- * dev shell that has sourced a lease, or from under a backgrounded `gate.mjs` (which
- * exports `NITRO_UI_GATE_LOG`), and any of those would silently retarget a fixture -
- * its store, its device, or its log path - so a test could pass or fail depending on
- * who typed `bun run test`.
+ * The lease-scoped variables (`METRO_PORT`, `ANDROID_SERIAL`, the whole `NITRO_UI_*` and `IOS_*`
+ * namespaces) are dropped for the same reason in the other direction (review N8): the suite is
+ * routinely run from a dev shell that has sourced a lease, or from under a backgrounded `gate.mjs`
+ * (which exports `NITRO_UI_GATE_LOG`), and any of those would silently retarget a fixture - its
+ * store, its device, or its log path - so a test could pass or fail depending on who typed
+ * `bun run test`. The list used to be hand-written and narrower than a lease's own output: it missed
+ * `METRO_PORT`, on which `gate.mjs` runs its Metro pre-flight, which is the 25-failure incident G8
+ * recorded and X16 item 1 closes. One shared helper now covers all three gate suites.
  */
 function gitEnv(dir) {
-  const env = { ...process.env };
+  const env = { ...withoutLeaseEnv(process.env) };
   for (const name of [
     'GIT_DIR',
     'GIT_WORK_TREE',
@@ -94,17 +97,6 @@ function gitEnv(dir) {
     'GIT_NAMESPACE',
   ]) {
     delete env[name];
-  }
-  for (const name of Object.keys(env)) {
-    if (
-      name.startsWith('NITRO_UI_') ||
-      name === 'ANDROID_SERIAL' ||
-      name === 'ANDROID_AVD' ||
-      name === 'EMULATOR_PORT' ||
-      name.startsWith('IOS_SIM')
-    ) {
-      delete env[name];
-    }
   }
   return {
     ...env,

@@ -34,6 +34,7 @@ import {
   renderStepTimings,
   stepTimingsOf,
 } from '../gate-core.mjs';
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
 
 const CLI = path.join(process.cwd(), 'scripts', 'gate.mjs');
 const CHECK_STEPS = path.join(process.cwd(), 'scripts', 'check-steps.mjs');
@@ -718,7 +719,7 @@ afterAll(() => {
  * rather than passed through, and `gitIn` additionally asserts which repository it is talking to.
  */
 function gitEnv(dir) {
-  const env = { ...process.env };
+  const env = { ...withoutLeaseEnv(process.env) };
   for (const name of [
     'GIT_DIR',
     'GIT_WORK_TREE',
