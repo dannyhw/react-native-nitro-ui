@@ -26,6 +26,7 @@ the layout engine, and React never sees a native node.
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                 | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`           | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
+| `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)     | M3 `ModalBottomSheet` with React Native content              | next   | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Host`               | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
@@ -42,6 +43,7 @@ diagnostics) and `prewarm` (see [Sizing](#sizing)):
 ```ts
 import {
   AlertDialog,
+  BottomSheet,
   Button,
   ConfirmationDialog,
   DatePicker,
@@ -456,6 +458,65 @@ gets the dialog back (D33). `dismissible={false}` leaves only the actions as a
 way out. On iOS the dialog is presented from a window of its own, so it works
 inside and over a React Native `Modal`.
 [dialog.md](docs/components/dialog.md) has the platform details.
+
+### BottomSheet
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/bottom-sheet-ios.png" width="300" alt="A fit BottomSheet holding React Native content, as tall as that content, on iOS" /></td>
+    <td><img src="docs/images/components/bottom-sheet-android.png" width="300" alt="A fit BottomSheet holding React Native content, as tall as that content, on Android" /></td>
+  </tr>
+</table>
+
+A modal sheet whose content is React Native: UIKit's sheet presentation on iOS,
+Material 3's `ModalBottomSheet` on Android. The children are laid out at the
+sheet's width and take touches as anywhere else in the app; they are mounted
+only while the sheet is up.
+
+```tsx name=bottom-sheet
+export function Filters() {
+  const [open, setOpen] = useState(false);
+  const [detent, setDetent] = useState(0);
+
+  return (
+    <>
+      <Button
+        title="Filters"
+        variant="tonal"
+        size="medium"
+        onPress={() => setOpen(true)}
+      />
+      <BottomSheet
+        isPresented={open}
+        onIsPresentedChange={setOpen}
+        detents={['medium', 'large']}
+        onDetentChange={setDetent}
+        accessibilityLabel="Filters"
+      >
+        <View style={{ padding: 24, gap: 12 }}>
+          <Text>{detent === 0 ? 'Half height' : 'Full height'}</Text>
+          <Button
+            title="Done"
+            variant="filled"
+            size="medium"
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </BottomSheet>
+    </>
+  );
+}
+```
+
+Detents use SwiftUI's names - `'fit'` (the default: as tall as the content, and
+following it), `'medium'`, `'large'`, `{ height }` and `{ fraction }` - and the
+detent the user drags to is reported, not controlled. Android's Material sheet
+has two rest positions, so there `'medium'` is the half-expanded one and the
+largest other detent the expanded one. `isPresented` works as a dialog's does. On
+iOS the sheet presents in the screen's own chain, and from a window of its own
+when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
+[bottom-sheet.md](docs/components/bottom-sheet.md) has the platform details.
 
 ### Host
 
