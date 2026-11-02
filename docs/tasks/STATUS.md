@@ -78,3 +78,4 @@
 | T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | running |
 | Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
+| S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | running |
