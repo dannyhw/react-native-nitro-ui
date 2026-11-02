@@ -92,6 +92,8 @@
 > (Q5 Appendix B, D33). iOS presents from its own window (`ios/core/NitroUiPresentation.swift`, shared with DatePicker),
 > so a dialog over an RN `Modal` can't strand it. Built, fixed twice and merge-gated on maintainer-mac-1 by Claude Opus at
 > `auto`: the merge branch `task/G11-merge` carried the five-gate ledger, and `main` was fast-forwarded to it.
+> **0.4.3 live, 0.5.0 staged (2026-11-02):** the owner approved 0.4.3 (tagged by a dispatched `Release tag`). Version
+> Packages PR #25 merged (`4f931b2`, minor: the dialogs); Release run 41483605054 green with `Stage on npm` succeeded.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
