@@ -1,0 +1,93 @@
+# Failure excerpt — harness:ios:Conformance%7CHostControls
+
+- Ran: 2026-11-02T18:44:01.448Z on code tree `a28d2fe556ca` at HEAD `a5239d7` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance|HostControls`
+- Result: fail, exit 1, 115090 ms
+- Load: start 5.07, end 7.62, median 6.17, max 7.62
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-h83ki`
+- Full log: `task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log` (<store>/task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Console`
+- `● Host · a hosted Slider is still a Slider › reports a hosted drag through all three callbacks`
+- `expected undefined to be defined`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (still live)
+  |   G12-h83ki                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.62 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 51 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:Conformance%7CHostControls
+gate: node ../scripts/harness.mjs --harnessRunner ios Conformance|HostControls (cwd example)
+gate: code tree a28d2fe556ca at HEAD a5239d7
+gate: git tree 2359faffa2af
+gate: log task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log
+gate:       <store>/task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance|HostControls
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a28d2fe556ca, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.07/5.35 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/HostControls.harness.tsx
+  ● Console
+
+    console.error
+      Each child in a list should have a unique "key" prop.
+      
+      Check the render method of `View`. It was passed a child from MixedList. See https://react.dev/link/warning-keys for more information.
+
+  ● Host · a hosted Slider is still a Slider › reports a hosted drag through all three callbacks
+
+    expected undefined to be defined
+
+      [0m [90m 771 |[39m     )[33m;[39m
+       [90m 772 |[39m     [36mawait[39m boxOf([32m'slide-0'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 773 |[39m     expect(log[33m.[39msliders[[32m'slide-0'[39m])[33m.[39mtoBeDefined()[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 774 |[39m
+       [90m 775 |[39m     [36mawait[39m drag([32m'slide-0'[39m[33m,[39m [35m0.75[39m)[33m;[39m
+       [90m 776 |[39m     [36mconst[39m kinds [33m=[39m kindsFor([32m'slide-0'[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 60 passed, 61 total
+Snapshots:   0 total
+Time:        113.959 s
+Ran all test suites matching Conformance|HostControls.
+gate: harness:ios:Conformance%7CHostControls FAIL in 115.1 s
+gate: recorded in .gates/task/G12-chip.jsonl
+
+
+gate: appended the device context to task/G12-chip/harness+ios+Conformance+7CHostControls-2026-11-02T18-44-01.071Z.log (4 probe(s))
+
+```

@@ -1,0 +1,86 @@
+# Failure excerpt — harness:android:Conformance
+
+- Ran: 2026-11-02T18:18:25.214Z on code tree `65fdd5da9754` at HEAD `d16968e` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Conformance`
+- Result: fail, exit 1, 99402 ms
+- Load: start 8.80, end 7.70, median 8.86, max 13.08
+- Device: android / device `emulator-5574` / lease `G12-h83ki`
+- Full log: `task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log` (<store>/task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · Chip › shows none of its previous owner under one identity`
+- `expected [ 'conformance-chip:true' ] to deeply equal [ 'conformance-chip:false' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (still live)
+  |   G12-h83ki                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.72 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Conformance
+gate: node ../scripts/harness.mjs --harnessRunner android Conformance (cwd example)
+gate: code tree 65fdd5da9754 at HEAD d16968e
+gate: git tree 0475d702c697 with a DIRTY worktree (not reusable)
+gate: log task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log
+gate:       <store>/task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Conformance
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 65fdd5da9754, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.80/7.42 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · Chip › shows none of its previous owner under one identity
+
+    expected [ 'conformance-chip:true' ] to deeply equal [ 'conformance-chip:false' ]
+
+      [0m [90m 2503 |[39m         [36mawait[39m pressChip([32m'conformance-chip'[39m)[33m;[39m
+       [90m 2504 |[39m         [36mawait[39m waitFor(() [33m=>[39m
+      [31m[1m>[22m[39m[90m 2505 |[39m           expect(eventsSince([35m0[39m))[33m.[39mtoEqual([[32m'conformance-chip:false'[39m])
+       [90m      |[39m                                         [31m[1m^[22m[39m
+       [90m 2506 |[39m         )[33m;[39m
+       [90m 2507 |[39m       }[33m,[39m
+       [90m 2508 |[39m       second[33m:[39m () [33m=>[39m ([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 49 passed, 50 total
+Snapshots:   0 total
+Time:        98.397 s
+Ran all test suites matching Conformance.
+gate: harness:android:Conformance FAIL in 99.4 s
+gate: recorded in .gates/task/G12-chip.jsonl
+
+
+gate: appended the device context to task/G12-chip/harness+android+Conformance-2026-11-02T18-18-24.837Z.log (5 probe(s))
+
+```
