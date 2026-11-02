@@ -1,0 +1,195 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T17:09:40.486Z on code tree `1805c810d6d2` at HEAD `25afecf` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 276861 ms
+- Load: start 4.11, end 4.88, median 4.16, max 5.94
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-09-40.185Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-09-40.185Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● Console`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing`
+- `Error: Promise created`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-09-40.185Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (no longer live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.88 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 173 — the rest is in the full log above)
+
+```
+    console.log
+      s2: ios fit-3-rows attached=1 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=sheetPresentation contentRect=8,602+386x230 contentW=402 corrections=0 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=0 inModalChain=0 maxVisibleH=271 minVisibleH=271 ownWindow=0 presented=1 samples=40 settledBoundsH=274 settledVisibleH=271 touchHandler=1 userDismissals=0 windowLevel=0 liveControllers=1 handlerViews=1 modalHostsInWindow=0 presentedDepth=2 topController=SheetProtoViewController presentations=1 entryLandedFirst=1 modalHostsHolding=0 appTopController=SheetProtoViewController appMarkerOwner=app appMarkerView=UIDimmingView sheetPointOwner=app sheetPointView=UIDimmingView probeVersion=2 markerReachable=notFound
+
+
+    console.log
+      s2: ios fit-5-rows attached=1 boundsChanges=1 boxSent=2 chromeChanges=0 chromeH=0 contentChanges=2 contentH=400 contentHitOwner=sheet contentRect=8,449+386x384 contentW=402 corrections=1 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=51 inModalChain=0 maxVisibleH=425 minVisibleH=271 ownWindow=0 presented=1 samples=90 settledBoundsH=434 settledVisibleH=425 touchHandler=1 userDismissals=0 windowLevel=0 liveControllers=1 handlerViews=1 modalHostsInWindow=0 presentedDepth=2 topController=SheetProtoViewController presentations=1 entryLandedFirst=1 modalHostsHolding=0 appTopController=SheetProtoViewController appMarkerOwner=app appMarkerView=UIDimmingView sheetPointOwner=sheet sheetPointView=UIView probeVersion=2 markerReachable=notFound
+
+
+    console.log
+      s2: ios fit events s21:update=1 s21:presented=1
+
+
+    console.log
+      s2: withheld-box native=402x240 layout=0x240
+
+
+    console.log
+      s2: ios medium-scroll attached=1 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=0 contentH=436 contentHitOwner=sheetPresentation contentRect=8,415+386x418 contentW=402 corrections=0 detent=medium firstBoundsH=470 firstVisibleH=459 framesToSettle=0 inModalChain=0 maxVisibleH=459 minVisibleH=459 ownWindow=0 presented=1 samples=40 settledBoundsH=470 settledVisibleH=459 touchHandler=1 userDismissals=0 windowLevel=0 liveControllers=1 handlerViews=1 modalHostsInWindow=0 presentedDepth=2 topController=SheetProtoViewController presentations=3 dismissals=2 closes=2 closedDuringEntry=1 entryLandedFirst=2 releasedAfterExit=2 modalHostsHolding=0 appTopController=SheetProtoViewController appMarkerOwner=app appMarkerView=UIDimmingView sheetPointOwner=app sheetPointView=UIDimmingView probeVersion=2 markerReachable=notFound drops=2
+
+
+    console.log
+      s2: ios medium 402x436 402x436 402x3200 chromeH=0
+
+
+    console.log
+      s2: ios large-scroll attached=1 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=0 contentH=778 contentHitOwner=sheetPresentation contentRect=0,62+402x778 contentW=402 corrections=0 detent=large firstBoundsH=812 firstVisibleH=812 framesToSettle=0 inModalChain=0 maxVisibleH=812 minVisibleH=812 ownWindow=0 presented=1 samples=40 settledBoundsH=812 settledVisibleH=812 touchHandler=1 userDismissals=0 windowLevel=0 liveControllers=1 handlerViews=1 modalHostsInWindow=0 presentedDepth=2 topController=SheetProtoViewController presentations=4 dismissals=3 closes=3 closedDuringEntry=1 entryLandedFirst=3 releasedAfterExit=2 modalHostsHolding=0 appTopController=SheetProtoViewController appMarkerOwner=app appMarkerView=UIDimmingView sheetPointOwner=app sheetPointView=UIDimmingView probeVersion=2 markerReachable=notFound drops=3
+
+
+    console.log
+      s2: ios large 402x778 402x778 402x3200 chromeH=0
+
+
+    console.log
+      s2: ios detents mediumViewport=436 largeViewport=778
+
+
+    console.log
+      s2: ios after-js-close attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=0 contentH=778 contentHitOwner=noController contentW=402 corrections=0 detent=large firstBoundsH=812 firstVisibleH=812 framesToSettle=0 inModalChain=noController maxVisibleH=812 minVisibleH=812 ownWindow=0 presented=0 samples=40 settledBoundsH=812 settledVisibleH=812 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 modalHostsInWindow=0 presentedDepth=1 topController=UIViewController presentations=5 dismissals=5 closes=5 closedDuringEntry=2 entryLandedFirst=4 releasedAfterExit=4 modalHostsHolding=0 appTopController=UIViewController appMarkerOwner=app appMarkerView=RCTParagraphComponentView sheetPointOwner=app sheetPointView=HybridNitroUiSheetProtoComponent probeVersion=2 markerReachable=notFound drops=4
+
+
+    console.log
+      s2: after-js-close events s25:update=1 s25:update=0 s25:dismiss-deferred=1 s25:closed=1
+
+
+    console.log
+      s2: ios after-drop-while-presented attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=0 contentH=778 contentHitOwner=noController contentW=402 corrections=0 detent=large firstBoundsH=812 firstVisibleH=812 framesToSettle=0 inModalChain=noController maxVisibleH=812 minVisibleH=812 ownWindow=0 presented=0 samples=40 settledBoundsH=812 settledVisibleH=812 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 modalHostsInWindow=0 presentedDepth=1 topController=UIViewController presentations=5 dismissals=5 closes=5 closedDuringEntry=2 entryLandedFirst=4 releasedAfterExit=5 modalHostsHolding=0 appTopController=UIViewController appMarkerOwner=app appMarkerView=RCTViewComponentView sheetPointOwner=app sheetPointView=RCTViewComponentView probeVersion=2 markerReachable=notFound drops=5
+
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing
+
+    Test timed out after 30000ms: SheetProto · React Native children in a presented sheet presents and dismisses until it has done it 50 times and keeps nothing
+
+    Pending promises at timeout: 4
+
+    Promise #346, created 1165ms after test start:
+      Error: Promise created
+
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at churn (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:108730:24)
+      at anonymous (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:108220:31)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #2259, created 29497ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at until (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107772:24)
+      at _loop2 (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:108754:24)
+      at anonymous (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:108778:16)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #2293, created 29997ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at settle (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107744:25)
+      at anonymous (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107784:21)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #2294, created 29997ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at ?anon_0_ (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107764:24)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26509:14)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88389:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27653)
+      at Promise (address at InternalBytecode.js:1:27764)
+      at construct (native)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88387:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at settle (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107744:25)
+      at anonymous (http:/localhost:8295/__tests__/SheetProto.harness.bundle/&modulesOnly=true&platform=ios:107784:21)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+
+
+Test Suites: 1 failed, 1 skipped, 15 passed, 16 of 17 total
+Tests:       1 failed, 7 skipped, 235 passed, 243 total
+Snapshots:   0 total
+Time:        275.369 s
+Ran all test suites.
+gate: harness:ios FAIL in 276.9 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+ios-2026-11-02T17-09-40.185Z.log (4 probe(s))
+
+```

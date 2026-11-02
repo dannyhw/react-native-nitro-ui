@@ -1,0 +1,152 @@
+# Failure excerpt — harness:android:SheetProto
+
+- Ran: 2026-11-02T15:56:09.528Z on code tree `0be689bd6a58` at HEAD `2932ec4` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SheetProto`
+- Result: fail, exit 1, 172235 ms
+- Load: start 4.47, end 2.08, median 2.93, max 5.13
+- Device: android / device `emulator-5574` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log` (<store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and grows a fit detent by exactly the content added`
+- `● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one`
+- `● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing`
+- `● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own`
+- `● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (lease S2-7bluv is no longer live, so its device is not ours to ask)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (no longer live)
+  |   T19-c14ka                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.08 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (lease S2-7bluv is no longer live, so its device is not ours to ask)
+gate: ---- end device context ----
+```
+
+## Last 103 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:SheetProto
+gate: node ../scripts/harness.mjs --harnessRunner android SheetProto (cwd example)
+gate: code tree 0be689bd6a58 at HEAD 2932ec4
+gate: git tree 84add087c59d with a DIRTY worktree (not reusable)
+gate: log task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log
+gate:       <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SheetProto
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0be689bd6a58, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.47/4.49 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and grows a fit detent by exactly the content added
+
+    No fit at 3 rows to be sampled within 10000ms. events=[] box={"width":411.42857142857144,"height":240} content={"width":411.4285583496094,"height":240} native=liveSheetRoots=1;presentations=1;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;sheetRootsCreated=1;slotsCreated=1
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one
+
+    No medium scroll to be sampled within 10000ms. events=[] box={"width":411.42857142857144,"height":429.7142857142857} content={"width":411.4285583496094,"height":3200} native=drops=2;liveSheetRoots=1;presentations=3;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;s22.chromeH=32;s22.contentH=240;s22.contentW=411;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s23.chromeH=32;s23.contentH=429;s23.contentW=411;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;sheetRootsCreated=3;slotsCreated=3
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open
+
+    No a dismissal of any kind within 8000ms. events=[] box={"width":411.42857142857144,"height":796.952380952381} content={"width":411.4285583496094,"height":400} native=dismissRequests=1;drops=3;liveSheetRoots=0;presentations=4;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;s22.chromeH=32;s22.contentH=240;s22.contentW=411;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s23.chromeH=32;s23.contentH=429;s23.contentW=411;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s24.chromeH=32;s24.contentH=796;s24.contentW=411;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;sheetRootsCreated=4;slotsCreated=4
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing
+
+    the first cycle did not complete: events=[] box={"width":411.42857142857144,"height":240} content={"width":411.4285583496094,"height":240} native=dismissRequests=1;drops=4;liveSheetRoots=1;presentations=5;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;s22.chromeH=32;s22.contentH=240;s22.contentW=411;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s23.chromeH=32;s23.contentH=429;s23.contentW=411;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s24.chromeH=32;s24.contentH=796;s24.contentW=411;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s25.chromeH=32;s25.contentH=240;s25.contentW=411;s25.detent=fit;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;sheetRootsCreated=5;slotsCreated=5: expected +0 to be 1 // Object.is equality
+
+      [0m [90m 725 |[39m     [90m// charged to the loop they introduced.[39m
+       [90m 726 |[39m     [36mconst[39m warmed [33m=[39m [36mawait[39m churn(mounted[33m,[39m p[33m,[39m [35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 727 |[39m     expect(warmed[33m,[39m [32m`the first cycle did not complete: ${dump(p)}`[39m)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m     |[39m                                                                        [31m[1m^[22m[39m
+       [90m 728 |[39m     [36mconst[39m before [33m=[39m handle[33m.[39mspikeMemoryBytes()[33m;[39m
+       [90m 729 |[39m     [36mconst[39m cycles [33m=[39m [36mawait[39m churn(mounted[33m,[39m p[33m,[39m [33mCYCLES[39m)[33m;[39m
+       [90m 730 |[39m     [36mconst[39m after [33m=[39m handle[33m.[39mspikeMemoryBytes()[33m;[39m[0m
+
+  ● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own
+
+    No Modal-over (own window) to be sampled within 10000ms. events=[s29:user-dismiss=1] box={"width":411.42857142857144,"height":240} content={"width":411.4285583496094,"height":240} native=appMarkerOwner=na;appMarkerView=na;appTopController=na;dismissRequests=1;drops=8;liveSheetRoots=1;modalHostsHolding=-1;modalHostsInWindow=-1;presentations=9;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;s22.chromeH=32;s22.contentH=240;s22.contentW=411;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s23.chromeH=32;s23.contentH=429;s23.contentW=411;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s24.chromeH=32;s24.contentH=796;s24.contentW=411;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s25.chromeH=32;s25.contentH=240;s25.contentW=411;s25.detent=fit;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;s26.chromeH=32;s26.contentH=240;s26.contentW=411;s26.detent=fit;s26.ownWindow=0;s26.presented=1;s26.touchHandler=1;s27.chromeH=32;s27.contentH=796;s27.contentW=411;s27.detent=large;s27.ownWindow=0;s27.presented=1;s27.touchHandler=1;s28.chromeH=32;s28.contentH=796;s28.contentW=411;s28.detent=large;s28.ownWindow=1;s28.presented=1;s28.touchHandler=1;s29.chromeH=32;s29.contentH=240;s29.contentW=411;s29.detent=fit;s29.ownWindow=1;s29.presented=1;s29.touchHandler=1;sheetPointOwner=na;sheetPointView=na;sheetRootIsActivityDecor=-1;sheetRootsCreated=9;sheetTapX=-1;sheetTapY=-1;sheetWindowFocused=-1;slotsCreated=9
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain
+
+    No Modal-over (in chain) to be sampled within 10000ms. events=[] box={"width":411.42857142857144,"height":240} content={"width":411.4285583496094,"height":240} native=appMarkerOwner=na;appMarkerView=na;appTopController=na;dismissRequests=1;drops=9;liveSheetRoots=1;modalHostsHolding=-1;modalHostsInWindow=-1;presentations=10;s21.chromeH=32;s21.contentH=240;s21.contentW=411;s21.detent=fit;s21.ownWindow=0;s21.presented=1;s21.touchHandler=1;s210.chromeH=32;s210.contentH=240;s210.contentW=411;s210.detent=fit;s210.ownWindow=0;s210.presented=1;s210.touchHandler=1;s22.chromeH=32;s22.contentH=240;s22.contentW=411;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s23.chromeH=32;s23.contentH=429;s23.contentW=411;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s24.chromeH=32;s24.contentH=796;s24.contentW=411;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s25.chromeH=32;s25.contentH=240;s25.contentW=411;s25.detent=fit;s25.ownWindow=0;s25.presented=1;s25.touchHandler=1;s26.chromeH=32;s26.contentH=240;s26.contentW=411;s26.detent=fit;s26.ownWindow=0;s26.presented=1;s26.touchHandler=1;s27.chromeH=32;s27.contentH=796;s27.contentW=411;s27.detent=large;s27.ownWindow=0;s27.presented=1;s27.touchHandler=1;s28.chromeH=32;s28.contentH=796;s28.contentW=411;s28.detent=large;s28.ownWindow=1;s28.presented=1;s28.touchHandler=1;s29.chromeH=32;s29.contentH=240;s29.contentW=411;s29.detent=fit;s29.ownWindow=1;s29.presented=1;s29.touchHandler=1;sheetPointOwner=na;sheetPointView=na;sheetRootIsActivityDecor=-1;sheetRootsCreated=10;sheetTapX=-1;sheetTapY=-1;sheetWindowFocused=-1;slotsCreated=10
+
+      [0m [90m 141 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 142 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 143 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 144 |[39m     }
+       [90m 145 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 146 |[39m   }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 4 passed, 10 total
+Snapshots:   0 total
+Time:        171.184 s
+Ran all test suites matching SheetProto.
+gate: harness:android:SheetProto FAIL in 172.2 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T15-56-09.185Z.log (5 probe(s))
+
+```
