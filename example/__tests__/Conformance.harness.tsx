@@ -96,6 +96,7 @@ import { deviceLocale, deviceLocaleNote } from './deviceContext';
 import { waitForHandle } from './handles';
 import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
+  AlertDialog,
   Button,
   DatePicker,
   Menu,
@@ -325,6 +326,10 @@ type Handle = {
    * `state.js`, which is what React sent, so it cannot show what the reset owns.
    */
   nuiTestDisplayedIndex?(): string;
+  /** Dialog's JS copy of `isPresented`, read back from the view's own props. */
+  readonly presented?: boolean;
+  /** Dialog's test hook: dismiss as a user would, through the real path. */
+  nuiTestDismiss?(): void;
 };
 
 /**
@@ -1275,6 +1280,17 @@ type Fixture = {
    * `displayed: false`) so the two writes could not be told apart.
    */
   controlledProbe?: RecycleProbe;
+  /**
+   * `false` for a component with no box of its own - `sizing: null` in its
+   * `component.json`, G11's dialogs. Such a control never enters the sizing engine, so
+   * the fallback and both leak tests print the reason the coverage matrix gives
+   * (`CONFORMANCE_RULES[].applies`) instead of asserting about a ledger it never joins,
+   * and the a11y test asserts the presentation-aware half: the anchor carries no name
+   * (the presented window does, and `A11Y_PRESENTATIONS` names the real-input check that
+   * reads it). `checkInAppFixtures` holds this member to the manifest in both
+   * directions, so a self-sizing control cannot opt out of its sizing rules here.
+   */
+  selfSizing?: false;
 };
 
 const SECOND = 'second owner';
@@ -1309,6 +1325,40 @@ const MENU_GROUP: MenuGroup = {
  */
 const MENU_TITLE = 'Conformance actions';
 const MENU_TITLE_SECOND = 'Second owner’s actions';
+
+const DIALOG_TITLE = 'Conformance dialog';
+const DIALOG_TITLE_SECOND = 'Second owner’s dialog';
+const DIALOG_ACTIONS = [
+  { id: 'keep', title: 'Keep', role: 'cancel' as const },
+  { id: 'go', title: 'Go' },
+];
+
+/**
+ * `captureFor` for a dialog. A dialog has no `accessibilityLabel` and no
+ * `measureContent()` (no box: Q5 Appendix B4/B5), so its view is filed under the
+ * shared handle type here; nothing in the suite calls either member for a fixture
+ * that says `selfSizing: false`.
+ */
+const captureDialog =
+  (testId: string) =>
+  (view: object): void => {
+    handles.set(testId, view as unknown as Handle);
+  };
+
+/** Dialog's report (`nuiTestStateReport`), as `key -> value`. */
+function dialogReportOf(handle: Handle): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const pair of (handle.nuiTestStateReport?.() ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return fields;
+}
+
+/** Whether a dialog's report says its window is up and shows `title`. */
+function dialogShows(report: Record<string, string>, title: string): boolean {
+  return report.kind !== 'none' && report.title === title;
+}
 
 /**
  * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
@@ -2235,6 +2285,122 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         'the blind half is one platform, not both.',
     },
   },
+  {
+    name: 'Dialog',
+    component: 'NitroUiDialog',
+    label: DIALOG_TITLE,
+    testId: 'conformance-dialog',
+    selfSizing: false,
+    owner: (second) => (
+      <AlertDialog
+        isPresented={false}
+        title={second ? DIALOG_TITLE_SECOND : DIALOG_TITLE}
+        actions={DIALOG_ACTIONS}
+        onIsPresentedChange={recordRecycle('conformance-dialog')}
+        testID="conformance-dialog"
+        hybridRef={captureDialog('conformance-dialog')}
+      />
+    ),
+    control: (testId, variant) => (
+      <AlertDialog
+        isPresented={false}
+        title={variant ? 'Leak B' : 'Leak A'}
+        actions={DIALOG_ACTIONS}
+        testID={testId}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'title',
+        expected: second ? DIALOG_TITLE_SECOND : DIALOG_TITLE,
+        actual: handle.title,
+      },
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // The residue a dialog can leave is the handshake's: a user dismissal is a native
+    // event, so the first owner ends with one native event counted. A second owner sends
+    // `isPresented` with `mostRecentEventCount` 0 (useControlled.ts), and if the reset
+    // left the first owner's count behind, `reconcile()` refuses that write as stale -
+    // the dialog the second app asked for never presents. The other residue is the
+    // first owner's controller: a reset that kept it would show the old title. Both are
+    // read from the view (`nuiTestStateReport`), never from React's own props.
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event) - the second owner ' +
+        'presents with a fresh count, so a left-over count refuses it, and a left-over ' +
+        'controller shows the first title',
+      first: () => (
+        <AlertDialog
+          isPresented
+          title={DIALOG_TITLE}
+          actions={DIALOG_ACTIONS}
+          onIsPresentedChange={recordRecycle('conformance-dialog')}
+          testID="conformance-dialog"
+          hybridRef={captureDialog('conformance-dialog')}
+        />
+      ),
+      act: async () => {
+        const handle = await ensureHandle('conformance-dialog');
+        const deadline = Date.now() + 8000;
+        while (!dialogShows(dialogReportOf(handle), DIALOG_TITLE)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its dialog: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        // Let the entry transition finish: a dismissal during it is carried by the
+        // helper, which is a different path from the one this probe is about.
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-dialog:false');
+        if (seen !== 'conformance-dialog:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => (
+        <AlertDialog
+          isPresented
+          title={DIALOG_TITLE_SECOND}
+          actions={DIALOG_ACTIONS}
+          onIsPresentedChange={recordRecycle('conformance-dialog')}
+          testID="conformance-dialog"
+          hybridRef={captureDialog('conformance-dialog')}
+        />
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-dialog');
+        // The flag is read once. The window is waited for, because presenting is
+        // asynchronous on both platforms - the wait is for UIKit or Compose to put
+        // up what the second owner asked for, not for a reset to happen.
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 4000;
+        let report = dialogReportOf(handle);
+        while (report.kind === 'none' && Date.now() < deadline) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the dialog the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: 'the title its window shows',
+            expected: DIALOG_TITLE_SECOND,
+            actual: report.title,
+          },
+        ];
+      },
+    },
+  },
 ];
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
@@ -2257,6 +2423,13 @@ describe('conformance · every control, four rules', () => {
       // `checkInAppFixtures` is what refuses such a fixture at all, on the host, in `check`.
 
       it('has its own declared fallback, and still corrects a wrong guess', async () => {
+        if (fixture.selfSizing === false) {
+          console.log(
+            `    · ${fixture.name} declares no sizing policy, so it has no fallback to ` +
+              'declare and never enters the engine to guess one (component.json sizing: null)'
+          );
+          return;
+        }
         // Which axes this control's declaration describes comes from the mirrored table,
         // because that is a host-side fact about its sizing policy — the suite that asserts
         // does not get to decide it. See `boxRuleFor` in scripts/conformance-core.mjs.
@@ -2356,6 +2529,14 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('is known to the engine while mounted, and unknown after', async () => {
+        if (fixture.selfSizing === false) {
+          console.log(
+            `    · ${fixture.name} is not self-sizing, so it never enters the engine's ` +
+              'ledger or registry (component.json sizing: null) - its drops are proved ' +
+              'by its own suite, which reads the presentation count'
+          );
+          return;
+        }
         // The positive control, which is the half round 1's leak rule was missing. It churned
         // 50 mount/unmount pairs with no settle between them and read `ledger 0→0`, a number a
         // control that never registered an instance produces just as well as one that registers
@@ -2443,6 +2624,14 @@ describe('conformance · every control, four rules', () => {
       });
 
       it('leaves the engine where it started across a churn of drops', async () => {
+        if (fixture.selfSizing === false) {
+          console.log(
+            `    · ${fixture.name} is not self-sizing, so it never enters the engine's ` +
+              'ledger or registry (component.json sizing: null) - its drops are proved ' +
+              'by its own suite, which reads the presentation count'
+          );
+          return;
+        }
         // The churn, kept because it is a different shape from the one above: instances that
         // come and go over time, in a process that has already measured this component. The
         // warm-up is what makes its baseline honest — the component's own registry row is
@@ -2636,6 +2825,20 @@ describe('conformance · every control, four rules', () => {
         await ensureHandle(fixture.testId);
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
+        if (fixture.selfSizing === false) {
+          // The presentation-aware half (Q5 Appendix B5): a closed dialog's anchor is
+          // hidden from accessibility, so nothing on screen may carry its title - a
+          // name on a 0 x 0 view would be a stop a screen reader lands on and cannot
+          // act on. The name belongs to the presented window, which real input reads
+          // (`A11Y_PRESENTATIONS` in scripts/real-input/a11y.mjs).
+          console.log(
+            `    · presentation: box=${describeBox(box)} labelBox=` +
+              `${describeBox(labelled)} - the window's name is asserted by real input`
+          );
+          expect(labelled).toBeNull();
+          mounted.unmount();
+          return;
+        }
         if (PLATFORM !== 'ios') {
           // The honest Android statement, from the suites that already make it: the harness
           // walks `View.contentDescription`, Compose publishes `SemanticsNode`s, and so

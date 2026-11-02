@@ -31,6 +31,8 @@ import {
   checkExampleScreens,
   checkIndexExports,
   checkRealInputRows,
+  exportedComponents,
+  exportedValuesByComponent,
   manifestsFromEntries,
   planRegistry,
   regionsFor,
@@ -242,6 +244,46 @@ describe('component manifest schema', () => {
     });
     expect(() => manifestsFromEntries(entries)).toThrow(
       /hybridView "NitroUiButton" is not NitroUiToggle/
+    );
+  });
+
+  it('accepts an exports list of distinct component names, and nothing else', () => {
+    // One native view behind several public components (Dialog: AlertDialog and
+    // ConfirmationDialog). Optional: a manifest without it exports its own name.
+    expect(check({ exports: ['AlertDialog', 'ConfirmationDialog'] })).toEqual(
+      []
+    );
+    for (const bad of [
+      [],
+      ['AlertDialog', 'AlertDialog'],
+      ['alertDialog'],
+      'X',
+    ]) {
+      expect(check({ exports: bad }).join('\n')).toMatch(
+        /key "exports" must be a non-empty array of distinct names/
+      );
+    }
+  });
+
+  it('rejects two manifests claiming one export', () => {
+    const entries = componentDirs().map((directory) => ({
+      directory,
+      text: readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`),
+    }));
+    entries.push({
+      directory: 'Sheet',
+      text: JSON.stringify({
+        ...buttonManifest(),
+        name: 'Sheet',
+        hybridView: 'NitroUiSheet',
+        implementation: 'HybridNitroUiSheet',
+        id: 'sheet',
+        exampleTab: 'sheet',
+        exports: ['ConfirmationDialog'],
+      }),
+    });
+    expect(() => manifestsFromEntries(entries)).toThrow(
+      /duplicate export "ConfirmationDialog": Dialog and Sheet cannot both claim it/
     );
   });
 
@@ -500,6 +542,39 @@ describe('the generated tables cover what they claim', () => {
     );
   });
 
+  it('holds a manifest with exports to each name the barrel exports', () => {
+    const index = readRepo('src/index.ts');
+    const exported = exportedComponents(index);
+    expect(
+      checkIndexExports(manifests, exported, exportedValuesByComponent(index))
+    ).toEqual([]);
+    // The module being exported is not enough: drop one of the two names and the
+    // check names it, even though `./components/Dialog/` is still in the barrel.
+    const withoutSheet = index.replace(/\n\s*ConfirmationDialog,/, '');
+    expect(withoutSheet).not.toBe(index);
+    expect(
+      checkIndexExports(
+        manifests,
+        exportedComponents(withoutSheet),
+        exportedValuesByComponent(withoutSheet)
+      ).join('\n')
+    ).toMatch(
+      /ConfirmationDialog is in Dialog's exports and src\/index\.ts does not export it/
+    );
+    // and a type of that name does not count as the component
+    const typeOnly = index.replace(
+      /\n\s*ConfirmationDialog,/,
+      '\n  type ConfirmationDialog,'
+    );
+    expect(
+      checkIndexExports(
+        manifests,
+        exportedComponents(typeOnly),
+        exportedValuesByComponent(typeOnly)
+      ).join('\n')
+    ).toMatch(/ConfirmationDialog is in Dialog's exports/);
+  });
+
   it('nitro.json agrees with the manifests, and so does the sizing table', () => {
     expect(
       checkAutolinking(manifests, JSON.parse(readRepo('nitro.json')))
@@ -587,10 +662,16 @@ describe('the generated tables cover what they claim', () => {
         text.indexOf('export const HOSTABLE_CONTROLS'),
         text.indexOf(']);', text.indexOf('export const HOSTABLE_CONTROLS'))
       );
+    // One import per component directory, naming every export its manifest lists
+    // (`exports`: Dialog's file exports AlertDialog and ConfirmationDialog).
+    const importLines = (text) => [
+      ...text.matchAll(
+        /^import \{ ([A-Z][\w, ]*) \} from '\.\.\/([A-Z]\w*)\/\2';$/gm
+      ),
+    ];
     const imports = (text) =>
-      [
-        ...text.matchAll(/^import \{ ([A-Z]\w*) \} from '\.\.\/\1\/\1';$/gm),
-      ].map((m) => m[1]);
+      importLines(text).flatMap((m) => m[1].split(', '));
+    const importDirs = (text) => importLines(text).map((m) => m[2]);
     const rows = (text) =>
       [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
         (m) => m[1]
@@ -609,8 +690,12 @@ describe('the generated tables cover what they claim', () => {
     // ...and the import stays, because UNHOSTABLE_CONTROLS is where it goes
     expect(imports(after)).toContain('Switch');
     // and every control the library has is imported, hostable or not
-    expect(imports(after).sort()).toEqual(
+    expect(importDirs(after).sort()).toEqual(
       componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
+    );
+    // with every name its directory exports
+    expect(imports(after)).toEqual(
+      expect.arrayContaining(['AlertDialog', 'ConfirmationDialog'])
     );
   });
 

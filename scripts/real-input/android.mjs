@@ -91,6 +91,7 @@ const ECHO = {
   pickerGone: 'real-input-drop-gone',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
+  dialogLog: 'dialog-log',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -1593,6 +1594,174 @@ const CHECKS = {
    *
    * @param {ReturnType<typeof makeContext>} t
    */
+  'dialog': async (t) => {
+    // The titles `DialogScreen` gives its dialogs. None appears anywhere else on the
+    // screen, so a text match names one window: `Locked action` and `Locked share` are
+    // the disabled ones. A Compose `Dialog` (and a `ModalBottomSheet`, which is one)
+    // is a window of its own that is not a `Pop-Up Window`, and while it is up
+    // `uiautomator dump` returns its tree rather than the app's - so the echo is read
+    // only with every dialog down, and "up" is read as the dialog's own title.
+    const ALERT = 'Delete the draft?';
+    const STICKY = 'Back and outside do nothing';
+    const SHEET_ROW = 'Copy link';
+    const upCount = (text) => () =>
+      t.dump().filter((node) => node.text === text).length;
+    const opener = (testID) => () => {
+      const node = t.nodeByTestId(testID);
+      if (node == null) {
+        t.log.abort(`no opener with testID "${testID}" on the Dialogs screen`);
+      }
+      return node;
+    };
+    const waitGone = async (text, description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount(text)() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    const open = async (testID, witness, description) => {
+      await t.tapUntilUp(opener(testID), description, upCount(witness), {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(witness, description);
+    };
+    const enabledOf = (text) =>
+      t.dump().find((node) => node.text === text)?.enabled;
+
+    // 1. Before a touch: nothing reported, nothing up.
+    t.log.checkEquals(
+      'no dialog has reported anything before a touch',
+      t.requireEcho(ECHO.dialogLog),
+      'none'
+    );
+    t.log.checkEquals('no alert is up before a touch', upCount(ALERT)(), 0);
+
+    // 2. A real tap opens the alert; JS opened it, so it reports nothing (read once
+    //    it is down again, in step 5's whole-log comparison).
+    await open('dialog-open-alert', ALERT, 'the real tap that opens the alert');
+    // 3. The disabled action is disabled in the accessibility tree too, and its twin
+    //    is not. The text node sits inside the button Compose merges it into, so the
+    //    node's own `enabled` is the button's.
+    t.log.checkEquals(
+      'a disabled action is a node that is not enabled',
+      enabledOf('Locked action'),
+      'false'
+    );
+    t.log.checkEquals(
+      'and an ordinary action is enabled',
+      enabledOf('Delete draft'),
+      'true'
+    );
+
+    // 4. A real tap on the disabled action takes nothing and leaves the alert up. One
+    //    press: the right outcome is silence; step 5 is its barrier.
+    await t.tapNode(t.waitForOption('Locked action', 'the disabled action'));
+    await t.settle(1500);
+    t.log.checkEquals(
+      'a real tap on a disabled action leaves the alert up',
+      upCount(ALERT)(),
+      1
+    );
+
+    // 5. The action that reports, before the close it causes (D32).
+    t.log.checkEquals(
+      'a real tap on an action reports its id, then the close - once each, in order',
+      await t.tapOptionUntilValue(
+        'Delete draft',
+        ECHO.dialogLog,
+        'action:delete > presented:false',
+        'the real tap on "Delete draft"'
+      ),
+      'action:delete > presented:false'
+    );
+    await waitGone(ALERT, 'the action to take the alert down');
+
+    // 6. Back and a tap outside close a dismissible alert, and report the close alone.
+    await open(
+      'dialog-open-alert',
+      ALERT,
+      'the real tap that reopens the alert'
+    );
+    await t.pressBack();
+    await waitGone(ALERT, 'Back to take the dismissible alert down');
+    await open('dialog-open-alert', ALERT, 'the real tap that opens it again');
+    await t.tapScrim();
+    await waitGone(ALERT, 'a tap outside to take the dismissible alert down');
+    t.log.checkEquals(
+      'Back and a tap outside each closed the alert with one close and no action',
+      t.requireEcho(ECHO.dialogLog),
+      'action:delete > presented:false > presented:false > presented:false'
+    );
+
+    // 7. Neither closes a dialog that only an action may close.
+    await open(
+      'dialog-open-sticky',
+      STICKY,
+      'the real tap that opens the sticky alert'
+    );
+    await t.pressBack();
+    await t.settle(1000);
+    t.log.checkEquals('Back leaves the sticky alert up', upCount(STICKY)(), 1);
+    await t.tapScrim();
+    await t.settle(1000);
+    t.log.checkEquals('and so does a tap outside', upCount(STICKY)(), 1);
+    t.log.checkEquals(
+      'its one action closes it, reporting the action first',
+      await t.tapOptionUntilValue(
+        'Understood',
+        ECHO.dialogLog,
+        'action:delete > presented:false > presented:false > presented:false > ' +
+          'action:ok > presented:false',
+        'the real tap on "Understood"'
+      ),
+      'action:delete > presented:false > presented:false > presented:false > ' +
+        'action:ok > presented:false'
+    );
+    await waitGone(STICKY, 'the action to take the sticky alert down');
+
+    // 8. The confirmation dialog is a Material bottom sheet of rows: its disabled row
+    //    is disabled, Back closes it with the close alone, and a row reports.
+    await open(
+      'dialog-open-sheet',
+      SHEET_ROW,
+      'the real tap that opens the confirmation sheet'
+    );
+    t.log.checkEquals(
+      'the sheet shows the title the app asked to be visible',
+      upCount('Share the photo')(),
+      1
+    );
+    t.log.checkEquals(
+      "the sheet's disabled row is not enabled",
+      enabledOf('Locked share'),
+      'false'
+    );
+    await t.pressBack();
+    await waitGone(SHEET_ROW, 'Back to take the sheet down');
+    await open(
+      'dialog-open-sheet',
+      SHEET_ROW,
+      'the real tap that reopens the sheet'
+    );
+    const tail =
+      'presented:false > presented:false > action:ok > presented:false > ' +
+      'presented:false > action:copy > presented:false';
+    t.log.checkEquals(
+      "a sheet's row reports its id, then the close; Back before it reported a close alone",
+      await t.tapOptionUntilValue(
+        SHEET_ROW,
+        ECHO.dialogLog,
+        `action:delete > presented:false > ${tail}`,
+        `the real tap on "${SHEET_ROW}"`
+      ),
+      `action:delete > presented:false > ${tail}`
+    );
+    await waitGone(SHEET_ROW, 'the row to take the sheet down');
+  },
+
   'date-picker': async (t) => {
     t.log.checkEquals(
       'the DatePicker has reported no day before a touch',
