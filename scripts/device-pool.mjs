@@ -42,7 +42,9 @@
  *  - a reset is refused on a device with a live claim, whoever holds it (X11 re-review M2), and an
  *    app that is not installed is a successful no-op rather than four retries (X11 re-review N5);
  *  - `acquire --exclusive` hands a bench a quiet machine and does so whether or not `--boot` was
- *    passed (X11 review M6). There is no `release --exclusive` - releasing leaves devices warm.
+ *    passed (X11 review M6). The power-off runs before the hand-off, so `--exclusive --boot` gets its
+ *    own pair back booted as well, rather than a dead machine and a flag that did nothing (X16 item 2)
+ *    - and no `release --exclusive`: releasing leaves devices warm.
  *
  * State is per-machine, beside the leases it references:
  *

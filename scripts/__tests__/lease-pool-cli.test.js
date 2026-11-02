@@ -54,7 +54,14 @@ describe('the lease owns the device lifecycle', () => {
    * operations the CLI chose to run, not about timing a boot - the wait loop has its own tests in
    * `device-pool.test.js`, with a clock.
    *
-   * @param {{androidUp?: boolean, iosUp?: boolean}} options
+   * `stateful: true` is the exception, for the one case that *is* a sequence: the three tools then
+   * read and write one state file, so `emu kill` / `simctl shutdown` take the device down and
+   * `emulator @avd` / `simctl boot` bring it up, and the next listing answers accordingly. A fixed
+   * answer cannot express "powered off, then booted" at all — it kept reporting the emulator as
+   * attached after the `emu kill` that had just run, which is how `--exclusive --boot` looked like a
+   * warm reuse while nothing had been started (X16 item 2).
+   *
+   * @param {{androidUp?: boolean, iosUp?: boolean, stateful?: boolean, pmClear?: string}} options
    */
   /**
    * What `pm clear` answers, in order, with the last one repeating.
@@ -85,18 +92,25 @@ describe('the lease owns the device lifecycle', () => {
     androidUp = false,
     iosUp = false,
     pmClear = 'success',
+    stateful = false,
   } = {}) => {
-    const listing = {
+    const listingFor = (iosState) => ({
       devices: {
         'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
           {
             udid: UDID_A,
             name: 'iPhone 17',
-            state: iosUp ? 'Booted' : 'Shutdown',
+            state: iosState,
           },
         ],
       },
-    };
+    });
+    const listing = listingFor(iosUp ? 'Booted' : 'Shutdown');
+    /** Reads one of the state files, or `fallback` when the case has not written it. */
+    const readState = (kind, fallback) =>
+      stateful
+        ? `      if [ -f "$NITRO_UI_FAKE_STATE.${kind}" ]; then state=$(cat "$NITRO_UI_FAKE_STATE.${kind}"); else state=${fallback}; fi`
+        : '';
     // One `printf` of a pre-built string per stub: the JSON goes in through JSON.stringify, so
     // neither the shell nor the JS parser has to agree about quotes.
     //
@@ -122,7 +136,21 @@ describe('the lease owns the device lifecycle', () => {
       "  *'get_app_container'*) exit 1 ;;",
       "  *'uninstall'*) exit 0 ;;",
       "  *'install'*) exit 0 ;;",
-      `  *) printf '%s' ${shellQuote(JSON.stringify(listing))} ;;`,
+      // The boot and the power-off, in the stateful shape only: they move the one bit the listing
+      // below reads, so `simctl list` afterwards reports what the last command did.
+      ...(stateful
+        ? [
+            '  *\'boot\'*) echo up > "$NITRO_UI_FAKE_STATE.ios" ;;',
+            '  *\'shutdown\'*) echo down > "$NITRO_UI_FAKE_STATE.ios" ;;',
+            '  *)',
+            readState('ios', iosUp ? "'up'" : "'down'"),
+            '      if [ "$state" = up ]; then',
+            `        printf '%s' ${shellQuote(JSON.stringify(listingFor('Booted')))}`,
+            '      else',
+            `        printf '%s' ${shellQuote(JSON.stringify(listingFor('Shutdown')))}`,
+            '      fi ;;',
+          ]
+        : [`  *) printf '%s' ${shellQuote(JSON.stringify(listing))} ;;`]),
       'esac',
       '',
     ];
@@ -134,7 +162,23 @@ describe('the lease owns the device lifecycle', () => {
       // turns the `\t` in the text below into one. `%s` hands back a literal backslash-t, which
       // no `adb devices` parser reads as a device - the fixture bug that made every "did it boot
       // the emulator?" case answer no and still pass.
-      `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
+      //
+      // In the stateful shape the listing is built from the state file instead, so a device the
+      // reaper just killed has stopped answering it. That is what makes "it powered the pool off and
+      // then booted mine" a claim a test can check rather than one it has to take on trust.
+      ...(stateful
+        ? [
+            '  *devices*)',
+            readState('android', androidUp ? "'up'" : "'down'"),
+            '      if [ "$state" = up ]; then',
+            `        printf '%b\\n' ${shellQuote(adbDeviceText(true))}`,
+            '      else',
+            "        printf 'List of devices attached\\n' ; exit 0",
+            '      fi ;;',
+          ]
+        : [
+            `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
+          ]),
       "  *boot_completed*) printf '1' ;;",
       // "Is the package on the device?" (`adb shell pm path <pkg>`), asked before the clear so a
       // fresh AVD is a no-op instead of four retries and a misleading line (X11 N5). Matched ahead
@@ -150,7 +194,11 @@ describe('the lease owns the device lifecycle', () => {
       // an emulator whose `sys.boot_completed` is already 1 really does while PackageManager
       // settles, and it is what the first real boot of this code reported as a failed reset.
       ...(pmClearLines[pmClear] ?? pmClearLines.success),
-      "  *'emu kill'*) printf 'OK' ;;",
+      ...(stateful
+        ? [
+            "  *'emu kill'*) echo down > \"$NITRO_UI_FAKE_STATE.android\"; printf 'OK' ;;",
+          ]
+        : ["  *'emu kill'*) printf 'OK' ;;"]),
       // Which AVD is behind a serial (`adb -s X emu avd name`), answered the way a real emulator
       // does it - name, then `OK`. This is the identity check in front of every `emu kill` (X11
       // review M4), so a stub that stayed silent about it would make every shutdown answer
@@ -173,12 +221,15 @@ describe('the lease owns the device lifecycle', () => {
     writeFileSync(join(bins, 'simctl'), simctlLines.join('\n'));
     writeFileSync(join(bins, 'adb'), adbLines.join('\n'));
     // The pool starts an emulator detached; the stub records the argv and exits, which is all the
-    // pool waits on (`adb devices` decides when a boot is over, not this process).
+    // pool waits on (`adb devices` decides when a boot is over, not this process). In the stateful
+    // shape it also brings the device up, because that is the whole answer the pool polls for - and
+    // a boot that never showed up in `adb devices` would make every "did it boot it?" case time out.
     writeFileSync(
       join(bins, 'emulator'),
       [
         '#!/bin/sh',
         'echo "emulator $*" >> "$NITRO_UI_FAKE_CALLS"',
+        ...(stateful ? ['echo up > "$NITRO_UI_FAKE_STATE.android"'] : []),
         'exit 0',
         '',
       ].join('\n')
@@ -209,6 +260,8 @@ describe('the lease owns the device lifecycle', () => {
         NITRO_UI_ADB_BIN: join(bins, 'adb'),
         EMULATOR_BIN: join(bins, 'emulator'),
         NITRO_UI_FAKE_CALLS: calls,
+        // Where the stateful stubs keep "is this device up?", one file per platform.
+        NITRO_UI_FAKE_STATE: join(home, 'fake-state'),
         // The pool's `acquire` asks about Metro ports; nothing is listening, always
         // (helper), so no case here depends on another task's harness.
         ...FREE_LSOF,
@@ -958,7 +1011,9 @@ describe('the lease owns the device lifecycle', () => {
   });
 
   it('shuts unheld pool devices down for an exclusive lease, idle or not', () => {
-    tools({ androidUp: true });
+    // Stateful: this case asks for a *sequence* - power the pool off, then boot what the lease
+    // names - and a stub with a fixed answer cannot show the first half having any effect.
+    tools({ androidUp: true, stateful: true });
     // Four minutes into a 30-minute clock: a bench does not care how idle it is, it cares that it
     // is running on the same machine as a booted emulator.
     warmDevice(idleEntry({ idleMinutes: 4 }));
@@ -973,7 +1028,89 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('exclusive');
     expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
-    expect(poolDevices()).toEqual([]);
+    // The kill took: the emulator stopped answering `adb devices`, which is what lets the boot
+    // below be a boot rather than a lookup that found the device already up.
+    expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
+    // And the pair the bench was handed is warm again, so the records describe the machine the
+    // bench is sitting on: empty here would mean the pool forgot the boot it just waited for.
+    expect(
+      poolDevices()
+        .map((x) => x.key)
+        .sort()
+    ).toEqual([`avd:${AVD_A}`, `ios:${UDID_A}`]);
+  });
+
+  it('boots the pair an exclusive lease names, after the power-off (X16 item 2)', () => {
+    // `--exclusive --boot` used to boot nothing: the boot branch in `poolHandoff` was
+    // `if (!lease.exclusive)`, so the flag was accepted and ignored. CONTRIBUTING's baseline-mint
+    // one-liner is `acquire --task <ID> --exclusive --boot`, so a bench host that typed the
+    // documented command measured on a machine whose leased devices had just been powered off, and
+    // booted them by hand (A6b). The promise the two flags make together is "quiet machine, then
+    // *my* device up" - in that order, which is what the calls file is read for here.
+    tools({ androidUp: true, stateful: true });
+    warmDevice(idleEntry({ idleMinutes: 4 }));
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    const logLines = log()
+      .split('\n')
+      .filter((line) => line !== '');
+    const killed = logLines.findIndex((line) => line.includes('emu kill'));
+    const booted = logLines.findIndex((line) => line.includes('emulator @'));
+    expect(killed).toBeGreaterThanOrEqual(0);
+    expect(booted).toBeGreaterThanOrEqual(0);
+    // The order is the fix. A boot that ran *before* the reap would have been powered off by it,
+    // which is the failure the original ordering of `poolHandoff` existed to avoid - so the
+    // exclusive path has to keep that ordering while still booting.
+    expect(booted).toBeGreaterThan(killed);
+    // Headless and on the pair's own console port, as every other pool boot is.
+    expect(log()).toContain(`emulator @${AVD_A} -port 5574`);
+    // iOS half: `simctl boot`, never `open -a Simulator` (that boots a device no lease handed out).
+    expect(log()).toContain(`simctl boot ${UDID_A}`);
+    expect(log()).not.toContain('open -a');
+    // And the wait is reported, the same way an ordinary `--boot` reports it: the number is a
+    // measurement, and a bench host needs to see what the lease cost before it starts a baseline.
+    expect(acquired.stderr).toMatch(/boot wait took [\d.]+s/);
+    expect(acquired.stderr).not.toContain('did not come up');
+  });
+
+  it('boots only the platform an exclusive lease was taken for', () => {
+    // `--platform android` narrows the boot for every lease, and the exclusive path now runs the
+    // same hand-off, so it narrows here too. What matters is that it does not over-reach in either
+    // direction: no simulator boot for an Android bench (that is a simulator booting underneath a
+    // measurement), and the emulator really does come up.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--platform',
+      'android',
+      '--boot',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
+    expect(log()).toContain('emulator @');
+    expect(log()).not.toContain(`simctl boot ${UDID_A}`);
+    // The simulator went down with the rest of the pool and stayed down: the exclusive promise is
+    // about the whole machine, and `--platform` says which half this lease will use. `notePair`
+    // records the pair rather than the platform, so the simulator keeps a record either way - the
+    // same as an ordinary `--boot --platform android` hand-off, and harmless: a record for a device
+    // that is off is dropped the next time the reaper asks it.
+    expect(log()).toContain(`simctl shutdown ${UDID_A}`);
+    expect(
+      poolDevices()
+        .map((x) => x.key)
+        .sort()
+    ).toEqual([`avd:${AVD_A}`, `ios:${UDID_A}`].sort());
   });
 
   it('powers the pool off for an exclusive lease that did not ask for a boot', () => {
