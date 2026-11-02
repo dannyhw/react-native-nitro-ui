@@ -1835,8 +1835,14 @@ const CHECKS = {
       0
     );
 
-    // 1. A real tap opens the fit sheet; its React Native content is in its window.
+    // 1. A real tap opens the fit sheet; its React Native content is in its window, and
+    //    the sheet itself carries `<testID>-sheet` for a test or a11y tool to find.
     await open('sheet-open-fit', FIT, 'the real tap that opens the fit sheet');
+    t.log.checkEquals(
+      'the presented sheet is the node named sheet-fit-sheet',
+      t.nodeByTestId('sheet-fit-sheet') != null,
+      true
+    );
 
     // 2. A real tap on the Pressable inside the sheet reaches JS through the sheet's
     //    own touch root: the sheet's echo moves.

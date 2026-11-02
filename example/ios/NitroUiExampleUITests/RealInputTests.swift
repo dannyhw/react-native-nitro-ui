@@ -2675,6 +2675,8 @@ final class RealInputTests: XCTestCase {
 
     // 1. A real tap opens the fit sheet, whose content is React Native.
     try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
+    // The sheet's own view carries `<testID>-sheet`, for a test or an a11y tool to find.
+    _ = try required("sheet-fit-sheet", as: "the presented sheet, by its testID")
     let pressable = try required("sheet-press", as: "the Pressable inside the sheet")
     let title = try required("sheet-fit-title", as: "the fit sheet's title")
     XCTAssertGreaterThan(

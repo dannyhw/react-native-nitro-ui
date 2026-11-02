@@ -97,6 +97,7 @@ import { waitForHandle } from './handles';
 import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
   AlertDialog,
+  BottomSheet,
   Button,
   DatePicker,
   Menu,
@@ -1360,6 +1361,35 @@ function dialogShows(report: Record<string, string>, title: string): boolean {
   return report.kind !== 'none' && report.title === title;
 }
 
+const SHEET_LABEL = 'Conformance sheet';
+/** The two owners' content heights: different, and neither a detent's. */
+const SHEET_FIRST_HEIGHT = 120;
+const SHEET_SECOND_HEIGHT = 260;
+
+/** A BottomSheet owner whose content is a box of a known height. */
+function sheetOwner(presented: boolean, height: number): ReactElement {
+  return (
+    <BottomSheet
+      isPresented={presented}
+      onIsPresentedChange={recordRecycle('conformance-sheet')}
+      accessibilityLabel={SHEET_LABEL}
+      testID="conformance-sheet"
+      hybridRef={captureDialog('conformance-sheet')}
+    >
+      <View style={{ height }} />
+    </BottomSheet>
+  );
+}
+
+/** Whether a sheet's report says it is up holding content `height` tall. */
+function sheetShows(report: Record<string, string>, height: number): boolean {
+  return (
+    report.presented === '1' &&
+    report.live === '1' &&
+    Math.abs(Number(report.contentH) - height) <= 1
+  );
+}
+
 /**
  * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
@@ -2396,6 +2426,80 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: 'the title its window shows',
             expected: DIALOG_TITLE_SECOND,
             actual: report.title,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'BottomSheet',
+    component: 'NitroUiBottomSheet',
+    label: SHEET_LABEL,
+    testId: 'conformance-sheet',
+    selfSizing: false,
+    owner: () => sheetOwner(false, SHEET_FIRST_HEIGHT),
+    control: (testId, variant) => (
+      <BottomSheet isPresented={false} testID={testId}>
+        <View style={{ height: variant ? 80 : 40 }} />
+      </BottomSheet>
+    ),
+    state: (handle) => [
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // A sheet's residue is the dialog's, plus its content: a user dismissal leaves one
+    // native event, so a reset that kept the count refuses the second owner's
+    // `isPresented` as stale; and a reset that kept the previous sheet's content box
+    // would show the first owner's height in the second owner's sheet. Both are read
+    // from the view (`nuiTestStateReport`).
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event), and the content the first ' +
+        "owner's sheet held - the second owner presents with a fresh count and content " +
+        'of another height',
+      first: () => sheetOwner(true, SHEET_FIRST_HEIGHT),
+      act: async () => {
+        const handle = await ensureHandle('conformance-sheet');
+        const deadline = Date.now() + 8000;
+        while (!sheetShows(dialogReportOf(handle), SHEET_FIRST_HEIGHT)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its sheet: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-sheet:false');
+        if (seen !== 'conformance-sheet:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => sheetOwner(true, SHEET_SECOND_HEIGHT),
+      read: async () => {
+        const handle = handleFor('conformance-sheet');
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 6000;
+        let report = dialogReportOf(handle);
+        while (!sheetShows(report, SHEET_SECOND_HEIGHT) && Date.now() < deadline) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the sheet the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: "the content height its sheet holds (the second owner's)",
+            expected: String(SHEET_SECOND_HEIGHT),
+            actual: report.contentH,
           },
         ];
       },
