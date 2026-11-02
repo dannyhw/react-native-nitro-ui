@@ -90,13 +90,22 @@ iOS segmented `tintColor` is the one "needs a decision" item — not implemented
 | `harness:android` | **PASS** | 287 tests / 16 suites | `5bb6dfc5226e` (android tree) | 8 m 33 s | start 112.4 / med 4.4 / max 112.4 |
 | `real-input:ios` | **PASS** | — | `5bb6dfc5226e` (ios tree) | 16 m 34 s | start 1.9 / med 4.3 / max 19.4 |
 | `real-input:android` | **PASS** | — | `5bb6dfc5226e` (android tree) | 21 m 33 s | start 2.5 / med 2.2 / max 5.0 |
+| `harness:android:inverted` | stale | — | 54566da5a119 (not this tree) | 1.1 s | start 5.5 / med 5.5 / max 5.5 |
+| `harness:android:SegmentedControl` | stale | 1 failed of 20 tests / 1 suites | 953293f4ec7e (not this tree) | 34.5 s | start 2.3 / med 2.4 / max 2.9 |
+| `harness:android:Slider` | stale | 2 failed of 24 tests / 1 suites | 51cc4d0faf56 (not this tree) | 20.6 s | start 2.0 / med 1.9 / max 2.0 |
+| `harness:ios:SegmentedControl` | stale | 1 failed of 20 tests / 1 suites | 953293f4ec7e (not this tree) | 32.9 s | start 2.3 / med 2.7 / max 2.7 |
+| `harness:ios:Slider` | stale | 1 failed of 24 tests / 1 suites | ca5089fd3abc (not this tree) | 21.2 s | start 2.5 / med 2.8 / max 3.0 |
 
-`need --for review is satisfied on this code tree.` — check, both `harness:*` (on their own
-platform half) and both `real-input:*` are green on `5bb6dfc5226e`. `harness:android` opened
-at load1 112.4 because the iOS `real-input` build was still finishing; the run's own median
-was 4.4. The red-proof runs are in the ledger under their own filtered names
-(`harness:ios:Slider`, `harness:android:SegmentedControl`, …) and satisfy nothing; `gate.mjs
-export --task G10-component-followups` wrote the ledger to `docs/tasks/G10-component-followups/gates.jsonl`
+`need --for review is satisfied on this code tree.` — check, both `harness:*` (each on its own
+platform half) and both `real-input:*` are green on `5bb6dfc5226e`. The five `stale` rows are
+the red-proof runs, recorded under their own filtered names against the mutated trees; they
+satisfy nothing, and the failing counts in them are the evidence in the section below (the
+`inverted` row is one of mine that asked for a test-name filter instead of a file filter, so
+it found no tests and recorded nothing — the inverted-range proof it was meant to be is under
+its own `Slider` runs).
+`harness:android` opened at load1 112.4 because the iOS `real-input` build was still finishing
+when it started; that run's own median was 4.4 and 287/287 passed. `gate.mjs export --task
+G10-component-followups` wrote the ledger to `docs/tasks/G10-component-followups/gates.jsonl`
 and a scrubbed excerpt of each failed run to `…/failures/`.
 
 ## Red proofs
