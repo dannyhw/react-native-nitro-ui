@@ -560,12 +560,15 @@ What that means in practice:
   simulator idling through the rest of the mint (X16 item 2).
   `NITRO_UI_LEASE_BOOT=1` does not boot an exclusive lease either: only a typed
   `--boot` does, because a bench host is exactly the host that keeps that
-  variable in its profile. One exception is made to the power-off: a device of
-  the leased pair that is _already up_ is spared rather than killed and restarted,
-  since killing it costs the bench a cold boot of the device it is about to
-  measure on (X16 item 3). An exclusive acquire used to skip the hand-off
-  altogether, so the documented baseline-mint line below left both of its
-  simulators off and the bench host booted its leased device by hand (X16 item 2).
+  variable in its profile. One exception is made to the power-off, and only when
+  a boot was asked for: a device of the named platform, in the pair being handed
+  over, that is _already up_ is spared rather than killed and restarted, since
+  killing it costs the bench a cold boot of the device it is about to measure on
+  (X16 item 3). Ask for no boot and the promise stays whole: the machine is
+  powered down however warm it was. An exclusive acquire used to skip the
+  hand-off altogether, so the documented baseline-mint line below left both of
+  its simulators off and the bench host booted its leased device by hand
+  (X16 item 2).
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
   a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
   no claim, so what protects them is the rule above: their pair is leased, and a
