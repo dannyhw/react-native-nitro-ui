@@ -59,37 +59,9 @@ one commit per controlled keystroke (6).
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1666 tests / 64 suites | `50e0cd168131` | 2 m 42 s | start 4.5 / med 5.6 / max 7.5 |
-| `harness:ios` | **PASS** | 288 tests / 18 suites | `921d30cd4d26` (ios tree) | 5 m 23 s | start 4.3 / med 4.0 / max 5.0 |
-| `harness:android` | **PASS** | 337 tests / 18 suites | `921d30cd4d26` (android tree) | 9 m 22 s | start 3.4 / med 3.4 / max 12.1 |
-| `real-input:ios` | **PASS** | — | `921d30cd4d26` (ios tree) | 18 m 43 s | start 2.7 / med 6.7 / max 73.3 |
-| `real-input:android` | **PASS** | — | `921d30cd4d26` (android tree) | 25 m 04 s | start 5.1 / med 2.4 / max 8.1 |
-| `harness:android:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 4.8 / med 4.4 / max 5.5 |
-| `harness:android:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 0f1ba858cb60 (not this tree) | 17.8 s | start 6.7 / med 6.1 / max 6.7 |
-| `harness:android:TextField` | stale | 5 failed of 12 tests / 1 suites | 22e4fb11b10d (not this tree) | 34.4 s | start 10.2 / med 8.8 / max 10.2 |
-| `harness:android:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.4 s | start 3.8 / med 3.9 / max 4.1 |
-| `harness:android:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.4 s | start 5.9 / med 5.0 / max 5.9 |
-| `harness:android:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.3 s | start 3.8 / med 3.8 / max 3.8 |
-| `harness:android:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | 0f1ba858cb60 (not this tree) | 9.0 s | start 6.2 / med 6.4 / max 6.7 |
-| `harness:android:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 14.2 s | start 4.2 / med 4.3 / max 4.3 |
-| `harness:android:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 8.7 s | start 4.6 / med 4.7 / max 4.9 |
-| `harness:ios:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 3.1 / med 4.6 / max 5.3 |
-| `harness:ios:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 539b032e02b8 (not this tree) | 21.6 s | start 4.1 / med 4.2 / max 4.6 |
-| `harness:ios:TextField` | stale | 5 failed of 12 tests / 1 suites | 08a2a172af6d (not this tree) | 36.5 s | start 3.6 / med 4.6 / max 5.1 |
-| `harness:ios:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 378a298679a7 (not this tree) | 15.6 s | start 4.5 / med 4.5 / max 4.8 |
-| `harness:ios:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.9 s | start 7.9 / med 6.9 / max 7.9 |
-| `harness:ios:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 14.1 s | start 12.6 / med 13.7 / max 14.9 |
-| `harness:ios:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | af5ba759f19a (not this tree) | 11.3 s | start 3.8 / med 4.2 / max 4.6 |
-| `harness:ios:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 15.8 s | start 5.8 / med 12.6 / max 12.6 |
-| `harness:ios:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 853846df2617 (not this tree) | 10.6 s | start 6.4 / med 6.3 / max 6.4 |
-| `real-input:android:--control:text-field` | stale | — | 9f3efe5aec0e (not this tree) | 5 m 31 s | start 4.5 / med 4.7 / max 8.2 |
-| `real-input:ios:--control:text-field` | stale | — | 5fb226e019db (not this tree) | 6 m 13 s | start 3.0 / med 10.0 / max 20.1 |
-
-The `stale` rows are the red-proof runs below, each on a mutated tree.
-
-`need --for review`: `need: review is satisfied on this code tree.`
+Round 1's generated table described code tree `50e0cd168131` (all five gates green), which fix round 1
+replaced; the fresh table is in "Fix round 1" below, and `docs/tasks/G13/gates.jsonl` keeps every run of both
+rounds.
 
 ## Red proofs
 
