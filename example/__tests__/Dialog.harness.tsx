@@ -368,7 +368,13 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       return (
         <View style={{ flex: 1 }}>
           <Stage testId="over-closing-modal" initial title="Over" />
-          <Modal visible={modal} animationType="none">
+          {/* A page sheet keeps the screen under it in the window; a full-screen
+              Modal does not, which is the next test. */}
+          <Modal
+            visible={modal}
+            animationType="none"
+            presentationStyle="pageSheet"
+          >
             <View style={{ flex: 1 }}>
               <Stage testId="in-closing-modal" initial title="Inside" />
             </View>
@@ -409,6 +415,39 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     expect(
       eventLog.filter((e) => e.startsWith('in-closing-modal:action')).length
     ).toBe(0);
+  });
+
+  it('closes and reports when its view leaves the window under a full-screen Modal', async () => {
+    // UIKit takes the presenting screen's views out of the window once a full-screen
+    // presentation lands, so a dialog open on that screen loses its anchor's window -
+    // B2's rule then closes it and reports the close. Android's RN Modal is a window of
+    // its own, the screen under it stays attached, and the dialog stays up. Pinned both
+    // ways, because it is a platform difference an app can see.
+    function Scene() {
+      const [modal, setModal] = useState(false);
+      setters.set('modal', setModal);
+      return (
+        <View style={{ flex: 1 }}>
+          <Stage testId="under-full-screen" initial title="Under" />
+          <Modal visible={modal} animationType="none">
+            <View style={{ flex: 1 }} />
+          </Modal>
+        </View>
+      );
+    }
+    await render(<Scene />);
+    await waitForHandle('under-full-screen');
+    await waitForReport('under-full-screen', isUpCounted(1), 'up');
+    setters.get('modal')?.(true);
+    if (Platform.OS === 'ios') {
+      await waitForLive('under-full-screen', 0, 'closed with its window gone');
+      expect(eventLog.join(',')).toBe('under-full-screen:presented:false');
+    } else {
+      await sleep(1000);
+      expect(reportOf('under-full-screen').live).toBe('1');
+      expect(eventLog.join(',')).toBe('');
+    }
+    setters.get('modal')?.(false);
   });
 });
 
@@ -485,6 +524,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       await render(<Stage testId="refused" initial refuse />);
       await waitForHandle('refused');
       await waitForReport('refused', isUpCounted(1), 'up');
+      await sleep(300);
       handles.get('refused')?.nuiTestDismiss();
       // The close lands, JS echoes it, `isPresented` is still true: it comes back.
       await waitForReport(
@@ -494,6 +534,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
         12000
       );
       expect(reportOf('refused').live).toBe('1');
+      // Past the new window's entry transition, so the next dismissal is a real one
+      // rather than a close carried to a presentation that is still arriving.
+      await sleep(800);
       handles.get('refused')?.nuiTestDismiss();
       await waitForReport(
         'refused',
