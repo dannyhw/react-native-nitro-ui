@@ -458,9 +458,6 @@ final class RealInputTests: XCTestCase {
     // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
-    // A SwiftUI `Toggle` drawn as a button (the Chip's filter variant) - the type
-    // VoiceOver announces as "toggle button".
-    case .toggle: return "toggle"
     case .progressIndicator: return "progress indicator"
     case .staticText: return "static text"
     case .group: return "group"
@@ -2642,7 +2639,9 @@ final class RealInputTests: XCTestCase {
   private func chipElement(of identifier: String) -> XCUIElement? {
     let container = app.descendants(matching: .any)[identifier].firstMatch
     guard container.exists else { return nil }
-    for type in [XCUIElement.ElementType.toggle, .button, .`switch`] {
+    // A filter chip's `Toggle(.button)` is reported as a switch (measured), an assist
+    // chip's `Button` as a button.
+    for type in [XCUIElement.ElementType.`switch`, .button] {
       let inner = container.descendants(matching: type).firstMatch
       if inner.exists { return inner }
     }
@@ -2650,8 +2649,8 @@ final class RealInputTests: XCTestCase {
   }
 
   /// Whether the chip's element says it is selected, as "on"/"off", or nil when nothing
-  /// answers. A toggle answers with `value`; a button that is selected answers with
-  /// `isSelected`, so either counts.
+  /// answers. The filter chip's element answers with `value` 1/0 (measured); a selected
+  /// button would answer with `isSelected`, so either counts.
   private func nativeChipState(of identifier: String) -> String? {
     guard let element = chipElement(of: identifier) else { return nil }
     if element.isSelected { return "on" }

@@ -46,7 +46,7 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
-import { nativeChecked } from './android-tree.mjs';
+import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
   calendarGridProblems,
@@ -1422,15 +1422,22 @@ const CHECKS = {
     //    is about a period in which nothing may move.
     const disabledFilter = named('Real-input disabled chip');
     const disabledAssist = named('Real-input disabled assist chip');
+    // Read off the clickable touch target around the label, not the labelled node:
+    // `nativeEnabled` says why (the labelled node reports enabled either way).
     t.log.checkEquals(
-      "the disabled filter chip's node says it is not enabled",
-      disabledFilter.enabled,
+      'the disabled filter chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled chip'),
       'false'
     );
     t.log.checkEquals(
-      "the disabled assist chip's node says it is not enabled",
-      disabledAssist.enabled,
+      'the disabled assist chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled assist chip'),
       'false'
+    );
+    t.log.checkEquals(
+      'its enabled twin announces itself enabled (so the reads above can say true)',
+      t.nativeEnabled('Real-input assist chip'),
+      'true'
     );
     await t.tapNode(disabledFilter);
     t.log.checkEquals(
@@ -3910,6 +3917,17 @@ function makeContext(harness, log) {
      */
     nativeChecked(description) {
       return nativeChecked(harness.hierarchy(), description);
+    },
+
+    /**
+     * See `nativeEnabled` in `android-tree.mjs`: the clickable node's `enabled`,
+     * which is where Compose puts a disabled control's state.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @returns {string | null} `"true"` / `"false"`, or null when nothing answers
+     */
+    nativeEnabled(description) {
+      return nativeEnabled(harness.hierarchy(), description);
     },
 
     /**
