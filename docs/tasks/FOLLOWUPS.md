@@ -114,3 +114,11 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G11 fix 2: the iOS `nuiTestPerformAction` has the alert dismiss itself, as a tap does, and then runs the handler in the same turn. Whether UIKit runs a real tap's handler at the start or the end of the exit was not measured, so the seam's event-before-count order may be the seam's own; `real-input:ios` drives the real tap.
 - `harness:ios` Host suites read a hybrid handle right after the box is laid out, before `hybridRef` fires: HostControls "reports a hosted drag…" (`log.sliders['slide-0']` undefined, the H2a flake) and HostPopups "segmented row … never mounted" each failed once in G11's merge run on maintainer-mac-1 and passed on the third run (`docs/tasks/G11-merge/failures/`). Wait for the handle the way `waitForHandle` does.
 
+
+- G14 bench (C9): `present.bottom-sheet` and `mount.bottom-sheet` are not built; like G11's dialogs, no scenario can stamp a presentation yet.
+- G14: C2's `PresentedContainerShadowNode` (a state push instead of the JS box round trip) is not built; the round trip is seeded with the window width, so a phone's first frame is right.
+- G14: react-native-screens 4.30.1's `ScreenStack` crashes a fresh Android harness app instance at mount (`addViewAt … child already has a parent`, `ReactClippingViewManager.addView`), with or without a BottomSheet in it; the Android half of D35 item 3 is unmeasured.
+- G14 red proofs: the Android BottomSheet drop tests stay green with the model close, `host.drop()` and the recycle reset all removed; a fourth path takes the window down and is unidentified.
+- G14: once, on a cold Android launch with Metro just started, the two-detent example sheet closed itself (`presented:false`); not reproduced in three tries. The stable `confirmValueChange` added afterwards is defensive, not proven.
+- G14: how often a non-`fit` iOS sheet re-reports its content box during an interactive detent drag (each report is a JS re-layout) was not measured.
+- G14: an RN `Modal` rendered on the same screen as an open in-chain iOS sheet is expected not to present (RN presents from `reactViewController`); read from source, not measured.

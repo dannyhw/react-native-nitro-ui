@@ -1,0 +1,211 @@
+# Failure excerpt — harness:ios:BottomSheet.harness
+
+- Ran: 2026-11-02T21:00:15.252Z on code tree `e3736a1f2623` at HEAD `6691428` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios BottomSheet.harness`
+- Result: fail, exit 1, 197784 ms
+- Load: start 16.44, end 5.88, median 7.71, max 16.87
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G14-ndzag`
+- Full log: `task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-00-15.252Z.log` (<store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-00-15.252Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet › follows its content while it is up (fit)`
+- `● BottomSheet › opens a medium/large sheet at the first detent and reports a drag to the second`
+- `● BottomSheet › gives a ScrollView inside the sheet the sheet box`
+- `● BottomSheet › takes touches through a touch root of its own while it is up`
+- `● BottomSheet › closes on a JS false with onDismiss and no onIsPresentedChange, then unmounts the content`
+- `● BottomSheet › closes as a user dismissal does: onIsPresentedChange(false), then onDismiss`
+- `● BottomSheet › does nothing for a user dismissal when dismissible is false`
+- `● BottomSheet › presents again when the app refuses a dismissal`
+- `● BottomSheet › closes when JS withdraws it mid-entry, and leaves nothing`
+- `● BottomSheet › leaves nothing when dropped 0 ms after presenting`
+- `● BottomSheet › leaves nothing when dropped 80 ms after presenting`
+- `● BottomSheet › leaves nothing when dropped 150 ms after presenting`
+- `● BottomSheet › leaves nothing when dropped 1000 ms after presenting`
+- `● BottomSheet › gives a recycled view none of its previous sheet`
+- `● BottomSheet › presents at mount once its view is in a window`
+- `● BottomSheet › presents inside an RN Modal and closes cleanly before the Modal does`
+- `● BottomSheet › follows its content in a window of its own, over an RN Modal (fit)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 1)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 2)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-00-15.252Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-ndzag (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.88 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 298 — the rest is in the full log above)
+
+```
+    "probe-70030350.766708" never reached nothing left after a drop at 150 ms; its report is "presented=0;js=0;live=11;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=0;contentH=0;inSheet=0;hidden=1;children=0;sheetH=0;ownWindow=0;appTop=-;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=11;touchRoots=11;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=19;recycles=19"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › leaves nothing when dropped 1000 ms after presenting
+
+    "probe-70040234.70175" never reached nothing left after a drop at 1000 ms; its report is "presented=0;js=0;live=12;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=0;contentH=0;inSheet=0;hidden=1;children=0;sheetH=0;ownWindow=0;appTop=-;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=12;touchRoots=12;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=22;recycles=22"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › gives a recycled view none of its previous sheet
+
+    "old" never reached presented (up, counted, content in it); its report is "presented=1;js=1;live=13;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=300;inSheet=1;hidden=0;children=2;sheetH=334;boxW=402;boxH=300;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=old-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=13;touchRoots=13;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=23;recycles=23"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › presents at mount once its view is in a window
+
+    "mount" never reached presented (up, counted, content in it); its report is "presented=1;js=1;live=14;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=mount-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=14;touchRoots=14;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=24;recycles=24"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › presents inside an RN Modal and closes cleanly before the Modal does
+
+    "in-modal" never reached presented (up, counted, content in it); its report is "presented=1;js=1;live=14;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=14;touchRoots=14;userDismissals=0;unasked=0;presentWaits=0;anchored=0;drops=26;recycles=26"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › follows its content in a window of its own, over an RN Modal (fit)
+
+    "own-fit" never reached up over the Modal (up, counted, content in it); its report is "presented=1;js=1;live=14;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=14;touchRoots=14;userDismissals=0;unasked=0;presentWaits=0;anchored=0;drops=27;recycles=27"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 1)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=1;js=1;live=15;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=cycle-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=15;touchRoots=15;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=29;recycles=29"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=1;js=1;live=16;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=cycle-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=16;touchRoots=16;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=30;recycles=30"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=1;js=1;live=17;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=cycle-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=17;touchRoots=17;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=31;recycles=31"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=1;js=1;live=18;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=cycle-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=18;touchRoots=18;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=32;recycles=32"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=1;js=1;live=19;presentCount=1;onScreen=1;detents=fit;selected=0;contentW=402;contentH=240;inSheet=1;hidden=0;children=2;sheetH=274;boxW=402;boxH=240;boxReports=1;maxDetent=768;grabber=1;modalInPresentation=0;label=-;sheetId=cycle-sheet;windowLevel=0;hit=1;ownWindow=0;appTop=NitroUiSheetController;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=19;touchRoots=19;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=33;recycles=33"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › leaves nothing behind after fifty cycles
+
+    expected +0 to be 50 // Object.is equality
+
+      [0m [90m 704 |[39m
+       [90m 705 |[39m   it([32m'leaves nothing behind after fifty cycles'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 706 |[39m     expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 707 |[39m     [36mconst[39m probeId [33m=[39m [36mawait[39m probe()[33m;[39m
+       [90m 708 |[39m     [36mconst[39m after [33m=[39m [36mawait[39m waitForReport(
+       [90m 709 |[39m       probeId[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       23 failed, 1 passed, 24 total
+Snapshots:   0 total
+Time:        196.214 s
+Ran all test suites matching BottomSheet.harness.
+
+
+
+```
