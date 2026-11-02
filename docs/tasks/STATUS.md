@@ -73,8 +73,8 @@
 | G8 | Android visual fixes from the README screenshots: inline DatePicker clipped, Menu dropdown truncating labels | Apex | Opus | merged (`b52435e`, PR #18) |
 | G9 | iOS Menu drops an untitled destructive group (run on maintainer-mac-1 via the T3 link) | Apex (on mac-1) | Opus | merged (`baf9811`, PR #17) |
 | X16 | Tooling sweep 2: lease-env leak in check's tests, --exclusive --boot, bench --help ledger row, a11y:switch stable read | Apex | Opus | merged (`f2a6f2c`, PR #20) |
-| G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | running |
-| X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | running |
+| G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | reviewed, PR #23; merge gates wait for a free device pair (components first) |
+| X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | done, PR #22; merge gates wait for a free device pair |
 | T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | running |
 | Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
