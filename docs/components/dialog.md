@@ -114,6 +114,12 @@ Modal's controller, which with a dialog on top dismisses the dialog instead and 
 Modal on screen with nothing to close it. From its own window the dialog is outside every
 app chain. A confirmation's popover (iPad) points at the anchor's rect.
 
+The window is above the app's, so while it is up UIKit asks its root about the status bar
+and the orientations: the root answers as the app's top controller did when the dialog
+presented (an RN `Modal`'s `supportedOrientations`, say). When the window closes it hands
+key status back — to the window that was key before it, else the app's — and posts a
+VoiceOver screen change.
+
 **Android.** The anchor is a `NitroComposeHost` at `0 × 0` that composes on attach and is
 not important for accessibility. `AlertDialog` lays the non-cancel actions out in order,
 with the cancel action as Material's dismiss button; `ModalBottomSheet` draws one row per
@@ -136,6 +142,7 @@ ran against react-native-screens, see below):
 | A second dialog over the first                              | both up, each closes on its own        | the same                        |
 | `isPresented = false` during the entry animation            | closes, no window left                 | closes, no window left          |
 | Unmounted at 0, 80, 150 and 1000 ms after presenting        | no window left behind                  | no window left behind           |
+| Re-keyed 0, 80, 150 ms in, the recycled view presenting again | one dialog up, none after              | the same                        |
 | The `pageSheet` Modal under an open dialog closes           | the Modal closes; nothing left         | the same                        |
 | A **full-screen** Modal opens over the dialog's screen      | the dialog closes and reports it       | the dialog stays up             |
 | react-native-screens `formSheet` (presents, sheet closes under it) | works, nothing left             | works, nothing left             |
@@ -169,7 +176,9 @@ view shows none of the old dialog (`Dialog.harness.tsx`, and the conformance sui
 residue probe: a first owner's dismissal leaves one native event, which a reset that kept
 it would use to refuse the second owner's `isPresented`). `onDropView()` closes — on iOS
 through the helper, which hides the presentation at once if the drop lands mid-transition
-and carries the dismissal to completion — and drops the callbacks. On Android the host's
+and carries the dismissal to completion — and drops the callbacks. The helper keeps that
+carried dismissal per controller, so a recycled view that presents its next mount's dialog
+before the previous one has finished arriving still takes the previous one down. On Android the host's
 drop disposes the composition, which closes the window.
 
 ## Accessibility

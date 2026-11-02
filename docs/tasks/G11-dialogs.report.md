@@ -45,24 +45,14 @@ are in. Bench arms (B8) are a follow-up: no scenario can stamp a presentation ye
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1653 tests / 62 suites | `91c20699519c` | 2 m 02 s | start 4.5 / med 9.6 / max 13.3 |
-| `harness:ios` | **PASS** | 258 tests / 17 suites | `91c20699519c` (ios tree) | 4 m 31 s | start 1.8 / med 2.3 / max 3.0 |
-| `harness:android` | **PASS** | 310 tests / 17 suites | `91c20699519c` (android tree) | 8 m 23 s | start 2.4 / med 2.1 / max 3.1 |
-| `real-input:ios` | **PASS** | — | `91c20699519c` (ios tree) | 13 m 54 s | start 7.4 / med 5.9 / max 16.9 |
-| `real-input:android` | **PASS** | — | `91c20699519c` (android tree) | 22 m 32 s | start 3.7 / med 3.7 / max 7.5 |
-| `harness:android:Dialog` | stale | 6 failed of 21 tests / 1 suites | e367ed4775e9 (not this tree) | 39.8 s | start 5.3 / med 4.6 / max 5.3 |
-| `harness:ios:Conformance` | stale | 2 failed of 45 tests / 1 suites | 48152bc52ff9 (not this tree) | 1 m 39 s | start 4.7 / med 5.4 / max 6.9 |
-| `harness:ios:Dialog` | stale | 5 failed of 20 tests / 1 suites | 0a43dc5567ca (not this tree) | 1 m 23 s | start 8.2 / med 6.3 / max 8.2 |
-| `real-input:android:--control:dialog` | **PASS** | — | `91c20699519c` (android tree) | 6 m 27 s | start 8.0 / med 2.4 / max 8.0 |
-| `real-input:ios:--control:dialog` | stale | — | 48152bc52ff9 (not this tree) | 4 m 46 s | start 6.5 / med 15.2 / max 55.8 |
+Round 1's generated table described code tree `91c20699519c`, which fix round 1 replaced;
+the fresh table is in "Fix round 1" below, and `docs/tasks/G11/gates.jsonl` keeps every
+run of both rounds.
 
-The `stale` rows are the red-proof runs, on mutated trees. `real-input:ios` is its second run
-on this tree: the first lost one of twelve 0.15 s presses on the untouched Switch screen
-(`dropped 1 of 12 presses`, the F7 quick-tap class) and passed Dialog and all 14 a11y cases.
-
-`need --for review`: `need: review is satisfied on this code tree.`
+In round 1's table the `stale` rows were the red-proof runs, on mutated trees, and
+`real-input:ios` was its second run on that tree: the first lost one of twelve 0.15 s presses
+on the untouched Switch screen (`dropped 1 of 12 presses`, the F7 quick-tap class) and passed
+Dialog and all 14 a11y cases. Round 1's `need --for review` was satisfied on that tree.
 
 ## Red proofs
 
@@ -119,3 +109,44 @@ The eight `G11` lines appended to `docs/tasks/FOLLOWUPS.md`, one line each there
    in-chain presenter and document the RN Modal hazard. Recommendation: (a) now, (b) as
    BottomSheet's first step — a sheet inside an RN Modal hits the same stranding, and a
    `UISheetPresentationController` in its own window needs its own spike.
+
+## Fix round 1
+
+All six review items, two code commits.
+
+**1.** The refusal warning fires only in the commit whose echoed count moved, so open,
+cancel, `false`, `true` stays quiet. **2.** `NitroUiPresentation` keeps the entry transition
+and carried dismissal per controller; each completion dismisses its own controller and
+window (DatePicker's one controller takes the same path). **3.** `titleVisibility` JSDoc
+matches iOS. **4.** A disabled sheet row gets Material's disabled colour (M3 1.4 has no
+`ListItem(enabled)`); the harness reads each label's drawn colour (`drawn=`), both
+variants. **5.** The window root forwards the status bar and orientations of the app's top
+controller, captured at present. **6.** Closing a key window hands key back and posts
+`.screenChanged`; iOS 27 already restores key, so that test is proved by mutation.
+
+Red proofs:
+
+- `dialog.test.tsx` quiet reopen -> pre-fix wrapper -> `Expected: 0, Received: 1`
+- swap ×6 (iOS) -> pre-fix helper, and `entering = [key: …]` -> `expected '2' to be '1'`, `live=2;…;windows=2`
+- disabled, confirmation (Android) -> pre-fix row -> `expected '1,1,1' to be '1,0,1'`
+- status bar (iOS) -> pre-fix root -> `expected '0,0,30' to be '0,0,2'`
+- key window (iOS) -> `close()` keeps the window, releasing its root -> `key=other`
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1655 tests / 63 suites | `6470cdb9f93f` | 2 m 02 s | start 7.2 / med 10.7 / max 13.8 |
+| `harness:ios` | **PASS** | 267 tests / 17 suites | `6470cdb9f93f` (ios tree) | 4 m 42 s | start 8.9 / med 5.9 / max 8.9 |
+| `harness:android` | **PASS** | 317 tests / 17 suites | `6470cdb9f93f` (android tree) | 8 m 35 s | start 5.0 / med 4.5 / max 5.6 |
+| `real-input:ios` | **PASS** | — | `6470cdb9f93f` (ios tree) | 15 m 06 s | start 4.9 / med 6.1 / max 77.4 |
+| `real-input:android` | **PASS** | — | `6470cdb9f93f` (android tree) | 22 m 53 s | start 6.2 / med 4.5 / max 6.2 |
+| `harness:android:Dialog` | **PASS** | 28 tests / 1 suites | `6470cdb9f93f` (android tree) | 37.6 s | start 4.8 / med 4.2 / max 4.8 |
+| `harness:ios:Conformance` | stale | 2 failed of 45 tests / 1 suites | 48152bc52ff9 (not this tree) | 1 m 39 s | start 4.7 / med 5.4 / max 6.9 |
+| `harness:ios:Dialog` | **PASS** | 29 tests / 1 suites | `6470cdb9f93f` (ios tree) | 59.4 s | start 3.7 / med 4.4 / max 5.7 |
+| `harness:ios:Dialog:-t:key%20window` | stale | 1 failed of 29 tests / 1 suites | 2e565f3cc127 (not this tree) | 19.1 s | start 11.9 / med 11.7 / max 11.9 |
+| `harness:ios:Dialog:-t:recycled%20view%20presents%20again` | stale | 6 failed of 29 tests / 1 suites | e923506e7221 (not this tree) | 1 m 15 s | start 7.6 / med 6.9 / max 7.6 |
+| `harness:ios:Dialog:-t:status%20bar%7Ckey%20window` | stale | 1 failed of 29 tests / 1 suites | b91da82a05b2 (not this tree) | 12.3 s | start 4.8 / med 4.8 / max 4.8 |
+| `real-input:android:--control:dialog` | stale | — | 1ae6b9e02309 (not this tree) | 6 m 02 s | start 3.6 / med 4.1 / max 5.3 |
+| `real-input:ios:--control:dialog` | stale | — | 48152bc52ff9 (not this tree) | 4 m 46 s | start 6.5 / med 15.2 / max 55.8 |
+
+`need --for review`: `need: review is satisfied on this code tree.` The `stale` rows are the
+red-proof runs on mutated or pre-fix trees.
