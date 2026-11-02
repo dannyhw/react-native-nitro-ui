@@ -26,7 +26,7 @@
  * `nuiTestStateReport()` (what the control is drawing, and on Android what its
  * accessibility node says).
  */
-import { useCallback, useLayoutEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -485,34 +485,55 @@ describe('Chip · G12', () => {
   it('files nothing under a key two quick toggles have already left', async () => {
     // The hold's other edge (G12 review, fix round 1). A toggle holds its size report
     // until a props batch re-keys the chip, but the first batch to arrive need not be
-    // the one that names what is drawn. Here the second toggle reaches native after
-    // the first toggle's render has committed and before that render's batch is
-    // applied - an order a quick double tap can take - because the fixture's layout
-    // effect, which runs in that commit, presses again. The batch then names
-    // `selected` while the chip draws unselected, and a hold that ended on whatever
-    // batch came next filed the unselected width under the selected key: every later
-    // selected chip of this label started narrow and corrected. The hold now ends only
-    // on a batch that has seen every toggle (the echoed event count, `Chip.tsx`).
+    // the one that names what is drawn. Here the second toggle reaches native while
+    // the first toggle's render is still on its way - an order a quick double tap can
+    // take. That render's batch names `selected` while the chip draws unselected, and
+    // a hold that ended on whatever batch came next let the re-measure the batch asks
+    // for file the unselected width under the selected key: every later selected chip
+    // of this label then started narrow and corrected. The hold now ends only on a
+    // batch that has seen every toggle (the echoed event count, `Chip.tsx`).
     //
     // The oracle is a fresh *selected* chip of the label. Its configuration was
     // measured before the toggles, by a chip that never toggled, so it must lay out
     // exact. On iOS the selection is not in the key and the case holds trivially.
+    //
+    // The order is made, not hoped for, and each of the three waits below was found
+    // by a version without it staying green against the old hold (Android, with the
+    // host's own log beside the trace):
+    // - each event keeps JS busy before it renders. After the first, so the first
+    //   toggle's frame has drawn: its relayout holds main's ordinary messages behind
+    //   that frame, which is also where the render's batch is applied, and a press
+    //   posted before it lands after the batch. After the second, so the second
+    //   render's batch cannot arrive within a frame of the first and re-key the chip
+    //   before the first batch's re-measure has reported;
+    // - the second press is posted from inside the first render, before its commit,
+    //   and the render then waits for main to draw it. Posted from the commit's layout
+    //   effect it landed after the batch; without the wait the batch shared the
+    //   press's frame and the re-measure read the composition from before the press.
     const LABEL = 'Twice';
     poison([
       sizingKey('filter', false, LABEL),
       sizingKey('filter', true, LABEL),
     ]);
+    const spin = (ms: number) => {
+      const until = nitroUiCore.now() + ms;
+      while (nitroUiCore.now() < until) {
+        // Deliberately busy, as Picker's `recordChangeThenBlock` is.
+      }
+    };
     function TwoQuickToggles() {
       const [toggles, setToggles] = useState(0);
+      const pressedAgain = useRef(false);
       const onChange = useCallback((next: boolean) => {
         events.push(`twice:${String(next)}`);
+        spin(150);
         setToggles((count) => count + 1);
       }, []);
-      useLayoutEffect(() => {
-        if (toggles === 1) {
-          handles.get('twice')?.nuiTestPress();
-        }
-      }, [toggles]);
+      if (toggles === 1 && !pressedAgain.current) {
+        pressedAgain.current = true;
+        handles.get('twice')?.nuiTestPress();
+        spin(150);
+      }
       return (
         <Chip
           label={LABEL}
