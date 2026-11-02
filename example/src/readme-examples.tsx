@@ -13,6 +13,7 @@
  */
 import {
   AlertDialog,
+  BottomSheet,
   Button,
   DatePicker,
   type DialogAction,
@@ -26,7 +27,7 @@ import {
   Switch,
 } from 'react-native-nitro-ui';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 // #region switch
 export function WifiSettings() {
@@ -185,6 +186,41 @@ export function DeleteDraft({ onDelete }: { onDelete: () => void }) {
           if (id === 'delete') onDelete();
         }}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region bottom-sheet
+export function Filters() {
+  const [open, setOpen] = useState(false);
+  const [detent, setDetent] = useState(0);
+
+  return (
+    <>
+      <Button
+        title="Filters"
+        variant="tonal"
+        size="medium"
+        onPress={() => setOpen(true)}
+      />
+      <BottomSheet
+        isPresented={open}
+        onIsPresentedChange={setOpen}
+        detents={['medium', 'large']}
+        onDetentChange={setDetent}
+        accessibilityLabel="Filters"
+      >
+        <View style={{ padding: 24, gap: 12 }}>
+          <Text>{detent === 0 ? 'Half height' : 'Full height'}</Text>
+          <Button
+            title="Done"
+            variant="filled"
+            size="medium"
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </BottomSheet>
     </>
   );
 }

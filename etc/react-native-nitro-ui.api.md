@@ -17,6 +17,43 @@ export function AlertDialog(props: AlertDialogProps): JSX.Element;
 export type AlertDialogProps = DialogProps;
 
 // @public
+export function BottomSheet(input: BottomSheetProps): JSX.Element;
+
+// @public
+export type BottomSheetDetent = 'fit' | 'medium' | 'large' | {
+    height: number;
+} | {
+    fraction: number;
+};
+
+// @public
+export interface BottomSheetProps {
+    accessibilityLabel?: string | undefined;
+    children?: ReactNode;
+    containerColor?: ColorValue | undefined;
+    cornerRadius?: number | undefined;
+    detents?: readonly BottomSheetDetent[] | undefined;
+    dismissible?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly presented: boolean;
+        readonly mostRecentEventCount: number;
+        readonly dismissible: boolean;
+        nuiTestStateReport(): string;
+        nuiTestDismiss(): void;
+        nuiTestSelectDetent(index: number): void;
+    }) => void) | undefined;
+    isPresented: boolean;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onDetentChange?: ((index: number) => void) | undefined;
+    onDismiss?: (() => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    showsGrabber?: boolean | undefined;
+    testID?: string | undefined;
+}
+
+// @public
 export function Button(input: ButtonProps): JSX.Element;
 
 // @public
