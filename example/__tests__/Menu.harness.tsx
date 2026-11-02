@@ -1982,6 +1982,8 @@ describe('Menu · inside a Host', () => {
 
   it('opens under its own button, and follows it when the Host moves', async () => {
     await render(<HostedMenu log={log} />, { timeout: 30000 });
+    // `render` resolves on the box; the handle `report` reads lands a commit later.
+    await waitForHandle('hosted-menu', 'the hosted menu');
 
     if (Platform.OS !== 'android') {
       // `<Host>` is the documented passthrough on iOS (D23): the child keeps its own
@@ -2011,7 +2013,6 @@ describe('Menu · inside a Host', () => {
       return;
     }
 
-    expect(log.menu).toBeDefined();
     // The sanity gate under the rest of this test, in `HostPopups`'s words: if the
     // anchor rect came from the React Native frame it would be `0 × 0` here, and the
     // press below would land on the spacer instead of on the button.
@@ -2132,6 +2133,7 @@ describe('Menu · inside a Host', () => {
       </View>
     );
     await render(tree(true, 0), { timeout: 30000 });
+    await waitForHandle('hosted-survivor', 'the surviving hosted menu');
     if (Platform.OS !== 'android') {
       // On iOS the two Menus are ordinary React Native views (D23), so the claim
       // that survives is only that both are there and neither reports a window.
@@ -2199,6 +2201,7 @@ describe('Menu · inside a Host', () => {
 
   it('takes its window down when its button moves inside the Host', async () => {
     await render(<HostedPair log={log} />, { timeout: 30000 });
+    await waitForHandle('pair-menu', 'the paired hosted menu');
     if (Platform.OS !== 'android') {
       // Nothing to measure: iOS hosts by passing the child through (D23), so the
       // button and the menu are ordinary React Native views there.
