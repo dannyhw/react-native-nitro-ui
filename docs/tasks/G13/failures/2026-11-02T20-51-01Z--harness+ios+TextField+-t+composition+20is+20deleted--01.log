@@ -1,0 +1,77 @@
+# Failure excerpt — harness:ios:TextField:-t:composition%20is%20deleted
+
+- Ran: 2026-11-02T20:51:01.017Z on code tree `e7c676bd5194` at HEAD `305ee40` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios TextField -t composition is deleted`
+- Result: fail, exit 1, 15325 ms
+- Load: start 6.02, end 5.40, median 5.40, max 6.02
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G13-pppmh`
+- Full log: `task/G13-textfield/harness+ios+TextField+-t+composition+20is+20deleted-2026-11-02T20-51-01.017Z.log` (<store>/task/G13-textfield/harness+ios+TextField+-t+composition+20is+20deleted-2026-11-02T20-51-01.017Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● TextField › settles a write a composition held back when the composition is deleted`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+ios+TextField+-t+composition+20is+20deleted-2026-11-02T20-51-01.017Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G13-pppmh (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.40 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios TextField -t composition is deleted
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree e7c676bd5194, 11 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.02/6.24 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G13-textfield/harness+ios+TextField+-t+composition+20is+20deleted-2026-11-02T20-51-01.017Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● TextField › settles a write a composition held back when the composition is deleted
+
+    TextField cancel: the held write landing once the composition was gone never happened; last report {"text":"abc","focused":true,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"composing","editable":true,"multiline":false,"secure":false,"keyboardType":"default","returnKeyType":"default","autoCapitalize":"none","autoCorrect":false,"maxLength":-1,"placeholder":"","accessibilityLabel":"Field cancel"}
+
+      [0m [90m 145 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 146 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 147 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 148 |[39m         [32m`TextField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 149 |[39m       )[33m;[39m
+       [90m 150 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 skipped, 16 total
+Snapshots:   0 total
+Time:        14.166 s
+Ran all test suites matching TextField with tests matching "composition is deleted".
+
+
+
+```

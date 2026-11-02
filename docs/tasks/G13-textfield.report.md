@@ -146,7 +146,7 @@ Conformance, real input, unit:
 - text-field: `autoFocus`, `selection`/`onSelectionChange`, `onKeyPress`, `submitBehavior`, text colour/font/alignment.
 - text-field: `TextInput.State` interop (`Keyboard.dismiss()`, RN's focused-input tracking).
 - text-field(Android): the composition guard is implemented but unmeasured; an `InputConnection` composition does not survive the emulator keyboard.
-- text-field(iOS): the harness's `insertText` bypasses the `UITextField` delegate, so its `maxLength` cases exercise the post-edit backstop; the delegate's insertion cut is proven by real input only.
+- text-field(iOS): the harness's `insertText` bypasses the `UITextField` delegate, so its typing cases exercise the post-edit backstop. Corrected in fix round 1: real input did *not* prove the delegate's cut (it types at the end, where both agree); host vectors and a mid-text paste now do.
 - text-field(Android): the label's semantics node is a child of the `EditText` (same box); TalkBack's announcement is unverified on a device.
 - sizing: per-instance multi-line keys add one cache entry per multi-line mount; the engine never evicts. Consider dropping instance-keyed entries on `forget`.
 - text-field(iOS 15): the representable's `sizeThatFits` is iOS 16+; the iOS 15 fallback (`intrinsicContentSize`) has never run on a device.
@@ -194,3 +194,72 @@ TextField's first key of every block at 18–35 ms on iOS, which was the keyboar
 | Android | `TextInput` | 19.0 / 19.0 ms | 22.7 / 23.6 ms |
 | iOS | TextField | 5.9 / 6.5 ms | 8.8 / 8.9 ms |
 | iOS | `TextInput` | 9.0 / 4.6 ms | 11.9 / 9.8 ms |
+
+## Fix round 1
+
+All nine items done; every new test shown red (appendix).
+
+- **Android composition:** edits are reported while composing, and `maxLength` cuts composing text, with a backstop. Only the `value` write is held back.
+- **Held write:** decided again when the composition ends, on both platforms, whatever text it left.
+- **Early focus:** the wrapper keeps the newest early `focus()`/`blur()` and runs it when the native view arrives.
+- **iOS:** `reloadInputViews()` on a focused trait change; the cut moved to a UIKit-free file with host vectors and a mid-text paste case; the backstop only cuts text that grew.
+- **Cheap fixes:** callbacks cleared before resign; secure toggle redraws; `NumberPassword`; `onSubmitEditing` docs.
+
+The Android harness still can't hold a composition open, so `TextFieldModelTest` covers it on the JVM. Real Gboard (autocorrect on) reported `H`…`Hello` per key on both the fixed and pre-fix builds, with no composing underline, so it never composed here.
+
+Not red-provable: `reloadInputViews` (no keyboard read-back) and the recycle order (`onDropView` clears callbacks first). One `harness:ios` run failed in HostControls (late Picker handle); it passed alone and on the rerun.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1668 tests / 64 suites | `351fe07229be` | 2 m 52 s | start 11.6 / med 11.6 / max 18.1 |
+| `harness:ios` | **PASS** | 291 tests / 18 suites | `351fe07229be` (ios tree) | 5 m 22 s | start 6.6 / med 6.1 / max 8.0 |
+| `harness:android` | **PASS** | 340 tests / 18 suites | `351fe07229be` (android tree) | 9 m 18 s | start 5.4 / med 4.1 / max 7.2 |
+| `real-input:ios` | **PASS** | — | `351fe07229be` (ios tree) | 18 m 33 s | start 3.3 / med 7.3 / max 35.6 |
+| `real-input:android` | **PASS** | — | `351fe07229be` (android tree) | 25 m 20 s | start 4.8 / med 4.6 / max 25.5 |
+| `harness:android:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 4.8 / med 4.4 / max 5.5 |
+| `harness:android:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 0f1ba858cb60 (not this tree) | 17.8 s | start 6.7 / med 6.1 / max 6.7 |
+| `harness:android:TextField` | stale | 16 tests / 1 suites | 4ba7b96778ce (not this tree) | 34.5 s | start 42.2 / med 34.2 / max 42.2 |
+| `harness:android:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.4 s | start 3.8 / med 3.9 / max 4.1 |
+| `harness:android:TextField:-t:drops%20a%20JS%20write` | stale | 1 failed of 13 tests / 1 suites | cae4cc5c8f62 (not this tree) | 15.1 s | start 9.1 / med 8.6 / max 9.1 |
+| `harness:android:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.4 s | start 5.9 / med 5.0 / max 5.9 |
+| `harness:android:TextField:-t:mount%20effect` | stale | 1 failed of 16 tests / 1 suites | 38585a488857 (not this tree) | 14.6 s | start 26.0 / med 24.0 / max 26.0 |
+| `harness:android:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.3 s | start 3.8 / med 3.8 / max 3.8 |
+| `harness:android:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | 0f1ba858cb60 (not this tree) | 9.0 s | start 6.2 / med 6.4 / max 6.7 |
+| `harness:android:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 14.2 s | start 4.2 / med 4.3 / max 4.3 |
+| `harness:android:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 8.7 s | start 4.6 / med 4.7 / max 4.9 |
+| `harness:ios:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 3.1 / med 4.6 / max 5.3 |
+| `harness:ios:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 539b032e02b8 (not this tree) | 21.6 s | start 4.1 / med 4.2 / max 4.6 |
+| `harness:ios:HostControls` | **PASS** | 11 tests / 1 suites | `351fe07229be` (ios tree) | 19.5 s | start 4.7 / med 6.6 / max 7.1 |
+| `harness:ios:TextField` | stale | 1 failed of 16 tests / 1 suites | a9c73096f789 (not this tree) | 26.8 s | start 12.3 / med 10.7 / max 12.3 |
+| `harness:ios:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 378a298679a7 (not this tree) | 15.6 s | start 4.5 / med 4.5 / max 4.8 |
+| `harness:ios:TextField:-t:composition%20is%20deleted` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 15.3 s | start 6.0 / med 5.4 / max 6.0 |
+| `harness:ios:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.9 s | start 7.9 / med 6.9 / max 7.9 |
+| `harness:ios:TextField:-t:mid-text%20paste` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 10.7 s | start 4.5 / med 5.2 / max 6.0 |
+| `harness:ios:TextField:-t:mount%20effect` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 14.2 s | start 5.4 / med 5.6 / max 5.8 |
+| `harness:ios:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 14.1 s | start 12.6 / med 13.7 / max 14.9 |
+| `harness:ios:TextField:-t:paste` | stale | 16 tests / 1 suites | 13bfea012ecf (not this tree) | 10.2 s | start 4.5 / med 4.4 / max 4.5 |
+| `harness:ios:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | af5ba759f19a (not this tree) | 11.3 s | start 3.8 / med 4.2 / max 4.6 |
+| `harness:ios:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 15.8 s | start 5.8 / med 12.6 / max 12.6 |
+| `harness:ios:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 853846df2617 (not this tree) | 10.6 s | start 6.4 / med 6.3 / max 6.4 |
+| `real-input:android:--control:text-field` | stale | — | 9f3efe5aec0e (not this tree) | 5 m 31 s | start 4.5 / med 4.7 / max 8.2 |
+| `real-input:ios:--control:text-field` | stale | — | 5fb226e019db (not this tree) | 6 m 13 s | start 3.0 / med 10.0 / max 20.1 |
+
+`need --for review`: `need: review is satisfied on this code tree.`
+
+## Appendix: fix round 1 red proofs and follow-ups
+
+- `TextFieldModelTest` (JVM; `test:native:android` skips locally, run with `NITRO_UI_ANDROID_JVM_TESTS=1`) -> the round-0 `observe` (return while composing, no backstop, no settle) -> 4 of 7 red: `expected [h#1, he#2, hel#3, hello#4] but was [hello#1]`, `hel[lo]`, `abcd[😀]`, settled `0`; the other three -> settle on any end / backstop over a JS write / reset keeps `wasComposing` -> `expected 0 but was 1`, `abcde[fgh]`, `expected 0 but was 1`
+- `text-limit.test.swift` -> no composed-character adjustment -> 5 failures (`"�"`, `"👨‍�"`, `"🇯�"` …); keep the whole insertion -> 6 failures (`got "xyz", want "xy"`)
+- harness `keeps the part of a mid-text paste that fits` -> delegate cut off -> `ab xyz c` instead of `ab xy cd`
+- harness `settles a write … when the composition is deleted` -> settle removed -> `"text":"abc"`, `"lastWrite":"composing"`
+- harness `focuses from its parent’s mount effect` (iOS and Android) -> wrapper without the pending ask -> `focus from the mount effect never happened`
+- `textField.test.tsx` early-ask cases -> round-0 wrapper -> 2 failed
+- follow-up: the multi-line sizing cache grows by one entry per mount and `forget` never clears `cache_`; proposed: a component-marked instance key that `forget` erases.
+- follow-up: a stale `focus()` request (iOS `focusWhenReady`, Android `focusTick`) never expires.
+- follow-up: `syncText` moves the caret to the end on every JS write.
+- follow-up: the Android secure toggle swaps `BasicTextField` for `BasicSecureTextField` and probably drops focus; verify on a device.
+- follow-up: the iOS undo stack across a recycle is unverified.
+- follow-up: the recycle test re-sends the trait props, so the trait resets are not proven.
+- follow-up: iOS `reloadInputViews()` on a focused trait change has no read-back test.
+- follow-up: iOS reports a composition at its commit, Android at every step; align iOS with RN (which emits during marked text) if wanted.
+- follow-up: `HostControls … keeps the two window-opening controls live` once read a Picker handle before it arrived (`expected undefined to be 3`).
