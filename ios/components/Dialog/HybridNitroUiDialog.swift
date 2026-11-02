@@ -205,7 +205,11 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     mark(.recycled)
     // First, before the props reset: an open dialog belongs to the *previous* mount.
     presentation.dismissForTeardown()
+    // The helper finishes the old controller's dismissal on its own; this mount must
+    // not see it, update it or run its actions.
     detachAlert()
+    alert = nil
+    builtActionIds = []
     state = NitroUiControlledValue<Bool>(displayed: false)
     variantValue = "alert"
     titleValue = ""
@@ -237,16 +241,25 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       state.displayed = false
       presentation.dismissForTeardown()
     }
+    detachAlert()
+    alert = nil
+    builtActionIds = []
     publishReport()
   }
 
   // MARK: - Presenting
 
+  /// Whether this mount's controller is on screen (or on its way) and not leaving.
+  private var alertIsUp: Bool {
+    guard let alert else { return false }
+    return alert.presentingViewController != nil && !alert.isBeingDismissed
+  }
+
   /// Make the screen match `state.displayed`.
   private func sync() {
     nitroUiAssertMainThread()
     MainActor.assumeIsolated {
-      let onScreen = presentation.isOnScreen && !(alert?.isBeingDismissed ?? false)
+      let onScreen = alertIsUp
       if state.displayed {
         if onScreen {
           // Wanted and up. A JS `false` then `true` inside the entry transition left a
@@ -375,7 +388,7 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   /// action set does not: adding, removing or renaming an action applies at the next
   /// presentation, because `UIAlertController` cannot drop an action.
   private func applyInPlace() {
-    guard let alert, presentation.isOnScreen, !alert.isBeingDismissed else { return }
+    guard let alert, alertIsUp else { return }
     let showsTitle = alert.preferredStyle == .alert || titleVisibilityValue == "visible"
     let nextTitle = showsTitle ? titleValue : nil
     if alert.title != nextTitle { alert.title = nextTitle }
@@ -518,7 +531,7 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     fields.append("js=\(state.js == true ? 1 : 0)")
     fields.append("live=\(Self.live.value)")
     fields.append("presentCount=\(presentCount)")
-    let onScreen = presentation.isOnScreen && !(alert?.isBeingDismissed ?? false)
+    let onScreen = alertIsUp
     fields.append("onScreen=\(onScreen ? 1 : 0)")
     if let alert, onScreen {
       fields.append("kind=\(alert.preferredStyle == .actionSheet ? "sheet" : "alert")")
