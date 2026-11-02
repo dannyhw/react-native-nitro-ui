@@ -45,12 +45,15 @@ const ALERT_ACTIONS: DialogAction[] = [
   { id: 'locked', title: 'Locked action', disabled: true },
 ];
 
-/** The real-input confirmation sheet: rows on Android, an action sheet on iOS. */
+/**
+ * The real-input confirmation sheet: rows on Android, an action sheet on iOS. It
+ * has no cancel action on purpose, so iOS adds its own Cancel - and a tap outside
+ * an action sheet, which is that Cancel, reports the close alone on both platforms.
+ */
 const SHEET_ACTIONS: DialogAction[] = [
   { id: 'copy', title: 'Copy link' },
   { id: 'remove', title: 'Remove photo', role: 'destructive' },
   { id: 'locked-row', title: 'Locked share', disabled: true },
-  { id: 'dismiss', title: 'Not now', role: 'cancel' },
 ];
 
 const STICKY_ACTIONS: DialogAction[] = [{ id: 'ok', title: 'Understood' }];
@@ -92,7 +95,7 @@ export default function DialogScreen() {
   const topInset = useTopInset();
   const [log, setLog] = useState<string[]>([]);
   const record = useCallback((entry: string) => {
-    setLog((previous) => [...previous.slice(-7), entry]);
+    setLog((previous) => [...previous.slice(-11), entry]);
   }, []);
 
   const [alertOpen, setAlertOpen] = useState(false);
@@ -128,12 +131,8 @@ export default function DialogScreen() {
           iOS, Material 3&apos;s AlertDialog and ModalBottomSheet on Android.
           Neither has a box: the window is the platform&apos;s.
         </Text>
-        <Text
-          testID="dialog-log"
-          style={[styles.value, { color: ink.ink }]}
-          accessibilityLabel={`dialog log ${log.join(',') || 'empty'}`}
-        >
-          {log.join(',') || 'no events yet'}
+        <Text testID="dialog-log" style={[styles.value, { color: ink.ink }]}>
+          {log.join(' > ') || 'none'}
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>Alert</Text>

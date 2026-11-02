@@ -71,6 +71,7 @@ import { join, resolve } from 'node:path';
 import {
   A11Y_CONTROLS,
   A11Y_EXEMPTIONS,
+  A11Y_PRESENTATIONS,
   staleExemptions as staleA11yExemptions,
 } from './real-input/a11y.mjs';
 import { SCREEN_FILE } from './real-input/screens.mjs';
@@ -420,22 +421,69 @@ export function staleDebt(run) {
  * - every manifest is covered by at least one case;
  * - every case names a real manifest and agrees with it on `hybridView`;
  * - every label still appears in the screen the case reads, as the JSX the case says;
- * - every `anchorTestId` still appears in that screen.
+ * - every `anchorTestId` still appears in that screen;
+ * - a presentation case (`A11Y_PRESENTATIONS`) covers only a component with no box
+ *   (`sizing: null`) whose real-input check is on (`realInput: true`), because that
+ *   check is the only place the presented window is read - and never a component the
+ *   sweep's table also covers.
  *
  * @param {any[]} manifests
  * @param {(path: string) => string | null} readFile repo-relative
  * @param {ReadonlyArray<any>} [table]
  * @param {Readonly<Record<string, string>>} [screenFile]
+ * @param {ReadonlyArray<any>} [presentations]
  * @returns {string[]} problems
  */
 export function checkA11yTable(
   manifests,
   readFile,
   table = A11Y_CONTROLS,
-  screenFile = SCREEN_FILE
+  screenFile = SCREEN_FILE,
+  presentations = A11Y_PRESENTATIONS
 ) {
   const problems = [];
-  const covered = new Set(table.map((entry) => entry.component));
+  const covered = new Set([
+    ...table.map((entry) => entry.component),
+    ...presentations.map((entry) => entry.component),
+  ]);
+  for (const entry of presentations) {
+    const manifest = manifests.find(
+      (candidate) => candidate.name === entry.component
+    );
+    if (manifest == null) {
+      problems.push(
+        `scripts/real-input/a11y.mjs: the presentation case "${entry.id}" guards ` +
+          `"${entry.component}" and no manifest declares that control`
+      );
+      continue;
+    }
+    if (entry.hybridView !== manifest.hybridView) {
+      problems.push(
+        `scripts/real-input/a11y.mjs: the presentation case "${entry.id}" says ` +
+          `hybridView "${entry.hybridView}" and the manifest says "${manifest.hybridView}"`
+      );
+    }
+    if (manifest.sizing != null) {
+      problems.push(
+        `scripts/real-input/a11y.mjs: "${entry.id}" is a presentation case, but ` +
+          `${manifest.name} is self-sizing (sizing "${String(manifest.sizing)}") - a ` +
+          'control with a box is read by the sweep, so it belongs in A11Y_CONTROLS'
+      );
+    }
+    if (manifest.realInput !== true) {
+      problems.push(
+        `scripts/real-input/a11y.mjs: "${entry.id}" is a presentation case and ` +
+          `${manifest.name} asks for no real-input check (realInput is not true), so ` +
+          'nothing ever opens the window this case says is read'
+      );
+    }
+    if (table.some((row) => row.component === entry.component)) {
+      problems.push(
+        `scripts/real-input/a11y.mjs: ${entry.component} is in both A11Y_CONTROLS ` +
+          'and A11Y_PRESENTATIONS - it either has a box the sweep reads or it does not'
+      );
+    }
+  }
   for (const manifest of manifests) {
     if (covered.has(manifest.name)) continue;
     problems.push(
@@ -1380,6 +1428,24 @@ export function checkInAppFixtures(manifests, harnessText) {
           `says ${String(row.component)} and the manifest says ` +
           `${manifest.hybridView}, so the sizing rules ask the engine about a ` +
           'component that is not this one'
+      );
+    }
+    // A component with no box opts out of the sizing rules with `selfSizing: false`, and
+    // only such a component may: held to the manifest both ways, so the member can never
+    // be a self-sizing control's way out of its fallback and leak rules.
+    const optsOut = /\n {4}selfSizing: false,/.test(row.text);
+    if (manifest.sizing == null && !optsOut) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: ${manifest.name} declares no sizing ` +
+          'policy (sizing: null) and its fixture does not say `selfSizing: false`, so the ' +
+          'suite would assert sizing rules about a control that never enters the engine'
+      );
+    }
+    if (manifest.sizing != null && optsOut) {
+      problems.push(
+        `example/__tests__/Conformance.harness.tsx: the ${manifest.name} fixture says ` +
+          `\`selfSizing: false\` and its manifest declares sizing "${String(manifest.sizing)}" ` +
+          '- a self-sizing control cannot opt out of its fallback and leak rules'
       );
     }
     // And the recycle rule's oracle for this control, or the reason it has none. Per row
