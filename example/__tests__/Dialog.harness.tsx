@@ -239,7 +239,7 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     await waitForNothingLeft('plain', 'after the JS false');
     expect(reportOf('plain').presented).toBe('0');
     // A change React made is not a native interaction: nothing was reported.
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
   });
 
   it('presents inside an RN Modal', async () => {
@@ -270,7 +270,7 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     }
     setters.get('in-modal')?.(false);
     await waitForLive('in-modal', 0, 'closed inside the Modal');
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
   });
 
   it('presents over an RN Modal from a view under it, mid-slide', async () => {
@@ -320,12 +320,9 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     expect(reportOf('first').presented).toBe('1');
     handles.get('first')?.nuiTestPerformAction('cancel');
     await waitForNothingLeft('first', 'both closed');
-    expect(eventLog).toEqual([
-      'second:action:later',
-      'second:presented:false',
-      'first:action:cancel',
-      'first:presented:false',
-    ]);
+    expect(eventLog.join(',')).toBe(
+      'second:action:later,second:presented:false,first:action:cancel,first:presented:false'
+    );
   });
 
   it('closes cleanly when JS says false during the entry transition', async () => {
@@ -339,7 +336,7 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
     const settled = reportOf('flicker');
     expect(settled.live).toBe('0');
     expect(settled.presented).toBe('0');
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
   });
 
   for (const delay of [0, 80, 150, 1000]) {
@@ -356,7 +353,7 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       const probeId = await probe();
       await waitForNothingLeft(probeId, `after a drop ${String(delay)} ms in`);
       // The dropped mount reports nothing: its callbacks went with it.
-      expect(eventLog).toEqual([]);
+      expect(eventLog.join(',')).toBe('');
     });
   }
 
@@ -401,10 +398,17 @@ describe('Dialog · presentation spike (G11, Q5 B9)', () => {
       'over-closing-modal',
       'the outer dialog closed too'
     );
-    expect(eventLog).toEqual([
-      'over-closing-modal:action:later',
-      'over-closing-modal:presented:false',
-    ]);
+    // The inner dialog's view left the window with its Modal, which reports a close
+    // if the view outlived the dismissal (B1) and nothing if it was dropped first.
+    console.log(`events: ${eventLog.join(',')}`);
+    expect(
+      eventLog.filter((e) => e.startsWith('over-closing-modal:')).join(',')
+    ).toBe(
+      'over-closing-modal:action:later,over-closing-modal:presented:false'
+    );
+    expect(
+      eventLog.filter((e) => e.startsWith('in-closing-modal:action')).length
+    ).toBe(0);
   });
 });
 
@@ -437,16 +441,16 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     await waitForReport('twin', isUpCounted(1), 'the twin up');
     handles.get('twin')?.nuiTestDismiss();
     await waitForLive('twin', 0, 'the twin dismissed by the user');
-    expect(eventLog).toEqual(['twin:presented:false']);
+    expect(eventLog.join(',')).toBe('twin:presented:false');
   });
 
   it('reports an action before the close it causes', async () => {
     await render(<Stage testId="act" initial />);
     await waitForHandle('act');
-    await waitForReport('act', isUp, 'up');
+    await waitForReport('act', isUpCounted(1), 'up');
     handles.get('act')?.nuiTestPerformAction('delete');
     await waitForLive('act', 0, 'closed by the action');
-    expect(eventLog).toEqual(['act:action:delete', 'act:presented:false']);
+    expect(eventLog.join(',')).toBe('act:action:delete,act:presented:false');
     expect(reportOf('act').presented).toBe('0');
   });
 
@@ -458,17 +462,17 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     ];
     await render(<Stage testId="locked" initial actions={actions} />);
     await waitForHandle('locked');
-    const up = await waitForReport('locked', isUp, 'up');
+    const up = await waitForReport('locked', isUpCounted(1), 'up');
     // Read from the controller iOS built and the model Android composed.
     expect(up.enabled).toBe(Platform.OS === 'ios' ? '1,0,1' : '1,0,1');
     handles.get('locked')?.nuiTestPerformAction('locked');
     await sleep(400);
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
     expect(reportOf('locked').presented).toBe('1');
     // Barrier: an enabled action on the same dialog does report.
     handles.get('locked')?.nuiTestPerformAction('go');
     await waitForLive('locked', 0, 'closed by the enabled action');
-    expect(eventLog).toEqual(['locked:action:go', 'locked:presented:false']);
+    expect(eventLog.join(',')).toBe('locked:action:go,locked:presented:false');
   });
 
   it('presents again when the app refuses a dismissal, and warns once', async () => {
@@ -480,7 +484,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     try {
       await render(<Stage testId="refused" initial refuse />);
       await waitForHandle('refused');
-      await waitForReport('refused', isUp, 'up');
+      await waitForReport('refused', isUpCounted(1), 'up');
       handles.get('refused')?.nuiTestDismiss();
       // The close lands, JS echoes it, `isPresented` is still true: it comes back.
       await waitForReport(
@@ -501,10 +505,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
         w.includes('dismissed by the user')
       );
       expect(refusal.length).toBe(1);
-      expect(eventLog).toEqual([
-        'refused:presented:false',
-        'refused:presented:false',
-      ]);
+      expect(eventLog.join(',')).toBe(
+        'refused:presented:false,refused:presented:false'
+      );
     } finally {
       console.warn = original;
     }
@@ -521,17 +524,17 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     await sleep(600);
     expect(reportOf('at-mount').presentCount).toBe('1');
     expect(up.live).toBe('1');
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
   });
 
   it('does nothing on a user dismissal while not dismissible', async () => {
     await render(<Stage testId="sticky" initial dismissible={false} />);
     await waitForHandle('sticky');
-    await waitForReport('sticky', isUp, 'up');
+    await waitForReport('sticky', isUpCounted(1), 'up');
     handles.get('sticky')?.nuiTestDismiss();
     await sleep(500);
     expect(reportOf('sticky').presented).toBe('1');
-    expect(eventLog).toEqual([]);
+    expect(eventLog.join(',')).toBe('');
     handles.get('sticky')?.nuiTestPerformAction('later');
     await waitForLive('sticky', 0, 'closed by its action');
   });
@@ -566,7 +569,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     await waitForHandle('live');
     await waitForReport(
       'live',
-      (r) => isUp(r) && r.title === 'Before',
+      (r) => isUpCounted(1)(r) && r.title === 'Before',
       'up with the first title'
     );
     setters.get('round')?.(true);
@@ -604,7 +607,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     await waitForHandle('recycled');
     await waitForReport(
       'recycled',
-      (r) => isUp(r) && r.title === 'Old title',
+      (r) => isUpCounted(1)(r) && r.title === 'Old title',
       'the old dialog up'
     );
     const reuses: string[] = [];
@@ -622,7 +625,7 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       } else {
         await waitForReport(
           'recycled',
-          (r) => isUp(r) && r.title === 'Old title',
+          (r) => isUpCounted(1)(r) && r.title === 'Old title',
           'reopened'
         );
       }
@@ -644,7 +647,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       expect(up.actions).toBe('3');
       handles.get('sheet')?.nuiTestPerformAction('later');
       await waitForLive('sheet', 0, 'the sheet animated out and gone');
-      expect(eventLog).toEqual(['sheet:action:later', 'sheet:presented:false']);
+      expect(eventLog.join(',')).toBe(
+        'sheet:action:later,sheet:presented:false'
+      );
     });
   }
 });
