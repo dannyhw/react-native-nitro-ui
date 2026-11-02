@@ -225,7 +225,11 @@ export const A11Y_CONTROLS = Object.freeze([
     label: 'Real-input chip',
     role: 'interactive',
     anchorTestId: 'real-input-chip',
-    iosTrait: 'toggle',
+    // A filter chip is an on/off control, and that is what it should announce: SwiftUI's
+    // `Toggle(.button)` carries the toggle trait, which XCUITest reports as `switch` with
+    // `value` 0/1 (measured, G12) - it has no separate type for a toggle *button*. The
+    // assist chip is a `Button` and is not a case here; real input asserts it presses.
+    iosTrait: 'switch',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all

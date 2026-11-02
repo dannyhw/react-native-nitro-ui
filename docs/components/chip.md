@@ -81,17 +81,20 @@ The fallback, the size of the very first frame before anything is measured, is
 can show it for one frame (DECISIONS D17).
 
 A user `style` wins. A `width` smaller than the label truncates it with a
-trailing ellipsis instead of painting outside the box (the example's "Long
-label" row, 200 wide).
+trailing ellipsis instead of painting outside the box. That was seen on iOS in
+the Storybook `Chip/Sizing` story (160 wide: "Only show places…"). Android sets
+`maxLines = 1` with `TextOverflow.Ellipsis` on the label, but no screenshot of
+it has been taken yet.
 
 ## Accessibility
 
 The control is the platform's, so the accessibility element is too:
 
-- A filter chip is a **toggle button** on iOS: XCUITest reports
-  `XCUIElementTypeToggle`, with `value` 1 or 0. On Android it is
-  `Role.Checkbox` with a selected state, which reaches the tree as
-  `checkable`/`checked`. An assist chip is a button on both.
+- A filter chip is an on/off control. On iOS, SwiftUI's toggle trait reaches
+  XCUITest as a `switch` element with `value` 0 or 1 (measured; XCUITest has
+  no separate type for a toggle button). On Android it is `Role.Checkbox` with
+  a selected state, which reaches the tree as `checkable`/`checked`. An assist
+  chip is a button on both.
 - `accessibilityLabel` goes on the control, not on a wrapper. It defaults to
   `label`.
 - `disabled` reaches the tree on both platforms: iOS `isEnabled == false`,
@@ -124,6 +127,9 @@ asserted by real input (`RealInputTests.testRealInputChip` and the a11y sweep's
 - Two kinds only. Material's `input` and `suggestion` chips are not in v1, and
   there is no trailing icon, avatar or close button.
 - No `tintColor` in v1. Both platforms draw their own selected colours.
+- On iOS a disabled chip draws the same whether or not it is selected:
+  SwiftUI's disabled bordered style drops the selected fill (the "Disabled" row
+  of the README screenshot).
 - `systemImage` is iOS only, like Button's. Android does not draw it.
 - **No check mark slide-in on Android.** Material 3 animates the check mark's
   width as a spring. The host cannot follow an animated intrinsic width: the
