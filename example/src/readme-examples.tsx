@@ -14,6 +14,7 @@
 import {
   AlertDialog,
   Button,
+  Chip,
   DatePicker,
   type DialogAction,
   Host,
@@ -152,6 +153,25 @@ export function FileActions() {
         variant="tonal"
         size="medium"
         onSelect={setLast}
+      />
+    </>
+  );
+}
+// #endregion
+
+// #region chip
+export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+  const [openNow, setOpenNow] = useState(false);
+
+  return (
+    <>
+      <Chip label="Open now" selected={openNow} onSelectedChange={setOpenNow} />
+      <Chip label="Vegan" defaultSelected />
+      <Chip
+        variant="assist"
+        label="Directions"
+        systemImage="map"
+        onPress={onDirections}
       />
     </>
   );
