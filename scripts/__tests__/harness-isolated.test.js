@@ -2,6 +2,7 @@
 // app instance for `example/__tests__/isolated/`, and how its exit code joins the
 // shared run's.
 import { describe, expect, it } from '@jest/globals';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -73,4 +74,45 @@ describe('the isolated harness run', () => {
     expect(config).toContain(`process.env.${ISOLATED_ENV} === '1'`);
     expect(config).toContain('/__tests__/isolated/');
   });
+
+  /**
+   * The files each run selects, asked of Jest the way `react-native-harness` asks: with
+   * its own `--testPathIgnorePatterns` on the command line, which *replaces* the config's
+   * list. An exclusion written there was dropped, and the shared run ran the isolated
+   * files in its own process after all (G14 fix round 1).
+   */
+  function listHarnessTests(env) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(repoRoot, 'node_modules/jest/bin/jest.js'),
+        '-c',
+        'jest.harness.config.mjs',
+        '--listTests',
+        '--testPathIgnorePatterns',
+        '\\.(android)\\.harness\\.(?:[mc]?[jt]sx?)$',
+      ],
+      {
+        cwd: join(repoRoot, 'example'),
+        encoding: 'utf8',
+        env: { ...process.env, ...env },
+      }
+    );
+    expect(result.status).toBe(0);
+    return result.stdout
+      .split('\n')
+      .filter((line) => line.endsWith('.tsx'))
+      .map((line) => line.slice(line.indexOf('__tests__/')));
+  }
+
+  it('keeps the isolated files out of the shared run, and runs only them in the isolated one', () => {
+    const shared = listHarnessTests({ [ISOLATED_ENV]: '' });
+    expect(shared).toContain('__tests__/BottomSheet.harness.tsx');
+    expect(shared.filter((file) => file.includes('/isolated/'))).toEqual([]);
+    const isolated = listHarnessTests({ [ISOLATED_ENV]: '1' });
+    expect(isolated).toContain(
+      '__tests__/isolated/BottomSheetModalHazard.harness.tsx'
+    );
+    expect(isolated.every((file) => file.includes('/isolated/'))).toBe(true);
+  }, 60000);
 });

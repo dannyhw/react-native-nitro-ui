@@ -159,7 +159,10 @@ export default function BottomSheetScreen() {
               defaultValue="Notes"
               onPressIn={() => setInputIn((count) => count + 1)}
               onPressOut={() => setInputOut((count) => count + 1)}
-              style={[styles.input, { color: ink.ink, borderColor: ink.button }]}
+              style={[
+                styles.input,
+                { color: ink.ink, borderColor: ink.button },
+              ]}
             />
             <Text testID="sheet-input-touches" style={{ color: ink.ink }}>
               {`Input touches: in ${inputIn} out ${inputOut}`}
