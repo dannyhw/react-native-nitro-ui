@@ -650,6 +650,9 @@ export function checkIosControlA11y(
  * live in one file — and so a mistake in the format is a unit-test failure rather than a
  * device run that quietly reads zero elements.
  *
+ * A `kind=stability` line is not an element and is skipped here; it is read by
+ * `parseIosA11yStability`, which is how the report says *how many reads* a case's boxes cost.
+ *
  * @param {string} log the xcodebuild test log
  * @returns {Map<string, IosA11yNode[]>} by control id, in table order
  */
@@ -699,6 +702,156 @@ export function parseIosA11yLog(log) {
     for (const node of nodes) {
       if (node.id === entry.anchorTestId) node.anchor = true;
     }
+  }
+  return byControl;
+}
+
+/**
+ * The report's note about one case's re-reads, or `null` when there is nothing to say.
+ *
+ * A case that settled on the ordinary two reads prints no stability line at all, so fourteen
+ * healthy cases add nothing to the report. Anything else belongs in it: a pass that read a control
+ * four times, or one that never settled, has to be visible, because *otherwise a fix that retried
+ * its way to a green is indistinguishable from a clean run* — which is precisely how an
+ * accessibility rule gets quietly turned off.
+ *
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   previousAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @returns {string | null}
+ */
+export function iosStabilityNote(stability, settledAnchor) {
+  if (stability == null) return null;
+  const discarded =
+    stability.previousAnchor == null
+      ? ''
+      : `, and the read before it said (${num(stability.previousAnchor.x)}, ` +
+        `${num(stability.previousAnchor.y)}, ${num(stability.previousAnchor.width)}, ` +
+        `${num(stability.previousAnchor.height)})`;
+  // Said once, at the end, for whichever branch printed the discarded box: a note that named the
+  // ratio twice would read like a bug in the note.
+  const scale =
+    stability.previousAnchor == null
+      ? ''
+      : describeDiscardedScale(stability.previousAnchor, settledAnchor);
+  if (!stability.settled) {
+    // Not a pass and not a failure: a measurement taken off a tree that would not hold still,
+    // which is the one kind of green a reader has to be able to discount. Saying it rather than
+    // silently reporting the boxes is what keeps the bounded wait honest.
+    return (
+      `the boxes below are the last of ${String(stability.reads)} reads that never agreed ` +
+      `(${String(stability.moved)} frame(s) still moving, ${String(stability.elapsedMs)} ms) — ` +
+      'this case rests on a single read of a tree that would not hold still, so discount it ' +
+      'rather than trusting it' +
+      scale
+    );
+  }
+  return (
+    `the boxes below were read ${String(stability.reads)} times before two reads agreed ` +
+    `(${String(stability.moved)} frame(s) moved on the first pair, ` +
+    `${String(stability.elapsedMs)} ms${discarded}) — a stale read was thrown away. The ` +
+    'comparison below is unaffected: it compares two elements of this one read, never two ' +
+    'reads' +
+    scale
+  );
+}
+
+/**
+ * "…and the discarded box is this one at ⅓ scale" — said only when it is true.
+ *
+ * The failure this whole guard was written for was a discarded read at exactly ⅓ of the settled
+ * one, on every component: the screen scale, which is what identified it as a stale snapshot from
+ * a different render pass rather than a control that had genuinely moved. A reader who sees two
+ * boxes and the ratio between them can make that call; a reader given two boxes and no ratio has to
+ * divide them by hand, in a report, at 2 a.m. The sentence is only printed when all four components
+ * share one ratio within a hundredth, so it cannot flatter the reader on a box that merely happens
+ * to be smaller.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} [discarded]
+ * @param {{x: number, y: number, width: number, height: number}} [settled]
+ */
+function describeDiscardedScale(discarded, settled) {
+  if (discarded == null || settled == null) return '';
+  const components = ['x', 'y', 'width', 'height'];
+  let ratio = null;
+  for (const key of components) {
+    const before = discarded[key];
+    const after = settled[key];
+    if (!Number.isFinite(before) || !Number.isFinite(after) || after === 0) {
+      return '';
+    }
+    const candidate = before / after;
+    if (ratio == null) {
+      ratio = candidate;
+      continue;
+    }
+    if (Math.abs(candidate - ratio) > 0.005) return '';
+  }
+  if (ratio == null || Math.abs(ratio - 1) < 0.01) return '';
+  // Named when it is one of the scales a screen actually has, and the raw ratio otherwise. The
+  // components of two real reads never divide to the same digit exactly - the boxes are rounded on
+  // their way out of the test manager, so 108.33/325 is 0.333323 rather than 1/3 - which is why
+  // these are comparisons with a tolerance and not key lookups.
+  const named = [
+    { near: 1 / 3, label: '⅓' },
+    { near: 1 / 2, label: '½' },
+    { near: 1 / 4, label: '¼' },
+    { near: 2, label: '2×' },
+    { near: 3, label: '3×' },
+  ];
+  const found = named.find(
+    (candidate) => Math.abs(ratio - candidate.near) < 0.002
+  );
+  const label = found == null ? `${ratio.toFixed(3)}×` : found.label;
+  return (
+    ` — the discarded box is this one at ${label} scale, the shape of a snapshot read ` +
+    'at another render scale rather than a control that moved'
+  );
+}
+
+/**
+ * The stability line a case printed, if it printed one (`parseIosA11yLog` skips those lines).
+ *
+ * A `kind=stability` line exists only when a case cost more than the ordinary two reads, or when
+ * the wait ran out: a control that settled immediately prints no extra line at all. Reading it in
+ * the report is what keeps the fix honest — a pass that retried its way to a green would look
+ * exactly like a green unless the log said how many reads it took, and an unsettled comparison is
+ * a measurement a reader has to be able to discount.
+ *
+ * @param {string} log the xcodebuild test log
+ * @returns {Map<string, {reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   previousAnchor?: {x: number, y: number, width: number, height: number}}>}
+ */
+export function parseIosA11yStability(log) {
+  /** @type {Map<string, any>} */
+  const byControl = new Map();
+  for (const line of log.split('\n')) {
+    if (!line.includes('real-input a11y ')) continue;
+    const fields = fieldsOf(line);
+    if (fields.get('kind') !== 'stability') continue;
+    const caseName = fields.get('case');
+    if (caseName == null) continue;
+    const reads = Number(fields.get('reads'));
+    const settled = fields.get('settled') === 'true';
+    const moved = Number(fields.get('moved'));
+    const elapsedMs = Number(fields.get('elapsedMs'));
+    // An unreadable count is a format change, and the difference between "settled after 3 reads"
+    // and "never settled" is the whole point of reading the line: silence here would turn a
+    // moving tree into an unremarked one. Same rule as an unreadable box above.
+    if (!Number.isFinite(reads) || !Number.isFinite(moved)) {
+      throw new Error(
+        `real-input: a stability line from the iOS run carries no readable read count: ${line.trim()}`
+      );
+    }
+    const entry = { reads, settled, moved, elapsedMs };
+    if (fields.has('previousAnchorX')) {
+      entry.previousAnchor = {
+        x: Number(fields.get('previousAnchorX')),
+        y: Number(fields.get('previousAnchorY')),
+        width: Number(fields.get('previousAnchorW')),
+        height: Number(fields.get('previousAnchorH')),
+      };
+    }
+    byControl.set(caseName, entry);
   }
   return byControl;
 }

@@ -42,6 +42,7 @@ import {
   A11Y_CONTROLS,
   checkIosControlA11y,
   parseIosA11yLog,
+  parseIosA11yStability,
   staleExemptions,
 } from './a11y.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
@@ -508,8 +509,10 @@ async function main() {
 function reportA11yPass({ log, suite, status, testLog }) {
   const outcome = parseTestResults(log).get(A11Y_METHOD);
   let trees;
+  let stabilityByCase;
   try {
     trees = parseIosA11yLog(log);
+    stabilityByCase = parseIosA11yStability(log);
   } catch (error) {
     // A line whose box did not parse means the format moved under the parser. That is a
     // broken measurement, not a control's failure, so it fails the run outright rather
@@ -545,6 +548,19 @@ function reportA11yPass({ log, suite, status, testLog }) {
       continue;
     }
     covered.push(entry.id);
+    // The stability line first, so it reads as the provenance of every box noted below it (X16
+    // item 4). A case that settled after two reads prints no line and gets no note; more reads
+    // than that, or no settle at all, is the interesting case and belongs in the report — a fix
+    // that retried its way to a green would otherwise be indistinguishable from a clean run.
+    // The wrapper's box is the one the stability line's `previousAnchor` describes — the Swift
+    // pass prints frames[0], which is the element it anchored on. Looked up by the anchor flag
+    // rather than by index, so the note cannot compare the discarded box against a descendant's.
+    const stability = stabilityByCase.get(entry.id);
+    const stabilityNote = iosStabilityNote(
+      stability,
+      nodes.find((element) => element.anchor)?.frame ?? nodes[0]?.frame
+    );
+    if (stabilityNote != null) check.note(stabilityNote);
     for (const node of nodes) {
       check.note(
         `${node.type} id="${node.id}" label="${node.label}" ` +
