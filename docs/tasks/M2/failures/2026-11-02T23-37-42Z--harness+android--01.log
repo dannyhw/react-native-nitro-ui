@@ -1,0 +1,83 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-02T23:37:42.209Z on code tree `e99634813021` at HEAD `28dcde3` (branch `task/M2-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 11196 ms
+- Load: start 7.78, end 11.31, median 9.55, max 11.31
+- Device: android
+- Full log: `task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log` (<store>/task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log)
+- Scrubbed: 6 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G12-sigr7                G12          both              pair-a
+  |   M2-wbmw1                 M2           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 11.31 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 40 log line(s)
+
+```
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree e99634813021 at HEAD 28dcde3
+gate: git tree db0f2533f135
+gate: log task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log
+gate:       <store>/task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree e99634813021, 10 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.78/12.21 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Creating Android emulator nitroui...
+Test Suites: 0 of 17 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        8.894 s, estimated 114 s
+Ran all test suites.
+SubprocessError: Command failed with exit code 1: bash -lc 'printf '\''no
+'\'' | "~/Library/Android/sdk/cmdline-tools/latest/bin/avdmanager" create avd --force --name "nitroui" --package "system-images;android-35;default;arm64-v8a" --device "pixel_9" -p "~/.android/avd/nitroui.avd"'
+    at checkFailure (file://<repo>/node_modules/nano-spawn/source/result.js:40:9)
+    at getResult (file://<repo>/node_modules/nano-spawn/source/result.js:17:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Module.createAvd (file:[scrubbed]@react-native-harness/platform-android/dist/adb.js:305:5)
+    at async recreateAvd (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:56:5)
+    at async file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:131:21
+    at async getAndroidEmulatorPlatformInstance (file:[scrubbed]@react-native-harness/platform-android/dist/instance.js:127:15)
+    at async Object.work (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:414:32)
+    at async withPlatformReadyTimeout (file:[scrubbed]@react-native-harness/jest/dist/harness-session.js:99:16)
+    at async Promise.all (index 1)
+gate: harness:android FAIL in 11.2 s
+gate: recorded in .gates/task/M2-merge.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/M2-merge/harness+android-2026-11-02T23-37-41.322Z.log (5 probe(s))
+
+```
