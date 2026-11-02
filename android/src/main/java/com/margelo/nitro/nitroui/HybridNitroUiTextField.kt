@@ -131,16 +131,55 @@ internal class TextFieldModel : NitroUiModel() {
    */
   var accounted = ""
 
-  /** Count and emit a user edit, if the field holds text native has not counted. */
-  fun catchUp() {
-    val text = textState.text.toString()
-    if (text == accounted || composing) {
-      return
+  /** Whether the last [observe] saw an open composition; see [settle]. */
+  private var wasComposing = false
+
+  /**
+   * Runs a `value` write a composition held back (`lastWrite == "composing"`) once the
+   * composition is over. Installed by the Hybrid View, which owns reconciling and
+   * writing the field.
+   */
+  var settle: (() -> Unit)? = null
+
+  /** [observe] what the field holds now. The `snapshotFlow` collector and `afterUpdate()`. */
+  fun catchUp() = observe(textState.text.toString(), composing)
+
+  /**
+   * The field holds [observed], inside an open IME composition or not.
+   *
+   * - An edit native has not counted is counted and emitted, **composing or not**.
+   *   Gboard keeps every Latin word in a composing region while autocorrect is on, so
+   *   a field that waited for compositions to end reported once per word, and a refused
+   *   edit reverted only at the word's end; React Native emits during a composition on
+   *   both platforms (G13 review, fix round 1). What stays composition-aware is the
+   *   write: `afterUpdate()` still drops a `value` write while one is open.
+   * - Text past `maxLength` that grew past what native accounted for is cut back, at a
+   *   grapheme boundary. A backstop: [NitroUiTextLimit] cuts an insertion as it
+   *   happens, and this catches what reaches the field another way. A JS write is
+   *   accounted for when it is written, so it is never cut here.
+   * - When a composition ends, a write it held back is settled ([settle]), whether or
+   *   not its end changed the text: a composition the user deleted leaves the text
+   *   native already counted, so no edit and no commit would ever decide it again.
+   */
+  fun observe(observed: String, isComposing: Boolean) {
+    var text = observed
+    val limit = maxLength
+    if (limit != null && text != accounted && text.length > limit && text.length > accounted.length) {
+      val keep = NitroUiTextLimit.graphemeFloor(text, limit)
+      text = text.substring(0, keep)
+      textState.edit { replace(keep, length, "") }
     }
-    accounted = text
-    val eventCount = state.user(text)
-    publish?.invoke()
-    onChange?.invoke(text, eventCount.toDouble())
+    val ended = wasComposing && !isComposing
+    wasComposing = isComposing
+    if (text != accounted) {
+      accounted = text
+      val eventCount = state.user(text)
+      publish?.invoke()
+      onChange?.invoke(text, eventCount.toDouble())
+    }
+    if (ended && lastWrite == "composing") {
+      settle?.invoke()
+    }
   }
 
   fun focusMoved(isFocused: Boolean) {
@@ -160,6 +199,7 @@ internal class TextFieldModel : NitroUiModel() {
     state.jsEvents = 0
     textState = TextFieldState("")
     accounted = ""
+    wasComposing = false
     defaultValue = null
     didApplyDefault = false
     placeholder = null
@@ -204,11 +244,9 @@ internal class NitroUiTextLimit(private val model: TextFieldModel) : InputTransf
     if (length <= limit || length <= originalText.length) {
       return
     }
-    // While a composition is open the IME owns the text: cutting it destroys the
-    // composition. Its commit is an edit of its own, and is cut then.
-    if (model.composing) {
-      return
-    }
+    // Composing or not: an IME that keeps a whole word composing (Gboard, autocorrect
+    // on) would otherwise take a field past its limit one composition at a time. React
+    // Native's `LengthFilter` cuts composing text too.
     val changes = changes
     if (changes.changeCount != 1) {
       replace(graphemeFloor(asCharSequence(), limit), length, "")
@@ -231,7 +269,9 @@ internal class NitroUiTextLimit(private val model: TextFieldModel) : InputTransf
     fun graphemeFloor(text: CharSequence, limit: Int): Int {
       if (limit >= text.length) return text.length
       if (limit <= 0) return 0
-      val breaks = android.icu.text.BreakIterator.getCharacterInstance()
+      // `java.text`, not `android.icu`: on Android it is ICU's character iterator
+      // (extended grapheme clusters), and it also runs in a JVM unit test.
+      val breaks = java.text.BreakIterator.getCharacterInstance()
       breaks.setText(text.toString())
       return if (breaks.isBoundary(limit)) limit else breaks.preceding(limit).coerceAtLeast(0)
     }
@@ -265,6 +305,9 @@ private object TextFieldStyleCache {
 
 private fun keyboardTypeOf(name: String, secure: Boolean): KeyboardType =
   when {
+    // A secure number pad stays a number pad, as `inputType` NUMBER_VARIATION_PASSWORD
+    // does in React Native.
+    secure && name == "number-pad" -> KeyboardType.NumberPassword
     secure -> KeyboardType.Password
     name == "number-pad" -> KeyboardType.Number
     name == "decimal-pad" -> KeyboardType.Decimal
@@ -473,6 +516,11 @@ class HybridNitroUiTextField(
     host.sizingPolicy = NitroUiSizing.POLICY_FILL_WIDTH
     declareFallback()
     model.publish = ::publishState
+    model.settle = {
+      applyWrite()
+      syncText()
+      publishState()
+    }
   }
 
   companion object {
@@ -682,20 +730,25 @@ class HybridNitroUiTextField(
     // An edit the collector has not reached yet is counted first, so a write that
     // raced it is judged stale - not applied over a keystroke native never reported.
     model.catchUp()
+    applyWrite()
+    syncText()
+    host.commit()
+    publishState()
+  }
+
+  /** Decide a pending `value` write: applied, stale, or held back by a composition. */
+  private fun applyWrite() {
     val js = model.state.js
     if (js != null && js != model.state.displayed) {
       model.lastWrite =
         when {
-          // Q2 §2.2: a write under an open composition destroys it. Dropped, not
-          // queued: the commit that echoes the composition's own edit decides again.
+          // Q2 §2.2: a write under an open composition destroys it. Held back, not
+          // queued: `settle` decides it again when the composition ends.
           model.composing -> "composing"
           model.state.reconcile() -> "applied"
           else -> "stale"
         }
     }
-    syncText()
-    host.commit()
-    publishState()
   }
 
   override fun prepareForRecycle() {

@@ -48,7 +48,7 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
 
 type ProbeModule = {
   imeInput(
-    kind: 'commit' | 'compose' | 'finish' | 'action',
+    kind: 'commit' | 'compose' | 'finish' | 'cancel' | 'action' | 'connect',
     text: string
   ): Promise<string>;
 };
@@ -178,6 +178,7 @@ async function compose(id: string, text: string) {
   if (iOS) {
     (await handleOf(id)).nuiTestSetMarkedText(text);
   } else {
+    await probe().imeInput('connect', '');
     await probe().imeInput('compose', text);
   }
 }
@@ -434,7 +435,7 @@ describe('TextField', () => {
    * (measured: `composing` never reads true after `setComposingText`, with the soft
    * keyboard up or down), so there is no composition to write into.
    */
-  const itComposes = iOS ? it : it.skip;
+  const itComposes = it;
   itComposes(
     'drops a JS write while a composition is open, and keeps the composition',
     async () => {
