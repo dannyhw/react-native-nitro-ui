@@ -26,7 +26,7 @@
  * `nuiTestStateReport()` (what the control is drawing, and on Android what its
  * accessibility node says).
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { Platform, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
@@ -478,6 +478,120 @@ describe('Chip · G12', () => {
     await waitForBox('toggled', reference, 'the toggled chip, selected');
     expect(sameSize(measured('toggled'), reference)).toBe(true);
     if (Platform.OS === 'android') {
+      expect(reference.width).toBeGreaterThan(unselected.width + 8);
+    }
+  });
+
+  it('files nothing under a key two quick toggles have already left', async () => {
+    // The hold's other edge (G12 review, fix round 1). A toggle holds its size report
+    // until a props batch re-keys the chip, but the first batch to arrive need not be
+    // the one that names what is drawn. Here the second toggle reaches native after
+    // the first toggle's render has committed and before that render's batch is
+    // applied - an order a quick double tap can take - because the fixture's layout
+    // effect, which runs in that commit, presses again. The batch then names
+    // `selected` while the chip draws unselected, and a hold that ended on whatever
+    // batch came next filed the unselected width under the selected key: every later
+    // selected chip of this label started narrow and corrected. The hold now ends only
+    // on a batch that has seen every toggle (the echoed event count, `Chip.tsx`).
+    //
+    // The oracle is a fresh *selected* chip of the label. Its configuration was
+    // measured before the toggles, by a chip that never toggled, so it must lay out
+    // exact. On iOS the selection is not in the key and the case holds trivially.
+    const LABEL = 'Twice';
+    poison([
+      sizingKey('filter', false, LABEL),
+      sizingKey('filter', true, LABEL),
+    ]);
+    function TwoQuickToggles() {
+      const [toggles, setToggles] = useState(0);
+      const onChange = useCallback((next: boolean) => {
+        events.push(`twice:${String(next)}`);
+        setToggles((count) => count + 1);
+      }, []);
+      useLayoutEffect(() => {
+        if (toggles === 1) {
+          handles.get('twice')?.nuiTestPress();
+        }
+      }, [toggles]);
+      return (
+        <Chip
+          label={LABEL}
+          onSelectedChange={onChange}
+          testID="twice"
+          hybridRef={captureHybrid('twice')}
+        />
+      );
+    }
+
+    // The selected configuration, measured by a chip that never toggles - and then
+    // gone, so nothing mounted under that key can re-report it after the toggles.
+    const { rerender } = await render(
+      <View style={rowStyle}>
+        <Chip
+          label={LABEL}
+          selected
+          testID="reference"
+          hybridRef={captureHybrid('reference')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('reference');
+    const reference = await waitForMeasured('reference', 'the reference');
+    await waitForBox('reference', reference, 'the reference');
+    await rerender(
+      <View style={rowStyle}>
+        <TwoQuickToggles />
+      </View>
+    );
+    await waitForTestId('twice');
+    const unselected = await waitForMeasured('twice', 'before the toggles');
+    await waitForBox('twice', unselected, 'before the toggles');
+    await sleep(250);
+
+    nitroUiCore.setSizingTraceEnabled(true);
+    nitroUiCore.drainSizingTrace();
+    (await handleOf('twice')).nuiTestPress();
+    expect(await waitForEvents(0, ['twice:true', 'twice:false'])).toEqual([
+      'twice:true',
+      'twice:false',
+    ]);
+    await waitForDisplayed('twice', '0');
+    await waitForBox('twice', unselected, 'the chip, unselected again');
+    await sleep(300);
+    const trace = nitroUiCore
+      .drainSizingTrace()
+      .map((e) => `${e.stage}:${e.width.toFixed(2)}x${e.height.toFixed(2)}`);
+    nitroUiCore.setSizingTraceEnabled(false);
+
+    const before = stats();
+    await rerender(
+      <View style={rowStyle}>
+        <TwoQuickToggles />
+        <Chip
+          label={LABEL}
+          selected
+          testID="fresh-on"
+          hybridRef={captureHybrid('fresh-on')}
+        />
+      </View>
+    );
+    await waitForTestId('fresh-on');
+    const firstBox = sizeOf('fresh-on');
+    const fresh = await waitForMeasured('fresh-on', 'the fresh selected chip');
+    await waitForBox('fresh-on', fresh, 'the fresh selected chip');
+    await sleep(250);
+    const freshCorrections = corrections(before, stats());
+    console.log(
+      `chip quick toggles: reference=${describeSize(reference)} ` +
+        `unselected=${describeSize(unselected)} ` +
+        `fresh first box=${describeSize(firstBox)} measured=${describeSize(fresh)} ` +
+        `freshCorrections=${freshCorrections} trace=${trace.join(',')}`
+    );
+    expect(sameSize(fresh, reference)).toBe(true);
+    expect(freshCorrections).toBe(0);
+    if (Platform.OS === 'android') {
+      // Otherwise the two keys would hold the same width and the case could not fail.
       expect(reference.width).toBeGreaterThan(unselected.width + 8);
     }
   });

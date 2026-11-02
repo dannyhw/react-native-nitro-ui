@@ -116,7 +116,10 @@ asserted by real input (`RealInputTests.testRealInputChip` and the a11y sweep's
 - **Uncontrolled costs a render on Android only.** On iOS an uncontrolled filter
   chip toggles with no React render. On Android the selection is part of the
   sizing key, so the wrapper re-renders once per toggle to send the new key,
-  which is Picker's rule for the same reason.
+  which is Picker's rule for the same reason. That render also echoes the
+  toggle's event count, as a controlled chip's does: native holds the toggle's
+  size report until a batch has seen every toggle, so two quick toggles cannot
+  file one state's width under the other state's key.
 - **Recycling resets everything.** `NitroUiChip` implements `RecyclableView`: a
   reused instance resets its model and re-seeds `defaultSelected`. The
   conformance suite's two recycle probes cover the default and the

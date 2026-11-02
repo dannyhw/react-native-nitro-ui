@@ -211,26 +211,42 @@ export function Chip({
   // configuration: Picker's G6 review M1, and Picker's fix, one render per toggle.
   // Stamped with the sizing id like Picker's, so a choice can only ever describe
   // the mount that made it.
+  //
+  // The render carries the toggle's event count as well, as a controlled chip's
+  // does. Native holds the toggle's size report until JS has seen *every* toggle
+  // (`HybridNitroUiChip.afterUpdate`): a batch keyed for an older toggle - a second
+  // toggle landed before the first one's render reached native - must not have the
+  // newer toggle's width filed under it (G12 review, fix round 1).
   const [lastChoice, setLastChoice] = useState<{
     readonly sizingId: number;
     readonly selected: boolean;
+    readonly eventCount: number;
   } | null>(null);
   const controlled = useControlled<boolean>(
     selected,
     defaultSelected,
-    (next) => {
-      if (SELECTION_RESIZES && selected === undefined) {
-        setLastChoice({ sizingId, selected: next });
-      }
-      onSelectedChange?.(next);
-    }
+    onSelectedChange
   );
+  const forwardNativeChange = controlled.onNativeChange.f;
+  const onNativeSelectedChange = useStableCallback(
+    (next: boolean, eventCount: number) => {
+      if (SELECTION_RESIZES && selected === undefined) {
+        setLastChoice({ sizingId, selected: next, eventCount });
+      }
+      forwardNativeChange(next, eventCount);
+    }
+  ) as NitroCallbackProp<(next: boolean, eventCount: number) => void>;
   const chosen =
-    lastChoice !== null && lastChoice.sizingId === sizingId
-      ? lastChoice.selected
-      : null;
+    lastChoice !== null && lastChoice.sizingId === sizingId ? lastChoice : null;
   const shownSelected =
-    controlled.value !== null ? controlled.value : (chosen ?? seeded);
+    controlled.value !== null ? controlled.value : (chosen?.selected ?? seeded);
+  // `useControlled` echoes only while controlled; an uncontrolled Android chip
+  // echoes its last toggle here. Counts only grow within a mount, and a new mount
+  // (a new sizing id) starts again at 0, as native's reset does.
+  const mostRecentEventCount = Math.max(
+    controlled.mostRecentEventCount,
+    chosen?.eventCount ?? 0
+  );
   // Always a function - see `onPressNotProvided`. The cast states what the `??`
   // guarantees, as `Button.tsx` does.
   const pressCallback = useStableCallback(
@@ -245,13 +261,13 @@ export function Chip({
       variant={resolvedVariant}
       selected={controlled.value}
       defaultSelected={controlled.defaultValue}
-      mostRecentEventCount={controlled.mostRecentEventCount}
+      mostRecentEventCount={mostRecentEventCount}
       disabled={disabled}
       systemImage={systemImage ?? null}
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
-      onSelectedChange={controlled.onNativeChange}
+      onSelectedChange={onNativeSelectedChange}
       onPress={pressCallback}
       nuiSizingKey={sizingVariantFor(
         resolvedVariant,

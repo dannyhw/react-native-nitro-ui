@@ -55,7 +55,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * grows the moment native paints the selection - before React has re-keyed it. That
  * is Picker's situation (G6 review M1), and it gets Picker's answer: the size report
  * is held from the toggle until the props batch that names the new selection lands
- * (`NitroComposeHost.holdSizingReports`).
+ * (`NitroComposeHost.holdSizingReports`) - recognised by its echoed event count, so a
+ * batch made before the newest toggle cannot end the hold.
  *
  * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
  * manager resolves the implementation through a wildcard import of exactly that
@@ -538,19 +539,31 @@ class HybridNitroUiChip(
       model.displayed = model.state.displayed
       host.markDirty()
     }
-    // The batch a held size report was waiting for has landed. It is the batch that
-    // report belongs to only if what the toggle painted is still what is shown: the
-    // same selection (a refused toggle has just been rolled back above), label and
-    // variant. Otherwise the held width is a fact about other content and is
-    // dropped; the rollback re-measures in the ordinary course.
+    // A held size report waits for the batch that has seen the toggle - every
+    // toggle: `jsEvents` is the count the wrapper echoed, controlled or not
+    // (`Chip.tsx`). A batch that is behind carries a key made before the newest
+    // toggle - a second toggle landed before the first one's render arrived, or an
+    // unrelated render was already on its way - and filing the held width under it
+    // would put one state's size in the other state's cache entry (G12 review,
+    // fix round 1). So that batch leaves the hold on, stamp and all; the one that
+    // catches up decides.
+    //
+    // That batch is the one the report belongs to only if what the toggle painted
+    // is still what is shown: the same selection (a refused toggle has just been
+    // rolled back above), label and variant. Otherwise the held width is a fact
+    // about other content and is dropped; the rollback re-measures in the ordinary
+    // course.
     val stamp = model.toggleStamp
-    model.toggleStamp = null
-    host.releaseSizingReports(
-      stamp != null &&
-        stamp.selected == model.displayed &&
-        stamp.label == model.label &&
-        stamp.variant == model.variant,
-    )
+    val caughtUp = model.state.jsEvents >= model.state.nativeEvents
+    if (stamp == null || caughtUp) {
+      model.toggleStamp = null
+      host.releaseSizingReports(
+        stamp != null &&
+          stamp.selected == model.displayed &&
+          stamp.label == model.label &&
+          stamp.variant == model.variant,
+      )
+    }
     host.commit()
   }
 
