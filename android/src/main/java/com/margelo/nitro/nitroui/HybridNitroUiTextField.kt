@@ -22,6 +22,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -96,6 +97,14 @@ internal class TextFieldModel : NitroUiModel() {
   /** Focus, as the field's own `onFocusChanged` reported it. */
   var focused = false
 
+  /**
+   * What the last composition drew - the secure field or the plain one, one line or
+   * many - so the harness's report says what is on screen rather than what the props
+   * asked for. Written from a `SideEffect`, i.e. after the composition that drew it.
+   */
+  var drawnSecure = false
+  var drawnMultiline = false
+
   /** `focus()` / `blur()` as ticks: they must run where a focus owner exists. */
   var focusTick by mutableIntStateOf(0)
   var blurTick by mutableIntStateOf(0)
@@ -166,6 +175,8 @@ internal class TextFieldModel : NitroUiModel() {
     sizingKey = ""
     lastWrite = "none"
     focused = false
+    drawnSecure = false
+    drawnMultiline = false
     focusTick = 0
     blurTick = 0
     onChange = null
@@ -374,6 +385,14 @@ private fun TextFieldContent(model: TextFieldModel) {
       .focusRequester(focusRequester)
       .onFocusChanged { focus -> model.focusMoved(focus.isFocused) }
   val secure = model.secureApplied
+  val multiline = model.multiline
+  SideEffect {
+    if (model.drawnSecure != secure || model.drawnMultiline != multiline) {
+      model.drawnSecure = secure
+      model.drawnMultiline = multiline
+      model.publish?.invoke()
+    }
+  }
   val keyboardOptions =
     KeyboardOptions(
       capitalization = capitalizationOf(model.autoCapitalize),
@@ -721,8 +740,8 @@ class HybridNitroUiTextField(
         model.state.jsEvents.toDouble(),
         model.lastWrite,
         model.editable,
-        model.multiline,
-        model.secureApplied,
+        model.drawnMultiline,
+        model.drawnSecure,
         model.keyboardType,
         model.returnKeyType,
         model.autoCapitalize,
