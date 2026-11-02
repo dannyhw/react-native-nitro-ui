@@ -16,6 +16,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
@@ -47,6 +48,7 @@ import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.views.RecyclableView
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 /*
@@ -114,6 +116,16 @@ internal class DialogModel : NitroUiModel() {
   /** What the composition last composed, for [readReport]. Written on the UI thread. */
   @Volatile private var composedFacts = "kind=none"
 
+  /** The ids the window composed, in the app's order, for [readReport]'s `drawn`. */
+  @Volatile private var composedIds: List<String> = emptyList()
+
+  /**
+   * Whether each action's label is *drawn* enabled, by id - read from the colour the
+   * composed label received, not from the action's `disabled` flag, so a row that
+   * takes no tap but is painted like one that does reads as the bug it is.
+   */
+  private val drawnEnabled = ConcurrentHashMap<String, Boolean>()
+
   /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
     val next = state.displayed
@@ -171,8 +183,20 @@ internal class DialogModel : NitroUiModel() {
   }
 
   /** Recorded by the composed window. */
-  fun noteComposed(facts: String) {
+  fun noteComposed(
+    facts: String,
+    ids: List<String>,
+  ) {
     composedFacts = facts
+    composedIds = ids
+  }
+
+  /** Recorded by each composed action label. */
+  fun noteDrawn(
+    id: String,
+    enabled: Boolean,
+  ) {
+    drawnEnabled[id] = enabled
   }
 
   fun noteWindowEntered() {
@@ -181,6 +205,8 @@ internal class DialogModel : NitroUiModel() {
 
   fun noteWindowLeft() {
     composedFacts = "kind=none"
+    composedIds = emptyList()
+    drawnEnabled.clear()
   }
 
   /**
@@ -191,7 +217,16 @@ internal class DialogModel : NitroUiModel() {
   fun readReport(lifetime: String): String =
     "presented=${if (state.displayed) 1 else 0};js=${if (state.js == true) 1 else 0}" +
       ";live=${livePresentations.get()};presentCount=${composedPresentations.get()}" +
-      ";$composedFacts;hosted=${if (hosted) 1 else 0};$lifetime"
+      ";$composedFacts;drawn=${drawnReport()};hosted=${if (hosted) 1 else 0};$lifetime"
+
+  private fun drawnReport(): String =
+    composedIds.joinToString(",") { id ->
+      when (drawnEnabled[id]) {
+        true -> "1"
+        false -> "0"
+        null -> "?"
+      }
+    }
 
   override fun reset() {
     presented = false
@@ -213,6 +248,8 @@ internal class DialogModel : NitroUiModel() {
     onAction = null
     composedPresentations.set(0)
     composedFacts = "kind=none"
+    composedIds = emptyList()
+    drawnEnabled.clear()
   }
 
   companion object {
@@ -226,6 +263,15 @@ internal class DialogModel : NitroUiModel() {
     val livePresentations = AtomicInteger(0)
   }
 }
+
+/**
+ * The alpha under which a label counts as drawn disabled in the report: Material paints
+ * a disabled label at 0.38 and an enabled one opaque.
+ */
+private const val DISABLED_ALPHA_CEILING = 0.5f
+
+/** Material 3's alpha for disabled content (`ButtonDefaults`' disabled text, say). */
+private const val DISABLED_CONTENT_ALPHA = 0.38f
 
 /**
  * The button colours a dialog needs, shared across instances (`core.md` section 3,
@@ -387,8 +433,25 @@ private class DialogHost(
       enabled = !action.disabled,
       colors = dialogButtonColors(action.role, tint),
     ) {
-      Text(action.title)
+      ActionLabel(model, action)
     }
+  }
+
+  /**
+   * An action's text, in the colour its button or row provides - and that colour,
+   * recorded for the report: Material draws a disabled label at 38 % alpha, every
+   * enabled one opaque.
+   */
+  @Composable
+  private fun ActionLabel(
+    model: DialogModel,
+    action: NitroUiDialogAction,
+  ) {
+    val drawn = LocalContentColor.current
+    SideEffect {
+      model.noteDrawn(action.id, drawn.alpha > DISABLED_ALPHA_CEILING)
+    }
+    Text(action.title)
   }
 
   @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -442,19 +505,19 @@ private class DialogHost(
         }
         val tint = model.tintColor
         for (action in ordered) {
+          // M3 1.4's `ListItem` has no `enabled` (the BOM's version has only the
+          // non-interactive overload), so it always draws `headlineColor`: a disabled
+          // row gets Material's disabled colour here, or it looks tappable and is not.
           val content =
             when {
+              action.disabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_CONTENT_ALPHA)
               action.role == "destructive" -> MaterialTheme.colorScheme.error
               tint != null -> ComposeColor(tint)
               else -> MaterialTheme.colorScheme.onSurface
             }
           ListItem(
-            headlineContent = { Text(action.title) },
-            colors =
-              ListItemDefaults.colors(
-                headlineColor = content,
-                disabledHeadlineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
-              ),
+            headlineContent = { ActionLabel(model, action) },
+            colors = ListItemDefaults.colors(headlineColor = content),
             modifier =
               Modifier
                 .fillMaxWidth()
@@ -487,6 +550,7 @@ private class DialogHost(
         "kind=$kind;title=$title;message=${message ?: "-"};actions=$rows" +
           ";ids=${actions.joinToString(",") { it.id }}" +
           ";enabled=${actions.joinToString(",") { if (it.disabled) "0" else "1" }}",
+        actions.map { it.id },
       )
     }
   }

@@ -494,26 +494,35 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     expect(reportOf('act').presented).toBe('0');
   });
 
-  it('takes no tap on a disabled action, and draws it disabled', async () => {
-    const actions: DialogAction[] = [
-      { id: 'cancel', title: 'Cancel', role: 'cancel' },
-      { id: 'locked', title: 'Locked', disabled: true },
-      { id: 'go', title: 'Go' },
-    ];
-    await render(<Stage testId="locked" initial actions={actions} />);
-    await waitForHandle('locked');
-    const up = await waitForReport('locked', isUpCounted(1), 'up');
-    // Read from the controller iOS built and the model Android composed.
-    expect(up.enabled).toBe(Platform.OS === 'ios' ? '1,0,1' : '1,0,1');
-    handles.get('locked')?.nuiTestPerformAction('locked');
-    await sleep(400);
-    expect(eventLog.join(',')).toBe('');
-    expect(reportOf('locked').presented).toBe('1');
-    // Barrier: an enabled action on the same dialog does report.
-    handles.get('locked')?.nuiTestPerformAction('go');
-    await waitForLive('locked', 0, 'closed by the enabled action');
-    expect(eventLog.join(',')).toBe('locked:action:go,locked:presented:false');
-  });
+  for (const variant of ['alert', 'confirmation'] as const) {
+    it(`takes no tap on a disabled action, and draws it disabled (${variant})`, async () => {
+      const actions: DialogAction[] = [
+        { id: 'cancel', title: 'Cancel', role: 'cancel' },
+        { id: 'locked', title: 'Locked', disabled: true },
+        { id: 'go', title: 'Go' },
+      ];
+      await render(
+        <Stage testId="locked" initial variant={variant} actions={actions} />
+      );
+      await waitForHandle('locked');
+      const up = await waitForReport('locked', isUpCounted(1), 'up');
+      // What is drawn, in the app's action order. iOS: the `isEnabled` of the actions
+      // on the controller UIKit draws. Android: the colour each composed label was
+      // given (`drawn`), not the model's flag (`enabled`) - an M3 `ListItem` row that
+      // ignores the flag paints the disabled action like the others.
+      expect(Platform.OS === 'ios' ? up.enabled : up.drawn).toBe('1,0,1');
+      handles.get('locked')?.nuiTestPerformAction('locked');
+      await sleep(400);
+      expect(eventLog.join(',')).toBe('');
+      expect(reportOf('locked').presented).toBe('1');
+      // Barrier: an enabled action on the same dialog does report.
+      handles.get('locked')?.nuiTestPerformAction('go');
+      await waitForLive('locked', 0, 'closed by the enabled action');
+      expect(eventLog.join(',')).toBe(
+        'locked:action:go,locked:presented:false'
+      );
+    });
+  }
 
   it('presents again when the app refuses a dismissal, and warns once', async () => {
     const warnings: string[] = [];
@@ -677,6 +686,106 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     console.log(`recycled-dialog recycles per round: ${reuses.join(',')}`);
   });
 
+  // A re-key hands the dropped view straight back to the new mount (Fabric's pool is
+  // LIFO, and the delete runs before the create in one transaction), so the old
+  // mount's dialog can still be animating in when the same native view presents the
+  // new one. iOS builds a controller per presentation, and the old one's carried
+  // dismissal has to survive the new `present`: when it did not (G11 review, item 2),
+  // the old alert stayed up in a key window of its own, `live` never came down, and the
+  // old completion marked the *new* entry finished, so the new mount's own teardown was
+  // refused too. Two endings per delay: the new dialog stays up and is then dropped,
+  // or it is dropped during its own entry.
+  for (const delay of [0, 80, 150]) {
+    for (const ending of ['kept', 'dropped mid-entry'] as const) {
+      it(`leaves one dialog, then none, when a recycled view presents again ${String(delay)} ms into the entry (${ending})`, async () => {
+        function Swap() {
+          const [scene, setScene] = useState({ open: false, key: 'a' });
+          setters.set('swap-open', (next) =>
+            setScene((s) => ({ ...s, open: next }))
+          );
+          setters.set('swap-key', (next) =>
+            setScene((s) => ({ ...s, key: next ? 'b' : 'a' }))
+          );
+          return (
+            <View>
+              <AlertDialog
+                key={scene.key}
+                testID="swapped"
+                hybridRef={captureHybrid('swapped')}
+                isPresented={scene.open}
+                title={`Mount ${scene.key}`}
+                actions={ACTIONS}
+              />
+            </View>
+          );
+        }
+        const { unmount } = await render(<Swap />);
+        await waitForHandle('swapped');
+        const before = reportOf('swapped');
+        setters.get('swap-open')?.(true);
+        // The delay runs from the native present (iOS: `present` asked; Android: the
+        // window composed), not from the JS write.
+        await waitForReport(
+          'swapped',
+          (r) => r.presentCount === '1',
+          'the first mount presenting'
+        );
+        if (delay > 0) await sleep(delay);
+        handles.clear();
+        setters.get('swap-key')?.(true);
+        await waitForHandle('swapped');
+        if (ending === 'kept') {
+          // One dialog counted *and* one window: mid-flight, the first mount's
+          // completion counts its own alert while the new one is still entering, so
+          // `live=1` alone can be the old dialog's.
+          const oneLeft = (r: Report) =>
+            isUpCounted(1)(r) &&
+            r.title === 'Mount b' &&
+            (Platform.OS !== 'ios' || r.windows === '1');
+          const up = await waitForReport(
+            'swapped',
+            oneLeft,
+            'the new mount up, the only dialog counted and the only window',
+            12000
+          );
+          if (Platform.OS === 'ios') {
+            // The precondition: this is the instance the first mount had, recycled -
+            // the per-object counters `prepareForRecycle` keeps went up by one.
+            expect(Number(up.recycles)).toBe(Number(before.recycles) + 1);
+          }
+          // Past both entry transitions, it is still so.
+          await sleep(800);
+          reportOf('swapped');
+          await sleep(100);
+          const settled = reportOf('swapped');
+          expect(oneLeft(settled) ? 'one' : settled.raw).toBe('one');
+        } else {
+          await waitForReport(
+            'swapped',
+            (r) => r.presentCount === '1' && r.presented === '1',
+            'the new mount presenting'
+          );
+          if (Platform.OS === 'ios') {
+            expect(Number(reportOf('swapped').recycles)).toBe(
+              Number(before.recycles) + 1
+            );
+          }
+          // Past the first entry's completion, inside the new one's.
+          await sleep(200);
+        }
+        unmount();
+        handles.clear();
+        const probeId = await probe();
+        await waitForNothingLeft(
+          probeId,
+          `a swap ${String(delay)} ms in, ${ending}`
+        );
+        // Neither mount reports anything: the app changed every prop.
+        expect(eventLog.join(',')).toBe('');
+      });
+    }
+  }
+
   it('presents from inside a <Host>, and goes when the Host is dropped', async () => {
     // Q5 B7 item 11. On Android the Host's one composition composes the dialog, window
     // and all, so dropping the Host is what has to take the window down; on iOS a Host
@@ -717,6 +826,70 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     const probeId = await probe();
     await waitForNothingLeft(probeId, 'the Host dropped with its dialog up');
   });
+
+  if (Platform.OS === 'ios') {
+    it('answers for the status bar and orientations as the screen it covers does', async () => {
+      // The dialog's window is above the app's, so UIKit asks *its* root about the
+      // status bar and the orientations while the dialog is up. The root has to give
+      // the answers of the app's top controller - here an RN Modal, portrait only.
+      // Only the orientations discriminate: this app sets
+      // `UIViewControllerBasedStatusBarAppearance` to NO, and RN's StatusBar then
+      // changes neither answer the Modal gives (measured: `0,0` with `hidden` and
+      // `light-content`), so the status bar half is the same code path held equal to
+      // its defaults. A bare controller answers `30` (all orientations) here.
+      await render(
+        <Modal
+          visible
+          animationType="none"
+          supportedOrientations={['portrait']}
+        >
+          <View style={{ flex: 1 }}>
+            <Stage testId="chrome" initial title="Chrome" />
+          </View>
+        </Modal>
+      );
+      await waitForHandle('chrome');
+      const up = await waitForReport(
+        'chrome',
+        isUpCounted(1),
+        'up over the Modal',
+        12000
+      );
+      // Not hidden, `.default`, `.portrait`.
+      expect(up.appChrome).toBe('0,0,2');
+      expect(up.chrome).toBe(up.appChrome);
+      setters.get('chrome')?.(false);
+      await waitForLive('chrome', 0, 'closed');
+    });
+
+    it('hands the key window back to the app when it closes or is dropped', async () => {
+      const first = await render(<Stage testId="keyed" initial />);
+      await waitForHandle('keyed');
+      const up = await waitForReport('keyed', isUpCounted(1), 'up');
+      // Barrier: the channel does say so when a window of ours is key.
+      expect(up.key).toBe('ours');
+      handles.get('keyed')?.nuiTestPerformAction('later');
+      await waitForNothingLeft('keyed', 'closed by its action');
+      await waitForReport(
+        'keyed',
+        (r) => r.key === 'app',
+        'the app window key after an action'
+      );
+      // And when the mount goes with the dialog up.
+      setters.get('keyed')?.(true);
+      await waitForReport('keyed', isUpCounted(1), 'up again');
+      await sleep(600);
+      first.unmount();
+      handles.clear();
+      const probeId = await probe();
+      await waitForNothingLeft(probeId, 'dropped while up');
+      await waitForReport(
+        probeId,
+        (r) => r.key === 'app',
+        'the app window key after a drop'
+      );
+    });
+  }
 
   if (Platform.OS === 'android') {
     it('composes the confirmation form as a sheet with one row per action', async () => {

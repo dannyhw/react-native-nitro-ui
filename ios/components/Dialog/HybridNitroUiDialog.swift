@@ -548,6 +548,16 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     fields.append("ownWindow=\(alert.map { presentation.isInOwnWindow($0) } == true ? 1 : 0)")
     fields.append("topPresented=\(Self.topPresentedClass(in: anchor.window))")
     fields.append("windows=\(Self.visibleWindowCount(near: anchor.window))")
+    // What the dialog's own window says about the status bar and orientations, next to
+    // what the app's top controller says: the window is above the app's, so its root
+    // is the one UIKit asks while the dialog is up.
+    if let alert, let root = presentation.ownWindowRoot(of: alert) {
+      fields.append("chrome=\(Self.chrome(of: root))")
+    } else {
+      fields.append("chrome=-")
+    }
+    fields.append("appChrome=\(Self.appTopController(in: anchor.window).map(Self.chrome(of:)) ?? "-")")
+    fields.append("key=\(Self.keyWindowOwner(near: anchor.window))")
     fields.append("drops=\(lifetimeDrops)")
     fields.append("recycles=\(lifetimeRecycles)")
     let line = fields.joined(separator: ";")
@@ -567,13 +577,40 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
 
   /// The class of the top-most controller presented in the app's window, or `-`.
   static func topPresentedClass(in window: UIWindow?) -> String {
-    guard var top = appWindow(window)?.rootViewController else { return "-" }
-    var presentedAny = false
+    guard let top = appTopController(in: window), top.presentingViewController != nil else {
+      return "-"
+    }
+    return String(describing: type(of: top))
+  }
+
+  /// The top-most controller in the app's window: the last one presented there, or its
+  /// root when nothing is.
+  static func appTopController(in window: UIWindow?) -> UIViewController? {
+    guard var top = appWindow(window)?.rootViewController else { return nil }
     while let next = top.presentedViewController {
       top = next
-      presentedAny = true
     }
-    return presentedAny ? String(describing: type(of: top)) : "-"
+    return top
+  }
+
+  /// `hidden,style,orientations`: a controller's status bar and orientation answers, as
+  /// numbers.
+  static func chrome(of controller: UIViewController) -> String {
+    let hidden = controller.prefersStatusBarHidden ? 1 : 0
+    let style = controller.preferredStatusBarStyle.rawValue
+    let orientations = controller.supportedInterfaceOrientations.rawValue
+    return "\(hidden),\(style),\(orientations)"
+  }
+
+  /// Whose window is key in the app's scene: `app` (the app's own window), `ours` (a
+  /// presentation window), `other` (any other window - one of ours with its root
+  /// released, say) or `none`.
+  static func keyWindowOwner(near window: UIWindow?) -> String {
+    guard let app = appWindow(window), let key = app.windowScene?.keyWindow else {
+      return "none"
+    }
+    if key === app { return "app" }
+    return key.rootViewController is NitroUiPresentationRootController ? "ours" : "other"
   }
 
   /// How many presentation windows (ours) are visible in the app's scene: a leaked
