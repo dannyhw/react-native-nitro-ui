@@ -1,0 +1,48 @@
+# Failure excerpt — real-input:android:date-picker:--control:date-picker
+
+- Ran: 2026-11-01T21:51:08.947Z on code tree `ffbfe429f7ce` at HEAD `8c4d2fd` (branch `task/G8-android-visual-fixes`)
+- Command: `node scripts/real-input/android.mjs date-picker --control date-picker`
+- Result: fail, exit 1, 241 ms
+- Load: start 2.84, end 2.84, median 2.84, max 2.84
+- Device: android / device `emulator-5574` / lease `G8-clgez`
+- Full log: `task/G8-android-visual-fixes/real-input+android+date-picker+--control+date-picker-2026-11-01T21-51-08.947Z.log` (<store>/task/G8-android-visual-fixes/real-input+android+date-picker+--control+date-picker-2026-11-01T21-51-08.947Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G8-android-visual-fixes/real-input+android+date-picker+--control+date-picker-2026-11-01T21-51-08.947Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G8-clgez (still live)
+  |   G8-clgez                 G8           android           pair-a
+gate: load
+  |   load1 at the moment of failure: 2.84 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (android): Error: real-input: unknown argument "date-picker".
+
+
+
+```

@@ -1306,6 +1306,297 @@ describe('Menu · G7a', () => {
     }
   });
 
+  /**
+   * A trigger whose title is shorter than any of its rows, which is the case the
+   * list has to survive: the README's `menu-android.png` showed this shape and the
+   * popup lost the tail of every label in it.
+   *
+   * "Move into a folder" is deliberately long enough that its row needs more width than
+   * Material's 112 dp list floor, which is what makes the assertion below about the
+   * popup's width rather than about a constant.
+   */
+  const WIDE_GROUP: MenuGroup = {
+    actions: [
+      { id: 'move', title: 'Move' },
+      { id: 'folder', title: 'Move into a folder' },
+    ],
+  };
+
+  /** Two rows, both shorter than Material's own 112 dp list floor. */
+  const NARROW_GROUP: MenuGroup = {
+    actions: [
+      { id: 'a', title: 'Up' },
+      { id: 'b', title: 'Down' },
+    ],
+  };
+
+  /**
+   * Material's own minimum width for a dropdown list, and its own maximum for a row's
+   * content (`DropdownMenuItemDefaultMinWidth` / `…MaxWidth` in `Menu.kt`, both private).
+   * The two bounds a popup has to sit between, named here rather than as literals so the
+   * assertions say which is which.
+   */
+  const MATERIAL_LIST_MIN_DP = 112;
+  const MATERIAL_LIST_MAX_DP = 280;
+
+  /** One popup, measured: its width and where its start edge landed, in device px. */
+  type PopupMeasure = {
+    popupWidthPx: number;
+    anchorWidthPx: number;
+    /** The popup's start edge and the trigger's, both device px from one read. */
+    popupStartPx: number;
+    anchorStartPx: number;
+  };
+
+  /**
+   * Opens `testId` and measures its popup against its own trigger.
+   *
+   * `live` is read here rather than passed in because it counts every menu in the
+   * process, so a caller that already has one open would otherwise be one out. Both
+   * rects come from one witness read of one menu, and two menus read the same way in one
+   * render answer in the same units, so anything taken here compares directly.
+   */
+  async function openAndMeasurePopup(testId: string): Promise<PopupMeasure> {
+    const liveBefore = report(testId).live ?? 0;
+    await pressTrigger(testId);
+    const open = await waitForMenu(
+      testId,
+      (r) => r.expanded === true && (r.live ?? 0) === liveBefore + 1
+    );
+    const [menuLeft, , menuRight] = edges(open.menu, 'menu');
+    const [anchorLeft, , anchorRight] = edges(open.anchor, 'anchor');
+    return {
+      popupWidthPx: menuRight - menuLeft,
+      anchorWidthPx: anchorRight - anchorLeft,
+      popupStartPx: menuLeft,
+      anchorStartPx: anchorLeft,
+    };
+  }
+
+  /** Closes `testId`'s popup by picking a row, so the next measurement is one window. */
+  async function closePopupByPicking(
+    testId: string,
+    id: string
+  ): Promise<void> {
+    const liveWhenOpen = report(testId).live ?? 0;
+    await pickRow(testId, id);
+    await waitForMenu(
+      testId,
+      (r) => r.expanded === false && (r.live ?? 0) === liveWhenOpen - 1
+    );
+  }
+
+  it('gives the list the width its items need, not the trigger\u2019s', async () => {
+    const { unmount } = await render(
+      <View style={{ gap: 6 }}>
+        <Menu
+          title="Move"
+          group={WIDE_GROUP}
+          testID="wide-list"
+          hybridRef={captureHybrid('wide-list')}
+          onSelect={recordSelect('wide-list')}
+        />
+        {/* The same render's other half, and the reason it has to be in this render:
+            Material's 112 dp floor is a *constant*, so "wider than 112 dp" is only a
+            claim about the items if a short list really does sit on that constant here.
+            This menu measures that, in the same units on the same device, which is what
+            turns "the wide popup is wider than the short one" into a check that a popup
+            pinned to any single width - 112 dp, or `Modifier.width(112.dp)` - cannot
+            pass. */}
+        <Menu
+          title="Up"
+          group={NARROW_GROUP}
+          testID="floor-list"
+          hybridRef={captureHybrid('floor-list')}
+          onSelect={recordSelect('floor-list')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wide-list');
+    await waitForTestId('floor-list');
+    const closed = report('wide-list');
+    const closedFloor = report('floor-list');
+
+    if (Platform.OS !== 'android') {
+      // iOS presents through the system's menu, which reports no window for the
+      // composition to measure (D23), so nothing about the list's width can be read
+      // from here on either platform's harness. What this branch keeps deterministic is
+      // the part that is answerable: the model's own rows, and the -1s for the window
+      // that is not there.
+      expectUnanswerable(closed);
+      expectUnanswerable(closedFloor);
+      expect(closed.rows).toBe(WIDE_GROUP.actions?.length ?? 0);
+      expect(closedFloor.rows).toBe(NARROW_GROUP.actions?.length ?? 0);
+      console.log(
+        `wide/floor lists on iOS: no popup window to measure (D23); rows ` +
+          `${String(closed.rows)}/${String(closedFloor.rows)}`
+      );
+      unmount();
+      return;
+    }
+
+    const trigger = await waitForBox(
+      'wide-list',
+      await waitForMeasured('wide-list', 'the trigger'),
+      'the trigger'
+    );
+    const wide = await openAndMeasurePopup('wide-list');
+    // The bug, in one line: `ExposedDropdownMenu` passes `matchAnchorWidth = true`
+    // by default, and its own `exposedDropdownSize` sets `minWidth = maxWidth =
+    // anchorWidth`, so the window came back exactly as wide as the button and every
+    // longer row lost its tail. Nothing here could see that: the rows are Compose
+    // nodes, not views, so `queryByTestId` cannot reach them, and the trigger's own
+    // rect is the box that is *not* clipped. The witness's `menu=` rect is the
+    // popup's window, which is where the clipping happened.
+    expect(wide.anchorWidthPx).toBeGreaterThan(0);
+    expect(wide.popupWidthPx).toBeGreaterThan(wide.anchorWidthPx);
+
+    // The premise, measured rather than assumed: a list of two short rows sits on
+    // Material's floor in this render, on this device, in these units. Closed by
+    // picking a row first, because a popup is a window of its own and the second
+    // one's width should be the only thing on screen while it is being read.
+    await closePopupByPicking('wide-list', 'folder');
+    const floor = await openAndMeasurePopup('floor-list');
+    const floorPx = MATERIAL_LIST_MIN_DP * PixelRatio.get();
+    expect(floor.popupWidthPx).toBeGreaterThanOrEqual(floorPx - 1);
+
+    // And now the width is the items', not a constant's: strictly wider than a list
+    // that needed nothing but the floor. Either the trigger's width (the shipped bug) or
+    // a hard 112 dp goes red on this line, which is what the line above alone cannot do.
+    expect(wide.popupWidthPx).toBeGreaterThan(floor.popupWidthPx);
+
+    // …and the reason that is not "grow forever": the popup stays inside the 280 dp
+    // ceiling Material caps a row's content at. `<=`, not `<`, because a popup whose
+    // widest row wants exactly the cap is allowed to be exactly the cap, and at a large
+    // font scale that is a reachable configuration rather than a rounding argument.
+    expect(wide.popupWidthPx / PixelRatio.get()).toBeLessThanOrEqual(
+      MATERIAL_LIST_MAX_DP
+    );
+
+    // Where the extra width went: printed, not asserted, and that is deliberate. The
+    // window's horizontal position is `ExposedDropdownMenuPositionProvider`'s decision,
+    // and this call exposes no lever that moves a window sideways - `Modifier.offset(x =
+    // 12.dp)` on the list, the widest one it takes, moves the rows *inside* the window and
+    // leaves the window where it was (measured: the witness still read the same rect, and
+    // every assertion above stayed green). An assertion here could not be shown to fail,
+    // which is the bar every new check has to clear, so placement is guarded where it is
+    // genuinely at risk instead: the hosted test below asserts
+    // `Math.abs(mLeft - aLeft) < 40` beside a `gap < 48` whose red proof is G7b round 1's
+    // `DropdownMenu(offset = DpOffset(0.dp, 64.dp))` - the one mutant in this file's
+    // history that really moved a window (16 px below the anchor's bottom to 168 px). What
+    // these lines add is the width claim; the number below keeps the geometry the fix
+    // produced on the record every run.
+    await closePopupByPicking('floor-list', 'a');
+    console.log(
+      `wide list: trigger ${String(wide.anchorWidthPx)} px, popup ` +
+        `${String(wide.popupWidthPx)} px ` +
+        `(${(wide.popupWidthPx / PixelRatio.get()).toFixed(1)} dp), floor list ` +
+        `${String(floor.popupWidthPx)} px, start ${String(wide.popupStartPx)} vs ` +
+        `${String(wide.anchorStartPx)}, trigger box ${describeSize(trigger)}`
+    );
+    unmount();
+  });
+
+  /**
+   * A section whose title is far longer than the 280 dp a Material row stops at, over
+   * rows that need almost nothing. The header is the only child of a popup that is not
+   * a `DropdownMenuItem`, so it is the only one Material's own cap does not reach.
+   */
+  const LONG_HEADER_GROUP: MenuGroup = {
+    sections: [
+      {
+        id: 'long',
+        title:
+          'A section title long enough to want more width than a Material menu row is ' +
+          'ever allowed to take, which is the point of it',
+        items: [{ id: 'tiny', title: 'Up' }],
+      },
+    ],
+  };
+
+  it('caps a section header at the width a row stops at', async () => {
+    const { unmount } = await render(
+      <Menu
+        title="Sections"
+        group={LONG_HEADER_GROUP}
+        testID="long-header"
+        hybridRef={captureHybrid('long-header')}
+        onSelect={recordSelect('long-header')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('long-header');
+    if (Platform.OS !== 'android') {
+      expectUnanswerable(report('long-header'));
+      unmount();
+      return;
+    }
+
+    const { popupWidthPx } = await openAndMeasurePopup('long-header');
+    // Once the popup stopped matching the trigger, its width is whatever its widest
+    // child asks for. Material caps a *row* at 280 dp (`DropdownMenuItemDefaultMaxWidth`
+    // in the row's own `sizeIn`) but a header is not a row, so an uncapped header was
+    // free to stretch the list past the width a Material menu is meant to stop at - and
+    // the widest thing the menu could then show was still capped, which is a menu whose
+    // rows are ellipsised inside a window bigger than they need. `MenuHeader` carries the
+    // same cap, and this is the line that says so.
+    expect(popupWidthPx / PixelRatio.get()).toBeLessThanOrEqual(
+      MATERIAL_LIST_MAX_DP
+    );
+    console.log(
+      `long header: popup ${String(popupWidthPx)} px ` +
+        `(${(popupWidthPx / PixelRatio.get()).toFixed(1)} dp, cap ` +
+        `${String(MATERIAL_LIST_MAX_DP)} dp)`
+    );
+    await closePopupByPicking('long-header', 'tiny');
+    unmount();
+  });
+
+  it('keeps Material\u2019s 112 dp floor on a list of short items', async () => {
+    const { unmount } = await render(
+      <Menu
+        title="Up"
+        group={NARROW_GROUP}
+        testID="narrow-list"
+        hybridRef={captureHybrid('narrow-list')}
+        onSelect={recordSelect('narrow-list')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('narrow-list');
+    if (Platform.OS !== 'android') {
+      expectUnanswerable(report('narrow-list'));
+      unmount();
+      return;
+    }
+    const liveBefore = report('narrow-list').live ?? 0;
+    await pressTrigger('narrow-list');
+    const open = await waitForMenu(
+      'narrow-list',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    const [menuLeft, , menuRight] = edges(open.menu, 'menu');
+    const [anchorLeft, , anchorRight] = edges(open.anchor, 'anchor');
+    const scale = PixelRatio.get();
+    // The other half of the fix: switching the anchor's width off must not let the
+    // list shrink to the trigger. Both rows here are shorter than Material's
+    // minimum, so a correct popup is exactly its floor, and a mutant that forced
+    // *some* width (rather than letting content decide) would land on the trigger's
+    // box and go red under this line. The wide test above measures this same floor in
+    // its own render, because comparing a wide popup against a floor needs both in one
+    // place; this test keeps it as a standalone claim as well.
+    expect((menuRight - menuLeft) / scale).toBeGreaterThanOrEqual(
+      MATERIAL_LIST_MIN_DP
+    );
+    console.log(
+      `short list: popup ${String(menuRight - menuLeft)} px = ` +
+        `${((menuRight - menuLeft) / scale).toFixed(1)} dp (floor ` +
+        `${String(MATERIAL_LIST_MIN_DP)}), trigger ${String(anchorRight - anchorLeft)} px`
+    );
+    unmount();
+  });
+
   it('draws every row of an untitled group, with its role (G9)', async () => {
     await render(
       <Menu
