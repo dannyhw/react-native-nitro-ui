@@ -265,4 +265,26 @@ describe('TextField · callbacks and ref', () => {
     expect(focus).not.toHaveBeenCalled();
     expect(blur).toHaveBeenCalledTimes(1);
   });
+
+  it('drops a queued focus() when the field unmounted before its view arrived', async () => {
+    // Nitro can hand the `hybridRef` over after the field is gone: React has run the
+    // unmount cleanup by then, and the native view it names may already be recycled into
+    // another field. A `focus()` queued on mount must not travel that far.
+    const ref = createRef<TextFieldHandle>();
+    const focus = jest.fn();
+    const blur = jest.fn();
+    const view = await render(<TextField ref={ref} testID="field" />);
+    const handedOver = nativeProps(view, 'field').hybridRef as {
+      f: (handle: unknown) => void;
+    };
+    ref.current?.focus();
+    await act(async () => {
+      view.unmount();
+    });
+    await act(async () => {
+      handedOver.f({ focus, blur });
+    });
+    expect(focus).not.toHaveBeenCalled();
+    expect(blur).not.toHaveBeenCalled();
+  });
 });

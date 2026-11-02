@@ -1,7 +1,8 @@
 //
 //  text-limit.test.swift
 //
-//  Host-side vectors for the TextField's `maxLength` cut and its text equality
+//  Host-side vectors for the TextField's `maxLength` cut, its committed-composition
+//  backstop and its text equality
 //  (ios/components/TextField/NitroUiTextLimit.swift).
 //
 //  `fitting` is what `shouldChangeCharactersIn` / `shouldChangeTextIn` run for a
@@ -24,6 +25,15 @@ struct TextLimitTest {
       print("  FAIL  \(what)")
       failures += 1
     }
+  }
+
+  /// `NitroUiCommitDelta.clamped` - what the iOS backstop runs when a field ends up past
+  /// the limit without the delegate's cut. Compared as UTF-16, like `checkFitting`.
+  private static func checkClamped(
+    _ displayed: String, _ incoming: String, _ limit: Int, _ expected: String, _ what: String
+  ) {
+    let got = NitroUiCommitDelta.clamped(displayed: displayed, incoming: incoming, limit: limit)
+    check((got as NSString) == (expected as NSString), what + " -> \"" + got + "\"")
   }
 
   /// `fitting`, compared as UTF-16 (JavaScript's view of the string) so a lone
@@ -85,6 +95,26 @@ struct TextLimitTest {
     checkTruncate("abcd😀", 5, "abcd", "never through a surrogate pair")
     checkTruncate("a👨‍👩‍👧", 5, "a", "never through a ZWJ family")
     checkTruncate("x", 0, "", "limit 0 is empty")
+
+    print("NitroUiCommitDelta.clamped")
+    // The field held `abcd`, the caret sat after the `a`, and the IME committed `かき`:
+    // the text the field shows is `aかきbcd`, and only the `かき` is the user's edit.
+    // Cutting the *field* here answers `aか` - the user's `bcd` is gone either way.
+    checkClamped("abcd", "a\u{304B}\u{304D}bcd", 5, "a\u{304B}bcd",
+      "a commit in the middle takes the room the cap has, and the text past it stays")
+    checkClamped("abcd", "ab\u{304B}\u{304D}cd", 6, "ab\u{304B}\u{304D}cd",
+      "a commit in the middle that fits is taken whole")
+    checkClamped("abcd", "ab\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}cd", 6, "abcd",
+      "a ZWJ family that cannot fit is refused whole - never cut in half, never at the cost of the `cd`")
+    checkClamped("abcd", "a\u{1F600}bcd", 5, "abcd",
+      "an emoji that does not fit is refused, and nothing past it moves")
+    // A JS write put the field past the cap; the user's commit must not cut it down.
+    checkClamped("abcdefgh", "abcdefgh\u{304B}", 5, "abcdefgh",
+      "a field already past the cap refuses new text and keeps what JS wrote")
+    checkClamped("abcdefgh", "abcdefg", 5, "abcdefg",
+      "a deletion from text past the cap is left alone")
+    checkClamped("abcd", "aXd", 3, "aXd",
+      "a selection replaced with text that fits is taken")
 
     print("NitroUiText ==")
     check(NitroUiText("abc") == NitroUiText("abc"), "the same code units are equal")
