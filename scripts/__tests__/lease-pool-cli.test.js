@@ -1312,6 +1312,33 @@ describe('the lease owns the device lifecycle', () => {
    * remove. A guess about which half the bench wants is not a lease's to make, so this refuses and
    * names the flag - before the lease exists, so a refusal cannot have already powered the pool off.
    */
+  it('lists --boot in its usage, and says an exclusive boot needs --platform', () => {
+    // The usage is what an unknown flag, a missing value and the refusal below all print, so it is
+    // the help a person actually reads. It listed `--no-boot` and `--boot-timeout-minutes` but not
+    // `--boot`, the flag CONTRIBUTING tells every agent to pass, and said nothing of the one
+    // combination the CLI refuses (X17 item 5). Matched as a flag of its own: `--no-boot` and
+    // `--boot-timeout-minutes` both contain the text `--boot`.
+    const bare = spawnSync(process.execPath, [CLI], {
+      encoding: 'utf8',
+      env: { ...withoutLeaseEnv(process.env), NITRO_UI_HOME: home },
+    });
+    expect(bare.status).toBe(2);
+    expect(bare.stderr).toMatch(/\[--boot\]/);
+    expect(bare.stderr).toMatch(/--exclusive --boot needs --platform/);
+    // And the refusal of that combination prints the same usage, so the line that names the rule
+    // sits under the error that enforced it.
+    tools({ stateful: true });
+    const refused = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+    ]);
+    expect(refused.status).toBe(2);
+    expect(refused.stderr).toMatch(/--exclusive --boot needs --platform/);
+  });
+
   it('refuses an exclusive boot that did not name a platform, and takes nothing', () => {
     tools({ androidUp: true, iosUp: true, stateful: true });
     const acquired = cli([
