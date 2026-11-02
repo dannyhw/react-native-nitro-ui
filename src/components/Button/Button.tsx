@@ -109,6 +109,21 @@ function onPressNotProvided(): void {
 }
 
 /**
+ * The separator between the fields of a Button's `nuiSizingKey`.
+ *
+ * Same rule as Menu's trigger (which is this Button) and SegmentedControl's
+ * option list: a free-form value may contain the separator, so the values are
+ * escaped on the way in (`\` -> `\\`, `|` -> `\|`) and only an unescaped one
+ * separates a field.
+ */
+const FIELD_SEPARATOR = '|';
+
+/** Escape one free-form value so it cannot forge a separator. */
+function escapeField(value: string): string {
+  return value.replace(/[\\|]/g, '\\$&');
+}
+
+/**
  * The size configuration of one Button, as the sizing engine sees it.
  *
  * Everything that moves the control's size has to be in here, and nothing else
@@ -121,7 +136,10 @@ function onPressNotProvided(): void {
  *
  * Two Buttons with the same key share one cached size, so leaving `title` out
  * would give every Button the width of the first one measured. The free-form
- * values come last so a `|` inside one of them cannot shift a fixed field.
+ * values are escaped, not merely last: `['x|a' as image, 'b']` and
+ * `['x' as image, 'a|b']` both used to join to `x|a|b`, and an escaped
+ * separator inside either one cannot forge that boundary either
+ * (`docs/architecture/sizing.md`, "Building `nuiSizingKey`").
  */
 function sizingVariantFor(
   variant: ButtonVariant,
@@ -129,7 +147,12 @@ function sizingVariantFor(
   systemImage: string | undefined,
   title: string
 ): string {
-  return `${variant}|${size}|${systemImage ?? ''}|${title}`;
+  return [
+    variant,
+    size,
+    escapeField(systemImage ?? ''),
+    escapeField(title),
+  ].join(FIELD_SEPARATOR);
 }
 
 /**
