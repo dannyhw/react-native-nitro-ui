@@ -95,3 +95,10 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - `lease-pool-cli.test.js`'s `cli` helper still spreads `process.env` without `withoutLeaseEnv`, so `NITRO_UI_LEASE_BOOT=1` in the shell turns 3 cases red (X16 re-review).
 - `lease.mjs` `USAGE` doesn't list `--boot` or that `--exclusive --boot` needs `--platform`, and the refusal prints that usage (X16 re-review).
 
+- G11 bench (Q5 B8): `mount.dialog`/`memory.dialog`/`leak.dialog` and `present.dialog` are not built; `present.<id>` needs a native "presentation shown" stamp, which no scenario has yet (`presentedNs` is a control's own first frame).
+- G11 spike, not run: the UIKit-vs-SwiftUI side-by-side screenshot of one alert (Q5 B9.1), and where an iOS 26/27 iPhone action sheet with a `sourceView` draws; the real-input check only asserts it is one `.sheet`.
+- G11: DatePicker's popover still presents in its containing controller's chain; inside an RN `Modal` it carries the hazard the Dialog spike measured (RN dismisses the Modal's controller, which takes the top presentation instead). `NitroUiPresentation.presentInOwnWindow` is the fix if it bites.
+- G11: the react-native-screens contexts (formSheet, push) were measured once with `react-native-screens@4.30.1` added and then removed; no permanent gate covers them, nor Android's `onDetachedFromWindow` close path outside that push.
+- G11: an iOS non-dismissible `ConfirmationDialog` that has a `cancel` action still closes on a tap outside, because UIKit routes that tap to the cancel action (reported as the action); documented in `docs/components/dialog.md` "Limits".
+- G11 docs: README has no `dialog-ios.png`/`dialog-android.png` screenshots beside the other components'.
+- G11 conformance: `no-leak-on-drop` has no presentation-aware variant (a live-window count across K drops); Dialog's drops are proved by `Dialog.harness.tsx`, and BottomSheet will want the shared rule.

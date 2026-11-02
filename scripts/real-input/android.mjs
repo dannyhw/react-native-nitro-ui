@@ -3144,7 +3144,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'host'} screen
+   *   | 'picker' | 'menu' | 'dialog' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -3155,6 +3155,7 @@ class DeviceHarness {
       datepicker: 'Dates',
       picker: 'Picker',
       menu: 'Menu',
+      dialog: 'Dialogs',
       host: 'Host',
     }[screen];
     const anchor = {
@@ -3165,6 +3166,7 @@ class DeviceHarness {
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
+      dialog: ECHO.dialogLog,
       host: ECHO.hostValue,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
