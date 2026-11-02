@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T15:20:55.731Z on code tree `fc2c9192c119` at HEAD `2cfbb9d` (branch `task/T19-textfield-measurements`)
+- Command: `bun run check`
+- Result: fail, exit 1, 150544 ms
+- Load: start 7.06, end 4.13, median 6.65, max 9.12
+- Device: android / device `emulator-5570` / lease `T19-c14ka`
+- Full log: `task/T19-textfield-measurements/check-2026-11-02T15-20-54.935Z.log` (<store>/task/T19-textfield-measurements/check-2026-11-02T15-20-54.935Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/real-input-a11y-ios.test.js`
+- `● the Swift case list against the shared table › has one case per row of the shared table, in the same order`
+- `expect(received).toEqual(expected) // deep equality`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 711 — the rest is in the full log above)
+
+```
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS src/spike/TextField/__tests__/keyboard.test.ts
+PASS scripts/__tests__/real-input-ios-latency.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/gate.test.js (53.445 s)
+PASS scripts/__tests__/ci-workflows.test.js (56.265 s)
+PASS scripts/__tests__/gate-logs.test.js (56.406 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (79.574 s)
+PASS scripts/__tests__/bench-gate.test.js (142.634 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/real-input-a11y-ios.test.js
+  ● the Swift case list against the shared table › has one case per row of the shared table, in the same order
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  -  0
+    + Received  + 25
+
+    @@ -67,6 +67,31 @@
+        Object {
+          "id": "hosted-progress",
+          "label": "Mixed linear progress",
+          "testId": "host-mixed-progress-linear",
+        },
+    +   Object {
+    +     "id": "arm-a",
+    +     "label": "spike typing target",
+    +     "testId": "spike-type-target",
+    +   },
+    +   Object {
+    +     "id": "arm-b",
+    +     "label": "spike typing target b",
+    +     "testId": "spike-type-target-b",
+    +   },
+    +   Object {
+    +     "id": "capped",
+    +     "label": "capped field",
+    +     "testId": "spike-maxlength",
+    +   },
+    +   Object {
+    +     "id": "frozen",
+    +     "label": "frozen field",
+    +     "testId": "spike-frozen",
+    +   },
+    +   Object {
+    +     "id": "rn",
+    +     "label": "rn typing target",
+    +     "testId": "rn-type-target",
+    +   },
+      ]
+
+      811 |     // asked about and its own case silently reports "not measured" — and a control that
+      812 |     // quietly leaves the suite is the failure this whole file is built to prevent.
+    > 813 |     expect(swiftCases()).toEqual(
+          |                          ^
+      814 |       A11Y_CONTROLS.map((entry) => ({
+      815 |         id: entry.id,
+      816 |         testId: entry.anchorTestId,
+
+      at Object.toEqual (scripts/__tests__/real-input-a11y-ios.test.js:813:26)
+
+
+Test Suites: 1 failed, 63 passed, 64 total
+Tests:       1 failed, 1665 passed, 1666 total
+Snapshots:   0 total
+Time:        143.144 s, estimated 146 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 150.5 s
+gate: recorded in .gates/task/T19-textfield-measurements.jsonl
+
+```

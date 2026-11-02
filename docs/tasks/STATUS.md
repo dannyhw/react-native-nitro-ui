@@ -75,8 +75,9 @@
 | X16 | Tooling sweep 2: lease-env leak in check's tests, --exclusive --boot, bench --help ledger row, a11y:switch stable read | Apex | Opus | merged (`f2a6f2c`, PR #20) |
 | G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | reviewed, PR #23; merge gates wait for a free device pair (components first) |
 | X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | done, PR #22; merge gates wait for a free device pair |
-| T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | running |
+| T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | done: build TextField on `UITextField` (D34); report on main, prototype branch kept |
 | Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged (`74efeb6`, PR #24) |
 | G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
+| G13 | TextField (Q2 + T19 + D34; `UITextField` on iOS, `BasicTextField` on Android) | Opus | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | running |

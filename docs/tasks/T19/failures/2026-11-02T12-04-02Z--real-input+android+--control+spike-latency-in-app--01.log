@@ -1,0 +1,56 @@
+# Failure excerpt — real-input:android:--control:spike-latency-in-app
+
+- Ran: 2026-11-02T12:04:02.621Z on code tree `ea5b55fc878d` at HEAD `efbb1e6` (branch `task/T19-textfield-measurements`)
+- Command: `node scripts/real-input/android.mjs --control spike-latency-in-app`
+- Result: fail, exit 1, 430 ms
+- Load: start 4.99, end 4.99, median 4.99, max 4.99
+- Device: android / device `emulator-5570`
+- Full log: `task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-04-02.621Z.log` (<store>/task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-04-02.621Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/T19-textfield-measurements/real-input+android+--control+spike-latency-in-app-2026-11-02T12-04-02.621Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   T19-18jd1                T19          both              pair-b
+  |   S2-7bluv                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.99 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 12 log line(s)
+
+```
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp cd08d6c7 at b973f985f41cb97a74a0b3373513996839a6331a, now ea5b55fc at efbb1e6f8df0056e80561300e9dfc1e2e747092a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp cd08d6c7 at b973f985f41cb97a74a0b3373513996839a6331a, now ea5b55fc at efbb1e6f8df0056e80561300e9dfc1e2e747092a)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+
+
+```
