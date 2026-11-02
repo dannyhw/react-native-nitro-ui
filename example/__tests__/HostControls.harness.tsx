@@ -63,6 +63,8 @@ import {
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
+import { waitForHandle } from './handles';
+
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
@@ -770,6 +772,11 @@ describe('Host · a hosted Slider is still a Slider', () => {
       </View>
     );
     await boxOf('slide-0');
+    // The box exists before the `hybridRef` callback has run (`handles.ts`): on iOS the
+    // mount is on main and the callback reaches JS a turn later. Asserting the handle the
+    // moment the box appears failed this test intermittently on main (G11-merge, 2 of 3
+    // full iOS runs) and on G12's branch; wait for the callback, as the other suites do.
+    await waitForHandle(() => log.sliders['slide-0'], { what: '"slide-0"' });
     expect(log.sliders['slide-0']).toBeDefined();
 
     await drag('slide-0', 0.75);

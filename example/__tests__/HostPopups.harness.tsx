@@ -60,6 +60,8 @@ import {
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
+import { waitForHandle } from './handles';
+
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
@@ -823,7 +825,11 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 
   it('takes a real press on a segment, through the Host’s composition', async () => {
     await mount(<SegRows log={log} />);
-    const control = need(log.segments.first, 'segmented row');
+    // The handle lands a turn after the mount on iOS (`handles.ts`): `need` straight
+    // after `mount` failed intermittently on main (G11-merge) and on G12's branch.
+    const control = await waitForHandle(() => log.segments.first, {
+      what: '"segmented row"',
+    });
     expect(control.selectedIndex).toBe(0);
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
@@ -840,7 +846,9 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
 
   it('goes back to what React kept when the app refuses a change', async () => {
     await mount(<SegRows log={log} refuse />);
-    const control = need(log.segments.first, 'segmented row');
+    const control = await waitForHandle(() => log.segments.first, {
+      what: '"segmented row"',
+    });
     const hostBox = await boxOf('seg-host');
     const aim = await aimAt(hostBox, 0, 'seg-first');
     expect(control.selectedIndex).toBe(0);
@@ -893,7 +901,9 @@ describe('Host · a hosted SegmentedControl is still a SegmentedControl', () => 
     // — the same row answering a press inside the drawing — is what stops "the Host
     // composed nothing" from reading the same as "the row is narrower than the Host".
     await mount(<SegRows log={log} />);
-    const control = need(log.segments.first, 'segmented row');
+    const control = await waitForHandle(() => log.segments.first, {
+      what: '"segmented row"',
+    });
     const hostBox = await boxOf('seg-host');
     await userEvent.pressAt(hostBox.x + hostBox.width - 6, hostBox.y + 14);
     await settle(350);
