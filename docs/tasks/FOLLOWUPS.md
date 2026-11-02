@@ -102,3 +102,4 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G11: an iOS non-dismissible `ConfirmationDialog` that has a `cancel` action still closes on a tap outside, because UIKit routes that tap to the cancel action (reported as the action); documented in `docs/components/dialog.md` "Limits".
 - G11 docs: README has no `dialog-ios.png`/`dialog-android.png` screenshots beside the other components'.
 - G11 conformance: `no-leak-on-drop` has no presentation-aware variant (a live-window count across K drops); Dialog's drops are proved by `Dialog.harness.tsx`, and BottomSheet will want the shared rule.
+- G11 red proofs: removing `hideImmediately` from `NitroUiPresentation.dismissForTeardown` leaves every Dialog drop test green (they assert the end state, which the carried dismissal still cleans); the visible flash after a mid-entry drop has no guard. A probe of the dialog window's `isHidden` right after the drop would be one.

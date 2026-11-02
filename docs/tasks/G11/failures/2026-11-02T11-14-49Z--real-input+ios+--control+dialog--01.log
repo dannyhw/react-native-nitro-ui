@@ -1,0 +1,151 @@
+# Failure excerpt — real-input:ios:--control:dialog
+
+- Ran: 2026-11-02T11:14:49.315Z on code tree `6f2f51cfaabd` at HEAD `ccc5eff` (branch `task/G11-dialogs`)
+- Command: `node scripts/real-input/ios.mjs --control dialog`
+- Result: fail, exit 1, 184408 ms
+- Load: start 15.26, end 14.57, median 19.20, max 30.41
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/real-input+ios+--control+dialog-2026-11-02T11-14-49.315Z.log` (<store>/task/G11-dialogs/real-input+ios+--control+dialog-2026-11-02T11-14-49.315Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ no elements were printed for segmented-control, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-switch, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-slider, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-segmented, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+- `✗ no elements were printed for hosted-progress, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/real-input+ios+--control+dialog-2026-11-02T11-14-49.315Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 14.57 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 102 log line(s)
+
+```
+real-input (ios): iPhone 17 · F08675D3-A32B-4F88-BC81-02D7E0CB797E · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 6f2f51cfaabd (690 files) head ccc5effc · 10 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-11-02 11:16:16.600.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-11-02 11:16:16.601.
+    Test Suite 'RealInputTests' started at 2026-11-02 11:16:16.601.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputA11y]' started.
+    real-input (ios): accessibility hierarchy - no element "real-input-segmented-index" after 8.0s
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputA11y]' failed (56.150 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDialog]' started.
+    real-input (ios): dialog: the alert's identifier is "dialog-alert-dialog"
+    real-input (ios): dialog: the sheet's buttons are ["Copy link", "Remove photo", "Locked share"]; 0 element(s) say "Cancel"
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDialog]' passed (40.095 seconds).
+    Test Suite 'RealInputTests' failed at 2026-11-02 11:17:52.848.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-11-02 11:17:52.848.
+    Test Suite 'Selected tests' failed at 2026-11-02 11:17:52.849.
+    ** TEST EXECUTE FAILED **
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    · real-input (ios): dialog: the alert's identifier is "dialog-alert-dialog"
+    · real-input (ios): dialog: the sheet's buttons are ["Copy link", "Remove photo", "Locked share"]; 0 element(s) say "Cancel"
+    ✓ XCUITest reported "passed" for testRealInputDialog in 40.095s
+
+  a11y:switch: Switch a11y (XCUITest)
+    · other id="switch-controlled" label="Controlled switch" value="" box (325, 217.3333282470703, 61x28) [the React Native wrapper]
+    · other id="" label="" value="" box (325, 217.3333282470703, 61x28)
+    · other id="" label="" value="" box (325, 217.3333282470703, 61x28)
+    · other id="" label="" value="" box (325, 217.3333282470703, 61x28)
+    · switch id="" label="Controlled switch" value="0" box (325, 217.3333282470703, 61x28)
+    · switch id="" label="" value="0" box (325, 217.3333282470703, 63x28)
+    ✓ NitroUiSwitch is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:slider: Slider a11y (XCUITest)
+    · other id="slider-controlled" label="Controlled slider" value="" box (16, 217.3333282470703, 370x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 217.3333282470703, 370x31)
+    · other id="" label="Controlled slider" value="0.25" box (16, 217.3333282470703, 370x31)
+    · known failing (X4 a11y: the Slider is announced as other and not as a slider): NitroUiSlider: "Controlled slider" is announced as an other and not as a slider — the announcement lost the kind of control this is, so a person hears a name with no idea what can be done with it
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:button: Button a11y (XCUITest)
+    · other id="real-input-enabled" label="Real-input button" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · other id="" label="" value="" box (16, 233.99999237060547, 99.33333587646484x34.333343505859375)
+    · button id="" label="Real-input button" value="" box (16, 233.99999237060547, 99.33333333333333x34.333333333333314)
+    ✓ NitroUiButton is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:segmented-control: SegmentedControl a11y (XCUITest)
+    ✗ no elements were printed for segmented-control, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:date-picker: DatePicker a11y (XCUITest)
+    ✗ no elements were printed for date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:picker: Picker a11y (XCUITest)
+    ✗ no elements were printed for picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:menu: Menu a11y (XCUITest)
+    ✗ no elements were printed for menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-switch: Switch a11y (XCUITest)
+    ✗ no elements were printed for hosted-switch, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-slider: Slider a11y (XCUITest)
+    ✗ no elements were printed for hosted-slider, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-button: Button a11y (XCUITest)
+    ✗ no elements were printed for hosted-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-segmented: SegmentedControl a11y (XCUITest)
+    ✗ no elements were printed for hosted-segmented, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-picker: Picker a11y (XCUITest)
+    ✗ no elements were printed for hosted-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-date-picker: DatePicker a11y (XCUITest)
+    ✗ no elements were printed for hosted-date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+  a11y:hosted-progress: Progress a11y (XCUITest)
+    ✗ no elements were printed for hosted-progress, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+dialog: PASS (no retries)
+a11y:segmented-control: failed: no elements were printed for segmented-control, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:date-picker: failed: no elements were printed for date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:picker: failed: no elements were printed for picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:menu: failed: no elements were printed for menu, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-switch: failed: no elements were printed for hosted-switch, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-slider: failed: no elements were printed for hosted-slider, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-button: failed: no elements were printed for hosted-button, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-segmented: failed: no elements were printed for hosted-segmented, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-picker: failed: no elements were printed for hosted-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-date-picker: failed: no elements were printed for hosted-date-picker, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+a11y:hosted-progress: failed: no elements were printed for hosted-progress, so this run never read its accessibility tree (the pass reported "failed"; exit 65). See <repo>/.real-input/ios/xcodebuild-test.log
+
+real-input (ios): 1/1 controls passed · 0 press sequence(s) needed a retry · 3/14 auxiliary checks passed
+
+
+
+```

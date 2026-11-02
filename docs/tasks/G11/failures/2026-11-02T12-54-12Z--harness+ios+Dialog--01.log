@@ -1,0 +1,131 @@
+# Failure excerpt — harness:ios:Dialog
+
+- Ran: 2026-11-02T12:54:12.352Z on code tree `0233f48a3a2d` at HEAD `0a124f2` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Dialog`
+- Result: fail, exit 1, 42111 ms
+- Load: start 11.41, end 9.58, median 10.86, max 11.41
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G11-30rj7`
+- Full log: `task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-54-12.352Z.log` (<store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-54-12.352Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · presentation spike (G11, Q5 B9) › presents a second dialog over the first, and each closes on its own`
+- `expected 'second:presented:false,second:action:…' to be 'second:action:later,second:presented:…' // Object.is equality`
+- `● Dialog · presentation spike (G11, Q5 B9) › leaves no Modal behind when the RN Modal under an open dialog closes`
+- `expected 'over-closing-modal:presented:false,ov…' to be 'over-closing-modal:action:later,over-…' // Object.is equality`
+- `● Dialog · behaviour (G11, Q5 B7) › reports an action before the close it causes`
+- `expected 'act:presented:false,act:action:delete' to be 'act:action:delete,act:presented:false' // Object.is equality`
+- `● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled`
+- `expected '1,1,1' to be '1,0,1' // Object.is equality`
+- `● Dialog · behaviour (G11, Q5 B7) › updates title, message and a disabled action in place while up`
+- `expected '1' to be '0' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-54-12.352Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-30rj7 (still live)
+  |   G11-30rj7                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.58 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Dialog
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 0233f48a3a2d, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.41/12.29 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+ios+Dialog-2026-11-02T12-54-12.352Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · presentation spike (G11, Q5 B9) › presents a second dialog over the first, and each closes on its own
+
+    expected 'second:presented:false,second:action:…' to be 'second:action:later,second:presented:…' // Object.is equality
+
+      [0m [90m 322 |[39m     handles[33m.[39m[36mget[39m([32m'first'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'cancel'[39m)[33m;[39m
+       [90m 323 |[39m     [36mawait[39m waitForNothingLeft([32m'first'[39m[33m,[39m [32m'both closed'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 324 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe(
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 325 |[39m       [32m'second:action:later,second:presented:false,first:action:cancel,first:presented:false'[39m
+       [90m 326 |[39m     )[33m;[39m
+       [90m 327 |[39m   })[33m;[39m[0m
+
+  ● Dialog · presentation spike (G11, Q5 B9) › leaves no Modal behind when the RN Modal under an open dialog closes
+
+    expected 'over-closing-modal:presented:false,ov…' to be 'over-closing-modal:action:later,over-…' // Object.is equality
+
+      [0m [90m 411 |[39m     expect(
+       [90m 412 |[39m       eventLog[33m.[39mfilter((e) [33m=>[39m e[33m.[39mstartsWith([32m'over-closing-modal:'[39m))[33m.[39mjoin([32m','[39m)
+      [31m[1m>[22m[39m[90m 413 |[39m     )[33m.[39mtoBe(
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 414 |[39m       [32m'over-closing-modal:action:later,over-closing-modal:presented:false'[39m
+       [90m 415 |[39m     )[33m;[39m
+       [90m 416 |[39m     expect([0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › reports an action before the close it causes
+
+    expected 'act:presented:false,act:action:delete' to be 'act:action:delete,act:presented:false' // Object.is equality
+
+      [0m [90m 491 |[39m     handles[33m.[39m[36mget[39m([32m'act'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'delete'[39m)[33m;[39m
+       [90m 492 |[39m     [36mawait[39m waitForLive([32m'act'[39m[33m,[39m [35m0[39m[33m,[39m [32m'closed by the action'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 493 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m'act:action:delete,act:presented:false'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 494 |[39m     expect(reportOf([32m'act'[39m)[33m.[39mpresented)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 495 |[39m   })[33m;[39m
+       [90m 496 |[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled
+
+    expected '1,1,1' to be '1,0,1' // Object.is equality
+
+      [0m [90m 505 |[39m     [36mconst[39m up [33m=[39m [36mawait[39m waitForReport([32m'locked'[39m[33m,[39m isUpCounted([35m1[39m)[33m,[39m [32m'up'[39m)[33m;[39m
+       [90m 506 |[39m     [90m// Read from the controller iOS built and the model Android composed.[39m
+      [31m[1m>[22m[39m[90m 507 |[39m     expect(up[33m.[39menabled)[33m.[39mtoBe([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m [33m?[39m [32m'1,0,1'[39m [33m:[39m [32m'1,0,1'[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 508 |[39m     handles[33m.[39m[36mget[39m([32m'locked'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'locked'[39m)[33m;[39m
+       [90m 509 |[39m     [36mawait[39m sleep([35m400[39m)[33m;[39m
+       [90m 510 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › updates title, message and a disabled action in place while up
+
+    expected '1' to be '0' // Object.is equality
+
+      [0m [90m 624 |[39m     )[33m;[39m
+       [90m 625 |[39m     [90m// The disabled flag follows in place on both platforms...[39m
+      [31m[1m>[22m[39m[90m 626 |[39m     expect(after[33m.[39menabled[33m?[39m[33m.[39msplit([32m','[39m)[[35m0[39m])[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m     |[39m                                              [31m[1m^[22m[39m
+       [90m 627 |[39m     [90m// ...and the action *set* is the platform difference B2 documents: UIKit cannot drop[39m
+       [90m 628 |[39m     [90m// or add an action on a presented alert, so iOS keeps two until the next[39m
+       [90m 629 |[39m     [90m// presentation; Compose recomposes, so Android shows three now.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 15 passed, 20 total
+Snapshots:   0 total
+Time:        40.289 s, estimated 126 s
+Ran all test suites matching Dialog.
+
+
+
+```
