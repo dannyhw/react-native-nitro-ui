@@ -42,6 +42,90 @@ const AVD_B = 'nitro-ui-b';
 
 const MINUTE = 60_000;
 
+/**
+ * Every `lease.mjs acquire --exclusive --boot` command a Markdown document prints, as the argv the
+ * CLI would receive (`<ID>` filled in).
+ *
+ * Read the way a shell reads it, in this order: a trailing `# comment` goes first, per physical
+ * line (a `\` inside a comment continues nothing), then a line ending in `\` is joined to the next,
+ * and only then are commands filtered. Filtering first is what let a wrapped command through
+ * unread (X17 item 3), and dropping only `#`-words let the rest of a comment become arguments.
+ *
+ * @param {string} doc
+ * @returns {{line: string, argv: string[]}[]}
+ */
+function exclusiveBootCommands(doc) {
+  const commands = [];
+  let pending = '';
+  for (const physical of doc.split('\n')) {
+    const code = physical.replace(/(^|\s)#.*$/, '').trim();
+    if (code.endsWith('\\')) {
+      pending += `${code.slice(0, -1).trim()} `;
+      continue;
+    }
+    commands.push(`${pending}${code}`.trim());
+    pending = '';
+  }
+  if (pending !== '') commands.push(pending.trim());
+  return commands
+    .filter((line) => /lease\.mjs acquire/.test(line))
+    .filter((line) => line.includes('--exclusive'))
+    .filter((line) => line.includes('--boot'))
+    .map((line) => ({
+      line,
+      argv: line
+        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
+        .split(/\s+/)
+        .filter((word) => word !== '')
+        // The doc's placeholders are the task name and nothing else.
+        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word)),
+    }));
+}
+
+describe('which documented commands the exclusive-boot guard reads', () => {
+  it('reads a backslash-continued command as one command', () => {
+    // A long command in a fenced block is wrapped with `\`, as CONTRIBUTING already wraps its
+    // `bench/run.mjs` and `xcodebuild` lines. Filtered per physical line, the first half has
+    // `--exclusive` but no `--boot` and the second has no `lease.mjs acquire`, so the guard read
+    // neither and a refused form could be documented under it in plain sight (X17 item 3).
+    const doc = [
+      '```sh',
+      'node scripts/lease.mjs acquire --task <ID> --exclusive \\',
+      '  --boot --platform android',
+      'node scripts/bench/run.mjs --platform android --plan full \\',
+      '  --launches 8',
+      '```',
+    ].join('\n');
+    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
+      [
+        'acquire',
+        '--task',
+        'DOC-LINE',
+        '--exclusive',
+        '--boot',
+        '--platform',
+        'android',
+      ],
+    ]);
+  });
+
+  it('still reads a one-line command, and drops its trailing comment', () => {
+    const doc =
+      'node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform ios   # a bench\n';
+    expect(exclusiveBootCommands(doc).map((command) => command.argv)).toEqual([
+      [
+        'acquire',
+        '--task',
+        'DOC-LINE',
+        '--exclusive',
+        '--boot',
+        '--platform',
+        'ios',
+      ],
+    ]);
+  });
+});
+
 describe('the lease owns the device lifecycle', () => {
   let home;
   let bins;
@@ -1617,23 +1701,13 @@ describe('the lease owns the device lifecycle', () => {
   it('documents an exclusive boot the CLI actually accepts', () => {
     tools({ androidUp: false, iosUp: false, stateful: true });
     const doc = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
-    const lines = doc
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => /lease\.mjs acquire/.test(line))
-      .filter((line) => line.includes('--exclusive'))
-      .filter((line) => line.includes('--boot'));
+    const commands = exclusiveBootCommands(doc);
     // Empty here would mean the guard proves nothing, which is the failure mode of every
     // "does the doc match the code" test written after the doc had already been fixed.
-    expect(lines.length).toBeGreaterThan(0);
-    for (const line of lines) {
-      const argv = line
-        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
-        .split(/\s+/)
-        .filter((word) => word !== '' && !word.startsWith('#'))
-        // The doc's placeholders are the task name and nothing else; `--out` keeps the env file
-        // out of stdout so the assertions below read the diagnostics, not the lease.
-        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word));
+    expect(commands.length).toBeGreaterThan(0);
+    for (const { line, argv } of commands) {
+      // `--out` keeps the env file out of stdout so the assertions below read the diagnostics,
+      // not the lease.
       const ran = cli([
         ...argv,
         '--out',
