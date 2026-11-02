@@ -89,8 +89,9 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
   /** The Return key's label on a single-line field. Default: `'default'`. */
   returnKeyType?: TextFieldReturnKeyType | undefined;
   /**
-   * Called when Return is pressed on a single-line field, with its text. The
-   * field then loses focus, as React Native's does by default.
+   * Called when Return is pressed on a single-line field, with its text - the
+   * string itself, where React Native's `TextInput` passes an event. The field
+   * then loses focus, as React Native's does by default.
    */
   onSubmitEditing?: ((text: string) => void) | undefined;
   /**

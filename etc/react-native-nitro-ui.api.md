@@ -517,6 +517,8 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
             accessibilityLabel: string;
         };
         nuiTestSetMarkedText(text: string): void;
+        nuiTestCancelMarkedText(): void;
+        nuiTestPaste(text: string, at: number): void;
         nuiTestLifetimeReport(): string;
     }) => void) | undefined;
     keyboardType?: TextFieldKeyboardType | undefined;

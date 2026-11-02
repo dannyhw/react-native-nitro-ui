@@ -37,7 +37,7 @@ implement that rule at all (T19).
 | `secureTextEntry`    | `boolean \| undefined`                 | `false`       | `isSecureTextEntry` / `BasicSecureTextField` (reveals the last typed character). Single-line only. |
 | `maxLength`          | `number \| null \| undefined`          | none          | Enforced natively, in UTF-16 code units (see below). |
 | `returnKeyType`      | `'default' \| 'done' \| 'go' \| 'next' \| 'search' \| 'send'` | `'default'` | `returnKeyType` / `ImeAction`. Single-line only. |
-| `onSubmitEditing`    | `(text: string) => void`               | —             | Return on a single-line field, with its text; the field then loses focus. |
+| `onSubmitEditing`    | `(text: string) => void`               | —             | Return on a single-line field, with its text as a string (not RN's `{ nativeEvent: { text } }` event); the field then loses focus. |
 | `editable`           | `boolean \| undefined`                 | `true`        | `false`: the text shows, but the field takes no focus and no input. |
 | `onFocus` / `onBlur` | `() => void`                           | —             | First responder / Compose focus, gained and lost. |
 | `ref`                | `Ref<TextFieldHandle>`                 | —             | `focus()` and `blur()`. |
@@ -61,8 +61,10 @@ or non-finite `maxLength` is no limit, as it is for `TextInput`.
 | `phone-pad`     | `.phonePad`               | `KeyboardType.Phone`   |
 | `url`           | `.URL`                    | `KeyboardType.Uri`     |
 
-A secure field always gets the platform's password keyboard on Android
-(`KeyboardType.Password`), whatever `keyboardType` says.
+A secure field gets Android's password keyboard (`KeyboardType.Password`), or its
+number-password keyboard (`KeyboardType.NumberPassword`) with `keyboardType="number-pad"`.
+On iOS a change to `keyboardType`, `returnKeyType`, `autoCapitalize`, `autoCorrect`
+or `secureTextEntry` while the field is focused reloads the keyboard that is up.
 
 ### `ref`: `focus()` and `blur()`
 
@@ -74,9 +76,12 @@ field.current?.focus();
 
 Both are native methods on the field's Hybrid View that hop to the UI thread and
 return at once (`docs/architecture/core.md` §5), so focus lands a moment later and
-`onFocus` says when. A `focus()` that arrives before the field is on screen is
-kept and applied when it gets a window (iOS) or a composition (Android). A field
-that is not `editable` ignores `focus()`. This is the library's first imperative
+`onFocus` says when. A `focus()` or `blur()` asked for before the native view has
+reached JS - from a parent's mount effect, `useEffect(() => ref.current?.focus(), [])`,
+which is how to focus a field on mount in v1 - is held by the wrapper (the newest ask
+wins) and run when the view arrives; one that reaches a field not yet on screen is
+applied when it gets a window (iOS) or a composition (Android). A field that is not
+`editable` ignores `focus()`. This is the library's first imperative
 API: `hybridRef` stays internal (D14), and `ref` is the public face of the two
 methods.
 
@@ -124,19 +129,30 @@ UTF-16 one Kotlin and JS already use.
 ### Composition (marked text)
 
 While an IME composition is open - the underlined text a Japanese, Chinese or
-Korean keyboard is still building - the text belongs to the IME. Replacing it
-destroys the composition, so **a `value` write that arrives while one is open is
-dropped**, not applied and not queued (`lastWrite=composing` in the harness's
-report). The composition's own commit is an edit like any other, and the commit
-that echoes it decides again. No edit is reported for the steps of a composition,
-only once its text is in the field, and `maxLength` is not enforced until then
-either.
+Korean keyboard is still building, and on Android also the word Gboard holds while
+autocorrect is on - the text belongs to the IME. Replacing it destroys the
+composition, so **a `value` write that arrives while one is open is held back**,
+not applied (`lastWrite=composing` in the harness's report), and **decided again
+when the composition ends**, whatever text it ends with: committed, the commit is an
+edit and its echo decides; deleted, the text is what native already counted, so the
+end itself re-runs the write.
 
-Measured on iOS (`TextField.harness.tsx`, through `setMarkedText`, the call an IME
-makes). Android drops the write under `TextFieldState.composition` the same way,
-but a composition opened from outside the IME does not survive on the test
-emulator's keyboard, so there is no composition to write into there; the rule is
-code-reviewed, not measured, on Android.
+What is reported during a composition differs per platform:
+
+- **Android** counts and reports every step, as React Native does: a composing
+  region that grows `h`, `he`, `hel` is three `onChangeText` calls, and `maxLength`
+  cuts composing text too. A refused edit inside a composition is put back when the
+  composition ends.
+- **iOS** reports a composition once its text is in the field: marked text belongs
+  to the IME until it commits (or is deleted), and `maxLength` is applied then.
+
+Measured on iOS (`TextField.harness.tsx`, through `setMarkedText`/`unmarkText`, the
+calls an IME makes): a write held back, and a held write landing after the
+composition is deleted. On Android a composition opened from outside the IME does not
+survive on the test emulator's keyboard, so the Android rules are held by
+`TextFieldModelTest` on the JVM. Typed with the emulator's real Gboard, autocorrect
+on, a word was reported key by key (`H`, `He`, … `Hello`); that Gboard drew no
+composing region, so it did not exercise a composition.
 
 ### `maxLength`
 
@@ -147,6 +163,13 @@ grapheme boundary: an emoji (two units) at the last free unit is refused whole
 rather than split into a lone surrogate, and a ZWJ family is never cut inside.
 Text a JS write puts in the field is not truncated; a deletion from it is always
 allowed.
+
+On iOS the cut is made in `shouldChangeCharactersIn`, the delegate call every
+keyboard and paste edit makes, with a backstop after the edit for text that reached
+the field without it (a committed composition, `insertText`). Only the first keeps
+the text after a mid-text insertion: pasting `xyz` at the middle of `ab··cd` under a
+limit of 8 gives `ab xy cd`, where cutting the end would give `ab xyz c`
+(`scripts/native-tests/text-limit.test.swift`, and the harness's paste case).
 
 ## Sizing
 
@@ -204,7 +227,8 @@ screen reader announces.
 
 ## Behaviour notes
 
-- **Return** on a single-line field calls `onSubmitEditing(text)` and then gives up
+- **Return** on a single-line field calls `onSubmitEditing(text)` - the text itself,
+  a string, where React Native's `TextInput` passes an event - and then gives up
   focus - React Native's default `submitBehavior` for one line. On a multi-line
   field Return inserts a newline, and `returnKeyType` and `onSubmitEditing` do not
   apply.
