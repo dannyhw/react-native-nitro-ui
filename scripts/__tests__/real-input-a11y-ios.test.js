@@ -462,7 +462,7 @@ describe('the accessibility re-read', () => {
   /** One case, re-read three times before its box stopped being the ⅓-scale one. */
   const STABILITY_LOG = [
     'real-input a11y case=switch kind=stability reads=3 settled=true moved=1 elapsedMs=240 ' +
-      'previousAnchorX=108.33333 previousAnchorY=72.44444 previousAnchorW=20.33333 previousAnchorH=9.33333',
+      'firstAnchorX=108.33333 firstAnchorY=72.44444 firstAnchorW=20.33333 firstAnchorH=9.33333',
     'real-input a11y case=switch kind=anchor id=switch-controlled x=325.0 y=217.333 w=61.0 h=28.0 nodes=2',
     'real-input a11y case=switch kind=node trait="switch" enabled=true hittable=true id="switch-controlled" label="Controlled switch" value="" x=325.0 y=217.333 w=61.0 h=28.0',
     'real-input a11y case=switch kind=node trait="switch" enabled=true hittable=true id="" label="Controlled switch" value="0" x=325.0 y=217.333 w=61.0 h=28.0',
@@ -488,7 +488,7 @@ describe('the accessibility re-read', () => {
     ).toBe(true);
   });
 
-  it('reads how many re-reads a case cost, and what the discarded read said', () => {
+  it('reads how many re-reads a case cost, and what the first read said', () => {
     const stability = parseIosA11yStability(STABILITY_LOG).get('switch');
     expect(stability.reads).toBe(3);
     expect(stability.settled).toBe(true);
@@ -497,7 +497,7 @@ describe('the accessibility re-read', () => {
     // The box that was thrown away, in the report: "the pass read it three times" is only useful
     // if a reader can see the two answers differ by the screen scale, which is how the ⅓-scale
     // snapshot was recognised as a stale read rather than a moved control.
-    expect(stability.previousAnchor).toEqual({
+    expect(stability.firstAnchor).toEqual({
       x: 108.33333,
       y: 72.44444,
       width: 20.33333,
@@ -522,7 +522,7 @@ describe('the accessibility re-read', () => {
     // measurement and a pass.
     const log =
       'real-input a11y case=switch kind=stability reads=6 settled=false moved=2 elapsedMs=1440 ' +
-      'previousAnchorX=325 previousAnchorY=217 previousAnchorW=61 previousAnchorH=28';
+      'firstAnchorX=325 firstAnchorY=217 firstAnchorW=61 firstAnchorH=28';
     const stability = parseIosA11yStability(log).get('switch');
     expect(stability.settled).toBe(false);
     expect(stability.reads).toBe(6);
@@ -544,12 +544,12 @@ describe('the accessibility re-read', () => {
     expect(iosStabilityNote(null)).toBeNull();
   });
 
-  it('notes a re-read with the read count, the discarded box, and the ratio between them', () => {
+  it('notes a re-read with the read count, the first read, and the ratio between them', () => {
     const note = iosStabilityNote(
       parseIosA11yStability(STABILITY_LOG).get('switch'),
       SWITCH_BOX
     );
-    expect(note).toContain('read 3 times before two reads agreed');
+    expect(note).toContain('read 3 times before two agreed');
     // The box that was thrown away, and the ratio to the one kept: that ratio is how a reader
     // tells a stale snapshot from a control that moved, so it has to survive into the report.
     expect(note).toContain('(108.33, 72.44, 20.33, 9.33)');
@@ -561,7 +561,7 @@ describe('the accessibility re-read', () => {
     expect(note).toContain('never two reads');
   });
 
-  it('will not call a discarded box a scaled read unless every component says so', () => {
+  it('will not call the first read a scaled one unless every component says so', () => {
     // The ⅓ sentence is a diagnosis, and a diagnosis printed for a box that merely happens to be
     // smaller would teach the next reader to distrust the note. Fixtures that coincide with the
     // right answer prove nothing, so this one is one component off: x/y/w at a third, height not.
@@ -570,18 +570,24 @@ describe('the accessibility re-read', () => {
       settled: true,
       moved: 1,
       elapsedMs: 240,
-      previousAnchor: { x: 108.33, y: 72.44, width: 20.33, height: 40 },
+      firstAnchor: { x: 108.33, y: 72.44, width: 20.33, height: 40 },
     };
-    expect(iosStabilityNote(almost, SWITCH_BOX)).not.toContain('scale');
+    const notScaled = iosStabilityNote(almost, SWITCH_BOX);
+    expect(notScaled).not.toContain('the first read is this box at');
+    // And the note must not assert the *shape* of the incident either: naming the ⅓-scale bug in
+    // every re-read note would teach a reader to see that bug in notes that are not about it.
+    // (checked on the bare fraction, not a spelling: the note writes "at ⅓ scale", and an
+    // assertion that depended on a hyphen would pass on a note that did name it.)
+    expect(notScaled).not.toContain('⅓');
     // And a discarded box that equals the kept one says nothing either: `settle` would not have
     // thrown it away, so if it ever appeared the note must not invent a scale for it.
-    const same = { ...almost, previousAnchor: { ...SWITCH_BOX } };
+    const same = { ...almost, firstAnchor: { ...SWITCH_BOX } };
     expect(iosStabilityNote(same, SWITCH_BOX)).not.toContain('scale');
     // With no discarded box printed at all (a budget timeout before a second read), the note still
     // renders: the read count is the finding, not the ratio.
     const none = { reads: 2, settled: false, moved: 0, elapsedMs: 1500 };
     expect(iosStabilityNote(none, SWITCH_BOX)).toContain(
-      '2 reads that never agreed'
+      'read 2 times and never agreed'
     );
   });
 
@@ -592,7 +598,7 @@ describe('the accessibility re-read', () => {
       moved: 2,
       elapsedMs: 1440,
     });
-    expect(note).toContain('6 reads that never agreed');
+    expect(note).toContain('read 6 times and never agreed');
     expect(note).toContain('discount it');
     // Never a pass, never a failure: `ios.mjs` notes it, and the rule still grades the boxes.
     expect(note).not.toMatch(/\bFAIL\b/);
@@ -611,7 +617,7 @@ describe('the accessibility re-read', () => {
       'settled',
       'moved',
       'elapsedMs',
-      'previousAnchorX',
+      'firstAnchorX',
     ]) {
       expect(swift).toContain(`${key}=`);
     }
