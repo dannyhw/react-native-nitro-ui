@@ -95,6 +95,14 @@ export default function TextFieldScreen() {
   const [blurCount, setBlurCount] = useState(0);
   const [submitted, setSubmitted] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
+  const [corrected, setCorrected] = useState('');
+  const [correctedChanges, setCorrectedChanges] = useState(0);
+  // Autocorrect on: Gboard holds each word in an IME composition while it types it,
+  // so this echo is how a person sees that every key is still reported (G13 round 1).
+  const onCorrectedText = useCallback((text: string) => {
+    setCorrected(text);
+    setCorrectedChanges((count) => count + 1);
+  }, []);
   const focusRef = useRef<TextFieldHandle>(null);
 
   // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the
@@ -144,6 +152,19 @@ export default function TextFieldScreen() {
             onPress={blurFromJs}
           />
         </View>
+
+        <Row title="Autocorrect on (the keyboard composes each word)">
+          <TextField
+            testID="text-autocorrect"
+            accessibilityLabel="Autocorrect field"
+            placeholder="Type words"
+            value={corrected}
+            onChangeText={onCorrectedText}
+          />
+        </Row>
+        <Text testID="text-autocorrect-echo" style={{ color: ink.ink }}>
+          {`autocorrect: ${corrected} (${String(correctedChanges)} changes)`}
+        </Text>
 
         <Row title="Controlled">
           <TextField

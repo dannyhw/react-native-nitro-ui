@@ -51,6 +51,7 @@ ios/components/Slider/HybridNitroUiSlider.swift
 ios/components/Slider/NitroUiSliderValue.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/components/TextField/HybridNitroUiTextField.swift
+ios/components/TextField/NitroUiTextLimit.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
 ios/core/NitroUiDeclaredFallbacks.swift
