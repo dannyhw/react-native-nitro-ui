@@ -1,0 +1,69 @@
+# Failure excerpt — harness:ios:Slider
+
+- Ran: 2026-11-02T09:21:51.564Z on code tree `54566da5a119` at HEAD `605b7e7` (branch `task/G10-component-followups`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Slider`
+- Result: fail, exit 1, 19450 ms
+- Load: start 7.87, end 6.27, median 6.64, max 7.87
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G10-y963t`
+- Full log: `task/G10-component-followups/harness+ios+Slider-2026-11-02T09-21-51.564Z.log` (<store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-21-51.564Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-21-51.564Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G10-y963t (still live)
+  |   G10-y963t                G10          both              pair-a
+  |   T19-18jd1                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.27 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 26 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Slider
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 54566da5a119, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.48/8.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-21-51.564Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        18.05 s
+Ran all test suites matching Slider.
+
+
+
+```
