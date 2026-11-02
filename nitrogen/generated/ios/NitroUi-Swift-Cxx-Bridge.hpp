@@ -8,6 +8,8 @@
 #pragma once
 
 // Forward declarations of C++ defined types
+// Forward declaration of `HybridNitroUiBottomSheetSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiBottomSheetSpec; }
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
@@ -42,12 +44,16 @@ namespace margelo::nitro::nitroui { struct NitroUiMenuSize; }
 namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
+// Forward declaration of `NitroUiSheetDetent` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSheetDetent; }
 // Forward declaration of `NitroUiSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
 // Forward declaration of `NitroUiSliderSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 
 // Forward declarations of Swift defined types
+// Forward declaration of `HybridNitroUiBottomSheetSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiBottomSheetSpec_cxx; }
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
@@ -70,6 +76,7 @@ namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 
 // Include C++ defined types
+#include "HybridNitroUiBottomSheetSpec.hpp"
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiDialogSpec.hpp"
@@ -87,6 +94,7 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 #include "NitroUiMenuSize.hpp"
 #include "NitroUiPickerSize.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
+#include "NitroUiSheetDetent.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
 #include <NitroModules/Null.hpp>
@@ -105,6 +113,17 @@ namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
  */
 namespace margelo::nitro::nitroui::bridge::swift {
 
+  // pragma MARK: std::vector<NitroUiSheetDetent>
+  /**
+   * Specialized version of `std::vector<NitroUiSheetDetent>`.
+   */
+  using std__vector_NitroUiSheetDetent_ = std::vector<NitroUiSheetDetent>;
+  inline std::vector<NitroUiSheetDetent> create_std__vector_NitroUiSheetDetent_(size_t size) noexcept {
+    std::vector<NitroUiSheetDetent> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
   // pragma MARK: std::variant<nitro::NullType, double>
   /**
    * Wrapper struct for `std::variant<nitro::NullType, double>`.
@@ -161,6 +180,184 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline std__variant_nitro__NullType__std__string_ create_std__variant_nitro__NullType__std__string_(const std::string& value) noexcept {
     return std__variant_nitro__NullType__std__string_(value);
+  }
+  
+  // pragma MARK: std::function<void(bool /* presented */, double /* eventCount */)>
+  /**
+   * Specialized version of `std::function<void(bool, double)>`.
+   */
+  using Func_void_bool_double = std::function<void(bool /* presented */, double /* eventCount */)>;
+  /**
+   * Wrapper class for a `std::function<void(bool / * presented * /, double / * eventCount * /)>`, this can be used from Swift.
+   */
+  class Func_void_bool_double_Wrapper final {
+  public:
+    explicit Func_void_bool_double_Wrapper(std::function<void(bool /* presented */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(bool /* presented */, double /* eventCount */)>>(std::move(func))) {}
+    inline void call(bool presented, double eventCount) const noexcept {
+      _function->operator()(presented, eventCount);
+    }
+  private:
+    std::unique_ptr<std::function<void(bool /* presented */, double /* eventCount */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_bool_double_Wrapper wrap_Func_void_bool_double(Func_void_bool_double value) noexcept {
+    return Func_void_bool_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(bool / * presented * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_bool____presented_____double____eventCount______ = std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(bool /* presented */, double /* eventCount */)>> create_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::function<void(bool /* presented */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(bool /* presented */, double /* eventCount */)> get_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::function<void(double /* index */)>
+  /**
+   * Specialized version of `std::function<void(double)>`.
+   */
+  using Func_void_double = std::function<void(double /* index */)>;
+  /**
+   * Wrapper class for a `std::function<void(double / * index * /)>`, this can be used from Swift.
+   */
+  class Func_void_double_Wrapper final {
+  public:
+    explicit Func_void_double_Wrapper(std::function<void(double /* index */)>&& func): _function(std::make_unique<std::function<void(double /* index */)>>(std::move(func))) {}
+    inline void call(double index) const noexcept {
+      _function->operator()(index);
+    }
+  private:
+    std::unique_ptr<std::function<void(double /* index */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_double create_Func_void_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_double_Wrapper wrap_Func_void_double(Func_void_double value) noexcept {
+    return Func_void_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* index */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * index * /)>>`.
+   */
+  using std__optional_std__function_void_double____index______ = std::optional<std::function<void(double /* index */)>>;
+  inline std::optional<std::function<void(double /* index */)>> create_std__optional_std__function_void_double____index______(const std::function<void(double /* index */)>& value) noexcept {
+    return std::optional<std::function<void(double /* index */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____index______(const std::optional<std::function<void(double /* index */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* index */)> get_std__optional_std__function_void_double____index______(const std::optional<std::function<void(double /* index */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::function<void(bool /* ended */)>
+  /**
+   * Specialized version of `std::function<void(bool)>`.
+   */
+  using Func_void_bool = std::function<void(bool /* ended */)>;
+  /**
+   * Wrapper class for a `std::function<void(bool / * ended * /)>`, this can be used from Swift.
+   */
+  class Func_void_bool_Wrapper final {
+  public:
+    explicit Func_void_bool_Wrapper(std::function<void(bool /* ended */)>&& func): _function(std::make_unique<std::function<void(bool /* ended */)>>(std::move(func))) {}
+    inline void call(bool ended) const noexcept {
+      _function->operator()(ended);
+    }
+  private:
+    std::unique_ptr<std::function<void(bool /* ended */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_bool_Wrapper wrap_Func_void_bool(Func_void_bool value) noexcept {
+    return Func_void_bool_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(bool /* ended */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(bool / * ended * /)>>`.
+   */
+  using std__optional_std__function_void_bool____ended______ = std::optional<std::function<void(bool /* ended */)>>;
+  inline std::optional<std::function<void(bool /* ended */)>> create_std__optional_std__function_void_bool____ended______(const std::function<void(bool /* ended */)>& value) noexcept {
+    return std::optional<std::function<void(bool /* ended */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_bool____ended______(const std::optional<std::function<void(bool /* ended */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(bool /* ended */)> get_std__optional_std__function_void_bool____ended______(const std::optional<std::function<void(bool /* ended */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::function<void(double /* width */, double /* height */)>
+  /**
+   * Specialized version of `std::function<void(double, double)>`.
+   */
+  using Func_void_double_double = std::function<void(double /* width */, double /* height */)>;
+  /**
+   * Wrapper class for a `std::function<void(double / * width * /, double / * height * /)>`, this can be used from Swift.
+   */
+  class Func_void_double_double_Wrapper final {
+  public:
+    explicit Func_void_double_double_Wrapper(std::function<void(double /* width */, double /* height */)>&& func): _function(std::make_unique<std::function<void(double /* width */, double /* height */)>>(std::move(func))) {}
+    inline void call(double width, double height) const noexcept {
+      _function->operator()(width, height);
+    }
+  private:
+    std::unique_ptr<std::function<void(double /* width */, double /* height */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_double_double_Wrapper wrap_Func_void_double_double(Func_void_double_double value) noexcept {
+    return Func_void_double_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* width */, double /* height */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * width * /, double / * height * /)>>`.
+   */
+  using std__optional_std__function_void_double____width_____double____height______ = std::optional<std::function<void(double /* width */, double /* height */)>>;
+  inline std::optional<std::function<void(double /* width */, double /* height */)>> create_std__optional_std__function_void_double____width_____double____height______(const std::function<void(double /* width */, double /* height */)>& value) noexcept {
+    return std::optional<std::function<void(double /* width */, double /* height */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____width_____double____height______(const std::optional<std::function<void(double /* width */, double /* height */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* width */, double /* height */)> get_std__optional_std__function_void_double____width_____double____height______(const std::optional<std::function<void(double /* width */, double /* height */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiBottomSheetSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiBottomSheetSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiBottomSheetSpec_ = std::shared_ptr<HybridNitroUiBottomSheetSpec>;
+  std::shared_ptr<HybridNitroUiBottomSheetSpec> create_std__shared_ptr_HybridNitroUiBottomSheetSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiBottomSheetSpec_(std__shared_ptr_HybridNitroUiBottomSheetSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiBottomSheetSpec>
+  using std__weak_ptr_HybridNitroUiBottomSheetSpec_ = std::weak_ptr<HybridNitroUiBottomSheetSpec>;
+  inline std__weak_ptr_HybridNitroUiBottomSheetSpec_ weakify_std__shared_ptr_HybridNitroUiBottomSheetSpec_(const std::shared_ptr<HybridNitroUiBottomSheetSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<std::string>
+  using Result_std__string_ = Result<std::string>;
+  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
+    return Result<std::string>::withValue(value);
+  }
+  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
+    return Result<std::string>::withError(error);
+  }
+  
+  // pragma MARK: Result<void>
+  using Result_void_ = Result<void>;
+  inline Result_void_ create_Result_void_() noexcept {
+    return Result<void>::withValue();
+  }
+  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
+    return Result<void>::withError(error);
   }
   
   // pragma MARK: std::function<void()>
@@ -221,28 +418,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiButtonSize>::withError(error);
   }
   
-  // pragma MARK: std::function<void(double /* millis */, double /* eventCount */)>
-  /**
-   * Specialized version of `std::function<void(double, double)>`.
-   */
-  using Func_void_double_double = std::function<void(double /* millis */, double /* eventCount */)>;
-  /**
-   * Wrapper class for a `std::function<void(double / * millis * /, double / * eventCount * /)>`, this can be used from Swift.
-   */
-  class Func_void_double_double_Wrapper final {
-  public:
-    explicit Func_void_double_double_Wrapper(std::function<void(double /* millis */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(double /* millis */, double /* eventCount */)>>(std::move(func))) {}
-    inline void call(double millis, double eventCount) const noexcept {
-      _function->operator()(millis, eventCount);
-    }
-  private:
-    std::unique_ptr<std::function<void(double /* millis */, double /* eventCount */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_double_double create_Func_void_double_double(void* NON_NULL swiftClosureWrapper) noexcept;
-  inline Func_void_double_double_Wrapper wrap_Func_void_double_double(Func_void_double_double value) noexcept {
-    return Func_void_double_double_Wrapper(std::move(value));
-  }
-  
   // pragma MARK: std::optional<std::function<void(double /* millis */, double /* eventCount */)>>
   /**
    * Specialized version of `std::optional<std::function<void(double / * millis * /, double / * eventCount * /)>>`.
@@ -279,24 +454,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<NitroUiDatePickerSize>::withError(error);
   }
   
-  // pragma MARK: Result<void>
-  using Result_void_ = Result<void>;
-  inline Result_void_ create_Result_void_() noexcept {
-    return Result<void>::withValue();
-  }
-  inline Result_void_ create_Result_void_(const std::exception_ptr& error) noexcept {
-    return Result<void>::withError(error);
-  }
-  
-  // pragma MARK: Result<std::string>
-  using Result_std__string_ = Result<std::string>;
-  inline Result_std__string_ create_Result_std__string_(const std::string& value) noexcept {
-    return Result<std::string>::withValue(value);
-  }
-  inline Result_std__string_ create_Result_std__string_(const std::exception_ptr& error) noexcept {
-    return Result<std::string>::withError(error);
-  }
-  
   // pragma MARK: std::vector<NitroUiDialogAction>
   /**
    * Specialized version of `std::vector<NitroUiDialogAction>`.
@@ -306,43 +463,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     std::vector<NitroUiDialogAction> vector;
     vector.reserve(size);
     return vector;
-  }
-  
-  // pragma MARK: std::function<void(bool /* presented */, double /* eventCount */)>
-  /**
-   * Specialized version of `std::function<void(bool, double)>`.
-   */
-  using Func_void_bool_double = std::function<void(bool /* presented */, double /* eventCount */)>;
-  /**
-   * Wrapper class for a `std::function<void(bool / * presented * /, double / * eventCount * /)>`, this can be used from Swift.
-   */
-  class Func_void_bool_double_Wrapper final {
-  public:
-    explicit Func_void_bool_double_Wrapper(std::function<void(bool /* presented */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(bool /* presented */, double /* eventCount */)>>(std::move(func))) {}
-    inline void call(bool presented, double eventCount) const noexcept {
-      _function->operator()(presented, eventCount);
-    }
-  private:
-    std::unique_ptr<std::function<void(bool /* presented */, double /* eventCount */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_bool_double create_Func_void_bool_double(void* NON_NULL swiftClosureWrapper) noexcept;
-  inline Func_void_bool_double_Wrapper wrap_Func_void_bool_double(Func_void_bool_double value) noexcept {
-    return Func_void_bool_double_Wrapper(std::move(value));
-  }
-  
-  // pragma MARK: std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>
-  /**
-   * Specialized version of `std::optional<std::function<void(bool / * presented * /, double / * eventCount * /)>>`.
-   */
-  using std__optional_std__function_void_bool____presented_____double____eventCount______ = std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>;
-  inline std::optional<std::function<void(bool /* presented */, double /* eventCount */)>> create_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::function<void(bool /* presented */, double /* eventCount */)>& value) noexcept {
-    return std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>(value);
-  }
-  inline bool has_value_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline std::function<void(bool /* presented */, double /* eventCount */)> get_std__optional_std__function_void_bool____presented_____double____eventCount______(const std::optional<std::function<void(bool /* presented */, double /* eventCount */)>>& optional) noexcept {
-    return optional.value();
   }
   
   // pragma MARK: std::function<void(const std::string& /* id */)>

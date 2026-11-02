@@ -94,6 +94,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one',
     screen: 'dialog',
   },
+  {
+    id: 'bottom-sheet',
+    title:
+      'a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one',
+    screen: 'sheet',
+  },
   // @end-generated
 ]);
 

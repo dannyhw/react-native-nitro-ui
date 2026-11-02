@@ -30,6 +30,7 @@ import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 import { Menu } from '../Menu/Menu';
 import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
+import { BottomSheet } from '../BottomSheet/BottomSheet';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -78,15 +79,16 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * **Empty since H2b**: every control the library ships is hosted, so there is
- * nothing left to refuse here for being what it is. The table and the check that
- * reads it stay, because they are the row the *next* control goes on - a
- * TextField, anything added before it has been measured inside a Host starts here,
- * refused, until a round measures it. `host.test.tsx` proves the sentence still
- * works by putting a stand-in in this table, because nothing in the library does any
- * more.
+ * Every control H2b measured is hosted. `BottomSheet` (G14) is refused by design,
+ * not for want of a measurement: its content is React Native views, and a Host has
+ * no place for an RN view (`docs/components/host.md`, "What a Host cannot hold").
+ * A TextField, anything added before it has been measured inside a Host, starts here
+ * too, refused, until a round measures it. `host.test.tsx` also proves the sentence
+ * with a stand-in in this table.
  */
-export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([]);
+export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
+  [BottomSheet, 'BottomSheet'],
+]);
 
 /**
  * The RN views an app reaches for, so that "no RN views in a Host" is checked

@@ -97,3 +97,13 @@ export {
   type DialogAction,
   type DialogProps,
 } from './components/Dialog/Dialog';
+
+// A modal bottom sheet with React Native content (G14, DECISIONS D33/D35): UIKit's sheet
+// presentation on iOS, Material 3's `ModalBottomSheet` on Android. `isPresented` is
+// controlled through the event-count handshake, detents use SwiftUI's names, and the
+// content is mounted only while the sheet is up.
+export {
+  BottomSheet,
+  type BottomSheetDetent,
+  type BottomSheetProps,
+} from './components/BottomSheet/BottomSheet';

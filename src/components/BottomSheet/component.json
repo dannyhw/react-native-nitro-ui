@@ -1,0 +1,16 @@
+{
+  "name": "BottomSheet",
+  "hybridView": "NitroUiBottomSheet",
+  "implementation": "HybridNitroUiBottomSheet",
+  "id": "bottom-sheet",
+  "sizing": null,
+  "hostable": false,
+  "exampleTab": "sheet",
+  "exampleLabel": "Sheet",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one",
+  "androidViewManager": "NitroUiBottomSheetViewManager"
+}

@@ -15,14 +15,18 @@
 #include <fbjni/fbjni.h>
 #include <NitroModules/HybridObjectRegistry.hpp>
 
+#include "JHybridNitroUiBottomSheetSpec.hpp"
+#include "JFunc_void_bool_double.hpp"
+#include "JFunc_void_double.hpp"
+#include "JFunc_void_bool.hpp"
+#include "JFunc_void_double_double.hpp"
+#include "views/JHybridNitroUiBottomSheetStateUpdater.hpp"
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
 #include "JHybridNitroUiDatePickerSpec.hpp"
-#include "JFunc_void_double_double.hpp"
 #include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
 #include "JHybridNitroUiDialogSpec.hpp"
-#include "JFunc_void_bool_double.hpp"
 #include "JFunc_void_std__string.hpp"
 #include "views/JHybridNitroUiDialogStateUpdater.hpp"
 #include "JHybridNitroUiHostSpec.hpp"
@@ -130,20 +134,32 @@ struct JHybridNitroUiDialogSpecImpl: public jni::JavaClass<JHybridNitroUiDialogS
     return javaPart->getJHybridNitroUiDialogSpec();
   }
 };
+struct JHybridNitroUiBottomSheetSpecImpl: public jni::JavaClass<JHybridNitroUiBottomSheetSpecImpl, JHybridNitroUiBottomSheetSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiBottomSheet;";
+  static std::shared_ptr<JHybridNitroUiBottomSheetSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiBottomSheetSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiBottomSheetSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiBottomSheetSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
   using namespace margelo::nitro::nitroui;
 
   // Register native JNI methods
+  margelo::nitro::nitroui::JHybridNitroUiBottomSheetSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_double_cxx::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_bool_cxx::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiBottomSheetStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDatePickerSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_double_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDialogSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
   margelo::nitro::nitroui::JFunc_void_std__string_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDialogStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiHostSpec::CxxPart::registerNatives();
@@ -229,6 +245,12 @@ void registerAllNatives() {
     "NitroUiDialog",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiDialogSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiBottomSheet",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiBottomSheetSpecImpl::create();
     }
   );
 }

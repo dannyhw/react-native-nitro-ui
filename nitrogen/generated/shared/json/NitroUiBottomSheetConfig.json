@@ -1,0 +1,23 @@
+{
+  "uiViewClassName": "NitroUiBottomSheet",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "presented": true,
+    "mostRecentEventCount": true,
+    "detents": true,
+    "dismissible": true,
+    "showsGrabber": true,
+    "cornerRadius": true,
+    "containerColor": true,
+    "label": true,
+    "testID": true,
+    "nuiPerfId": true,
+    "onPresentedChange": true,
+    "onDetentChange": true,
+    "onDismissed": true,
+    "onContentBox": true,
+    "hybridRef": true
+  }
+}
