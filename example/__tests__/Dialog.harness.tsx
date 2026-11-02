@@ -20,6 +20,7 @@
  */
 import { useState } from 'react';
 import { Modal, Platform, View } from 'react-native';
+import { ScreenStack, ScreenStackItem } from 'react-native-screens';
 import {
   afterEach,
   cleanup,
@@ -695,4 +696,100 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       );
     });
   }
+});
+
+describe('Dialog · react-native-screens (G11 spike)', () => {
+  afterEach(async () => {
+    cleanup();
+    handles.clear();
+    setters.clear();
+    eventLog.length = 0;
+    await sleep(800);
+  });
+
+  it('presents inside a formSheet, and closing the sheet under it leaves nothing', async () => {
+    function Scene() {
+      const [sheet, setSheet] = useState(true);
+      setters.set('sheet', setSheet);
+      return (
+        <ScreenStack style={{ flex: 1 }}>
+          <ScreenStackItem screenId="base" headerConfig={{ hidden: true }}>
+            <View style={{ flex: 1 }} />
+          </ScreenStackItem>
+          {sheet ? (
+            <ScreenStackItem
+              screenId="sheet"
+              stackPresentation="formSheet"
+              sheetAllowedDetents={[0.6]}
+              headerConfig={{ hidden: true }}
+            >
+              <View style={{ flex: 1 }}>
+                <Stage
+                  testId="in-sheet"
+                  initial
+                  variant="confirmation"
+                  title="In the sheet"
+                />
+              </View>
+            </ScreenStackItem>
+          ) : null}
+        </ScreenStack>
+      );
+    }
+    await render(<Scene />);
+    await waitForHandle('in-sheet');
+    const up = await waitForReport(
+      'in-sheet',
+      isUpCounted(1),
+      'up inside the formSheet',
+      15000
+    );
+    console.log(`formSheet report: ${up.raw}`);
+    handles.get('in-sheet')?.nuiTestPerformAction('later');
+    await waitForLive('in-sheet', 0, 'closed by its action inside the sheet');
+    expect(eventLog.join(',')).toBe(
+      'in-sheet:action:later,in-sheet:presented:false'
+    );
+    eventLog.length = 0;
+    setters.get('in-sheet')?.(true);
+    await waitForReport('in-sheet', isUpCounted(1), 'up again', 12000);
+    // The sheet goes away with the dialog still up on it.
+    setters.get('sheet')?.(false);
+    const probeId = await probe();
+    await waitForNothingLeft(probeId, 'the formSheet and its dialog gone');
+    console.log(`formSheet events: ${eventLog.join(',') || '(none)'}`);
+  });
+
+  it('closes and reports when a screen is pushed over its screen', async () => {
+    function Scene() {
+      const [pushed, setPushed] = useState(false);
+      setters.set('push', setPushed);
+      return (
+        <ScreenStack style={{ flex: 1 }}>
+          <ScreenStackItem screenId="base" headerConfig={{ hidden: true }}>
+            <View style={{ flex: 1 }}>
+              <Stage testId="pushed-over" initial title="Before the push" />
+            </View>
+          </ScreenStackItem>
+          {pushed ? (
+            <ScreenStackItem screenId="next" headerConfig={{ hidden: true }}>
+              <View style={{ flex: 1 }} />
+            </ScreenStackItem>
+          ) : null}
+        </ScreenStack>
+      );
+    }
+    await render(<Scene />);
+    await waitForHandle('pushed-over');
+    await waitForReport('pushed-over', isUpCounted(1), 'up', 12000);
+    setters.get('push')?.(true);
+    await waitForReport(
+      'pushed-over',
+      (r) => r.live === '0',
+      'closed when the screen was pushed over',
+      12000
+    );
+    console.log(`push events: ${eventLog.join(',') || '(none)'}`);
+    expect(eventLog.join(',')).toBe('pushed-over:presented:false');
+  });
 });
