@@ -41,9 +41,9 @@ import { REAL_INPUT_CONTROLS, iosCheckName } from './controls.mjs';
 import {
   A11Y_CONTROLS,
   checkIosControlA11y,
-  iosStabilityNote,
   parseIosA11yLog,
   parseIosA11yStability,
+  reportIosStability,
   staleExemptions,
 } from './a11y.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
@@ -556,12 +556,11 @@ function reportA11yPass({ log, suite, status, testLog }) {
     // The wrapper's box is the one the stability line's `firstAnchor` describes — the Swift pass
     // prints frames[0], which is the element it anchored on. Looked up by the anchor flag rather
     // than by index, so the note cannot compare the first read's box against a descendant's.
-    const stability = stabilityByCase.get(entry.id);
-    const stabilityNote = iosStabilityNote(
-      stability,
+    reportIosStability(
+      check,
+      stabilityByCase.get(entry.id),
       nodes.find((element) => element.anchor)?.frame ?? nodes[0]?.frame
     );
-    if (stabilityNote != null) check.note(stabilityNote);
     for (const node of nodes) {
       check.note(
         `${node.type} id="${node.id}" label="${node.label}" ` +

@@ -242,14 +242,16 @@ final class RealInputTests: XCTestCase {
       framesOf: { $0.frames },
       read: readCase
     )
-    // Printed before the tree, so a reader sees the provenance of the boxes below it - and printed
-    // only when there is something to say: two reads that agree add no line at all, which is what
-    // keeps fourteen healthy cases quiet and makes a line mean something. `firstAnchor*` is the box
-    // the old single-read pass would have decided on, which is the comparison worth having in a log:
-    // what one sample said, against what the settled tree says. An unsettled line says the
-    // comparison below rests on a tree that would not hold still - a measurement to discount, not a
-    // pass. `a11y.mjs` skips this line when it reads the elements, and reports it separately.
-    if settled.moved > 0 || !settled.settled {
+    // Printed before the tree, so a reader sees the provenance of the boxes below it. The rule for
+    // *whether* to print is `A11yFrameStability.shouldReport`, next to the wait it describes, so the
+    // flap case below is proved on the host rather than by a device run that happens to be slow:
+    // two reads that agree add no line, which keeps fourteen healthy cases quiet and makes a line
+    // mean something. `firstAnchor*` is the box the old single-read pass would have decided on,
+    // which is the comparison worth having in a log: what one sample said, against what the settled
+    // tree says. An unsettled line says the comparison below rests on a tree that would not hold
+    // still - a measurement to discount, not a pass. `a11y.mjs` skips this line when it reads the
+    // elements, and reports it separately.
+    if A11yFrameStability.shouldReport(settled) {
       let firstBox = settled.first?.frames.first
       print(
         "real-input a11y case=\(one.id) kind=stability reads=\(settled.reads) "

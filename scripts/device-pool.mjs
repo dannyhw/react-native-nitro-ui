@@ -1012,16 +1012,13 @@ export class DevicePool {
   }
 
   /**
-   * Brings the pair's devices up and waits until each is attached *and* the machine has settled
-   * after the boot. Never throws: a device that will not come up is reported in `degraded`, and
-   * the caller decides whether that is fatal - a harness run on a warm pair cares, a lease that
-   * only needed the ports does not.
+   * The devices one platform of a pair needs, in the shape `isDeviceUp` and `bootDevice` want.
+   *
+   * Factored out of `ensureBooted` so the question "is this device already up?" has exactly one
+   * definition in the file: the hand-off's warm reuse, and an exclusive acquire's decision not to
+   * kill a device it is about to reuse, must not be able to disagree about it (X16 item 3).
    */
-  ensureBooted(
-    pair,
-    lease,
-    { platform = 'both', timeoutMs = DEVICE_SETTLE_TIMEOUT_MS } = {}
-  ) {
+  devicesFor(pair, platform = 'both') {
     const wanted = [];
     if (platform !== 'ios' && pair?.android?.avd) {
       wanted.push({
@@ -1043,15 +1040,58 @@ export class DevicePool {
         udid: pair.ios.udid,
       });
     }
+    return wanted;
+  }
+
+  /**
+   * Whether this device is up enough to be reused instead of started: attached and past
+   * `sys.boot_completed` for an emulator, `Booted` for a simulator. Answers the same question
+   * `ensureBooted` asks before it logs "already up - reusing it".
+   */
+  isDeviceUp(w) {
+    return w.kind === 'android'
+      ? !!w.serial &&
+          this.ops.attachedSerials(w.adbPort).includes(w.serial) &&
+          this.ops.bootComplete(w.serial, w.adbPort)
+      : this.ops.bootedSimulators().includes(w.udid);
+  }
+
+  /**
+   * Pool keys, of this pair, whose device is up right now and so would be *reused* rather than
+   * booted by the next hand-off.
+   *
+   * The point is cost, not correctness: `acquire --exclusive --boot --platform android` powers the
+   * pool off, and the key list it names comes from devices.json, which includes the very emulator
+   * this lease has been handed. Killing a device that is down costs nothing; killing one that is up
+   * costs a cold boot - 54 s and a load spike - of the one device the bench is about to measure on.
+   * So the caller leaves these keys out of `shutdownKeys`, and the pool's own rules do the rest: an
+   * unnamed key is not `forced`, and a key a live lease holds is kept (X16 item 3).
+   *
+   * One `adb devices` and one `simctl list` per platform asked, which is what the same check costs
+   * anywhere else in this file.
+   */
+  upKeysFor(pair, platform = 'both') {
+    return this.devicesFor(pair, platform)
+      .filter((w) => this.isDeviceUp(w))
+      .map((w) => w.key);
+  }
+
+  /**
+   * Brings the pair's devices up and waits until each is attached *and* the machine has settled
+   * after the boot. Never throws: a device that will not come up is reported in `degraded`, and
+   * the caller decides whether that is fatal - a harness run on a warm pair cares, a lease that
+   * only needed the ports does not.
+   */
+  ensureBooted(
+    pair,
+    lease,
+    { platform = 'both', timeoutMs = DEVICE_SETTLE_TIMEOUT_MS } = {}
+  ) {
+    const wanted = this.devicesFor(pair, platform);
 
     const startedAt = this.now();
     const already = new Set();
-    const isUp = (w) =>
-      w.kind === 'android'
-        ? !!w.serial &&
-          this.ops.attachedSerials(w.adbPort).includes(w.serial) &&
-          this.ops.bootComplete(w.serial, w.adbPort)
-        : this.ops.bootedSimulators().includes(w.udid);
+    const isUp = (w) => this.isDeviceUp(w);
 
     const booted = [];
     // A boot that the tool refused outright (no such AVD, no such UDID, an emulator binary that

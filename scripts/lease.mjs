@@ -110,6 +110,11 @@ function parseArgs(argv) {
   const options = {
     task: null,
     platform: 'both',
+    // Whether `--platform` was actually typed. `both` is the default *and* a real answer, and the
+    // two are not the same instruction: an exclusive `--boot` that never named a half would boot
+    // both of them under a bench that measures one (X16 item 2), so a defaulted `both` is refused
+    // where a typed one is obeyed.
+    platformGiven: false,
     exclusive: false,
     waitMinutes: null,
     // null means "the default for this kind of lease", which differs between an
@@ -120,6 +125,9 @@ function parseArgs(argv) {
     json: false,
     // `--boot` / `--no-boot` win over the env default; the env can only force it off.
     boot: BOOT_FORCED_OFF ? false : BOOT_DEFAULT,
+    // Whether `--boot` was typed rather than inherited from `NITRO_UI_LEASE_BOOT`. An exclusive
+    // lease boots only for a typed flag (X16 item 2); see `bootForLease`.
+    bootFlag: false,
     // Reaping is not a background service (X11 fix round 2, the orchestrator's scope decision):
     // `list`, `acquire` and `release` never power anything off. It happens when somebody types
     // `lease.mjs reap`, and when an `--exclusive` acquire promises a quiet machine. This flag only
@@ -143,6 +151,7 @@ function parseArgs(argv) {
         break;
       case '--platform':
         options.platform = take('--platform', argv[++index]);
+        options.platformGiven = true;
         break;
       case '--exclusive':
         options.exclusive = true;
@@ -163,11 +172,13 @@ function parseArgs(argv) {
         // Boot the pair, reset its app data, and reap idle devices. Without it a lease only
         // reserves names, which is what a test, a CI runner or a bench host wants.
         options.boot = true;
+        options.bootFlag = true;
         break;
       case '--no-boot':
         // The explicit "no", which also beats `NITRO_UI_LEASE_BOOT=1` - a bench host that has
         // the variable set in its profile can still ask for a naming-only lease.
         options.boot = false;
+        options.bootFlag = false;
         break;
       case '--no-reap':
         // For a machine whose devices are managed elsewhere (a CI runner that boots its own
@@ -661,6 +672,12 @@ function main(argv) {
   }
   if (options.task == null)
     throw new Error(`acquire needs --task <id>\n${USAGE}`);
+  // What this lease may actually do to a device, and whether it was asked for badly. Checked
+  // before the lease exists, so a refusal cannot have powered the pool off first (item 2).
+  const wantsBoot = bootForLease(options);
+  const misuse = exclusiveBootMisuse({ options, boot: wantsBoot.boot });
+  if (misuse != null) throw new Error(`${misuse}\n${USAGE}`);
+  if (wantsBoot.note != null) log(`lease: ${wantsBoot.note}`);
 
   const { devices, configPath } = loadDevices(options, paths);
   const result = acquire({ devices, paths, options, log });
@@ -690,8 +707,23 @@ function main(argv) {
     // failure this fixes. The keys come from devices.json rather than `pool.json`, so a pool device
     // booted outside the pool is included, and this is the only caller allowed to exempt a live
     // lease from its own protection - its own, which holds every pair by definition.
+    //
+    // One thing it does not kill is the device it is about to hand over, when that device is already
+    // up (X16 item 3). `exceptLeaseId` is what makes that possible and what made it a bug: removing
+    // the lease's protection from its own pair means `--exclusive --boot --platform android` powers
+    // off, and then cold-starts, the emulator the bench was just given - 54 s and a load spike for a
+    // reboot of the one device about to be measured on. Sparing is done by *not naming* the key, so
+    // the pool's own rules decide what happens next (an unnamed key is not forced, and a key a live
+    // lease holds is kept) rather than this caller widening its licence. Only when a boot was asked
+    // for, and only for that platform: with no boot the promise is a quiet machine, whole.
+    const spare = wantsBoot.boot ? pool.upKeysFor(pair, options.platform) : [];
+    const shutdownKeys = poolShutdownKeys(pool).filter(
+      (key) => !spare.includes(key)
+    );
+    for (const key of spare)
+      log(`lease: spared ${key} (already up, this lease's own)`);
     const reaped = pool.reap({
-      shutdownKeys: poolShutdownKeys(pool),
+      shutdownKeys,
       reason: 'exclusive acquire',
       exceptLeaseId: lease.id,
     });
@@ -706,9 +738,14 @@ function main(argv) {
         : `lease: exclusive - ${
             reaped.failed.length > 0
               ? `${reaped.failed.length} device(s) are still up`
-              : 'every device no other lease holds is off'
+              : spare.length > 0
+                ? `every device no other lease holds is off, except the ${
+                    spare.length
+                  } spared for this lease`
+                : 'every device no other lease holds is off'
           } ` +
             `(${reaped.reaped.length} shut down, ${reaped.alreadyOff.length} already off` +
+            (spare.length > 0 ? `, ${spare.length} spared` : '') +
             (reaped.kept.length > 0
               ? `, ${reaped.kept.length} held by a lease`
               : '') +
@@ -716,15 +753,21 @@ function main(argv) {
     );
   }
 
-  if (options.boot && pool != null) {
+  if (wantsBoot.boot && pool != null) {
     poolHandoff({ pool, result, options, log });
   } else {
-    if (!options.boot) {
+    if (!wantsBoot.boot) {
+      // The env is only suggested where it works. For an exclusive lease whose env-driven boot was
+      // just dismissed, a second line saying "or NITRO_UI_LEASE_BOOT=1" would undo the note above
+      // and send the reader back to a flag that does nothing here.
       log(
-        'lease: devices not booted - pass --boot (or NITRO_UI_LEASE_BOOT=1) to warm the pair'
+        options.exclusive
+          ? 'lease: devices not booted - pass --boot with --platform to warm a ' +
+              'device for this bench (an --exclusive lease ignores NITRO_UI_LEASE_BOOT)'
+          : 'lease: devices not booted - pass --boot (or NITRO_UI_LEASE_BOOT=1) to warm the pair'
       );
     }
-    if (options.boot && pool == null) {
+    if (wantsBoot.boot && pool == null) {
       log('lease: --boot needs a devices.json to boot from, and there is none');
     }
     // And no reap: a lease is a booking, and a booking that quietly powers devices off is the
@@ -868,6 +911,64 @@ function poolHandoff({ pool, result, options, log }) {
 }
 
 /* --------------------------- the warm device pool --------------------------- */
+
+/**
+ * Whether this `acquire` should do device work, and what to say when the answer surprised it.
+ *
+ * An **exclusive** lease boots only for a typed `--boot`; `NITRO_UI_LEASE_BOOT=1` does not count.
+ * The variable exists because an agent's lease is always a device lease, and CONTRIBUTING's
+ * `--no-boot` comment describes a bench host that sets it in its profile and still wants a
+ * naming-only lease - which is the same host that types `--exclusive`. Before X16 the env booted
+ * nothing under `--exclusive`, because the exclusive path skipped the hand-off entirely; making
+ * that hand-off work (item 2) silently turned the variable into "cold-boot a simulator under my
+ * baseline", on a host where a boot is a load spike of 50-150 and a simulator that then idles for
+ * the rest of a 4-hour mint. A bench's machine is the one place where a boot must not be implicit.
+ *
+ * @param {ReturnType<typeof parseArgs>} options
+ * @returns {{boot: boolean, note: string | null}}
+ */
+function bootForLease(options) {
+  if (!options.exclusive) return { boot: options.boot, note: null };
+  if (options.bootFlag) return { boot: true, note: null };
+  return {
+    boot: false,
+    note: options.boot
+      ? 'NITRO_UI_LEASE_BOOT does not boot an --exclusive lease: only a typed ' +
+        '--boot does. Pass --boot (with --platform) to warm a device for this bench'
+      : null,
+  };
+}
+
+/**
+ * What an exclusive `acquire` got wrong about its flags, or `null`.
+ *
+ * `--platform` defaults to `both`, and the hand-off hands that default to `ensureBooted`, so
+ * `--exclusive --boot` alone brings up *both* devices of the pair it hands over. CONTRIBUTING's own
+ * bench line is `acquire --exclusive --boot` followed by `bench/run.mjs --platform android`: one
+ * half measured, both halves cold-booted, and every boot on this machine is minutes of load a
+ * baseline is supposed to be free of. `both` is a legitimate answer, so the fix is not to forbid it
+ * - it is to make somebody choose it. The default is refused with the flag named, before the lease
+ * is written, so refusing costs nothing.
+ *
+ * Judged on the boot this lease will really do (`boot`), not on the flags: an exclusive lease whose
+ * env-only boot was just dismissed has no boot to get wrong, and refusing it would be refusing a
+ * command that powers nothing on.
+ *
+ * @param {{options: ReturnType<typeof parseArgs>, boot: boolean}} args
+ * @returns {string | null}
+ */
+function exclusiveBootMisuse({ options, boot }) {
+  if (!options.exclusive || !boot) return null;
+  if (!options.platformGiven) {
+    return (
+      'an --exclusive --boot must name the half it warms: pass --platform ' +
+      'android, --platform ios or --platform both. An exclusive lease brings a machine ' +
+      'to a standstill for hours and a cold boot is the noise it exists to avoid, so ' +
+      'the defaulted --platform both is not taken as a wish to boot both devices'
+    );
+  }
+  return null;
+}
 
 /**
  * A pool bound to this machine's state, or null when the caller opted out of device lifecycle

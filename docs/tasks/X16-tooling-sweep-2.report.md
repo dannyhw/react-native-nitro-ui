@@ -108,6 +108,8 @@ The diagnostic was wrong too, in the way that wastes the next occurrence: the ou
 before this one*, so a case settled by a third read printed an agreeing box and lost the stale one —
 the ⅓-scale box the report exists to capture. It carries the **first** read now (`firstAnchor*`).
 
-`harness:android`'s refusal was mine: `ANDROID_HOME` unset in my shell, not a code fault. Re-ran `check`,
-both harnesses and `real-input:ios`: **zero** stability lines, all fourteen settling on reads one and
-two.
+`harness:android`'s refusal was mine but not for the reason the last report gave: the committed excerpt
+says `no app to test`, and `ANDROID_HOME` being unset in my shell is what made `build-app.mjs` fail to
+produce the `app.stamp` that message reads — one failure, two lines. Re-ran `check`,
+both harnesses and `real-input:ios`, which prints **zero** stability lines — all fourteen settled on
+reads one and two.

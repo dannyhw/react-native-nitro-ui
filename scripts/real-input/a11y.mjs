@@ -762,36 +762,42 @@ export function iosStabilityNote(stability, settledAnchor) {
 }
 
 /**
- * "…and the first read is this box at ⅓ scale" — said only when it is true.
+ * The scale ratio between the first read's box and the settled one, or `null` when there is no
+ * single ratio to name.
  *
- * The failure this guard was written for was a first read at exactly ⅓ of the settled one on every
- * component: the screen scale, which is what identifies a stale snapshot from another render pass
- * rather than a control that genuinely moved. Two boxes and their ratio let a reader make that call;
- * two boxes alone leave them dividing decimals by hand. The sentence is printed only when all four
- * components share one ratio within half a percent, so it cannot flatter the reader on a box that
- * merely happens to be smaller.
+ * The failure this whole guard was written for was a first read at exactly ⅓ of the settled one on
+ * every component: the screen scale, which is what identifies a stale snapshot from another render
+ * pass rather than a control that genuinely moved. Answered once, here, because two readers of that
+ * question — the note that prints the ratio and the WARN that promotes it (X16 item 4) — would
+ * eventually disagree, and the disagreement would look like a warning contradicting the sentence
+ * printed beside it.
+ *
+ * A label, not a number: `⅓`, `½`, `¼`, `2×`, `3×`, or the raw ratio to three places. All four
+ * components have to share one ratio within half a percent, and it has to differ from 1, so a box
+ * that merely happens to be smaller is not called a scaled read.
  *
  * @param {{x: number, y: number, width: number, height: number}} [first]
  * @param {{x: number, y: number, width: number, height: number}} [settled]
+ * @returns {string | null}
  */
-function describeFirstReadScale(first, settled) {
-  if (first == null || settled == null) return '';
+export function firstReadScale(first, settled) {
+  if (first == null || settled == null) return null;
   const components = ['x', 'y', 'width', 'height'];
   let ratio = null;
   for (const key of components) {
     const before = first[key];
     const after = settled[key];
     if (!Number.isFinite(before) || !Number.isFinite(after) || after === 0) {
-      return '';
+      return null;
     }
     const candidate = before / after;
     if (ratio == null) {
       ratio = candidate;
       continue;
     }
-    if (Math.abs(candidate - ratio) > 0.005) return '';
+    if (Math.abs(candidate - ratio) > 0.005) return null;
   }
-  if (ratio == null || Math.abs(ratio - 1) < 0.01) return '';
+  if (ratio == null || Math.abs(ratio - 1) < 0.01) return null;
   // Named when it is one of the scales a screen actually has, and the raw ratio otherwise. The
   // components of two real reads never divide to the same digit exactly - boxes are rounded on
   // their way out of the test manager, so 108.33/325 is 0.333323 rather than 1/3 - which is why
@@ -806,7 +812,76 @@ function describeFirstReadScale(first, settled) {
   const found = named.find(
     (candidate) => Math.abs(ratio - candidate.near) < 0.002
   );
-  const label = found == null ? `${ratio.toFixed(3)}×` : found.label;
+  return found == null ? `${ratio.toFixed(3)}×` : found.label;
+}
+
+/**
+ * The WARN this case's re-reads deserve, or `null` for a case that earns none.
+ *
+ * A first read at exactly the screen's scale is a real accessibility bug that came and went. The
+ * rule still grades the settled tree correctly, so the case *passes* — and that is precisely why it
+ * has to be said somewhere a reader cannot miss: a finding that only appears as one line among
+ * forty per-case notes is reported as a clean run by anyone who reads the verdict column. So it goes
+ * on the summary, and the exit code does not change, because "the boxes are right" is still true.
+ *
+ * Only a named scale warns. Two reads whose boxes differ by some arbitrary ratio are a control that
+ * moved (or a tree still being laid out), which is what the notes are for; all four components
+ * dividing by one ratio is the shape of a snapshot taken at another render scale, which is the shape
+ * that failed twice on maintainer-mac-1 and that nobody saw in the report.
+ *
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor]
+ * @returns {string | null}
+ */
+export function iosStabilityWarning(stability, settledAnchor) {
+  if (stability?.firstAnchor == null) return null;
+  const label = firstReadScale(stability.firstAnchor, settledAnchor);
+  if (label == null) return null;
+  return (
+    `its first accessibility read was this box at ${label} scale — a stale snapshot ` +
+    `from another render pass, discarded by read ${String(stability.reads)}. The boxes ` +
+    'reported here are the settled ones and the rule still graded them, so this is not a ' +
+    'failure; it is a transient accessibility bug that came and went, and it is a warning ' +
+    'so it does not become a footnote'
+  );
+}
+
+/**
+ * Reports one case's re-reads onto its check: the note always, the WARN when the shape says so.
+ *
+ * Lives here rather than inline in `ios.mjs` because `ios.mjs` is the runner and nothing can import
+ * it without a simulator — and item 4 is exactly about the step that *publishes* the finding. A
+ * helper nobody calls is worth nothing, and a text assertion on a call site is weak enough to survive
+ * the call being switched off. Handed a real `CheckLog`, this is testable end to end: the note
+ * appears, the warning appears, and the case's verdict does not move.
+ *
+ * @param {{note: (message: string) => void, warn: (message: string) => void}} check
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor]
+ */
+export function reportIosStability(check, stability, settledAnchor) {
+  const note = iosStabilityNote(stability, settledAnchor);
+  if (note != null) check.note(note);
+  const warning = iosStabilityWarning(stability, settledAnchor);
+  if (warning != null) check.warn(warning);
+  return { note, warning };
+}
+
+/**
+ * "…and the first read is this box at ⅓ scale" — said only when it is true.
+ *
+ * One call to `firstReadScale`, which is the same question `ios.mjs` asks when it decides whether to
+ * WARN. Two implementations of "is this the screen-scale shape" would eventually disagree, and the
+ * disagreement would look like a warning that contradicts the note printed beside it.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} [first]
+ * @param {{x: number, y: number, width: number, height: number}} [settled]
+ */
+function describeFirstReadScale(first, settled) {
+  const label = firstReadScale(first, settled);
+  if (label == null) return '';
   return (
     ` — the first read is this box at ${label} scale, the shape of a snapshot taken at another ` +
     'render scale rather than a control that moved'
