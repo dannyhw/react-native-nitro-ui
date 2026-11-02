@@ -75,3 +75,4 @@
 | X16 | Tooling sweep 2: lease-env leak in check's tests, --exclusive --boot, bench --help ledger row, a11y:switch stable read | Apex | Opus | merged (`f2a6f2c`, PR #20) |
 | G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | running |
 | X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | running |
+| T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | running |
