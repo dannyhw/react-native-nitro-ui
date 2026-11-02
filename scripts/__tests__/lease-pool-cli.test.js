@@ -37,6 +37,7 @@ const EXAMPLE_CONFIG = join(REPO_ROOT, 'scripts', 'devices.example.json');
 const UDID_A = '00000000-0000-4000-8000-00000000000A';
 const SERIAL_A = 'emulator-5574';
 const AVD_A = 'nitro-ui-a';
+const AVD_B = 'nitro-ui-b';
 
 const MINUTE = 60_000;
 
@@ -168,13 +169,19 @@ describe('the lease owns the device lifecycle', () => {
       // then booted mine" a claim a test can check rather than one it has to take on trust.
       ...(stateful
         ? [
+            // One state file *per serial*: the pool has two emulators and an exclusive acquire's
+            // job is to kill somebody else's and reuse its own, which one shared bit cannot say.
+            // `androidUp` is pair-a's default; pair-b starts down unless a case seeds its file, so
+            // an existing case that says "the emulator is up" still means *its* emulator.
             '  *devices*)',
-            readState('android', androidUp ? "'up'" : "'down'"),
-            '      if [ "$state" = up ]; then',
-            `        printf '%b\\n' ${shellQuote(adbDeviceText(true))}`,
-            '      else',
-            "        printf 'List of devices attached\\n' ; exit 0",
-            '      fi ;;',
+            "    printf 'List of devices attached\\n'",
+            '    for s in emulator-5574 emulator-5576; do',
+            '      st=down',
+            `      case "$s" in emulator-5574) st=${androidUp ? "'up'" : "'down'"} ;; esac`,
+            '      f="$NITRO_UI_FAKE_STATE.android-$s"',
+            '      if [ -f "$f" ]; then st=$(cat "$f"); fi',
+            '      if [ "$st" = up ]; then printf \'%s\\tdevice\\n\' "$s"; fi',
+            '    done ;;',
           ]
         : [
             `  *devices*) printf '%b\\n' ${shellQuote(adbDeviceText(androidUp))} ;;`,
@@ -196,7 +203,14 @@ describe('the lease owns the device lifecycle', () => {
       ...(pmClearLines[pmClear] ?? pmClearLines.success),
       ...(stateful
         ? [
-            "  *'emu kill'*) echo down > \"$NITRO_UI_FAKE_STATE.android\"; printf 'OK' ;;",
+            // Which serial is being killed is in the argv, so the state file is per-serial: an
+            // exclusive acquire kills pair-b's emulator and keeps pair-a's, and one shared bit
+            // cannot record that difference.
+            "  *'emu kill'*)",
+            '      case "$*" in',
+            '        *emulator-5576*) echo down > "$NITRO_UI_FAKE_STATE.android-emulator-5576" ;;',
+            '        *) echo down > "$NITRO_UI_FAKE_STATE.android-emulator-5574" ;;',
+            "      esac; printf 'OK' ;;",
           ]
         : ["  *'emu kill'*) printf 'OK' ;;"]),
       // Which AVD is behind a serial (`adb -s X emu avd name`), answered the way a real emulator
@@ -229,7 +243,15 @@ describe('the lease owns the device lifecycle', () => {
       [
         '#!/bin/sh',
         'echo "emulator $*" >> "$NITRO_UI_FAKE_CALLS"',
-        ...(stateful ? ['echo up > "$NITRO_UI_FAKE_STATE.android"'] : []),
+        ...(stateful
+          ? [
+              // The port is in the argv, so the boot marks up the serial it actually started.
+              '    case "$*" in',
+              '      *-port*5576*) echo up > "$NITRO_UI_FAKE_STATE.android-emulator-5576" ;;',
+              '      *) echo up > "$NITRO_UI_FAKE_STATE.android-emulator-5574" ;;',
+              '    esac',
+            ]
+          : []),
         'exit 0',
         '',
       ].join('\n')
@@ -303,6 +325,16 @@ describe('the lease owns the device lifecycle', () => {
       join(home, 'pool.json'),
       `${JSON.stringify({ version: 1, devices: [...existing, entry] }, null, 2)}\n`
     );
+  };
+
+  /**
+   * Seeds the stateful stub's idea that one device is already up (`android-emulator-5576`, or an
+   * iOS udid). Needed once a case is about two devices at once: an exclusive acquire's job is to
+   * kill somebody else's and keep its own, and a fixture that can only say "all up" or "all down"
+   * cannot express the difference.
+   */
+  const seedUp = (which) => {
+    writeFileSync(join(home, `fake-state.${which}`), 'up\n');
   };
 
   /** A pool.json with one warm device, idle for `minutes`. */
@@ -1013,23 +1045,45 @@ describe('the lease owns the device lifecycle', () => {
   it('shuts unheld pool devices down for an exclusive lease, idle or not', () => {
     // Stateful: this case asks for a *sequence* - power the pool off, then boot what the lease
     // names - and a stub with a fixed answer cannot show the first half having any effect.
-    tools({ androidUp: true, stateful: true });
-    // Four minutes into a 30-minute clock: a bench does not care how idle it is, it cares that it
-    // is running on the same machine as a booted emulator.
-    warmDevice(idleEntry({ idleMinutes: 4 }));
+    // A stranger's emulator (pair-b's, up and idle) to kill: with the spare (X16 item 3) the
+    // acquire no longer kills pair-a's own device, so this case's *sequence* - kill something the
+    // machine should not have running, then boot what the lease names - needs a device that really
+    // is somebody else's. Pair-a's own devices start down, so their boot below is a real boot.
+    tools({ androidUp: false, iosUp: false, stateful: true });
+    seedUp('android-emulator-5576');
+    // With a record, so "its record goes with it" below is a claim about pass 3 rather than about
+    // nothing ever having been written.
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_B}`,
+        serial: 'emulator-5576',
+        idleMinutes: 4,
+      })
+    );
     const acquired = cli([
       'acquire',
       '--task',
       'BENCH',
       '--exclusive',
       '--boot',
+      // Named explicitly because an exclusive `--boot` that does *not* name a platform is now a
+      // refusal (X16 fix round 1): `--platform` defaults to `both`, and both is what made a
+      // single-platform bench cold-boot a simulator it never uses.
+      '--platform',
+      'both',
       '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
     expect(acquired.stderr).toContain('exclusive');
-    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
-    // The kill took: the emulator stopped answering `adb devices`, which is what lets the boot
-    // below be a boot rather than a lookup that found the device already up.
+    // The stranger's emulator really is powered off, and its record goes with it: that is the
+    // promise, and it is what `--platform both`/`--platform android` may not narrow.
+    // Addressed through pair-b's own adb server (5045), which is what the pair declares: a kill
+    // sent to the wrong server would be a kill of nothing, or of somebody's else's serial.
+    expect(log()).toContain('adb -P 5045 -s emulator-5576 emu kill');
+    expect(acquired.stderr).toContain('shut down avd:nitro-ui-b');
+    expect(poolDevices().map((x) => x.key)).not.toContain(`avd:${AVD_B}`);
+    // Pair-a's own devices were booted, not spared: they were down when the lease was taken, so
+    // there was nothing to spare and this really is a boot - which is the point of the case.
     expect(acquired.stderr).toContain('booting android device nitro-ui-a:5574');
     // And the pair the bench was handed is warm again, so the records describe the machine the
     // bench is sitting on: empty here would mean the pool forgot the boot it just waited for.
@@ -1047,14 +1101,21 @@ describe('the lease owns the device lifecycle', () => {
     // documented command measured on a machine whose leased devices had just been powered off, and
     // booted them by hand (A6b). The promise the two flags make together is "quiet machine, then
     // *my* device up" - in that order, which is what the calls file is read for here.
-    tools({ androidUp: true, stateful: true });
-    warmDevice(idleEntry({ idleMinutes: 4 }));
+    // Pair-b's emulator is the stranger to kill; pair-a's own devices start down, so the hand-off
+    // has a real boot to do. Had pair-a been up, X16 item 3 would spare it and there would be no
+    // boot left to order after the kill - which is its own case below.
+    tools({ androidUp: false, iosUp: false, stateful: true });
+    seedUp('android-emulator-5576');
     const acquired = cli([
       'acquire',
       '--task',
       'BENCH',
       '--exclusive',
       '--boot',
+      // Named, because an exclusive `--boot` that leaves `--platform` to its `both` default is a
+      // refusal now (X16 fix round 1, item 2). This case is about the *order* of the two halves.
+      '--platform',
+      'both',
       '--no-reset',
     ]);
     expect(acquired.status).toBe(0);
@@ -1085,7 +1146,11 @@ describe('the lease owns the device lifecycle', () => {
     // same hand-off, so it narrows here too. What matters is that it does not over-reach in either
     // direction: no simulator boot for an Android bench (that is a simulator booting underneath a
     // measurement), and the emulator really does come up.
-    tools({ androidUp: true, iosUp: true, stateful: true });
+    //
+    // The emulator starts down and the simulator up, which is also the shape that pins X16 item 3's
+    // boundary: sparing applies to the *named* platform's own device, so an up simulator is still
+    // powered off by `--platform android` rather than waved through as "mine".
+    tools({ androidUp: false, iosUp: true, stateful: true });
     const acquired = cli([
       'acquire',
       '--task',
@@ -1127,6 +1192,205 @@ describe('the lease owns the device lifecycle', () => {
     // And it boots nothing: that part of the promise is unchanged.
     expect(log()).not.toContain('emulator @');
     expect(log()).not.toContain('simctl boot');
+  });
+
+  /**
+   * Item 2 (X16 fix round 1). `--platform` defaults to `both`, and `poolHandoff` passed that default
+   * straight to `ensureBooted`, so an exclusive `--boot` with no `--platform` brought up *both*
+   * devices of the pair. CONTRIBUTING's bench line used to be exactly that, followed by
+   * `bench/run.mjs --platform android`, so minting an Android baseline cold-booted the iOS
+   * simulator as well: on this host a boot is a load spike of 50-150 followed by a simulator
+   * idling through hours of measurement, which is exactly the noise an exclusive lease exists to
+   * remove. A guess about which half the bench wants is not a lease's to make, so this refuses and
+   * names the flag - before the lease exists, so a refusal cannot have already powered the pool off.
+   */
+  it('refuses an exclusive boot that did not name a platform, and takes nothing', () => {
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(2);
+    expect(acquired.stderr).toContain('--platform');
+    // Not a partial success: no lease was written...
+    expect(acquired.stdout).not.toContain('NITRO_UI_LEASE_ID');
+    // ...no device was powered off, which is the part a bench host could not undo...
+    expect(log()).not.toContain('emu kill');
+    expect(log()).not.toContain('simctl shutdown');
+    // ...and nothing was booted.
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain('simctl boot');
+  });
+
+  it('still boots both devices when a platform of `both` was actually typed', () => {
+    // The refusal is about a *defaulted* flag, not about the value. A bench that wants the pair
+    // warm says so, and gets it; the difference between `--platform both` and nothing is one word
+    // on the command line and it is the whole of "I thought about this".
+    tools({ androidUp: false, iosUp: false, stateful: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'both',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain('emulator @');
+    expect(log()).toContain(`simctl boot ${UDID_A}`);
+  });
+
+  it('spares both of the pair when `--platform both` is typed and both are up', () => {
+    // The other half of the same flag: `both` means "I want the pair warm", and warm is what it
+    // gets. Killing a booted simulator and booting it again would be the item-3 cost paid twice
+    // over, on the widest setting, so the spare covers both halves when both were named.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'both',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain(`simctl boot ${UDID_A}`);
+    expect(acquired.stderr).toContain('spared avd:nitro-ui-a');
+    expect(acquired.stderr).toContain(`spared ios:${UDID_A}`);
+    // And the summary does not claim a machine that was not powered down.
+    expect(acquired.stderr).toContain('2 spared');
+    expect(acquired.stderr).not.toContain(
+      'every device no other lease holds is off ('
+    );
+  });
+
+  it('boots nothing for an exclusive lease when only the environment asked for a boot', () => {
+    // Decision (b). `NITRO_UI_LEASE_BOOT=1` in a profile means "every lease I type is a device
+    // lease", which is true of an agent's lease and false of a bench host's - and CONTRIBUTING's
+    // `--no-boot` comment is written for exactly that host. Before X16 the env booted *nothing*
+    // under `--exclusive`, because the exclusive path skipped the hand-off entirely; item 2's fix
+    // silently made it boot both devices. Only a typed `--boot` may boot an exclusive lease.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    const acquired = cli(
+      ['acquire', '--task', 'BENCH', '--exclusive', '--no-reset'],
+      { NITRO_UI_LEASE_BOOT: '1' }
+    );
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toContain('not booted');
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain('simctl boot');
+    // The power-off is unconditional and stays so: a bench that boots nothing still wants the
+    // machine quiet, and that promise does not depend on `--boot` (X11 review M6).
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+  });
+
+  it('says the environment was ignored, rather than staying silent about a boot that did not come', () => {
+    // A bench host with the variable set, typing no flag, is the case that reads most like a bug:
+    // the shell says it boots devices and then does not. Saying which of the two it did is the
+    // whole of the difference between a surprise and a mystery.
+    tools({ androidUp: true, stateful: true });
+    const acquired = cli(
+      ['acquire', '--task', 'BENCH', '--exclusive', '--no-reset'],
+      { NITRO_UI_LEASE_BOOT: '1' }
+    );
+    expect(acquired.stderr).toContain('NITRO_UI_LEASE_BOOT');
+    expect(acquired.stderr).toContain('--boot');
+  });
+
+  it("leaves the bench's own warm device up instead of cold-starting it (X16 item 3)", () => {
+    // The power-off an exclusive acquire runs enumerates *every* key devices.json declares, and it
+    // exempts its own lease from its own protection (`exceptLeaseId`) to do it. That is right for
+    // the promise and wrong for the pair being handed over: `acquire --exclusive --boot --platform
+    // android` on a machine whose pair-a emulator is already up and idle killed it and started it
+    // again, so the bench paid 54 s and a load spike for a reboot of the one device it was about to
+    // use. Sparing it is not a widening of anybody's licence: it is the caller declining to name a
+    // key it owns, and the pool then leaves it up on its own rules (a live lease holds it).
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({ key: `avd:${AVD_A}`, idleMinutes: 4, leaseId: null })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).not.toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    // It stays up, so there is no boot to wait for and no boot cost to pay.
+    expect(log()).not.toContain('emulator @');
+    expect(acquired.stderr).toMatch(/already up|reusing/i);
+    // The iOS half of the pool is still powered off: `--platform android` says which half this
+    // lease will use, not which half of the machine may keep running.
+    expect(log()).toContain(`simctl shutdown ${UDID_A}`);
+    expect(acquired.stderr).toContain('spared');
+  });
+
+  it("still kills the bench's own device when it is not up, so the promise is kept", () => {
+    // The spare is conditional on the device being *up*, which is the only case where a kill costs
+    // a boot. A device that is down has nothing to spare, and an exclusive lease that left a
+    // stranger's emulator running would be the failure X11 review M6 was about.
+    tools({ androidUp: false, iosUp: false, stateful: true });
+    warmDevice(idleEntry({ key: `avd:${AVD_A}`, idleMinutes: 4 }));
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).not.toContain('spared');
+    expect(log()).toContain('emulator @');
+  });
+
+  it("spares only the named platform's own device", () => {
+    // `--platform android` spares the emulator and powers the simulator off. Sparing "the pair"
+    // would leave an idle simulator under an Android measurement, which is the noise the exclusive
+    // lease exists to remove.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_A}`,
+        idleMinutes: 4,
+        serial: SERIAL_A,
+      })
+    );
+    warmDeviceSecond(
+      idleEntry({ key: `ios:${UDID_A}`, idleMinutes: 4, serial: null })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).not.toContain(`adb -P 5043 -s ${SERIAL_A} emu kill`);
+    expect(log()).toContain(`simctl shutdown ${UDID_A}`);
+    // And the summary agrees with what was actually touched: the simulator is named, and the
+    // spared emulator is not counted as something this command powered off.
+    expect(acquired.stderr).toMatch(/1 shut down/);
   });
 
   it('powers off a pool device that was booted outside the pool, for an exclusive lease', () => {
@@ -1242,6 +1506,49 @@ describe('the lease owns the device lifecycle', () => {
     spawnSync('/bin/ls', [home], { encoding: 'utf8' })
       .stdout.split('\n')
       .filter((name) => name.startsWith(prefix));
+
+  /**
+   * The documented invocation is the one that gets typed, so it has to be one the CLI accepts.
+   *
+   * Item 2's fix was to *refuse* `--exclusive --boot` without `--platform`, which is the exact form
+   * CONTRIBUTING told every bench host to run. Fixing the code and leaving the doc would have made
+   * the documented command a hard failure - a worse version of the bug than the one it replaced -
+   * and the two files never see each other. So every exclusive-boot line the doc prints is run here,
+   * through the real CLI with the fake device tools, rather than being compared by eyeball.
+   */
+  it('documents an exclusive boot the CLI actually accepts', () => {
+    tools({ androidUp: false, iosUp: false, stateful: true });
+    const doc = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8');
+    const lines = doc
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => /lease\.mjs acquire/.test(line))
+      .filter((line) => line.includes('--exclusive'))
+      .filter((line) => line.includes('--boot'));
+    // Empty here would mean the guard proves nothing, which is the failure mode of every
+    // "does the doc match the code" test written after the doc had already been fixed.
+    expect(lines.length).toBeGreaterThan(0);
+    for (const line of lines) {
+      const argv = line
+        .replace(/^node\s+scripts\/lease\.mjs\s+/, '')
+        .split(/\s+/)
+        .filter((word) => word !== '' && !word.startsWith('#'))
+        // The doc's placeholders are the task name and nothing else; `--out` keeps the env file
+        // out of stdout so the assertions below read the diagnostics, not the lease.
+        .map((word) => (word === '<ID>' ? 'DOC-LINE' : word));
+      const ran = cli([
+        ...argv,
+        '--out',
+        join(home, 'doc-line.env'),
+        '--no-reset',
+      ]);
+      expect({ line, status: ran.status, err: ran.stderr }).toMatchObject({
+        line,
+        status: 0,
+      });
+      expect(ran.stderr).not.toContain('must name the half');
+    }
+  });
 
   afterEach(() => {
     rmSync(home, { recursive: true, force: true });

@@ -26,10 +26,13 @@ import {
   A11Y_CONTROLS,
   checkIosControlA11y,
   exemptionsFor,
+  firstReadScale,
   iosA11yProblems,
   parseIosA11yLog,
   parseIosA11yStability,
+  reportIosStability,
   iosStabilityNote,
+  iosStabilityWarning,
   staleExemptions,
 } from '../real-input/a11y.mjs';
 
@@ -604,6 +607,155 @@ describe('the accessibility re-read', () => {
     expect(note).not.toMatch(/\bFAIL\b/);
   });
 
+  /**
+   * Item 4: a ⅓-scale first read is a real accessibility bug that came and went, and the case still
+   * *passes* the rule — so a note two screens up is where a finding like that goes to be reported
+   * as clean. These are the two directions that matter: the shape must warn, and an ordinary
+   * disagreement must not, because a WARN that fires on every re-read is a WARN nobody reads.
+   */
+  it('warns when the first read has the shape of a stale render-scale snapshot', () => {
+    const warning = iosStabilityWarning(
+      parseIosA11yStability(STABILITY_LOG).get('switch'),
+      SWITCH_BOX
+    );
+    expect(warning).toContain('⅓');
+    expect(warning).toContain('stale');
+    // Said as a warning precisely because it is not a failure: the boxes below are the settled ones.
+    expect(warning).toMatch(/not a failure/);
+  });
+
+  it('warns nothing for a re-read that is not the screen-scale shape', () => {
+    // A control that moved, or a tree still being laid out: the note covers it, and calling every
+    // re-read a warning would train a reader to skim past the one that matters.
+    expect(
+      iosStabilityWarning(
+        { reads: 3, settled: true, moved: 1, elapsedMs: 240 },
+        SWITCH_BOX
+      )
+    ).toBeNull();
+    const arbitrary = {
+      reads: 3,
+      settled: true,
+      moved: 1,
+      elapsedMs: 240,
+      firstAnchor: { x: 108.33, y: 72.44, width: 20.33, height: 40 },
+    };
+    expect(iosStabilityWarning(arbitrary, SWITCH_BOX)).toBeNull();
+  });
+
+  it('has one definition of the scale shape, shared by the note and the warning', () => {
+    // The note and the WARN ask the same question in two places. If they answered it separately they
+    // would eventually disagree, and a summary that warns about a box the note beside it declines to
+    // call scaled is the kind of contradiction a reader cannot resolve from a log.
+    expect(
+      firstReadScale({ x: 100, y: 100, width: 30, height: 30 }, SWITCH_BOX)
+    ).toBe(null);
+    const scaled = { x: 108.333, y: 72.444, width: 20.333, height: 9.333 };
+    expect(firstReadScale(scaled, SWITCH_BOX)).toBe('⅓');
+    const warns = iosStabilityWarning(
+      {
+        reads: 3,
+        settled: true,
+        moved: 1,
+        elapsedMs: 240,
+        firstAnchor: scaled,
+      },
+      SWITCH_BOX
+    );
+    const notes = iosStabilityNote(
+      {
+        reads: 3,
+        settled: true,
+        moved: 1,
+        elapsedMs: 240,
+        firstAnchor: scaled,
+      },
+      SWITCH_BOX
+    );
+    expect(warns).toContain('⅓');
+    expect(notes).toContain('⅓');
+    // And they say nothing when the other says nothing.
+    const plain = { x: 300, y: 200, width: 61, height: 28 };
+    expect(firstReadScale(plain, SWITCH_BOX)).toBeNull();
+    expect(
+      iosStabilityWarning(
+        {
+          reads: 2,
+          settled: true,
+          moved: 1,
+          elapsedMs: 10,
+          firstAnchor: plain,
+        },
+        SWITCH_BOX
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * Item 4, end to end: the finding has to reach the check, not just exist as a helper.
+   *
+   * `reportIosStability` is what `ios.mjs` calls, and it is written against a plain `{note, warn}`
+   * pair so it can be handed a real `CheckLog` here. A text assertion on a call site is not enough —
+   * an earlier version of this file asserted `toContain('check.warn(stabilityWarning)')` and stayed
+   * green when the mutation wrapped that call in `if (false)`, because the text was still there. The
+   * call is checked by making it.
+   */
+  it('reports the re-read onto the check: a note always, a WARN only for the scale shape', async () => {
+    const { CheckLog } = await import('../real-input/report.mjs');
+    const scaled = { x: 108.333, y: 72.444, width: 20.333, height: 9.333 };
+    const stability = {
+      reads: 3,
+      settled: true,
+      moved: 2,
+      elapsedMs: 6_000,
+      firstAnchor: scaled,
+    };
+
+    const warned = new CheckLog('Switch a11y');
+    reportIosStability(warned, stability, SWITCH_BOX);
+    expect(warned.notes.some((n) => n.startsWith('ok:') || n.length > 0)).toBe(
+      true
+    );
+    expect(warned.warns.length).toBe(1);
+    expect(warned.warns[0]).toContain('⅓');
+    // The whole point of item 4: a warning, not a failure. The boxes below are settled ones.
+    expect(warned.passed).toBe(true);
+
+    const quiet = new CheckLog('Slider a11y');
+    reportIosStability(
+      quiet,
+      { ...stability, firstAnchor: undefined },
+      SWITCH_BOX
+    );
+    expect(quiet.warns).toEqual([]);
+    expect(quiet.notes.length).toBeGreaterThan(0);
+
+    const ordinary = new CheckLog('Button a11y');
+    reportIosStability(ordinary, undefined, SWITCH_BOX);
+    expect(ordinary.warns).toEqual([]);
+    expect(ordinary.notes).toEqual([]);
+  });
+
+  it('has the runner hand the anchor-flagged box, not index zero, to the reporter', () => {
+    // The behavioural test above covers what `reportIosStability` does; it cannot reach `ios.mjs`,
+    // which needs a simulator to import. What is still worth pinning at the call site is *which box*
+    // is handed over: the Swift pass prints frames[0], the wrapper, so the first read's box is the
+    // wrapper's and the settled box has to be the wrapper's too. Looking it up by the anchor flag
+    // rather than by index is what keeps a tree whose wrapper is not first from producing a ratio
+    // that is not the screen scale at all. `nodes[0]` stays as the fallback for a log that flags
+    // nothing, which is the same fallback the note above has always used.
+    const runner = require('node:fs').readFileSync(
+      `${__dirname}/../real-input/ios.mjs`,
+      'utf8'
+    );
+    const call = runner.slice(
+      runner.indexOf('reportIosStability('),
+      runner.indexOf('reportIosStability(') + 260
+    );
+    expect(call).toContain('stabilityByCase.get(entry.id)');
+    expect(call).toContain('nodes.find((element) => element.anchor)?.frame');
+  });
+
   it('has the Swift pass print what the reader parses', () => {
     // The line is written in Swift and read in JavaScript, in two files that never see each other.
     // Every key `parseIosA11yStability` reads has to be one the pass prints, or the note above
@@ -625,6 +777,14 @@ describe('the accessibility re-read', () => {
     // host test above is testing the code that runs on the device.
     expect(swift).toContain('A11yFrameStability.settle(');
     expect(swift).not.toMatch(/while !framesAgree/);
+    // The *print* decision is delegated to `shouldReport` too (X16 item 5). Inline, the condition is
+    // three clauses that read as obvious, and the one clause that is not obvious - `reads > 2`, for
+    // a tree that flaps A, B, A, A and ends where it started with `moved == 0` - would be a device
+    // run away from ever being tested. Asking the helper means the host test covers the rule the
+    // device run follows, and a second copy of the condition cannot survive review unnoticed.
+    expect(swift).toContain('A11yFrameStability.shouldReport(settled)');
+    expect(swift).not.toMatch(/if settled\.reads > 2/);
+    expect(swift).not.toMatch(/if settled\.moved > 0/);
   });
 });
 

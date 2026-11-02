@@ -92,6 +92,25 @@ enum A11yFrameStability {
     return moved
   }
 
+  /// Should this outcome be printed as a stability line?
+  ///
+  /// The ordinary wait — two reads that agree — prints nothing, which is what keeps fourteen
+  /// healthy cases quiet and makes a printed line mean something. Everything else prints:
+  ///
+  ///   - **three reads or more**, even when nothing ended up moved. A tree that reads A, B, A, A
+  ///     settles on the fourth read holding the *same* box it started with, so `moved` is 0 and a
+  ///     `moved`-only rule hides it: three wasted round trips and no trace in the log. That is the
+  ///     case a reader most needs to see, because a control that cannot hold still for two reads is
+  ///     a control whose boxes cannot be trusted;
+  ///   - **any frame that differs** between the first read and the last, on any read count;
+  ///   - **any wait that never settled**, which is a measurement to discount rather than a pass.
+  ///
+  /// Lives here rather than inline in the UI-test target so the case above is a test rather than a
+  /// device run: `RealInputTests` asks this and prints what it says.
+  static func shouldReport<Snapshot>(_ outcome: Outcome<Snapshot>) -> Bool {
+    return outcome.reads > 2 || outcome.moved > 0 || !outcome.settled
+  }
+
   /// Read until two consecutive reads agree, or the cap or the budget says stop.
   ///
   /// ## The budget is a count of reads, not a wall-clock guess

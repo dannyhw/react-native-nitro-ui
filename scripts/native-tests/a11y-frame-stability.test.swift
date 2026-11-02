@@ -433,6 +433,72 @@ struct A11yFrameStabilityTest {
       )
     }
 
+    // Item 5: the print decision. The ordinary wait is two reads that agree, and it prints nothing -
+    // fourteen healthy cases stay quiet and a printed line means something. The hole this closes is
+    // the tree that flaps and lands back where it started: reads A, B, A, A settle on the fourth
+    // read holding the *same* box as the first, so `moved` is 0 and a `moved`-only rule reports
+    // nothing at all. Three wasted round trips, no trace, and the control whose boxes cannot be
+    // trusted is exactly the one a reader needs to be told about.
+    do {
+      let other = Snapshot(
+        anchor: CGRect(x: 325, y: 217, width: 61, height: 30),
+        nodes: [CGRect(x: 325, y: 217, width: 61, height: 30)]
+      )
+      let flap = Snapshot(anchor: switchBox, nodes: [switchBox])
+      let scripted = script([flap, other, flap, flap])
+      let clock = Clock()
+      let outcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        read: scripted.read,
+        nowMs: clock.now,
+        pause: { _ in }
+      )
+      // The premise, stated so the assertion below cannot be satisfied by an accident of the fixture.
+      check(outcome.settled, "a tree that flaps and holds still does settle")
+      check(outcome.reads == 4, "on the fourth read (got \(outcome.reads))")
+      check(
+        outcome.moved == 0,
+        "and the last box equals the first, so moved is 0 (got \(outcome.moved))"
+      )
+      check(
+        A11yFrameStability.shouldReport(outcome),
+        "a flapped-back tree is still reported - moved == 0 is not 'nothing happened'"
+      )
+    }
+
+    // Each branch of the print rule on its own, so a change to one cannot silently drop another.
+    do {
+      let quiet = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: switchBox, reads: 2, settled: true, moved: 0,
+        elapsedMs: 4_000
+      )
+      check(
+        !A11yFrameStability.shouldReport(quiet),
+        "the ordinary two agreeing reads print nothing"
+      )
+      let moved = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: scaledBox, reads: 2, settled: true, moved: 1,
+        elapsedMs: 4_000
+      )
+      check(
+        A11yFrameStability.shouldReport(moved),
+        "two reads that disagree and then settle are reported"
+      )
+      let many = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: switchBox, reads: 5, settled: true, moved: 0,
+        elapsedMs: 20_000
+      )
+      check(A11yFrameStability.shouldReport(many), "five quiet reads are reported")
+      let never = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: switchBox, reads: 2, settled: false, moved: 0,
+        elapsedMs: 1_500
+      )
+      check(
+        A11yFrameStability.shouldReport(never),
+        "an out-of-budget wait is reported even with nothing moved"
+      )
+    }
+
     if failures > 0 {
       print("FAILED: \(failures) check(s)")
       exit(1)
