@@ -417,8 +417,8 @@ submenu nests on iOS and appears inline under a divider on Android.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/chip-ios.png" width="300" alt="Filter chips, two selected, assist chips and a disabled row on iOS" /></td>
-    <td>Screenshot to come: see <code>docs/tasks/G12-chip.report.md</code>.</td>
+    <td><img src="docs/images/components/chip-ios.png" width="300" alt="Chip states: filter chips with two selected, assist chips and a disabled row on iOS" /></td>
+    <td><img src="docs/images/components/chip-android.png" width="300" alt="Chip states: filter chips with two selected, assist chips and a disabled row on Android" /></td>
   </tr>
 </table>
 
