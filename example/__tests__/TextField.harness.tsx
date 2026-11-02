@@ -19,8 +19,8 @@
  *
  * @file Gates: `harness:ios`, `harness:android`.
  */
-import { useCallback, useState } from 'react';
-import { Platform, TurboModuleRegistry, View } from 'react-native';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { Platform, TextInput, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   beforeAll,
@@ -34,6 +34,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import { TextField, nitroUiCore } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
+import { expectTimingBudget } from './timingGate';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -259,6 +260,50 @@ function Controlled({
         hybridRef={capture(id)}
       />
     </View>
+  );
+}
+
+/** One commit of a latency arm: which text React committed, and when. */
+const commits: Array<{ arm: string; text: string; at: number }> = [];
+
+/**
+ * One arm of the keystroke-to-commit comparison: a controlled field whose commit
+ * is stamped in a layout effect - the moment React has committed the new text.
+ */
+function LatencyArm({ arm }: { arm: 'nitro' | 'rn' }) {
+  const [text, setText] = useState('');
+  const rnRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  if (arm === 'rn') rnFocus.current = () => rnRef.current?.focus();
+  useLayoutEffect(() => {
+    if (text !== '') commits.push({ arm, text, at: nitroUiCore.now() });
+  }, [arm, text]);
+  return arm === 'nitro' ? (
+    <TextField
+      testID="latency-nitro"
+      value={text}
+      onChangeText={setText}
+      autoCorrect={false}
+      autoCapitalize="none"
+      hybridRef={capture('latency-nitro')}
+    />
+  ) : (
+    <TextInput
+      ref={rnRef}
+      testID="latency-rn"
+      value={text}
+      onChangeText={setText}
+      autoCorrect={false}
+      autoCapitalize="none"
+      style={{ height: 40 }}
+    />
+  );
+}
+const rnFocus: { current: (() => void) | null } = { current: null };
+
+function percentile(values: number[], p: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  return (
+    sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] ?? NaN
   );
 }
 
@@ -657,6 +702,83 @@ describe('TextField', () => {
     await typeText('\nd');
     await waitFor(() => expect(boxHeight('grow')).toBeGreaterThan(line * 3.5), {
       timeout: 5000,
+    });
+  });
+
+  /*
+   * Keystroke-to-commit against React Native's own `TextInput`, the two arms
+   * interleaved block by block so both see the same machine in the same seconds
+   * (T19's lesson). A keystroke is the same IME-level call into either field
+   * (`insertText` on iOS, `InputConnection.commitText` on Android); the clock starts
+   * in JS before that call and stops in the layout effect that commits the new text,
+   * so both arms pay the same JS -> UI hop and the difference is the field. Every key
+   * must commit on both arms; the duration is D21's (`expectTimingBudget`).
+   */
+  it('commits a keystroke about as fast as RN TextInput', async () => {
+    commits.length = 0;
+    render(
+      <>
+        <LatencyArm arm="nitro" />
+        <LatencyArm arm="rn" />
+      </>
+    );
+    await waitForTestId('latency-nitro');
+    await waitForTestId('latency-rn');
+    const BLOCKS = 4;
+    const KEYS = 4;
+    const samples: Record<'nitro' | 'rn', number[]> = { nitro: [], rn: [] };
+    const typed: Record<'nitro' | 'rn', string> = { nitro: '', rn: '' };
+    for (let block = 0; block < BLOCKS; block += 1) {
+      for (const arm of ['nitro', 'rn'] as const) {
+        // Both arms get the same settle after focus: the first key otherwise lands
+        // while the keyboard is still animating in, and measures that.
+        if (arm === 'nitro') {
+          await focusField('latency-nitro');
+        } else {
+          rnFocus.current?.();
+        }
+        await sleep(400);
+        for (let key = 0; key < KEYS; key += 1) {
+          const letter = String.fromCharCode(97 + ((block * KEYS + key) % 26));
+          typed[arm] += letter;
+          const want = typed[arm];
+          const started = nitroUiCore.now();
+          if (iOS) {
+            await harnessUi.typeChar(letter);
+          } else {
+            await probe().imeInput('commit', letter);
+          }
+          const deadline = Date.now() + 3000;
+          let commit = commits.find((c) => c.arm === arm && c.text === want);
+          while (commit == null && Date.now() < deadline) {
+            await sleep(5);
+            commit = commits.find((c) => c.arm === arm && c.text === want);
+          }
+          if (commit == null) {
+            throw new Error(`${arm}: "${want}" never committed`);
+          }
+          samples[arm].push(commit.at - started);
+          await sleep(120);
+        }
+      }
+    }
+    expect(samples.nitro.length).toBe(BLOCKS * KEYS);
+    expect(samples.rn.length).toBe(BLOCKS * KEYS);
+    const summary = {
+      nitro: {
+        p50: percentile(samples.nitro, 0.5),
+        p95: percentile(samples.nitro, 0.95),
+      },
+      rn: {
+        p50: percentile(samples.rn, 0.5),
+        p95: percentile(samples.rn, 0.95),
+      },
+    };
+    await expectTimingBudget({
+      label: 'TextField keystroke->commit p95 (1.5x RN TextInput p95)',
+      measuredMs: summary.nitro.p95,
+      limitMs: summary.rn.p95 * 1.5,
+      note: `nitro p50 ${summary.nitro.p50.toFixed(1)} / p95 ${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ${summary.rn.p95.toFixed(1)}`,
     });
   });
 
