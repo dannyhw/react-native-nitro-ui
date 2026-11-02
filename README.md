@@ -492,6 +492,8 @@ export function Filters() {
         onIsPresentedChange={setOpen}
         detents={['medium', 'large']}
         onDetentChange={setDetent}
+        // The next presentation opens at the first detent again.
+        onDismiss={() => setDetent(0)}
         accessibilityLabel="Filters"
       >
         <View style={{ padding: 24, gap: 12 }}>

@@ -305,6 +305,29 @@ internal class NitroUiSheetRootView(
     return true
   }
 
+  /**
+   * React Native's `ReactRootView`: a child that disallows interception (a horizontal
+   * `ScrollView`, a scrolling multiline `TextInput`) must not stop this root's
+   * [onInterceptTouchEvent], which is where JS gets the gesture's MOVE and UP - without
+   * them a `Pressable` can stay pressed. So the flag is not set here; it is passed up,
+   * so the sheet's own drag (Compose's interop filter above the `AndroidView`) still
+   * stands down for that gesture.
+   */
+  override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+    parent?.requestDisallowInterceptTouchEvent(disallowIntercept)
+  }
+
+  /** Hover reaches JS as pointer events, as in React Native's `Modal` root. */
+  override fun onInterceptHoverEvent(event: MotionEvent): Boolean {
+    eventDispatcher?.let { dispatcher -> jsPointerDispatcher?.handleMotionEvent(event, dispatcher, true) }
+    return super.onHoverEvent(event)
+  }
+
+  override fun onHoverEvent(event: MotionEvent): Boolean {
+    eventDispatcher?.let { dispatcher -> jsPointerDispatcher?.handleMotionEvent(event, dispatcher, false) }
+    return super.onHoverEvent(event)
+  }
+
   override fun handleException(t: Throwable) {
     (context as ThemedReactContext).reactApplicationContext.handleException(RuntimeException(t))
   }
@@ -509,9 +532,15 @@ internal class BottomSheetHost(
       remember(model) {
         { value: SheetValue -> value != SheetValue.Hidden || model.dismissible || !model.presented }
       }
+    // Decided once per presentation (this is inside `key(model.generation)`):
+    // `rememberModalBottomSheetState` keys its saved state on it, so a detent list that
+    // gained or lost `medium` while the sheet was up built a new, hidden `SheetState`
+    // under it. Such a change applies at the next presentation; every other detent
+    // change (the expanded height) applies at once.
+    val skipPartiallyExpanded = remember(model) { !hasMedium || expanded == null }
     val sheetState =
       rememberModalBottomSheetState(
-        skipPartiallyExpanded = !hasMedium || expanded == null,
+        skipPartiallyExpanded = skipPartiallyExpanded,
         confirmValueChange = confirmValueChange,
       )
     val presented = model.presented
@@ -525,7 +554,7 @@ internal class BottomSheetHost(
       }
     }
     DetentReporter(model, sheetState, detents, expanded)
-    TestSeam(sheetState, detents, canPartiallyExpand = hasMedium && expanded != null)
+    TestSeam(sheetState, detents, canPartiallyExpand = !skipPartiallyExpanded)
     val radius = model.cornerRadius
     val color = model.containerColor
     ModalBottomSheet(

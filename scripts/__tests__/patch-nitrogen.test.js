@@ -447,19 +447,34 @@ describe('patch-nitrogen: content children (G14)', () => {
     );
   });
 
-  it('fails for a declared view nitrogen did not generate, and skips an undeclared one', () => {
+  it('fails for a listed view nitrogen did not generate, or that nitro.json does not declare', () => {
     withSheetTree(null, (root) => {
       const result = runPatch(root);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('is the view generated?');
     });
     withSheetTree(
-      null,
+      generated(),
       (root) => {
-        expect(runPatch(root).status).toBe(0);
+        const result = runPatch(root);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(
+          'CONTENT_CHILDREN_VIEWS lists HybridNitroUiBottomSheet, and nitro.json declares no NitroUiBottomSheet'
+        );
       },
       { declare: false }
     );
+  });
+
+  it('asks nothing of a tree with no nitro.json, as the sizing step asks nothing without its config', () => {
+    withSheetTree(generated(), (root) => {
+      rmSync(join(root, 'nitro.json'));
+      const result = runPatch(root);
+      expect(result.status).toBe(0);
+      expect(readFileSync(join(root, MM), 'utf8')).not.toContain(
+        '// nitro-ui: content children'
+      );
+    });
   });
 
   it('is applied to the BottomSheet the repo generates', () => {
