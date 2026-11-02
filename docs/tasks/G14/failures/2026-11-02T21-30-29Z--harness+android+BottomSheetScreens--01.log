@@ -1,0 +1,70 @@
+# Failure excerpt — harness:android:BottomSheetScreens
+
+- Ran: 2026-11-02T21:30:29.071Z on code tree `3541b67947d2` at HEAD `53d8bec` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android BottomSheetScreens`
+- Result: fail, exit 1, 16146 ms
+- Load: start 10.87, end 9.19, median 9.19, max 10.87
+- Device: android / device `emulator-5574` / lease `G14-ndzag`
+- Full log: `task/G14-bottomsheet/harness+android+BottomSheetScreens-2026-11-02T21-30-29.071Z.log` (<store>/task/G14-bottomsheet/harness+android+BottomSheetScreens-2026-11-02T21-30-29.071Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/BottomSheetScreens.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+android+BottomSheetScreens-2026-11-02T21-30-29.071Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-ndzag (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.19 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 25 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android BottomSheetScreens
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 3541b67947d2, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.87/10.90 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+android+BottomSheetScreens-2026-11-02T21-30-29.071Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/isolated/BottomSheetScreens.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        14.699 s
+Ran all test suites matching BottomSheetScreens.
+
+
+
+```
