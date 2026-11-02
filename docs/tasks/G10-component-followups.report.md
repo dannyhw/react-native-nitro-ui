@@ -6,14 +6,14 @@
 ## Summary
 
 Triage of everything G1, G2, G3 and G4 left behind, against `main`. The table below has 37
-rows; **five were live** — three correctness bugs and two test gaps — and each is fixed with a
-test shown red first. Fifteen were fixed already by later tasks, sixteen are nits (now one
+rows; **five were live** — three correctness bugs and two test gaps — each fixed with a test
+shown red first. Fifteen were fixed already by later tasks, sixteen are nits (now one
 FOLLOWUPS line each), and one is a decision.
 
 Fixed:
 
 1. **Android's Slider thumb landed one step above iOS's** (`605b7e7`). `roundHalfAway` —
-   the function written *because* the two OSes must agree on a step — was spelled
+   written *because* the two OSes must agree on a step — was spelled
    `floor(x + 0.5)`, which perturbs the value before rounding it, and the addition rounds:
    `(0.21 - 0.1) / 0.22` is `0.49999999999999994` (nearer 0), and adding a half to it is
    exactly `1.0` because the sum has no room for the difference. It now decides magnitude
@@ -33,12 +33,10 @@ Fixed:
 4. Two test gaps closed: no device render for `min > max` (`aa548d9`), and no test for the
    native-only clamp of an **uncontrolled** selection under shrinking options (`e3caeba`).
 
-Three of the six red proofs ran on both platforms' devices; the other three are the host-side
-vector sets and the wrapper test. The `min > max` iOS proof crashed the app in
-`SliderModel.trackBounds` rather than merely failing, which is the failure mode the guard
-exists for.
-
-iOS segmented `tintColor` is the one "needs a decision" item — not implemented; see below.
+Three of the six red proofs ran on both platforms' devices; the rest are host-side vector sets
+and the wrapper test. The `min > max` iOS proof crashed the app in `SliderModel.trackBounds`
+rather than merely failing, which is the failure mode the guard exists for. iOS segmented
+`tintColor` is the one "needs a decision" item — not implemented; see below.
 
 ## Triage
 
