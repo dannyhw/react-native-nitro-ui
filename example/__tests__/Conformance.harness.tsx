@@ -2528,17 +2528,26 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
     // The handshake's counters: a press on an uncontrolled chip, then a second owner
-    // controlled at `false`. Counters left over make the write look stale, the chip keeps
-    // the previous owner's `true`, and its first press reports `false`.
+    // controlled at `true`. Counters left over make that write look stale, so it is
+    // refused and the chip keeps showing `false`: its first press reports `true` where a
+    // clean chip, showing the `true` it was sent, reports `false`.
+    //
+    // Why `true` and not Switch's `false` (measured, G12): Android draws a chip from
+    // `ChipModel.displayed`, which `reset()` clears to `false` on its own line, so a
+    // second owner controlled at `false` is shown `false` whether or not the counters
+    // were reset - the fixture's answer coincided with the reset's, and this probe stayed
+    // green on Android with the counter reset deleted. iOS draws from `state.displayed`,
+    // the residue itself, which is why the first owner here starts selected and is pressed
+    // *off*: the residue (`false`) differs from the controlled value on both platforms.
     controlledProbe: {
       leaveBehind:
-        'a press on an uncontrolled filter chip, then a second owner that is ' +
-        '*controlled* at `false` - the only shape that reads the handshake’s counters, ' +
-        'which is what `model.state = NitroUiControlledValue(…)` uniquely owns',
+        'a press that turns an uncontrolled filter chip off, then a second owner that ' +
+        'is *controlled* at `true` - the only shape that reads the handshake’s ' +
+        'counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns',
       first: () => (
         <Chip
           label="Conformance chip label"
-          defaultSelected={false}
+          defaultSelected
           onSelectedChange={recordRecycle('conformance-chip')}
           testID="conformance-chip"
           accessibilityLabel="Conformance chip"
@@ -2548,13 +2557,13 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       act: async () => {
         await pressChip('conformance-chip');
         await waitFor(() =>
-          expect(eventsSince(0)).toEqual(['conformance-chip:true'])
+          expect(eventsSince(0)).toEqual(['conformance-chip:false'])
         );
       },
       second: () => (
         <Chip
           label="Conformance chip label"
-          selected={false}
+          selected
           onSelectedChange={recordRecycle('conformance-chip')}
           testID="conformance-chip"
           accessibilityLabel="Conformance chip"
@@ -2567,8 +2576,8 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         return [
           {
             label: 'the first press on the controlled second mount reports',
-            expected: 'conformance-chip:true',
-            actual: await eventsSettled(from, 'conformance-chip:true'),
+            expected: 'conformance-chip:false',
+            actual: await eventsSettled(from, 'conformance-chip:false'),
           },
         ];
       },
