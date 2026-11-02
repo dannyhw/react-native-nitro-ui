@@ -10,12 +10,20 @@
  */
 const isolated = process.env.NITRO_UI_HARNESS_ISOLATED === '1';
 
+/*
+ * The exclusion is a negated `testMatch` glob, not `testPathIgnorePatterns`:
+ * `react-native-harness` passes its own `--testPathIgnorePatterns` (for
+ * platform-suffixed files), and a CLI flag replaces the config's list - so an
+ * ignore pattern here was dropped, and the shared run ran `__tests__/isolated/`
+ * after all (G14 fix round 1). The negation comes after the pattern it narrows,
+ * as Jest's globs require.
+ */
 export default {
   preset: 'react-native-harness',
   testMatch: isolated
     ? ['<rootDir>/**/__tests__/isolated/**/*.harness.[jt]s?(x)']
-    : ['<rootDir>/**/__tests__/**/*.harness.[jt]s?(x)'],
-  testPathIgnorePatterns: isolated
-    ? ['/node_modules/']
-    : ['/node_modules/', '/__tests__/isolated/'],
+    : [
+        '<rootDir>/**/__tests__/**/*.harness.[jt]s?(x)',
+        '!**/__tests__/isolated/**',
+      ],
 };

@@ -1870,7 +1870,7 @@ const CHECKS = {
     //     without it JS sees the press go in and never come out.
     const touches = await t.pressUntil({
       what: 'the TextInput inside the sheet',
-      waitingFor: "a real tap on the TextInput to reach JS, in and out",
+      waitingFor: 'a real tap on the TextInput to reach JS, in and out',
       press: async (attempt) => {
         if (attempt > 1 && upCount('Input touches: in 0 out 0')() === 0) return;
         const input = t.nodeByTestId('sheet-input');
@@ -1878,9 +1878,8 @@ const CHECKS = {
         await t.tapNode(input);
       },
       reading: () =>
-        t
-          .dump()
-          .find((node) => node.text.startsWith('Input touches:'))?.text ?? '-',
+        t.dump().find((node) => node.text.startsWith('Input touches:'))?.text ??
+        '-',
       raised: (shown) => shown === 'Input touches: in 1 out 1',
       pollMs: DUMP_POLL_MS,
     });
