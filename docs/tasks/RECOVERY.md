@@ -81,6 +81,10 @@
 > `Divider()`, which UIKit built as an empty inline menu). Run on maintainer-mac-1 by **Claude Opus 5.5 at `auto`**: the
 > first linked task in auto mode, with nothing blocked. iOS gates ran there on the same code tree; check and both Android
 > gates ran here on the merged tree, plus an Android red proof the orchestrator added (`ce4ba14`).
+> **G8 merged (2026-11-02, `b52435e`, PR #18):** the Android `Menu` dropdown sizes to its items, not the trigger; the inline
+> `DatePicker` fits 320 dp (40 dp touch targets only below 360 dp, height unchanged at 512 dp). iOS gates ran first on
+> maintainer-mac-1 (V3, V3b), and then all five merge gates ran here after the host restart, which fixed the simulators'
+> `DataMigrationFailed` boots. Two patch changesets are pending.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
