@@ -93,7 +93,7 @@ against measured behaviour and several failed during development before the fix 
 
 - `src/components/Dialog/*` (new): wrapper, nitro spec, manifest, view config; `src/index.ts`.
 - `ios/core/NitroUiPresentation.swift` (new), `ios/components/Dialog/HybridNitroUiDialog.swift` (new), `ios/components/DatePicker/HybridNitroUiDatePicker.swift` (helper).
-- `android/.../HybridNitroUiDialog.kt` (new); nitrogen output and generated tables (`bun run regen`).
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt` (new); nitrogen output and generated tables (`bun run regen`).
 - `scripts/registry-core.mjs` (`exports`), `scripts/conformance-core.mjs`, `scripts/real-input/{a11y,android}.mjs` and their tests; `src/__tests__/host.test.tsx`.
 - `example/__tests__/{Dialog,Conformance}.harness.tsx`, `example/ios/NitroUiExampleUITests/RealInputTests.swift`, `example/src/{DialogScreen,readme-examples}.tsx`, `example/src/stories/Dialog.stories.tsx`.
 - `docs/components/dialog.md`, `README.md`, `.changeset/dialogs-alert-confirmation.md`, `etc/package-files.txt`, `docs/tasks/FOLLOWUPS.md`.
@@ -102,7 +102,7 @@ against measured behaviour and several failed during development before the fix 
 
 The eight `G11` lines appended to `docs/tasks/FOLLOWUPS.md`, one line each there:
 
-- Bench: `mount/memory/leak.dialog` and `present.dialog` not built (no presentation stamp exists).
+- Bench: the `mount`, `memory`, `leak` and `present` dialog scenarios are not built (no presentation stamp exists).
 - Spike: the UIKit-vs-SwiftUI screenshot and the iOS 26/27 sheet-placement arms were not run.
 - iOS: DatePicker's in-chain popover keeps the RN Modal stranding hazard the Dialog spike measured.
 - Tests: no permanent react-native-screens gate; Android's detach close path is covered only by that spike.
