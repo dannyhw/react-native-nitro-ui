@@ -63,3 +63,72 @@ export async function waitForHandle<T>(
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 }
+
+/**
+ * How to read each handle a fixture has said is coming, by the `testID` of the
+ * control it belongs to. Filled by {@link handleRef} as fixtures render, emptied
+ * by {@link forgetPromisedHandles} between cases.
+ */
+const promisedHandles = new Map<string, () => unknown>();
+
+/**
+ * A `hybridRef` callback that files the handle under `key` in `map`, and promises
+ * it for `testId`, so {@link waitForPromisedHandle} knows a box with that `testID`
+ * is not ready until the handle has landed too.
+ *
+ * Called while the fixture renders, which is before its native view exists: by the
+ * time any box with this `testID` can be found, the promise is already on file.
+ * That is what lets a box helper wait for "the box and, if one is coming, its
+ * handle" without each call site naming the handle again (G12 fix round 1: the
+ * Host suites raced the ref callback at four sites a per-site wait had missed).
+ *
+ * @param map where the suite keeps handles of this kind
+ * @param key the entry in `map`
+ * @param testId the control's `testID`, when it is not `key`
+ */
+export function handleRef<T>(
+  map: Record<string, T>,
+  key: string,
+  testId: string = key
+): (view: T) => void {
+  promisedHandles.set(testId, () => map[key]);
+  return (view: T) => {
+    map[key] = view;
+  };
+}
+
+/**
+ * Wait for the handle a fixture promised for `testId`, if it promised one; return
+ * at once otherwise (a wrapper `View`, a Host, a control wired without
+ * {@link handleRef}). Existence only: whatever the caller asserts next is unchanged.
+ */
+export async function waitForPromisedHandle(
+  testId: string,
+  timeoutMs?: number
+): Promise<void> {
+  const read = promisedHandles.get(testId);
+  if (read == null) return;
+  await waitForHandle(read, { what: `"${testId}"`, timeoutMs });
+}
+
+/**
+ * The handle filed under `key`, once it exists: {@link waitForHandle} on a map
+ * entry, for a read that is not behind a box lookup.
+ *
+ * @param what how a miss names the control; defaults to `key`
+ */
+export async function handleOf<T>(
+  map: Record<string, T>,
+  key: string,
+  what: string = key
+): Promise<T> {
+  return waitForHandle(() => map[key], { what: `"${what}"` });
+}
+
+/**
+ * Drop every promise, so a later case cannot be satisfied (or held up) by a
+ * fixture an earlier case rendered under the same `testID`. Call it in `afterEach`.
+ */
+export function forgetPromisedHandles(): void {
+  promisedHandles.clear();
+}

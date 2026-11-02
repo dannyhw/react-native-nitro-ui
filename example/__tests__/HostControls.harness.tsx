@@ -63,7 +63,12 @@ import {
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
-import { waitForHandle } from './handles';
+import {
+  forgetPromisedHandles,
+  handleOf,
+  handleRef,
+  waitForPromisedHandle,
+} from './handles';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -210,12 +215,26 @@ function settle(ms: number) {
  * Poll for a `testID` and hand back its box. `screen.findByTestId` has no timeout, and a
  * hosted control mounts through the Host's composition — slower than the single pass the
  * harness makes, on a loaded machine.
+ *
+ * A box whose control was wired with `handleRef` is handed back only once that
+ * control's handle has landed as well. The box exists before the `hybridRef` callback
+ * has run — on iOS the mount is on main and the callback reaches JS a turn later — and
+ * the reads that follow a `boxOf` in this suite go through the handle; asserting the
+ * moment the box appeared failed "reports a hosted drag" intermittently on main
+ * (G11-merge, 2 of 3 full iOS runs) and on G12's branch. Waiting here rather than at
+ * each read is what covers the reads nobody has seen fail yet (`handles.ts`).
  */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
   for (;;) {
     const box = harnessUi.queryByTestId(testId);
     if (box != null) {
+      // At least the handle helper's own 5 s, and the rest of this call's budget
+      // when that is longer, so a slow mount is not judged twice as harshly.
+      await waitForPromisedHandle(
+        testId,
+        Math.max(5000, deadline - nitroUiCore.now())
+      );
       return box;
     }
     if (nitroUiCore.now() > deadline) {
@@ -419,9 +438,7 @@ function Slide({
       maximumValue={maximumValue}
       step={step}
       disabled={disabled}
-      hybridRef={(view: SliderHandle) => {
-        log.sliders[id] = view;
-      }}
+      hybridRef={handleRef(log.sliders, id)}
       onSlidingStart={record('start')}
       onValueChange={record('change')}
       onSlidingComplete={(next) => {
@@ -462,9 +479,7 @@ function Bar({
       variant={variant}
       accessibilityLabel={id}
       value={value}
-      hybridRef={(view: ProgressHandle) => {
-        log.bars[id] = view;
-      }}
+      hybridRef={handleRef(log.bars, id)}
     />
   );
 }
@@ -490,9 +505,7 @@ function Press({
       title={title}
       accessibilityLabel={title}
       disabled={disabled}
-      hybridRef={(view: ButtonHandle) => {
-        log.buttons[id] = view;
-      }}
+      hybridRef={handleRef(log.buttons, id)}
       onPress={() => {
         log.taps.push(id);
       }}
@@ -595,9 +608,7 @@ function Toggle({
       style={style}
       accessibilityLabel={id}
       value={value}
-      hybridRef={(view: SwitchHandle) => {
-        log.switches[id] = view;
-      }}
+      hybridRef={handleRef(log.switches, id)}
       onValueChange={(next) => {
         log.taps.push(id);
         log.acceptedSwitches[id] = next;
@@ -616,9 +627,7 @@ function Segment({ id, log }: { id: string; log: Log }) {
       options={['One', 'Two', 'Three']}
       selectedIndex={index}
       accessibilityLabel={`Mixed segmented ${id.slice(-1)}`}
-      hybridRef={(view: SegmentHandle) => {
-        log.segments[id] = view;
-      }}
+      hybridRef={handleRef(log.segments, id)}
       onChange={(event) => {
         log.taps.push(id);
         log.acceptedSegments[id] = event.index;
@@ -638,9 +647,7 @@ function Pick({ id, log }: { id: string; log: Log }) {
       selectedIndex={index}
       label={`Pick ${id.slice(-1)}`}
       accessibilityLabel={`Mixed picker ${id.slice(-1)}`}
-      hybridRef={(view: PickerHandle) => {
-        log.pickers[id] = view;
-      }}
+      hybridRef={handleRef(log.pickers, id)}
       onChange={(event) => {
         log.taps.push(id);
         log.acceptedPickers[id] = event.index;
@@ -661,9 +668,7 @@ function Dates({ id, log }: { id: string; log: Log }) {
       disabled={off}
       value={date}
       accessibilityLabel={`Mixed date picker ${id.slice(-1)}`}
-      hybridRef={(view: DateHandle) => {
-        log.dates[id] = view;
-      }}
+      hybridRef={handleRef(log.dates, id)}
       onChange={setDate}
     />
   );
@@ -729,6 +734,7 @@ const tappableOf = (ids: string[]) =>
 
 afterEach(() => {
   cleanup();
+  forgetPromisedHandles();
 });
 
 beforeAll(async () => {
@@ -755,7 +761,10 @@ describe('Host · a hosted Slider is still a Slider', () => {
    * in one turn, so the wait is for delivery to JS rather than for the moves.
    */
   async function drag(id: string, to: number, steps = 4, msPerStep = 0) {
-    log.sliders[id]?.nuiTestDrag(to, steps, msPerStep);
+    // On the handle, not `?.` on the map: a drag sent to a handle that has not landed
+    // yet was a silent no-op, and the test then failed on "no events" — a fixture that
+    // did not wait, reading like a Slider that ignores a drag.
+    (await handleOf(log.sliders, id)).nuiTestDrag(to, steps, msPerStep);
     await settle(msPerStep > 0 ? msPerStep * steps + 500 : 700);
   }
 
@@ -771,12 +780,8 @@ describe('Host · a hosted Slider is still a Slider', () => {
         </Host>
       </View>
     );
+    // `boxOf` hands the box back once the handle has landed too.
     await boxOf('slide-0');
-    // The box exists before the `hybridRef` callback has run (`handles.ts`): on iOS the
-    // mount is on main and the callback reaches JS a turn later. Asserting the handle the
-    // moment the box appears failed this test intermittently on main (G11-merge, 2 of 3
-    // full iOS runs) and on G12's branch; wait for the callback, as the other suites do.
-    await waitForHandle(() => log.sliders['slide-0'], { what: '"slide-0"' });
     expect(log.sliders['slide-0']).toBeDefined();
 
     await drag('slide-0', 0.75);
