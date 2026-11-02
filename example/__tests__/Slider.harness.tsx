@@ -1693,6 +1693,67 @@ describe('Slider', () => {
     expect(handle.nuiTestFramePumpArmed()).toBe(false);
   });
 
+  it('renders a range whose two ends are the wrong way round', async () => {
+    // G1's verifier follow-up: `min == max` has had a device test since review fix
+    // 7, and `min > max` never did, even though it is the case the platform controls
+    // actually reject - `ClosedRange(a...b)` traps when `a > b`, and Kotlin's
+    // `coerceIn` throws for the same shape, which is why both platforms hand their
+    // control a widened span (`trackBounds` on iOS, `trackRange` on Android) rather
+    // than the one React described. Neither widening was asserted anywhere, and a
+    // control that traps here takes the app's whole tree with it - the failure mode
+    // is a crash, not a wrong pixel.
+    //
+    // The documented rule (`docs/components/slider.md`, Limits): an inverted range is
+    // a one-value range whose value is `minimumValue`, with the thumb at an end. So
+    // this asserts the three things that rule has to survive: the control lays out,
+    // every interaction lands on 5, and the reader's increment has nowhere to go.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={5}
+          maximumValue={1}
+          defaultValue={5}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="inverted-range"
+          hybridRef={captureFor('inverted-range')}
+        />
+      </View>
+    );
+    // Merely getting here is most of the test: the control has hosted, measured and
+    // laid out without trapping.
+    const box = await waitForBox('inverted-range');
+    const handle = await handleFor('inverted-range');
+    expect(Math.abs(box.height - EXPECTED_HEIGHT)).toBeLessThan(1);
+    expect(box.width).toBeGreaterThan(100);
+
+    await drag(handle, events, 3, 6, 0);
+    console.log(
+      `inverted range: starts=${JSON.stringify(events.start)} ` +
+        `change=${JSON.stringify(events.change)} ` +
+        `complete=${JSON.stringify(events.complete)}`
+    );
+    expect(events.start).toEqual([5]);
+    expect(events.complete).toEqual([5]);
+    expect(events.change.every((value) => value === 5)).toBe(true);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+
+    // And the reader gets the same answer: there is no other value to go to, so the
+    // platform's action runs and reports a gesture that moved nothing.
+    expectPerformed(
+      await accessibilityStepReport(handle, 1),
+      'inverted range, forward'
+    );
+    expectPerformed(
+      await accessibilityStepReport(handle, -1),
+      'inverted range, back'
+    );
+    expect(events.complete).toEqual([5]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
   it('renders a range whose two ends are the same value', async () => {
     // Review fix 7: `min == max` was only ever covered by the native vectors, which
     // is exactly the kind of case that traps a platform control - `ClosedRange` is
