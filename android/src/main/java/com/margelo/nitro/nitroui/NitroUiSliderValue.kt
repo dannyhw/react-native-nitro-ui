@@ -5,6 +5,7 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.round
 
 /*
  * The value rules of a Slider: clamp to the range, snap to the step, and shed the
@@ -99,9 +100,31 @@ internal object NitroUiSliderValue {
    * both OSes: with [round], `quantize(2.5, 0..10, step 1)` answered 2 on Android and
    * 3 on iOS, so a controlled `value={2.5}` put the thumb on different stops per
    * platform.
+   *
+   * The spelling matters as much as the direction. `floor(x + 0.5)`, the first fix
+   * for that divergence, perturbs the number before it rounds it, and the addition
+   * rounds: `(0.21 - 0.1) / 0.22` is `0.49999999999999994` — a hair under a tie, and
+   * nearer 0 than 1 — while adding a half to it produces exactly `1.0`, because the
+   * sum has no room for the difference. That spelling answered 1 where iOS answered
+   * 0, one whole step of thumb per OS on any range whose count lands near a tie.
+   *
+   * So [round] decides the magnitude — `Math.rint` is correctly rounded on the exact
+   * value of `x` and never moves it — and the tie is detected and pushed away from
+   * zero separately. `magnitude - floor(magnitude)` is exact: for `magnitude >= 1`
+   * it is a Sterbenz subtraction (the floor is at least half the value), and below 1
+   * the floor is `0`. That covers every value a tie can occur at.
    */
-  fun roundHalfAway(x: Double): Double =
-    if (x < 0.0) -floor(-x + 0.5) else floor(x + 0.5)
+  fun roundHalfAway(
+    x: Double,
+  ): Double {
+    if (!x.isFinite() || x == 0.0) {
+      return x
+    }
+    val magnitude = abs(x)
+    val whole = floor(magnitude)
+    val rounded = if (magnitude - whole == 0.5) whole + 1.0 else round(magnitude)
+    return if (x < 0.0) -rounded else rounded
+  }
 
   /**
    * The value a Slider shows and reports for [raw]: clamped into the range, and
