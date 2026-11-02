@@ -364,8 +364,12 @@ private fun TextFieldContent(model: TextFieldModel) {
   val label = model.accessibilityLabel
   val modifier =
     Modifier.fillMaxWidth()
-      // The name goes on the field's own node, the one TalkBack focuses and a person
-      // types into (`docs/architecture/core.md` §3, "testID and accessibility").
+      // The name goes on the field, never on the host around it
+      // (`docs/architecture/core.md` §3, "testID and accessibility"). Measured in a dump:
+      // `BasicTextField` publishes its editable node (`EditText`, the text, the actions)
+      // with this modifier's semantics as a child node of the same box, which is the
+      // shape Material 3's own `TextField` label has, and what X4's rule reads as one
+      // named control (`scripts/real-input/a11y.mjs`).
       .then(if (label != null) Modifier.semantics { contentDescription = label } else Modifier)
       .focusRequester(focusRequester)
       .onFocusChanged { focus -> model.focusMoved(focus.isFocused) }

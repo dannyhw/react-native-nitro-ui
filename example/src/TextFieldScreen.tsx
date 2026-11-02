@@ -80,6 +80,9 @@ function Row({
  * `testRealInputTextField` in `RealInputTests.swift`). Those checks find a field
  * by its `accessibilityLabel` and read only the `Text` below it, so every echo
  * has a testID and says what JS saw.
+ *
+ * The focus row and its two buttons come first: a keyboard that is up covers the
+ * lower half of the screen, and a button under it cannot be tapped.
  */
 export default function TextFieldScreen() {
   const ink = useInk();
@@ -111,6 +114,36 @@ export default function TextFieldScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.title, { color: ink.ink }]}>TextField</Text>
+
+        <Row title="Focus, blur and submit">
+          <TextField
+            ref={focusRef}
+            testID="text-focus"
+            accessibilityLabel="Focus field"
+            placeholder="Return submits"
+            returnKeyType="done"
+            onFocus={noteFocus}
+            onBlur={noteBlur}
+            onSubmitEditing={setSubmitted}
+          />
+        </Row>
+        <Text testID="text-focus-echo" style={{ color: ink.ink }}>
+          {`focus: ${String(focusCount)} blur: ${String(blurCount)} submitted: ${
+            submitted ?? '-'
+          }`}
+        </Text>
+        <View style={styles.actions}>
+          <Action
+            label="Focus from JS"
+            testID="text-focus-js"
+            onPress={focusFromJs}
+          />
+          <Action
+            label="Blur from JS"
+            testID="text-blur-js"
+            onPress={blurFromJs}
+          />
+        </View>
 
         <Row title="Controlled">
           <TextField
@@ -155,36 +188,6 @@ export default function TextFieldScreen() {
         <Text testID="text-capped-echo" style={{ color: ink.ink }}>
           {`capped: ${capped} (${String(capped.length)})`}
         </Text>
-
-        <Row title="Focus, blur and submit">
-          <TextField
-            ref={focusRef}
-            testID="text-focus"
-            accessibilityLabel="Focus field"
-            placeholder="Return submits"
-            returnKeyType="done"
-            onFocus={noteFocus}
-            onBlur={noteBlur}
-            onSubmitEditing={setSubmitted}
-          />
-        </Row>
-        <Text testID="text-focus-echo" style={{ color: ink.ink }}>
-          {`focus: ${String(focusCount)} blur: ${String(blurCount)} submitted: ${
-            submitted ?? '-'
-          }`}
-        </Text>
-        <View style={styles.actions}>
-          <Action
-            label="Focus from JS"
-            testID="text-focus-js"
-            onPress={focusFromJs}
-          />
-          <Action
-            label="Blur from JS"
-            testID="text-blur-js"
-            onPress={blurFromJs}
-          />
-        </View>
 
         <Row title="Password">
           <TextField
