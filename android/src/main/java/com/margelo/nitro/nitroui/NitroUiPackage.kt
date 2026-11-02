@@ -59,6 +59,11 @@ class NitroUiPackage : BaseReactPackage() {
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the
     // `IViewGroupManager` half. See `NitroUiHostViewManager`.
     NitroUiHostViewManager(),
+    // The BottomSheet's React Native children are mounted into the sheet's window, so
+    // it needs the `IViewGroupManager` half too: its manifest names this class
+    // (`androidViewManager`), and the registry checks it is registered here instead of
+    // the generated manager. See `NitroUiBottomSheetViewManager`.
+    NitroUiBottomSheetViewManager(),
   )
 
   companion object {

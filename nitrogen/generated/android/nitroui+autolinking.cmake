@@ -34,6 +34,8 @@ target_sources(
   ../nitrogen/generated/android/nitrouiOnLoad.cpp
   # Shared Nitrogen C++ sources
   ../nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiBottomSheetSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
@@ -55,9 +57,11 @@ target_sources(
   ../nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
   # Android-specific Nitrogen C++ sources
-  ../nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiBottomSheetStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
