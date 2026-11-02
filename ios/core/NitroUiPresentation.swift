@@ -91,6 +91,9 @@ final class NitroUiPresentation: NSObject {
   /// so a component's "the controller went away" witness can tell that from a
   /// dismissal UIKit did on its own.
   private var requested = Set<ObjectIdentifier>()
+  /// The windows of presentations made with ``presentInOwnWindow(_:over:animated:prepare:onShown:)``,
+  /// by controller, each released when its presentation ends.
+  private var windows: [ObjectIdentifier: UIWindow] = [:]
 
   init(counter: NitroUiPresentationCounter) {
     self.counter = counter
@@ -118,8 +121,10 @@ final class NitroUiPresentation: NSObject {
     isPresenting = true
     dismissWhenPresented = false
     dismissAnimatedWhenPresented = false
-    presenter.present(controller, animated: animated) { [weak self] in
-      guard let self else { return }
+    // `self` is held until the completion runs - one transition - so a dismissal carried
+    // to it still happens when the view that owned the presentation was dropped and
+    // released in the meantime. The closure is released once it has run.
+    presenter.present(controller, animated: animated) {
       self.isPresenting = false
       if self.counted.insert(ObjectIdentifier(controller)).inserted {
         self.counter.opened()
@@ -130,6 +135,62 @@ final class NitroUiPresentation: NSObject {
         self.dismissNow(animated: self.dismissAnimatedWhenPresented)
       }
     }
+  }
+
+  /// Present `controller` from a window of its own, above the app's.
+  ///
+  /// What a dialog uses on iOS, for the reason React Native's own `Alert` does
+  /// (`RCTAlertController`, a `UIWindow` at `UIWindowLevelAlert + 1`): a controller
+  /// presented *in* the app's chain sits on top of whatever is presented there, and
+  /// React Native dismisses its `Modal` with `[modalController
+  /// dismissViewControllerAnimated:]` - which UIKit reads as "dismiss what this
+  /// controller presented". With a dialog on top of the Modal, closing the Modal took
+  /// the dialog down instead and left the Modal on screen for good (G11 spike,
+  /// `example/__tests__/Dialog.harness.tsx`). A window of its own touches nobody's
+  /// chain: there is always a free controller to present from, over an RN `Modal`, a
+  /// screens `formSheet` or another dialog, and closing any of those cannot reach it.
+  ///
+  /// `false` when the anchor has no window scene to put a window in.
+  @MainActor
+  @discardableResult
+  func presentInOwnWindow(
+    _ controller: UIViewController,
+    over anchor: UIView,
+    animated: Bool = true,
+    prepare: ((_ root: UIViewController) -> Void)? = nil,
+    onShown: (() -> Void)? = nil
+  ) -> Bool {
+    guard let appWindow = anchor.window, let scene = appWindow.windowScene else {
+      return false
+    }
+    let window = UIWindow(windowScene: scene)
+    window.frame = scene.coordinateSpace.bounds
+    window.windowLevel = UIWindow.Level.alert + 1
+    window.overrideUserInterfaceStyle = appWindow.overrideUserInterfaceStyle
+    window.backgroundColor = .clear
+    let root = NitroUiPresentationRootController()
+    window.rootViewController = root
+    windows[ObjectIdentifier(controller)] = window
+    window.makeKeyAndVisible()
+    // After the window is visible, so the root's view is in it and a popover source can
+    // be expressed in its coordinates.
+    prepare?(root)
+    present(controller, from: root, animated: animated, onShown: onShown)
+    return true
+  }
+
+  /// Whether `controller` was presented from a window of its own.
+  func isInOwnWindow(_ controller: UIViewController) -> Bool {
+    windows[ObjectIdentifier(controller)] != nil
+  }
+
+  /// Hide and let go of the window `controller` was presented in, if it has one.
+  private func releaseWindow(for controller: UIViewController) {
+    guard let window = windows.removeValue(forKey: ObjectIdentifier(controller)) else {
+      return
+    }
+    window.isHidden = true
+    window.rootViewController = nil
   }
 
   /// Keep a presentation that a teardown asked to close during its entry transition,
@@ -179,6 +240,7 @@ final class NitroUiPresentation: NSObject {
     if counted.remove(ObjectIdentifier(closed)) != nil {
       counter.closed()
     }
+    releaseWindow(for: closed)
   }
 
   /// Whether `controller` is going away because this class asked it to.
@@ -219,68 +281,41 @@ final class NitroUiPresentation: NSObject {
     let key = ObjectIdentifier(controller)
     let wasCounted = counted.remove(key) != nil
     let counter = self.counter
+    // The window goes with the presentation, captured here rather than read from `self`
+    // in the completion, for the same reason the ticket is.
+    let window = windows.removeValue(forKey: key)
     requested.insert(key)
     controller.dismiss(animated: animated) { [weak self] in
       if wasCounted {
         counter.closed()
       }
+      window?.isHidden = true
+      window?.rootViewController = nil
       self?.requested.remove(key)
     }
   }
+}
 
-  // MARK: - Finding a presenter
-
-  /// The controller a view can present from right now, or `nil`.
-  ///
-  /// The nearest view controller on the view's responder chain that is not a
-  /// navigation or tab controller (the walk `NitroSwiftUIHost` does for containment),
-  /// then up its `presentedViewController` chain to the top - which is what lets a
-  /// dialog open over an RN `Modal`, over another dialog, or over the app's own
-  /// presentation. `nil` while the view has no window, and while the top of the chain
-  /// is still animating in or out: UIKit refuses to present from a controller in a
-  /// transition, so the caller waits for ``transitionInFlight(for:)`` instead.
-  @MainActor
-  static func topPresenter(for view: UIView) -> UIViewController? {
-    guard let window = view.window else { return nil }
-    guard var top = nearestViewController(of: view) ?? window.rootViewController else {
-      return nil
-    }
-    while let presented = top.presentedViewController {
-      top = presented
-    }
-    if top.isBeingDismissed || top.isBeingPresented {
-      return nil
-    }
-    return top
+/// The root of a presentation window: nothing to draw, and no touches of its own.
+///
+/// The window is full screen and above the app's, so while a teardown has hidden a
+/// presentation that UIKit is still animating in, a root view that answered `hitTest:`
+/// would keep the app untouchable until the transition ends - the 500 ms G5 measured.
+/// Passing through hands the touch to the windows underneath.
+final class NitroUiPresentationRootController: UIViewController {
+  override func loadView() {
+    view = NitroUiPassThroughView()
   }
 
-  /// The transition coordinator of whatever is animating at the top of `view`'s
-  /// presentation chain, so a presentation refused by ``topPresenter(for:)`` can be
-  /// retried when it ends. `nil` when nothing is in flight.
-  @MainActor
-  static func transitionInFlight(for view: UIView) -> UIViewControllerTransitionCoordinator? {
-    guard view.window != nil else { return nil }
-    guard var top = nearestViewController(of: view) ?? view.window?.rootViewController else {
-      return nil
-    }
-    while let presented = top.presentedViewController {
-      top = presented
-    }
-    return top.transitionCoordinator
+  override var prefersStatusBarHidden: Bool {
+    presentingViewController?.prefersStatusBarHidden ?? false
   }
+}
 
-  /// The nearest view controller on `view`'s responder chain that can present: not a
-  /// navigation or tab controller, which cannot host a presentation cleanly.
-  static func nearestViewController(of view: UIView) -> UIViewController? {
-    var responder: UIResponder? = view.next
-    while let current = responder {
-      if let controller = current as? UIViewController,
-        !(controller is UINavigationController),
-        !(controller is UITabBarController) {
-        return controller
-      }
-      responder = current.next
-    }
-    return nil
+/// A view that is never the target of a touch itself.
+final class NitroUiPassThroughView: UIView {
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    let hit = super.hitTest(point, with: event)
+    return hit === self ? nil : hit
   }
 }

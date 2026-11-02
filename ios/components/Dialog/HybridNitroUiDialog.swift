@@ -95,17 +95,14 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
   private var alert: NitroUiAlertController?
   /// The ids of `alert`'s actions, in order; `nil` for the implicit Cancel.
   private var builtActionIds: [String?] = []
-  /// Whether a presentation is waiting for a transition at the top of the chain.
-  private var waitingForTransition = false
-  /// Retries left when nothing reports a transition to wait for (see `presentIfPossible`).
-  private var presentRetries = 0
   /// Whether this mount has ended (`onDropView`) - the deferred window-loss check and
   /// the transition retry both stand down once it has.
   private var dropped = false
   /// How many times this mount presented, for the harness (B7 test 5).
   private var presentCount = 0
-  /// The presenter's class at the last presentation, for the harness (B7 test 8).
-  private var presenterClass = "-"
+  /// What the app had presented on top when this dialog last presented (an RN
+  /// `Modal`'s controller, say) - the dialog itself is always in a window of its own.
+  private var appTopClass = "-"
   private var lifetimeDrops = 0
   private var lifetimeRecycles = 0
 
@@ -220,10 +217,8 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     testIDValue = nil
     presentedChange = nil
     actionHandler = nil
-    waitingForTransition = false
-    presentRetries = 0
     presentCount = 0
-    presenterClass = "-"
+    appTopClass = "-"
     perfInstanceId = nitroUiPerfNoInstance
     // The next mount starts live: `dropped` belonged to the mount that just ended.
     dropped = false
@@ -275,49 +270,30 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
       // mount opens once, when its view first has a window (B1).
       return
     }
-    guard let presenter = NitroUiPresentation.topPresenter(for: anchor) else {
-      waitForTransition()
-      return
-    }
-    presentRetries = 0
     let controller = buildAlert()
-    presenterClass = String(describing: type(of: presenter))
+    appTopClass = Self.topPresentedClass(in: anchor.window)
     presentCount += 1
-    presentation.present(controller, from: presenter, animated: true) { [weak self] in
-      self?.publishReport()
-    }
-  }
-
-  /// The top of the presentation chain is animating (an RN `Modal` sliding in, the
-  /// previous alert of a refused dismissal sliding out), and UIKit refuses to present
-  /// from a controller in a transition. Try again when it ends.
-  @MainActor
-  private func waitForTransition() {
-    guard !waitingForTransition else { return }
-    waitingForTransition = true
-    if let coordinator = NitroUiPresentation.transitionInFlight(for: anchor) {
-      coordinator.animate(alongsideTransition: nil) { [weak self] _ in
-        // The coordinator's completion can run before the controller's own
-        // `isBeingPresented` flag clears, so the retry goes one turn later.
-        DispatchQueue.main.async { self?.retryPresent() }
+    // A window of its own, never the app's presentation chain: see
+    // ``NitroUiPresentation/presentInOwnWindow(_:over:animated:prepare:onShown:)`` for the
+    // RN `Modal` it would otherwise strand on screen.
+    let presented = presentation.presentInOwnWindow(
+      controller,
+      over: anchor,
+      animated: true,
+      prepare: { [weak self] root in
+        guard let self, let popover = controller.popoverPresentationController else { return }
+        // Mandatory on iPad, where UIKit throws for an action sheet with no source; the
+        // anchor's box, expressed in the presentation window's coordinates.
+        popover.sourceView = root.view
+        popover.sourceRect = self.anchor.convert(self.anchor.bounds, to: root.view)
+      },
+      onShown: { [weak self] in
+        self?.publishReport()
       }
-      return
+    )
+    if !presented {
+      presentCount -= 1
     }
-    // No coordinator to wait on (a transition with no animation): try next turn, a
-    // bounded number of times so a chain that never settles cannot spin forever.
-    presentRetries += 1
-    guard presentRetries <= 60 else {
-      waitingForTransition = false
-      return
-    }
-    DispatchQueue.main.async { [weak self] in self?.retryPresent() }
-  }
-
-  private func retryPresent() {
-    waitingForTransition = false
-    guard !dropped else { return }
-    sync()
-    publishReport()
   }
 
   /// A fresh controller for the current props. `UIAlertController` cannot drop an
@@ -378,12 +354,6 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     }
     if let testIDValue {
       controller.view.accessibilityIdentifier = "\(testIDValue)-dialog"
-    }
-    if isSheet, let popover = controller.popoverPresentationController {
-      // Mandatory on iPad, where UIKit throws for an action sheet with no source, and
-      // the anchor of an iPhone action sheet where iOS anchors one.
-      popover.sourceView = anchor
-      popover.sourceRect = anchor.bounds
     }
     controller.isModalInPresentation = !dismissibleValue
     controller.onDismissed = { [weak self, weak controller] in
@@ -561,8 +531,10 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     } else {
       fields.append("kind=none")
     }
-    fields.append("presenter=\(presenterClass)")
-    fields.append("topPresented=\(topPresentedClass())")
+    fields.append("appTop=\(appTopClass)")
+    fields.append("ownWindow=\(alert.map { presentation.isInOwnWindow($0) } == true ? 1 : 0)")
+    fields.append("topPresented=\(Self.topPresentedClass(in: anchor.window))")
+    fields.append("windows=\(Self.visibleWindowCount(near: anchor.window))")
     fields.append("drops=\(lifetimeDrops)")
     fields.append("recycles=\(lifetimeRecycles)")
     let line = fields.joined(separator: ";")
@@ -571,20 +543,33 @@ final class HybridNitroUiDialog: HybridNitroUiDialogSpec, RecyclableView {
     reportLock.unlock()
   }
 
-  /// The class of the top-most presented controller of the key window, or `-`.
-  private func topPresentedClass() -> String {
-    let window = anchor.window
-      ?? UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .flatMap { $0.windows }
-        .first { $0.isKeyWindow }
-    guard var top = window?.rootViewController else { return "-" }
+  /// The app's window: the anchor's, or the scene's key window that is not one of ours.
+  private static func appWindow(_ window: UIWindow?) -> UIWindow? {
+    if let window { return window }
+    return UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .flatMap { $0.windows }
+      .first { !($0.rootViewController is NitroUiPresentationRootController) && !$0.isHidden }
+  }
+
+  /// The class of the top-most controller presented in the app's window, or `-`.
+  static func topPresentedClass(in window: UIWindow?) -> String {
+    guard var top = appWindow(window)?.rootViewController else { return "-" }
     var presentedAny = false
     while let next = top.presentedViewController {
       top = next
       presentedAny = true
     }
     return presentedAny ? String(describing: type(of: top)) : "-"
+  }
+
+  /// How many presentation windows (ours) are visible in the app's scene: a leaked
+  /// window is one that is still here with nothing in it.
+  static func visibleWindowCount(near window: UIWindow?) -> Int {
+    guard let scene = appWindow(window)?.windowScene else { return 0 }
+    return scene.windows.filter {
+      $0.rootViewController is NitroUiPresentationRootController && !$0.isHidden
+    }.count
   }
 
   private func mark(_ kind: NitroUiPerfKind) {
