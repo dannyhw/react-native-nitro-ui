@@ -76,6 +76,7 @@ import {
   findReusableCheck,
   gateLogStoreDir,
   isFailedRunWithLog,
+  isUsageProbe,
   lastLogLine,
   ledgerFileName,
   ledgerLineFromRun,
@@ -3106,6 +3107,20 @@ function parseStageOption({ rest, command }) {
 
 async function main(argv) {
   const [command, ...rest] = argv;
+  // A usage probe is answered before anything is resolved, launched or recorded. `gate.mjs
+  // bench --help` used to resolve as the bench gate with a `--help` filter, launch
+  // `scripts/bench/run.mjs --help` - which prints its usage and exits 2 - and append
+  // `bench:--help FAIL` to the branch ledger (X16 item 3, twice: G7b's and A6b's tables). A
+  // FAIL row is *evidence*: `table` sorts it first, `status` calls the branch red, and
+  // `export --task` writes a scrubbed failure excerpt for a command that measured nothing.
+  // `rest` is every argument on either side of `--`, which is the point: a probe is the user
+  // asking how to spell something, so where they put the flag decides nothing. The answer is
+  // this script's own usage, because that is the file they were holding; the runner's own
+  // flags come from running the runner.
+  if (isUsageProbe(command, rest)) {
+    process.stdout.write(USAGE);
+    return 0;
+  }
   if (command == null || command === '--help' || command === '-h') {
     process.stdout.write(USAGE);
     return 0;
