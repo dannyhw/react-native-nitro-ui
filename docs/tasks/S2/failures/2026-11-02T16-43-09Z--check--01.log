@@ -1,0 +1,170 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T16:43:09.676Z on code tree `6313c9dc93d7` at HEAD `cbf7ac3` (branch `task/S2-bottomsheet-spike`)
+- Command: `bun run check`
+- Result: fail, exit 1, 146564 ms
+- Load: start 3.99, end 2.97, median 4.03, max 5.68
+- Device: none recorded (not a device gate)
+- Full log: `task/S2-bottomsheet-spike/check-2026-11-02T16-43-09.445Z.log` (<store>/task/S2-bottomsheet-spike/check-2026-11-02T16-43-09.445Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 298 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/task-ready.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/component-coverage.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS src/__tests__/useSizingId.test.tsx
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS src/__tests__/hostReport.test.tsx
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/gate-logs.test.js (44.525 s)
+PASS scripts/__tests__/gate.test.js (47.312 s)
+PASS scripts/__tests__/ci-workflows.test.js (52.523 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (73.313 s)
+PASS scripts/__tests__/bench-gate.test.js (142.29 s)
+
+Test Suites: 62 passed, 62 total
+Tests:       1641 passed, 1641 total
+Snapshots:   0 total
+Time:        142.547 s, estimated 144 s
+Ran all test suites.
+──────── test:native — skipped, 0.0s ─────────────────────────────────────────────
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 5 passed, 1 failed, 11 skipped in 146.5s
+check: failed step(s): typecheck
+check: not started after the first failure: test:native, test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: typecheck ─────────────────────────────────────────────────────
+$ tsc
+src/spike/SheetProto/NitroUiSheetProtoConfig.ts(30,5): error TS2353: Object literal may only specify known properties, and 'hybridRef' does not exist in type '{ presented: AttributeValue<boolean, boolean>; detent: AttributeValue<string, string>; dismissible: AttributeValue<boolean, boolean>; ... 5 more ...; onSheetBox?: AttributeValue<...> | undefined; }'.
+error: script "check" exited with code 1
+gate: check FAIL in 146.6 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+```

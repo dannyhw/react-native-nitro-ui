@@ -1,0 +1,78 @@
+# Failure excerpt — harness:ios:Slider
+
+- Ran: 2026-11-02T09:35:27.369Z on code tree `ca5089fd3abc` at HEAD `605b7e7` (branch `task/G10-component-followups`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Slider`
+- Result: fail, exit 1, 21192 ms
+- Load: start 2.47, end 2.81, median 2.81, max 2.97
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G10-y963t`
+- Full log: `task/G10-component-followups/harness+ios+Slider-2026-11-02T09-35-27.369Z.log` (<store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-35-27.369Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › renders a range whose two ends are the wrong way round`
+- `expected [ 1 ] to deeply equal [ 5 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-35-27.369Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G10-y963t (still live)
+  |   G10-y963t                G10          both              pair-a
+  |   T19-18jd1                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.81 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Slider
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree ca5089fd3abc, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.47/2.78 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G10-component-followups/harness+ios+Slider-2026-11-02T09-35-27.369Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › renders a range whose two ends are the wrong way round
+
+    expected [ 1 ] to deeply equal [ 5 ]
+
+      [0m [90m 1736 |[39m         [32m`complete=${JSON.stringify(events.complete)}`[39m
+       [90m 1737 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 1738 |[39m     expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m5[39m])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 1739 |[39m     expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m5[39m])[33m;[39m
+       [90m 1740 |[39m     expect(events[33m.[39mchange[33m.[39mevery((value) [33m=>[39m value [33m===[39m [35m5[39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1741 |[39m     expect(handle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        19.979 s
+Ran all test suites matching Slider.
+
+
+
+```

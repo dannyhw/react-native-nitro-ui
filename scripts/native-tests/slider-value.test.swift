@@ -110,6 +110,69 @@ struct SliderValueTest {
     checkEquals(quantize(0.25, 0, 1, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
     checkEquals(quantize(1.5, 0, 3, 1), 2, "an integer-valued tie is the same either way")
 
+    // A tie *minus one bit* is not a tie. `floor(x + 0.5)` — the spelling Kotlin
+    // carried until 2026-11 — perturbs the value before rounding it, and the
+    // perturbation rounds: `(0.21 - 0.1) / 0.22` is 0.49999999999999994, nearer 0
+    // than 1, and `+ 0.5` on it is exactly 1.0 because the sum has no room for the
+    // difference. Android therefore answered one whole step above iOS on these
+    // ranges. The three vectors below are the same rule seen through `quantize`;
+    // the ladder after them is the class, not the instance.
+    let justUnder = (0.21 - 0.1) / 0.22
+    check(justUnder < 0.5, "the step count is a hair under a tie, not one")
+    check(justUnder + 0.5 == 1.0, "...and adding a half first is what loses the difference")
+    checkEquals(NitroUiSliderValue.roundHalfAway(justUnder), 0, "a hair under a tie rounds down")
+    checkEquals(NitroUiSliderValue.roundHalfAway(-justUnder), 0, "...and so does its mirror image")
+    checkEquals(quantize(0.21, 0.1, 3.1, 0.22), 0.1, "0.21 on a 0.1 + n*0.22 grid is the stop below")
+    checkEquals(quantize(-0.89, -1, 2, 0.22), -1, "...including on a grid that starts below zero")
+    checkEquals(quantize(0.31, 0.2, 2.2, 0.22), 0.2, "...and on a grid with a fractional minimum")
+
+    // A ladder through a tie at every magnitude the rule can be asked about, with
+    // each rung's two neighbours. The rung rounds away from zero, the bit below it
+    // rounds down and the bit above rounds up — which is what a rule that shifts
+    // the value before rounding it cannot survive, however it is spelled. Kotlin's
+    // twin uses `BigDecimal` as the reference because there is no `BigDecimal`
+    // here; both are the same definition.
+    // A ladder through ties at every magnitude the rule can be asked about, each
+    // rung with its two neighbouring doubles. The rung rounds away from zero; the
+    // neighbour on the near side rounds back down to the integer below it and the
+    // one on the far side rounds up. A rule that shifts the value before rounding
+    // it — `floor(x + 0.5)`, the spelling Kotlin carried until now — cannot survive
+    // the near-side rung at any magnitude where the shift is comparable to one ulp,
+    // which is what the rungs approaching 2^51 are for. Kotlin's twin uses
+    // `BigDecimal` as the reference because there is no `BigDecimal` in Swift; both
+    // are the same definition.
+    //
+    // The rungs are half-integers, `odd / 2`, because those are the only ties a
+    // double can hold: `(k + 0.5) * 2^n` is a whole number for n >= 1, and a whole
+    // number is not a tie. Every odd numerator below 2^53 is exact.
+    var oddNumerators: [Int64] = Array(stride(from: Int64(1), through: 81, by: 2))
+    // A few rungs around each power of two, up to where the ulp of a double reaches
+    // the half that makes a tie in the first place.
+    for exponent in 6...50 {
+      let top = (Int64(1) << (exponent + 1)) - 1
+      for delta in stride(from: Int64(-4), through: 4, by: 2) {
+        oddNumerators.append(top + delta)
+      }
+    }
+    for odd in oddNumerators {
+      let magnitude = Double(odd) / 2.0
+      let whole = floor(magnitude)
+      for sign in [1.0, -1.0] {
+        let rung = magnitude * sign
+        // Taken on the magnitude, so "near/far side" means near/far from zero on
+        // both halves of the line.
+        let nearSide = magnitude.nextDown * sign
+        let farSide = magnitude.nextUp * sign
+        check(nearSide != rung && rung != farSide, "a rung has two neighbours")
+        checkEquals(NitroUiSliderValue.roundHalfAway(rung), (whole + 1) * sign,
+                    "a rung rounds away from zero")
+        checkEquals(NitroUiSliderValue.roundHalfAway(nearSide), whole * sign,
+                    "the neighbour on the near side of a rung rounds back to the integer below")
+        checkEquals(NitroUiSliderValue.roundHalfAway(farSide), (whole + 1) * sign,
+                    "the neighbour on the far side rounds up too")
+      }
+    }
+
     // Which ranges a platform's own stepped control can draw.
     let tenths = NitroUiSliderValue.division(minimum: 0, maximum: 1, step: 0.1)
     check(tenths?.wholeSteps == 10 && tenths?.endsOnStep == true, "0...1 by tenths ends on a step")

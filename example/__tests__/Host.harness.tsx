@@ -47,6 +47,7 @@ import {
 } from 'react-native-harness';
 import { userEvent } from '@react-native-harness/ui';
 import { Host, Switch, nitroUiCore } from 'react-native-nitro-ui';
+import { waitForHandle } from './handles';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -139,6 +140,18 @@ async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
 
 async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
   return await render(ui, { timeout: timeoutMs });
+}
+
+/**
+ * Wait for a Switch's `hybridRef` handle to exist, then hand it back.
+ *
+ * `render` and `boxOf` resolve when the view is laid out, and the callback runs on a
+ * commit after that, so `log.handles[id]` read straight after a mount can be
+ * `undefined` (the Host suites lost handles this way under load). The wait is on
+ * existence only. Every value a test asserts is still read after it, unchanged.
+ */
+function handleOf(log: Log, id: string): Promise<SwitchHandle> {
+  return waitForHandle(() => log.handles[id], { what: `"${id}"` });
 }
 
 /**
@@ -394,12 +407,13 @@ describe('Host · hosted controls are still controls', () => {
     // and a plain RN view is reliably queryable where a native container is not.
     const box = await boxOf('tap-host');
     expect([Math.round(box.width), Math.round(box.height)]).toEqual([300, 140]);
+    const toggle = await handleOf(log, 'tap-0');
 
     const hit = await pressFirstControl('tap-host', 'tap-0');
     expect(hit).toBe('tap-0');
     expect(log.events).toEqual(['tap-0']);
     expect(log.accepted['tap-0']).toBe(true);
-    expect(log.handles['tap-0']?.value).toBe(true);
+    expect(toggle.value).toBe(true);
     unmount();
   });
 
@@ -412,6 +426,7 @@ describe('Host · hosted controls are still controls', () => {
       </View>
     );
     await boxOf('reject-0');
+    await handleOf(log, 'reject-0');
     const first = await pressFirstControl('reject-host', 'reject-0');
     expect(first).toBe('reject-0');
     // The app refused, so the value JS owns never moved — and the control must have
@@ -448,18 +463,19 @@ describe('Host · hosted controls are still controls', () => {
       </View>
     );
     await boxOf('write-0');
-    expect(log.handles['write-0']?.value).toBe(false);
+    const toggle = await handleOf(log, 'write-0');
+    expect(toggle.value).toBe(false);
     log.write['write-0']?.(true);
     await settle(400);
     // The handle records the write, but a handle is the model's last JS prop, not what
     // is drawn: a Host whose composition never recomposed would read the same here
     // (review S6). The press is the witness — a Switch still showing `false` would ask
     // for `true`, and only one showing `true` asks to go back.
-    expect(log.handles['write-0']?.value).toBe(true);
+    expect(toggle.value).toBe(true);
     expect(log.events).toEqual([]);
     expect(await pressFirstControl('write-host', 'write-0')).toBe('write-0');
     expect(log.requests).toEqual(['write-0:false']);
-    expect(log.handles['write-0']?.value).toBe(false);
+    expect(toggle.value).toBe(false);
     unmount();
   });
 
@@ -530,7 +546,7 @@ describe('Host · hosted controls are still controls', () => {
       </View>
     );
     await boxOf('off-0');
-    expect(log.handles['off-0']?.disabled).toBe(true);
+    expect((await handleOf(log, 'off-0')).disabled).toBe(true);
     expect(await pressFirstControl('off-host', 'off-0')).toBeNull();
     expect(log.events).toEqual([]);
 
@@ -1137,6 +1153,7 @@ if (Platform.OS === 'android') {
       const box = await boxOf('s2-host');
       await boxOf('s2-a');
       await boxOf('s2-b');
+      const hiddenToggle = await handleOf(s2Log, 's2-b');
 
       // The write, while `display: none` still hides the child.
       s2Log.write['s2-b']?.(true);
@@ -1144,7 +1161,7 @@ if (Platform.OS === 'android') {
       // JavaScript has the value and sent the prop; that half is easy and only the
       // premise. (Read off the handle rather than `accepted`: this is a JS write, which
       // never passes through `onValueChange`.)
-      expect(s2Log.handles['s2-b']?.value).toBe(true);
+      expect(hiddenToggle.value).toBe(true);
 
       // Hidden is still hidden: a value change must not put the child back in the
       // drawing, so the only answer a sweep can get is from the shown child.
@@ -1481,6 +1498,7 @@ if (Platform.OS === 'android') {
         </View>
       );
       const child = await boxOf('ios-tap-0');
+      const toggle = await handleOf(log, 'ios-tap-0');
       const hit = await probeAt(
         child.x + child.width / 2,
         child.y + child.height / 2,
@@ -1488,7 +1506,7 @@ if (Platform.OS === 'android') {
         log
       );
       expect(hit).toBe('ios-tap-0');
-      expect(log.handles['ios-tap-0']?.value).toBe(true);
+      expect(toggle.value).toBe(true);
       unmount();
     });
   });

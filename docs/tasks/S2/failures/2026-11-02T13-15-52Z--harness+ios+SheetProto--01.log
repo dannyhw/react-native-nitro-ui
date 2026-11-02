@@ -1,0 +1,128 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T13:15:52.866Z on code tree `8439c4955648` at HEAD `bd64b7e` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 66598 ms
+- Load: start 5.69, end 4.08, median 4.98, max 5.69
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-15-52.866Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-15-52.866Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and at their own height when the detent is fit`
+- `expected 0 to be greater than 100`
+- `● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one`
+- `● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open`
+- `● SheetProto · React Native children in a presented sheet › presents from inside an RN Modal, at the Modal’s width`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses 50 times and keeps nothing`
+- `expected 1 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-15-52.866Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (still live)
+  |   S2-7bluv                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.08 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 80 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 8439c4955648, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.69/6.95 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-15-52.866Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and at their own height when the detent is fit
+
+    expected 0 to be greater than 100
+
+      [0m [90m 156 |[39m     [90m// below shows this one can actually report.[39m
+       [90m 157 |[39m     expect(box[33m.[39mwidth)[33m.[39mtoBeGreaterThan([35m100[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 158 |[39m     expect(content[33m.[39mwidth)[33m.[39mtoBeGreaterThan([35m100[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 159 |[39m     expect([33mMath[39m[33m.[39mabs(content[33m.[39mwidth [33m-[39m box[33m.[39mwidth))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m 160 |[39m     [90m// `fit`: the height is the children's own. 240 is what the fixture builds and[39m
+       [90m 161 |[39m     [90m// is no detent's height on any screen this runs on (AGENTS' fixture rule).[39m[0m
+
+  ● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one
+
+    No box for medium within 10000ms.
+
+      [0m [90m 91 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 92 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 93 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms.`[39m)[33m;[39m
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 94 |[39m     }
+       [90m 95 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 96 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open
+
+    No a dismissal of any kind within 8000ms.
+
+      [0m [90m 91 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 92 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 93 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms.`[39m)[33m;[39m
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 94 |[39m     }
+       [90m 95 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 96 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › presents from inside an RN Modal, at the Modal’s width
+
+    No box inside an RN Modal within 15000ms.
+
+      [0m [90m 91 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 92 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 93 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms.`[39m)[33m;[39m
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 94 |[39m     }
+       [90m 95 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 96 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses 50 times and keeps nothing
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 315 |[39m
+       [90m 316 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m) {
+      [31m[1m>[22m[39m[90m 317 |[39m       expect([33mNumber[39m(afterFields[33m.[39mliveControllers [33m?[39m[33m?[39m [32m'-1'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 318 |[39m       expect([33mNumber[39m(afterFields[33m.[39mhandlerViews [33m?[39m[33m?[39m [32m'-1'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 319 |[39m     } [36melse[39m {
+       [90m 320 |[39m       expect([33mNumber[39m(afterFields[33m.[39mliveSheetRoots [33m?[39m[33m?[39m [32m'-1'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 1 passed, 6 total
+Snapshots:   0 total
+Time:        64.575 s
+Ran all test suites matching SheetProto.
+
+
+
+```

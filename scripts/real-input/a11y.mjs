@@ -811,6 +811,15 @@ export function iosStabilityNote(stability, settledAnchor) {
   );
 }
 
+/** The scales a screen actually has, and the labels `firstReadScale` gives them. */
+const SCREEN_SCALES = [
+  { near: 1 / 3, label: '⅓' },
+  { near: 1 / 2, label: '½' },
+  { near: 1 / 4, label: '¼' },
+  { near: 2, label: '2×' },
+  { near: 3, label: '3×' },
+];
+
 /**
  * The scale ratio between the first read's box and the settled one, or `null` when there is no
  * single ratio to name.
@@ -824,7 +833,9 @@ export function iosStabilityNote(stability, settledAnchor) {
  *
  * A label, not a number: `⅓`, `½`, `¼`, `2×`, `3×`, or the raw ratio to three places. All four
  * components have to share one ratio within half a percent, and it has to differ from 1, so a box
- * that merely happens to be smaller is not called a scaled read.
+ * that merely happens to be smaller is not called a scaled read. A raw ratio is still a uniform
+ * one, but it is not a scale a screen has, so only `screenScale` (below) is the stale-snapshot
+ * question; this is the one the note quotes.
  *
  * @param {{x: number, y: number, width: number, height: number}} [first]
  * @param {{x: number, y: number, width: number, height: number}} [settled]
@@ -852,17 +863,28 @@ export function firstReadScale(first, settled) {
   // components of two real reads never divide to the same digit exactly - boxes are rounded on
   // their way out of the test manager, so 108.33/325 is 0.333323 rather than 1/3 - which is why
   // these are comparisons with a tolerance and not key lookups.
-  const named = [
-    { near: 1 / 3, label: '⅓' },
-    { near: 1 / 2, label: '½' },
-    { near: 1 / 4, label: '¼' },
-    { near: 2, label: '2×' },
-    { near: 3, label: '3×' },
-  ];
-  const found = named.find(
+  const found = SCREEN_SCALES.find(
     (candidate) => Math.abs(ratio - candidate.near) < 0.002
   );
   return found == null ? `${ratio.toFixed(3)}×` : found.label;
+}
+
+/**
+ * `firstReadScale`'s label when it names a screen scale, and `null` for any other ratio.
+ *
+ * The stale-snapshot question, and the only one the WARN and the note's "another render scale"
+ * sentence ask. A first read at 0.8× on all four components is uniform, but no screen renders at
+ * 0.8×: that is a control animating in or a layout pass at another size, which is a note's business
+ * and not a summary's (X17 item 1). One function rather than a label check at each call site, for
+ * the reason `firstReadScale` gives.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} [first]
+ * @param {{x: number, y: number, width: number, height: number}} [settled]
+ * @returns {string | null}
+ */
+export function screenScale(first, settled) {
+  const label = firstReadScale(first, settled);
+  return SCREEN_SCALES.some((scale) => scale.label === label) ? label : null;
 }
 
 /**
@@ -874,9 +896,10 @@ export function firstReadScale(first, settled) {
  * forty per-case notes is reported as a clean run by anyone who reads the verdict column. So it goes
  * on the summary, and the exit code does not change, because "the boxes are right" is still true.
  *
- * Only a named scale warns. Two reads whose boxes differ by some arbitrary ratio are a control that
- * moved (or a tree still being laid out), which is what the notes are for; all four components
- * dividing by one ratio is the shape of a snapshot taken at another render scale, which is the shape
+ * Only a named scale warns (`screenScale`). Two reads whose boxes differ by some arbitrary ratio are
+ * a control that moved (or a tree still being laid out), which is what the notes are for - and so
+ * are four components that share a ratio no screen has, like 0.8×. All four dividing by one of a
+ * screen's own scales is the shape of a snapshot taken at another render scale, which is the shape
  * that failed twice on maintainer-mac-1 and that nobody saw in the report.
  *
  * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
@@ -886,7 +909,7 @@ export function firstReadScale(first, settled) {
  */
 export function iosStabilityWarning(stability, settledAnchor) {
   if (stability?.firstAnchor == null) return null;
-  const label = firstReadScale(stability.firstAnchor, settledAnchor);
+  const label = screenScale(stability.firstAnchor, settledAnchor);
   if (label == null) return null;
   return (
     `its first accessibility read was this box at ${label} scale — a stale snapshot ` +
@@ -922,19 +945,28 @@ export function reportIosStability(check, stability, settledAnchor) {
 /**
  * "…and the first read is this box at ⅓ scale" — said only when it is true.
  *
- * One call to `firstReadScale`, which is the same question `ios.mjs` asks when it decides whether to
- * WARN. Two implementations of "is this the screen-scale shape" would eventually disagree, and the
- * disagreement would look like a warning that contradicts the note printed beside it.
+ * The render-scale sentence comes from `screenScale`, which is the same question `ios.mjs` asks
+ * when it decides whether to WARN. Two implementations of "is this the screen-scale shape" would
+ * eventually disagree, and the disagreement would look like a warning that contradicts the note
+ * printed beside it. A uniform ratio that is not a screen scale is still quoted - a reader should
+ * not have to divide four numbers - but as a box that moved, which is what the missing WARN says.
  *
  * @param {{x: number, y: number, width: number, height: number}} [first]
  * @param {{x: number, y: number, width: number, height: number}} [settled]
  */
 function describeFirstReadScale(first, settled) {
-  const label = firstReadScale(first, settled);
-  if (label == null) return '';
+  const scale = screenScale(first, settled);
+  if (scale != null) {
+    return (
+      ` — the first read is this box at ${scale} scale, the shape of a snapshot taken at ` +
+      'another render scale rather than a control that moved'
+    );
+  }
+  const ratio = firstReadScale(first, settled);
+  if (ratio == null) return '';
   return (
-    ` — the first read is this box at ${label} scale, the shape of a snapshot taken at another ` +
-    'render scale rather than a control that moved'
+    ` — the first read is this box at ${ratio} on every component, which is no screen's ` +
+    'scale, so it reads as a control that moved'
   );
 }
 

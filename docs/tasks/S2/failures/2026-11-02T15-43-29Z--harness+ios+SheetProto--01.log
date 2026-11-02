@@ -1,0 +1,113 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T15:43:29.722Z on code tree `8da1fa4270de` at HEAD `2932ec4` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 95306 ms
+- Load: start 10.25, end 4.58, median 6.20, max 10.25
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing`
+- `● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own`
+- `● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (still live)
+  |   S2-7bluv                 S2           both              pair-a
+  |   T19-c14ka                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.58 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 68 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:SheetProto
+gate: node ../scripts/harness.mjs --harnessRunner ios SheetProto (cwd example)
+gate: code tree 8da1fa4270de at HEAD 2932ec4
+gate: git tree 84add087c59d with a DIRTY worktree (not reusable)
+gate: log task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log
+gate:       <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 8da1fa4270de, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.25/6.29 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses until it has done it 50 times and keeps nothing
+
+    No exitStuck in s2: ios churn-50 attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=noController contentW=402 corrections=1 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=35 inModalChain=noController maxVisibleH=271 minVisibleH=0 ownWindow=0 presented=0 samples=60 settledBoundsH=274 settledVisibleH=0 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 modalHostsInWindow=0 presentedDepth=1 topController=UIViewController presentations=56 dismissals=56 closes=56 closedDuringEntry=2 entryLandedFirst=55 releasedAfterExit=55 modalHostsHolding=0 appTopController=UIViewController appMarkerOwner=app appMarkerView=RCTParagraphComponentView sheetPointOwner=app sheetPointView=RCTViewComponentView probeVersion=2 markerReachable=notFound drops=5
+
+      [0m [90m 370 |[39m   [36mif[39m (raw [33m===[39m undefined [33m&&[39m whenAbsent [33m!==[39m undefined) [36mreturn[39m whenAbsent[33m;[39m
+       [90m 371 |[39m   [36mif[39m (raw [33m===[39m undefined) {
+      [31m[1m>[22m[39m[90m 372 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${key} in ${fields.line ?? '<no measurement line>'}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 373 |[39m   }
+       [90m 374 |[39m   [36mreturn[39m [33mNumber[39m(raw)[33m;[39m
+       [90m 375 |[39m }[0m
+
+  ● SheetProto · React Native children in a presented sheet › is untouched by an RN Modal when presented in a window of its own
+
+    a fit sheet in its own window grew by 0: s2: ios modal-over (own window)-up attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=sheetPresentation contentRect=8,602+386x230 contentW=402 corrections=0 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=0 inModalChain=0 maxVisibleH=271 minVisibleH=271 ownWindow=1 presented=1 samples=30 settledBoundsH=274 settledVisibleH=271 touchHandler=1 userDismissals=0 windowLevel=2001 liveControllers=0 handlerViews=1 ownWindows=0 ownWindowPresents=2 modalHostsInWindow=1 presentedDepth=2 topController=RCTFabricModalHostViewController presentations=59 dismissals=57 closes=57 closedDuringEntry=2 entryLandedFirst=58 exitTakenWithoutDidDismiss=2 releasedAfterExit=58 modalHostsHolding=0 appTopController=RCTFabricModalHostViewController appMarkerOwner=sheet appMarkerView=UIDimmingView sheetPointOwner=sheet sheetPointView=UIDimmingView probeVersion=2 markerReachable=notFound drops=8 || s2: ios modal-over (own window)-fit-5-rows attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=noController contentRect=8,602+386x230 contentW=402 corrections=0 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=0 inModalChain=noController maxVisibleH=271 minVisibleH=271 ownWindow=1 presented=1 samples=30 settledBoundsH=274 settledVisibleH=271 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 ownWindows=0 ownWindowPresents=2 modalHostsInWindow=1 presentedDepth=2 topController=RCTFabricModalHostViewController presentations=59 dismissals=57 closes=57 closedDuringEntry=2 entryLandedFirst=58 exitTakenWithoutDidDismiss=2 releasedAfterExit=59 modalHostsHolding=0 appTopController=RCTFabricModalHostViewController appMarkerOwner=modal appMarkerView=RCTViewComponentView sheetPointOwner=modal sheetPointView=RCTViewComponentView probeVersion=2 markerReachable=notFound drops=8: expected 160 to be less than or equal to 4
+
+      [0m [90m 1126 |[39m           [33mMath[39m[33m.[39mabs(delta [33m-[39m [33mROW_HEIGHT[39m [33m*[39m [35m2[39m)[33m,[39m
+       [90m 1127 |[39m           [32m`a fit sheet in its own window grew by ${String(delta)}: ${up.line} || ${grew.line}`[39m
+      [31m[1m>[22m[39m[90m 1128 |[39m         )[33m.[39mtoBeLessThanOrEqual([35m4[39m)[33m;[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1129 |[39m       }
+       [90m 1130 |[39m     }
+       [90m 1131 |[39m[0m
+
+  ● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain
+
+    the sheet survived a Modal whose controller was holding it: s2: ios modal-over (in chain)-after-modal-close attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=noController contentRect=8,602+386x230 contentW=402 corrections=0 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=0 inModalChain=noController maxVisibleH=271 minVisibleH=271 ownWindow=0 presented=1 samples=60 settledBoundsH=274 settledVisibleH=271 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 ownWindows=0 ownWindowPresents=2 modalHostsInWindow=1 presentedDepth=2 topController=RCTFabricModalHostViewController presentations=60 dismissals=57 closes=57 closedDuringEntry=2 entryLandedFirst=59 exitTakenWithoutDidDismiss=3 releasedAfterExit=60 modalHostsHolding=0 appTopController=RCTFabricModalHostViewController appMarkerOwner=modal appMarkerView=UIView sheetPointOwner=modal sheetPointView=UIView probeVersion=2 markerReachable=notFound drops=9: expected 0 to be greater than or equal to 1
+
+      [0m [90m 1218 |[39m         taken[33m,[39m
+       [90m 1219 |[39m         [32m`the sheet survived a Modal whose controller was holding it: ${after.line}`[39m
+      [31m[1m>[22m[39m[90m 1220 |[39m       )[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                               [31m[1m^[22m[39m
+       [90m 1221 |[39m       [90m// G11's question, asked of the shape that can actually answer it: RN closed[39m
+       [90m 1222 |[39m       [90m// the `Modal` by dismissing the Modal's own controller, and the sheet was[39m
+       [90m 1223 |[39m       [90m// that controller's presentation. Did the `Modal` itself get dismissed too?[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 7 passed, 10 total
+Snapshots:   0 total
+Time:        94.044 s
+Ran all test suites matching SheetProto.
+gate: harness:ios:SheetProto FAIL in 95.3 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T15-43-29.220Z.log (4 probe(s))
+
+```

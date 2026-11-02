@@ -1,0 +1,177 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T19:52:35.876Z on code tree `ce46251baad7` at HEAD `c6502aa` (branch `task/M2-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 281220 ms
+- Load: start 14.32, end 11.06, median 33.09, max 78.90
+- Device: none recorded (not a device gate)
+- Full log: `task/M2-merge/check-2026-11-02T19-52-35.345Z.log` (<store>/task/M2-merge/check-2026-11-02T19-52-35.345Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/lease.test.js (42.997 s)`
+- `● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait`
+- `● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)`
+- `FAIL scripts/__tests__/ci-workflows.test.js (61.957 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang`
+- `expect(received).toEqual(expected) // deep equality`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2852 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/emulator-launch.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+FAIL scripts/__tests__/lease.test.js (42.997 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+PASS scripts/__tests__/lease-pool-cli.test.js (44.033 s)
+PASS scripts/__tests__/lease-metro-port.test.js (45.288 s)
+FAIL scripts/__tests__/ci-workflows.test.js (61.957 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "countLine": "diagnostics: 4 file(s) in harness-diag",
+    +   "countLine": "diagnostics: 3 file(s) in harness-diag",
+        "elapsedMs": Any<Number>,
+        "status": 0,
+      }
+
+      1336 |         countLine: ran.countLine,
+      1337 |         elapsedMs: Math.round(ran.elapsedMs / 1000),
+    > 1338 |       }).toEqual({
+           |          ^
+      1339 |         status: 0,
+      1340 |         countLine: 'diagnostics: 4 file(s) in harness-diag',
+      1341 |         // The assertion the whole case exists for: bounded, not "eventually". Four
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:1338:10)
+
+PASS scripts/__tests__/gate-check.test.js (88.819 s)
+PASS scripts/__tests__/gate.test.js (91.105 s)
+PASS scripts/__tests__/gate-logs.test.js (140.29 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (160.087 s)
+PASS scripts/__tests__/bench-gate.test.js (262.176 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/lease.test.js (42.997 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+FAIL scripts/__tests__/ci-workflows.test.js (61.957 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step returns when every tool it asks would hang
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Object {
+    -   "countLine": "diagnostics: 4 file(s) in harness-diag",
+    +   "countLine": "diagnostics: 3 file(s) in harness-diag",
+        "elapsedMs": Any<Number>,
+        "status": 0,
+      }
+
+      1336 |         countLine: ran.countLine,
+      1337 |         elapsedMs: Math.round(ran.elapsedMs / 1000),
+    > 1338 |       }).toEqual({
+           |          ^
+      1339 |         status: 0,
+      1340 |         countLine: 'diagnostics: 4 file(s) in harness-diag',
+      1341 |         // The assertion the whole case exists for: bounded, not "eventually". Four
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:1338:10)
+
+
+Test Suites: 2 failed, 62 passed, 64 total
+Tests:       3 failed, 1664 passed, 1667 total
+Snapshots:   0 total
+Time:        264.125 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 281.2 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+```

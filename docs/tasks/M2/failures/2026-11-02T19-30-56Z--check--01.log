@@ -1,0 +1,179 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T19:30:56.824Z on code tree `ce46251baad7` at HEAD `da27761` (branch `task/M2-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 384532 ms
+- Load: start 17.84, end 21.67, median 52.83, max 75.07
+- Device: none recorded (not a device gate)
+- Full log: `task/M2-merge/check-2026-11-02T19-30-56.334Z.log` (<store>/task/M2-merge/check-2026-11-02T19-30-56.334Z.log)
+- Scrubbed: 2 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/lease.test.js (55.084 s)`
+- `● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait`
+- `● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)`
+- `FAIL scripts/__tests__/ci-workflows.test.js (74.162 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "hw.gpu.mode=swift_ind"`
+- `Received string:    "== avd name ==`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2937 — the rest is in the full log above)
+
+```
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+FAIL scripts/__tests__/lease.test.js (55.084 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+PASS scripts/__tests__/lease-metro-port.test.js (56.42 s)
+PASS scripts/__tests__/lease-pool-cli.test.js (57.56 s)
+FAIL scripts/__tests__/ci-workflows.test.js (74.162 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "hw.gpu.mode=swift_ind"
+    Received string:    "== avd name ==
+    nitroui
+    <gave up (spawnSync node ETIMEDOUT)>: node scripts/ci-avd-name.mjs
+    == avd dir ==
+    total 0
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:32 .
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:32 ..
+    drwxr-xr-x@ 4 <user>  staff  128 Nov  2 19:32 nitroui.avd
+    == config.ini (hardware lines) ==
+    grep: <tmp>/nui-ci-diag-DUwKfv/home/<user>/avd/nitroui
+    <gave up (spawnSync node ETIMEDOUT)>: node scripts/ci-avd-name.mjs.avd/config.ini: No such file or directory
+    "
+
+      1440 |       // And giving up did not lose the cheap evidence, because the cheap evidence was
+      1441 |       // read first: the AVD's hardware config is still in the artifact.
+    > 1442 |       expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+           |                                                            ^
+      1443 |         'hw.gpu.mode=swift_ind'
+      1444 |       );
+      1445 |     } finally {
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1442:60)
+
+PASS scripts/__tests__/gate.test.js (140.087 s)
+PASS scripts/__tests__/gate-check.test.js (156.989 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (211.721 s)
+PASS scripts/__tests__/gate-logs.test.js (213.653 s)
+PASS scripts/__tests__/bench-gate.test.js (364.249 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/lease.test.js (55.084 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+FAIL scripts/__tests__/ci-workflows.test.js (74.162 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "hw.gpu.mode=swift_ind"
+    Received string:    "== avd name ==
+    nitroui
+    <gave up (spawnSync node ETIMEDOUT)>: node scripts/ci-avd-name.mjs
+    == avd dir ==
+    total 0
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:32 .
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:32 ..
+    drwxr-xr-x@ 4 <user>  staff  128 Nov  2 19:32 nitroui.avd
+    == config.ini (hardware lines) ==
+    grep: <tmp>/nui-ci-diag-DUwKfv/home/<user>/avd/nitroui
+    <gave up (spawnSync node ETIMEDOUT)>: node scripts/ci-avd-name.mjs.avd/config.ini: No such file or directory
+    "
+
+      1440 |       // And giving up did not lose the cheap evidence, because the cheap evidence was
+      1441 |       // read first: the AVD's hardware config is still in the artifact.
+    > 1442 |       expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+           |                                                            ^
+      1443 |         'hw.gpu.mode=swift_ind'
+      1444 |       );
+      1445 |     } finally {
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1442:60)
+
+
+Test Suites: 2 failed, 62 passed, 64 total
+Tests:       3 failed, 1664 passed, 1667 total
+Snapshots:   0 total
+Time:        366.419 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 384.5 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+```

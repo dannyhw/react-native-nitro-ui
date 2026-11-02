@@ -62,7 +62,6 @@ import {
   Switch,
   nitroUiCore,
 } from 'react-native-nitro-ui';
-
 import {
   forgetPromisedHandles,
   handleOf,
@@ -217,12 +216,9 @@ function settle(ms: number) {
  * harness makes, on a loaded machine.
  *
  * A box whose control was wired with `handleRef` is handed back only once that
- * control's handle has landed as well. The box exists before the `hybridRef` callback
- * has run — on iOS the mount is on main and the callback reaches JS a turn later — and
- * the reads that follow a `boxOf` in this suite go through the handle; asserting the
- * moment the box appeared failed "reports a hosted drag" intermittently on main
- * (G11-merge, 2 of 3 full iOS runs) and on G12's branch. Waiting here rather than at
- * each read is what covers the reads nobody has seen fail yet (`handles.ts`).
+ * control's handle has landed as well (`handles.ts`): the box exists before the
+ * `hybridRef` callback has run, and the reads after a `boxOf` here go through the
+ * handle. Waiting here covers the reads that have no `handleOf` of their own.
  */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
@@ -761,10 +757,8 @@ describe('Host · a hosted Slider is still a Slider', () => {
    * in one turn, so the wait is for delivery to JS rather than for the moves.
    */
   async function drag(id: string, to: number, steps = 4, msPerStep = 0) {
-    // On the handle, not `?.` on the map: a drag sent to a handle that has not landed
-    // yet was a silent no-op, and the test then failed on "no events" — a fixture that
-    // did not wait, reading like a Slider that ignores a drag.
-    (await handleOf(log.sliders, id)).nuiTestDrag(to, steps, msPerStep);
+    const slider = await handleOf(() => log.sliders[id], id);
+    slider.nuiTestDrag(to, steps, msPerStep);
     await settle(msPerStep > 0 ? msPerStep * steps + 500 : 700);
   }
 
@@ -780,9 +774,8 @@ describe('Host · a hosted Slider is still a Slider', () => {
         </Host>
       </View>
     );
-    // `boxOf` hands the box back once the handle has landed too.
     await boxOf('slide-0');
-    expect(log.sliders['slide-0']).toBeDefined();
+    await handleOf(() => log.sliders['slide-0'], 'slide-0');
 
     await drag('slide-0', 0.75);
     const kinds = kindsFor('slide-0');
@@ -838,6 +831,7 @@ describe('Host · a hosted Slider is still a Slider', () => {
       </View>
     );
     await boxOf('write-slide-0');
+    await handleOf(() => log.sliders['write-slide-0'], 'write-slide-0');
     log.writeSlider['write-slide-0']?.(0.4);
     await settle(500);
     // A handle is the model's last JS prop, not what is drawn: a Host whose composition
@@ -861,7 +855,11 @@ describe('Host · a hosted Slider is still a Slider', () => {
       </View>
     );
     await boxOf('disabled-slide-0');
-    expect(log.sliders['disabled-slide-0']?.disabled).toBe(true);
+    const disabledSlider = await handleOf(
+      () => log.sliders['disabled-slide-0'],
+      'disabled-slide-0'
+    );
+    expect(disabledSlider.disabled).toBe(true);
     await drag('disabled-slide-0', 0.6);
     expect(log.slides).toHaveLength(0);
 
@@ -893,18 +891,17 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
       </View>
     );
     await boxOf('bar-0');
-    const handle = log.bars['bar-0'];
-    expect(handle).toBeDefined();
+    const handle = await handleOf(() => log.bars['bar-0'], 'bar-0');
     // The mount write reached the drawing (this is the witness that the reader reads
     // *something* — a control that never drew would answer `displayed=none` forever).
-    await waitForDisplayed(handle!, 'displayed=0.25');
+    await waitForDisplayed(handle, 'displayed=0.25');
 
     log.writeProgress['bar-0']?.(0.75);
-    await waitForDisplayed(handle!, 'displayed=0.75');
+    await waitForDisplayed(handle, 'displayed=0.75');
     // The handle agrees, and that is the weak half kept only to say the two readings
     // are of one control: the report above is what the drawing wrote, the prop below is
     // what JS last sent. A commit that stored without repainting fails the line above.
-    expect(handle!.value).toBe(0.75);
+    expect(handle.value).toBe(0.75);
     unmount();
   });
 
@@ -918,23 +915,27 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
       </View>
     );
     await boxOf('anim-determinate');
-    const spinning = log.bars['anim-indeterminate'];
-    const still = log.bars['anim-determinate'];
-    expect(spinning).toBeDefined();
-    expect(still).toBeDefined();
+    const spinning = await handleOf(
+      () => log.bars['anim-indeterminate'],
+      'anim-indeterminate'
+    );
+    const still = await handleOf(
+      () => log.bars['anim-determinate'],
+      'anim-determinate'
+    );
     // The pair is in one Host: the same composition keeps one indicator animating and
     // does not animate the other, so "the animation gate survived hosting" cannot be a
     // reading of a composition that never started.
-    expect(spinning!.nuiTestIsAnimating()).toBe(true);
-    expect(still!.nuiTestIsAnimating()).toBe(false);
-    await waitForDisplayed(spinning!, 'displayed=indeterminate');
+    expect(spinning.nuiTestIsAnimating()).toBe(true);
+    expect(still.nuiTestIsAnimating()).toBe(false);
+    await waitForDisplayed(spinning, 'displayed=indeterminate');
 
     // Same instance, one prop different: giving the spinning bar a value has to stop it,
     // which is the animation gate answering inside the shared composition rather than
     // only at its own view's attach.
     log.writeProgress['anim-indeterminate']?.(0.2);
-    await waitForDisplayed(spinning!, 'displayed=0.2');
-    expect(spinning!.nuiTestIsAnimating()).toBe(false);
+    await waitForDisplayed(spinning, 'displayed=0.2');
+    expect(spinning.nuiTestIsAnimating()).toBe(false);
     unmount();
   });
 
@@ -954,8 +955,14 @@ describe('Host · a hosted Progress still draws what JS sets', () => {
       </View>
     );
     await boxOf('circle-1');
-    await waitForDisplayed(log.bars['circle-0']!, 'displayed=0.5');
-    await waitForDisplayed(log.bars['circle-1']!, 'displayed=0.5');
+    await waitForDisplayed(
+      await handleOf(() => log.bars['circle-0'], 'circle-0'),
+      'displayed=0.5'
+    );
+    await waitForDisplayed(
+      await handleOf(() => log.bars['circle-1'], 'circle-1'),
+      'displayed=0.5'
+    );
     unmount();
   });
 });
@@ -998,12 +1005,16 @@ describe('Host · a hosted Button still presses', () => {
       </View>
     );
     await boxOf('props-press-0');
-    expect(log.buttons['props-press-0']?.title).toBe('Deploy');
-    expect(log.buttons['props-press-0']?.disabled).toBe(true);
+    const button = await handleOf(
+      () => log.buttons['props-press-0'],
+      'props-press-0'
+    );
+    expect(button.title).toBe('Deploy');
+    expect(button.disabled).toBe(true);
 
     log.setButtonDisabled?.(false);
     await settle(500);
-    expect(log.buttons['props-press-0']?.disabled).toBe(false);
+    expect(button.disabled).toBe(false);
     unmount();
   });
 
@@ -1039,8 +1050,11 @@ describe('Host · a hosted Button still presses', () => {
         </View>
       );
       const host = await boxOf('off-press-host');
-      // The Host's box says nothing about the Button's handle (`handles.ts`).
-      expect((await handleOf(log.buttons, 'off-press-0')).disabled).toBe(true);
+      const button = await handleOf(
+        () => log.buttons['off-press-0'],
+        'off-press-0'
+      );
+      expect(button.disabled).toBe(true);
       expect(await pressRow(host, 'off-press-0', log)).toBeNull();
       expect(log.taps).toEqual([]);
 
@@ -1110,12 +1124,19 @@ describe('Host · four kinds of control, one composition', () => {
     expect(log.acceptedSwitches['mix-sw-0']).toBe(true);
 
     // Slider: a drag through the interaction pipeline, answered with a value.
-    log.sliders['mix-sl-2']?.nuiTestDrag(0.6, 4, 0);
+    (await handleOf(() => log.sliders['mix-sl-2'], 'mix-sl-2')).nuiTestDrag(
+      0.6,
+      4,
+      0
+    );
     await settle(700);
     expect(log.acceptedSliders['mix-sl-2']).toBeCloseTo(0.6, 2);
 
     // Progress: the drawing reports the value JS set.
-    await waitForDisplayed(log.bars['mix-pr-3']!, 'displayed=0.25');
+    await waitForDisplayed(
+      await handleOf(() => log.bars['mix-pr-3'], 'mix-pr-3'),
+      'displayed=0.25'
+    );
 
     // Button: a real press, answered — and it has to be *reachable*, not merely
     // pressable-in-principle. Android aims inside the Host at the rows Compose placed;
@@ -1145,8 +1166,12 @@ describe('Host · four kinds of control, one composition', () => {
       // iOS reaches no SwiftUI `Button` with a harness touch (`Button.harness`, G2), so
       // this half of the mixed batch is read where it can be: the Button's props arrived
       // at the control the Host is drawing. The press is `hosted-button`'s job.
-      expect(log.buttons['mix-btn-1']?.title).toBe('Go 1');
-      expect(log.buttons['mix-btn-1']?.disabled).toBe(false);
+      const button = await handleOf(
+        () => log.buttons['mix-btn-1'],
+        'mix-btn-1'
+      );
+      expect(button.title).toBe('Go 1');
+      expect(button.disabled).toBe(false);
     }
     unmount();
   });
@@ -1361,19 +1386,31 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
     expect(log.acceptedSwitches['mix-sw-0']).toBe(true);
 
     // Slider: a drag through the interaction pipeline.
-    log.sliders['mix-sl-1']?.nuiTestDrag(0.6, 4, 0);
+    (await handleOf(() => log.sliders['mix-sl-1'], 'mix-sl-1')).nuiTestDrag(
+      0.6,
+      4,
+      0
+    );
     await settle(700);
     expect(log.acceptedSliders['mix-sl-1']).toBeCloseTo(0.6, 2);
 
     // Progress: the drawing reports the value JS set (0.25 is this Bar's own seed).
-    await waitForDisplayed(log.bars['mix-pr-2']!, 'displayed=0.25');
+    await waitForDisplayed(
+      await handleOf(() => log.bars['mix-pr-2'], 'mix-pr-2'),
+      'displayed=0.25'
+    );
 
     // Button: its props are on the control the Host is drawing.
-    expect(log.buttons['mix-btn-3']?.title).toBe('Go 3');
+    const button = await handleOf(() => log.buttons['mix-btn-3'], 'mix-btn-3');
+    expect(button.title).toBe('Go 3');
 
     // SegmentedControl: the value React holds is on the hosted control.
-    expect(log.segments['mix-seg-4']?.selectedIndex).toBe(0);
-    expect(log.segments['mix-seg-4']?.options.length).toBe(3);
+    const segment = await handleOf(
+      () => log.segments['mix-seg-4'],
+      'mix-seg-4'
+    );
+    expect(segment.selectedIndex).toBe(0);
+    expect(segment.options.length).toBe(3);
   });
 
   it('keeps the two window-opening controls live in the same Host', async () => {
@@ -1384,10 +1421,11 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
         hostStyle={{ width: 300, height: 420 }}
       />
     );
-    // Props land on both controls on either platform. Read through `handleOf`: nothing
-    // here has waited for a box, so nothing has waited for the handles either.
-    expect((await handleOf(log.pickers, 'mix-pk-5')).options.length).toBe(3);
-    expect((await handleOf(log.dates, 'mix-dp-6')).mode).toBe('date');
+    // Props land on both controls on either platform.
+    const picker = await handleOf(() => log.pickers['mix-pk-5'], 'mix-pk-5');
+    const date = await handleOf(() => log.dates['mix-dp-6'], 'mix-dp-6');
+    expect(picker.options.length).toBe(3);
+    expect(date.mode).toBe('date');
     if (Platform.OS !== 'android') {
       // A SwiftUI `Picker` keeps its menu in the system's own presentation and reports
       // nothing about it, and the dialog below is Material 3's, so there is no window to
@@ -1396,12 +1434,10 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
     }
     // Picker: a choice reaches JS from inside somebody else's composition, and the
     // process-wide menu count is back at 0 because no window of this mount is open.
-    const picker = log.pickers['mix-pk-5'];
-    expect(picker).toBeDefined();
-    picker?.nuiTestSelect(2);
+    picker.nuiTestSelect(2);
     await settle(500);
     expect(log.acceptedPickers['mix-pk-5']).toBe(2);
-    expect(picker?.nuiTestMenuReport()).toContain('live=0');
+    expect(picker.nuiTestMenuReport()).toContain('live=0');
 
     // DatePicker: it presents a dialog from the Host's composition, and an app-side
     // write takes it down again. Pressing the field is an open and never a close - the
@@ -1409,18 +1445,16 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
     // which leaves disabling the control as the way to prove the window is the Host's to
     // lose. Read as a pair (`presented` and `livePresentations`) for the reason on
     // `waitDate`, and left at zero so the next case does not read this one as a leak.
-    const date = log.dates['mix-dp-6'];
-    expect(date).toBeDefined();
-    date!.nuiTestPresent();
+    date.nuiTestPresent();
     const shown = await waitDate(
-      date!,
+      date,
       (r) => r.presented && r.live === 1,
       "the dialog composed by the Host's composition"
     );
     expect(shown.presented).toBe(true);
     log.disableDate['mix-dp-6']?.(true);
     const hidden = await waitDate(
-      date!,
+      date,
       (r) => !r.presented && r.live === 0,
       'the dialog taken down by disabling the control'
     );
@@ -1468,6 +1502,9 @@ if (Platform.OS === 'android') {
       const host = await boxOf('n4-wrap');
       for (const id of [...hostedIds, ...aloneIds]) {
         await boxOf(id);
+        // `read` below turns a missing handle into `''`, which is the hosted answer, so
+        // every handle has to be there before a probe is read.
+        await handleOf(() => log.switches[id], id);
       }
       await settle(400);
 
@@ -1554,6 +1591,7 @@ if (Platform.OS === 'android') {
       // composition is installed against. (Measured here: a real 52 x 48 box, and a press
       // that answers.)
       await boxOf(id);
+      await handleOf(() => log.switches[id], id);
       await settle(600);
       expect(guards().ever).toBe('strategy,preDraw');
       expect(guards().live).toBe('strategy');
@@ -1618,19 +1656,21 @@ if (Platform.OS === 'android') {
         </View>
       );
       await boxOf('a11y-slide');
-      const handle = log.sliders['a11y-slide'];
-      expect(handle).toBeDefined();
+      const handle = await handleOf(
+        () => log.sliders['a11y-slide'],
+        'a11y-slide'
+      );
 
-      handle!.nuiTestAccessibilityStep(1);
+      handle.nuiTestAccessibilityStep(1);
       await settle(700);
-      const report = handle!.nuiTestAccessibilityStepReport();
+      const report = handle.nuiTestAccessibilityStepReport();
       // Performed on the real node, not synthesised by us: the report says which action
       // it found and where it landed.
       expect(report).toContain('performed SetProgress');
       // And the rule under test is the library's, not M3's: one stride up from 3 on
       // `0…12 step 3` is 6.
       expect(log.acceptedSliders['a11y-slide']).toBe(6);
-      expect(handle!.value).toBe(6);
+      expect(handle.value).toBe(6);
       unmount();
     });
   });
