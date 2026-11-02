@@ -150,3 +150,27 @@ Red proofs:
 
 `need --for review`: `need: review is satisfied on this code tree.` The `stale` rows are the
 red-proof runs on mutated or pre-fix trees.
+
+## Fix round 2
+
+**1.** A teardown that meets a dismissal already under way hands its ticket and window to
+that dismissal's transition coordinator, or releases them at once if there is none. The
+iOS action seam now has the alert dismiss itself, as a tap does: going through the helper
+hid the leak. **2.** The window root keeps a weak app window and finds the top controller
+on every ask. **3.** The mid-entry swap wait needs `title === 'Mount b'`. **4.** A teardown
+gives up a present UIKit never took (no red proof; FOLLOWUPS).
+
+Red proofs (iOS):
+
+- drop 100 ms into an action's close -> pre-fix early return -> `live=1;…;windows=1;…;key=ours`. JS-`false` barrier green alone.
+- screen changes under the dialog -> answer pinned at first ask -> `expected '0,0,30' to be '0,0,2'`
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1655 tests / 63 suites | `08f9b4d6f976` | 2 m 03 s | start 7.0 / med 10.7 / max 13.5 |
+| `harness:android:Dialog` | **PASS** | 30 tests / 1 suites | `08f9b4d6f976` (android tree) | 39.9 s | start 8.7 / med 7.4 / max 8.7 |
+| `harness:ios:Dialog` | **PASS** | 32 tests / 1 suites | `08f9b4d6f976` (ios tree) | 1 m 04 s | start 11.7 / med 8.9 / max 11.7 |
+| `harness:ios:Dialog:-t:close%20of%20a%20JS%20false` | stale | 32 tests / 1 suites | e3d2e689be5b (not this tree) | 8.7 s | start 9.1 / med 9.0 / max 9.1 |
+| `harness:ios:Dialog:-t:close%20of%7Ckeeps%20answering` | stale | 3 failed of 32 tests / 1 suites | e3d2e689be5b (not this tree) | 27.6 s | start 13.8 / med 12.0 / max 13.8 |
+
+Stale rows: the red-proof runs. The full gates ran on `task/G11-merge`, whose code tree is this one.
