@@ -1,0 +1,87 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T18:38:12.838Z on code tree `151570c2d2fe` at HEAD `58c1452` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 108613 ms
+- Load: start 4.09, end 5.70, median 6.93, max 8.50
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-g2lpi`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › closes an RN Modal that a sheet was presented inside the chain of`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-g2lpi (still live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.70 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:SheetProto
+gate: node ../scripts/harness.mjs --harnessRunner ios SheetProto (cwd example)
+gate: code tree 151570c2d2fe at HEAD 58c1452
+gate: git tree 5416b0d9ad64
+gate: log task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log
+gate:       <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 151570c2d2fe, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.09/7.10 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › closes an RN Modal that a sheet was presented inside the chain of
+
+    the app did not come back after the stranded Modal: s2: ios modal-over (in chain)-recovered attached=0 boundsChanges=0 boxSent=1 chromeChanges=0 chromeH=0 contentChanges=1 contentH=240 contentHitOwner=noController contentRect=8,602+386x230 contentW=402 corrections=0 detent=fit firstBoundsH=274 firstVisibleH=271 framesToSettle=0 inModalChain=noController maxVisibleH=271 minVisibleH=271 ownWindow=0 presented=1 samples=60 settledBoundsH=274 settledVisibleH=271 touchHandler=1 userDismissals=0 windowLevel=-999 liveControllers=0 handlerViews=1 ownWindows=0 ownWindowPresents=2 modalHostsInWindow=1 presentedDepth=2 topController=RCTFabricModalHostViewController presentations=60 dismissals=57 closes=57 closedDuringEntry=2 entryLandedFirst=59 exitTakenWithoutDidDismiss=3 releasedAfterExit=60 modalHostsHolding=0 appTopController=RCTFabricModalHostViewController appMarkerOwner=modal appMarkerView=UIView sheetPointOwner=modal sheetPointView=UIView probeVersion=2 markerReachable=notFound markerHit=RCTParagraphComponentView drops=10: expected 'modal' to be 'app' // Object.is equality
+
+      [0m [90m 1449 |[39m           recovered[33m.[39mappMarkerOwner[33m,[39m
+       [90m 1450 |[39m           [32m`the app did not come back after the stranded Modal: ${recovered.line}`[39m
+      [31m[1m>[22m[39m[90m 1451 |[39m         )[33m.[39mtoBe([32m'app'[39m)[33m;[39m
+       [90m      |[39m               [31m[1m^[22m[39m
+       [90m 1452 |[39m         expect(num(recovered[33m,[39m [32m'modalHostsInWindow'[39m[33m,[39m [35m0[39m)[33m,[39m recovered[33m.[39mline)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 1453 |[39m       } [36melse[39m {
+       [90m 1454 |[39m         expect([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        107.209 s
+Ran all test suites matching SheetProto.
+gate: harness:ios:SheetProto FAIL in 108.6 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T18-38-12.303Z.log (4 probe(s))
+
+```

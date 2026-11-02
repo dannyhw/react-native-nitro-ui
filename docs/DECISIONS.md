@@ -410,3 +410,22 @@ measured what D31 required. Android passes every Q2 §7 line it can measure: typ
    component has one shape.
 
 The build is G13.
+
+## D35 — BottomSheet's presentation (2026-11-02)
+
+S2 (`docs/tasks/S2-bottomsheet-spike.report.md`; prototype on `task/S2-bottomsheet-spike`, never merged) answered GO on
+both platforms: RN children mount at the sheet's width, take touches (also over an open RN `Modal`), follow a `fit`
+detent, and leave nothing behind after 50 cycles. It also confirmed G11's finding: presented in the screen's own chain,
+a sheet over an RN `Modal` strands the Modal, and only an own window avoids it. In an own window, though, `fit` doesn't
+follow the content. The orchestrator's answers to S2's questions:
+
+1. **iOS presents in the screen's chain by default,** and from an own window (G11's `NitroUiPresentation`) only when
+   the top presented controller is an RN `Modal` host when the sheet presents. `fit` inside an own window is a known
+   gap, to fix or document in the build.
+2. **An exit the app didn't ask for** is detected from `presentationControllerDidDismiss` and `isBeingDismissed`, not
+   `viewDidDisappear` alone.
+3. **react-native-screens:** the build measures it with the dependency added for one commit and reverted, as G11 did.
+4. **iOS real input** uses the XCUITest pattern (G11 and G12). The Android real tap moves into `real-input:android`.
+5. **The stranded-Modal hazard case** runs in its own app instance, never in the shared harness process.
+
+Android needs no equivalent. Q5 Appendix C6's presentation choice is reversed accordingly. The build is G14.

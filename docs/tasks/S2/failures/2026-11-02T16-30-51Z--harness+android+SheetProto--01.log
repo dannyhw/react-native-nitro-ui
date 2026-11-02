@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:SheetProto
+
+- Ran: 2026-11-02T16:30:51.740Z on code tree `d37f7e9df5d0` at HEAD `b50a721` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SheetProto`
+- Result: fail, exit 1, 52281 ms
+- Load: start 3.70, end 2.92, median 2.92, max 3.70
+- Device: android / device `emulator-5574` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log` (<store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (lease S2-7bluv is no longer live, so its device is not ours to ask)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (no longer live)
+  |   T19-c14ka                T19          both              pair-b
+  |   S2-g2lpi                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.92 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (lease S2-7bluv is no longer live, so its device is not ours to ask)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:SheetProto
+gate: node ../scripts/harness.mjs --harnessRunner android SheetProto (cwd example)
+gate: code tree d37f7e9df5d0 at HEAD b50a721
+gate: git tree a4a2ed081f5a
+gate: log task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log
+gate:       <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SheetProto
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree d37f7e9df5d0, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.70/4.30 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › is taken down by an RN Modal that closes over a sheet in its presentation chain
+
+    the sheet left with nobody told: s2: android modal-over (in chain)-up chromeH=32 contentChanges=1 contentH=240 contentW=411 detent=fit firstBoundsH=240 ownWindow=0 presented=1 samples=94 settledBoundsH=240 touchHandler=1 liveSheetRoots=1 modalHostsInWindow=-1 presentations=61 modalHostsHolding=-1 appTopController=na appMarkerOwner=app appMarkerView=DebuggingOverlay sheetPointOwner=sheet sheetPointView=SheetRootViewGroup sheetWindowFocused=1 activityWindowFocused=0 sheetRootIsActivityDecor=0 sheetTapX=540 sheetTapY=2046 sheetRootsCreated=61 drops=10 || s2: android modal-over (in chain)-after-modal-close chromeH=32 contentChanges=1 contentH=240 contentW=411 detent=fit firstBoundsH=240 ownWindow=0 presented=1 samples=119 settledBoundsH=240 touchHandler=1 liveSheetRoots=1 modalHostsInWindow=-1 presentations=61 modalHostsHolding=-1 appTopController=na appMarkerOwner=app appMarkerView=SheetProtoSlot sheetPointOwner=sheet sheetPointView=SheetRootViewGroup sheetWindowFocused=1 activityWindowFocused=0 sheetRootIsActivityDecor=0 sheetTapX=540 sheetTapY=2046 sheetRootsCreated=61 drops=10: expected 0 to be greater than or equal to 1
+
+      [0m [90m 1325 |[39m         unasked[33m,[39m
+       [90m 1326 |[39m         [32m`the sheet left with nobody told: ${up.line} || ${after.line}`[39m
+      [31m[1m>[22m[39m[90m 1327 |[39m       )[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                               [31m[1m^[22m[39m
+       [90m 1328 |[39m     }
+       [90m 1329 |[39m     [36mreturn[39m handle[33m;[39m
+       [90m 1330 |[39m   }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        51.142 s, estimated 173 s
+Ran all test suites matching SheetProto.
+gate: harness:android:SheetProto FAIL in 52.3 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+
+gate: appended the device context to task/S2-bottomsheet-spike/harness+android+SheetProto-2026-11-02T16-30-51.316Z.log (5 probe(s))
+
+```

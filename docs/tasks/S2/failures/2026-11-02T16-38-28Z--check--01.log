@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T16:38:28.261Z on code tree `7c99feab60b9` at HEAD `3b9b7c3` (branch `task/S2-bottomsheet-spike`)
+- Command: `bun run check`
+- Result: fail, exit 1, 148017 ms
+- Load: start 2.56, end 3.89, median 4.71, max 6.38
+- Device: none recorded (not a device gate)
+- Full log: `task/S2-bottomsheet-spike/check-2026-11-02T16-38-28.027Z.log` (<store>/task/S2-bottomsheet-spike/check-2026-11-02T16-38-28.027Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL src/__tests__/viewConfigs.test.ts`
+- `● hand-written view configs › covers every generated config (add the copy + an entry here)`
+- `expect(received).toEqual(expected) // deep equality`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 661 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/gate.test.js (49.307 s)
+PASS scripts/__tests__/gate-logs.test.js (50.718 s)
+PASS scripts/__tests__/ci-workflows.test.js (53.499 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (75.783 s)
+PASS scripts/__tests__/bench-gate.test.js (143.065 s)
+
+Summary of all failing tests
+FAIL src/__tests__/viewConfigs.test.ts
+  ● hand-written view configs › covers every generated config (add the copy + an entry here)
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 0
+
+    @@ -4,9 +4,8 @@
+        "NitroUiHostConfig.json",
+        "NitroUiMenuConfig.json",
+        "NitroUiPickerConfig.json",
+        "NitroUiProgressConfig.json",
+        "NitroUiSegmentedControlConfig.json",
+    -   "NitroUiSheetProtoConfig.json",
+        "NitroUiSliderConfig.json",
+        "NitroUiSwitchConfig.json",
+      ]
+
+      64 |       file.endsWith('Config.json')
+      65 |     );
+    > 66 |     expect(Object.keys(copies).sort()).toEqual(generated.sort());
+         |                                        ^
+      67 |   });
+      68 | });
+      69 |
+
+      at Object.toEqual (src/__tests__/viewConfigs.test.ts:66:40)
+
+
+Test Suites: 1 failed, 61 passed, 62 total
+Tests:       1 failed, 1639 passed, 1640 total
+Snapshots:   0 total
+Time:        143.478 s, estimated 147 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 148.0 s
+gate: recorded in .gates/task/S2-bottomsheet-spike.jsonl
+
+```

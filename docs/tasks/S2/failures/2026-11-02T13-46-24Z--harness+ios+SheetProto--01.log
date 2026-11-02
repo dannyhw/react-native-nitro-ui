@@ -1,0 +1,154 @@
+# Failure excerpt — harness:ios:SheetProto
+
+- Ran: 2026-11-02T13:46:24.998Z on code tree `184b54e19293` at HEAD `60a05f4` (branch `task/S2-bottomsheet-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SheetProto`
+- Result: fail, exit 1, 86866 ms
+- Load: start 5.40, end 4.23, median 4.29, max 5.40
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S2-7bluv`
+- Full log: `task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-46-24.998Z.log` (<store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-46-24.998Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SheetProto.harness.tsx`
+- `● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and at their own height when the detent is fit`
+- `● SheetProto · React Native children in a presented sheet › reports a box that never reached Yoga as a collapsed layout`
+- `● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one`
+- `● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open`
+- `● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in its own presentation chain`
+- `● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in a window of its own`
+- `● SheetProto · React Native children in a presented sheet › presents and dismisses 50 times and keeps nothing`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-46-24.998Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S2-7bluv (still live)
+  |   S2-7bluv                 S2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.23 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 106 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SheetProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 184b54e19293, 10 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.40/9.67 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S2-bottomsheet-spike/harness+ios+SheetProto-2026-11-02T13-46-24.998Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SheetProto.harness.tsx
+  ● SheetProto · React Native children in a presented sheet › lays the children out at the sheet’s width, and at their own height when the detent is fit
+
+    fit settled at 0, expected 274: s2: ios fit attached=1 boxSent=2 chromeH=34 contentChanges=0 contentH=240 contentW=402 corrections=0 detent=fit firstVisibleH=0 framesToSettle=0 maxVisibleH=0 minVisibleH=0 ownWindow=0 presented=1 settledVisibleH=0 touchHandler=1 userDismissals=0 liveControllers=1 handlerViews=1 presentations=1: expected 274 to be less than or equal to 8
+
+      [0m [90m 297 |[39m         [33mMath[39m[33m.[39mabs(settled [33m-[39m expected)[33m,[39m
+       [90m 298 |[39m         [32m`fit settled at ${String(settled)}, expected ${String(expected)}: ${fields.line}`[39m
+      [31m[1m>[22m[39m[90m 299 |[39m       )[33m.[39mtoBeLessThanOrEqual([35m8[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 300 |[39m       expect(
+       [90m 301 |[39m         num(fields[33m,[39m [32m'firstVisibleH'[39m)[33m,[39m
+       [90m 302 |[39m         [32m`the first frame should not already be the last: ${fields.line}`[39m[0m
+
+  ● SheetProto · React Native children in a presented sheet › reports a box that never reached Yoga as a collapsed layout
+
+    No content box while withheld within 15000ms. events=[s22:presented=1] box=null content={"width":0,"height":240} native=dismissals=1;handlerViews=1;lastControllerAlive=1;liveControllers=1;presentations=2;s21.attached=1;s21.boxSent=2;s21.chromeH=34;s21.contentChanges=1;s21.contentH=240;s21.contentW=402;s21.corrections=0;s21.detent=fit;s21.firstVisibleH=304;s21.framesToSettle=0;s21.maxVisibleH=304;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.settledVisibleH=304;s21.touchHandler=1;s21.userDismissals=0;s22.attached=1;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;windows=1
+
+      [0m [90m 124 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 125 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 126 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 127 |[39m     }
+       [90m 128 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 129 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › gives a ScrollView the sheet’s box, and a medium detent less screen than a large one
+
+    No box for medium within 15000ms. events=[] box=null content={"width":0,"height":3200} native=dismissals=1;handlerViews=1;lastControllerAlive=1;liveControllers=0;presentations=2;s21.attached=1;s21.boxSent=2;s21.chromeH=34;s21.contentChanges=1;s21.contentH=240;s21.contentW=402;s21.corrections=0;s21.detent=fit;s21.firstVisibleH=304;s21.framesToSettle=0;s21.maxVisibleH=304;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.settledVisibleH=304;s21.touchHandler=1;s21.userDismissals=0;s22.attached=1;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;windows=1
+
+      [0m [90m 124 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 125 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 126 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 127 |[39m     }
+       [90m 128 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 129 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › takes the content away when JS closes the sheet, and nothing survives being dropped while it is open
+
+    No a dismissal of any kind within 8000ms. events=[] box=null content={"width":0,"height":0} native=dismissals=1;handlerViews=1;lastControllerAlive=1;liveControllers=0;presentations=2;s21.attached=1;s21.boxSent=2;s21.chromeH=34;s21.contentChanges=1;s21.contentH=240;s21.contentW=402;s21.corrections=0;s21.detent=fit;s21.firstVisibleH=304;s21.framesToSettle=0;s21.maxVisibleH=304;s21.minVisibleH=304;s21.ownWindow=0;s21.presented=1;s21.settledVisibleH=304;s21.touchHandler=1;s21.userDismissals=0;s22.attached=1;s22.detent=fit;s22.ownWindow=0;s22.presented=1;s22.touchHandler=1;s22.userDismissals=0;s23.attached=0;s23.detent=medium;s23.ownWindow=0;s23.presented=1;s23.touchHandler=1;s23.userDismissals=0;s24.attached=0;s24.detent=large;s24.ownWindow=0;s24.presented=0;s24.touchHandler=1;s24.userDismissals=0;windows=1
+
+      [0m [90m 124 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 125 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 126 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 127 |[39m     }
+       [90m 128 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 129 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in its own presentation chain
+
+    No sheet box in a Modal (in chain) within 10000ms.
+
+      [0m [90m 124 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 125 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 126 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 127 |[39m     }
+       [90m 128 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 129 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › closes a Modal that has a sheet presented in a window of its own
+
+    No sheet box in a Modal (own window) within 10000ms.
+
+      [0m [90m 124 |[39m     [36mif[39m (value [33m!==[39m [36mnull[39m) [36mreturn[39m value[33m;[39m
+       [90m 125 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 126 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`No ${what} within ${String(timeoutMs)}ms. ${diag()}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 127 |[39m     }
+       [90m 128 |[39m     [36mawait[39m settle([35m20[39m)[33m;[39m
+       [90m 129 |[39m   }[0m
+
+  ● SheetProto · React Native children in a presented sheet › presents and dismisses 50 times and keeps nothing
+
+    s2: ios churn-50 attached=0 detent=fit ownWindow=0 presented=0 touchHandler=1 userDismissals=0 liveControllers=0 handlerViews=1 presentations=2 dismissals=1: expected 1 to be +0 // Object.is equality
+
+      [0m [90m 569 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m) {
+       [90m 570 |[39m       expect(num(afterFields[33m,[39m [32m'liveControllers'[39m)[33m,[39m afterFields[33m.[39mline)[33m.[39mtoBe([35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 571 |[39m       expect(num(afterFields[33m,[39m [32m'handlerViews'[39m)[33m,[39m afterFields[33m.[39mline)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 572 |[39m       expect(num(afterFields[33m,[39m [32m'ownWindows'[39m)[33m,[39m afterFields[33m.[39mline)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 573 |[39m     } [36melse[39m {
+       [90m 574 |[39m       expect(num(afterFields[33m,[39m [32m'liveSheetRoots'[39m)[33m,[39m afterFields[33m.[39mline)[33m.[39mtoBe([35m0[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       7 failed, 7 total
+Snapshots:   0 total
+Time:        85.224 s
+Ran all test suites matching SheetProto.
+
+
+
+```
