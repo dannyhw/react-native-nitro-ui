@@ -626,6 +626,44 @@ describe('BottomSheet', () => {
     );
     if (IOS) expect(after.modalHosts).toBe('0');
   });
+
+  it('follows its content in a window of its own, over an RN Modal (fit)', async () => {
+    function OverModal() {
+      const [modal, setModal] = useState(true);
+      setters.set('own-modal', setModal);
+      return (
+        <Modal visible={modal} animationType="none">
+          <View style={{ flex: 1 }}>
+            <Stage testId="own-fit" />
+          </View>
+        </Modal>
+      );
+    }
+    await render(<OverModal />);
+    await waitForHandle('own-fit');
+    await sleep(500);
+    setters.get('own-fit')?.(true);
+    const up = await waitForUp('own-fit', 'up over the Modal');
+    if (IOS) expect(up.ownWindow).toBe('1');
+    await settledLayout('own-fit', (l) => Math.abs(l.height - 240) < 1, 'at 240');
+    await sleep(500);
+    const key = IOS ? 'sheetH' : 'contentH';
+    const first = reportOf('own-fit');
+    rowSetters.get('own-fit')?.(2);
+    await settledLayout('own-fit', (l) => Math.abs(l.height - 400) < 1, 'at 400');
+    await waitForReport(
+      'own-fit',
+      (r) => Math.abs(num(r, key) - num(first, key) - 160) <= 2,
+      `${key} 160 taller than ${first[key]} in a window of its own`
+    );
+    await staysUp('own-fit', 800, 'after its content grew');
+    // The sheet goes before the Modal: closing the Modal under a sheet is the hazard
+    // case, which runs in an app instance of its own.
+    setters.get('own-fit')?.(false);
+    await waitForEvent('own-fit:dismiss');
+    setters.get('own-modal')?.(false);
+    await sleep(800);
+  });
 });
 
 /**
