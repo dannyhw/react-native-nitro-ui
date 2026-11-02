@@ -1039,7 +1039,8 @@ describe('Host · a hosted Button still presses', () => {
         </View>
       );
       const host = await boxOf('off-press-host');
-      expect(log.buttons['off-press-0']?.disabled).toBe(true);
+      // The Host's box says nothing about the Button's handle (`handles.ts`).
+      expect((await handleOf(log.buttons, 'off-press-0')).disabled).toBe(true);
       expect(await pressRow(host, 'off-press-0', log)).toBeNull();
       expect(log.taps).toEqual([]);
 
@@ -1383,9 +1384,10 @@ describe('Host \u00b7 all seven kinds of control, one composition', () => {
         hostStyle={{ width: 300, height: 420 }}
       />
     );
-    // Props land on both controls on either platform.
-    expect(log.pickers['mix-pk-5']?.options.length).toBe(3);
-    expect(log.dates['mix-dp-6']?.mode).toBe('date');
+    // Props land on both controls on either platform. Read through `handleOf`: nothing
+    // here has waited for a box, so nothing has waited for the handles either.
+    expect((await handleOf(log.pickers, 'mix-pk-5')).options.length).toBe(3);
+    expect((await handleOf(log.dates, 'mix-dp-6')).mode).toBe('date');
     if (Platform.OS !== 'android') {
       // A SwiftUI `Picker` keeps its menu in the system's own presentation and reports
       // nothing about it, and the dialog below is Material 3's, so there is no window to
