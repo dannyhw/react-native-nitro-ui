@@ -11,6 +11,7 @@ android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt
@@ -39,6 +40,7 @@ cpp/core/NitroUiPerf.hpp
 cpp/core/NitroUiSizing.hpp
 ios/components/Button/HybridNitroUiButton.swift
 ios/components/DatePicker/HybridNitroUiDatePicker.swift
+ios/components/Dialog/HybridNitroUiDialog.swift
 ios/components/Host/HybridNitroUiHost.swift
 ios/components/Menu/HybridNitroUiMenu.swift
 ios/components/Picker/HybridNitroUiPicker.swift
@@ -53,6 +55,7 @@ ios/core/NitroUiDeclaredFallbacks.swift
 ios/core/NitroUiDeclaredFallbacksLoader.m
 ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
+ios/core/NitroUiPresentation.swift
 ios/core/UIColor+NitroUiColor.swift
 lib/module/NitroUiCore.js
 lib/module/NitroUiCore.js.map
@@ -74,6 +77,14 @@ lib/module/components/DatePicker/NativeNitroUiDatePicker.js
 lib/module/components/DatePicker/NativeNitroUiDatePicker.js.map
 lib/module/components/DatePicker/NitroUiDatePickerConfig.js
 lib/module/components/DatePicker/NitroUiDatePickerConfig.js.map
+lib/module/components/Dialog/Dialog.js
+lib/module/components/Dialog/Dialog.js.map
+lib/module/components/Dialog/Dialog.nitro.js
+lib/module/components/Dialog/Dialog.nitro.js.map
+lib/module/components/Dialog/NativeNitroUiDialog.js
+lib/module/components/Dialog/NativeNitroUiDialog.js.map
+lib/module/components/Dialog/NitroUiDialogConfig.js
+lib/module/components/Dialog/NitroUiDialogConfig.js.map
 lib/module/components/Host/Host.js
 lib/module/components/Host/Host.js.map
 lib/module/components/Host/Host.nitro.js
@@ -168,6 +179,14 @@ lib/typescript/src/components/DatePicker/NativeNitroUiDatePicker.d.ts
 lib/typescript/src/components/DatePicker/NativeNitroUiDatePicker.d.ts.map
 lib/typescript/src/components/DatePicker/NitroUiDatePickerConfig.d.ts
 lib/typescript/src/components/DatePicker/NitroUiDatePickerConfig.d.ts.map
+lib/typescript/src/components/Dialog/Dialog.d.ts
+lib/typescript/src/components/Dialog/Dialog.d.ts.map
+lib/typescript/src/components/Dialog/Dialog.nitro.d.ts
+lib/typescript/src/components/Dialog/Dialog.nitro.d.ts.map
+lib/typescript/src/components/Dialog/NativeNitroUiDialog.d.ts
+lib/typescript/src/components/Dialog/NativeNitroUiDialog.d.ts.map
+lib/typescript/src/components/Dialog/NitroUiDialogConfig.d.ts
+lib/typescript/src/components/Dialog/NitroUiDialogConfig.d.ts.map
 lib/typescript/src/components/Host/Host.d.ts
 lib/typescript/src/components/Host/Host.d.ts.map
 lib/typescript/src/components/Host/Host.nitro.d.ts
@@ -250,6 +269,8 @@ nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiHostSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
@@ -266,6 +287,7 @@ nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.hpp
 nitrogen/generated/android/c++/JNitroUiButtonSize.hpp
 nitrogen/generated/android/c++/JNitroUiDatePickerSize.hpp
+nitrogen/generated/android/c++/JNitroUiDialogAction.hpp
 nitrogen/generated/android/c++/JNitroUiMenuRow.hpp
 nitrogen/generated/android/c++/JNitroUiMenuSize.hpp
 nitrogen/generated/android/c++/JNitroUiPickerSize.hpp
@@ -282,6 +304,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiDialogStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiDialogStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
@@ -302,6 +326,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_double_dou
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDatePickerSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDialogSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPickerSpec.kt
@@ -311,6 +336,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderS
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDatePickerSize.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDialogAction.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuRow.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiPickerSize.kt
@@ -325,6 +351,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiB
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDatePickerManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDatePickerStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDialogManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDialogStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiHostStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuManager.kt
@@ -353,6 +381,8 @@ nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiDatePickerSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiDatePickerSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiDialogSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiDialogSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiHostSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.cpp
@@ -369,6 +399,7 @@ nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDatePickerComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiDialogComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiMenuComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiPickerComponent.mm
@@ -384,6 +415,8 @@ nitrogen/generated/ios/swift/HybridNitroUiButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiDialogSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiDialogSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiHostSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiHostSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiMenuSpec.swift
@@ -400,6 +433,7 @@ nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec_cxx.swift
 nitrogen/generated/ios/swift/NitroUiButtonSize.swift
 nitrogen/generated/ios/swift/NitroUiDatePickerSize.swift
+nitrogen/generated/ios/swift/NitroUiDialogAction.swift
 nitrogen/generated/ios/swift/NitroUiMenuRow.swift
 nitrogen/generated/ios/swift/NitroUiMenuSize.swift
 nitrogen/generated/ios/swift/NitroUiPickerSize.swift
@@ -415,6 +449,8 @@ nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiHostSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
@@ -431,6 +467,7 @@ nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
 nitrogen/generated/shared/c++/NitroUiButtonSize.hpp
 nitrogen/generated/shared/c++/NitroUiDatePickerSize.hpp
+nitrogen/generated/shared/c++/NitroUiDialogAction.hpp
 nitrogen/generated/shared/c++/NitroUiMenuRow.hpp
 nitrogen/generated/shared/c++/NitroUiMenuSize.hpp
 nitrogen/generated/shared/c++/NitroUiPerfEvent.hpp
@@ -444,6 +481,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiDialogComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiDialogComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
@@ -460,6 +499,7 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
 nitrogen/generated/shared/json/NitroUiDatePickerConfig.json
+nitrogen/generated/shared/json/NitroUiDialogConfig.json
 nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiMenuConfig.json
 nitrogen/generated/shared/json/NitroUiPickerConfig.json
@@ -478,6 +518,10 @@ src/components/DatePicker/DatePicker.nitro.ts
 src/components/DatePicker/DatePicker.tsx
 src/components/DatePicker/NativeNitroUiDatePicker.ts
 src/components/DatePicker/NitroUiDatePickerConfig.ts
+src/components/Dialog/Dialog.nitro.ts
+src/components/Dialog/Dialog.tsx
+src/components/Dialog/NativeNitroUiDialog.ts
+src/components/Dialog/NitroUiDialogConfig.ts
 src/components/Host/Host.nitro.ts
 src/components/Host/Host.tsx
 src/components/Host/HostChildren.ts
