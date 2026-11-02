@@ -1393,6 +1393,80 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.stderr).toMatch(/1 shut down/);
   });
 
+  it('counts a spared device once, not again as held by a lease', () => {
+    // The spare works by not naming the key, so the pool keeps it on its own rule - "a live lease
+    // holds it", the lease being this one - and reports it under `kept`. The summary used to add
+    // both up and print "1 spared, 1 held by a lease" for a machine with one device left up, which
+    // reads as somebody else's lease keeping a device under the bench: the one thing an exclusive
+    // lease exists to rule out. No other lease is live here, so nothing is held by one.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_A}`,
+        idleMinutes: 4,
+        serial: SERIAL_A,
+      })
+    );
+    warmDeviceSecond(
+      idleEntry({ key: `ios:${UDID_A}`, idleMinutes: 4, serial: null })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    const summary = acquired.stderr
+      .split('\n')
+      .find((line) => line.startsWith('lease: exclusive - '));
+    expect(summary).toContain('1 spared');
+    expect(summary).not.toContain('held by a lease');
+  });
+
+  it('still counts a device kept for somebody else beside a spared one', () => {
+    // The other direction, so the fix cannot be "drop `kept` from the summary": the simulator here
+    // carries a live run's claim, the pool keeps it up for that run, and the summary must still say
+    // a device was left up for somebody - only the spared emulator leaves the count.
+    tools({ androidUp: true, iosUp: true, stateful: true });
+    warmDevice(
+      idleEntry({
+        key: `avd:${AVD_A}`,
+        idleMinutes: 4,
+        serial: SERIAL_A,
+      })
+    );
+    warmDeviceSecond(
+      idleEntry({
+        key: `ios:${UDID_A}`,
+        idleMinutes: 4,
+        serial: null,
+        claims: CLAIM,
+      })
+    );
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'BENCH',
+      '--exclusive',
+      '--boot',
+      '--platform',
+      'android',
+      '--no-reset',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).not.toContain(`simctl shutdown ${UDID_A}`);
+    const summary = acquired.stderr
+      .split('\n')
+      .find((line) => line.startsWith('lease: exclusive - '));
+    expect(summary).toContain('1 spared');
+    expect(summary).toContain('1 held by a lease');
+  });
+
   it('powers off a pool device that was booted outside the pool, for an exclusive lease', () => {
     // The exclusive power-off is enumerated from devices.json, not from the records, because the
     // harness boots a cold device itself and a person can start one by hand: no `pool.json` record

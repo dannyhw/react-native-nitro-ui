@@ -722,11 +722,19 @@ function main(argv) {
     );
     for (const key of spare)
       log(`lease: spared ${key} (already up, this lease's own)`);
-    const reaped = pool.reap({
+    const swept = pool.reap({
       shutdownKeys,
       reason: 'exclusive acquire',
       exceptLeaseId: lease.id,
     });
+    // A spared key comes back under `kept` - the pool kept it because a live lease holds it, and
+    // that lease is this one - so counting `kept` as well would say "1 spared, 1 held by a lease"
+    // for one device, and read as another task's lease keeping a device under the bench (X17
+    // item 2). `kept` here means held by somebody else; the spare has its own count.
+    const reaped = {
+      ...swept,
+      kept: (swept.kept ?? []).filter((entry) => !spare.includes(entry.key)),
+    };
     reportReap(reaped, log);
     // The promise an exclusive lease makes, stated only when it was kept. A reap that was skipped
     // (an unreadable `pool.json`) or that could not power something off leaves devices running
