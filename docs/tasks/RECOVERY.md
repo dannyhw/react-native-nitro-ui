@@ -88,6 +88,10 @@
 > **X16 merged (2026-11-02, `f2a6f2c`, PR #20):** tooling sweep 2. Tests scrub the lease env; `acquire --exclusive --boot` needs
 > `--platform` and an explicit flag; `--help` probes record nothing; `real-input:ios` re-reads a11y boxes until two agree.
 > All five merge gates ran here. Five small follow-ups from its re-review are in FOLLOWUPS.
+> **G11 merged (2026-11-02, `74efeb6`, PR #24): AlertDialog and ConfirmationDialog**, the first new components since Menu
+> (Q5 Appendix B, D33). iOS presents from its own window (`ios/core/NitroUiPresentation.swift`, shared with DatePicker),
+> so a dialog over an RN `Modal` can't strand it. Built, fixed twice and merge-gated on maintainer-mac-1 by Claude Opus at
+> `auto`: the merge branch `task/G11-merge` carried the five-gate ledger, and `main` was fast-forwarded to it.
 >
 > **Failure logs (owner, 2026-10-28):** A4 adds per-iteration missing-sample reasons to the bench;
 > **X12** (`X12-failure-logs.md`, after X10) keeps gate logs outside the worktree and exports failure
