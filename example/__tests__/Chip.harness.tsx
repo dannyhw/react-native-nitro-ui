@@ -225,7 +225,7 @@ async function waitForDisplayed(testId: string, displayed: string) {
 
 /** Wait until the app has been told exactly `wanted` since `from`. */
 async function waitForEvents(from: number, wanted: readonly string[]) {
-  return pollUntil(
+  await pollUntil(
     () => {
       const seen = events.slice(from);
       return seen.length >= wanted.length ? seen : null;
@@ -236,7 +236,16 @@ async function waitForEvents(from: number, wanted: readonly string[]) {
           JSON.stringify(events.slice(from))
       )
   );
+  // Then a quiet period, and everything that arrived: returning the moment the count is
+  // reached let an extra event through on iOS (G12's red proof - an `onPress` called twice
+  // per press passed there, because the first press's second call made the count before
+  // the second press had landed). A caller compares the whole list, so a surplus is red.
+  await sleep(EVENT_QUIET_MS);
+  return events.slice(from);
 }
+
+/** How long `waitForEvents` waits for a surplus event after the count is reached. */
+const EVENT_QUIET_MS = 400;
 
 /**
  * Press a chip the way this platform's harness can.
