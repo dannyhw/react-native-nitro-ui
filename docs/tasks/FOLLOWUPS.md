@@ -113,4 +113,11 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G11 fix 2: `NitroUiPresentation.dismissForTeardown` now gives up a present UIKit never took (pending entry, no presenter), but no red proof exists: no harness can make UIKit refuse a present from a fresh window's root. DatePicker's in-chain popover, whose presenter can be busy, is where a refusal can actually happen.
 - G11 fix 2: the iOS `nuiTestPerformAction` has the alert dismiss itself, as a tap does, and then runs the handler in the same turn. Whether UIKit runs a real tap's handler at the start or the end of the exit was not measured, so the seam's event-before-count order may be the seam's own; `real-input:ios` drives the real tap.
 - `harness:ios` Host suites read a hybrid handle right after the box is laid out, before `hybridRef` fires: HostControls "reports a hosted drag…" (`log.sliders['slide-0']` undefined, the H2a flake) and HostPopups "segmented row … never mounted" each failed once in G11's merge run on maintainer-mac-1 and passed on the third run (`docs/tasks/G11-merge/failures/`). Wait for the handle the way `waitForHandle` does.
-
+- G12: the Host handle race on the line above is fixed: HostControls "reports a hosted drag…" and HostPopups' three "segmented row" reads now `waitForHandle`. Chip's conformance fallback test had made the race fail 3 of 3 full iOS runs; why it slows `hybridRef` delivery is not established.
+- G12 Chip: bench arms (mount, toggle); hosting inside `<Host>` (`hostable: false`, refused by name); `tintColor`; input/suggestion chips; the Android README screenshot.
+- G12 Chip (iOS): a disabled selected chip draws as unselected (SwiftUI's disabled bordered style drops the fill).
+- G12 Host sizing (Android): content that animates its intrinsic width settles short, because over-wide placement stops reporting; Chip passes M3 a fixed leading slot to avoid it.
+- G12 real-input:android: one full run saw the assist chip's barrier tap stall 8 s and land with the retry (presses 1 -> 3 -> 4); chip-only reruns 2 of 2 green.
+- G12 Conformance (Android): Switch's controlled recycle probe may share the coincidence Chip's had (second owner `false` equals `reset()`'s `displayed = false`), which kept Chip's green with the counter reset deleted.
+- G12: `scripts/conformance/make-a11y-fixtures.mjs` dumps for switch/button/menu now differ from the committed fixtures (only `chip.xml` was regenerated).
+- G12: `app.stamp` hashes `etc/`, which the gate ledger treats as check-only, so an API-report update forces app rebuilds.
