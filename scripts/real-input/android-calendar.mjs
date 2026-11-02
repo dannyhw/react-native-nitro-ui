@@ -16,21 +16,21 @@
  * ## Why the weekday header, and not the day cells
  *
  * Material composes both rows the same way — `Row(fillMaxWidth) { SpaceEvenly }` with
- * every child `sizeIn(min = 40.dp).size(LocalMinimumInteractiveComponentSize)` — but
- * only one of them reports what it was given. Measured on `emulator-5574` (density
- * 2.625) at a 320 dp box with the fix in place:
+ * every child `sizeIn(min = 40.dp).size(LocalMinimumInteractiveComponentSize)` — and the
+ * dump shows it: the two rows have the same columns. Measured on `emulator-5574` (density
+ * 2.625) in a 320 dp box, before and after the fix:
  *
- * | row                        | column widths (px)                            |
- * | -------------------------- | --------------------------------------------- |
- * | weekday header             | 105, 105, 105, 105, 105, 105, 105             |
- * | day cells                  | 110, 110, 111, 110, 110, 110, 126             |
+ * | dump                 | weekday header (px)               | day cells (px)                    |
+ * | -------------------- | --------------------------------- | --------------------------------- |
+ * | `g8-320-prefix.xml`  | 126, 126, 126, 126, 126, 126, 20  | 126, 126, 126, 126, 126, 126, 73  |
+ * | `g8-320-postfix.xml` | 105, 105, 105, 105, 105, 105, 105 | 105, 105, 105, 105, 105, 105, 105 |
  *
- * The header cells are exactly 40 dp each. The day cells are the `Surface`s under them,
- * and their accessibility box picks up Material's touch-target expansion on top of the
- * cell, which lands unevenly across the row (16 px = 6 dp between the widest and the
- * narrowest) even in a grid that is laid out perfectly. A width rule written against the
- * day cells would therefore call a healthy calendar broken, and a rule loosened enough
- * to tolerate that spread would not see the squeeze it exists to catch.
+ * After the fix every column in both rows is exactly 40 dp, and before it both rows lost
+ * their width on the right. What separates them is accessibility, not geometry: the
+ * header's seven boxes are the only named nodes in the calendar (`content-desc` "Sunday"
+ * … "Saturday"), while a day cell is an unnamed `Button` with no `text` and no
+ * `content-desc`. A rule cannot say which unnamed box in a dump is a day cell, or which
+ * day it is, so it reads the one row that names itself.
  *
  * For what a squeeze looks like in the same header row: the same box at **240 dp** — re-measured
  * on `emulator-5570` with the fix in place — reports *six* columns, `105, 105, 105, 105,
@@ -40,9 +40,9 @@
  *
  * ## What else in a dump a header row must not be mistaken for
  *
- * - The month toggle is clickable and names a year ("October 2026"), and a day cell is
- *   clickable and names a whole date. Neither is in the header row, which is the
- *   non-clickable group of exactly seven same-row names.
+ * - The month toggle is clickable and names a year ("October 2026"), and a day cell, on a
+ *   Material build that names it at all, would be clickable and name a whole date. Neither
+ *   is in the header row, which is the non-clickable group of exactly seven same-row names.
  * - A row scrolled outside the composition's clip keeps its names and gets
  *   `bounds=[0,0][0,0]`, so a zero box means "not on screen" and is skipped rather than
  *   counted as a zero-width column.
