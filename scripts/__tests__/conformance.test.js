@@ -173,9 +173,10 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the nine controls today', () => {
+  it('is complete for the ten controls today', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
+      'BottomSheet',
       'Button',
       'DatePicker',
       'Dialog',
@@ -1234,9 +1235,10 @@ describe('the a11y presentation cases', () => {
   const withDialog = (patch) =>
     repoManifests().map((m) => (m.name === 'Dialog' ? { ...m, ...patch } : m));
 
-  it('covers Dialog, and only through its real-input check', () => {
+  it('covers Dialog and BottomSheet, and only through their real-input checks', () => {
     expect(A11Y_PRESENTATIONS.map((entry) => entry.component)).toEqual([
       'Dialog',
+      'BottomSheet',
     ]);
     expect(checkA11yTable(repoManifests(), read)).toEqual([]);
   });

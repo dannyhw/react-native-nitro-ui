@@ -342,6 +342,15 @@ export const A11Y_PRESENTATIONS = Object.freeze([
       '`testRealInputDialog` (RealInputTests.swift) and `CHECKS.dialog` ' +
       '(scripts/real-input/android.mjs)',
   },
+  {
+    id: 'bottom-sheet',
+    component: 'BottomSheet',
+    hybridView: 'NitroUiBottomSheet',
+    assertedBy:
+      "`testRealInputBottomSheet` (RealInputTests.swift) and `CHECKS['bottom-sheet']` " +
+      "(scripts/real-input/android.mjs): the sheet's React Native content is read " +
+      'and pressed through the accessibility tree, and the sheet carries <testID>-sheet',
+  },
 ]);
 
 /**

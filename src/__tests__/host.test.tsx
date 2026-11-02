@@ -19,7 +19,7 @@ import {
   assertHostChildren,
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
-import { Picker } from '../components/Picker/Picker';
+import { BottomSheet } from '../components/BottomSheet/BottomSheet';
 import {
   HOSTABLE_CONTROLS,
   UNHOSTABLE_CONTROLS,
@@ -189,36 +189,20 @@ describe('Host children', () => {
   });
 
   /**
-   * H2b hosted the last three controls, so **no control the library ships is refused
-   * for being what it is** any more. The refusal sentence for a nitro-ui control that
-   * has not been measured inside a Host is still the rule the *next* control meets
-   * (`UNHOSTABLE_CONTROLS` is where a Menu or a TextField starts), so it is proved
-   * here the only way it can be: by putting a stand-in in the table, asking the check,
-   * and taking the stand-in back out. A row that was never exercised is a row that can
-   * rot, and this is the difference between a rule and a comment.
+   * `BottomSheet` (G14) is the first control the library ships that a Host refuses for
+   * being what it is: its content is React Native views, which a Host has no place for.
+   * So the refusal sentence for a nitro-ui control - the one the *next* unmeasured
+   * control (a TextField) will meet too - is asked of a real row now, not a stand-in.
    */
-  it('names a control the Host does not render yet', () => {
-    expect(UNHOSTABLE_CONTROLS.size).toBe(0);
-    // The allowlist is consulted first, so a control cannot be refused while it is
-    // still on it - which is the right order (a table cannot take back a permission
-    // the other table granted). To ask the sentence the question the next control
-    // will get, move `Picker` across for the length of the check.
-    UNHOSTABLE_CONTROLS.set(Picker, 'Picker');
-    HOSTABLE_CONTROLS.delete(Picker);
-    try {
-      const error = errorFor(
-        <Picker options={['a', 'b']} selectedIndex={0} onChange={() => {}} />
-      );
-      expect(error).not.toBeNull();
-      expect(error?.message).toMatch(/<Picker>/);
-      // "nitro-ui's", so the sentence says whose control it is before saying what
-      // is wrong with it - `Switch` and `Picker` exist in more than one library.
-      expect(error?.message).toMatch(/react-native-nitro-ui's <Picker>/);
-    } finally {
-      UNHOSTABLE_CONTROLS.delete(Picker);
-      HOSTABLE_CONTROLS.set(Picker, 'Picker');
-    }
-    expect(errorFor(createElement(Picker as never))).toBeNull();
+  it('names a control the Host refuses', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['BottomSheet']);
+    expect(HOSTABLE_CONTROLS.has(BottomSheet)).toBe(false);
+    const error = errorFor(<BottomSheet isPresented={false} />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/<BottomSheet>/);
+    // "nitro-ui's", so the sentence says whose control it is before saying what is
+    // wrong with it - `Switch` and `Picker` exist in more than one library.
+    expect(error?.message).toMatch(/react-native-nitro-ui's <BottomSheet>/);
   });
 
   /**
