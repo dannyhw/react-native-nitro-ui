@@ -6,5 +6,6 @@
   "HybridNitroUiSegmentedControl": "intrinsic",
   "HybridNitroUiDatePicker": "intrinsic",
   "HybridNitroUiPicker": "intrinsic",
-  "HybridNitroUiMenu": "intrinsic"
+  "HybridNitroUiMenu": "intrinsic",
+  "HybridNitroUiTextField": "fillWidth"
 }

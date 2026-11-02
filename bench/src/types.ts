@@ -24,7 +24,8 @@ export type ComponentName =
   | 'segmented-control'
   | 'date-picker'
   | 'picker'
-  | 'menu';
+  | 'menu'
+  | 'text-field';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -44,7 +45,8 @@ export type ScenarioName =
   | `${ScenarioAction}.segmented-control`
   | `${ScenarioAction}.date-picker`
   | `${ScenarioAction}.picker`
-  | `${ScenarioAction}.menu`;
+  | `${ScenarioAction}.menu`
+  | `${ScenarioAction}.text-field`;
 // @end-generated
 
 /**

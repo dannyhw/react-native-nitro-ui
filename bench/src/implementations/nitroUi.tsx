@@ -9,6 +9,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
@@ -25,6 +26,7 @@ import {
   onPickerChange,
   onSegmentChange,
   onSliderChange,
+  onTextChange,
   onValueChange,
   pickerOptions,
   pickerSelection,
@@ -34,6 +36,7 @@ import {
   segmentedOptions,
   sliderValue,
   stackStyle,
+  textFieldValue,
 } from './shared';
 
 /**
@@ -413,6 +416,24 @@ export function NitroUiList({
             testID={`bench-nitro-ui-slider-${String(index)}`}
             value={sliderValue(value)}
             onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'text-field') {
+    // A controlled single-line field: `update.text-field` writes new text
+    // through the handshake, the path an app's `setText` takes.
+    return (
+      <>
+        {range(n).map((index) => (
+          <TextField
+            key={index}
+            testID={`bench-nitro-ui-text-field-${String(index)}`}
+            value={textFieldValue(value)}
+            onChangeText={onTextChange}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />

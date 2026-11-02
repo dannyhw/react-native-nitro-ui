@@ -1,0 +1,15 @@
+{
+  "name": "TextField",
+  "hybridView": "NitroUiTextField",
+  "implementation": "HybridNitroUiTextField",
+  "id": "text-field",
+  "sizing": "fillWidth",
+  "hostable": false,
+  "exampleTab": "textfield",
+  "exampleLabel": "Text",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it"
+}

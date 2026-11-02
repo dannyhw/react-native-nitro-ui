@@ -94,6 +94,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one',
     screen: 'dialog',
   },
+  {
+    id: 'text-field',
+    title:
+      'real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it',
+    screen: 'textfield',
+  },
   // @end-generated
 ]);
 

@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 
@@ -20,6 +21,8 @@ import {
   pickerOptions,
   pickerSelection,
   segmentedOptions,
+  onTextChange,
+  textFieldValue,
 } from './shared';
 
 /**
@@ -189,6 +192,22 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
           <View
             key={index}
             testID={`bench-rn-core-slider-${String(index)}`}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'text-field') {
+    // RN core's own field, controlled the same way: the peer G13 is priced against.
+    return (
+      <>
+        {range(n).map((index) => (
+          <TextInput
+            key={index}
+            testID={`bench-rn-core-text-field-${String(index)}`}
+            value={textFieldValue(value)}
+            onChangeText={onTextChange}
             style={style}
           />
         ))}
