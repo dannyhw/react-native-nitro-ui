@@ -25,6 +25,8 @@ import path from 'node:path';
 import { describe, expect, it } from '@jest/globals';
 import yaml from 'js-yaml';
 
+import { withoutLeaseEnv } from './helpers/scrubbed-env.js';
+
 const root = process.cwd();
 const workflowDir = path.join(root, '.github', 'workflows');
 
@@ -760,7 +762,18 @@ describe('the dispatch-only harness jobs are given what the action needs', () =>
         '-c',
         lines.slice(0, through + 1).join('\n'),
       ],
-      { cwd: root, encoding: 'utf8' }
+      // The scrubbed environment, not the inherited one (X16 item 1 — this is the 25th failure of
+      // the G8 incident, and the one that needed the whole step body to be running to notice). The
+      // step asks `ci-avd-name.mjs`, which deliberately honours `ANDROID_AVD` — a lease env sourced
+      // in the shell that typed `bun run test` therefore makes the *step* answer `nitroui_a` while
+      // the assertion below reads the constant in the config file, `nitroui`. Both answers are
+      // correct for their own machine; a CI job has no lease, so the environment the step really
+      // runs with is the scrubbed one.
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: withoutLeaseEnv(process.env),
+      }
     );
     const want = fs
       .readFileSync(path.join(root, 'example', 'rn-harness.config.mjs'), 'utf8')

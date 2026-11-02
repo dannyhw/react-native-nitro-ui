@@ -650,6 +650,9 @@ export function checkIosControlA11y(
  * live in one file — and so a mistake in the format is a unit-test failure rather than a
  * device run that quietly reads zero elements.
  *
+ * A `kind=stability` line is not an element and is skipped here; it is read by
+ * `parseIosA11yStability`, which is how the report says *how many reads* a case's boxes cost.
+ *
  * @param {string} log the xcodebuild test log
  * @returns {Map<string, IosA11yNode[]>} by control id, in table order
  */
@@ -699,6 +702,236 @@ export function parseIosA11yLog(log) {
     for (const node of nodes) {
       if (node.id === entry.anchorTestId) node.anchor = true;
     }
+  }
+  return byControl;
+}
+
+/**
+ * The report's note about one case's re-reads, or `null` when there is nothing to say.
+ *
+ * A case whose two reads agreed prints no stability line, so fourteen healthy cases add nothing to
+ * the report. Anything else belongs in it: a pass that read a control four times, or one that never
+ * settled, has to be visible, because *otherwise a fix that retried its way to a green is
+ * indistinguishable from a clean run* — which is precisely how an accessibility rule gets quietly
+ * turned off.
+ *
+ * The note quotes the **first** read rather than the one before the last, because the first is the
+ * box the old single-read pass would have decided on: that pair is the comparison a reader wants,
+ * and it is the only one that survives a third or fourth read.
+ *
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor] the box actually
+ *   printed, so the note can name the ratio between the two reads instead of leaving a reader to
+ *   divide four numbers in their head.
+ * @returns {string | null}
+ */
+export function iosStabilityNote(stability, settledAnchor) {
+  if (stability == null) return null;
+  const firstRead =
+    stability.firstAnchor == null
+      ? ''
+      : `; the first read said (${num(stability.firstAnchor.x)}, ` +
+        `${num(stability.firstAnchor.y)}, ${num(stability.firstAnchor.width)}, ` +
+        `${num(stability.firstAnchor.height)})`;
+  // Said once, at the end, for whichever branch quoted the first read: naming the ratio twice in
+  // one sentence would read like a bug in the note.
+  const scale =
+    stability.firstAnchor == null
+      ? ''
+      : describeFirstReadScale(stability.firstAnchor, settledAnchor);
+  if (!stability.settled) {
+    // Not a pass and not a failure: a measurement taken off a tree that would not hold still, the
+    // one kind of green a reader has to be able to discount. Saying that out loud is what keeps a
+    // bounded wait honest — the alternative is a silent number of reads nobody can interpret.
+    return (
+      `the boxes below are read ${String(stability.reads)} times and never agreed ` +
+      `(${String(stability.moved)} frame(s) still different between the first and the last, ` +
+      `${String(stability.elapsedMs)} ms${firstRead}) — this case is one sample of a tree that ` +
+      'would not hold still, so discount it rather than trusting it' +
+      scale
+    );
+  }
+  return (
+    `the boxes below are read ${String(stability.reads)} times before two agreed ` +
+    `(${String(stability.moved)} frame(s) moved, ${String(stability.elapsedMs)} ms${firstRead}) ` +
+    '— the first read was thrown away rather than decided on. The finding below is unaffected: ' +
+    'the rule compares two elements of this one read, never two reads' +
+    scale
+  );
+}
+
+/**
+ * The scale ratio between the first read's box and the settled one, or `null` when there is no
+ * single ratio to name.
+ *
+ * The failure this whole guard was written for was a first read at exactly ⅓ of the settled one on
+ * every component: the screen scale, which is what identifies a stale snapshot from another render
+ * pass rather than a control that genuinely moved. Answered once, here, because two readers of that
+ * question — the note that prints the ratio and the WARN that promotes it (X16 item 4) — would
+ * eventually disagree, and the disagreement would look like a warning contradicting the sentence
+ * printed beside it.
+ *
+ * A label, not a number: `⅓`, `½`, `¼`, `2×`, `3×`, or the raw ratio to three places. All four
+ * components have to share one ratio within half a percent, and it has to differ from 1, so a box
+ * that merely happens to be smaller is not called a scaled read.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} [first]
+ * @param {{x: number, y: number, width: number, height: number}} [settled]
+ * @returns {string | null}
+ */
+export function firstReadScale(first, settled) {
+  if (first == null || settled == null) return null;
+  const components = ['x', 'y', 'width', 'height'];
+  let ratio = null;
+  for (const key of components) {
+    const before = first[key];
+    const after = settled[key];
+    if (!Number.isFinite(before) || !Number.isFinite(after) || after === 0) {
+      return null;
+    }
+    const candidate = before / after;
+    if (ratio == null) {
+      ratio = candidate;
+      continue;
+    }
+    if (Math.abs(candidate - ratio) > 0.005) return null;
+  }
+  if (ratio == null || Math.abs(ratio - 1) < 0.01) return null;
+  // Named when it is one of the scales a screen actually has, and the raw ratio otherwise. The
+  // components of two real reads never divide to the same digit exactly - boxes are rounded on
+  // their way out of the test manager, so 108.33/325 is 0.333323 rather than 1/3 - which is why
+  // these are comparisons with a tolerance and not key lookups.
+  const named = [
+    { near: 1 / 3, label: '⅓' },
+    { near: 1 / 2, label: '½' },
+    { near: 1 / 4, label: '¼' },
+    { near: 2, label: '2×' },
+    { near: 3, label: '3×' },
+  ];
+  const found = named.find(
+    (candidate) => Math.abs(ratio - candidate.near) < 0.002
+  );
+  return found == null ? `${ratio.toFixed(3)}×` : found.label;
+}
+
+/**
+ * The WARN this case's re-reads deserve, or `null` for a case that earns none.
+ *
+ * A first read at exactly the screen's scale is a real accessibility bug that came and went. The
+ * rule still grades the settled tree correctly, so the case *passes* — and that is precisely why it
+ * has to be said somewhere a reader cannot miss: a finding that only appears as one line among
+ * forty per-case notes is reported as a clean run by anyone who reads the verdict column. So it goes
+ * on the summary, and the exit code does not change, because "the boxes are right" is still true.
+ *
+ * Only a named scale warns. Two reads whose boxes differ by some arbitrary ratio are a control that
+ * moved (or a tree still being laid out), which is what the notes are for; all four components
+ * dividing by one ratio is the shape of a snapshot taken at another render scale, which is the shape
+ * that failed twice on maintainer-mac-1 and that nobody saw in the report.
+ *
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor]
+ * @returns {string | null}
+ */
+export function iosStabilityWarning(stability, settledAnchor) {
+  if (stability?.firstAnchor == null) return null;
+  const label = firstReadScale(stability.firstAnchor, settledAnchor);
+  if (label == null) return null;
+  return (
+    `its first accessibility read was this box at ${label} scale — a stale snapshot ` +
+    `from another render pass, discarded by read ${String(stability.reads)}. The boxes ` +
+    'reported here are the settled ones and the rule still graded them, so this is not a ' +
+    'failure; it is a transient accessibility bug that came and went, and it is a warning ' +
+    'so it does not become a footnote'
+  );
+}
+
+/**
+ * Reports one case's re-reads onto its check: the note always, the WARN when the shape says so.
+ *
+ * Lives here rather than inline in `ios.mjs` because `ios.mjs` is the runner and nothing can import
+ * it without a simulator — and item 4 is exactly about the step that *publishes* the finding. A
+ * helper nobody calls is worth nothing, and a text assertion on a call site is weak enough to survive
+ * the call being switched off. Handed a real `CheckLog`, this is testable end to end: the note
+ * appears, the warning appears, and the case's verdict does not move.
+ *
+ * @param {{note: (message: string) => void, warn: (message: string) => void}} check
+ * @param {{reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}} [stability]
+ * @param {{x: number, y: number, width: number, height: number}} [settledAnchor]
+ */
+export function reportIosStability(check, stability, settledAnchor) {
+  const note = iosStabilityNote(stability, settledAnchor);
+  if (note != null) check.note(note);
+  const warning = iosStabilityWarning(stability, settledAnchor);
+  if (warning != null) check.warn(warning);
+  return { note, warning };
+}
+
+/**
+ * "…and the first read is this box at ⅓ scale" — said only when it is true.
+ *
+ * One call to `firstReadScale`, which is the same question `ios.mjs` asks when it decides whether to
+ * WARN. Two implementations of "is this the screen-scale shape" would eventually disagree, and the
+ * disagreement would look like a warning that contradicts the note printed beside it.
+ *
+ * @param {{x: number, y: number, width: number, height: number}} [first]
+ * @param {{x: number, y: number, width: number, height: number}} [settled]
+ */
+function describeFirstReadScale(first, settled) {
+  const label = firstReadScale(first, settled);
+  if (label == null) return '';
+  return (
+    ` — the first read is this box at ${label} scale, the shape of a snapshot taken at another ` +
+    'render scale rather than a control that moved'
+  );
+}
+
+/**
+ * The stability line a case printed, if it printed one (`parseIosA11yLog` skips those lines).
+ *
+ * A `kind=stability` line exists only when a case cost more than the ordinary two reads, or when
+ * the wait ran out: a control that settled immediately prints no extra line at all. Reading it in
+ * the report is what keeps the fix honest — a pass that retried its way to a green would look
+ * exactly like a green unless the log said how many reads it took, and an unsettled comparison is
+ * a measurement a reader has to be able to discount.
+ *
+ * @param {string} log the xcodebuild test log
+ * @returns {Map<string, {reads: number, settled: boolean, moved: number, elapsedMs: number,
+ *   firstAnchor?: {x: number, y: number, width: number, height: number}}>}
+ */
+export function parseIosA11yStability(log) {
+  /** @type {Map<string, any>} */
+  const byControl = new Map();
+  for (const line of log.split('\n')) {
+    if (!line.includes('real-input a11y ')) continue;
+    const fields = fieldsOf(line);
+    if (fields.get('kind') !== 'stability') continue;
+    const caseName = fields.get('case');
+    if (caseName == null) continue;
+    const reads = Number(fields.get('reads'));
+    const settled = fields.get('settled') === 'true';
+    const moved = Number(fields.get('moved'));
+    const elapsedMs = Number(fields.get('elapsedMs'));
+    // An unreadable count is a format change, and the difference between "settled after 3 reads"
+    // and "never settled" is the whole point of reading the line: silence here would turn a
+    // moving tree into an unremarked one. Same rule as an unreadable box above.
+    if (!Number.isFinite(reads) || !Number.isFinite(moved)) {
+      throw new Error(
+        `real-input: a stability line from the iOS run carries no readable read count: ${line.trim()}`
+      );
+    }
+    const entry = { reads, settled, moved, elapsedMs };
+    if (fields.has('firstAnchorX')) {
+      entry.firstAnchor = {
+        x: Number(fields.get('firstAnchorX')),
+        y: Number(fields.get('firstAnchorY')),
+        width: Number(fields.get('firstAnchorW')),
+        height: Number(fields.get('firstAnchorH')),
+      };
+    }
+    byControl.set(caseName, entry);
   }
   return byControl;
 }

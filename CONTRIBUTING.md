@@ -499,7 +499,8 @@ What that means in practice:
   `simctl list` rather than for the boot process, waits for the load average to
   fall under the bench's settle ceiling, and resets the example app. Without it
   a lease only reserves names - which is what a test, a CI runner or a bench
-  host wants.
+  host wants. An `--exclusive` lease ignores that variable and boots only for a
+  typed `--boot`: a bench host is the host most likely to have it set.
 - **Nothing reaps passively.** `acquire`, `release` and `list` never power a
   device off and never reset one, not even one that is idle past
   `idleShutdownMinutes` (`devices.json`, default 30). Devices are powered off in
@@ -551,8 +552,23 @@ What that means in practice:
   regenerate its env file - from wiping its own running suite.
   `NITRO_UI_GATE_DEVICE_FORCE=1` runs anyway; a bench that wants the machine to
   itself uses `--exclusive`, which powers off every pool device no _other_ lease
-  holds - with or without `--boot`, because the bench host's documented
-  invocation is the one without it.
+  holds. That power-off happens with or without `--boot`; the boot does not.
+  `--boot` is what brings up the pair the lease hands you, and an exclusive
+  `--boot` has to name the half it warms (`--platform android|ios|both`) or it is
+  refused: `--platform` defaults to `both`, so a line that never said which half
+  would cold-boot a simulator under an Android baseline - minutes of load, and a
+  simulator idling through the rest of the mint (X16 item 2).
+  `NITRO_UI_LEASE_BOOT=1` does not boot an exclusive lease either: only a typed
+  `--boot` does, because a bench host is exactly the host that keeps that
+  variable in its profile. One exception is made to the power-off, and only when
+  a boot was asked for: a device of the named platform, in the pair being handed
+  over, that is _already up_ is spared rather than killed and restarted, since
+  killing it costs the bench a cold boot of the device it is about to measure on
+  (X16 item 3). Ask for no boot and the promise stays whole: the machine is
+  powered down however warm it was. An exclusive acquire used to skip the
+  hand-off altogether, so the documented baseline-mint line below left both of
+  its simulators off and the bench host booted its leased device by hand
+  (X16 item 2).
 - **Anything started outside `gate.mjs` runs unclaimed.** `bun run harness:*`,
   a direct `node scripts/real-input/*.mjs --control …` and `build-app.mjs` take
   no claim, so what protects them is the rule above: their pair is leased, and a
@@ -1102,7 +1118,7 @@ that did it took 35 min:
 
 ```sh
 export NITRO_UI_MACHINE_LABEL=maintainer-mac-2
-node scripts/lease.mjs acquire --task <ID> --exclusive --boot
+node scripts/lease.mjs acquire --task <ID> --exclusive --boot --platform android
 node scripts/bench/run.mjs --platform android --plan full --launches 8 \
   --component menu --update-baseline   # add --dry-run first: it answers the same
                                        # startup questions without booting anything

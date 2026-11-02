@@ -26,8 +26,13 @@ import {
   A11Y_CONTROLS,
   checkIosControlA11y,
   exemptionsFor,
+  firstReadScale,
   iosA11yProblems,
   parseIosA11yLog,
+  parseIosA11yStability,
+  reportIosStability,
+  iosStabilityNote,
+  iosStabilityWarning,
   staleExemptions,
 } from '../real-input/a11y.mjs';
 
@@ -442,6 +447,344 @@ describe('reading the pass out of an xcodebuild log', () => {
     // `ios.mjs` turns this into a per-case "not measured" failure, which is how a pass that
     // never reached a screen stays a failure rather than a green section.
     expect(parseIosA11yLog('nothing here').size).toBe(0);
+  });
+});
+
+/**
+ * The re-read the Swift pass does before it prints a case's boxes (X16 item 4).
+ *
+ * `a11y:switch` failed twice on maintainer-mac-1 with the React Native wrapper's box at exactly ⅓
+ * of the switch's — every component divided by the screen scale — and passed on a re-run of the
+ * same tree. That snapshot is the pass's to throw away, and the pass itself is
+ * `A11yFrameStability`, proved on the host by `scripts/native-tests/a11y-frame-stability.test.swift`
+ * in `bun run test:native`. What is proved *here* is the other half: that the log line it prints
+ * about doing so reaches the report, because a fix that retried its way to a green would otherwise
+ * be indistinguishable from a clean run.
+ */
+describe('the accessibility re-read', () => {
+  /** One case, re-read three times before its box stopped being the ⅓-scale one. */
+  const STABILITY_LOG = [
+    'real-input a11y case=switch kind=stability reads=3 settled=true moved=1 elapsedMs=240 ' +
+      'firstAnchorX=108.33333 firstAnchorY=72.44444 firstAnchorW=20.33333 firstAnchorH=9.33333',
+    'real-input a11y case=switch kind=anchor id=switch-controlled x=325.0 y=217.333 w=61.0 h=28.0 nodes=2',
+    'real-input a11y case=switch kind=node trait="switch" enabled=true hittable=true id="switch-controlled" label="Controlled switch" value="" x=325.0 y=217.333 w=61.0 h=28.0',
+    'real-input a11y case=switch kind=node trait="switch" enabled=true hittable=true id="" label="Controlled switch" value="0" x=325.0 y=217.333 w=61.0 h=28.0',
+  ].join('\n');
+
+  it('does not read a stability line as an element', () => {
+    // It carries `case=` like an element line, so a reader that keyed only on that would hand the
+    // rule a phantom node with no label and a box made of `NaN`s — which the rule would report as
+    // "no element is announced as the control", i.e. the guard would manufacture its own failure.
+    const trees = parseIosA11yLog(STABILITY_LOG);
+    expect(trees.get('switch')).toHaveLength(2);
+    // The phantom it would otherwise create: no trait, no label, and a box made of `NaN`s, which
+    // the rule would report as "no element is announced as the control".
+    expect(
+      trees.get('switch').every((element) => element.type !== 'unknown')
+    ).toBe(true);
+    expect(
+      trees
+        .get('switch')
+        .every(
+          (element) => Number.isFinite(element.frame.x) && element.label !== ''
+        )
+    ).toBe(true);
+  });
+
+  it('reads how many re-reads a case cost, and what the first read said', () => {
+    const stability = parseIosA11yStability(STABILITY_LOG).get('switch');
+    expect(stability.reads).toBe(3);
+    expect(stability.settled).toBe(true);
+    expect(stability.moved).toBe(1);
+    expect(stability.elapsedMs).toBe(240);
+    // The box that was thrown away, in the report: "the pass read it three times" is only useful
+    // if a reader can see the two answers differ by the screen scale, which is how the ⅓-scale
+    // snapshot was recognised as a stale read rather than a moved control.
+    expect(stability.firstAnchor).toEqual({
+      x: 108.33333,
+      y: 72.44444,
+      width: 20.33333,
+      height: 9.33333,
+    });
+  });
+
+  it('reports a case that printed no stability line as an ordinary two-read settle', () => {
+    // The common case must stay silent in the log — fourteen extra lines a run is noise — so the
+    // absence of a line is what "settled immediately" means, and `ios.mjs` notes nothing.
+    expect(
+      parseIosA11yStability(
+        'real-input a11y case=switch kind=anchor id=switch-controlled x=325.0 y=217.333 w=61.0 h=28.0 nodes=2\n' +
+          'real-input a11y case=switch kind=node trait="switch" enabled=true hittable=true id="switch-controlled" label="Controlled switch" value="" x=325.0 y=217.333 w=61.0 h=28.0'
+      ).size
+    ).toBe(0);
+  });
+
+  it('keeps an unsettled case visibly unsettled', () => {
+    // A tree that never holds still (an animated indicator, a list mid-recycle) is measured on its
+    // last read and must not read as a settle: that branch is the difference between a discounted
+    // measurement and a pass.
+    const log =
+      'real-input a11y case=switch kind=stability reads=6 settled=false moved=2 elapsedMs=1440 ' +
+      'firstAnchorX=325 firstAnchorY=217 firstAnchorW=61 firstAnchorH=28';
+    const stability = parseIosA11yStability(log).get('switch');
+    expect(stability.settled).toBe(false);
+    expect(stability.reads).toBe(6);
+  });
+
+  it('refuses a stability line whose counts did not parse', () => {
+    // Same rule as an unreadable box: a format change is a broken measurement, and reading
+    // `reads=NaN settled=false` as "it never settled" would blame the app for a parser.
+    expect(() =>
+      parseIosA11yStability(
+        'real-input a11y case=switch kind=stability reads=?? settled=true moved=1'
+      )
+    ).toThrow(/no readable read count/);
+  });
+
+  it('says nothing in the report for a case that settled on the ordinary two reads', () => {
+    // Fourteen extra notes a run is noise, and the silence is what makes the note meaningful.
+    expect(iosStabilityNote(undefined)).toBeNull();
+    expect(iosStabilityNote(null)).toBeNull();
+  });
+
+  it('notes a re-read with the read count, the first read, and the ratio between them', () => {
+    const note = iosStabilityNote(
+      parseIosA11yStability(STABILITY_LOG).get('switch'),
+      SWITCH_BOX
+    );
+    expect(note).toContain('read 3 times before two agreed');
+    // The box that was thrown away, and the ratio to the one kept: that ratio is how a reader
+    // tells a stale snapshot from a control that moved, so it has to survive into the report.
+    expect(note).toContain('(108.33, 72.44, 20.33, 9.33)');
+    expect(note).toContain('at ⅓ scale');
+    expect(note).toContain('1 frame(s) moved');
+    expect(note).toContain('240 ms');
+    // And what the guard does NOT do, in the same breath, because the note is the only place a
+    // reader learns which of the two kinds of wait this was.
+    expect(note).toContain('never two reads');
+  });
+
+  it('will not call the first read a scaled one unless every component says so', () => {
+    // The ⅓ sentence is a diagnosis, and a diagnosis printed for a box that merely happens to be
+    // smaller would teach the next reader to distrust the note. Fixtures that coincide with the
+    // right answer prove nothing, so this one is one component off: x/y/w at a third, height not.
+    const almost = {
+      reads: 3,
+      settled: true,
+      moved: 1,
+      elapsedMs: 240,
+      firstAnchor: { x: 108.33, y: 72.44, width: 20.33, height: 40 },
+    };
+    const notScaled = iosStabilityNote(almost, SWITCH_BOX);
+    expect(notScaled).not.toContain('the first read is this box at');
+    // And the note must not assert the *shape* of the incident either: naming the ⅓-scale bug in
+    // every re-read note would teach a reader to see that bug in notes that are not about it.
+    // (checked on the bare fraction, not a spelling: the note writes "at ⅓ scale", and an
+    // assertion that depended on a hyphen would pass on a note that did name it.)
+    expect(notScaled).not.toContain('⅓');
+    // And a discarded box that equals the kept one says nothing either: `settle` would not have
+    // thrown it away, so if it ever appeared the note must not invent a scale for it.
+    const same = { ...almost, firstAnchor: { ...SWITCH_BOX } };
+    expect(iosStabilityNote(same, SWITCH_BOX)).not.toContain('scale');
+    // With no discarded box printed at all (a budget timeout before a second read), the note still
+    // renders: the read count is the finding, not the ratio.
+    const none = { reads: 2, settled: false, moved: 0, elapsedMs: 1500 };
+    expect(iosStabilityNote(none, SWITCH_BOX)).toContain(
+      'read 2 times and never agreed'
+    );
+  });
+
+  it('says outright when a tree would not hold still, rather than reporting a clean box', () => {
+    const note = iosStabilityNote({
+      reads: 6,
+      settled: false,
+      moved: 2,
+      elapsedMs: 1440,
+    });
+    expect(note).toContain('read 6 times and never agreed');
+    expect(note).toContain('discount it');
+    // Never a pass, never a failure: `ios.mjs` notes it, and the rule still grades the boxes.
+    expect(note).not.toMatch(/\bFAIL\b/);
+  });
+
+  /**
+   * Item 4: a ⅓-scale first read is a real accessibility bug that came and went, and the case still
+   * *passes* the rule — so a note two screens up is where a finding like that goes to be reported
+   * as clean. These are the two directions that matter: the shape must warn, and an ordinary
+   * disagreement must not, because a WARN that fires on every re-read is a WARN nobody reads.
+   */
+  it('warns when the first read has the shape of a stale render-scale snapshot', () => {
+    const warning = iosStabilityWarning(
+      parseIosA11yStability(STABILITY_LOG).get('switch'),
+      SWITCH_BOX
+    );
+    expect(warning).toContain('⅓');
+    expect(warning).toContain('stale');
+    // Said as a warning precisely because it is not a failure: the boxes below are the settled ones.
+    expect(warning).toMatch(/not a failure/);
+  });
+
+  it('warns nothing for a re-read that is not the screen-scale shape', () => {
+    // A control that moved, or a tree still being laid out: the note covers it, and calling every
+    // re-read a warning would train a reader to skim past the one that matters.
+    expect(
+      iosStabilityWarning(
+        { reads: 3, settled: true, moved: 1, elapsedMs: 240 },
+        SWITCH_BOX
+      )
+    ).toBeNull();
+    const arbitrary = {
+      reads: 3,
+      settled: true,
+      moved: 1,
+      elapsedMs: 240,
+      firstAnchor: { x: 108.33, y: 72.44, width: 20.33, height: 40 },
+    };
+    expect(iosStabilityWarning(arbitrary, SWITCH_BOX)).toBeNull();
+  });
+
+  it('has one definition of the scale shape, shared by the note and the warning', () => {
+    // The note and the WARN ask the same question in two places. If they answered it separately they
+    // would eventually disagree, and a summary that warns about a box the note beside it declines to
+    // call scaled is the kind of contradiction a reader cannot resolve from a log.
+    expect(
+      firstReadScale({ x: 100, y: 100, width: 30, height: 30 }, SWITCH_BOX)
+    ).toBe(null);
+    const scaled = { x: 108.333, y: 72.444, width: 20.333, height: 9.333 };
+    expect(firstReadScale(scaled, SWITCH_BOX)).toBe('⅓');
+    const warns = iosStabilityWarning(
+      {
+        reads: 3,
+        settled: true,
+        moved: 1,
+        elapsedMs: 240,
+        firstAnchor: scaled,
+      },
+      SWITCH_BOX
+    );
+    const notes = iosStabilityNote(
+      {
+        reads: 3,
+        settled: true,
+        moved: 1,
+        elapsedMs: 240,
+        firstAnchor: scaled,
+      },
+      SWITCH_BOX
+    );
+    expect(warns).toContain('⅓');
+    expect(notes).toContain('⅓');
+    // And they say nothing when the other says nothing.
+    const plain = { x: 300, y: 200, width: 61, height: 28 };
+    expect(firstReadScale(plain, SWITCH_BOX)).toBeNull();
+    expect(
+      iosStabilityWarning(
+        {
+          reads: 2,
+          settled: true,
+          moved: 1,
+          elapsedMs: 10,
+          firstAnchor: plain,
+        },
+        SWITCH_BOX
+      )
+    ).toBeNull();
+  });
+
+  /**
+   * Item 4, end to end: the finding has to reach the check, not just exist as a helper.
+   *
+   * `reportIosStability` is what `ios.mjs` calls, and it is written against a plain `{note, warn}`
+   * pair so it can be handed a real `CheckLog` here. A text assertion on a call site is not enough —
+   * an earlier version of this file asserted `toContain('check.warn(stabilityWarning)')` and stayed
+   * green when the mutation wrapped that call in `if (false)`, because the text was still there. The
+   * call is checked by making it.
+   */
+  it('reports the re-read onto the check: a note always, a WARN only for the scale shape', async () => {
+    const { CheckLog } = await import('../real-input/report.mjs');
+    const scaled = { x: 108.333, y: 72.444, width: 20.333, height: 9.333 };
+    const stability = {
+      reads: 3,
+      settled: true,
+      moved: 2,
+      elapsedMs: 6_000,
+      firstAnchor: scaled,
+    };
+
+    const warned = new CheckLog('Switch a11y');
+    reportIosStability(warned, stability, SWITCH_BOX);
+    expect(warned.notes.some((n) => n.startsWith('ok:') || n.length > 0)).toBe(
+      true
+    );
+    expect(warned.warns.length).toBe(1);
+    expect(warned.warns[0]).toContain('⅓');
+    // The whole point of item 4: a warning, not a failure. The boxes below are settled ones.
+    expect(warned.passed).toBe(true);
+
+    const quiet = new CheckLog('Slider a11y');
+    reportIosStability(
+      quiet,
+      { ...stability, firstAnchor: undefined },
+      SWITCH_BOX
+    );
+    expect(quiet.warns).toEqual([]);
+    expect(quiet.notes.length).toBeGreaterThan(0);
+
+    const ordinary = new CheckLog('Button a11y');
+    reportIosStability(ordinary, undefined, SWITCH_BOX);
+    expect(ordinary.warns).toEqual([]);
+    expect(ordinary.notes).toEqual([]);
+  });
+
+  it('has the runner hand the anchor-flagged box, not index zero, to the reporter', () => {
+    // The behavioural test above covers what `reportIosStability` does; it cannot reach `ios.mjs`,
+    // which needs a simulator to import. What is still worth pinning at the call site is *which box*
+    // is handed over: the Swift pass prints frames[0], the wrapper, so the first read's box is the
+    // wrapper's and the settled box has to be the wrapper's too. Looking it up by the anchor flag
+    // rather than by index is what keeps a tree whose wrapper is not first from producing a ratio
+    // that is not the screen scale at all. `nodes[0]` stays as the fallback for a log that flags
+    // nothing, which is the same fallback the note above has always used.
+    const runner = require('node:fs').readFileSync(
+      `${__dirname}/../real-input/ios.mjs`,
+      'utf8'
+    );
+    const call = runner.slice(
+      runner.indexOf('reportIosStability('),
+      runner.indexOf('reportIosStability(') + 260
+    );
+    expect(call).toContain('stabilityByCase.get(entry.id)');
+    expect(call).toContain('nodes.find((element) => element.anchor)?.frame');
+  });
+
+  it('has the Swift pass print what the reader parses', () => {
+    // The line is written in Swift and read in JavaScript, in two files that never see each other.
+    // Every key `parseIosA11yStability` reads has to be one the pass prints, or the note above
+    // silently disappears from the report on a rename.
+    const swift = require('node:fs').readFileSync(
+      `${__dirname}/../../example/ios/NitroUiExampleUITests/RealInputTests.swift`,
+      'utf8'
+    );
+    for (const key of [
+      'reads',
+      'settled',
+      'moved',
+      'elapsedMs',
+      'firstAnchorX',
+    ]) {
+      expect(swift).toContain(`${key}=`);
+    }
+    // And it settles through the shared helper rather than re-implementing the wait inline, so the
+    // host test above is testing the code that runs on the device.
+    expect(swift).toContain('A11yFrameStability.settle(');
+    expect(swift).not.toMatch(/while !framesAgree/);
+    // The *print* decision is delegated to `shouldReport` too (X16 item 5). Inline, the condition is
+    // three clauses that read as obvious, and the one clause that is not obvious - `reads > 2`, for
+    // a tree that flaps A, B, A, A and ends where it started with `moved == 0` - would be a device
+    // run away from ever being tested. Asking the helper means the host test covers the rule the
+    // device run follows, and a second copy of the condition cannot survive review unnoticed.
+    expect(swift).toContain('A11yFrameStability.shouldReport(settled)');
+    expect(swift).not.toMatch(/if settled\.reads > 2/);
+    expect(swift).not.toMatch(/if settled\.moved > 0/);
   });
 });
 
