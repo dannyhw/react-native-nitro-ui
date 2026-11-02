@@ -10,11 +10,11 @@
 		0C80B921A6F3F58F76C31292 /* libPods-NitroUiExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-NitroUiExample.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		604D1B03BCF670E20D71C157 /* RealInputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C54FBBD80A535C1716DDA821 /* RealInputTests.swift */; };
-		A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11CF00000000000000000F0 /* A11yFrameStability.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		761780EF2CA45674006654EF /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EE2CA45674006654EF /* SceneDelegate.swift */; };
 		761780F02CA45674006654F0 /* NitroUiProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780F12CA45674006654F1 /* NitroUiProbe.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		A11CF00000000000000000F1 /* A11yFrameStability.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11CF00000000000000000F0 /* A11yFrameStability.swift */; };
 		C3BEE595C2DB289FD1374B0D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 		DC059275BA640FCAF6BA9E70 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 862EA38750FC85F10CC19780 /* Foundation.framework */; };
 /* End PBXBuildFile section */
