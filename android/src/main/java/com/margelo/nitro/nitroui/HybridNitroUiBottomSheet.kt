@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -500,10 +501,18 @@ internal class BottomSheetHost(
     val hasMedium = detents.any { it.kind == "medium" }
     val expanded = expandedDetent(detents, model.fitHeightPx)
     val dismissible = model.dismissible
+    // One instance for the whole presentation: `rememberModalBottomSheetState` keys its
+    // saved state on this lambda, so a fresh one per recomposition - the content's box
+    // arriving, a `fit` height moving - built a new, hidden `SheetState` and the sheet
+    // took itself down. It reads the model when Material asks, not when it was made.
+    val confirmValueChange =
+      remember(model) {
+        { value: SheetValue -> value != SheetValue.Hidden || model.dismissible || !model.presented }
+      }
     val sheetState =
       rememberModalBottomSheetState(
         skipPartiallyExpanded = !hasMedium || expanded == null,
-        confirmValueChange = { value -> value != SheetValue.Hidden || model.dismissible || !model.presented },
+        confirmValueChange = confirmValueChange,
       )
     val presented = model.presented
     LaunchedEffect(presented) {

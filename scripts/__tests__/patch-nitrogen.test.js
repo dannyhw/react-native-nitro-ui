@@ -359,3 +359,114 @@ describe('patch-nitrogen: intrinsic sizing', () => {
     });
   });
 });
+
+describe('patch-nitrogen: content children (G14)', () => {
+  const MM =
+    'nitrogen/generated/ios/c++/views/HybridNitroUiBottomSheetComponent.mm';
+  /** A generated iOS component view, cut down to what the patch reads. */
+  const generated = () =>
+    [
+      '@implementation HybridNitroUiBottomSheetComponent {',
+      '}',
+      '- (void) updateView {',
+      '  [self setContentView:view];',
+      '}',
+      '@end',
+      '',
+    ].join('\n');
+
+  /** A scratch tree that declares the BottomSheet, with `mm` as its generated view. */
+  function withSheetTree(mm, fn, { declare = true } = {}) {
+    const root = mkdtempSync(join(tmpdir(), 'patch-nitrogen-sheet-'));
+    try {
+      mkdirSync(join(root, 'nitrogen/generated/ios/c++/views'), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(root, 'nitro.json'),
+        JSON.stringify({
+          autolinking: declare ? { NitroUiBottomSheet: {} } : {},
+        })
+      );
+      if (mm != null) writeFileSync(join(root, MM), mm);
+      return fn(root);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+
+  it('mounts the children into the content view, inside the @implementation', () => {
+    withSheetTree(generated(), (root) => {
+      const result = runPatch(root);
+      expect(result.status).toBe(0);
+      const code = readFileSync(join(root, MM), 'utf8');
+      expect(code).toContain('- (void)mountChildComponentView:');
+      expect(code).toContain(
+        '[content insertSubview:childComponentView atIndex:index];'
+      );
+      expect(code).toContain('- (void)unmountChildComponentView:');
+      expect(code).toContain('[childComponentView removeFromSuperview];');
+      expect(code.indexOf('mountChildComponentView')).toBeLessThan(
+        code.lastIndexOf('@end')
+      );
+    });
+  });
+
+  it('is idempotent', () => {
+    withSheetTree(generated(), (root) => {
+      runPatch(root);
+      const once = readFileSync(join(root, MM), 'utf8');
+      const again = runPatch(root);
+      expect(again.status).toBe(0);
+      expect(again.stdout).toContain(
+        'already-patched HybridNitroUiBottomSheetComponent.mm'
+      );
+      expect(readFileSync(join(root, MM), 'utf8')).toBe(once);
+    });
+  });
+
+  it('fails when the view is no longer the content view, or nitrogen generates the override', () => {
+    withSheetTree(
+      generated().replace('[self setContentView:view];', ''),
+      (root) => {
+        const result = runPatch(root);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('setContentView');
+      }
+    );
+    withSheetTree(
+      generated().replace(
+        '@end',
+        '- (void)mountChildComponentView:(UIView *)v index:(NSInteger)i {}\n@end'
+      ),
+      (root) => {
+        const result = runPatch(root);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('dropped rather than duplicated');
+      }
+    );
+  });
+
+  it('fails for a declared view nitrogen did not generate, and skips an undeclared one', () => {
+    withSheetTree(null, (root) => {
+      const result = runPatch(root);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('is the view generated?');
+    });
+    withSheetTree(
+      null,
+      (root) => {
+        expect(runPatch(root).status).toBe(0);
+      },
+      { declare: false }
+    );
+  });
+
+  it('is applied to the BottomSheet the repo generates', () => {
+    const mm = readFileSync(join(repoRoot, MM), 'utf8');
+    expect(mm).toContain('// nitro-ui: content children');
+    expect(mm).toContain(
+      '[content insertSubview:childComponentView atIndex:index];'
+    );
+  });
+});

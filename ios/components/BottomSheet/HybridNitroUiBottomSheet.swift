@@ -1078,6 +1078,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       fields.append("label=\(sheet.isViewLoaded ? sheet.view.accessibilityLabel ?? "-" : "-")")
       fields.append("sheetId=\(sheet.isViewLoaded ? sheet.view.accessibilityIdentifier ?? "-" : "-")")
       fields.append("windowLevel=\(Int(sheet.viewIfLoaded?.window?.windowLevel.rawValue ?? -1))")
+      fields.append("hit=\(Self.contentTakesHit(container) ? 1 : 0)")
     } else {
       fields.append("sheetH=0")
     }
@@ -1133,6 +1134,20 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       current = controller.presentedViewController
     }
     return count
+  }
+
+  /// Whether a touch at the centre of the content would be routed into it: UIKit's
+  /// own `hitTest`, asked of the window the content is in - the structural half of "a
+  /// finger reaches it" (the real finger is `real-input:ios`).
+  static func contentTakesHit(_ content: UIView) -> Bool {
+    guard let window = content.window, !content.isHidden, content.bounds.height > 0 else {
+      return false
+    }
+    let centre = content.convert(CGPoint(x: content.bounds.midX, y: content.bounds.midY), to: window)
+    guard let hit = window.hitTest(centre, with: nil) else { return false }
+    // A React Native child, not the content view itself: an empty content view in the
+    // sheet takes the hit as well, and would say nothing about where the children are.
+    return hit !== content && hit.isDescendant(of: content)
   }
 
   /// Whether UIKit would drop a presentation asked of `controller` right now.

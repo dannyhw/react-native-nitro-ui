@@ -54,7 +54,7 @@ function Opener({
 }
 
 const DETENTS_TWO: BottomSheetDetent[] = ['medium', 'large'];
-const DETENTS_FRACTION: BottomSheetDetent[] = [{ fraction: 0.35 }, 'large'];
+const DETENTS_FRACTION: BottomSheetDetent[] = ['medium', { fraction: 0.85 }];
 const ROWS = Array.from({ length: 30 }, (_, index) => `Row ${index + 1}`);
 
 /**
@@ -121,7 +121,10 @@ export default function BottomSheetScreen() {
           accessibilityLabel="Fit sheet"
         >
           <View style={styles.sheet}>
-            <Text style={[styles.title, { color: ink.ink }]}>
+            <Text
+              testID="sheet-fit-title"
+              style={[styles.title, { color: ink.ink }]}
+            >
               As tall as this
             </Text>
             <Pressable
@@ -179,7 +182,15 @@ export default function BottomSheetScreen() {
           onDismiss={() => record('dismiss')}
           detents={DETENTS_TWO}
         >
-          <ScrollView contentContainerStyle={styles.sheet}>
+          {/* A header that is not a scroll view: a drag on it moves the sheet. */}
+          <View testID="sheet-two-header" style={styles.header}>
+            <Text style={[styles.title, { color: ink.ink }]}>
+              Drag this up for large
+            </Text>
+          </View>
+          {/* `nestedScrollEnabled`: on Android a drag at the list's top edge then
+              moves the sheet, as it does on iOS. */}
+          <ScrollView nestedScrollEnabled contentContainerStyle={styles.sheet}>
             {ROWS.map((row) => (
               <View
                 key={row}
@@ -192,10 +203,10 @@ export default function BottomSheetScreen() {
         </BottomSheet>
 
         <Text style={[styles.section, { color: ink.ink }]}>
-          A fraction, then large
+          Medium, then 85%
         </Text>
         <Opener
-          label="Open the 35% sheet"
+          label="Open the 85% sheet"
           testID="sheet-open-fraction"
           onPress={() => setFractionOpen(true)}
         />
@@ -208,10 +219,7 @@ export default function BottomSheetScreen() {
         >
           <View style={styles.sheet}>
             <Text style={[styles.title, { color: ink.ink }]}>
-              35% of the largest height
-            </Text>
-            <Text style={styles.note}>
-              Android shows this one expanded: Material has one expanded height.
+              Medium, then 85% of the largest height
             </Text>
           </View>
         </BottomSheet>
@@ -235,7 +243,10 @@ export default function BottomSheetScreen() {
           dismissible={false}
         >
           <View style={styles.sheet}>
-            <Text style={[styles.title, { color: ink.ink }]}>
+            <Text
+              testID="sheet-sticky-title"
+              style={[styles.title, { color: ink.ink }]}
+            >
               Swipe, back and outside do nothing
             </Text>
             <Pressable
@@ -312,6 +323,7 @@ const styles = StyleSheet.create({
   page: { padding: 16, gap: 10 },
   modal: { flex: 1, padding: 24, gap: 12 },
   sheet: { padding: 20, gap: 12 },
+  header: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8 },
   title: { fontSize: 20, fontWeight: '600' },
   section: { fontSize: 15, fontWeight: '600', marginTop: 14 },
   note: { color: '#8a8a8f', fontSize: 12, lineHeight: 17 },

@@ -48,6 +48,7 @@ final class RealInputTests: XCTestCase {
     static let pickerTab = "tab-picker"
     static let menuTab = "tab-menu"
     static let dialogTab = "tab-dialog"
+    static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
   }
 
@@ -71,6 +72,8 @@ final class RealInputTests: XCTestCase {
     static let menuPick = "real-input-menu-pick"
     static let menuEvents = "real-input-menu-events"
     static let dialogLog = "dialog-log"
+    static let sheetLog = "sheet-log"
+    static let sheetPresses = "sheet-presses"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -2650,6 +2653,190 @@ final class RealInputTests: XCTestCase {
       "a sheet's action reports its id, then the close"
     )
     waitUntilOptionGone("Copy link", "the action to take the sheet down")
+  }
+
+  /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN
+  /// button, a tap on a `Pressable` *inside* the sheet reaches JS through the sheet's own
+  /// touch root, and a drag down and a tap outside each close a dismissible sheet -
+  /// reported as the close, then the dismissal - while neither closes a sticky one.
+  /// A drag up on the two-detent sheet reports the second detent.
+  ///
+  /// The screen's log is read only with every sheet down: a presented sheet is modal to
+  /// VoiceOver (`accessibilityViewIsModal`), which keeps the app's own elements out of
+  /// the tree XCUITest reads while it is up. Inside the sheet, `sheet-presses` is the
+  /// sheet's own echo.
+  func testRealInputBottomSheet() throws {
+    try goToTab(Tab.sheetTab, showing: Echo.sheetLog)
+    XCTAssertEqual(try read(Echo.sheetLog), "none", "no sheet has reported anything before a touch")
+    XCTAssertFalse(
+      app.descendants(matching: .any)["sheet-press"].exists,
+      "the sheet's content is not mounted before it is presented"
+    )
+
+    // 1. A real tap opens the fit sheet, whose content is React Native.
+    try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
+    let pressable = try required("sheet-press", as: "the Pressable inside the sheet")
+    let title = try required("sheet-fit-title", as: "the fit sheet's title")
+    XCTAssertGreaterThan(
+      title.frame.minY,
+      app.frame.height * 0.4,
+      "a fit sheet sits low on the screen, as tall as its content (title at \(title.frame))"
+    )
+
+    // 2. A real tap on the Pressable inside the sheet reaches JS: the sheet's own echo.
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the Pressable inside the sheet",
+        waitingFor: "the real tap inside the sheet to reach JS",
+        press: { _ in pressable.fingerTap() },
+        reading: { self.echoText(Echo.sheetPresses) }
+      ) { shown in
+        shown == "Pressed 1 times"
+      },
+      "Pressed 1 times",
+      "a real tap inside the sheet presses its Pressable once"
+    )
+
+    // 3. A drag down closes it: the close, then the dismissal.
+    try dragSheetDown(from: "sheet-fit-title", until: "sheet-press")
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0 == "press:1 > presented:false > dismiss" },
+      "press:1 > presented:false > dismiss",
+      "a drag down reports the close, then the dismissal - and the press before them"
+    )
+
+    // 4. A tap outside closes it too.
+    try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
+    try tapOutsideSheet(until: "sheet-press")
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0.hasSuffix("dismiss > presented:false > dismiss") },
+      "press:1 > presented:false > dismiss > presented:false > dismiss",
+      "a tap outside reports the close, then the dismissal"
+    )
+
+    // 5. A sticky sheet: neither a drag down nor a tap outside closes it; its button does.
+    try tapUntilElement("sheet-open-sticky", as: "the sticky sheet's opener", appears: "sheet-sticky-close")
+    let stickyTitle = try required("sheet-sticky-title", as: "the sticky sheet's title")
+    stickyTitle.centre.press(
+      forDuration: 0.05,
+      thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
+    )
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertTrue(
+      app.descendants(matching: .any)["sheet-sticky-close"].exists,
+      "a drag down leaves a sticky sheet up"
+    )
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).fingerTap()
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertTrue(
+      app.descendants(matching: .any)["sheet-sticky-close"].exists,
+      "and so does a tap outside"
+    )
+    try pressUntil(
+      named: "the sticky sheet's own button",
+      waitingFor: "the real tap on the sticky sheet's button to close it",
+      press: { attempt in
+        let close = self.app.descendants(matching: .any)["sheet-sticky-close"]
+        if attempt > 1 && !close.exists { return }
+        close.fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)["sheet-sticky-close"].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0.hasSuffix("close > dismiss") },
+      "press:1 > presented:false > dismiss > presented:false > dismiss > close > dismiss",
+      "only the sticky sheet's own button closed it, and that close is the app's: no presented:false"
+    )
+
+    // 6. The two-detent sheet: a drag up on its header reports the second detent.
+    try tapUntilElement("sheet-open-two", as: "the two-detent sheet's opener", appears: "sheet-two-header")
+    let header = try required("sheet-two-header", as: "the two-detent sheet's header")
+    let mediumTop = header.frame.minY
+    header.centre.press(
+      forDuration: 0.1,
+      thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+    )
+    let largeTop = waitForFrame("sheet-two-header") { $0.minY < mediumTop - 100 }
+    print("real-input (ios): bottom-sheet: header from y=\(mediumTop) to y=\(largeTop.minY)")
+    // A drag down from large may stop at medium first (UIKit reports that as detent 0)
+    // and the helper drags again, so the log is read for what it must contain.
+    try dragSheetDown(from: "sheet-two-header", until: "sheet-two-header")
+    let twoLog = readUntil(Echo.sheetLog) { $0.hasSuffix("presented:false > dismiss") && $0.contains("detent:1") }
+    print("real-input (ios): bottom-sheet: log after the two-detent sheet: \(twoLog)")
+    XCTAssertTrue(
+      twoLog.hasPrefix(
+        "press:1 > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1"),
+      "a drag up reports detent 1 after everything before it (log: \(twoLog))"
+    )
+    XCTAssertTrue(
+      twoLog.hasSuffix("presented:false > dismiss"),
+      "and a drag down closes it, reported as the close, then the dismissal (log: \(twoLog))"
+    )
+  }
+
+  /// Tap a plain RN element until another element appears (a sheet's content).
+  private func tapUntilElement(_ identifier: String, as what: String, appears other: String) throws {
+    try pressUntil(
+      named: "\(what) (\(identifier))",
+      waitingFor: "the real tap on \(identifier) to bring up \(other)",
+      press: { attempt in
+        if attempt > 1 && self.app.descendants(matching: .any)[other].exists { return }
+        try self.required(identifier, as: what).fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)[other].exists ? "up" : "down" }
+    ) { shown in
+      shown == "up"
+    }
+  }
+
+  /// Drag a sheet down from one of its elements until `gone` has left the screen.
+  private func dragSheetDown(from identifier: String, until gone: String) throws {
+    try pressUntil(
+      named: "a drag down from \(identifier)",
+      waitingFor: "the drag down to take the sheet away",
+      press: { attempt in
+        let start = self.app.descendants(matching: .any)[identifier]
+        if attempt > 1 && !start.exists { return }
+        start.centre.press(
+          forDuration: 0.05,
+          thenDragTo: self.app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)),
+          withVelocity: .fast,
+          thenHoldForDuration: 0
+        )
+      },
+      reading: { self.app.descendants(matching: .any)[gone].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+  }
+
+  /// Tap the dimmed screen above a sheet until `gone` has left.
+  private func tapOutsideSheet(until gone: String) throws {
+    try pressUntil(
+      named: "the dimming view above the sheet",
+      waitingFor: "the tap outside to take the sheet away",
+      press: { attempt in
+        if attempt > 1 && !self.app.descendants(matching: .any)[gone].exists { return }
+        self.app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)[gone].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+  }
+
+  /// Wait for an element's frame to satisfy `check`, and hand it back (or the last one).
+  private func waitForFrame(_ identifier: String, _ check: (CGRect) -> Bool) -> CGRect {
+    let deadline = Date().addingTimeInterval(reactTimeout)
+    var frame = app.descendants(matching: .any)[identifier].frame
+    while !check(frame) && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      frame = app.descendants(matching: .any)[identifier].frame
+    }
+    XCTAssertTrue(check(frame), "\(identifier) never moved as expected: \(frame)")
+    return frame
   }
 
   /// UIKit's own word for Cancel, which is what the library puts on the implicit

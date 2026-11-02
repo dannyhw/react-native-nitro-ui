@@ -219,4 +219,30 @@ using namespace margelo::nitro::nitroui::views;
 }
 #endif
 
+// nitro-ui: content children (G14, scripts/patch-nitrogen.mjs)
+//
+// This view's React Native children are its content, and its content view is
+// what native presents. `RCTViewComponentView` would mount them beside the
+// content view (into `currentContainerView`, itself), where they would stay in
+// the app's window; mount them into it instead, as RN's `Modal` mounts into its
+// controller's view. Indices are Fabric's, and nothing else lives in there.
+- (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView
+                          index:(NSInteger)index {
+  UIView *content = self.contentView;
+  if (content == nil) {
+    [super mountChildComponentView:childComponentView index:index];
+    return;
+  }
+  [content insertSubview:childComponentView atIndex:index];
+}
+
+- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView
+                            index:(NSInteger)index {
+  UIView *content = self.contentView;
+  if (content == nil || childComponentView.superview != content) {
+    [super unmountChildComponentView:childComponentView index:index];
+    return;
+  }
+  [childComponentView removeFromSuperview];
+}
 @end

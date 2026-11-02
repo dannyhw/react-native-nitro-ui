@@ -36,6 +36,7 @@
  *   | 'segmented'
  *   | 'datepicker'
  *   | 'picker'
+ *   | 'sheet'
  *   | 'host'
  * } screen The example app's tab to be
  *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
