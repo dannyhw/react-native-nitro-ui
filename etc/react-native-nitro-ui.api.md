@@ -8,6 +8,7 @@ import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
 import { JSX } from 'react';
 import { ReactNode } from 'react';
+import { Ref } from 'react';
 import { ViewProps } from 'react-native';
 
 // @public
@@ -464,6 +465,78 @@ export interface SwitchProps extends ViewProps {
     tintColor?: ColorValue | undefined;
     value?: boolean | undefined;
 }
+
+// @public
+export function TextField(input: TextFieldProps): JSX.Element;
+
+// @public
+export type TextFieldAutoCapitalize = 'none' | 'sentences' | 'words' | 'characters';
+
+// @public
+export interface TextFieldHandle {
+    blur(): void;
+    focus(): void;
+}
+
+// @public
+export type TextFieldKeyboardType = 'default' | 'number-pad' | 'decimal-pad' | 'numeric' | 'email-address' | 'phone-pad' | 'url';
+
+// @public
+export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
+    autoCapitalize?: TextFieldAutoCapitalize | undefined;
+    autoCorrect?: boolean | undefined;
+    defaultValue?: string | undefined;
+    editable?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: string | null;
+        readonly mostRecentEventCount: number;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        focus(): void;
+        blur(): void;
+        nuiTestState(): {
+            text: string;
+            focused: boolean;
+            composing: boolean;
+            nativeEvents: number;
+            jsEvents: number;
+            lastWrite: string;
+            editable: boolean;
+            multiline: boolean;
+            secure: boolean;
+            keyboardType: string;
+            returnKeyType: string;
+            autoCapitalize: string;
+            autoCorrect: boolean;
+            maxLength: number;
+            placeholder: string;
+            accessibilityLabel: string;
+        };
+        nuiTestSetMarkedText(text: string): void;
+        nuiTestLifetimeReport(): string;
+    }) => void) | undefined;
+    keyboardType?: TextFieldKeyboardType | undefined;
+    maxLength?: number | null | undefined;
+    multiline?: boolean | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onBlur?: (() => void) | undefined;
+    onChangeText?: ((text: string) => void) | undefined;
+    onFocus?: (() => void) | undefined;
+    onSubmitEditing?: ((text: string) => void) | undefined;
+    placeholder?: string | undefined;
+    ref?: Ref<TextFieldHandle> | undefined;
+    returnKeyType?: TextFieldReturnKeyType | undefined;
+    secureTextEntry?: boolean | undefined;
+    value?: string | undefined;
+}
+
+// @public
+export type TextFieldReturnKeyType = 'default' | 'done' | 'go' | 'next' | 'search' | 'send';
 
 // (No @packageDocumentation comment for this package)
 

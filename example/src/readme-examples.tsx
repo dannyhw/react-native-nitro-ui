@@ -24,8 +24,10 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
+  type TextFieldHandle,
 } from 'react-native-nitro-ui';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 
 // #region switch
@@ -184,6 +186,40 @@ export function DeleteDraft({ onDelete }: { onDelete: () => void }) {
         onAction={(id) => {
           if (id === 'delete') onDelete();
         }}
+      />
+    </>
+  );
+}
+// #endregion
+
+// #region text-field
+export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const passwordField = useRef<TextFieldHandle>(null);
+
+  return (
+    <>
+      <TextField
+        accessibilityLabel="Email"
+        placeholder="name@example.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        value={email}
+        onChangeText={setEmail}
+        onSubmitEditing={() => passwordField.current?.focus()}
+      />
+      <TextField
+        ref={passwordField}
+        accessibilityLabel="Password"
+        placeholder="Password"
+        secureTextEntry
+        returnKeyType="go"
+        value={password}
+        onChangeText={setPassword}
+        onSubmitEditing={onSignIn}
       />
     </>
   );
