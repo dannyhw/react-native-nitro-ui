@@ -1,0 +1,76 @@
+# Failure excerpt — harness:android:Dialog
+
+- Ran: 2026-11-02T13:43:05.222Z on code tree `b91da82a05b2` at HEAD `7a9aa10` (branch `task/G11-dialogs`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Dialog`
+- Result: fail, exit 1, 34234 ms
+- Load: start 5.01, end 4.25, median 4.41, max 5.01
+- Device: android / device `emulator-5574` / lease `G11-askae`
+- Full log: `task/G11-dialogs/harness+android+Dialog-2026-11-02T13-43-05.222Z.log` (<store>/task/G11-dialogs/harness+android+Dialog-2026-11-02T13-43-05.222Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled (confirmation)`
+- `expected '1,1,1' to be '1,0,1' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G11-dialogs/harness+android+Dialog-2026-11-02T13-43-05.222Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G11-askae (still live)
+  |   G11-askae                G11          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.25 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Dialog
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree b91da82a05b2, 10 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.01/5.40 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G11-dialogs/harness+android+Dialog-2026-11-02T13-43-05.222Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled (confirmation)
+
+    expected '1,1,1' to be '1,0,1' // Object.is equality
+
+      [0m [90m 511 |[39m       [90m// given (`drawn`), not the model's flag (`enabled`) - an M3 `ListItem` row that[39m
+       [90m 512 |[39m       [90m// ignores the flag paints the disabled action like the others.[39m
+      [31m[1m>[22m[39m[90m 513 |[39m       expect([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m [33m?[39m up[33m.[39menabled [33m:[39m up[33m.[39mdrawn)[33m.[39mtoBe([32m'1,0,1'[39m)[33m;[39m
+       [90m     |[39m                                                                 [31m[1m^[22m[39m
+       [90m 514 |[39m       handles[33m.[39m[36mget[39m([32m'locked'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'locked'[39m)[33m;[39m
+       [90m 515 |[39m       [36mawait[39m sleep([35m400[39m)[33m;[39m
+       [90m 516 |[39m       expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 27 passed, 28 total
+Snapshots:   0 total
+Time:        33.224 s
+Ran all test suites matching Dialog.
+
+
+
+```
