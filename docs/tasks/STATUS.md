@@ -72,3 +72,4 @@
 | F8b | F8's sizing-engine fix finished: no in-window eviction from the held set, one false red proof moved, flush prunes, changeset trimmed | Apex | Opus | merged with F8 (`e011d8e`) |
 | G8 | Android visual fixes from the README screenshots: inline DatePicker clipped, Menu dropdown truncating labels | Apex | Opus | merged (`b52435e`, PR #18) |
 | G9 | iOS Menu drops an untitled destructive group (run on maintainer-mac-1 via the T3 link) | Apex (on mac-1) | Opus | merged (`baf9811`, PR #17) |
+| X16 | Tooling sweep 2: lease-env leak in check's tests, --exclusive --boot, bench --help ledger row, a11y:switch stable read | Apex | Opus | running |
