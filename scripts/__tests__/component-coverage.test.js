@@ -295,9 +295,10 @@ describe('every component is covered by the conformance suite', () => {
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
     //
-    // Four cells, each a measurement rather than a guess: the Slider and SegmentedControl
+    // Five cells, each a measurement rather than a guess: the Slider and SegmentedControl
     // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
     // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
+    // an accessible ContextMenu still lists its first Text under the labelled wrapper (iOS),
     // and Menu holds recycle residue no read-out can show on iOS. SegmentedControl's recycle
     // cell was the fifth of those until F6 gave the fixture a read-out that can see the
     // residue; the a11y one stands, because that debt is about a name, not a state. The two
@@ -309,6 +310,7 @@ describe('every component is covered by the conformance suite', () => {
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
+      'ContextMenu|a11y-name-on-focusable-node',
     ]);
     // …and every one of those cells really is marked failing in the matrix.
     const matrix = coverageMatrix(manifests, {

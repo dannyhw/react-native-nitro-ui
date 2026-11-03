@@ -148,11 +148,18 @@ An inner focusable child keeps the focus and its own actions.
 | Claim                                                        | iOS                                                                  | Android                                                      |
 | ------------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------ |
 | `accessible` makes it an element; without it, it is not one  | harness (`ax`: the view's own `isAccessibilityElement`)              | harness (`ax`: the wrapper is focusable)                     |
-| one element carries the label, on the wrapper's box          | real input: XCUITest's tree, with nothing under the wrapper a stop   | real input: `uiautomator`'s tree, one node with the label    |
+| one element carries the label, on the wrapper's box          | real input: XCUITest's tree — **with one gap**, below                | real input: `uiautomator`'s tree, one node with the label    |
 | that element can be acted on                                 | real input (enabled, hittable)                                       | real input (focusable, `long-clickable`)                     |
 | it offers the menu as an action                              | harness: the view carries the `UIContextMenuInteraction`, only that  | harness: `ACTION_LONG_CLICK` "Show menu", none while disabled |
 | performing that action opens the menu                        | not exercised: UIKit derives the action, and no tool here reads it   | harness: the action performed on the node opens the menu     |
 | a recycled wrapper keeps no previous owner's label           | harness                                                              | harness                                                      |
+
+**The iOS gap (known debt).** XCUITest lists the wrapper as the element with the label,
+hides the second `Text` under it, and still lists the **first** `Text` as an element of
+its own (measured on iOS 27, the example screen's "Grace Hopper"). Real input reports it
+on every run as known debt, `A11Y_EXEMPTIONS` and FOLLOWUPS: the wrapper not being an
+element at all (D37 item 2), which lists both, stays red. Whether VoiceOver stops on that
+`Text` is not known.
 
 **Not exercised:** VoiceOver and TalkBack themselves. Neither screen reader ran, and their
 double-tap-and-hold was not performed on a device: the simulator has no VoiceOver, and the

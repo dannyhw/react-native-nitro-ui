@@ -501,6 +501,18 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // `staleExemptions` could never retire the row for that either.
     matches: /announces the control's name twice/,
   },
+  {
+    control: 'context-menu',
+    platform: 'ios',
+    followups:
+      'G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS',
+    // The measured shape and nothing wider (G16, iOS 27): the wrapper is the element and
+    // carries the label, the second Text is hidden under it, and the first Text is still
+    // listed - twice, as XCUITest lists every element. A regression of D37 item 2 (the
+    // wrapper not an element at all) lists both Texts, four stops, and stays red.
+    matches:
+      /2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+  },
 ]);
 
 /**
