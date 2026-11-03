@@ -219,6 +219,16 @@ final class NitroUiPresentation: NSObject {
     return true
   }
 
+  /// Let go of the last controller, whose dismissal is already under way or done.
+  ///
+  /// Nothing here needs the property for that: an entry carried to its completion and a
+  /// dismissal both hold their controller themselves. But a view in Fabric's recycle pool
+  /// keeps this object, and with it the last controller it presented - a BottomSheet's
+  /// whole view hierarchy - until it presents again, which may be never (G14 review).
+  func forgetController() {
+    controller = nil
+  }
+
   /// Whether `controller` was presented from a window of its own.
   func isInOwnWindow(_ controller: UIViewController) -> Bool {
     windows[ObjectIdentifier(controller)] != nil

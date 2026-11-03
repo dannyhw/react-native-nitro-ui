@@ -760,6 +760,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       detach(sheet)
       if presentation.controller === sheet {
         presentation.dismissForTeardown()
+        // The dismissal holds the controller itself; the pooled view must not.
+        presentation.forgetController()
       }
     }
     sheet = nil
@@ -964,6 +966,9 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
     detach(controller)
     sheet = nil
+    if presentation.controller === controller {
+      presentation.forgetController()
+    }
     restoreContent()
     if !asked, !dropped {
       if controller.dismissedByUser {
