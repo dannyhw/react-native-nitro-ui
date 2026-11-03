@@ -118,6 +118,16 @@
         "implementationClassName": "HybridNitroUiDialog"
       }
     },
+    "NitroUiTextField": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiTextField"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiTextField"
+      }
+    },
     "NitroUiBottomSheet": {
       "ios": {
         "language": "swift",

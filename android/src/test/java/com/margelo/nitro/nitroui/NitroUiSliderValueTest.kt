@@ -5,6 +5,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /**
  * JVM unit test for the Slider's value rule, the Android twin of
@@ -129,6 +131,110 @@ class NitroUiSliderValueTest {
     expect(quantize(-2.5, -5.0, 5.0, 1.0), -2.0, "a tie in a negative range counts steps up from the minimum")
     expect(quantize(0.25, 0.0, 1.0, 0.5), 0.5, "a tie in a fraction goes up to the next stop")
     expect(quantize(1.5, 0.0, 3.0, 1.0), 2.0, "an integer-valued tie is the same either way")
+  }
+
+  /**
+   * A step count that is a hair *under* a tie, which is where `floor(x + 0.5)` and
+   * a real round-to-nearest part company.
+   *
+   * `(0.21 - 0.1) / 0.22` is `0.49999999999999994`: not a tie, and nearer 0 than
+   * 1. Adding a half first turns it into one, because `0.49999999999999994 + 0.5`
+   * *is* `1.0` in binary - so `floor(x + 0.5)`, the first spelling of
+   * [NitroUiSliderValue.roundHalfAway], answered 1 here while Swift's
+   * `Double.rounded()` answered 0. `roundHalfAway`'s own comment says the point of
+   * the function is that "the thumb goes to the next stop" is the same stop on both
+   * OSes; a stop that depends on the OS is the bug, whatever the arithmetic reason.
+   *
+   * The fixture is checked, not assumed: the first two lines below are the reason
+   * the rest of the test can say anything.
+   */
+  @Test
+  fun aHairUnderATieIsNotATie() {
+    val justUnder = (0.21 - 0.1) / 0.22
+    assertTrue("the step count is a hair under a tie, not one (fixture sanity)", justUnder < 0.5)
+    assertTrue(
+      "…and adding a half first is what loses the difference (fixture sanity)",
+      justUnder + 0.5 == 1.0,
+    )
+    expect(NitroUiSliderValue.roundHalfAway(justUnder), 0.0, "a hair under a tie rounds down")
+    expect(
+      NitroUiSliderValue.roundHalfAway(-justUnder),
+      0.0,
+      "…and so does its mirror image, toward zero rather than away from a tie it is not on",
+    )
+    // The same count reached through the rule the app actually calls. iOS answers
+    // the stop below on each of these; `floor(x + 0.5)` answered one step up.
+    expect(quantize(0.21, 0.1, 3.1, 0.22), 0.1, "0.21 on a 0.1 + n*0.22 grid is the stop below")
+    expect(quantize(-0.89, -1.0, 2.0, 0.22), -1.0, "…including on a grid that starts below zero")
+    expect(quantize(0.31, 0.2, 2.2, 0.22), 0.2, "…and on a grid with a fractional minimum")
+  }
+
+  /**
+   * [NitroUiSliderValue.roundHalfAway] against the definition itself, on a ladder
+   * of ties at every magnitude the rule can be asked about, each rung with its two
+   * neighbouring doubles.
+   *
+   * `BigDecimal(Double)` holds the *exact* value of a double, so
+   * `setScale(0, HALF_UP)` is round-to-nearest-with-ties-away-from-zero computed on
+   * that exact value — which is what Swift's `Double.rounded()` does. That makes it a
+   * reference this platform can check itself against without a second copy of the
+   * same arithmetic, and it catches the class rather than one instance:
+   * `floor(x + 0.5)`, the first spelling of the rule, perturbs anything within half
+   * an ulp below a tie *into* a tie, so it was wrong on every near-side neighbour at
+   * the small rungs and correct everywhere else. The Swift twin walks the same ladder
+   * and spells its expectations out, because there is no `BigDecimal` there.
+   *
+   * The rungs are half-integers, `odd / 2`, because those are the only ties a double
+   * can hold: `(k + 0.5) * 2^n` is a whole number for n >= 1, and a whole number is
+   * not a tie. Every odd numerator below 2^53 is exact.
+   */
+  @Test
+  fun roundHalfAwayIsTheDefinitionOnLaddersThroughATie() {
+    val oddNumerators = mutableListOf<Long>()
+    var odd = 1L
+    while (odd <= 81) {
+      oddNumerators += odd
+      odd += 2
+    }
+    // A few rungs around each power of two, up to where the ulp of a double reaches
+    // the half that makes a tie in the first place.
+    for (exponent in 6..50) {
+      val top = (1L shl (exponent + 1)) - 1
+      var delta = -4L
+      while (delta <= 4) {
+        oddNumerators += top + delta
+        delta += 2
+      }
+    }
+    for (numerator in oddNumerators) {
+      val magnitude = numerator.toDouble() / 2.0
+      for (sign in doubleArrayOf(1.0, -1.0)) {
+        val rung = magnitude * sign
+        // Taken on the magnitude, so "near/far side" means near/far from zero on
+        // both halves of the line.
+        val nearSide = Math.nextAfter(magnitude, Double.NEGATIVE_INFINITY) * sign
+        val farSide = Math.nextAfter(magnitude, Double.POSITIVE_INFINITY) * sign
+        assertTrue("a rung has two neighbours", nearSide != rung && rung != farSide)
+        val expected = BigDecimal(rung).setScale(0, RoundingMode.HALF_UP).toDouble()
+        expect(
+          NitroUiSliderValue.roundHalfAway(rung),
+          expected,
+          "a rung rounds away from zero",
+        )
+        val expectedNear = BigDecimal(nearSide).setScale(0, RoundingMode.HALF_UP).toDouble()
+        expect(
+          NitroUiSliderValue.roundHalfAway(nearSide),
+          expectedNear,
+          "the neighbour on the near side of a rung rounds back to the integer below",
+        )
+        val expectedFar = BigDecimal(farSide).setScale(0, RoundingMode.HALF_UP).toDouble()
+        expect(
+          NitroUiSliderValue.roundHalfAway(farSide),
+          expectedFar,
+          "the neighbour on the far side rounds up too",
+        )
+      }
+    }
   }
 
   @Test

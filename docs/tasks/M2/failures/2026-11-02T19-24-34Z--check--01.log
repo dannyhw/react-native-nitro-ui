@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T19:24:34.014Z on code tree `ce46251baad7` at HEAD `da27761` (branch `task/M2-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 365411 ms
+- Load: start 29.92, end 22.88, median 88.40, max 146.32
+- Device: none recorded (not a device gate)
+- Full log: `task/M2-merge/check-2026-11-02T19-24-32.750Z.log` (<store>/task/M2-merge/check-2026-11-02T19-24-32.750Z.log)
+- Scrubbed: 2 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/lease.test.js (41.262 s)`
+- `● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)`
+- `FAIL scripts/__tests__/ci-workflows.test.js (66.767 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped`
+- `expect(received).toContain(expected) // indexOf`
+- `Expected substring: "hw.gpu.mode=swift_ind"`
+- `Received string:    "== avd name ==`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2912 — the rest is in the full log above)
+
+```
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS src/__tests__/dialog.test.tsx
+PASS scripts/__tests__/nitrogen-scope.test.js
+FAIL scripts/__tests__/lease.test.js (41.262 s)
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+PASS scripts/__tests__/lease-pool-cli.test.js (42.019 s)
+PASS scripts/__tests__/lease-metro-port.test.js (42.109 s)
+FAIL scripts/__tests__/ci-workflows.test.js (66.767 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "hw.gpu.mode=swift_ind"
+    Received string:    "== avd name ==
+    no output (timed out after 0s and was killed): node scripts/ci-avd-name.mjs
+    == avd dir ==
+    total 0
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:25 .
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:25 ..
+    drwxr-xr-x@ 4 <user>  staff  128 Nov  2 19:25 nitroui.avd
+    == config.ini (hardware lines) ==
+    grep: <tmp>/nui-ci-diag-0UXuIT/home/<user>/avd/no output (timed out after 0s and was killed): node scripts/ci-avd-name.mjs.avd/config.ini: No such file or directory
+    "
+
+      1440 |       // And giving up did not lose the cheap evidence, because the cheap evidence was
+      1441 |       // read first: the AVD's hardware config is still in the artifact.
+    > 1442 |       expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+           |                                                            ^
+      1443 |         'hw.gpu.mode=swift_ind'
+      1444 |       );
+      1445 |     } finally {
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1442:60)
+
+PASS scripts/__tests__/gate.test.js (125.808 s)
+PASS scripts/__tests__/gate-check.test.js (144.536 s)
+PASS scripts/__tests__/gate-logs.test.js (200.912 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (209.87 s)
+PASS scripts/__tests__/bench-gate.test.js (350.684 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/lease.test.js (41.262 s)
+  ● the CLI, in a real state directory › holds new leases back for a waiting exclusive request (review S4)
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      1161 |   });
+      1162 |
+    > 1163 |   it('holds new leases back for a waiting exclusive request (review S4)', async () => {
+           |     ^
+      1164 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      1165 |
+      1166 |     // A bench asking for the whole machine, parked in the wait loop.
+
+      at scripts/__tests__/lease.test.js:1163:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+FAIL scripts/__tests__/ci-workflows.test.js (66.767 s)
+  ● the dispatch-only harness jobs are given what the action needs › the diagnostics step gives up on its own budget and says what it skipped
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "hw.gpu.mode=swift_ind"
+    Received string:    "== avd name ==
+    no output (timed out after 0s and was killed): node scripts/ci-avd-name.mjs
+    == avd dir ==
+    total 0
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:25 .
+    drwxr-xr-x@ 3 <user>  staff   96 Nov  2 19:25 ..
+    drwxr-xr-x@ 4 <user>  staff  128 Nov  2 19:25 nitroui.avd
+    == config.ini (hardware lines) ==
+    grep: <tmp>/nui-ci-diag-0UXuIT/home/<user>/avd/no output (timed out after 0s and was killed): node scripts/ci-avd-name.mjs.avd/config.ini: No such file or directory
+    "
+
+      1440 |       // And giving up did not lose the cheap evidence, because the cheap evidence was
+      1441 |       // read first: the AVD's hardware config is still in the artifact.
+    > 1442 |       expect(fs.readFileSync(box.diag('avd.log'), 'utf8')).toContain(
+           |                                                            ^
+      1443 |         'hw.gpu.mode=swift_ind'
+      1444 |       );
+      1445 |     } finally {
+
+      at Object.toContain (scripts/__tests__/ci-workflows.test.js:1442:60)
+
+
+Test Suites: 2 failed, 62 passed, 64 total
+Tests:       2 failed, 1665 passed, 1667 total
+Snapshots:   0 total
+Time:        351.789 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 365.4 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+```

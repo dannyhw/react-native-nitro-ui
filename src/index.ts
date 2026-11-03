@@ -107,3 +107,16 @@ export {
   type BottomSheetDetent,
   type BottomSheetProps,
 } from './components/BottomSheet/BottomSheet';
+// A single- or multi-line text field (G13, DECISIONS D34): `UITextField` (a
+// `UITextView` when `multiline`) on iOS, Compose `BasicTextField(TextFieldState)`
+// on Android. The text is controlled through the event-count handshake, a `value`
+// write is dropped while an IME composition is open, and `ref` gives `focus()` /
+// `blur()`.
+export {
+  TextField,
+  type TextFieldAutoCapitalize,
+  type TextFieldHandle,
+  type TextFieldKeyboardType,
+  type TextFieldProps,
+  type TextFieldReturnKeyType,
+} from './components/TextField/TextField';

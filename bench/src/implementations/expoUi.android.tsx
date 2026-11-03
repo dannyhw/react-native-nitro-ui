@@ -36,6 +36,8 @@ import {
   segmentedOptions,
   sliderValue,
   stackStyle,
+  onTextChange,
+  textFieldValue,
 } from './shared';
 
 /**
@@ -215,6 +217,8 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             {component === 'slider' ? (
               <BenchSlider value={value} />
+            ) : component === 'text-field' ? (
+              <BenchTextField value={value} />
             ) : component === 'progress' ? (
               <BenchProgress value={value} />
             ) : (
@@ -260,6 +264,20 @@ function BenchSlider({ value }: { value: boolean }) {
       onValueChange={onSliderChange}
     />
   );
+}
+
+/**
+ * `@expo/ui`'s Compose `TextField`, single-line, with its text in an observable -
+ * the one way Expo takes a value - written when the runner flips, as the Picker arm
+ * writes its anchor. So `update.text-field` is a text write here as it is for the
+ * other arms, not a repaint.
+ */
+function BenchTextField({ value }: { value: boolean }) {
+  const text = useNativeState<string>(textFieldValue(value));
+  useEffect(() => {
+    text.value = textFieldValue(value);
+  }, [text, value]);
+  return <TextField value={text} singleLine onValueChange={onTextChange} />;
 }
 
 /**
@@ -343,6 +361,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchMenu key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
+          ) : component === 'text-field' ? (
+            <BenchTextField key={index} value={value} />
           ) : component === 'progress' ? (
             <BenchProgress key={index} value={value} />
           ) : (

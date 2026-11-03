@@ -1,0 +1,201 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-02T23:08:29.784Z on code tree `c399a86acd1a` at HEAD `48e667f` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 563208 ms
+- Load: start 3.72, end 6.42, median 3.72, max 8.93
+- Device: android
+- Full log: `task/G13-textfield/harness+android-2026-11-02T23-08-29.540Z.log` (<store>/task/G13-textfield/harness+android-2026-11-02T23-08-29.540Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● Console`
+- `● TextField › commits a keystroke about as fast as RN TextInput`
+- `FAIL __tests__/MountChurn.harness.tsx`
+- `● Test suite failed to run`
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected 3 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+android-2026-11-02T23-08-29.540Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G13-tj4up                G13          both              pair-b
+  |   G14-v1501                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.42 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 192 — the rest is in the full log above)
+
+```
+       [90m 866 |[39m           [36mawait[39m sleep([35m120[39m)[33m;[39m[0m
+
+FAIL __tests__/MountChurn.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      slider size: box=300.19x48.00 measured=300.19x48.00 expectedHeight=48
+
+
+    console.log
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=63->62 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #16860 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #16867 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #2 performed SetProgress(9.0) on #16874 range=0.0..12.0@12.0 12.0->9.0 disabled=false
+
+
+    console.log
+      a11y walk: starts=7 complete=7
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 112.5ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 112.5ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 6.39/load5 5.72 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected 3 to be +0 // Object.is equality
+
+      [0m [90m 1605 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1606 |[39m     [36mawait[39m drag(alignedHandle[33m,[39m aligned[33m,[39m [35m6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1607 |[39m     expect(aligned[33m.[39mstart[aligned[33m.[39mstart[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1608 |[39m     expect(aligned[33m.[39mcomplete[aligned[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m6[39m)[33m;[39m
+       [90m 1609 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1610 |[39m     expect(alignedHandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+HARNESS Shutting down Android emulator nitroui...
+
+Test Suites: 3 failed, 15 passed, 18 total
+Tests:       2 failed, 3 skipped, 330 passed, 335 total
+Snapshots:   0 total
+Time:        562.097 s
+Ran all test suites.
+gate: harness:android FAIL in 563.2 s
+gate: recorded in .gates/task/G13-textfield.jsonl
+
+
+gate: appended the device context to task/G13-textfield/harness+android-2026-11-02T23-08-29.540Z.log (5 probe(s))
+
+```
