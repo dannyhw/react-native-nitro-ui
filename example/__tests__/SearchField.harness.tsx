@@ -103,8 +103,16 @@ type FieldHandle = {
 };
 
 const handles = new Map<string, FieldHandle>();
+/** A handle this file only *measures*: TextField's, for the test that puts the other
+ * control next to this one. Kept apart because `FieldHandle` lists the SearchField
+ * seams (`nuiTestState`, `nuiTestClear`) that TextField has no equivalent of. */
+type Measurable = { measureContent(): { width: number; height: number } };
+const measurableHandles = new Map<string, Measurable>();
 const capture = (id: string) => (view: FieldHandle) => {
   handles.set(id, view);
+};
+const captureMeasured = (id: string) => (view: Measurable) => {
+  measurableHandles.set(id, view);
 };
 const handleOf = (id: string) =>
   waitForHandle(() => handles.get(id), { what: `SearchField ${id}` });
@@ -190,7 +198,19 @@ async function insertAtOnce(text: string) {
 
 /** Wait until the field has a real measured box, and return it. */
 async function measuredBox(id: string) {
-  const handle = await handleOf(id);
+  return boxOf(await handleOf(id));
+}
+
+/** The same, for a handle filed by {@link captureMeasured}. */
+async function measuredTextBox(id: string) {
+  return boxOf(
+    await waitForHandle(() => measurableHandles.get(id), {
+      what: `TextField ${id}`,
+    })
+  );
+}
+
+async function boxOf(handle: Measurable) {
   await waitFor(
     () => expect(handle.measureContent().height).toBeGreaterThan(0),
     { timeout: 5000 }
@@ -291,6 +311,7 @@ afterEach(async () => {
   }
   cleanup();
   handles.clear();
+  measurableHandles.clear();
   events.clear();
   jsValues.clear();
   await sleep(150);
@@ -453,13 +474,18 @@ describe('SearchField', () => {
     ]);
     expect(after.returnKeyType).toBe('search');
 
-    // The barrier twin: an empty field cannot submit. iOS gets this from
-    // `enablesReturnKeyAutomatically`, Android from a guard on the Search handler, and
-    // the seam runs the same guard either way.
-    events.delete('submitted');
-    (await handleOf('submitted')).nuiTestSubmit();
+    // The barrier twin: a focused field with nothing in it cannot submit — the state of
+    // somebody hammering the Search key before typing. A *fresh* empty field, not this
+    // one: submitting does not clear the query, so "tea" is still in the box here. iOS
+    // gets this from `enablesReturnKeyAutomatically`, Android from a guard on the Search
+    // handler, and the seam runs that same guard either way.
+    render(<Controlled id="unsubmitted" initial="" />);
+    await waitForTestId('unsubmitted');
+    await focusField('unsubmitted');
+    expect((await handleOf('unsubmitted')).nuiTestState().text).toBe('');
+    (await handleOf('unsubmitted')).nuiTestSubmit();
     await sleep(150);
-    expect(eventsOf('submitted')).toEqual([]);
+    expect(eventsOf('unsubmitted')).toEqual([]);
   });
 
   it('sizes itself to its parent width and its own height, whatever its text', async () => {
@@ -475,7 +501,11 @@ describe('SearchField', () => {
             whole reason SearchField is its own Hybrid View is that their heights
             differ (docs/architecture/sizing.md §5, D38 item 2). */}
         <View style={{ width: 300 }}>
-          <TextField testID="plain-field" defaultValue="same words here" />
+          <TextField
+            testID="plain-field"
+            defaultValue="same words here"
+            hybridRef={captureMeasured('plain-field')}
+          />
         </View>
       </>
     );
@@ -501,7 +531,7 @@ describe('SearchField', () => {
     );
     // And it is *not* TextField's height: a SearchField that composed TextField's
     // control would measure 22 pt / 24 dp here and pass every assertion above.
-    const plain = await measuredBox('plain-field');
+    const plain = await measuredTextBox('plain-field');
     console.log(
       `search field height ${wide.height.toFixed(2)} vs text field ${plain.height.toFixed(2)}`
     );
@@ -589,12 +619,11 @@ describe('SearchField', () => {
       render(<Owner second={false} />);
       await waitForTestId('pooled');
       await focusField('pooled');
-      await typeText('residue');
-      await stateWhen(
-        'pooled',
-        (s) => s.text === 'firstresidue',
-        'the residue'
-      );
+      // Short on purpose: `maxLength={9}` caps the field, and both controls truncate an
+      // insertion that would pass it. The claim here is that *some* of what the first
+      // owner typed is sitting in the box, not how much of it.
+      await typeText('due');
+      await stateWhen('pooled', (s) => s.text === 'firstdue', 'the residue');
       cleanup();
       handles.clear();
       await sleep(200);
@@ -651,22 +680,22 @@ describe('SearchField', () => {
       const handle = await handleOf('poisoned');
       const measured = await measuredBox('poisoned');
       await sleep(300);
-      const events = nitroUiCore
+      const traced = nitroUiCore
         .drainSizingTrace()
         .filter((event) => event.instanceId === (handle.nuiSizingId ?? 0));
-      const describe = (event: NitroUiSizingTraceEvent) =>
+      const describeEvent = (event: NitroUiSizingTraceEvent) =>
         `${event.stage} ${String(event.width.toFixed(1))}x${String(event.height.toFixed(1))}`;
       console.log(
-        `poisoned search field: ${events.map(describe).join(', ')}; measured ${String(measured.height.toFixed(2))}`
+        `poisoned search field: ${traced.map(describeEvent).join(', ')}; measured ${String(measured.height.toFixed(2))}`
       );
-      const laidOut = events.filter((event) => event.stage === 'laidOut');
-      const corrected = events.filter((event) => event.stage === 'corrected');
+      const laidOut = traced.filter((event) => event.stage === 'laidOut');
+      const corrected = traced.filter((event) => event.stage === 'corrected');
       const firstFrame = laidOut[0];
       const lastCorrection = corrected.at(-1);
       if (firstFrame == null || lastCorrection == null) {
         throw new Error(
           `no ${firstFrame == null ? 'laidOut' : 'corrected'} event in this ` +
-            `instance's trace: ${events.map(describe).join(', ') || '(empty)'}`
+            `instance's trace: ${traced.map(describeEvent).join(', ') || '(empty)'}`
         );
       }
       // The first frame is the poison: the engine answered for a cold configuration with
