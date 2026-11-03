@@ -76,6 +76,7 @@
 | G10 | Component follow-up sweep: triage and fix the live G1/G2/G3/G4 leftovers | Apex | Opus | merged (M2, PR #23; gates on maintainer-mac-1) |
 | X17 | Small tooling follow-ups from X16/G8/G9 (run on maintainer-mac-1) | Opus (on mac-1) | Opus | merged (M2, PR #22) |
 | D4 | Every component in the README with iOS/Android screenshots (dialog shots, a check-time readme guard, the written convention) | Apex | Opus | merged (PR #29; 1 impl + 1 fix round; all five merge gates green on mac-2; the guard caught TextField missing from the README imports at merge) |
+| D5 | README for end users: internal setup, machine labels, task links and bench mechanics move out to docs/performance.md and CONTRIBUTING | Opus | Opus | running |
 | T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | done: build TextField on `UITextField` (D34); report on main, prototype branch kept |
 | Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged (`74efeb6`, PR #24) |
