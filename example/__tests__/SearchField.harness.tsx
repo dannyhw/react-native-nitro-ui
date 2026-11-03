@@ -485,7 +485,9 @@ describe('SearchField', () => {
     expect((await handleOf('unsubmitted')).nuiTestState().text).toBe('');
     (await handleOf('unsubmitted')).nuiTestSubmit();
     await sleep(150);
-    expect(eventsOf('unsubmitted')).toEqual([]);
+    // Exactly one event, and it is the focus: no `submit:`, and no `blur` either -
+    // refusing a submit from an empty query does not send the field away.
+    expect(eventsOf('unsubmitted')).toEqual(['focus']);
   });
 
   it('sizes itself to its parent width and its own height, whatever its text', async () => {
