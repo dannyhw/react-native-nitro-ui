@@ -179,6 +179,7 @@ describe('coverage', () => {
       'BottomSheet',
       'Button',
       'Chip',
+      'ContextMenu',
       'DatePicker',
       'Dialog',
       'Menu',
@@ -1911,6 +1912,7 @@ describe('the a11y sweep, against a fake device', () => {
         'chip',
         'host',
         'textfield',
+        'contextmenu',
       ]);
     });
   });

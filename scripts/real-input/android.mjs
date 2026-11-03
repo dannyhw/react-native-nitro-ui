@@ -848,6 +848,16 @@ const CHECKS = {
    *
    * @param {ReturnType<typeof makeContext>} t
    */
+  /**
+   * A ContextMenu under a real finger (G16): a quick tap is the child's, a still hold
+   * opens the menu at the finger and cancels the child's touch, a pick reports select
+   * then close, a drag scrolls and opens nothing, the innermost of two nested menus
+   * wins, a disabled one leaves the hold to its child, Back and an outside tap close it,
+   * and an accessible one is a single long-clickable node. The measurements are S3's
+   * (`docs/tasks/S3-contextmenu-spike.report.md`, questions 1, 2 and 5), made here on
+   * the shipped component; `contextMenuCheck` below says what each step reads.
+   */
+  'context-menu': async (t) => contextMenuCheck(t),
   'menu': async (t) => {
     // The three titles of `real-input-menu`, spelled as `MenuScreen` spells them.
     // None appears anywhere else on the screen, which is what lets a text match name a
@@ -2813,6 +2823,441 @@ const CHECKS = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// ContextMenu (G16). Every reading is the screen's own echo (`ctx-echo`, React's
+// counters in a fixed header outside the ScrollView) or the popup's window in the
+// dump. With a popup up, `uiautomator dump` holds the popup's window only, so every
+// echo is read before a hold or after the close.
+// ---------------------------------------------------------------------------
+
+/** The `ctx-echo` line as numbers. @param {ReturnType<typeof makeContext>} t */
+function contextEcho(t) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const part of (t.echo('ctx-echo') ?? '').split(';')) {
+    const [key, value] = part.split('=');
+    if (key != null && value != null && /^-?\d+$/.test(value)) {
+      out[key] = Number(value);
+    }
+  }
+  return out;
+}
+
+/**
+ * Poll the echo until `ok` accepts it or `timeoutMs` passes; the last reading either way.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {(echo: Record<string, number>) => boolean} ok
+ */
+async function contextEchoWhen(t, ok, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let echo = contextEcho(t);
+  while (!ok(echo) && Date.now() < deadline) {
+    await sleep(250);
+    echo = contextEcho(t);
+  }
+  return echo;
+}
+
+/**
+ * The open popup's window and its rows, or `null` while the app's own window is on top.
+ * The popup is the `android:id/content` that is not the whole display (S3's reading).
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+function contextPopup(t) {
+  const nodes = t.dump();
+  const width = t.displayWidth();
+  const height = t.displayHeight();
+  const content = nodes.find(
+    (node) =>
+      node.resourceId === 'android:id/content' &&
+      !(
+        node.bounds.x1 === 0 &&
+        node.bounds.y1 === 0 &&
+        node.bounds.x2 === width &&
+        node.bounds.y2 === height
+      )
+  );
+  if (content == null) return null;
+  return {
+    bounds: content.bounds,
+    rows: nodes.filter((node) => node.text !== '').map((node) => node.text),
+    nodes,
+  };
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function contextPopupWithin(t, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const popup = contextPopup(t);
+    if (popup != null || Date.now() > deadline) return popup;
+    await sleep(250);
+  }
+}
+
+/**
+ * The point `fx`, `fy` of the way across a node, px.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode['bounds']} bounds
+ * @param {number} fx
+ * @param {number} fy
+ */
+function pointIn(bounds, fx, fy) {
+  return {
+    x: Math.round(bounds.x1 + (bounds.x2 - bounds.x1) * fx),
+    y: Math.round(bounds.y1 + (bounds.y2 - bounds.y1) * fy),
+  };
+}
+
+/**
+ * Close whatever popup is up with Back, and wait for its window to go.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function contextClose(t) {
+  if (contextPopup(t) == null) return;
+  await t.pressBack();
+  t.waitForPopupCount(0, 'Back to close the context menu');
+  await sleep(300);
+}
+
+/**
+ * The node with this testID, scrolled wholly inside `ctx-scroll` with slow drags on the
+ * right-edge strip (no fling, and no ContextMenu under the finger).
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} testID
+ */
+async function contextReveal(t, testID) {
+  const edge = t.displayWidth() - 8;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const view = t.nodeByTestId('ctx-scroll')?.bounds;
+    const node = t.nodeByTestId(testID)?.bounds;
+    if (view == null) t.log.abort('the ContextMenu screen has no ctx-scroll');
+    if (node != null && node.y1 >= view.y1 + 8 && node.y2 <= view.y2 - 8) {
+      return node;
+    }
+    // Absent from the dump means scrolled out of sight, and everything here is below.
+    const down = node == null || node.y2 > view.y2 - 8;
+    const from = Math.round((view.y1 + view.y2) / 2);
+    await t.swipePx(edge, from, edge, down ? from - 350 : from + 350, 900);
+  }
+  const last = t.nodeByTestId(testID);
+  if (last == null) t.log.abort(`no "${testID}" on the ContextMenu screen`);
+  return last.bounds;
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function contextTop(t) {
+  const edge = t.displayWidth() - 8;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if ((contextEcho(t).scrollY ?? 0) <= 0) return;
+    const view = t.nodeByTestId('ctx-scroll')?.bounds;
+    if (view == null) return;
+    const from = Math.round(view.y1 + (view.y2 - view.y1) * 0.3);
+    await t.swipePx(edge, from, edge, from + 700, 300);
+    await sleep(500);
+  }
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function contextReset(t) {
+  await contextClose(t);
+  await contextTop(t);
+  await t.tapTestId('ctx-reset');
+  await contextEchoWhen(t, (echo) => echo.press === 0 && echo.opens === 0);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function contextMenuCheck(t) {
+  const { log } = t;
+  await contextReset(t);
+  const density = t.density();
+  const target = t.nodeByTestId('ctx-target')?.bounds;
+  if (target == null) log.abort('no ctx-target on the ContextMenu screen');
+  // Off-centre on purpose: the press point is the anchor, and a menu anchored to the
+  // view's centre or corner would read tens of dp off here (S3: 329/48/141 px).
+  const at = pointIn(target, 0.3, 0.4);
+
+  // 1. Quick taps are the child's: one onPress each, no menu.
+  let quick = 0;
+  for (let i = 0; i < 3; i += 1) {
+    const before = contextEcho(t);
+    await t.tapPx(at.x, at.y);
+    const after = await contextEchoWhen(t, (e) => e.press === before.press + 1);
+    await sleep(500);
+    if (
+      contextEcho(t).press === before.press + 1 &&
+      after.opens === before.opens
+    ) {
+      quick += 1;
+    }
+  }
+  log.checkEquals(
+    'a quick tap presses the child once and opens nothing (of 3)',
+    quick,
+    3
+  );
+  t.waitForPopupCount(0, 'no popup after the quick taps');
+
+  // 2. A still hold opens the menu at the finger, with no onPress; a row picks, select
+  //    then close; the next tap presses once.
+  const anchors = [];
+  let opened = 0;
+  let pressAfterOpen = 0;
+  let picked = 0;
+  let fresh = 0;
+  const orders = [];
+  for (let i = 0; i < 3; i += 1) {
+    const before = contextEcho(t);
+    await t.holdAt(at.x, at.y, 1000);
+    const popup = await contextPopupWithin(t);
+    if (popup == null || !popup.rows.includes('Copy text')) {
+      log.note(`hold ${String(i + 1)}: no popup with "Copy text"`);
+      await contextClose(t);
+      continue;
+    }
+    opened += 1;
+    anchors.push({ dx: popup.bounds.x1 - at.x, dy: popup.bounds.y1 - at.y });
+    const row = popup.nodes.find((node) => node.text === 'Copy text');
+    if (row != null) await t.tapPx(row.bounds.cx, row.bounds.cy);
+    t.waitForPopupCount(0, 'the pick to take the popup down');
+    const mid = await contextEchoWhen(t, (e) => e.closes === before.closes + 1);
+    pressAfterOpen += mid.press - before.press;
+    if (mid.selects === before.selects + 1) picked += 1;
+    orders.push(
+      (t.echo('ctx-order') ?? '')
+        .replace('order=', '')
+        .split(',')
+        .slice(-3)
+        .join('>')
+    );
+    await t.tapPx(at.x, at.y);
+    const after = await contextEchoWhen(t, (e) => e.press === mid.press + 1);
+    await sleep(400);
+    if (after.press === mid.press + 1) fresh += 1;
+  }
+  log.note(
+    `popup top-start minus the press point, px at density ${String(density)}: ` +
+      anchors.map((a) => `${String(a.dx)},${String(a.dy)}`).join(' | ')
+  );
+  log.checkEquals('a still hold opens the menu (of 3)', opened, 3);
+  log.checkEquals(
+    'and the child is never pressed by a hold that opened it',
+    pressAfterOpen,
+    0
+  );
+  log.checkEquals('a row picks (of 3)', picked, 3);
+  log.checkEquals(
+    'a pick reports select before close, every time',
+    orders.filter((order) => order === 'open>select:copy>close').length,
+    3
+  );
+  log.checkEquals('a fresh tap after each menu presses once (of 3)', fresh, 3);
+  log.checkEquals(
+    "the popup's top-start is the finger, within 1 dp (of 3)",
+    anchors.filter(
+      (a) => Math.abs(a.dx) <= density && Math.abs(a.dy) <= density
+    ).length,
+    3
+  );
+
+  // 3. A drag that starts on the ContextMenu scrolls the page and opens nothing.
+  let scrolled = 0;
+  let openedByDrag = 0;
+  for (let i = 0; i < 3; i += 1) {
+    const from = pointIn(
+      t.nodeByTestId('ctx-target')?.bounds ?? target,
+      0.5,
+      0.5
+    );
+    const before = contextEcho(t);
+    await t.swipePx(from.x, from.y, from.x, from.y - 500, 250);
+    await sleep(900);
+    const after = contextEcho(t);
+    if (after.scrollY !== before.scrollY) scrolled += 1;
+    openedByDrag += after.opens - before.opens;
+    if (contextPopup(t) != null) {
+      openedByDrag += 1;
+      await contextClose(t);
+    }
+    await contextTop(t);
+  }
+  log.checkEquals(
+    'a drag starting on the ContextMenu scrolls the page (of 3)',
+    scrolled,
+    3
+  );
+  log.checkEquals('and opens no menu', openedByDrag, 0);
+
+  // 4. Hold, then drag in the same gesture: the menu is up and the page stays still.
+  //    Back closes it.
+  {
+    const from = pointIn(
+      t.nodeByTestId('ctx-target')?.bounds ?? target,
+      0.4,
+      0.5
+    );
+    const before = contextEcho(t);
+    await t.holdThenDrag(from.x, from.y, -400);
+    const popup = await contextPopupWithin(t, 2000);
+    log.check('a hold then a drag opens the menu', popup != null);
+    await t.pressBack();
+    t.waitForPopupCount(0, 'Back to close the menu');
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.closes === before.closes + 1
+    );
+    log.checkEquals(
+      'and the page under it did not move (scrollY)',
+      after.scrollY,
+      before.scrollY
+    );
+    log.checkEquals(
+      'Back closes it, reported once',
+      after.closes - before.closes,
+      1
+    );
+  }
+
+  // 5. A horizontal ScrollView inside pans and opens nothing.
+  {
+    const strip = t.nodeByTestId('ctx-hscroll')?.bounds;
+    if (strip == null) log.abort('no ctx-hscroll on the ContextMenu screen');
+    const from = pointIn(strip, 0.8, 0.5);
+    const to = pointIn(strip, 0.2, 0.5);
+    const before = contextEcho(t);
+    await t.swipePx(from.x, from.y, to.x, to.y, 300);
+    await sleep(800);
+    const after = contextEcho(t);
+    log.check('the inner horizontal ScrollView pans', after.hX !== before.hX);
+    log.checkEquals('and opens no menu', after.opens - before.opens, 0);
+    await t.swipePx(to.x, to.y, from.x, from.y, 300);
+    await sleep(600);
+  }
+
+  // 6. An outside tap closes the menu and presses nothing below it.
+  {
+    const below = t.nodeByTestId('ctx-below')?.bounds;
+    if (below == null) log.abort('no ctx-below on the ContextMenu screen');
+    const belowAt = pointIn(below, 0.85, 0.5);
+    const before = contextEcho(t);
+    await t.holdAt(at.x, at.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.check('the hold before the outside tap opens the menu', popup != null);
+    await t.tapPx(belowAt.x, belowAt.y);
+    t.waitForPopupCount(0, 'the outside tap to close the menu');
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.closes === before.closes + 1
+    );
+    await sleep(400);
+    log.checkEquals(
+      'an outside tap closes the menu',
+      after.closes - before.closes,
+      1
+    );
+    log.checkEquals(
+      'and the press under it never lands',
+      contextEcho(t).below - before.below,
+      0
+    );
+  }
+
+  // 7. Nested: the innermost ContextMenu opens, the outer does not.
+  {
+    const before = contextEcho(t);
+    const inner = await contextReveal(t, 'ctx-inner');
+    const innerAt = pointIn(inner, 0.5, 0.5);
+    await t.holdAt(innerAt.x, innerAt.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.check(
+      `a hold on the inner ContextMenu opens the inner menu (rows ${popup == null ? '-' : popup.rows.join('/')})`,
+      popup != null &&
+        popup.rows.includes('Inner') &&
+        !popup.rows.includes('Outer')
+    );
+    await contextClose(t);
+    const after = await contextEchoWhen(t, (e) => e.inner === before.inner + 1);
+    log.checkEquals(
+      'the inner reports the open',
+      after.inner - before.inner,
+      1
+    );
+    log.checkEquals('the outer does not', after.outer - before.outer, 0);
+  }
+
+  // 8. Disabled: no menu, and the hold is the child's (a Pressable with no onLongPress
+  //    presses on release).
+  {
+    const before = contextEcho(t);
+    const child = await contextReveal(t, 'ctx-disabled-target');
+    const childAt = pointIn(child, 0.5, 0.5);
+    await t.holdAt(childAt.x, childAt.y, 1000);
+    const popup = await contextPopupWithin(t, 1500);
+    await contextClose(t);
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.dPress === before.dPress + 1
+    );
+    log.check('a disabled ContextMenu opens nothing on a hold', popup == null);
+    log.checkEquals('and reports no open', after.dOpens - before.dOpens, 0);
+    log.checkEquals(
+      'the child keeps the gesture: one press on release',
+      after.dPress - before.dPress,
+      1
+    );
+  }
+
+  // 9. An accessible ContextMenu is one node with the label, long-clickable: what
+  //    TalkBack offers its double-tap-and-hold on. (The a11y sweep grades its name.)
+  {
+    await contextReveal(t, 'ctx-accessible');
+    const named = t
+      .dump()
+      .filter((node) => node.contentDesc === 'Message from Grace');
+    log.checkEquals('one node carries "Message from Grace"', named.length, 1);
+    log.checkEquals(
+      'and it is long-clickable',
+      named[0]?.longClickable,
+      'true'
+    );
+    log.checkEquals('and focusable', named[0]?.focusable, 'true');
+  }
+
+  // 10. At the bottom edge the popup opens above the finger. Last, from the top of the
+  //     page, because the bottom row sits outside the ScrollView.
+  {
+    await contextTop(t);
+    const bottom = t.nodeByTestId('ctx-bottom')?.bounds;
+    if (bottom == null) log.abort('no ctx-bottom on the ContextMenu screen');
+    const low = pointIn(bottom, 0.3, 0.5);
+    const before = contextEcho(t);
+    await t.holdAt(low.x, low.y, 1000);
+    const popup = await contextPopupWithin(t);
+    log.note(
+      `bottom edge: press=${String(low.x)},${String(low.y)} popup=` +
+        (popup == null ? '-' : t.boundsText({ bounds: popup.bounds }))
+    );
+    log.check(
+      'near the bottom edge the popup opens above the finger',
+      popup != null && popup.bounds.y2 <= low.y
+    );
+    await contextClose(t);
+    const after = await contextEchoWhen(
+      t,
+      (e) => e.bottom === before.bottom + 1
+    );
+    log.checkEquals(
+      'and that ContextMenu reported the open',
+      after.bottom - before.bottom,
+      1
+    );
+  }
+}
+
 /**
  * `adb shell input text`'s argument form.
  *
@@ -3741,6 +4186,7 @@ class DeviceHarness {
       sheet: 'Sheet',
       host: 'Host',
       textfield: 'Text',
+      contextmenu: 'Context',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -3755,6 +4201,7 @@ class DeviceHarness {
       sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
       textfield: ECHO.textTyping,
+      contextmenu: 'ctx-echo',
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
@@ -3916,6 +4363,20 @@ class DeviceHarness {
     this.shell(
       `input swipe ${String(Math.round(x1))} ${String(Math.round(y1))} ` +
         `${String(Math.round(x2))} ${String(Math.round(y2))} ${String(durationMs)}`
+    );
+  }
+
+  /**
+   * One raw touch event: `input motionevent DOWN|MOVE|UP x y`. A gesture that has to
+   * change shape mid-way - a hold that becomes a drag - is three of these in one stream.
+   *
+   * @param {'DOWN'|'MOVE'|'UP'} action
+   * @param {number} x
+   * @param {number} y
+   */
+  motion(action, x, y) {
+    this.shell(
+      `input motionevent ${action} ${String(Math.round(x))} ${String(Math.round(y))}`
     );
   }
 
@@ -4922,6 +5383,73 @@ function makeContext(harness, log) {
     async pressBack() {
       harness.key(KEY_BACK);
       await sleep(400);
+    },
+
+    /**
+     * A still hold at one point, `durationMs` long: `input swipe` at zero distance, which
+     * InputDispatcher delivers as a DOWN, a finger that does not move, and an UP.
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} [durationMs]
+     */
+    async holdAt(x, y, durationMs = 1000) {
+      harness.swipe(x, y, x, y, durationMs);
+      await sleep(300);
+    },
+
+    /**
+     * A hold that turns into a drag in the same gesture: DOWN, `holdMs` still, then five
+     * MOVEs to `dyPx` and the UP there (`input motionevent`, one touch stream).
+     *
+     * @param {number} x
+     * @param {number} y
+     * @param {number} dyPx
+     * @param {number} [holdMs]
+     */
+    async holdThenDrag(x, y, dyPx, holdMs = 900) {
+      harness.motion('DOWN', x, y);
+      await sleep(holdMs);
+      for (let step = 1; step <= 5; step += 1) {
+        harness.motion('MOVE', x, y + (dyPx * step) / 5);
+      }
+      harness.motion('UP', x, y + dyPx);
+      await sleep(300);
+    },
+
+    /**
+     * One swipe between two screen points, px.
+     *
+     * @param {number} x1
+     * @param {number} y1
+     * @param {number} x2
+     * @param {number} y2
+     * @param {number} durationMs
+     */
+    async swipePx(x1, y1, x2, y2, durationMs) {
+      harness.swipe(x1, y1, x2, y2, durationMs);
+      await sleep(300);
+    },
+
+    /**
+     * One tap at a screen point, px.
+     *
+     * @param {number} x
+     * @param {number} y
+     */
+    async tapPx(x, y) {
+      harness.tapAt(x, y);
+      await sleep(250);
+    },
+
+    /** The display's width, px. */
+    displayWidth() {
+      return harness.displayWidth();
+    },
+
+    /** The display's height, px. */
+    displayHeight() {
+      return harness.displayHeight();
     },
 
     /**

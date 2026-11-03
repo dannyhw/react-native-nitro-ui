@@ -24,6 +24,7 @@ the layout engine, and React never sees a native node.
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 `DropdownMenu` opened at the finger                       | next   | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | next   | [chip.md](docs/components/chip.md)                           |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
@@ -36,7 +37,8 @@ one Compose composition on Android instead of one each. It held Switches only
 in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0,
 `SegmentedControl`, `Picker` and `DatePicker` in 0.3.0, and `Menu` in 0.4.0.
 `Chip` is the one control it does not hold yet: a Host refuses it with an error
-that names it. See [Performance](#performance) for what it buys and what it
+that names it. It refuses `ContextMenu` too, by design: that one is a `View`
+around React Native children, not a control a composition could draw. See [Performance](#performance) for what it buys and what it
 costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
@@ -50,6 +52,7 @@ import {
   Button,
   Chip,
   ConfirmationDialog,
+  ContextMenu,
   DatePicker,
   Host,
   Menu,
@@ -417,6 +420,62 @@ fires `onSelect` before the `onClose` that follows it. `systemImage` and
 `primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
 submenu nests on iOS and appears inline under a divider on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
+
+### ContextMenu
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/context-menu-ios.png" width="300" alt="A message held open with its context menu on iOS" /></td>
+    <td><img src="docs/images/components/context-menu-android.png" width="300" alt="A message held open with its context menu on Android, at the finger" /></td>
+  </tr>
+</table>
+
+A `View` that opens a menu on a long press. Its children stay where they are and
+keep their own gestures: a tap is theirs, a scroll is the scroll view's, and a
+hold that opens the menu cancels their touch, so a `Pressable` inside never
+fires `onPress` for it. The rows are `Menu`'s `group`.
+
+```tsx name=context-menu
+const MESSAGE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+    { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+  ],
+  sections: [
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function MessageRow() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <ContextMenu
+      group={MESSAGE_ACTIONS}
+      onSelect={setLast}
+      style={messageStyles.bubble}
+    >
+      <Text>Hold this message for its menu.</Text>
+      <Text>Last action: {last}</Text>
+    </ContextMenu>
+  );
+}
+
+const messageStyles = StyleSheet.create({
+  bubble: { padding: 12, borderRadius: 16, backgroundColor: '#f2f2f7' },
+});
+```
+
+iOS lifts the view itself as the preview (its corners follow `borderRadius`);
+Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
+both platforms, `onSelect` before the `onClose` that follows it. Set
+`accessible` and an `accessibilityLabel` to make it one screen-reader element
+with the menu on it. [context-menu.md](docs/components/context-menu.md) has the
+gesture rules and the limits.
 
 ### Chip
 

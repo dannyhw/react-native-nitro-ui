@@ -24,6 +24,7 @@
  * @property {string} contentDesc
  * @property {string} enabled
  * @property {string} clickable
+ * @property {string} longClickable
  * @property {string} focusable
  * @property {string} checkable
  * @property {string} checked
@@ -49,6 +50,9 @@ export function parseHierarchy(xml) {
       contentDesc: attributes['content-desc'] ?? '',
       enabled: attributes.enabled ?? '',
       clickable: attributes.clickable ?? '',
+      // `long-clickable`: what a ContextMenu's accessible node offers TalkBack's
+      // double-tap-and-hold (`CHECKS['context-menu']`).
+      longClickable: attributes['long-clickable'] ?? '',
       // Whether the node offers itself for accessibility focus. TalkBack's focus
       // search is broader than this flag, but it is the one a dump can be read
       // for, and `CHECKS.picker` uses it to say which node a screen reader is

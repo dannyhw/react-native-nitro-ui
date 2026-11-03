@@ -99,6 +99,63 @@ describe('the iOS a11y rule', () => {
     );
   });
 
+  describe('a control that is the React Native view (ContextMenu)', () => {
+    const GRACE_BOX = { x: 16, y: 300, width: 361, height: 76 };
+    /** The accessible ContextMenu: one element, the wrapper itself, carrying the name. */
+    const graceWrapper = (overrides = {}) =>
+      node({
+        type: 'other',
+        id: 'ctx-accessible',
+        label: 'Message from Grace',
+        value: '',
+        frame: { ...GRACE_BOX },
+        anchor: true,
+        ...overrides,
+      });
+
+    it('passes when the wrapper itself carries the name', () => {
+      expect(
+        iosA11yProblems(control('context-menu'), [graceWrapper()])
+      ).toEqual([]);
+    });
+
+    it('goes red when the wrapper lost its name (not an accessibility element)', () => {
+      // The D37 item 2 failure: React Native asks the content view, the content view says
+      // no, and the wrapper is announced as nothing at all.
+      const problems = iosA11yProblems(control('context-menu'), [
+        graceWrapper({ label: '' }),
+      ]);
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(
+        'no element other than the React Native wrapper'
+      );
+    });
+
+    it('goes red when a child inside it is announced with the name as well', () => {
+      const problems = iosA11yProblems(control('context-menu'), [
+        graceWrapper(),
+        node({
+          type: 'staticText',
+          label: 'Message from Grace',
+          frame: { ...GRACE_BOX, height: 20 },
+        }),
+      ]);
+      expect(problems.join('\n')).toContain(
+        '2 elements under "ctx-accessible"'
+      );
+    });
+
+    it('is the only case that may grade its wrapper', () => {
+      // Every other control keeps the exclusion: React Native puts the label on the
+      // wrapper whatever the control does, so for them it proves nothing.
+      expect(
+        A11Y_CONTROLS.filter((entry) => entry.wrapperIsControl === true).map(
+          (entry) => entry.id
+        )
+      ).toEqual(['context-menu']);
+    });
+  });
+
   it('goes red when the named element is not at the control’s box', () => {
     // A name the person can act on belongs on the box the control is drawn at. Ten points
     // away is a different place: measured, the honest pair agrees to under a tenth.

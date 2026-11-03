@@ -97,6 +97,13 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   numbers its batch Switches with a template literal. The same escape hatch
  *   `labelAttribute` is, for the same reason: a name that exists only as an
  *   interpolation still has to be there.
+ * @property {boolean} [wrapperIsControl] the control *is* the React Native view that
+ *   carries the `testID` - a ContextMenu, which is a `View` with a menu on it. For every
+ *   other case the wrapper is excluded from the iOS candidates, because React Native puts
+ *   the label on it whatever the control does; here the wrapper is the element a screen
+ *   reader stops on, so it is graded like any named element: one of them, on its box,
+ *   enabled or hittable. Android needs nothing: the wrapper's `contentDescription` is
+ *   the node the dump names.
  * @property {string} [iosTrait] the element type a screen reader *should* be told this
  *   control is, as XCUITest names it (`switch`, `button`, `slider`, `segmented control`,
  *   `progress indicator`).
@@ -114,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'contextmenu'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -329,6 +336,23 @@ export const A11Y_CONTROLS = Object.freeze([
     role: 'interactive',
     anchorTestId: 'text-typing',
     iosTrait: 'text field',
+  },
+  {
+    id: 'context-menu',
+    component: 'ContextMenu',
+    hybridView: 'NitroUiContextMenu',
+    screen: 'contextmenu',
+    label: 'Message from Grace',
+    role: 'interactive',
+    anchorTestId: 'ctx-accessible',
+    // A ContextMenu *is* a `View`: the element that carries the name is the very view
+    // React Native styled, with the menu on it (D36 item 1), so the iOS half grades the
+    // anchor itself rather than looking under it.
+    wrapperIsControl: true,
+    // No `iosTrait`, by design rather than as debt: what the element is announced as is
+    // the app's `accessibilityRole`, exactly as on a `View` - UIKit adds its own "Show
+    // Context Menu" action, not a type. The name, the box and the single element are
+    // still graded.
   },
 ]);
 
@@ -608,7 +632,10 @@ export function iosA11yProblems(control, tree) {
   // element that names the control" is the tautology the in-app rule was guilty of. What
   // is being asked is whether anything *under* that wrapper is announced as the control.
   const named = tree.filter(
-    (node) => node.label === control.label && !node.anchor && hasArea(node)
+    (node) =>
+      node.label === control.label &&
+      (control.wrapperIsControl === true || !node.anchor) &&
+      hasArea(node)
   );
   const problems = [];
   if (named.length === 0) {
