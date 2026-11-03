@@ -168,10 +168,41 @@ const HOST_CONTROL_ROWS = Object.freeze([
   },
 ]);
 
+/**
+ * S3 spike only (never merged): the ContextMenu prototype's measurements, Q6
+ * Appendix G. Hand-written like the `<Host>` rows: the prototype has no manifest.
+ */
+const S3_SPIKE_ROWS = Object.freeze([
+  {
+    id: 's3-cancel',
+    title:
+      'S3 Q1/Q4/Q7: a hold opens the menu with no onPress, a tap presses once',
+    screen: 'ctx',
+  },
+  {
+    id: 's3-scroll',
+    title:
+      'S3 Q2: scrolls open nothing, and nothing scrolls under an open menu',
+    screen: 'ctx',
+  },
+  {
+    id: 's3-layout',
+    title:
+      'S3 Q3: children keep Yoga frames with padding and border, and churn',
+    screen: 'ctx',
+  },
+  {
+    id: 's3-misc',
+    title: 'S3 Q5/Q6/Q8: anchor, screen-reader tree, synthesized hold, nested',
+    screen: 'ctx',
+  },
+]);
+
 /** Every control the suite proves, in the order it proves them. */
 export const REAL_INPUT_CONTROLS = Object.freeze([
   ...REAL_INPUT_CONTROL_ROWS,
   ...HOST_CONTROL_ROWS,
+  ...S3_SPIKE_ROWS,
 ]);
 
 /**

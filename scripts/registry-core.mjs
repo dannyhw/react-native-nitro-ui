@@ -1060,7 +1060,12 @@ export function sizingTableContent(manifests, current, currentText) {
  * unknown key would also ignore a component deleted from the registry and left
  * behind in `nitro.json`.
  */
-export const NON_CONTROL_AUTOLINKING = ['NitroUiCore', 'NitroUiHost'];
+// `NitroUiContextMenuProto` is the S3 spike's prototype (never merged).
+export const NON_CONTROL_AUTOLINKING = [
+  'NitroUiCore',
+  'NitroUiHost',
+  'NitroUiContextMenuProto',
+];
 
 /**
  * Exports from `src/index.ts` whose directory has no manifest: `<Host>`, the shared
