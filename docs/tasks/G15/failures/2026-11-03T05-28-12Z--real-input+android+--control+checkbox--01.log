@@ -1,0 +1,123 @@
+# Failure excerpt — real-input:android:--control:checkbox
+
+- Ran: 2026-11-03T05:28:12.397Z on code tree `17625b929c7d` at HEAD `3afdf5d` (branch `task/G15-checkbox`)
+- Command: `node scripts/real-input/android.mjs --control checkbox`
+- Result: fail, exit 1, 366337 ms
+- Load: start 4.99, end 3.40, median 2.67, max 4.99
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/real-input+android+--control+checkbox-2026-11-03T05-28-12.397Z.log` (<store>/task/G15-checkbox/real-input+android+--control+checkbox-2026-11-03T05-28-12.397Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the box publishes a toggleable state, and it says unchecked — expected off, saw null`
+- `✗ the real tap that checks the box: "real-input-checkbox-value" was given a native-state witness and it read nothing, so a delivered touch could not be told from a lost event. The control publishes no state to read, or the label names the wrong node.`
+- `✗ NitroUiCheckbox: 2 nodes carry the name "Real-input checkbox" (android.view.View no actions [42,737][387,863]; android.widget.CheckBox clickable|checkable|focusable [43,738][169,863]) — a name on more than one node is a control a screen reader announces twice, and only one of those stops carries the value | NitroUiCheckbox: the node that carries "Real-input checkbox" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][387,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/real-input+android+--control+checkbox-2026-11-03T05-28-12.397Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-69l63 (still live)
+  |   G15-69l63                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.40 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 77 log line(s)
+
+```
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  checkbox: real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing
+    ✓ the checkbox starts unchecked (React renders "off") — expected off, saw off
+    ✓ the checkbox has reported no change before a touch — expected 0, saw 0
+    ✓ the counter the disabled checkbox reports into starts at zero, so a stray delivery is a number that moved rather than a callback nobody saw — expected 0, saw 0
+    ✗ the box publishes a toggleable state, and it says unchecked — expected off, saw null
+    · name node "Real-input checkbox": checkable=false checked=false enabled=true clickable=false class=android.view.View
+    · name node "Real-input checkbox": checkable=true checked=false enabled=true clickable=true class=android.widget.CheckBox
+    ✗ the real tap that checks the box: "real-input-checkbox-value" was given a native-state witness and it read nothing, so a delivered touch could not be told from a lost event. The control publishes no state to read, or the label names the wrong node.
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,737][1038,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][492,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✗ NitroUiCheckbox: 2 nodes carry the name "Real-input checkbox" (android.view.View no actions [42,737][387,863]; android.widget.CheckBox clickable|checkable|focusable [43,738][169,863]) — a name on more than one node is a control a screen reader announces twice, and only one of those stops carries the value | NitroUiCheckbox: the node that carries "Real-input checkbox" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][387,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2053][1038,2179]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2101][714,2227]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+checkbox: FAIL (no retries)
+    failed: the box publishes a toggleable state, and it says unchecked — expected off, saw null
+    failed: the real tap that checks the box: "real-input-checkbox-value" was given a native-state witness and it read nothing, so a delivered touch could not be told from a lost event. The control publishes no state to read, or the label names the wrong node.
+a11y:checkbox: failed: NitroUiCheckbox: 2 nodes carry the name "Real-input checkbox" (android.view.View no actions [42,737][387,863]; android.widget.CheckBox clickable|checkable|focusable [43,738][169,863]) — a name on more than one node is a control a screen reader announces twice, and only one of those stops carries the value | NitroUiCheckbox: the node that carries "Real-input checkbox" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][387,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 16/17 auxiliary checks passed
+
+
+
+```

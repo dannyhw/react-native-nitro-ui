@@ -25,6 +25,7 @@ the layout engine, and React never sees a native node.
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0 | [menu.md](docs/components/menu.md)                           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
+| `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
@@ -46,6 +47,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
   ConfirmationDialog,
   DatePicker,
@@ -429,6 +431,49 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
 `systemImage` is iOS-only. On Android a selected filter chip shows Material's
 check mark and is wider by it; on iOS selection only changes the fill.
 [chip.md](docs/components/chip.md) has the sizes and the limits.
+
+### Checkbox
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/checkbox-ios.png" width="300" alt="Checkbox on iOS: three switches (off, checked, and one with no label), a third-state column the switch reads as off and then on, and two disabled switches" /></td>
+    <td><img src="docs/images/components/checkbox-android.png" width="300" alt="Checkbox on Android: three Material 3 boxes (off, checked, and one with no label), a third-state column showing a dash and then a checked box, and two disabled boxes" /></td>
+  </tr>
+</table>
+
+A checkbox: `checked` is controlled the way a Switch's `value` is, and
+`defaultChecked` starts an uncontrolled one. `label` is part of the control and
+of its size, and the whole row is tappable. `indeterminate` is Material's third
+state and Android-only: iOS has no checkbox — `CheckboxToggleStyle` is
+unavailable there — so a Checkbox is a `Toggle` with the switch style, which is
+what Expo's universal `Checkbox` renders too.
+
+```tsx name=checkbox
+export function CheckoutOptions({
+  onEmailMe,
+}: {
+  onEmailMe: (email: boolean) => void;
+}) {
+  const [gift, setGift] = useState(false);
+
+  return (
+    <>
+      <Checkbox label="Gift wrap" checked={gift} onCheckedChange={setGift} />
+      <Checkbox label="Email me the receipt" onCheckedChange={onEmailMe} />
+    </>
+  );
+}
+```
+
+`indeterminate` asks for a third glyph, not a third value, and iOS has nowhere to put it.
+A press reports the opposite of what the box shows — empty box → `true`, check mark →
+`false`, dash → `true` — and since Android draws a check mark for a _checked_
+`indeterminate` box, the press that empties that one reports `false`. Nothing clears
+`indeterminate` for you, so an Android caller resolves it in `onCheckedChange`
+(`setIndeterminate(false)` beside `setChecked(next)`). On iOS every press reports
+`!checked` and the third state reads as off.
+[checkbox.md](docs/components/checkbox.md) has the sizes and the limits.
 
 ### AlertDialog and ConfirmationDialog
 
