@@ -8,7 +8,7 @@ buildscript {
 
 ext.BenchProbe = [
   minSdkVersion: 24,
-  compileSdkVersion: 36
+  compileSdkVersion: 37
 ]
 
 ext.getExtOrDefault = { prop ->
