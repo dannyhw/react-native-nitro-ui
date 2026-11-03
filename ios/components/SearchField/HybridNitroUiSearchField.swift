@@ -261,14 +261,15 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   private static let sizingComponentName = "NitroUiSearchField"
 
   /// The declared fallback: the height `UISearchTextField` measures at the body font
-  /// (37 pt on iOS 27, measured on the iPhone Air simulator this repo runs its gates
-  /// on), and the width a field gets under a parent that does not give it one (a row
-  /// with no `flex`), where `fillWidth` draws the declared width.
+  /// (28 pt on iOS 27 — the Conformance rule measures it, `box=420.0x28.0` on the iPhone
+  /// Air simulator this repo runs its gates on, which is also the height UIKit gives the
+  /// field inside its own search bar), and the width a field gets under a parent that
+  /// does not give it one (a row with no `flex`), where `fillWidth` draws the width.
   ///
   /// TextField's one line is 22 pt, so the two differ by design: a SearchField that
   /// reused TextField's declaration would be a SearchField that composed TextField's
   /// control, and `SearchField.harness.tsx` has an assertion against exactly that.
-  private static let fallbackSize = (width: 200.0, height: 37.0)
+  private static let fallbackSize = (width: 200.0, height: 28.0)
 
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.fillWidth.rawValue)

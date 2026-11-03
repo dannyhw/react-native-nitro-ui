@@ -572,7 +572,7 @@ describe('SearchField', () => {
     expect(handle.nuiTestState().focused).toBe(true);
   });
 
-  it('shows the placeholder it was given, and the platform’s own when given none', async () => {
+  it('shows the placeholder it was given, and what the platform brings when given none', async () => {
     render(
       <>
         <Controlled id="prompted" initial="" placeholder="Search recipes" />
@@ -587,10 +587,17 @@ describe('SearchField', () => {
       'the placeholder it was given'
     );
     expect(prompted.placeholder).toBe('Search recipes');
-    // Nobody asked for English: both platforms answer with their own localized word,
-    // which the report shows as what the control is drawing.
+    // "The platform's own word" is a claim per platform, and the device run says which
+    // way each one goes: Material 3's search input answers with the framework's localized
+    // hint, while UIKit's *standalone* `UISearchTextField` has no prompt of its own —
+    // UIKit only writes "Search" inside a search bar — so an unset `placeholder` draws
+    // nothing there. Neither one is English because the library said so.
     const unprompted = handles.get('unprompted')?.nuiTestState();
-    expect(unprompted?.placeholder ?? '').not.toBe('');
+    if (iOS) {
+      expect(unprompted?.placeholder).toBe('');
+    } else {
+      expect(unprompted?.placeholder ?? '').not.toBe('');
+    }
     expect(unprompted?.placeholder).not.toBe('Search recipes');
   });
 
@@ -664,8 +671,13 @@ describe('SearchField', () => {
     // component's declared size as well as its cached guess, so this leaves the number
     // back where `scripts/conformance-core.mjs` says it belongs before it finishes.
     const POISON = iOS ? { width: 97, height: 11 } : { width: 111, height: 13 };
+    // Must agree with the component's own declaration — `fallbackSize` in
+    // `HybridNitroUiSearchField.swift`, `FALLBACK_HEIGHT_DP` in
+    // `HybridNitroUiSearchField.kt`, and the table in `scripts/conformance-core.mjs`
+    // that the Conformance rule measures against (which is how 37 pt became 28 pt:
+    // this number was a guess until a device run measured the field).
     const DECLARED = iOS
-      ? { width: 200, height: 37 }
+      ? { width: 200, height: 28 }
       : { width: 200, height: 56 };
     nitroUiCore.setSizingTraceEnabled(true);
     nitroUiCore.drainSizingTrace();
