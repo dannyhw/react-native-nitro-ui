@@ -12,6 +12,7 @@
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiChipSpecSwift.hpp"
+#include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
 #include "HybridNitroUiHostSpecSwift.hpp"
@@ -131,6 +132,30 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
+  // pragma MARK: std::function<void(const std::string& /* id */)>
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& id) mutable -> void {
+      swiftClosure.call(id);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiContextMenuSpec>
+  std::shared_ptr<HybridNitroUiContextMenuSpec> create_std__shared_ptr_HybridNitroUiContextMenuSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiContextMenuSpec_cxx swiftPart = NitroUi::HybridNitroUiContextMenuSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiContextMenuSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiContextMenuSpec_(std__shared_ptr_HybridNitroUiContextMenuSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiContextMenuSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiContextMenuSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiContextMenuSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiContextMenuSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiDatePickerSpec>
   std::shared_ptr<HybridNitroUiDatePickerSpec> create_std__shared_ptr_HybridNitroUiDatePickerSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NitroUi::HybridNitroUiDatePickerSpec_cxx swiftPart = NitroUi::HybridNitroUiDatePickerSpec_cxx::fromUnsafe(swiftUnsafePointer);
@@ -145,14 +170,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     #endif
     NitroUi::HybridNitroUiDatePickerSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
-  }
-  
-  // pragma MARK: std::function<void(const std::string& /* id */)>
-  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = NitroUi::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::string& id) mutable -> void {
-      swiftClosure.call(id);
-    };
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiDialogSpec>

@@ -1,0 +1,8 @@
+Measured, not written (G16): the iOS a11y sweep's lines for context-menu with the content view's isAccessibilityElement getter forced false. XCUITest lists the wrapper with its label and the two texts as stops of their own.
+real-input a11y case=context-menu kind=anchor id=ctx-accessible x=12.0 y=423.00000762939453 w=378.0 h=61.0 nodes=6
+real-input a11y case=context-menu kind=node trait="other" enabled=true hittable=true id="ctx-accessible" label="Message from Grace" value="" x=12.0 y=423.00000762939453 w=378.0 h=61.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="Grace Hopper" value="" x=25.0 y=429.00000762939453 w=352.0 h=17.0
+real-input a11y case=context-menu kind=node trait="other" enabled=true hittable=true id="" label="" value="" x=25.0 y=429.00000762939453 w=352.0 h=42.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="One element for screen readers, with the menu on it." value="" x=25.0 y=454.00000762939453 w=352.0 h=17.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="Grace Hopper" value="" x=25.0 y=429.00000762939453 w=352.0 h=17.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="One element for screen readers, with the menu on it." value="" x=25.0 y=454.00000762939453 w=352.0 h=17.0

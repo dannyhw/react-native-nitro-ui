@@ -157,6 +157,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiCheckbox"
       }
+    },
+    "NitroUiContextMenu": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      }
     }
   },
   "ignorePaths": [

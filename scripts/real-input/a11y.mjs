@@ -97,6 +97,13 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   numbers its batch Switches with a template literal. The same escape hatch
  *   `labelAttribute` is, for the same reason: a name that exists only as an
  *   interpolation still has to be there.
+ * @property {boolean} [wrapperIsControl] the control *is* the React Native view that
+ *   carries the `testID` - a ContextMenu, which is a `View` with a menu on it. For every
+ *   other case the wrapper is excluded from the iOS candidates, because React Native puts
+ *   the label on it whatever the control does; here the wrapper is the element a screen
+ *   reader stops on, so it is graded like any named element: one of them, on its box,
+ *   enabled or hittable. Android needs nothing: the wrapper's `contentDescription` is
+ *   the node the dump names.
  * @property {string} [iosTrait] the element type a screen reader *should* be told this
  *   control is, as XCUITest names it (`switch`, `button`, `slider`, `segmented control`,
  *   `progress indicator`).
@@ -114,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'contextmenu'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -345,6 +352,23 @@ export const A11Y_CONTROLS = Object.freeze([
     anchorTestId: 'text-typing',
     iosTrait: 'text field',
   },
+  {
+    id: 'context-menu',
+    component: 'ContextMenu',
+    hybridView: 'NitroUiContextMenu',
+    screen: 'contextmenu',
+    label: 'Message from Grace',
+    role: 'interactive',
+    anchorTestId: 'ctx-accessible',
+    // A ContextMenu *is* a `View`: the element that carries the name is the very view
+    // React Native styled, with the menu on it (D36 item 1), so the iOS half grades the
+    // anchor itself rather than looking under it.
+    wrapperIsControl: true,
+    // No `iosTrait`, by design rather than as debt: what the element is announced as is
+    // the app's `accessibilityRole`, exactly as on a `View`; the menu's action is UIKit's,
+    // derived from the interaction, and not a type. The name, the box and the single
+    // element are still graded.
+  },
 ]);
 
 /**
@@ -492,6 +516,19 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // `staleExemptions` could never retire the row for that either.
     matches: /announces the control's name twice/,
   },
+  {
+    control: 'context-menu',
+    platform: 'ios',
+    followups:
+      'G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS',
+    // The measured shape and nothing wider (G16, iOS 27): the wrapper is the element and
+    // carries the label, the second Text is hidden under it, and the first Text is still
+    // listed - twice, as XCUITest lists every element. A regression of D37 item 2 (the
+    // wrapper not an element at all) lists both Texts, four stops, and stays red.
+    // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
+    matches:
+      /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+  },
 ]);
 
 /**
@@ -623,7 +660,10 @@ export function iosA11yProblems(control, tree) {
   // element that names the control" is the tautology the in-app rule was guilty of. What
   // is being asked is whether anything *under* that wrapper is announced as the control.
   const named = tree.filter(
-    (node) => node.label === control.label && !node.anchor && hasArea(node)
+    (node) =>
+      node.label === control.label &&
+      (control.wrapperIsControl === true || !node.anchor) &&
+      hasArea(node)
   );
   const problems = [];
   if (named.length === 0) {
@@ -676,6 +716,26 @@ export function iosA11yProblems(control, tree) {
         'element is a control a screen reader announces twice, and only one of those ' +
         'stops carries the value'
     );
+  }
+
+  if (control.wrapperIsControl === true) {
+    // One element *with the menu on it* means its children are inside it: a view that is
+    // an accessibility element hides its subtree. Measured the other way round (G16, the
+    // content view's getter forced false): XCUITest still listed the wrapper with its
+    // label - it lists any view with an identifier - and its two texts as stops of their
+    // own, so the name check alone passed a wrapper VoiceOver never stops on.
+    const separate = tree.filter(
+      (node) => !node.anchor && node.label !== '' && hasArea(node)
+    );
+    if (separate.length > 0) {
+      problems.push(
+        `${control.hybridView}: ${String(separate.length)} element(s) under ` +
+          `"${control.anchorTestId}" are stops of their own ` +
+          `(${separate.map(describeIosNode).join('; ')}) — the wrapper is not one ` +
+          'accessibility element, so a screen reader reaches its children and never ' +
+          'the menu on it'
+      );
+    }
   }
 
   const node = named[0];

@@ -1,0 +1,17 @@
+{
+  "uiViewClassName": "NitroUiContextMenu",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "rows": true,
+    "title": true,
+    "disabled": true,
+    "previewCornerRadius": true,
+    "nuiPerfId": true,
+    "onSelect": true,
+    "onOpen": true,
+    "onClose": true,
+    "hybridRef": true
+  }
+}

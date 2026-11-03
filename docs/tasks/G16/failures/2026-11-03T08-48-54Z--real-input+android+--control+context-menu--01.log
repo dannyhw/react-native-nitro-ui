@@ -1,0 +1,145 @@
+# Failure excerpt — real-input:android:--control:context-menu
+
+- Ran: 2026-11-03T08:48:54.462Z on code tree `289025a3d31f` at HEAD `dffe762` (branch `task/G16-contextmenu`)
+- Command: `node scripts/real-input/android.mjs --control context-menu`
+- Result: fail, exit 1, 515523 ms
+- Load: start 2.54, end 3.17, median 2.80, max 4.00
+- Device: android / device `emulator-5574` / lease `G16-dymmb`
+- Full log: `task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log` (<store>/task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ and the child is never pressed by a hold that opened it — expected 0, saw 3`
+- `✗ a hold on the inner ContextMenu opens the inner menu (rows Outer)`
+- `✗ timed out after 8000ms waiting for Back to close the context menu - popup windows 1, expected 0`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-dymmb (still live)
+  |   G16-dymmb                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.17 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 101 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: real-input:android:--control:context-menu
+gate: node scripts/real-input/android.mjs --control context-menu (cwd .)
+gate: code tree 289025a3d31f at HEAD dffe762d
+gate: git tree 527db026441a with a DIRTY worktree (not reusable)
+gate: log task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log
+gate:       <store>/task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log
+real-input (android): emulator-5574 · nitroui_t03 · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  context-menu: a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing
+    ✓ a quick tap presses the child once and opens nothing (of 3) — expected 3, saw 3
+    · popup top-start minus the press point, px at density 2.625: 0,0 | 0,0 | 0,0
+    ✓ a still hold opens the menu (of 3) — expected 3, saw 3
+    ✗ and the child is never pressed by a hold that opened it — expected 0, saw 3
+    ✓ a row picks (of 3) — expected 3, saw 3
+    ✓ a pick reports select before close, every time — expected 3, saw 3
+    ✓ a fresh tap after each menu presses once (of 3) — expected 3, saw 3
+    ✓ the popup's top-start is the finger, within 1 dp (of 3) — expected 3, saw 3
+    ✓ a drag starting on the ContextMenu scrolls the page (of 3) — expected 3, saw 3
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ a hold then a drag opens the menu
+    ✓ and the page under it did not move (scrollY) — expected 0, saw 0
+    ✓ Back closes it, reported once — expected 1, saw 1
+    ✓ the inner horizontal ScrollView pans
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ the hold before the outside tap opens the menu
+    ✓ an outside tap closes the menu — expected 1, saw 1
+    ✓ and the press under it never lands — expected 0, saw 0
+    ✗ a hold on the inner ContextMenu opens the inner menu (rows Outer)
+    ✗ timed out after 8000ms waiting for Back to close the context menu - popup windows 1, expected 0
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,737][1038,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][492,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2053][1038,2179]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2423][714,2424]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+context-menu: FAIL (no retries)
+    failed: and the child is never pressed by a hold that opened it — expected 0, saw 3
+    failed: a hold on the inner ContextMenu opens the inner menu (rows Outer)
+    failed: timed out after 8000ms waiting for Back to close the context menu - popup windows 1, expected 0
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 17/17 auxiliary checks passed
+gate: real-input:android:--control:context-menu FAIL in 515.5 s - note: the code tree moved during the run (72e1e87c0eb5 now), so this line describes 289025a3d31f
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G16-contextmenu/real-input+android+--control+context-menu-2026-11-03T08-48-54.137Z.log (5 probe(s))
+
+```

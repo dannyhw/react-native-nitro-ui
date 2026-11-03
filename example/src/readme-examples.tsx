@@ -17,6 +17,7 @@ import {
   Button,
   Checkbox,
   Chip,
+  ContextMenu,
   DatePicker,
   type DialogAction,
   Host,
@@ -161,6 +162,40 @@ export function FileActions() {
     </>
   );
 }
+// #endregion
+
+// #region context-menu
+const MESSAGE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+    { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+  ],
+  sections: [
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function MessageRow() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <ContextMenu
+      group={MESSAGE_ACTIONS}
+      onSelect={setLast}
+      style={messageStyles.bubble}
+    >
+      <Text>Hold this message for its menu.</Text>
+      <Text>Last action: {last}</Text>
+    </ContextMenu>
+  );
+}
+
+const messageStyles = StyleSheet.create({
+  bubble: { padding: 12, borderRadius: 16, backgroundColor: '#f2f2f7' },
+});
 // #endregion
 
 // #region chip

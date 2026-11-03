@@ -34,6 +34,7 @@ import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { TextField } from '../TextField/TextField';
 import { Chip } from '../Chip/Chip';
 import { Checkbox } from '../Checkbox/Checkbox';
+import { ContextMenu } from '../ContextMenu/ContextMenu';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -91,6 +92,8 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  *   (`docs/components/chip.md`, "Limits"). The next unmeasured control starts here too.
  * - **refused by design** - the BottomSheet (G14): its content is React Native views, and a
  *   Host has no place for an RN view (`docs/components/host.md`, "What a Host cannot hold").
+ *   The ContextMenu (G16) is refused for the same reason: it *is* a `View` around React
+ *   Native children (Q6 Appendix A, "Manifest").
  *
  * The rows are hand-written rather than generated: the registry writes the imports and
  * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
@@ -101,6 +104,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [Chip, 'Chip'],
   [Checkbox, 'Checkbox'],
   [BottomSheet, 'BottomSheet'],
+  [ContextMenu, 'ContextMenu'],
 ]);
 
 /**
