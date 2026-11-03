@@ -233,10 +233,10 @@ const SHARED = {
     "NitroUiCheckbox": {
       "android": {
         "width": 40,
-        "height": 40
+        "height": 48
       },
       "ios": {
-        "width": 56,
+        "width": 61,
         "height": 28
       }
     }
@@ -263,7 +263,7 @@ const SHARED = {
     "NitroUiPicker": "both",
     "NitroUiTextField": "height",
     "NitroUiChip": "none",
-    "NitroUiCheckbox": "none"
+    "NitroUiCheckbox": "height"
   },
   "exemptions": [
     {

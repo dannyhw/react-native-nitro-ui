@@ -97,9 +97,13 @@ export const Playground: Story = {
 };
 
 /**
- * The states a checkbox has: off, on, disabled in both, and the third state.
- * The third row is Android's - on iOS the box is a switch and `indeterminate`
- * reads as off, which is what the note says and the picture shows.
+ * The states a checkbox has: off, on, a bare box, disabled in both, and the third
+ * state in both of its values - a dash while the value is off, a check mark while it is
+ * on, which is the row whose press reports `false`.
+ *
+ * The third column is Android's: on iOS the box is a switch, `indeterminate` draws
+ * nothing, and the two rows read as off and on. That is what the note says and what the
+ * picture shows.
  *
  * This is the README screenshot.
  */
@@ -110,13 +114,18 @@ export const States: Story = {
         <View style={styles.stack}>
           <Checkbox label="Email me offers" />
           <Checkbox label="Order confirmation" defaultChecked />
-          <Checkbox label="Bare box" accessibilityLabel="Bare box" />
+          {/* Bare: no label at all, so the name has to come from `accessibilityLabel`. */}
+          <Checkbox accessibilityLabel="Bare box" />
         </View>
       </Column>
-      <Column label="Three state (Android)">
+      <Column label="Third state (Android)">
         <View style={styles.stack}>
           <Checkbox label="Select all" indeterminate />
-          <Checkbox label="Select all, checked" checked />
+          {/*
+            The state a caller has to handle: `indeterminate` while `checked` is true
+            shows a check mark, and the press that empties it reports `false`.
+          */}
+          <Checkbox label="Select all, checked" checked indeterminate />
         </View>
       </Column>
       <Column label="Disabled">

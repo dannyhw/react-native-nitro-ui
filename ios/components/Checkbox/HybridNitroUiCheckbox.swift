@@ -170,10 +170,21 @@ struct CheckboxContent: NitroUIContent {
     // here (`real-input:ios --control checkbox`) as no `value` change and no event at
     // all, while a press on the glyph toggled. So the row gets a tap target of its own,
     // and it asks through the hook a press is documented to take - `press()`: the
-    // opposite of what the box shows, refused while `disabled`. The overlay takes the
-    // glyph's touches as well, which is the point - one handler, once per tap (the
-    // harness's event counter and real-input's counts are what go red on a double), and
-    // out of the accessibility tree, so the element a reader meets is still the switch.
+    // opposite of what the box shows, refused while `disabled`.
+    //
+    // It has to be an overlay, and not the `background` layer one would rather write.
+    // That version was tried on this simulator and measured: three presses on the row's
+    // middle left the switch at `off` with its own element's `value` unmoved, because a
+    // `Toggle` claims the whole row for hit testing and acts on the glyph only, so a layer
+    // *behind* it is never asked and the label's touches die in the control that owns the
+    // row. In front, they cannot be missed.
+    //
+    // What the overlay takes from the glyph is SwiftUI's press feedback and the thumb's
+    // drag; what it buys is that one press of this control is exactly one `onCheckedChange`
+    // wherever it lands, and the glyph is no exception - `testRealInputCheckbox` taps the
+    // glyph and counts, which is the assertion that a row handler and the `Toggle`'s own
+    // gesture both answering the same touch would go red on. Out of the accessibility tree,
+    // so the element a reader meets is still the switch.
     .overlay {
       Color.clear
         .contentShape(Rectangle())
