@@ -22,6 +22,8 @@
 #include "HybridNitroUiMenuSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
 #include "HybridNitroUiTextFieldSpecSwift.hpp"
+#include "HybridNitroUiBottomSheetSpecSwift.hpp"
+#include "HybridNitroUiChipSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -115,6 +117,20 @@
     "NitroUiTextField",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiTextFieldSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTextField();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiBottomSheet",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiBottomSheetSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiBottomSheet();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiChip",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiChipSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiChip();
       return hybridObject;
     }
   );

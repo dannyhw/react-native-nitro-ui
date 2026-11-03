@@ -57,3 +57,49 @@ export function nativeChecked(tree, description) {
   }
   return tightest == null ? null : tightest.checked === 'true' ? 'on' : 'off';
 }
+
+/**
+ * Whether the control a person would press is enabled: `enabled` on the tightest
+ * *clickable* node that carries this labelled control.
+ *
+ * The same shape as {@link nativeChecked}, for the same reason, measured on G12's
+ * Chip screen: a disabled Material 3 chip publishes `enabled="false"` on its 48 dp
+ * touch-target node at `[562,738][964,864]`, and the node carrying
+ * `content-desc="Real-input disabled chip"` inside it at `[562,759][964,843]` says
+ * `enabled="true"` - so reading the labelled node reports every disabled chip as
+ * enabled.
+ *
+ * @param {ReadonlyArray<{contentDesc: string, clickable: string, enabled: string, bounds: {x1: number, y1: number, x2: number, y2: number, width: number, height: number}}>} tree
+ * @param {string} description the control's `accessibilityLabel`
+ * @returns {string | null} `"true"` / `"false"`, or null when no clickable node
+ *   carries the control
+ */
+export function nativeEnabled(tree, description) {
+  const labelled = tree.find(
+    (node) => node.contentDesc === description && node.bounds.height > 0
+  );
+  if (labelled == null) {
+    return null;
+  }
+  /** @type {{area: number, enabled: string} | null} */
+  let tightest = null;
+  for (const node of tree) {
+    if (node.clickable !== 'true') {
+      continue;
+    }
+    const { bounds } = node;
+    const contains =
+      bounds.x1 <= labelled.bounds.x1 &&
+      bounds.y1 <= labelled.bounds.y1 &&
+      bounds.x2 >= labelled.bounds.x2 &&
+      bounds.y2 >= labelled.bounds.y2;
+    if (!contains) {
+      continue;
+    }
+    const area = bounds.width * bounds.height;
+    if (tightest == null || area < tightest.area) {
+      tightest = { area, enabled: node.enabled };
+    }
+  }
+  return tightest == null ? null : tightest.enabled;
+}

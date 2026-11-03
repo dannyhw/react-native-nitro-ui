@@ -13,7 +13,9 @@
  */
 import {
   AlertDialog,
+  BottomSheet,
   Button,
+  Chip,
   DatePicker,
   type DialogAction,
   Host,
@@ -28,7 +30,7 @@ import {
   type TextFieldHandle,
 } from 'react-native-nitro-ui';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 // #region switch
 export function WifiSettings() {
@@ -160,6 +162,25 @@ export function FileActions() {
 }
 // #endregion
 
+// #region chip
+export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+  const [openNow, setOpenNow] = useState(false);
+
+  return (
+    <>
+      <Chip label="Open now" selected={openNow} onSelectedChange={setOpenNow} />
+      <Chip label="Vegan" defaultSelected />
+      <Chip
+        variant="assist"
+        label="Directions"
+        systemImage="map"
+        onPress={onDirections}
+      />
+    </>
+  );
+}
+// #endregion
+
 // #region dialog
 const DRAFT_ACTIONS: DialogAction[] = [
   { id: 'keep', title: 'Keep', role: 'cancel' },
@@ -187,6 +208,43 @@ export function DeleteDraft({ onDelete }: { onDelete: () => void }) {
           if (id === 'delete') onDelete();
         }}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region bottom-sheet
+export function Filters() {
+  const [open, setOpen] = useState(false);
+  const [detent, setDetent] = useState(0);
+
+  return (
+    <>
+      <Button
+        title="Filters"
+        variant="tonal"
+        size="medium"
+        onPress={() => setOpen(true)}
+      />
+      <BottomSheet
+        isPresented={open}
+        onIsPresentedChange={setOpen}
+        detents={['medium', 'large']}
+        onDetentChange={setDetent}
+        // The next presentation opens at the first detent again.
+        onDismiss={() => setDetent(0)}
+        accessibilityLabel="Filters"
+      >
+        <View style={{ padding: 24, gap: 12 }}>
+          <Text>{detent === 0 ? 'Half height' : 'Full height'}</Text>
+          <Button
+            title="Done"
+            variant="filled"
+            size="medium"
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </BottomSheet>
     </>
   );
 }

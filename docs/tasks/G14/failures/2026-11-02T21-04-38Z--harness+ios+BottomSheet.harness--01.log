@@ -1,0 +1,206 @@
+# Failure excerpt — harness:ios:BottomSheet.harness
+
+- Ran: 2026-11-02T21:04:38.416Z on code tree `6f14983d1e73` at HEAD `6691428` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios BottomSheet.harness`
+- Result: fail, exit 1, 131633 ms
+- Load: start 8.08, end 6.20, median 9.56, max 14.25
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G14-ndzag`
+- Full log: `task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-04-38.416Z.log` (<store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-04-38.416Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet › does nothing for a user dismissal when dismissible is false`
+- `● BottomSheet › presents again when the app refuses a dismissal`
+- `● BottomSheet › closes when JS withdraws it mid-entry, and leaves nothing`
+- `● BottomSheet › gives a recycled view none of its previous sheet`
+- `● BottomSheet › presents at mount once its view is in a window`
+- `● BottomSheet › presents inside an RN Modal and closes cleanly before the Modal does`
+- `● BottomSheet › follows its content in a window of its own, over an RN Modal (fit)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 1)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 2)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 3)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+- `● BottomSheet · 50 cycles › leaves nothing behind after fifty cycles`
+- `expected +0 to be 50 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness-2026-11-02T21-04-38.416Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-ndzag (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.20 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 178 — the rest is in the full log above)
+
+```
+    "refuse" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=8;recycles=8"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › closes when JS withdraws it mid-entry, and leaves nothing
+
+    never saw "mid:dismiss"; events=[]
+
+      [0m [90m 277 |[39m   [36mreturn[39m pollUntil(
+       [90m 278 |[39m     () [33m=>[39m (eventLog[33m.[39mincludes(entry) [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+      [31m[1m>[22m[39m[90m 279 |[39m     () [33m=>[39m [36mnew[39m [33mError[39m([32m`never saw "${entry}"; events=[${eventLog.join(',')}]`[39m)[33m,[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 280 |[39m     timeoutMs
+       [90m 281 |[39m   )[33m;[39m
+       [90m 282 |[39m }[0m
+
+  ● BottomSheet › gives a recycled view none of its previous sheet
+
+    "old" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=300;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=23;recycles=23"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › presents at mount once its view is in a window
+
+    "mount" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=24;recycles=24"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › presents inside an RN Modal and closes cleanly before the Modal does
+
+    "in-modal" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=RCTFabricModalHostViewController;modalHosts=1;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=26;recycles=26"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › follows its content in a window of its own, over an RN Modal (fit)
+
+    "own-fit" never reached up over the Modal (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=RCTFabricModalHostViewController;modalHosts=1;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=27;recycles=27"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 1)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=29;recycles=29"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=30;recycles=30"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=31;recycles=31"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=32;recycles=32"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=240;inSheet=0;hidden=1;children=2;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=1;drops=33;recycles=33"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › leaves nothing behind after fifty cycles
+
+    expected +0 to be 50 // Object.is equality
+
+      [0m [90m 704 |[39m
+       [90m 705 |[39m   it([32m'leaves nothing behind after fifty cycles'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 706 |[39m     expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 707 |[39m     [36mconst[39m probeId [33m=[39m [36mawait[39m probe()[33m;[39m
+       [90m 708 |[39m     [36mconst[39m after [33m=[39m [36mawait[39m waitForReport(
+       [90m 709 |[39m       probeId[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       13 failed, 11 passed, 24 total
+Snapshots:   0 total
+Time:        130.215 s, estimated 189 s
+Ran all test suites matching BottomSheet.harness.
+
+
+
+```

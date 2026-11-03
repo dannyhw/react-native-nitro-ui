@@ -143,4 +143,28 @@ public final class NitroUiAutolinking {
   public static func isNitroUiTextFieldRecyclable() -> Bool {
     return HybridNitroUiTextField.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiBottomSheet() -> bridge.std__shared_ptr_HybridNitroUiBottomSheetSpec_ {
+    let hybridObject = HybridNitroUiBottomSheet()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiBottomSheetSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiBottomSheetRecyclable() -> Bool {
+    return HybridNitroUiBottomSheet.self is any RecyclableView.Type
+  }
+  
+  public static func createNitroUiChip() -> bridge.std__shared_ptr_HybridNitroUiChipSpec_ {
+    let hybridObject = HybridNitroUiChip()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiChipSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiChipRecyclable() -> Bool {
+    return HybridNitroUiChip.self is any RecyclableView.Type
+  }
 }

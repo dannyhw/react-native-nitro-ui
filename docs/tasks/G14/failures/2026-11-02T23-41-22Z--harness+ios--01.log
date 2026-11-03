@@ -1,0 +1,116 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T23:41:22.954Z on code tree `9833018fe37b` at HEAD `f273c2c` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 440752 ms
+- Load: start 2.54, end 3.18, median 4.26, max 7.32
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G14-v1501`
+- Full log: `task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log` (<store>/task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/RedProof.harness.tsx`
+- `● Console`
+- `● isolated red proof › fails on purpose`
+- `expected 'isolated' to be 'red' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-v1501 (still live)
+  |   G13-tj4up                G13          both              pair-b
+  |   G14-v1501                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.18 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 71 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 9833018fe37b at HEAD f273c2cb
+gate: git tree eb5d97fc5b29 with a DIRTY worktree (not reusable)
+gate: log task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log
+gate:       <store>/task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9833018fe37b, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.54/4.75 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+
+Test Suites: 1 skipped, 17 passed, 17 of 18 total
+Tests:       2 skipped, 299 passed, 301 total
+Snapshots:   0 total
+Time:        421.146 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, RedProof.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9833018fe37b, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.77/4.65 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/isolated/RedProof.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+  ● isolated red proof › fails on purpose
+
+    expected 'isolated' to be 'red' // Object.is equality
+
+      [0m [90m  5 |[39m describe([32m'isolated red proof'[39m[33m,[39m () [33m=>[39m {
+       [90m  6 |[39m   it([32m'fails on purpose'[39m[33m,[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m  7 |[39m     expect([32m'isolated'[39m)[33m.[39mtoBe([32m'red'[39m)[33m;[39m
+       [90m    |[39m                            [31m[1m^[22m[39m
+       [90m  8 |[39m   })[33m;[39m
+       [90m  9 |[39m })[33m;[39m
+       [90m 10 |[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 2 passed, 3 total
+Snapshots:   0 total
+Time:        16.995 s
+Ran all test suites.
+harness: isolated run failed (exit 1)
+gate: harness:ios FAIL in 440.8 s
+gate: recorded in .gates/task/G14-bottomsheet.jsonl
+
+
+gate: appended the device context to task/G14-bottomsheet/harness+ios-2026-11-02T23-41-22.440Z.log (4 probe(s))
+
+```

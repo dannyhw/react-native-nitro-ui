@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:Chip
+
+- Ran: 2026-11-02T22:07:22.713Z on code tree `0ef394a913cc` at HEAD `a7ea888` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Chip`
+- Result: fail, exit 1, 17729 ms
+- Load: start 6.33, end 7.38, median 7.38, max 7.68
+- Device: android / device `emulator-5574` / lease `G12-sigr7`
+- Full log: `task/G12-chip/harness+android+Chip-2026-11-02T22-07-22.713Z.log` (<store>/task/G12-chip/harness+android+Chip-2026-11-02T22-07-22.713Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · G12 › files nothing under a key two quick toggles have already left`
+- `expected 1 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+android+Chip-2026-11-02T22-07-22.713Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-sigr7 (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+  |   G12-sigr7                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.38 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Chip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0ef394a913cc, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.33/7.15 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+android+Chip-2026-11-02T22-07-22.713Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · G12 › files nothing under a key two quick toggles have already left
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 611 |[39m     )[33m;[39m
+       [90m 612 |[39m     expect(sameSize(fresh[33m,[39m reference))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 613 |[39m     expect(freshCorrections)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                  [31m[1m^[22m[39m
+       [90m 614 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+       [90m 615 |[39m       [90m// Otherwise the two keys would hold the same width and the case could not fail.[39m
+       [90m 616 |[39m       expect(reference[33m.[39mwidth)[33m.[39mtoBeGreaterThan(unselected[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 10 passed, 11 total
+Snapshots:   0 total
+Time:        16.444 s
+Ran all test suites matching Chip.
+
+
+
+```

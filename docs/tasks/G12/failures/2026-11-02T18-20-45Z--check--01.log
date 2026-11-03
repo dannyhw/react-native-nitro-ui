@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T18:20:45.701Z on code tree `8b2aa490fb13` at HEAD `31db76f` (branch `task/G12-chip`)
+- Command: `bun run check`
+- Result: fail, exit 1, 136402 ms
+- Load: start 5.99, end 14.18, median 18.10, max 23.26
+- Device: android / device `emulator-5574` / lease `G12-h83ki`
+- Full log: `task/G12-chip/check-2026-11-02T18-20-45.349Z.log` (<store>/task/G12-chip/check-2026-11-02T18-20-45.349Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "api-extractor:check" exited with code 1`
+- `error: script "manifest:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 764 — the rest is in the full log above)
+
+```
+| DatePicker: mount, 3 value changes, 2 bound changes, 2 unrelated parent renders | 8        | 8       | mount+0 redundant[] | ok     |
+| Picker: mount, 3 selection changes, 2 unrelated parent renders                  | 6        | 6       | mount+0 redundant[] | ok     |
+| Progress: mount, 3 value changes, 2 unrelated parent renders, 1 variant change  | 7        | 7       | mount+0 redundant[] | ok     |
+| SegmentedControl: mount, 3 selection changes, 2 unrelated parent renders        | 6        | 6       | mount+0 redundant[] | ok     |
+| Slider: mount, 3 value changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| Switch: mount, 3 flips, 2 unrelated parent renders                              | 6        | 6       | mount+0 redundant[] | ok     |
+
+PASS - 7 wrapper(s) render exactly as many times as the baseline says, with no redundant renders.
+──────── nitrogen:check — pass, 4.8s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 12/12 HybridObjects in 2.7s!
+💡  Your code is in <tmp>/nitrogen-check-i3B4Qa/nitrogen/generated
+‼️   Added 372 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: no drift (268 generated files match, 38 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (10 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.2s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        2.1s
+──────── prepare — pass, 2.1s ────────────────────────────────────────────────────
+$ bob build
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [custom] Cleaning up nitrogen
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [typescript] Generating type definitions with tsc
+ℹ [module] Compiling 71 files in src with babel
+ℹ [custom] Running bun run nitrogen
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+✔ [module] Wrote files to lib/module
+✔ [typescript] Wrote definition files to lib/typescript
+✔ [custom] Ran the nitrogen script succesfully
+check: ✓ publint             pass        1.3s
+check: ✗ api-extractor:check fail        1.5s - exit 1
+──────── api-extractor:check — fail, 1.5s ────────────────────────────────────────
+──────── publint — pass, 1.3s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✗ manifest:check      fail        2.0s - exit 1
+──────── manifest:check — fail, 2.0s ─────────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 11 blocks match example/src/readme-examples.tsx
+check: 15 passed, 2 failed in 135.9s
+check: failed step(s): api-extractor:check, manifest:check
+──────── full log: api-extractor:check ───────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+[33mWarning: You have changed the API signature for this project. Please copy the file ".turbo/api-extractor-temp/react-native-nitro-ui.api.md" to "etc/react-native-nitro-ui.api.md", or perform a local build (which does this automatically). See the Git repo documentation for more info.[39m
+
+[33mAPI Extractor completed with warnings[39m
+error: script "api-extractor:check" exited with code 1
+──────── full log: manifest:check ────────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiChip.kt would be published (not in the manifest).
+package-files: +ios/components/Chip/HybridNitroUiChip.swift would be published (not in the manifest).
+package-files: +lib/module/components/Chip/Chip.js would be published (not in the manifest).
+package-files: +lib/module/components/Chip/Chip.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Chip/Chip.nitro.js would be published (not in the manifest).
+package-files: +lib/module/components/Chip/Chip.nitro.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Chip/NativeNitroUiChip.js would be published (not in the manifest).
+package-files: +lib/module/components/Chip/NativeNitroUiChip.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Chip/NitroUiChipConfig.js would be published (not in the manifest).
+package-files: +lib/module/components/Chip/NitroUiChipConfig.js.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/Chip.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/Chip.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/Chip.nitro.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/Chip.nitro.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/NativeNitroUiChip.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/NativeNitroUiChip.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/NitroUiChipConfig.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Chip/NitroUiChipConfig.d.ts.map would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiChipSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiChipSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiChipSpec.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiChipSize.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiChipManager.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiChipStateUpdater.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiChipSpecSwift.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiChipSpecSwift.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/views/HybridNitroUiChipComponent.mm would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiChipSpec.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiChipSpec_cxx.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiChipSize.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiChipSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiChipSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiChipSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/json/NitroUiChipConfig.json would be published (not in the manifest).
+package-files: +src/components/Chip/Chip.nitro.ts would be published (not in the manifest).
+package-files: +src/components/Chip/Chip.tsx would be published (not in the manifest).
+package-files: +src/components/Chip/NativeNitroUiChip.ts would be published (not in the manifest).
+package-files: +src/components/Chip/NitroUiChipConfig.ts would be published (not in the manifest).
+package-files: tarball differs from <repo>/etc/package-files.txt (43 added, 0 removed). If intended, run `bun run manifest:update`.
+error: script "manifest:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 136.4 s
+gate: recorded in .gates/task/G12-chip.jsonl
+
+```

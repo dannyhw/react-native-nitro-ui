@@ -1,0 +1,91 @@
+# Failure excerpt — harness:ios:BottomSheetModalHazard
+
+- Ran: 2026-11-02T21:09:33.380Z on code tree `617fbdfa4ba3` at HEAD `6691428` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios BottomSheetModalHazard`
+- Result: fail, exit 1, 23474 ms
+- Load: start 5.81, end 6.77, median 6.01, max 6.77
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G14-ndzag`
+- Full log: `task/G14-bottomsheet/harness+ios+BottomSheetModalHazard-2026-11-02T21-09-33.380Z.log` (<store>/task/G14-bottomsheet/harness+ios+BottomSheetModalHazard-2026-11-02T21-09-33.380Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/BottomSheetModalHazard.harness.tsx`
+- `● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal closes under a sheet presented over it`
+- `expected '0' to be '1' // Object.is equality`
+- `● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal holding the sheet closes while it is up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+ios+BottomSheetModalHazard-2026-11-02T21-09-33.380Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-ndzag (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.77 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios BottomSheetModalHazard
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 617fbdfa4ba3, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.81/7.55 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+ios+BottomSheetModalHazard-2026-11-02T21-09-33.380Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/isolated/BottomSheetModalHazard.harness.tsx
+  ● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal closes under a sheet presented over it
+
+    expected '0' to be '1' // Object.is equality
+
+      [0m [90m 142 |[39m     [36mif[39m ([33mIOS[39m) {
+       [90m 143 |[39m       [90m// D35: an RN Modal on top means a window of its own, above the alerts.[39m
+      [31m[1m>[22m[39m[90m 144 |[39m       expect(shown[33m.[39mownWindow)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 145 |[39m       expect(shown[33m.[39mappTop)[33m.[39mtoContain([32m'ModalHostViewController'[39m)[33m;[39m
+       [90m 146 |[39m       expect([33mNumber[39m(shown[33m.[39mwindowLevel))[33m.[39mtoBeGreaterThan([35m1000[39m)[33m;[39m
+       [90m 147 |[39m     }[0m
+
+  ● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal holding the sheet closes while it is up
+
+    "sheet" never reached up from inside the Modal; its report is "presented=1;js=1;live=0;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=402;contentH=200;inSheet=0;hidden=1;children=1;sheetH=0;ownWindow=0;appTop=-;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;presentWaits=0;anchored=0;drops=1;recycles=1"; events=[]
+
+      [0m [90m 67 |[39m     [36mif[39m (check(report)) [36mreturn[39m report[33m;[39m
+       [90m 68 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 69 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 70 |[39m         [32m`"${testId}" never reached ${what}; its report is "${report.raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 71 |[39m       )[33m;[39m
+       [90m 72 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 2 total
+Snapshots:   0 total
+Time:        22.003 s
+Ran all test suites matching BottomSheetModalHazard.
+
+
+
+```

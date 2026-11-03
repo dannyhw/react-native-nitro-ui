@@ -46,7 +46,7 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
-import { nativeChecked } from './android-tree.mjs';
+import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
   calendarGridProblems,
@@ -91,7 +91,13 @@ const ECHO = {
   pickerGone: 'real-input-drop-gone',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
+  chipValue: 'real-input-chip-value',
+  chipEvents: 'real-input-chip-events',
+  chipRefusedLast: 'real-input-chip-refused-last',
+  chipRefusedEvents: 'real-input-chip-refused-events',
+  chipPresses: 'real-input-chip-presses',
   dialogLog: 'dialog-log',
+  sheetLog: 'sheet-log',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -1313,6 +1319,173 @@ const CHECKS = {
   },
 
   /**
+   * A real tap toggles a Material 3 FilterChip, a toggle the parent refuses snaps back,
+   * an AssistChip presses, and a disabled chip of either kind takes nothing (G12).
+   * `RealInputTests.testRealInputChip` on the other platform, assertion for assertion.
+   *
+   * The chip's own state is read from the tree as well as from the echo: Compose
+   * publishes a FilterChip's `selected` as `checkable`/`checked` (the same mapping the
+   * Picker's rows reach the dump through), so `nativeChecked` is both the a11y read of
+   * "selected" and the witness that tells a dropped tap from a lost event.
+   *
+   * The refusing chip's oracle is SegmentedControl's: the parent keeps `selected={false}`,
+   * so every tap asks for `true`. A chip that kept the refused selection would ask for
+   * `false` on the second tap.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'chip': async (t) => {
+    const named = (label) => t.requireControl(label);
+    t.log.checkEquals(
+      'the filter chip starts unselected',
+      t.requireEcho(ECHO.chipValue),
+      'off'
+    );
+    t.log.checkEquals(
+      "the filter chip's own node starts not checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 1. On, then off.
+    t.log.checkEquals(
+      'one real tap selects the filter chip (React renders "on")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'on',
+        'the real tap that selects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'on'
+    );
+    t.log.checkEquals(
+      "the selected chip's node says it is checked",
+      t.nativeChecked('Real-input chip'),
+      'on'
+    );
+    t.log.checkEquals(
+      'a second real tap deselects it (React renders "off")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'off',
+        'the real tap that deselects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes',
+      t.requireEcho(ECHO.chipEvents),
+      '2'
+    );
+    t.log.checkEquals(
+      "the deselected chip's node stops saying it is checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 2. The refusing parent: two requests, both for `true`, and the chip's node still
+    //    unchecked after each.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onSelectedChange`,
+        await t.tapUntilValue(
+          () => named('Real-input refusing chip'),
+          ECHO.chipRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true (a chip that kept the refused ` +
+          'selection would ask for false on the second tap)',
+        t.requireEcho(ECHO.chipRefusedLast),
+        'true'
+      );
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused chip snaps back to unchecked after request ${request}`,
+        t.nativeChecked('Real-input refusing chip'),
+        'off'
+      );
+    }
+
+    // 3. The assist chip presses once per tap.
+    t.log.checkEquals(
+      'one real tap on the assist chip reaches onPress once',
+      await t.tapUntilValue(
+        () => named('Real-input assist chip'),
+        ECHO.chipPresses,
+        '1',
+        'the real tap on the assist chip'
+      ),
+      '1'
+    );
+
+    // 4. Neither disabled chip takes a tap. Each is wired to its enabled twin's
+    //    counter, so a stray delivery is a number that moved. Not retried: the claim
+    //    is about a period in which nothing may move.
+    const disabledFilter = named('Real-input disabled chip');
+    const disabledAssist = named('Real-input disabled assist chip');
+    // Read off the clickable touch target around the label, not the labelled node:
+    // `nativeEnabled` says why (the labelled node reports enabled either way).
+    t.log.checkEquals(
+      'the disabled filter chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled chip'),
+      'false'
+    );
+    t.log.checkEquals(
+      'the disabled assist chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled assist chip'),
+      'false'
+    );
+    t.log.checkEquals(
+      'its enabled twin announces itself enabled (so the reads above can say true)',
+      t.nativeEnabled('Real-input assist chip'),
+      'true'
+    );
+    await t.tapNode(disabledFilter);
+    t.log.checkEquals(
+      'a real tap on the disabled filter chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipEvents,
+        '2',
+        'a tap on the disabled filter chip to be refused'
+      ),
+      '2'
+    );
+    await t.tapNode(disabledAssist);
+    t.log.checkEquals(
+      'a real tap on the disabled assist chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipPresses,
+        '1',
+        'a tap on the disabled assist chip to be refused'
+      ),
+      '1'
+    );
+
+    // 5. The barrier: the enabled twin, tapped the same way, still presses. At
+    //    least once more, not exactly once: a tap that stalls past the window lands
+    //    with its retry (G12: 1 -> 3), and "presses once per tap" is item 3's claim.
+    const barrier = await t.tapUntilValue(
+      () => named('Real-input assist chip'),
+      ECHO.chipPresses,
+      '2',
+      'the barrier tap on the assist chip',
+      { atLeast: true }
+    );
+    t.log.check(
+      'the enabled assist chip still presses after the refused taps — expected ' +
+        `at least 2, saw ${barrier}`,
+      Number(barrier) >= 2
+    );
+  },
+
+  /**
    * A real drag must move the thumb and report every phase.
    *
    * The phases Slider is uncontrolled and counts each callback separately, so a
@@ -1790,6 +1963,239 @@ const CHECKS = {
       `action:delete > presented:false > ${tail}`
     );
     await waitGone(SHEET_ROW, 'the row to take the sheet down');
+  },
+
+  'bottom-sheet': async (t) => {
+    // The texts `BottomSheetScreen` gives its sheets' content. Each appears nowhere
+    // else, so a text match names one sheet. A Material sheet is a `Dialog` window of
+    // its own, and while it is up `uiautomator dump` returns its tree - the React
+    // Native content is in there, which is half of what this check proves - so the
+    // screen's log is read only with every sheet down, and the sheet's own echo
+    // (`Pressed N times`) while it is up.
+    const FIT = 'Press inside the sheet';
+    const FIT_TITLE = 'As tall as this';
+    const STICKY = 'Close the sticky sheet';
+    const STICKY_TITLE = 'Swipe, back and outside do nothing';
+    const TWO = 'Drag this up for large';
+    const upCount = (text) => () =>
+      t.dump().filter((node) => node.text === text).length;
+    const opener = (testID) => () => {
+      const node = t.nodeByTestId(testID);
+      if (node == null) {
+        t.log.abort(`no opener with testID "${testID}" on the Sheet screen`);
+      }
+      return node;
+    };
+    const waitGone = async (text, description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount(text)() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    const open = async (testID, witness, description) => {
+      await t.tapUntilUp(opener(testID), description, upCount(witness), {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(witness, description);
+      // The entry animation: a gesture during it lands on a moving sheet.
+      await t.settle(700);
+    };
+    const log = (expected, what) =>
+      t.log.checkEquals(what, t.requireEcho(ECHO.sheetLog), expected);
+
+    // 0. Before a touch: nothing reported, and the content is not mounted.
+    log('none', 'no sheet has reported anything before a touch');
+    t.log.checkEquals(
+      "the sheet's content is not mounted before it is presented",
+      upCount(FIT)(),
+      0
+    );
+
+    // 1. A real tap opens the fit sheet; its React Native content is in its window, and
+    //    the sheet itself carries `<testID>-sheet` for a test or a11y tool to find.
+    await open('sheet-open-fit', FIT, 'the real tap that opens the fit sheet');
+    t.log.checkEquals(
+      'the presented sheet is the node named sheet-fit-sheet',
+      t.nodeByTestId('sheet-fit-sheet') != null,
+      true
+    );
+
+    // 2. A real tap on the Pressable inside the sheet reaches JS through the sheet's
+    //    own touch root: the sheet's echo moves.
+    const pressed = await t.pressUntil({
+      what: 'the Pressable inside the sheet',
+      waitingFor: 'the real tap inside the sheet to reach JS',
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Pressed 1 times')() > 0) return;
+        await t.tapNode(t.waitForOption(FIT, 'the Pressable to be up'));
+      },
+      reading: () =>
+        upCount('Pressed 1 times')() > 0 ? 'Pressed 1 times' : '-',
+      raised: (shown) => shown === 'Pressed 1 times',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      'a real tap inside the sheet presses its Pressable once',
+      pressed.shown,
+      'Pressed 1 times'
+    );
+
+    // 2a. A real tap on a TextInput inside the sheet. `ReactEditText` disallows its
+    //     parents' interception on touch-down, so the tap's UP reaches JS only because
+    //     the sheet's root keeps intercepting regardless (RN's `ReactRootView` rule);
+    //     without it JS sees the press go in and never come out.
+    const touches = await t.pressUntil({
+      what: 'the TextInput inside the sheet',
+      waitingFor: 'a real tap on the TextInput to reach JS, in and out',
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Input touches: in 0 out 0')() === 0) return;
+        const input = t.nodeByTestId('sheet-input');
+        if (input == null) t.log.abort('no TextInput sheet-input in the sheet');
+        await t.tapNode(input);
+      },
+      reading: () =>
+        t.dump().find((node) => node.text.startsWith('Input touches:'))?.text ??
+        '-',
+      raised: (shown) => shown === 'Input touches: in 1 out 1',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      "a real tap on the sheet's TextInput reaches JS as a whole press",
+      touches.shown,
+      'Input touches: in 1 out 1'
+    );
+
+    // 2b. A horizontal drag on the list inside the sheet: the ScrollView disallows its
+    //     parents' interception for that gesture. The sheet's root must still see the
+    //     gesture's end (RN's `ReactRootView` rule), or JS keeps a touch that never
+    //     ended - and the next press on the Pressable is lost.
+    const chipBefore = t.waitForOption('Chip 1', 'the first chip of the list');
+    await t.swipeAcross(chipBefore, 0.9, 0.1, 400);
+    const chipAfter = findAllByText(t.dump(), 'Chip 1')[0] ?? null;
+    t.log.checkEquals(
+      'a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out)',
+      chipAfter == null || chipAfter.bounds.x1 < chipBefore.bounds.x1,
+      true
+    );
+    t.log.checkEquals('and leaves the sheet up', upCount(FIT)(), 1);
+    const pressedAgain = await t.pressUntil({
+      what: 'the Pressable inside the sheet, after the scroll',
+      waitingFor: 'a real tap after the horizontal scroll to reach JS',
+      press: async (attempt) => {
+        if (attempt > 1 && upCount('Pressed 2 times')() > 0) return;
+        await t.tapNode(t.waitForOption(FIT, 'the Pressable to be up'));
+      },
+      reading: () =>
+        upCount('Pressed 2 times')() > 0 ? 'Pressed 2 times' : '-',
+      raised: (shown) => shown === 'Pressed 2 times',
+      pollMs: DUMP_POLL_MS,
+    });
+    t.log.checkEquals(
+      'the Pressable still takes a real tap after the scroll',
+      pressedAgain.shown,
+      'Pressed 2 times'
+    );
+
+    // 3. Back closes it; then a tap outside; then a drag down on its content.
+    await t.pressBack();
+    await waitGone(FIT, 'Back to take the fit sheet down');
+    await open(
+      'sheet-open-fit',
+      FIT,
+      'the real tap that reopens the fit sheet'
+    );
+    await t.tapAtFraction(0.5, 0.12);
+    await waitGone(FIT, 'a tap outside to take the fit sheet down');
+    await open('sheet-open-fit', FIT, 'the real tap that opens it again');
+    await t.swipeFrom(
+      t.waitForOption(FIT_TITLE, 'the fit sheet title'),
+      Math.round(600 * t.density()),
+      250
+    );
+    await waitGone(
+      FIT,
+      'a drag down on the content to take the fit sheet down'
+    );
+    log(
+      'press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > ' +
+        'presented:false > dismiss',
+      'Back, a tap outside and a drag down each reported the close, then the dismissal'
+    );
+
+    // 4. None of the three closes a sticky sheet; its own button does, and that close
+    //    is the app's (no presented:false).
+    await open(
+      'sheet-open-sticky',
+      STICKY,
+      'the real tap that opens the sticky sheet'
+    );
+    await t.pressBack();
+    await t.settle(1000);
+    t.log.checkEquals('Back leaves the sticky sheet up', upCount(STICKY)(), 1);
+    await t.tapAtFraction(0.5, 0.12);
+    await t.settle(1000);
+    t.log.checkEquals('and so does a tap outside', upCount(STICKY)(), 1);
+    await t.swipeFrom(
+      t.waitForOption(STICKY_TITLE, 'the sticky sheet title'),
+      Math.round(600 * t.density()),
+      250
+    );
+    await t.settle(1200);
+    t.log.checkEquals('and so does a drag down', upCount(STICKY)(), 1);
+    await t.tapUntilUp(
+      () => t.waitForOption(STICKY, 'the sticky sheet button'),
+      'the real tap on the sticky sheet button to close it',
+      () => (upCount(STICKY)() === 0 ? 1 : 0),
+      { pollMs: DUMP_POLL_MS }
+    );
+    await waitGone(STICKY, 'the sticky sheet button to take it down');
+    log(
+      'press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > ' +
+        'presented:false > dismiss > close > dismiss',
+      'only the sticky sheet button closed it'
+    );
+
+    // 5. The two-detent sheet opens half expanded; a drag up on its header expands it,
+    //    which reports detent 1.
+    await open(
+      'sheet-open-two',
+      TWO,
+      'the real tap that opens the two-detent sheet'
+    );
+    const header = t.waitForOption(TWO, 'the two-detent header');
+    const halfTop = header.bounds.y1;
+    await t.swipeFrom(header, -Math.round(halfTop * 0.8), 400);
+    await t.settle(800);
+    const expandedTop = t.waitForOption(TWO, 'the header after the drag').bounds
+      .y1;
+    t.log.note(
+      `bottom-sheet: the two-detent header moved from y=${String(halfTop)} to y=${String(expandedTop)}`
+    );
+    t.log.checkEquals(
+      'a drag up on the header expands the sheet (its top moves up by more than a third)',
+      halfTop - expandedTop > halfTop / 3,
+      true
+    );
+    // Material's Back steps down a detent before it closes: from expanded it returns to
+    // the half-expanded one (reported as detent 0), and only the next Back closes it.
+    await t.pressBack();
+    await t.settle(1200);
+    t.log.checkEquals(
+      'Back from the expanded detent leaves the sheet up, half expanded',
+      upCount(TWO)(),
+      1
+    );
+    await t.pressBack();
+    await waitGone(TWO, 'a second Back to take the two-detent sheet down');
+    // The screen keeps its last twelve entries, so the first press has scrolled off.
+    log(
+      'presented:false > dismiss > presented:false > dismiss > presented:false > ' +
+        'dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss',
+      'a drag up reported detent 1, Back stepped down to detent 0, and Back closed it'
+    );
   },
 
   'date-picker': async (t) => {
@@ -3319,7 +3725,7 @@ class DeviceHarness {
    * The example's tabs are its only navigation.
    *
    * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'dialog' | 'host'} screen
+   *   | 'picker' | 'menu' | 'dialog' | 'sheet' | 'host'} screen
    */
   async goToScreen(screen) {
     const label = {
@@ -3330,7 +3736,9 @@ class DeviceHarness {
       datepicker: 'Dates',
       picker: 'Picker',
       menu: 'Menu',
+      chip: 'Chip',
       dialog: 'Dialogs',
+      sheet: 'Sheet',
       host: 'Host',
       textfield: 'Text',
     }[screen];
@@ -3342,7 +3750,9 @@ class DeviceHarness {
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
+      chip: ECHO.chipValue,
       dialog: ECHO.dialogLog,
+      sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
       textfield: ECHO.textTyping,
     }[screen];
@@ -3925,6 +4335,17 @@ function makeContext(harness, log) {
     },
 
     /**
+     * See `nativeEnabled` in `android-tree.mjs`: the clickable node's `enabled`,
+     * which is where Compose puts a disabled control's state.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @returns {string | null} `"true"` / `"false"`, or null when nothing answers
+     */
+    nativeEnabled(description) {
+      return nativeEnabled(harness.hierarchy(), description);
+    },
+
+    /**
      * Tap a control until the on-screen *value* it should change says so.
      *
      * The value, not merely a change: `waitForEchoToChange` is satisfied by any
@@ -3941,8 +4362,13 @@ function makeContext(harness, log) {
      * @param {string} testID the echo whose value proves the press arrived
      * @param {string} expected what the echo has to say
      * @param {string} waitingFor what this tap was meant to do
-     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string}} [options]
+     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string, atLeast?: boolean}} [options]
      *   `aim` - how to press it, for the taps that aim at a fraction of the control.
+     *   `atLeast` - the echo is a counter and any count from `expected` up passes.
+     *   For a barrier, whose claim is "a press still arrives": a tap that stalled
+     *   past the window can land together with the retry, and the counter then
+     *   skips `expected` (G12: 1 -> 3), which proves the claim twice rather than
+     *   failing it. Not for a check that counts presses per tap.
      *   `nativeLabel` - the control's `accessibilityLabel` when it publishes its own
      *   state, which for a Switch it does: `pressUntil` then refuses to retry a press
      *   whose touch clearly landed (F1 M3). Pass it for every single-value control
@@ -3955,7 +4381,7 @@ function makeContext(harness, log) {
       // options object, and a callsite left behind would keep tapping the
       // middle of the control - which is a wrong-place tap, not a dropped one,
       // and it showed up as two segmented checks going red for the wrong reason.
-      const known = ['aim', 'attempts', 'nativeLabel'];
+      const known = ['aim', 'attempts', 'nativeLabel', 'atLeast'];
       const unknown = Object.keys(options).filter((k) => !known.includes(k));
       if (typeof options === 'function' || unknown.length > 0) {
         log.abort(
@@ -3963,12 +4389,18 @@ function makeContext(harness, log) {
             typeof options === 'function'
               ? 'a positional aim function (it is now { aim })'
               : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
-                '{ aim, attempts, nativeLabel }'
+                '{ aim, attempts, nativeLabel, atLeast }'
           }. Refusing to tap: an ignored aim presses the middle of the control, ` +
             'which fails a segment check and blames delivery.'
         );
       }
-      const { aim, attempts = 3, nativeLabel } = options;
+      const { aim, attempts = 3, nativeLabel, atLeast = false } = options;
+      const target = Number(expected);
+      if (atLeast && !Number.isInteger(target)) {
+        log.abort(
+          `${waitingFor}: atLeast needs a counter, and "${expected}" is not one`
+        );
+      }
       const { delivered, shown } = await this.pressUntil({
         what: `"${testID}"`,
         waitingFor,
@@ -3998,13 +4430,16 @@ function makeContext(harness, log) {
           nativeLabel == null
             ? undefined
             : () => this.nativeChecked(nativeLabel),
-        raised: (current) => current === expected,
+        raised: (current) =>
+          atLeast
+            ? current != null && Number(current) >= target
+            : current === expected,
       });
       if (!delivered) {
         log.abort(
           `${waitingFor}: ${String(attempts)} real taps left ${testID} at "${String(
             shown
-          )}" rather than "${expected}" - either the taps were never delivered ` +
+          )}" rather than ${atLeast ? 'at least ' : ''}"${expected}" - either the taps were never delivered ` +
             '(FOLLOWUPS.md:58) or the control ignores a real touch. One delivered ' +
             'tap was enough to pass, so this is not a control that answers sometimes.'
         );
@@ -4486,6 +4921,65 @@ function makeContext(harness, log) {
      */
     async pressBack() {
       harness.key(KEY_BACK);
+      await sleep(400);
+    },
+
+    /**
+     * Drag a finger vertically from the centre of a node - a sheet's content, its
+     * header - by `dyPx` pixels (positive is down). One `adb shell input swipe`, so
+     * the drag travels the same InputDispatcher path a finger does.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {number} dyPx
+     * @param {number} [durationMs]
+     */
+    async swipeFrom(node, dyPx, durationMs = 300) {
+      harness.swipe(
+        node.bounds.cx,
+        node.bounds.cy,
+        node.bounds.cx,
+        Math.max(
+          0,
+          Math.min(harness.displayHeight() - 1, node.bounds.cy + dyPx)
+        ),
+        durationMs
+      );
+      await sleep(600);
+    },
+
+    /**
+     * Drag a finger horizontally across a node, between two fractions of the display's
+     * width, at the node's own height.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} node
+     * @param {number} fromFx
+     * @param {number} toFx
+     * @param {number} [durationMs]
+     */
+    async swipeAcross(node, fromFx, toFx, durationMs = 400) {
+      const width = harness.displayWidth();
+      harness.swipe(
+        Math.round(width * fromFx),
+        node.bounds.cy,
+        Math.round(width * toFx),
+        node.bounds.cy,
+        durationMs
+      );
+      await sleep(600);
+    },
+
+    /**
+     * Tap a point given as fractions of the display - above a sheet, say, where its
+     * scrim is.
+     *
+     * @param {number} fx
+     * @param {number} fy
+     */
+    async tapAtFraction(fx, fy) {
+      harness.tapAt(
+        Math.round(harness.displayWidth() * fx),
+        Math.round(harness.displayHeight() * fy)
+      );
       await sleep(400);
     },
 

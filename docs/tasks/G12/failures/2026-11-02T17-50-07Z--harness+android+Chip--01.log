@@ -1,0 +1,140 @@
+# Failure excerpt — harness:android:Chip
+
+- Ran: 2026-11-02T17:50:07.791Z on code tree `6afcf3ff6cff` at HEAD `d16968e` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Chip`
+- Result: fail, exit 1, 25331 ms
+- Load: start 8.66, end 7.31, median 8.28, max 8.66
+- Device: android / device `emulator-5574` / lease `G12-h83ki`
+- Full log: `task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log` (<store>/task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android`
+- `expected 66.28571428571429 to be greater than 74.28571428571429`
+- `● Chip · G12 › re-keys a toggle: each state keeps its own size`
+- `expected 89.52380952380952 to be greater than 97.52380952380952`
+- `● Chip · G12 › applies a selection written from JS, and keeps its own when uncontrolled`
+- `● Chip · G12 › takes no press while disabled, of either variant`
+- `● Chip · G12 › tells accessibility what it is and whether it is selected`
+- `expected 'role=Checkbox,selected=false,toggle=n…' to contain 'disabled=true'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (still live)
+  |   G12-h83ki                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.31 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 91 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Chip
+gate: node ../scripts/harness.mjs --harnessRunner android Chip (cwd example)
+gate: code tree 6afcf3ff6cff at HEAD d16968e
+gate: git tree 0475d702c697 with a DIRTY worktree (not reusable)
+gate: log task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log
+gate:       <store>/task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Chip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 6afcf3ff6cff, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.66/8.26 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android
+
+    expected 66.28571428571429 to be greater than 74.28571428571429
+
+      [0m [90m 377 |[39m       [90m// The leading check (18 dp plus its padding): the reason `selected` is in the[39m
+       [90m 378 |[39m       [90m// Android sizing key at all.[39m
+      [31m[1m>[22m[39m[90m 379 |[39m       expect(on[33m.[39mwidth)[33m.[39mtoBeGreaterThan(off[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 380 |[39m       expect(on[33m.[39mheight)[33m.[39mtoBeCloseTo(off[33m.[39mheight[33m,[39m [35m0[39m)[33m;[39m
+       [90m 381 |[39m     } [36melse[39m {
+       [90m 382 |[39m       [90m// The reason it is *not* in the iOS key: `Toggle(.button)` fills the same[39m[0m
+
+  ● Chip · G12 › re-keys a toggle: each state keeps its own size
+
+    expected 89.52380952380952 to be greater than 97.52380952380952
+
+      [0m [90m 470 |[39m     expect(sameSize(measured([32m'toggled'[39m)[33m,[39m reference))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 471 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+      [31m[1m>[22m[39m[90m 472 |[39m       expect(reference[33m.[39mwidth)[33m.[39mtoBeGreaterThan(unselected[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m
+       [90m     |[39m                                              [31m[1m^[22m[39m
+       [90m 473 |[39m     }
+       [90m 474 |[39m   })[33m;[39m
+       [90m 475 |[39m[0m
+
+  ● Chip · G12 › applies a selection written from JS, and keeps its own when uncontrolled
+
+    "free" never drew displayed=1 - it reports "displayed=0;probes=0;a11y=none".
+
+      [0m [90m 217 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 218 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 219 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 220 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 221 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 222 |[39m       )[0m
+
+  ● Chip · G12 › takes no press while disabled, of either variant
+
+    "disabled-filter" never drew displayed=1 - it reports "displayed=0;probes=0;a11y=none".
+
+      [0m [90m 217 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 218 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 219 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 220 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 221 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 222 |[39m       )[0m
+
+  ● Chip · G12 › tells accessibility what it is and whether it is selected
+
+    expected 'role=Checkbox,selected=false,toggle=n…' to contain 'disabled=true'
+
+      [0m [90m 728 |[39m       expect(assist)[33m.[39mtoContain([32m'selected=none'[39m)[33m;[39m
+       [90m 729 |[39m       expect(assist)[33m.[39mtoContain([32m'label=Get directions'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 730 |[39m       expect(disabled)[33m.[39mtoContain([32m'disabled=true'[39m)[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 731 |[39m       expect(filterOn)[33m.[39mtoContain([32m'disabled=false'[39m)[33m;[39m
+       [90m 732 |[39m     } [36melse[39m {
+       [90m 733 |[39m       [90m// Nothing to read in-process (the spec says why); the role and the selected[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 5 passed, 10 total
+Snapshots:   0 total
+Time:        24.322 s, estimated 26 s
+Ran all test suites matching Chip.
+gate: harness:android:Chip FAIL in 25.3 s
+gate: recorded in .gates/task/G12-chip.jsonl
+
+
+gate: appended the device context to task/G12-chip/harness+android+Chip-2026-11-02T17-50-07.410Z.log (5 probe(s))
+
+```

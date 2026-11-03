@@ -97,7 +97,9 @@ import { waitForHandle } from './handles';
 import { ALLOW_LOCALE_MISMATCH_ENV, localeMismatchAllowed } from './timingGate';
 import {
   AlertDialog,
+  BottomSheet,
   Button,
+  Chip,
   DatePicker,
   Menu,
   Picker,
@@ -216,6 +218,16 @@ const SHARED = {
         "width": 200,
         "height": 22
       }
+    },
+    "NitroUiChip": {
+      "android": {
+        "width": 96,
+        "height": 48
+      },
+      "ios": {
+        "width": 80,
+        "height": 28
+      }
     }
   },
   "poisonSizes": {
@@ -238,7 +250,8 @@ const SHARED = {
     "NitroUiSegmentedControl": "both",
     "NitroUiDatePicker": "both",
     "NitroUiPicker": "both",
-    "NitroUiTextField": "height"
+    "NitroUiTextField": "height",
+    "NitroUiChip": "none"
   },
   "exemptions": [
     {
@@ -351,6 +364,17 @@ type Handle = {
   /** TextField's focus, through the native method its `ref` calls. */
   focus?(): void;
   blur?(): void;
+  /**
+   * Chip's label, the props half of its recycle rule. `null` is Picker's: its handle
+   * carries an optional field label of the same name.
+   */
+  readonly label?: string | null;
+  /**
+   * Chip's press, through the tap's own path (`ChipModel.press()`): the iOS harness's
+   * HID-less touch reaches no SwiftUI button gesture, so this is how a probe presses a
+   * Chip there (`Chip.harness.tsx` measured it).
+   */
+  nuiTestPress?(): void;
 };
 
 /**
@@ -493,6 +517,25 @@ async function eventsSettled(from: number, wanted: string): Promise<string> {
 /** Press a control at its own box. */
 const pressControl = async (testId: string): Promise<void> => {
   await userEvent.press(await screen.findByTestId(testId));
+};
+
+/**
+ * Press a Chip: a real harness tap on Android, the control's own press path on iOS, where
+ * the harness's HID-less touch reaches neither chip variant (measured in G12 -
+ * `Chip.harness.tsx`'s `pressChip` says why). Both go through `press()`, which is where
+ * the residue a reset has to clear is written.
+ */
+const pressChip = async (testId: string): Promise<void> => {
+  if (PLATFORM === 'ios') {
+    await screen.findByTestId(testId);
+    const handle = handleFor(testId);
+    if (handle.nuiTestPress == null) {
+      throw new Error(`"${testId}" is not a Chip - it has no nuiTestPress()`);
+    }
+    handle.nuiTestPress();
+    return;
+  }
+  await pressControl(testId);
 };
 
 /**
@@ -1414,6 +1457,35 @@ function dialogReportOf(handle: Handle): Record<string, string> {
 /** Whether a dialog's report says its window is up and shows `title`. */
 function dialogShows(report: Record<string, string>, title: string): boolean {
   return report.kind !== 'none' && report.title === title;
+}
+
+const SHEET_LABEL = 'Conformance sheet';
+/** The two owners' content heights: different, and neither a detent's. */
+const SHEET_FIRST_HEIGHT = 120;
+const SHEET_SECOND_HEIGHT = 260;
+
+/** A BottomSheet owner whose content is a box of a known height. */
+function sheetOwner(presented: boolean, height: number): ReactElement {
+  return (
+    <BottomSheet
+      isPresented={presented}
+      onIsPresentedChange={recordRecycle('conformance-sheet')}
+      accessibilityLabel={SHEET_LABEL}
+      testID="conformance-sheet"
+      hybridRef={captureDialog('conformance-sheet')}
+    >
+      <View style={{ height }} />
+    </BottomSheet>
+  );
+}
+
+/** Whether a sheet's report says it is up holding content `height` tall. */
+function sheetShows(report: Record<string, string>, height: number): boolean {
+  return (
+    report.presented === '1' &&
+    report.live === '1' &&
+    Math.abs(Number(report.contentH) - height) <= 1
+  );
 }
 
 /**
@@ -2590,6 +2662,223 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: 'the title its window shows',
             expected: DIALOG_TITLE_SECOND,
             actual: report.title,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'BottomSheet',
+    component: 'NitroUiBottomSheet',
+    label: SHEET_LABEL,
+    testId: 'conformance-sheet',
+    selfSizing: false,
+    owner: () => sheetOwner(false, SHEET_FIRST_HEIGHT),
+    control: (testId, variant) => (
+      <BottomSheet isPresented={false} testID={testId}>
+        <View style={{ height: variant ? 80 : 40 }} />
+      </BottomSheet>
+    ),
+    state: (handle) => [
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // A sheet's residue is the dialog's, plus its content: a user dismissal leaves one
+    // native event, so a reset that kept the count refuses the second owner's
+    // `isPresented` as stale; and a reset that kept the previous sheet's content box
+    // would show the first owner's height in the second owner's sheet. Both are read
+    // from the view (`nuiTestStateReport`).
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event), and the content the first ' +
+        "owner's sheet held - the second owner presents with a fresh count and content " +
+        'of another height',
+      first: () => sheetOwner(true, SHEET_FIRST_HEIGHT),
+      act: async () => {
+        const handle = await ensureHandle('conformance-sheet');
+        const deadline = Date.now() + 8000;
+        while (!sheetShows(dialogReportOf(handle), SHEET_FIRST_HEIGHT)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its sheet: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-sheet:false');
+        if (seen !== 'conformance-sheet:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => sheetOwner(true, SHEET_SECOND_HEIGHT),
+      read: async () => {
+        const handle = handleFor('conformance-sheet');
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 6000;
+        let report = dialogReportOf(handle);
+        while (
+          !sheetShows(report, SHEET_SECOND_HEIGHT) &&
+          Date.now() < deadline
+        ) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the sheet the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: "the content height its sheet holds (the second owner's)",
+            expected: String(SHEET_SECOND_HEIGHT),
+            actual: report.contentH,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'Chip',
+    component: 'NitroUiChip',
+    label: 'Conformance chip',
+    testId: 'conformance-chip',
+    owner: (second) => (
+      <Chip
+        label={second ? 'Second owner chip' : 'Conformance chip label'}
+        testID="conformance-chip"
+        accessibilityLabel={
+          second ? `Conformance chip, ${SECOND}` : 'Conformance chip'
+        }
+        hybridRef={captureFor('conformance-chip')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Chip
+        label={variant ? 'Leak chip B' : 'Leak chip A'}
+        variant={variant ? 'assist' : 'filter'}
+        testID={testId}
+        accessibilityLabel={`Leak chip ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'label',
+        expected: second ? 'Second owner chip' : 'Conformance chip label',
+        actual: handle.label,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second ? `Conformance chip, ${SECOND}` : 'Conformance chip',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): an uncontrolled chip
+    // that started selected and was pressed off, then a second owner whose own default is
+    // selected. The residue (`false`) is what `prepareForRecycle` writes, so the display
+    // alone cannot be the evidence; the first press after the second mount is. A chip whose
+    // `didApplyDefault` was re-armed shows selected and reports `false`; one that kept
+    // the flag shows the previous owner's unselected and reports `true`.
+    probe: {
+      leaveBehind:
+        'an uncontrolled filter chip that started selected and was pressed off, then a ' +
+        'second owner whose own default is selected - which the control can only be ' +
+        'showing because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      act: async () => {
+        await pressChip('conformance-chip');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-chip:false'])
+        );
+      },
+      second: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressChip('conformance-chip');
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-chip:false',
+            actual: await eventsSettled(from, 'conformance-chip:false'),
+          },
+        ];
+      },
+    },
+    // The handshake's counters: a press on an uncontrolled chip, then a second owner
+    // controlled at `true`. Counters left over make that write look stale, so it is
+    // refused and the chip keeps showing `false`: its first press reports `true` where a
+    // clean chip, showing the `true` it was sent, reports `false`.
+    //
+    // Why `true` and not Switch's `false` (measured, G12): Android draws a chip from
+    // `ChipModel.displayed`, which `reset()` clears to `false` on its own line, so a
+    // second owner controlled at `false` is shown `false` whether or not the counters
+    // were reset - the fixture's answer coincided with the reset's, and this probe stayed
+    // green on Android with the counter reset deleted. iOS draws from `state.displayed`,
+    // the residue itself, which is why the first owner here starts selected and is pressed
+    // *off*: the residue (`false`) differs from the controlled value on both platforms.
+    controlledProbe: {
+      leaveBehind:
+        'a press that turns an uncontrolled filter chip off, then a second owner that ' +
+        'is *controlled* at `true` - the only shape that reads the handshake’s ' +
+        'counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns',
+      first: () => (
+        <Chip
+          label="Conformance chip label"
+          defaultSelected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      act: async () => {
+        await pressChip('conformance-chip');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-chip:false'])
+        );
+      },
+      second: () => (
+        <Chip
+          label="Conformance chip label"
+          selected
+          onSelectedChange={recordRecycle('conformance-chip')}
+          testID="conformance-chip"
+          accessibilityLabel="Conformance chip"
+          hybridRef={captureFor('conformance-chip')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressChip('conformance-chip');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-chip:false',
+            actual: await eventsSettled(from, 'conformance-chip:false'),
           },
         ];
       },
