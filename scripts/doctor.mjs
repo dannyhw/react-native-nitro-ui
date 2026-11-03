@@ -396,8 +396,9 @@ function checkAndroid() {
           dir === `android-${wanted.compileSdk}` ||
           dir.startsWith(`android-${wanted.compileSdk}.`)
       ),
-      // From API 37 the SDK names platforms with a minor version (`android-37.0`).
-      pkg: `platforms;android-${wanted.compileSdk}${Number(wanted.compileSdk) >= 37 ? '.0' : ''}`,
+      // The SDK names platforms with a minor version from API 37 (`android-37.0`), and 37
+      // is the floor RN 0.88 compiles against (D39), so there is no older naming to ask for.
+      pkg: `platforms;android-${wanted.compileSdk}.0`,
     },
     {
       name: `build-tools ${wanted.buildTools}`,

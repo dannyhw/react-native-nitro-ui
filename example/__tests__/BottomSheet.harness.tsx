@@ -445,6 +445,28 @@ describe('BottomSheet', () => {
     await waitForReport('detents', (r) => r.selected === '1', 'selected=1');
   });
 
+  // Android only. material3 1.5's sheet state keeps a `PartiallyExpanded` anchor for a
+  // sheet no taller than half the screen, on top of `Expanded`, where 1.4's dropped it:
+  // the sheet rests in the same place, but as the other value. The detent it reports
+  // is the one it rests at - the 200 dp one, as before the bump - not `medium`, which
+  // would be the taller of the two (X18). iOS presents `medium` first and is not this
+  // case.
+  it('reads a medium sheet that is shorter than half the screen as its shorter detent', async () => {
+    if (IOS) return;
+    await render(
+      <Stage testId="short" detents={['medium', { height: 200 }]} />
+    );
+    await waitForHandle('short');
+    setters.get('short')?.(true);
+    const up = await waitForUp('short');
+    expect(up.detents).toBe('medium,height');
+    await waitForReport('short', (r) => r.selected === '1', 'selected=1');
+    // Resting is not a change, before or after its box arrives.
+    await staysUp('short', 1500, 'once its box arrived');
+    expect(reportOf('short').selected).toBe('1');
+    expect(eventLog.filter((e) => e.startsWith('short:detent:'))).toEqual([]);
+  });
+
   it('gives a ScrollView inside the sheet the sheet box', async () => {
     await render(<Stage testId="scroll" detents={['large']} scroll initial />);
     await waitForHandle('scroll');
