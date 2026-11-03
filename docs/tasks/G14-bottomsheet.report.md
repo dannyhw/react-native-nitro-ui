@@ -46,28 +46,10 @@ scaled to 804 px (iOS, 3x) and 720 px (Android), because a sheet is screen-wide.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1666 tests / 63 suites | `4fc9d4bc1a19` | 2 m 45 s | start 3.2 / med 6.8 / max 11.3 |
-| `harness:ios` | **PASS** | 301 tests / 19 suites | `4fc9d4bc1a19` (ios tree) | 6 m 51 s | start 7.5 / med 4.6 / max 13.9 |
-| `harness:android` | **PASS** | 350 tests / 19 suites | `4fc9d4bc1a19` (android tree) | 10 m 57 s | start 14.9 / med 5.7 / max 24.1 |
-| `real-input:ios` | **PASS** | — | `4fc9d4bc1a19` (ios tree) | 18 m 26 s | start 3.6 / med 5.5 / max 38.1 |
-| `real-input:android` | **PASS** | — | `4fc9d4bc1a19` (android tree) | 25 m 36 s | start 3.9 / med 3.5 / max 14.8 |
-| `harness:android:BottomSheet.harness` | stale | 10 failed of 24 tests / 1 suites | 32079ce34574 (not this tree) | 1 m 42 s | start 4.4 / med 3.8 / max 4.5 |
-| `harness:android:BottomSheetModalHazard` | **PASS** | 2 tests / 1 suites | `4fc9d4bc1a19` (android tree) | 16.0 s | start 11.1 / med 9.6 / max 11.1 |
-| `harness:android:BottomSheetScreens` | stale | 0 tests / 1 suites | 3541b67947d2 (not this tree) | 16.1 s | start 10.9 / med 9.2 / max 10.9 |
-| `harness:ios:BottomSheet.harness` | stale | 7 failed of 24 tests / 1 suites | e8e6e1149cbe (not this tree) | 2 m 24 s | start 7.8 / med 5.6 / max 7.8 |
-| `harness:ios:BottomSheetModalHazard` | **PASS** | 2 tests / 1 suites | `4fc9d4bc1a19` (ios tree) | 18.2 s | start 9.7 / med 11.1 / max 11.1 |
-| `harness:ios:BottomSheetScreens` | stale | 2 tests / 1 suites | 9774eabe8a2e (not this tree) | 17.6 s | start 19.6 / med 16.1 / max 19.6 |
-| `real-input:android:--control:bottom-sheet` | stale | — | 73ea5130b01e (not this tree) | 2 m 57 s | start 6.8 / med 3.0 / max 6.8 |
-| `real-input:ios:--control:bottom-sheet` | stale | — | 2d398ef66a0e (not this tree) | 6 m 32 s | start 5.8 / med 10.4 / max 42.2 |
-
-The five unsuffixed rows are the final code tree. The filtered rows are the isolated and
-red-proof runs: `BottomSheetModalHazard` passed 2/2 on both platforms on this tree before the
-README screenshots (docs only) were retaken, and its `stale` iOS row with 2 failed is the D35
-mutation; the other `stale` rows with failures are the mutated trees under Red proofs;
-`BottomSheetScreens` is the reverted react-native-screens commit (iOS 2/2; Android 0 tests,
-the `ScreenStack` crash).
+Round 1's generated table described code tree `4fc9d4bc1a19`, which fix round 1 replaced;
+the fresh table is in "Fix round 1" below, and `docs/tasks/G14/gates.jsonl` keeps every run
+of both rounds. On that tree all five gates passed, and `BottomSheetModalHazard` passed
+2/2 on both platforms.
 
 `need --for review`: `need: review is satisfied on this code tree.`
 
@@ -123,3 +105,54 @@ Device reds ran on mutated trees (filtered `harness:*:BottomSheet.harness`, `…
 2. **Android react-native-screens is unmeasured.** Options: (a) a follow-up that reproduces
    the `ScreenStack` crash in a fresh instance without nitro-ui and reports it upstream; (b)
    accept iOS-only evidence. Recommend (a), small.
+
+## Fix round 1
+
+All seven review items. **1:** drop tests keep a probe BottomSheet mounted beside the
+dropped one; a probe mounted afterwards was the recycled dropped view, and its first props
+batch closed the sheet. **2:** iOS's present budget is per request, with a separate total.
+**3:** the Android root passes `requestDisallowInterceptTouchEvent` up instead of setting
+it (RN's `ReactRootView`), and forwards hover. A horizontal `ScrollView` stayed green
+without it (RN cancels JS on its native gesture); a `TextInput` tap did not. **4:** Android
+keeps one `SheetState` per presentation; adding or dropping `medium` while up applies at the
+next presentation (documented). **5:** `harness:<platform>` runs `__tests__/isolated/` as a
+second app launch (`scripts/harness-isolated.mjs`). That exposed a bug: the harness's own
+`--testPathIgnorePatterns` replaced the config's, so the shared run had been running the
+isolated files too; they are excluded by `testMatch` now. **6, 7:** Swift header corrected;
+`patch-nitrogen` fails on an undeclared listed view; README resets its detent on dismiss;
+the iOS report is built only once a harness has asked.
+
+Red proofs, after the table.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1672 tests / 64 suites | `f689bee18780` | 2 m 49 s | start 3.5 / med 9.3 / max 11.9 |
+| `harness:ios` | **PASS** | 301 tests / 18 suites | `f689bee18780` (ios tree) | 7 m 20 s | start 9.0 / med 4.8 / max 9.0 |
+| `harness:android` | **PASS** | 350 tests / 18 suites | `f689bee18780` (android tree) | 10 m 43 s | start 7.0 / med 3.5 / max 7.0 |
+| `real-input:ios` | **PASS** | — | `f689bee18780` (ios tree) | 19 m 31 s | start 3.5 / med 23.2 / max 381.2 |
+| `real-input:android` | **PASS** | — | `f689bee18780` (android tree) | 25 m 60 s | start 7.0 / med 5.1 / max 40.7 |
+| `harness:android:BottomSheet.harness` | stale | 26 tests / 1 suites | 67ccf97e1893 (not this tree) | 1 m 45 s | start 11.5 / med 7.4 / max 11.5 |
+| `harness:android:BottomSheet.harness:-t:detents%20changed` | stale | 1 failed of 27 tests / 1 suites | b8f04a65ddf0 (not this tree) | 10.9 s | start 4.0 / med 3.8 / max 4.0 |
+| `harness:android:BottomSheet.harness:-t:dropped` | stale | 3 failed of 27 tests / 1 suites | b8f04a65ddf0 (not this tree) | 38.0 s | start 3.8 / med 3.9 / max 4.0 |
+| `harness:android:BottomSheetModalHazard` | stale | 2 tests / 1 suites | 4fc9d4bc1a19 (not this tree) | 16.0 s | start 11.1 / med 9.6 / max 11.1 |
+| `harness:android:BottomSheetScreens` | stale | 0 tests / 1 suites | 3541b67947d2 (not this tree) | 16.1 s | start 10.9 / med 9.2 / max 10.9 |
+| `harness:ios:BottomSheet.harness` | stale | 26 tests / 1 suites | 67ccf97e1893 (not this tree) | 2 m 13 s | start 9.9 / med 6.9 / max 9.9 |
+| `harness:ios:BottomSheet.harness:-t:round%20after%20round` | stale | 1 failed of 26 tests / 1 suites | 4a81b081febd (not this tree) | 29.9 s | start 12.5 / med 12.6 / max 14.6 |
+| `harness:ios:BottomSheetModalHazard` | stale | 2 tests / 1 suites | 4fc9d4bc1a19 (not this tree) | 18.2 s | start 9.7 / med 11.1 / max 11.1 |
+| `harness:ios:BottomSheetScreens` | stale | 2 tests / 1 suites | 9774eabe8a2e (not this tree) | 17.6 s | start 19.6 / med 16.1 / max 19.6 |
+| `real-input:android:--control:bottom-sheet` | stale | — | 9552728ceaa3 (not this tree) | 7 m 40 s | start 3.3 / med 4.6 / max 11.9 |
+| `real-input:ios:--control:bottom-sheet` | stale | — | 2d398ef66a0e (not this tree) | 6 m 32 s | start 5.8 / med 10.4 / max 42.2 |
+
+The five unsuffixed rows are this tree; each `harness:*` ledger line also carries its
+isolated run's summary (2/2 on both). The filtered rows are red-proof and isolated runs on
+earlier or mutated trees (`stale`).
+
+`need --for review`: `need: review is satisfied on this code tree.`
+
+- drop tests (Android) -> drop close, dispose, recycle reset removed -> `never reached nothing left after a drop at 80 ms … live=1;…roots=1`
+- busy-chain rounds (iOS) -> budget per mount -> `"over" never reached round 6 … presented=1;…onScreen=0;…presentWaits=61`
+- `CHECKS['bottom-sheet']` TextInput step -> no interception override -> `expected Input touches: in 1 out 1, saw Input touches: in 1 out 0`
+- detents changed while up (Android) -> state not frozen -> `"change" did not stay up after medium joined the list … sheetValue=Hidden`
+- full `harness:ios` -> a failing file in `isolated/` -> shared run 299 passed, isolated `1 failed`, gate FAIL with both summaries in the ledger
+- `harness-isolated.test.js` -> `testPathIgnorePatterns` exclusion back -> the shared list holds `isolated/…`; exit-code rule ignoring the isolated run -> `Expected: 1 Received: 0`
+- `patch-nitrogen.test.js` -> the old silent skip -> `Expected: 1 Received: 0`
