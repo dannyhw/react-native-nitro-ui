@@ -1,0 +1,624 @@
+# Failure excerpt — real-input:android:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc
+
+- Ran: 2026-11-03T05:25:06.679Z on code tree `29227aa29093` at HEAD `afcac0f` (branch `task/S3-contextmenu-spike`)
+- Command: `node scripts/real-input/android.mjs --control s3-cancel --control s3-scroll --control s3-layout --control s3-misc`
+- Result: fail, exit null signal SIGTERM, 1129082 ms
+- Load: start 9.58, end 4.11, median 4.85, max 11.51
+- Device: android / device `emulator-5574` / lease `S3-70m31`
+- Full log: `task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log` (<store>/task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ s3: no node "s3-churn" on screen`
+- `✗ s3: no node "s3-below" on screen`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S3-70m31 (still live)
+  |   S3-70m31                 S3           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.11 (the ledger line carries the samples across the whole run)
+gate: logcat (last 500 of 1572 lines)
+  | 11-03 05:36:36.799  5091  5135 D EGL_emulation: app_time_stats: avg=180.07ms min=0.59ms max=1594.13ms count=9
+  | 11-03 05:36:36.828  5091  5135 D EGL_emulation: app_time_stats: avg=1135.45ms min=1135.45ms max=1135.45ms count=1
+  | 11-03 05:36:37.787  5091  5091 I S3ContextMenu: s3-menu 286|close|t=129654411|via=dismiss
+  | 11-03 05:36:37.825  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c423d40
+  | 11-03 05:36:37.826  5091  5135 D EGL_emulation: app_time_stats: avg=1027.24ms min=1027.24ms max=1027.24ms count=1
+  | 11-03 05:36:37.924  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@54c7cf0
+  | 11-03 05:36:41.193  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@84df946
+  | 11-03 05:36:43.293  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1908cd
+  | 11-03 05:36:45.395  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@972a00
+  | 11-03 05:36:47.477  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bb5f8cf
+  | 11-03 05:36:49.518  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@52281ea
+  | 11-03 05:36:51.427  5091  5091 I S3ContextMenu: s3-menu 287|down|t=129668050|x=603 y=121 timeout=400
+  | 11-03 05:36:51.441  5091  5135 D EGL_emulation: app_time_stats: avg=7306.67ms min=987.64ms max=13625.69ms count=2
+  | 11-03 05:36:51.493  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@359ab3e
+  | 11-03 05:36:51.829  5091  5091 I S3ContextMenu: s3-menu 288|open|t=129668452|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:36:51.846  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:36:51.846  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:36:51.859  5091  5091 I S3ContextMenu: s3-menu 289|menuFrame|t=129668483|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=31
+  | 11-03 05:36:51.866  5091  5091 I S3ContextMenu: s3-menu 290|drawn|t=129668489|openToDrawnMs=38
+  | 11-03 05:36:51.866  5091  5091 I S3ContextMenu: s3-menu 291|menuFrame|t=129668490|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=31
+  | 11-03 05:36:52.439  5091  5091 I S3ContextMenu: s3-menu 292|gestureEnd|t=129669062|action=1
+  | 11-03 05:36:52.491  5091  5135 D EGL_emulation: app_time_stats: avg=205.09ms min=3.78ms max=586.11ms count=5
+  | 11-03 05:36:53.590  5091  5091 I S3ContextMenu: s3-menu 293|menuFrame|t=129670214|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=31
+  | 11-03 05:36:53.602  5091  5135 D EGL_emulation: app_time_stats: avg=193.45ms min=5.73ms max=1629.30ms count=9
+  | 11-03 05:36:53.627  5091  5135 D EGL_emulation: app_time_stats: avg=1135.99ms min=1135.99ms max=1135.99ms count=1
+  | 11-03 05:36:54.578  5091  5091 I S3ContextMenu: s3-menu 294|close|t=129671201|via=dismiss
+  | 11-03 05:36:54.614  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b6342bf
+  | 11-03 05:36:54.623  5091  5135 D EGL_emulation: app_time_stats: avg=1020.09ms min=1020.09ms max=1020.09ms count=1
+  | 11-03 05:36:54.722  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ab58e0d
+  | 11-03 05:36:58.044  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d95e066
+  | 11-03 05:37:00.138  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5e89a6d
+  | 11-03 05:37:02.177  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4f9467f
+  | 11-03 05:37:04.243  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@653eb5a
+  | 11-03 05:37:06.292  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1a031f1
+  | 11-03 05:37:08.291  5091  5091 I S3ContextMenu: s3-menu 295|down|t=129684914|x=603 y=121 timeout=400
+  | 11-03 05:37:08.310  5091  5135 D EGL_emulation: app_time_stats: avg=7341.53ms min=988.61ms max=13694.45ms count=2
+  | 11-03 05:37:08.360  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a47865e
+  | 11-03 05:37:08.693  5091  5091 I S3ContextMenu: s3-menu 296|open|t=129685316|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:37:08.719  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:37:08.719  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:37:08.735  5091  5091 I S3ContextMenu: s3-menu 297|menuFrame|t=129685359|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=44
+  | 11-03 05:37:08.745  5091  5091 I S3ContextMenu: s3-menu 298|drawn|t=129685368|openToDrawnMs=53
+  | 11-03 05:37:08.745  5091  5091 I S3ContextMenu: s3-menu 299|menuFrame|t=129685368|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=44
+  | 11-03 05:37:09.291  5091  5091 I S3ContextMenu: s3-menu 300|gestureEnd|t=129685914|action=1
+  | 11-03 05:37:09.344  5091  5135 D EGL_emulation: app_time_stats: avg=206.71ms min=10.39ms max=553.61ms count=5
+  | 11-03 05:37:10.438  5091  5091 I S3ContextMenu: s3-menu 301|menuFrame|t=129687062|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=44
+  | 11-03 05:37:10.443  5091  5135 D EGL_emulation: app_time_stats: avg=178.59ms min=0.79ms max=1572.26ms count=9
+  | 11-03 05:37:10.474  5091  5135 D EGL_emulation: app_time_stats: avg=1130.52ms min=1130.52ms max=1130.52ms count=1
+  | 11-03 05:37:11.399  5091  5091 I S3ContextMenu: s3-menu 302|close|t=129688023|via=dismiss
+  | 11-03 05:37:11.445  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c48ff5f
+  | 11-03 05:37:11.446  5091  5135 D EGL_emulation: app_time_stats: avg=1002.30ms min=1002.30ms max=1002.30ms count=1
+  | 11-03 05:37:11.542  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b94ffad
+  | 11-03 05:37:14.827  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7ac7786
+  | 11-03 05:37:16.930  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@969c0d
+  | 11-03 05:37:19.038  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@622d640
+  | 11-03 05:37:21.109  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@da3707a
+  | 11-03 05:37:23.114  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@44e943d
+  | 11-03 05:37:25.092  5091  5091 I S3ContextMenu: s3-menu 303|down|t=129701715|x=603 y=121 timeout=400
+  | 11-03 05:37:25.110  5091  5135 D EGL_emulation: app_time_stats: avg=7317.65ms min=949.50ms max=13685.81ms count=2
+  | 11-03 05:37:25.160  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bfb273a
+  | 11-03 05:37:25.493  5091  5091 I S3ContextMenu: s3-menu 304|open|t=129702117|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:37:25.527  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:37:25.527  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:37:25.547  5091  5091 I S3ContextMenu: s3-menu 305|menuFrame|t=129702170|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=54
+  | 11-03 05:37:25.554  5091  5091 I S3ContextMenu: s3-menu 306|drawn|t=129702177|openToDrawnMs=61
+  | 11-03 05:37:25.554  5091  5091 I S3ContextMenu: s3-menu 307|menuFrame|t=129702178|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=54
+  | 11-03 05:37:26.111  5091  5091 I S3ContextMenu: s3-menu 308|gestureEnd|t=129702735|action=1
+  | 11-03 05:37:26.161  5091  5135 D EGL_emulation: app_time_stats: avg=210.27ms min=13.74ms max=571.43ms count=5
+  | 11-03 05:37:27.259  5091  5091 I S3ContextMenu: s3-menu 309|menuFrame|t=129703882|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=54
+  | 11-03 05:37:27.270  5091  5135 D EGL_emulation: app_time_stats: avg=180.32ms min=0.51ms max=1593.50ms count=9
+  | 11-03 05:37:27.309  5091  5135 D EGL_emulation: app_time_stats: avg=1147.67ms min=1147.67ms max=1147.67ms count=1
+  | 11-03 05:37:28.263  5091  5091 I S3ContextMenu: s3-menu 310|close|t=129704886|via=dismiss
+  | 11-03 05:37:28.263  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@34b4ab8
+  | 11-03 05:37:28.308  5091  5135 D EGL_emulation: app_time_stats: avg=1037.94ms min=1037.94ms max=1037.94ms count=1
+  | 11-03 05:37:28.405  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1f112b9
+  | 11-03 05:37:31.710  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c6db8e2
+  | 11-03 05:37:35.944  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7697853
+  | 11-03 05:37:38.025  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@315573e
+  | 11-03 05:37:40.110  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5395f25
+  | 11-03 05:37:42.050  5091  5091 I S3ContextMenu: s3-menu 311|down|t=129718673|x=603 y=121 timeout=400
+  | 11-03 05:37:42.075  5091  5135 D EGL_emulation: app_time_stats: avg=7383.00ms min=983.40ms max=13782.60ms count=2
+  | 11-03 05:37:42.111  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9a40f02
+  | 11-03 05:37:42.453  5091  5091 I S3ContextMenu: s3-menu 312|open|t=129719076|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:37:42.477  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:37:42.477  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:37:42.493  5091  5091 I S3ContextMenu: s3-menu 313|menuFrame|t=129719116|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=41
+  | 11-03 05:37:42.499  5091  5091 I S3ContextMenu: s3-menu 314|drawn|t=129719123|openToDrawnMs=48
+  | 11-03 05:37:42.500  5091  5091 I S3ContextMenu: s3-menu 315|menuFrame|t=129719123|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=41
+  | 11-03 05:37:42.507  5091  5091 I S3ContextMenu: s3-menu 316|menuFrame|t=129719130|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=41
+  | 11-03 05:37:43.059  5091  5091 I S3ContextMenu: s3-menu 317|gestureEnd|t=129719682|action=1
+  | 11-03 05:37:43.091  5091  5135 D EGL_emulation: app_time_stats: avg=248.42ms min=5.31ms max=552.21ms count=4
+  | 11-03 05:37:44.174  5091  5091 I S3ContextMenu: s3-menu 318|menuFrame|t=129720798|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=41
+  | 11-03 05:37:44.189  5091  5135 D EGL_emulation: app_time_stats: avg=188.25ms min=6.68ms max=1582.72ms count=9
+  | 11-03 05:37:44.212  5091  5135 D EGL_emulation: app_time_stats: avg=1121.39ms min=1121.39ms max=1121.39ms count=1
+  | 11-03 05:37:45.168  5091  5091 I S3ContextMenu: s3-menu 319|close|t=129721791|via=dismiss
+  | 11-03 05:37:45.178  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bc444a
+  | 11-03 05:37:45.207  5091  5135 D EGL_emulation: app_time_stats: avg=1018.40ms min=1018.40ms max=1018.40ms count=1
+  | 11-03 05:37:45.312  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4d0f421
+  | 11-03 05:37:48.677  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@babafaa
+  | 11-03 05:37:52.878  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@39d2f7b
+  | 11-03 05:37:56.975  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5130bf8
+  | 11-03 05:37:58.951  5091  5091 I S3ContextMenu: s3-menu 320|down|t=129735574|x=603 y=121 timeout=400
+  | 11-03 05:37:58.975  5091  5135 D EGL_emulation: app_time_stats: avg=7381.19ms min=979.99ms max=13782.38ms count=2
+  | 11-03 05:37:59.031  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cf80e79
+  | 11-03 05:37:59.354  5091  5091 I S3ContextMenu: s3-menu 321|open|t=129735977|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:37:59.374  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:37:59.374  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:37:59.386  5091  5091 I S3ContextMenu: s3-menu 322|menuFrame|t=129736009|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=33
+  | 11-03 05:37:59.395  5091  5091 I S3ContextMenu: s3-menu 323|drawn|t=129736018|openToDrawnMs=42
+  | 11-03 05:37:59.396  5091  5091 I S3ContextMenu: s3-menu 324|menuFrame|t=129736019|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=33
+  | 11-03 05:37:59.956  5091  5091 I S3ContextMenu: s3-menu 325|gestureEnd|t=129736579|action=1
+  | 11-03 05:38:00.013  5091  5135 D EGL_emulation: app_time_stats: avg=259.43ms min=16.49ms max=571.56ms count=4
+  | 11-03 05:38:01.122  5091  5091 I S3ContextMenu: s3-menu 326|menuFrame|t=129737745|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=33
+  | 11-03 05:38:01.131  5091  5135 D EGL_emulation: app_time_stats: avg=182.60ms min=1.06ms max=1608.55ms count=9
+  | 11-03 05:38:01.161  5091  5135 D EGL_emulation: app_time_stats: avg=1147.75ms min=1147.75ms max=1147.75ms count=1
+  | 11-03 05:38:02.064  5091  5091 I S3ContextMenu: s3-menu 327|close|t=129738688|via=dismiss
+  | 11-03 05:38:02.139  5091  5135 D EGL_emulation: app_time_stats: avg=336.09ms min=15.34ms max=976.55ms count=3
+  | 11-03 05:38:02.209  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8279124
+  | 11-03 05:38:05.493  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e7883c2
+  | 11-03 05:38:07.577  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5e3c579
+  | 11-03 05:38:09.717  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cf7e9c
+  | 11-03 05:38:11.759  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e94ccf6
+  | 11-03 05:38:13.776  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@51bb03d
+  | 11-03 05:38:15.721  5091  5091 I S3ContextMenu: s3-menu 328|down|t=129752344|x=603 y=121 timeout=400
+  | 11-03 05:38:15.743  5091  5135 D EGL_emulation: app_time_stats: avg=7291.02ms min=931.34ms max=13650.70ms count=2
+  | 11-03 05:38:16.123  5091  5091 I S3ContextMenu: s3-menu 329|open|t=129752747|x=603 y=121 screen=635,1192 via=touch
+  | 11-03 05:38:16.140  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:38:16.140  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:38:16.163  5091  5091 I S3ContextMenu: s3-menu 330|menuFrame|t=129752786|menu=0,142,294,565 press=635,1192 dxDp=-241.9 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=40
+  | 11-03 05:38:16.171  5091  5091 I S3ContextMenu: s3-menu 331|drawn|t=129752795|openToDrawnMs=49
+  | 11-03 05:38:16.173  5091  5091 I S3ContextMenu: s3-menu 332|menuFrame|t=129752796|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=40
+  | 11-03 05:38:16.723  5091  5091 I S3ContextMenu: s3-menu 333|gestureEnd|t=129753346|action=1
+  | 11-03 05:38:16.759  5091  5135 D EGL_emulation: app_time_stats: avg=254.08ms min=13.81ms max=552.84ms count=4
+  | 11-03 05:38:17.875  5091  5091 I S3ContextMenu: s3-menu 334|menuFrame|t=129754499|menu=635,1192,929,1615 press=635,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=40
+  | 11-03 05:38:17.884  5091  5135 D EGL_emulation: app_time_stats: avg=180.50ms min=1.10ms max=1594.55ms count=9
+  | 11-03 05:38:17.911  5091  5135 D EGL_emulation: app_time_stats: avg=1151.43ms min=1151.43ms max=1151.43ms count=1
+  | 11-03 05:38:18.861  5091  5091 I S3ContextMenu: s3-menu 335|close|t=129755485|via=dismiss
+  | 11-03 05:38:18.862  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9b3a415
+  | 11-03 05:38:18.906  5091  5135 D EGL_emulation: app_time_stats: avg=1022.33ms min=1022.33ms max=1022.33ms count=1
+  | 11-03 05:38:19.007  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f0bedb2
+  | 11-03 05:38:22.345  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4819dd7
+  | 11-03 05:38:24.433  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@32d0a92
+  | 11-03 05:38:26.492  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9063a89
+  | 11-03 05:38:28.660  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@785b6ec
+  | 11-03 05:38:30.794  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8d95aab
+  | 11-03 05:38:32.788  5091  5091 I S3ContextMenu: s3-menu 336|down|t=129769411|x=792 y=274 timeout=400
+  | 11-03 05:38:32.811  5091  5135 D EGL_emulation: app_time_stats: avg=7450.35ms min=980.64ms max=13920.05ms count=2
+  | 11-03 05:38:32.821  5091  5091 I S3ContextMenu: s3-menu 337|drop|t=129769444|why=slop
+  | 11-03 05:38:32.860  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@665ef7c
+  | 11-03 05:38:33.944  5091  5135 D EGL_emulation: app_time_stats: avg=25.17ms min=11.93ms max=389.06ms count=45
+  | 11-03 05:38:36.141  5091  5091 I S3ContextMenu: s3-menu 338|down|t=129772765|x=226 y=274 timeout=400
+  | 11-03 05:38:36.158  5091  5135 D EGL_emulation: app_time_stats: avg=122.96ms min=13.86ms max=1935.81ms count=18
+  | 11-03 05:38:36.171  5091  5091 I S3ContextMenu: s3-menu 339|drop|t=129772794|why=slop
+  | 11-03 05:38:36.214  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6ee1def
+  | 11-03 05:38:37.263  5091  5135 D EGL_emulation: app_time_stats: avg=23.01ms min=8.24ms max=307.61ms count=48
+  | 11-03 05:38:39.459  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@80030dd
+  | 11-03 05:38:41.404  5091  5091 I S3ContextMenu: s3-menu 340|down|t=129778028|x=792 y=274 timeout=400
+  | 11-03 05:38:41.425  5091  5135 D EGL_emulation: app_time_stats: avg=244.86ms min=12.58ms max=3903.39ms count=17
+  | 11-03 05:38:41.441  5091  5091 I S3ContextMenu: s3-menu 341|drop|t=129778064|why=slop
+  | 11-03 05:38:41.477  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4f85e81
+  | 11-03 05:38:42.560  5091  5135 D EGL_emulation: app_time_stats: avg=25.20ms min=11.82ms max=387.91ms count=45
+  | 11-03 05:38:44.864  5091  5091 I S3ContextMenu: s3-menu 342|down|t=129781487|x=226 y=274 timeout=400
+  | 11-03 05:38:44.892  5091  5135 D EGL_emulation: app_time_stats: avg=137.17ms min=11.23ms max=2070.50ms count=17
+  | 11-03 05:38:44.905  5091  5091 I S3ContextMenu: s3-menu 343|drop|t=129781528|why=slop
+  | 11-03 05:38:46.054  5091  5135 D EGL_emulation: app_time_stats: avg=22.78ms min=9.46ms max=315.33ms count=51
+  | 11-03 05:38:50.074  5091  5091 I S3ContextMenu: s3-menu 344|down|t=129786698|x=792 y=274 timeout=400
+  | 11-03 05:38:50.094  5091  5135 D EGL_emulation: app_time_stats: avg=237.62ms min=9.39ms max=3772.74ms count=17
+  | 11-03 05:38:50.105  5091  5091 I S3ContextMenu: s3-menu 345|drop|t=129786728|why=slop
+  | 11-03 05:38:50.130  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8524e44
+  | 11-03 05:38:51.248  5091  5135 D EGL_emulation: app_time_stats: avg=25.07ms min=9.21ms max=391.96ms count=46
+  | 11-03 05:38:53.501  5091  5091 I S3ContextMenu: s3-menu 346|down|t=129790124|x=226 y=274 timeout=400
+  | 11-03 05:38:53.527  5091  5135 D EGL_emulation: app_time_stats: avg=126.62ms min=14.40ms max=2005.31ms count=18
+  | 11-03 05:38:53.540  5091  5091 I S3ContextMenu: s3-menu 347|drop|t=129790163|why=slop
+  | 11-03 05:38:53.561  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1a13994
+  | 11-03 05:38:54.657  5091  5135 D EGL_emulation: app_time_stats: avg=25.12ms min=11.10ms max=385.55ms count=45
+  | 11-03 05:38:56.826  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7fed167
+  | 11-03 05:38:58.823  5091  5091 I S3ContextMenu: s3-menu 348|down|t=129795447|x=792 y=274 timeout=400
+  | 11-03 05:38:58.844  5091  5135 D EGL_emulation: app_time_stats: avg=246.23ms min=14.96ms max=3921.24ms count=17
+  | 11-03 05:38:58.855  5091  5091 I S3ContextMenu: s3-menu 349|drop|t=129795478|why=slop
+  | 11-03 05:38:58.878  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6c744dc
+  | 11-03 05:38:59.980  5091  5135 D EGL_emulation: app_time_stats: avg=25.24ms min=10.36ms max=390.92ms count=45
+  | 11-03 05:39:02.306  5091  5091 I S3ContextMenu: s3-menu 350|down|t=129798929|x=226 y=274 timeout=400
+  | 11-03 05:39:02.326  5091  5135 D EGL_emulation: app_time_stats: avg=138.02ms min=11.00ms max=2086.99ms count=17
+  | 11-03 05:39:02.338  5091  5091 I S3ContextMenu: s3-menu 351|drop|t=129798962|why=slop
+  | 11-03 05:39:02.378  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d48ae1
+  | 11-03 05:39:03.555  5091  5135 D EGL_emulation: app_time_stats: avg=24.09ms min=11.22ms max=382.34ms count=51
+  | 11-03 05:39:05.612  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@26925c8
+  | 11-03 05:39:07.541  5091  5091 I S3ContextMenu: s3-menu 352|down|t=129804165|x=792 y=274 timeout=400
+  | 11-03 05:39:07.558  5091  5135 D EGL_emulation: app_time_stats: avg=235.46ms min=14.00ms max=3734.88ms count=17
+  | 11-03 05:39:07.571  5091  5091 I S3ContextMenu: s3-menu 353|drop|t=129804194|why=slop
+  | 11-03 05:39:08.711  5091  5135 D EGL_emulation: app_time_stats: avg=25.07ms min=13.43ms max=389.84ms count=46
+  | 11-03 05:39:10.956  5091  5091 I S3ContextMenu: s3-menu 354|down|t=129807579|x=226 y=274 timeout=400
+  | 11-03 05:39:10.975  5091  5135 D EGL_emulation: app_time_stats: avg=125.76ms min=12.28ms max=1986.73ms count=18
+  | 11-03 05:39:10.991  5091  5091 I S3ContextMenu: s3-menu 355|drop|t=129807615|why=slop
+  | 11-03 05:39:11.024  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7b417f4
+  | 11-03 05:39:12.107  5091  5135 D EGL_emulation: app_time_stats: avg=25.14ms min=8.74ms max=385.05ms count=45
+  | 11-03 05:39:14.243  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@63459ae
+  | 11-03 05:39:16.194  5091  5091 I S3ContextMenu: s3-menu 356|down|t=129812818|x=792 y=274 timeout=400
+  | 11-03 05:39:16.208  5091  5135 D EGL_emulation: app_time_stats: avg=241.20ms min=14.85ms max=3836.05ms count=17
+  | 11-03 05:39:16.222  5091  5091 I S3ContextMenu: s3-menu 357|drop|t=129812845|why=slop
+  | 11-03 05:39:17.357  5091  5135 D EGL_emulation: app_time_stats: avg=24.96ms min=11.67ms max=385.18ms count=46
+  | 11-03 05:39:19.592  5091  5091 I S3ContextMenu: s3-menu 358|down|t=129816215|x=226 y=274 timeout=400
+  | 11-03 05:39:19.622  5091  5091 I S3ContextMenu: s3-menu 359|drop|t=129816245|why=slop
+  | 11-03 05:39:19.628  5091  5135 D EGL_emulation: app_time_stats: avg=133.61ms min=11.24ms max=2004.44ms count=17
+  | 11-03 05:39:19.662  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@21eef66
+  | 11-03 05:39:20.761  5091  5135 D EGL_emulation: app_time_stats: avg=24.61ms min=10.79ms max=389.01ms count=46
+  | 11-03 05:39:22.927  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1be7e5b
+  | 11-03 05:39:25.018  5091  5091 I S3ContextMenu: s3-menu 360|down|t=129821641|x=792 y=274 timeout=400
+  | 11-03 05:39:25.043  5091  5135 D EGL_emulation: app_time_stats: avg=251.91ms min=14.41ms max=4021.79ms count=17
+  | 11-03 05:39:25.055  5091  5091 I S3ContextMenu: s3-menu 361|drop|t=129821678|why=slop
+  | 11-03 05:39:25.091  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c1d3a40
+  | 11-03 05:39:26.188  5091  5135 D EGL_emulation: app_time_stats: avg=25.43ms min=11.29ms max=399.08ms count=45
+  | 11-03 05:39:28.383  5091  5091 I S3ContextMenu: s3-menu 362|down|t=129825006|x=226 y=274 timeout=400
+  | 11-03 05:39:28.408  5091  5135 D EGL_emulation: app_time_stats: avg=110.06ms min=0.95ms max=1936.32ms count=18
+  | 11-03 05:39:28.421  5091  5091 I S3ContextMenu: s3-menu 363|drop|t=129825044|why=slop
+  | 11-03 05:39:29.543  5091  5135 D EGL_emulation: app_time_stats: avg=25.13ms min=9.92ms max=388.25ms count=45
+  | 11-03 05:39:31.677  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f91e010
+  | 11-03 05:39:33.759  5091  5091 I S3ContextMenu: s3-menu 364|down|t=129830383|x=792 y=274 timeout=400
+  | 11-03 05:39:33.776  5091  5135 D EGL_emulation: app_time_stats: avg=249.02ms min=13.26ms max=3970.93ms count=17
+  | 11-03 05:39:33.789  5091  5091 I S3ContextMenu: s3-menu 365|drop|t=129830411|why=slop
+  | 11-03 05:39:33.829  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d12ae04
+  | 11-03 05:39:34.929  5091  5135 D EGL_emulation: app_time_stats: avg=25.06ms min=10.77ms max=390.74ms count=46
+  | 11-03 05:39:37.241  5091  5091 I S3ContextMenu: s3-menu 366|down|t=129833864|x=226 y=274 timeout=400
+  | 11-03 05:39:37.258  5091  5135 D EGL_emulation: app_time_stats: avg=129.32ms min=10.18ms max=2051.51ms count=18
+  | 11-03 05:39:37.272  5091  5091 I S3ContextMenu: s3-menu 367|drop|t=129833895|why=slop
+  | 11-03 05:39:38.408  5091  5135 D EGL_emulation: app_time_stats: avg=24.99ms min=12.77ms max=385.93ms count=46
+  | 11-03 05:39:42.508  5091  5091 I S3ContextMenu: s3-menu 368|down|t=129839132|x=792 y=274 timeout=400
+  | 11-03 05:39:42.526  5091  5135 D EGL_emulation: app_time_stats: avg=242.21ms min=12.84ms max=3854.14ms count=17
+  | 11-03 05:39:42.539  5091  5091 I S3ContextMenu: s3-menu 369|drop|t=129839163|why=slop
+  | 11-03 05:39:43.675  5091  5135 D EGL_emulation: app_time_stats: avg=24.99ms min=11.54ms max=385.57ms count=46
+  | 11-03 05:39:45.881  5091  5091 I S3ContextMenu: s3-menu 370|down|t=129842505|x=226 y=274 timeout=400
+  | 11-03 05:39:45.908  5091  5135 D EGL_emulation: app_time_stats: avg=131.29ms min=11.81ms max=1969.50ms count=17
+  | 11-03 05:39:45.921  5091  5091 I S3ContextMenu: s3-menu 371|drop|t=129842544|why=slop
+  | 11-03 05:39:45.967  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5ce1326
+  | 11-03 05:39:47.040  5091  5135 D EGL_emulation: app_time_stats: avg=25.15ms min=5.75ms max=384.80ms count=45
+  | 11-03 05:39:51.173  5091  5091 I S3ContextMenu: s3-menu 372|down|t=129847796|x=792 y=274 timeout=400
+  | 11-03 05:39:51.191  5091  5135 D EGL_emulation: app_time_stats: avg=244.21ms min=13.34ms max=3885.68ms count=17
+  | 11-03 05:39:51.206  5091  5091 I S3ContextMenu: s3-menu 373|drop|t=129847829|why=slop
+  | 11-03 05:39:52.347  5091  5135 D EGL_emulation: app_time_stats: avg=25.13ms min=13.66ms max=392.05ms count=46
+  | 11-03 05:39:54.605  5091  5091 I S3ContextMenu: s3-menu 374|down|t=129851228|x=226 y=274 timeout=400
+  | 11-03 05:39:54.627  5091  5135 D EGL_emulation: app_time_stats: avg=126.64ms min=13.67ms max=2005.46ms count=18
+  | 11-03 05:39:54.638  5091  5091 I S3ContextMenu: s3-menu 375|drop|t=129851261|why=slop
+  | 11-03 05:39:55.759  5091  5135 D EGL_emulation: app_time_stats: avg=25.15ms min=13.50ms max=387.57ms count=45
+  | 11-03 05:40:00.877  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f15200b
+  | 11-03 05:40:02.942  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e798256
+  | 11-03 05:40:05.110  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9fb651d
+  | 11-03 05:40:07.242  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@58f7290
+  | 11-03 05:40:09.307  5091  5135 D EGL_emulation: app_time_stats: avg=796.92ms min=10.83ms max=13286.01ms count=17
+  | 11-03 05:40:09.342  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3cd10ee
+  | 11-03 05:40:13.426  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@91e5b6f
+  | 11-03 05:40:17.643  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3585cdc
+  | 11-03 05:40:19.658  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3f6f95b
+  | 11-03 05:40:21.609  5091  5091 I S3ContextMenu: s3-bottom 1|down|t=129878232|x=106 y=12 timeout=400
+  | 11-03 05:40:21.610  5091  5091 I S3ContextMenu: s3-bottom 2|drop|t=129878234|why=up
+  | 11-03 05:40:21.625  5091  5135 D EGL_emulation: app_time_stats: avg=12317.49ms min=12317.49ms max=12317.49ms count=1
+  | 11-03 05:40:21.658  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cfe3940
+  | 11-03 05:40:25.077  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8e9510f
+  | 11-03 05:40:27.159  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a02b72a
+  | 11-03 05:40:29.242  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@525b001
+  | 11-03 05:40:31.354  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f530ac4
+  | 11-03 05:40:34.227  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dd5a063
+  | 11-03 05:40:36.242  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9dcde8e
+  | 11-03 05:40:38.295  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ff4ceb5
+  | 11-03 05:40:40.393  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7a9c908
+  | 11-03 05:40:42.374  5091  5135 D EGL_emulation: app_time_stats: avg=10374.34ms min=15.98ms max=20732.71ms count=2
+  | 11-03 05:40:42.409  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@76bbf02
+  | 11-03 05:40:44.476  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d8139b9
+  | 11-03 05:40:46.508  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2507fdc
+  | 11-03 05:40:47.979  5091  5091 I S3ContextMenu: s3-menu 376|down|t=129904603|x=179 y=87 timeout=400
+  | 11-03 05:40:48.012  5091  5135 D EGL_emulation: app_time_stats: avg=5638.57ms min=5638.57ms max=5638.57ms count=1
+  | 11-03 05:40:48.381  5091  5091 I S3ContextMenu: s3-menu 377|open|t=129905004|x=179 y=87 screen=211,1158 via=touch
+  | 11-03 05:40:48.393  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:40:48.393  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:40:48.398  5091  5091 I S3ContextMenu: s3-menu 378|menuFrame|t=129905022|menu=0,142,294,565 press=211,1158 dxDp=-80.4 dyTopDp=-387.0 dyBottomDp=-225.9 openToLayoutMs=19
+  | 11-03 05:40:48.405  5091  5091 I S3ContextMenu: s3-menu 379|drawn|t=129905028|openToDrawnMs=25
+  | 11-03 05:40:48.405  5091  5091 I S3ContextMenu: s3-menu 380|menuFrame|t=129905029|menu=211,1158,505,1581 press=211,1158 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=19
+  | 11-03 05:40:48.988  5091  5091 I S3ContextMenu: s3-menu 381|gestureEnd|t=129905611|action=1
+  | 11-03 05:40:50.140  5091  5091 I S3ContextMenu: s3-menu 382|menuFrame|t=129906763|menu=211,1158,505,1581 press=211,1158 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=19
+  | 11-03 05:40:50.147  5091  5135 D EGL_emulation: app_time_stats: avg=193.68ms min=8.39ms max=1621.90ms count=9
+  | 11-03 05:40:50.175  5091  5135 D EGL_emulation: app_time_stats: avg=432.44ms min=14.89ms max=1168.19ms count=5
+  | 11-03 05:40:51.127  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f5beee4
+  | 11-03 05:40:53.163  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2de5303
+  | 11-03 05:40:53.186  5091  5091 I S3ContextMenu: s3-menu 383|close|t=129909809|via=dismiss
+  | 11-03 05:40:53.209  5091  5135 D EGL_emulation: app_time_stats: avg=3034.21ms min=3034.21ms max=3034.21ms count=1
+  | 11-03 05:40:53.225  5091  5135 D EGL_emulation: app_time_stats: avg=3077.70ms min=3077.70ms max=3077.70ms count=1
+  | 11-03 05:40:53.321  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e8363e2
+  | 11-03 05:40:54.164  5091  5091 I S3ContextMenu: s3-menu 384|down|t=129910787|x=556 y=155 timeout=400
+  | 11-03 05:40:54.210  5091  5135 D EGL_emulation: app_time_stats: avg=500.45ms min=17.92ms max=982.99ms count=2
+  | 11-03 05:40:54.567  5091  5091 I S3ContextMenu: s3-menu 385|open|t=129911190|x=556 y=155 screen=588,1226 via=touch
+  | 11-03 05:40:54.593  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:40:54.593  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:40:54.607  5091  5091 I S3ContextMenu: s3-menu 386|menuFrame|t=129911230|menu=0,142,294,565 press=588,1226 dxDp=-224.0 dyTopDp=-413.0 dyBottomDp=-251.8 openToLayoutMs=41
+  | 11-03 05:40:54.625  5091  5091 I S3ContextMenu: s3-menu 387|drawn|t=129911249|openToDrawnMs=60
+  | 11-03 05:40:54.626  5091  5091 I S3ContextMenu: s3-menu 388|menuFrame|t=129911249|menu=588,1226,882,1649 press=588,1226 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=41
+  | 11-03 05:40:55.174  5091  5091 I S3ContextMenu: s3-menu 389|gestureEnd|t=129911797|action=1
+  | 11-03 05:40:55.225  5091  5135 D EGL_emulation: app_time_stats: avg=203.05ms min=15.67ms max=550.27ms count=5
+  | 11-03 05:40:56.324  5091  5091 I S3ContextMenu: s3-menu 390|menuFrame|t=129912947|menu=588,1226,882,1649 press=588,1226 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=41
+  | 11-03 05:40:56.340  5091  5135 D EGL_emulation: app_time_stats: avg=180.43ms min=1.78ms max=1584.05ms count=9
+  | 11-03 05:40:56.365  5091  5135 D EGL_emulation: app_time_stats: avg=1139.74ms min=1139.74ms max=1139.74ms count=1
+  | 11-03 05:40:57.311  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@71edc14
+  | 11-03 05:40:59.427  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2a9e1f3
+  | 11-03 05:40:59.431  5091  5091 I S3ContextMenu: s3-menu 391|close|t=129916055|via=dismiss
+  | 11-03 05:40:59.460  5091  5135 D EGL_emulation: app_time_stats: avg=3094.96ms min=3094.96ms max=3094.96ms count=1
+  | 11-03 05:40:59.474  5091  5135 D EGL_emulation: app_time_stats: avg=3134.02ms min=3134.02ms max=3134.02ms count=1
+  | 11-03 05:40:59.572  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@94423df
+  | 11-03 05:41:00.379  5091  5091 I S3ContextMenu: s3-menu 392|down|t=129917002|x=367 y=121 timeout=400
+  | 11-03 05:41:00.781  5091  5091 I S3ContextMenu: s3-menu 393|open|t=129917404|x=367 y=121 screen=399,1192 via=touch
+  | 11-03 05:41:00.801  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:41:00.801  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:41:00.805  5091  5135 D EGL_emulation: app_time_stats: avg=672.37ms min=395.00ms max=949.75ms count=2
+  | 11-03 05:41:00.810  5091  5091 I S3ContextMenu: s3-menu 394|menuFrame|t=129917433|menu=0,142,294,565 press=399,1192 dxDp=-152.0 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=29
+  | 11-03 05:41:00.816  5091  5091 I S3ContextMenu: s3-menu 395|drawn|t=129917439|openToDrawnMs=35
+  | 11-03 05:41:00.817  5091  5091 I S3ContextMenu: s3-menu 396|menuFrame|t=129917440|menu=399,1192,693,1615 press=399,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=29
+  | 11-03 05:41:01.391  5091  5091 I S3ContextMenu: s3-menu 397|gestureEnd|t=129918014|action=1
+  | 11-03 05:41:02.526  5091  5091 I S3ContextMenu: s3-menu 398|menuFrame|t=129919149|menu=399,1192,693,1615 press=399,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=29
+  | 11-03 05:41:02.532  5091  5135 D EGL_emulation: app_time_stats: avg=190.68ms min=5.53ms max=1608.88ms count=9
+  | 11-03 05:41:02.544  5091  5135 D EGL_emulation: app_time_stats: avg=342.95ms min=4.83ms max=1103.80ms count=5
+  | 11-03 05:41:05.613  5091  5091 I S3ContextMenu: s3-menu 399|close|t=129922236|via=dismiss
+  | 11-03 05:41:05.644  5091  5135 D EGL_emulation: app_time_stats: avg=3099.79ms min=3099.79ms max=3099.79ms count=1
+  | 11-03 05:41:05.657  5091  5135 D EGL_emulation: app_time_stats: avg=3125.25ms min=3125.25ms max=3125.25ms count=1
+  | 11-03 05:41:05.755  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6b091cf
+  | 11-03 05:41:16.893  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@71776d1
+  | 11-03 05:41:18.958  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9d3bfd4
+  | 11-03 05:41:20.901  5091  5091 I S3ContextMenu: s3-bottom 3|down|t=129937524|x=324 y=73 timeout=400
+  | 11-03 05:41:20.929  5091  5135 D EGL_emulation: app_time_stats: avg=15284.90ms min=15284.90ms max=15284.90ms count=1
+  | 11-03 05:41:20.977  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@66b126e
+  | 11-03 05:41:21.303  5091  5091 I S3ContextMenu: s3-bottom 4|open|t=129937927|x=324 y=73 screen=324,2351 via=touch
+  | 11-03 05:41:21.316  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:41:21.316  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:41:21.333  5091  5091 I S3ContextMenu: s3-bottom 5|menuFrame|t=129937956|menu=0,142,294,562 press=324,2351 dxDp=-123.4 dyTopDp=-841.5 dyBottomDp=-681.5 openToLayoutMs=30
+  | 11-03 05:41:21.339  5091  5091 I S3ContextMenu: s3-bottom 6|drawn|t=129937963|openToDrawnMs=37
+  | 11-03 05:41:21.340  5091  5091 I S3ContextMenu: s3-bottom 7|menuFrame|t=129937963|menu=324,1678,618,2098 press=324,2351 dxDp=0.0 dyTopDp=-256.4 dyBottomDp=-96.4 openToLayoutMs=30
+  | 11-03 05:41:21.909  5091  5091 I S3ContextMenu: s3-bottom 8|gestureEnd|t=129938533|action=1
+  | 11-03 05:41:21.959  5091  5135 D EGL_emulation: app_time_stats: avg=206.15ms min=14.40ms max=586.31ms count=5
+  | 11-03 05:41:23.055  5091  5091 I S3ContextMenu: s3-bottom 9|menuFrame|t=129939679|menu=324,1678,618,2098 press=324,2351 dxDp=0.0 dyTopDp=-256.4 dyBottomDp=-96.4 openToLayoutMs=30
+  | 11-03 05:41:23.062  5091  5135 D EGL_emulation: app_time_stats: avg=180.57ms min=0.55ms max=1602.29ms count=9
+  | 11-03 05:41:23.091  5091  5135 D EGL_emulation: app_time_stats: avg=1132.15ms min=1132.15ms max=1132.15ms count=1
+  | 11-03 05:41:24.045  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@922360d
+  | 11-03 05:41:26.138  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bab3840
+  | 11-03 05:41:26.146  5091  5091 I S3ContextMenu: s3-bottom 10|close|t=129942769|via=dismiss
+  | 11-03 05:41:26.175  5091  5135 D EGL_emulation: app_time_stats: avg=3083.51ms min=3083.51ms max=3083.51ms count=1
+  | 11-03 05:41:26.190  5091  5135 D EGL_emulation: app_time_stats: avg=3127.56ms min=3127.56ms max=3127.56ms count=1
+  | 11-03 05:41:26.289  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@80685d8
+  | 11-03 05:41:31.195  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@49883c9
+  | 11-03 05:41:33.121  5091  5091 I S3ContextMenu: s3-menu 400|down|t=129949745|x=203 y=107 timeout=400
+  | 11-03 05:41:33.121  5091  5091 I S3ContextMenu: s3-menu 401|synth|t=129949745|at=235,1178 ms=1000
+  | 11-03 05:41:33.142  5091  5135 D EGL_emulation: app_time_stats: avg=6967.17ms min=6967.17ms max=6967.17ms count=1
+  | 11-03 05:41:33.525  5091  5091 I S3ContextMenu: s3-menu 402|open|t=129950149|x=203 y=107 screen=235,1178 via=touch
+  | 11-03 05:41:33.547  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:41:33.547  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:41:33.554  5091  5091 I S3ContextMenu: s3-menu 403|menuFrame|t=129950177|menu=0,142,294,565 press=235,1178 dxDp=-89.5 dyTopDp=-394.7 dyBottomDp=-233.5 openToLayoutMs=30
+  | 11-03 05:41:33.561  5091  5091 I S3ContextMenu: s3-menu 404|drawn|t=129950184|openToDrawnMs=37
+  | 11-03 05:41:33.561  5091  5091 I S3ContextMenu: s3-menu 405|menuFrame|t=129950184|menu=235,1178,529,1601 press=235,1178 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=30
+  | 11-03 05:41:34.122  5091  5091 I S3ContextMenu: s3-menu 406|gestureEnd|t=129950745|action=1
+  | 11-03 05:41:34.161  5091  5135 D EGL_emulation: app_time_stats: avg=203.65ms min=14.38ms max=571.19ms count=5
+  | 11-03 05:41:36.789  5091  5091 I S3ContextMenu: s3-menu 407|menuFrame|t=129953412|menu=235,1178,529,1601 press=235,1178 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=30
+  | 11-03 05:41:36.799  5091  5135 D EGL_emulation: app_time_stats: avg=348.70ms min=0.56ms max=3111.81ms count=9
+  | 11-03 05:41:36.827  5091  5135 D EGL_emulation: app_time_stats: avg=2666.52ms min=2666.52ms max=2666.52ms count=1
+  | 11-03 05:41:37.794  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ebe692b
+  | 11-03 05:41:39.894  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f41ddf6
+  | 11-03 05:41:39.901  5091  5091 I S3ContextMenu: s3-menu 408|close|t=129956524|via=dismiss
+  | 11-03 05:41:39.927  5091  5135 D EGL_emulation: app_time_stats: avg=3099.60ms min=3099.60ms max=3099.60ms count=1
+  | 11-03 05:41:39.940  5091  5135 D EGL_emulation: app_time_stats: avg=3140.31ms min=3140.31ms max=3140.31ms count=1
+  | 11-03 05:41:40.041  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f9ce150
+  | 11-03 05:41:42.938  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9f7c130
+  | 11-03 05:41:44.880  5091  5091 I S3ContextMenu: s3-menu 409|down|t=129961503|x=509 y=121 timeout=400
+  | 11-03 05:41:44.909  5091  5135 D EGL_emulation: app_time_stats: avg=4982.38ms min=4982.38ms max=4982.38ms count=1
+  | 11-03 05:41:44.929  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5eccd24
+  | 11-03 05:41:45.282  5091  5091 I S3ContextMenu: s3-menu 410|open|t=129961906|x=509 y=121 screen=541,1192 via=touch
+  | 11-03 05:41:45.313  5091  5091 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-03 05:41:45.313  5091  5091 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-03 05:41:45.325  5091  5091 I S3ContextMenu: s3-menu 411|menuFrame|t=129961948|menu=0,142,294,565 press=541,1192 dxDp=-206.1 dyTopDp=-400.0 dyBottomDp=-238.9 openToLayoutMs=44
+  | 11-03 05:41:45.331  5091  5091 I S3ContextMenu: s3-menu 412|drawn|t=129961954|openToDrawnMs=50
+  | 11-03 05:41:45.333  5091  5091 I S3ContextMenu: s3-menu 413|menuFrame|t=129961956|menu=541,1192,835,1615 press=541,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=44
+  | 11-03 05:41:45.892  5091  5091 I S3ContextMenu: s3-menu 414|gestureEnd|t=129962516|action=1
+  | 11-03 05:41:45.945  5091  5135 D EGL_emulation: app_time_stats: avg=202.43ms min=4.86ms max=572.84ms count=5
+  | 11-03 05:41:47.042  5091  5091 I S3ContextMenu: s3-menu 415|menuFrame|t=129963666|menu=541,1192,835,1615 press=541,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=44
+  | 11-03 05:41:47.058  5091  5135 D EGL_emulation: app_time_stats: avg=192.32ms min=7.02ms max=1617.16ms count=9
+  | 11-03 05:41:47.079  5091  5135 D EGL_emulation: app_time_stats: avg=1134.33ms min=1134.33ms max=1134.33ms count=1
+  | 11-03 05:41:48.045  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d3b6c32
+  | 11-03 05:41:50.172  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1c088a9
+  | 11-03 05:41:52.134  5091  5091 I S3ContextMenu: s3-menu 416|close|t=129968757|via=dismiss
+  | 11-03 05:41:52.159  5091  5135 D EGL_emulation: app_time_stats: avg=5079.87ms min=5079.87ms max=5079.87ms count=1
+  | 11-03 05:41:52.173  5091  5135 D EGL_emulation: app_time_stats: avg=5114.70ms min=5114.70ms max=5114.70ms count=1
+  | 11-03 05:41:52.210  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e63529a
+  | 11-03 05:41:52.275  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1a8986b
+  | 11-03 05:41:55.049  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9d5506d
+  | 11-03 05:42:00.009  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5191c02
+  | 11-03 05:42:02.353  5091  5135 D EGL_emulation: app_time_stats: avg=10193.57ms min=10193.57ms max=10193.57ms count=1
+  | 11-03 05:42:03.756  5091  5135 D EGL_emulation: app_time_stats: avg=695.61ms min=5.65ms max=1385.57ms count=2
+  | 11-03 05:42:04.593  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c4fa1b8
+  | 11-03 05:42:06.895  5091  5135 D EGL_emulation: app_time_stats: avg=196.14ms min=14.43ms max=2872.84ms count=16
+  | 11-03 05:42:06.916  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6d9ab94
+  | 11-03 05:42:07.905  5091  5135 D EGL_emulation: app_time_stats: avg=16.56ms min=7.32ms max=23.95ms count=61
+  | 11-03 05:42:10.134  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@778f773
+  | 11-03 05:42:12.360  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@576acd5
+  | 11-03 05:42:14.663  5091  5135 D EGL_emulation: app_time_stats: avg=3378.60ms min=16.42ms max=6740.78ms count=2
+  | 11-03 05:42:15.672  5091  5135 D EGL_emulation: app_time_stats: avg=16.53ms min=9.89ms max=21.65ms count=61
+  | 11-03 05:42:17.861  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6933008
+  | 11-03 05:42:20.159  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d005677
+  | 11-03 05:42:22.900  5091  5135 D EGL_emulation: app_time_stats: avg=2409.53ms min=16.72ms max=7195.15ms count=3
+  | 11-03 05:42:24.173  5091  5135 D EGL_emulation: app_time_stats: avg=636.42ms min=9.43ms max=1263.41ms count=2
+  | 11-03 05:42:27.747  5091  5135 D EGL_emulation: app_time_stats: avg=210.19ms min=14.69ms max=3305.48ms count=17
+  | 11-03 05:42:27.765  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@156b5df
+  | 11-03 05:42:28.758  5091  5135 D EGL_emulation: app_time_stats: avg=3.15ms min=1.01ms max=21.58ms count=61
+  | 11-03 05:42:30.994  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@40ba23a
+  | 11-03 05:42:33.277  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1acd651
+  | 11-03 05:42:35.598  5091  5135 D EGL_emulation: app_time_stats: avg=6825.16ms min=6825.16ms max=6825.16ms count=1
+  | 11-03 05:42:35.628  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@67ea554
+  | 11-03 05:42:36.605  5091  5135 D EGL_emulation: app_time_stats: avg=16.51ms min=8.93ms max=24.28ms count=61
+  | 11-03 05:42:38.759  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a128ad9
+  | 11-03 05:42:41.062  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1629c5a
+  | 11-03 05:42:43.578  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@19f10f8
+  | 11-03 05:42:43.681  5091  5135 D EGL_emulation: app_time_stats: avg=3537.59ms min=16.53ms max=7058.64ms count=2
+  | 11-03 05:42:44.707  5091  5135 D EGL_emulation: app_time_stats: avg=253.34ms min=4.85ms max=887.40ms count=4
+  | 11-03 05:42:45.858  5091  5135 D EGL_emulation: app_time_stats: avg=63.98ms min=11.84ms max=586.25ms count=18
+  | 11-03 05:42:46.959  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ae4dab3
+  | 11-03 05:42:47.079  5091  5135 D EGL_emulation: app_time_stats: avg=610.28ms min=49.08ms max=1171.47ms count=2
+  | 11-03 05:42:48.292  5091  5135 D EGL_emulation: app_time_stats: avg=606.39ms min=44.72ms max=1168.05ms count=2
+  | 11-03 05:42:49.428  5091  5135 D EGL_emulation: app_time_stats: avg=568.02ms min=30.33ms max=1105.71ms count=2
+  | 11-03 05:42:50.438  5091  5135 D EGL_emulation: app_time_stats: avg=16.56ms min=11.09ms max=22.47ms count=61
+  | 11-03 05:42:51.945  5091  5135 D EGL_emulation: app_time_stats: avg=376.54ms min=16.70ms max=1170.88ms count=4
+  | 11-03 05:42:53.093  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@21b89ce
+  | 11-03 05:42:53.158  5091  5135 D EGL_emulation: app_time_stats: avg=606.75ms min=28.71ms max=1184.79ms count=2
+  | 11-03 05:42:54.374  5091  5135 D EGL_emulation: app_time_stats: avg=607.95ms min=48.46ms max=1167.45ms count=2
+  | 11-03 05:42:55.493  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@81472f5
+  | 11-03 05:42:55.595  5091  5135 D EGL_emulation: app_time_stats: avg=610.19ms min=31.38ms max=1189.01ms count=2
+  | 11-03 05:42:56.812  5091  5135 D EGL_emulation: app_time_stats: avg=608.50ms min=52.50ms max=1164.51ms count=2
+  | 11-03 05:42:57.894  5091  5135 D EGL_emulation: app_time_stats: avg=541.35ms min=28.28ms max=1054.43ms count=2
+  | 11-03 05:42:57.914  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@547c4b6
+  | 11-03 05:42:58.906  5091  5135 D EGL_emulation: app_time_stats: avg=16.57ms min=8.40ms max=24.71ms count=61
+  | 11-03 05:43:00.458  5091  5135 D EGL_emulation: app_time_stats: avg=517.16ms min=28.14ms max=1152.40ms count=3
+  | 11-03 05:43:01.625  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f960afd
+  | 11-03 05:43:01.675  5091  5135 D EGL_emulation: app_time_stats: avg=608.79ms min=31.43ms max=1186.16ms count=2
+  | 11-03 05:43:02.892  5091  5135 D EGL_emulation: app_time_stats: avg=608.09ms min=50.95ms max=1165.24ms count=2
+  | 11-03 05:43:03.975  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8c7d1f0
+  | 11-03 05:43:04.109  5091  5135 D EGL_emulation: app_time_stats: avg=608.58ms min=30.17ms max=1186.99ms count=2
+  | 11-03 05:43:05.325  5091  5135 D EGL_emulation: app_time_stats: avg=608.07ms min=54.92ms max=1161.23ms count=2
+  | 11-03 05:43:06.768  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dff9ee8
+  | 11-03 05:43:06.929  5091  5135 D EGL_emulation: app_time_stats: avg=801.76ms min=30.83ms max=1572.69ms count=2
+  | 11-03 05:43:08.045  5091  5135 D EGL_emulation: app_time_stats: avg=89.86ms min=5.30ms max=938.89ms count=12
+  | 11-03 05:43:09.480  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f0aa97f
+  | 11-03 05:43:10.534  5091  5135 D EGL_emulation: app_time_stats: avg=130.99ms min=10.37ms max=2007.53ms count=19
+  | 11-03 05:43:12.544  5091  5135 D EGL_emulation: app_time_stats: avg=1004.56ms min=42.58ms max=1966.54ms count=2
+  | 11-03 05:43:13.546  5091  5135 D EGL_emulation: app_time_stats: avg=23.29ms min=10.96ms max=265.44ms count=43
+  | 11-03 05:43:14.561  5091  5135 D EGL_emulation: app_time_stats: avg=48.32ms min=11.93ms max=688.77ms count=21
+  | 11-03 05:43:16.559  5091  5135 D EGL_emulation: app_time_stats: avg=666.01ms min=12.38ms max=1969.37ms count=3
+  | 11-03 05:43:16.826  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7a37ecc
+  | 11-03 05:43:18.577  5091  5135 D EGL_emulation: app_time_stats: avg=1008.81ms min=51.17ms max=1966.45ms count=2
+  | 11-03 05:43:20.617  5091  5135 D EGL_emulation: app_time_stats: avg=1020.11ms min=48.93ms max=1991.29ms count=2
+  | 11-03 05:43:21.629  5091  5135 D EGL_emulation: app_time_stats: avg=48.19ms min=7.89ms max=652.64ms count=21
+  | 11-03 05:43:22.645  5091  5135 D EGL_emulation: app_time_stats: avg=23.08ms min=10.43ms max=304.83ms count=44
+  | 11-03 05:43:24.644  5091  5135 D EGL_emulation: app_time_stats: avg=999.32ms min=12.21ms max=1986.42ms count=2
+  | 11-03 05:43:24.843  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@693c3c6
+  | 11-03 05:43:26.643  5091  5135 D EGL_emulation: app_time_stats: avg=999.69ms min=53.15ms max=1946.24ms count=2
+  | 11-03 05:43:27.009  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a01c6b9
+  | 11-03 05:43:28.679  5091  5135 D EGL_emulation: app_time_stats: avg=1018.01ms min=53.55ms max=1982.46ms count=2
+  | 11-03 05:43:30.823  5091  5135 D EGL_emulation: app_time_stats: avg=533.65ms min=2.74ms max=1184.33ms count=4
+  | 11-03 05:43:31.825  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@17cc819
+  | 11-03 05:43:34.100  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@579545
+  | 11-03 05:43:34.105  5091  5135 D EGL_emulation: app_time_stats: avg=193.03ms min=15.64ms max=3014.76ms count=17
+  | 11-03 05:43:35.105  5091  5135 D EGL_emulation: app_time_stats: avg=2.70ms min=0.84ms max=7.79ms count=61
+  | 11-03 05:43:37.061  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@61a80d8
+  | 11-03 05:43:39.127  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5c1d87
+  | 11-03 05:43:41.227  5091  5135 D EGL_emulation: app_time_stats: avg=6105.54ms min=6105.54ms max=6105.54ms count=1
+  | 11-03 05:43:42.239  5091  5135 D EGL_emulation: app_time_stats: avg=10.03ms min=0.84ms max=28.88ms count=61
+  | 11-03 05:43:44.396  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4f5cd14
+  | 11-03 05:43:46.628  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e0186f3
+  | 11-03 05:43:49.547  5091  5097 I nitroui.example: Background concurrent mark compact GC freed 12MB AllocSpace bytes, 0(0B) LOS objects, 18% free, 102MB/126MB, paused 381us,1.237ms total 110.318ms
+  | 11-03 05:43:49.773  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@190f3a4
+  | 11-03 05:43:49.806  5091  5091 I Choreographer: Skipped 49 frames!  The application may be doing too much work on its main thread.
+  | 11-03 05:43:49.893  5091  5135 D EGL_emulation: app_time_stats: avg=2536.10ms min=0.85ms max=7605.80ms count=3
+  | 11-03 05:43:49.906  5091  7827 I HWUI    : Davey! duration=909ms; Flags=0, FrameTimelineVsyncId=14505996, IntendedVsync=130085610009217, Vsync=130086426675851, InputEventId=-40758859, HandleInputStart=130086430197237, AnimationStart=130086430198195, PerformTraversalsStart=130086448532862, DrawStart=130086448750737, FrameDeadline=130085626675883, FrameInterval=130086430027154, FrameStartTime=16666666, SyncQueued=130086509582320, SyncStart=130086509753570, IssueDrawCommandsStart=130086510840279, SwapBuffers=130086515559570, FrameCompleted=130086519394570, DequeueBufferDuration=2750, QueueBufferDuration=142375, GpuCompleted=130086519394570, SwapBuffersCompleted=130086517454154, DisplayPresentTime=0, CommandSubmissionCompleted=130086515559570, 
+  | 11-03 05:43:51.100  5091  5135 D EGL_emulation: app_time_stats: avg=62.93ms min=2.01ms max=672.96ms count=19
+  | 11-03 05:43:52.277  5091  5091 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d5455fb
+  | 11-03 05:43:53.127  5091  5135 D EGL_emulation: app_time_stats: avg=1013.46ms min=27.98ms max=1998.94ms count=2
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: Error occurred, shutting down websocket connection: Websocket exception
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: java.io.EOFException
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.require(RealBufferedSource.kt:199)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.readByte(RealBufferedSource.kt:209)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.readHeader(WebSocketReader.kt:119)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.processNextFrame(WebSocketReader.kt:102)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket.loopReader(RealWebSocket.kt:293)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket$connect$1.onResponse(RealWebSocket.kt:195)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 11-03 05:43:54.367  5091  5143 E unknown:ReconnectingWebSocket: 	at java.lang.Thread.run(Thread.java:1012)
+  | 11-03 05:43:54.367  5091  5143 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8295/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: Cannot connect to Metro.
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: 
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: Try the following to fix the issue:
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: - Ensure that Metro is running and available on the same network
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: - Ensure that your device/emulator is connected to your machine and has USB debugging enabled - run 'adb devices' to see a list of connected devices
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: - If you're on a physical device connected to the same machine, run 'adb reverse tcp:8081 tcp:8081' to forward requests from your device
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: - If your device is on the same Wi-Fi network, set 'Debug server host & port for device' in 'Dev settings' to your machine's IP address and the port of the local dev server - e.g. 10.0.1.1:8081
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: 
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: URL: localhost:8295
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: 
+  | 11-03 05:43:54.373  5091  5170 W ReactNativeJS: Error: undefined
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: real-input:android:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc
+gate: node scripts/real-input/android.mjs --control s3-cancel --control s3-scroll --control s3-layout --control s3-misc (cwd .)
+gate: code tree 29227aa29093 at HEAD afcac0f1
+gate: git tree 79f22273eaee with a DIRTY worktree (not reusable)
+gate: log task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log
+gate:       <store>/task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log
+real-input (android): emulator-5574 · nitroui_t03 · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  s3-cancel: S3 Q1/Q4/Q7: a hold opens the menu with no onPress, a tap presses once
+    · s3 load at start: 0.44
+    · s3 Q1 quick taps: onPress once and no menu 10/10
+    · s3 Q1 holds: opened 10/10, onPress after an open 0, fresh tap once 10/10, picks 10/10
+    · s3 D32 order per pick: open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close
+    · s3 open latency (last 12): timings=openToDrawnMs=107 ; openToDrawnMs=61 ; openToDrawnMs=49 ; openToDrawnMs=68 ; openToDrawnMs=49 ; openToDrawnMs=53 ; openToDrawnMs=61 ; openToDrawnMs=39 ; openToDrawnMs=59 ; openToDrawnMs=72
+    · s3 last anchor: anchor=menu=352,1175,646,1598 press=352,1175 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=62
+    · s3 load at end: 0.59
+    ✓ s3 Q1: quick taps press once with no menu (of 10) — expected 10, saw 10
+    ✓ s3 Q1: holds open the menu (of 10) — expected 10, saw 10
+    ✓ s3 Q1: onPress after an open — expected 0, saw 0
+    ✓ s3 Q1: a fresh tap after each cycle presses once (of 10) — expected 10, saw 10
+    · s3 red proof (cancelTouches=false): opened=1 onPress=1 closes=1 next three taps onPress=1,1,1
+    ✓ s3 red proof: with the cancel skipped, the hold presses on release
+
+  s3-scroll: S3 Q2: scrolls open nothing, and nothing scrolls under an open menu
+    · s3 Q2 ancestor drags: scrolled 10/10, menus opened 0
+    · s3 Q2 hold-then-drag: opened 10/10, list still 10/10
+    · s3 Q2 swipe under an open menu: list still 10/10 (menus up 10/10, closed by the swipe 10)
+    · s3 Q2 inner horizontal pans: panned 10/10, menus opened 0
+    ✓ s3 Q2: ancestor drags scroll (of 10) — expected 10, saw 10
+    ✓ s3 Q2: ancestor drags open nothing — expected 0, saw 0
+    ✓ s3 Q2: hold-then-drag leaves the list still (of 10) — expected 10, saw 10
+    ✓ s3 Q2: a swipe under an open menu leaves the list still (of 10) — expected 10, saw 10
+    ✓ s3 Q2: the inner horizontal ScrollView pans (of 10) — expected 10, saw 10
+    ✓ s3 Q2: the inner pans open nothing — expected 0, saw 0
+
+  s3-layout: S3 Q3: children keep Yoga frames with padding and border, and churn
+    · s3 Q3 fixture box 128.0x68.2 child at 14.1,14.1; twin box 128.0x68.2 child at 14.1,14.1
+    ✓ s3 Q3: child x offset equals the twin View (px) — expected 37, saw 37
+    ✓ s3 Q3: child y offset equals the twin View (px) — expected 37, saw 37
+    ✓ s3 Q3: box width equals the twin View (px) — expected 336, saw 336
+    · s3 Q3 native report: report=-
+    ✗ s3: no node "s3-churn" on screen
+
+  s3-misc: S3 Q5/Q6/Q8: anchor, screen-reader tree, synthesized hold, nested
+    · s3 Q5 screen recording: <repo>/.real-input/android/s3-anchor.mp4
+    · s3 Q5 anchor (px, density 2.625): press=211,1158 popupTopStart=211,1158 dx=0 dy=0 | press=588,1226 popupTopStart=588,1226 dx=0 dy=0 | press=399,1192 popupTopStart=399,1192 dx=0 dy=0
+    · s3 Q5 last composition report: anchor=menu=399,1192,693,1615 press=399,1192 dxDp=0.0 dyTopDp=0.0 dyBottomDp=161.1 openToLayoutMs=29
+    · s3 Q5 bottom edge: press=324,2351 popup={"x1":324,"y1":1678,"x2":618,"y2":2098,"cx":471,"cy":1888,"width":294,"height":420} bottomMinusPress=-253
+    · s3 Q5 bottom composition report: anchor=menu=324,1678,618,2098 press=324,2351 dxDp=0.0 dyTopDp=-256.4 dyBottomDp=-96.4 openToLayoutMs=30
+    · s3 Q8 synthesized 1 s hold through the root: opened=1 onPress=0 opens=1
+    ✗ s3: no node "s3-below" on screen
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,738][1038,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,738][492,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+gate: stopped the Metro this run started (23198) on port 8295 - the next gate on this lease gets a free port
+gate: stopped the Metro this run started (23198) on port 8295 - the next gate on this lease gets a free port
+gate: real-input:android:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc FAIL in 1129.1 s (signal SIGTERM)
+gate: recorded in .gates/task/S3-contextmenu-spike.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/S3-contextmenu-spike/real-input+android+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T05-25-06.339Z.log (5 probe(s))
+
+```

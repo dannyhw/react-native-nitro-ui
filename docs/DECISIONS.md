@@ -448,3 +448,24 @@ orchestrator adopted Q6's recommendations; the owner may override any of them be
    G14's content-view patch would offset a padded ContextMenu's children twice. BottomSheet keeps its patch.
 6. **Order (E):** a spike first (S3, one round, D19's spike rule, prototype never merged). GO means Q6 Appendix G
    questions 1, 2, 3 and 5 pass on both platforms; the build (G16) follows a GO.
+
+## D37 — ContextMenu spike: GO, and what the build changes (2026-11-03)
+
+S3 (`docs/tasks/S3-contextmenu-spike.report.md`; prototype on `task/S3-contextmenu-spike`, never merged) answered GO:
+questions 1, 2, 3 and 5 met 10/10 on both platforms with real input. The orchestrator's answers to its questions:
+
+1. **Keep the iOS touch cancel (A).** It is RN's own path and cheap. iOS 27's lift already ends RN's touch, so the
+   red proof cannot run on iOS 27; the build proves it on an older iOS runtime if one is installable, and otherwise
+   documents that it is unproven on device.
+2. **The iOS accessible wrapper (B):** the content view answers `isAccessibilityElement` with the value RN stored on
+   the wrapper (the spike's getter), plus a harness test that fails if RN moves that answer again.
+3. **The preview radius (C):** the JS wrapper sends the flattened `borderRadius` as `previewCornerRadius: number | null`.
+   Never read RN's private border layers.
+4. **No human screen-reader pass (D; owner, 2026-11-03: "leave voiceover testing that requires me to intervene").**
+   G16 verifies screen-reader reach only by automation: the accessibility tree, roles and actions the harness can read
+   on both platforms. The docs say plainly what that covers, and that VoiceOver and TalkBack's double-tap-and-hold
+   were not exercised on a device. Tasks never wait on, or ask the owner for, manual testing.
+5. The build also takes S3's other findings: an Android a11y action via `onInitializeAccessibilityNodeInfo` (not
+   `replaceAccessibilityAction`, which dropped `testID`), the wrapper laying out its 0×0 compose host itself, the
+   layout-move dismissal, and the documented platform notes (iOS inner `onLongPress` ~240 ms before the menu;
+   Material's 48 dp edge inset).
