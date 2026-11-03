@@ -742,7 +742,7 @@ is actually in force before it measures.
 
 **Consumer defaults - nothing to add.** The merge needs no configuration, and the runtime piece
 arrives on its own: `androidx.profileinstaller` is a *runtime* dependency of Compose
-(`ui-android-1.11.4.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
+(`ui-android-1.12.1.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
 mount a nitro-ui control already ships it. On API 29+ ART also consumes the profile in its own
 background dex-opt pass; API 24-28 are covered by profileinstaller writing it at first launch. The
 library therefore does not declare the dependency itself - it would be a second path to the same

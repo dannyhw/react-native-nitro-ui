@@ -273,7 +273,8 @@ class HybridBenchProbe : HybridBenchProbeSpec() {
   private fun armFrameCapture(target: Capture, mountNs: Long) {
     val activity: Activity? = BenchProbeContextHolder.context?.currentActivity
     val window = activity?.window
-    if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+    // `addOnFrameMetricsAvailableListener` is API 24, which is the minSdk.
+    if (window != null) {
       val listener =
         object : Window.OnFrameMetricsAvailableListener {
           override fun onFrameMetricsAvailable(

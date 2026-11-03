@@ -255,6 +255,9 @@ export interface HostProps extends ViewProps {
 }
 
 // @public
+export type MaterialTheme = 'expressive' | 'baseline';
+
+// @public
 export function Menu(input: MenuProps): JSX.Element;
 
 // @public
@@ -350,6 +353,7 @@ export const nitroUiCore: {
     prewarmSizing(componentNames: readonly string[]): number;
     setSizingTraceEnabled(enabled: boolean): void;
     drainSizingTrace(): NitroUiSizingTraceEvent[];
+    materialThemeReport(): string;
 };
 
 // @public
@@ -506,6 +510,9 @@ export interface SegmentedControlProps extends ViewProps {
     selectedIndex?: number | undefined;
     tintColor?: ColorValue | undefined;
 }
+
+// @public
+export function setMaterialTheme(theme: MaterialTheme): void;
 
 // @public
 export function Slider(input: SliderProps): JSX.Element;

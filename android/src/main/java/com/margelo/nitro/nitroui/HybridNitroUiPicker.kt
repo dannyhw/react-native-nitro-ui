@@ -6,7 +6,6 @@ import android.view.View
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -665,7 +664,6 @@ private class PickerHost(
     }
   }
 
-  @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   override fun Component(model: PickerModel) {
     val options = model.options

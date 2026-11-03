@@ -17,7 +17,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /*
@@ -525,7 +526,7 @@ internal class BottomSheetHost(
     val hasMedium = detents.any { it.kind == "medium" }
     val expanded = expandedDetent(detents, model.fitHeightPx)
     val dismissible = model.dismissible
-    // One instance for the whole presentation: `rememberModalBottomSheetState` keys its
+    // One instance for the whole presentation: `rememberBottomSheetState` keys its
     // saved state on this lambda, so a fresh one per recomposition - the content's box
     // arriving, a `fit` height moving - built a new, hidden `SheetState` and the sheet
     // took itself down. It reads the model when Material asks, not when it was made.
@@ -534,14 +535,29 @@ internal class BottomSheetHost(
         { value: SheetValue -> value != SheetValue.Hidden || model.dismissible || !model.presented }
       }
     // Decided once per presentation (this is inside `key(model.generation)`):
-    // `rememberModalBottomSheetState` keys its saved state on it, so a detent list that
+    // `rememberBottomSheetState` keys its saved state on it, so a detent list that
     // gained or lost `medium` while the sheet was up built a new, hidden `SheetState`
     // under it. Such a change applies at the next presentation; every other detent
     // change (the expanded height) applies at once.
     val skipPartiallyExpanded = remember(model) { !hasMedium || expanded == null }
+    // material3 1.5's sheet state (`rememberModalBottomSheetState` is deprecated). One
+    // thing differs from the old call: a sheet no taller than half the screen keeps its
+    // `PartiallyExpanded` anchor, at its own height and on top of `Expanded`, where the
+    // old state dropped it. The sheet rests in the same place either way; what moved is
+    // which value it rests *as*, and [detentIndexOf] reads that converged anchor as the
+    // expanded detent, so the detent a caller is told is what it was before.
+    val enabledValues =
+      remember(skipPartiallyExpanded) {
+        if (skipPartiallyExpanded) {
+          setOf(SheetValue.Hidden, SheetValue.Expanded)
+        } else {
+          setOf(SheetValue.Hidden, SheetValue.PartiallyExpanded, SheetValue.Expanded)
+        }
+      }
     val sheetState =
-      rememberModalBottomSheetState(
-        skipPartiallyExpanded = skipPartiallyExpanded,
+      rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = enabledValues,
         confirmValueChange = confirmValueChange,
       )
     val presented = model.presented
@@ -612,13 +628,16 @@ internal class BottomSheetHost(
     // change while the sheet is up does not restart them (one state per presentation).
     val currentDetents by rememberUpdatedState(detents)
     val currentExpanded by rememberUpdatedState(expanded)
+    // Distinct on the *detent*, not on Material's value: a converged sheet that grows
+    // past half the screen is promoted from `PartiallyExpanded` to `Expanded` without
+    // moving off its detent, and that is not a change to report.
     LaunchedEffect(sheetState) {
       snapshotFlow { sheetState.currentValue }
-        .distinctUntilChanged()
         .filter { it != SheetValue.Hidden }
+        .map { value -> detentIndexOf(value, currentDetents, currentExpanded) }
+        .distinctUntilChanged()
         .drop(1)
-        .collect { value ->
-          val index = indexOf(value, currentDetents, currentExpanded)
+        .collect { index ->
           model.selected = index
           model.onDetentChange?.invoke(index.toDouble())
         }
@@ -627,7 +646,7 @@ internal class BottomSheetHost(
       snapshotFlow { sheetState.currentValue }.collect { value ->
         model.sheetValue = value.name
         if (value != SheetValue.Hidden) {
-          model.selected = indexOf(value, currentDetents, currentExpanded)
+          model.selected = detentIndexOf(value, currentDetents, currentExpanded)
         }
       }
     }
@@ -665,15 +684,40 @@ internal class BottomSheetHost(
   var selectDetent: ((Int) -> Unit)? = null
 
   @OptIn(ExperimentalMaterial3Api::class)
-  private fun indexOf(
+  private fun detentIndexOf(
     value: SheetValue,
     detents: List<NitroUiSheetDetent>,
     expanded: NitroUiSheetDetent?,
   ): Int {
-    if (value == SheetValue.PartiallyExpanded || expanded == null) {
+    val medium = value == SheetValue.PartiallyExpanded && !(expanded != null && convergesWithMedium(expanded))
+    if (medium || expanded == null) {
       return detents.indexOfFirst { it.kind == "medium" }.coerceAtLeast(0)
     }
     return detents.indexOf(expanded).coerceAtLeast(0)
+  }
+
+  /**
+   * Whether Material puts `PartiallyExpanded` on top of `Expanded` for this detent: the
+   * sheet is no taller than half the screen, so material3 1.5's state rests a `medium`
+   * sheet at the sheet's own height, where `medium` would be the taller of the two. The
+   * old state had no `PartiallyExpanded` anchor at all in that case, so this is the
+   * one place the 1.5 migration needs an answer of its own (see [Sheet]).
+   */
+  private fun convergesWithMedium(expanded: NitroUiSheetDetent): Boolean =
+    detentHeightPx(expanded, model.fitHeightPx) <= resources.displayMetrics.heightPixels / 2.0
+
+  /** The height a non-`medium` detent asks for, in px; `large` is the whole screen. */
+  private fun detentHeightPx(
+    detent: NitroUiSheetDetent,
+    fitHeightPx: Int,
+  ): Double {
+    val metrics = resources.displayMetrics
+    return when (detent.kind) {
+      "large" -> Double.MAX_VALUE
+      "fraction" -> detent.value * metrics.heightPixels
+      "height" -> detent.value * metrics.density
+      else -> fitHeightPx.toDouble()
+    }
   }
 
   /**
@@ -684,20 +728,10 @@ internal class BottomSheetHost(
   private fun expandedDetent(
     detents: List<NitroUiSheetDetent>,
     fitHeightPx: Int,
-  ): NitroUiSheetDetent? {
-    val metrics = resources.displayMetrics
-    val screen = metrics.heightPixels.toDouble()
-    return detents
+  ): NitroUiSheetDetent? =
+    detents
       .filter { it.kind != "medium" }
-      .maxByOrNull { detent ->
-        when (detent.kind) {
-          "large" -> Double.MAX_VALUE
-          "fraction" -> detent.value * screen
-          "height" -> detent.value * metrics.density
-          else -> fitHeightPx.toDouble()
-        }
-      }
-  }
+      .maxByOrNull { detent -> detentHeightPx(detent, fitHeightPx) }
 
   /**
    * Losing the window while presented closes the sheet and reports it, as iOS does and
