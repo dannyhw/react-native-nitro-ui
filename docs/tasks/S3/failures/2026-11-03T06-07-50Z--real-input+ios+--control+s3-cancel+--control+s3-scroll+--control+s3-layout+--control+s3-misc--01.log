@@ -1,0 +1,187 @@
+# Failure excerpt — real-input:ios:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc
+
+- Ran: 2026-11-03T06:07:50.572Z on code tree `a109712e60e9` at HEAD `afcac0f` (branch `task/S3-contextmenu-spike`)
+- Command: `node scripts/real-input/ios.mjs --control s3-cancel --control s3-scroll --control s3-layout --control s3-misc`
+- Result: fail, exit 1, 738377 ms
+- Load: start 9.18, end 3.87, median 4.90, max 51.48
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `S3-70m31`
+- Full log: `task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log` (<store>/task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ XCUITest reported "failed" for testRealInputS3Scroll in 384.682s`
+- `✗ XCUITest reported "failed" for testRealInputS3Layout in 36.081s`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S3-70m31 (still live)
+  |   S3-70m31                 S3           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.87 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 146 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: real-input:ios:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc
+gate: node scripts/real-input/ios.mjs --control s3-cancel --control s3-scroll --control s3-layout --control s3-misc (cwd .)
+gate: code tree a109712e60e9 at HEAD afcac0f1
+gate: git tree 79f22273eaee with a DIRTY worktree (not reusable)
+gate: log task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log
+gate:       <store>/task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log
+real-input (ios): iPhone 17 · F08675D3-A32B-4F88-BC81-02D7E0CB797E · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree a109712e60e9 (831 files) head afcac0f1 · 14 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-11-03 06:09:21.185.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-11-03 06:09:21.185.
+    Test Suite 'RealInputTests' started at 2026-11-03 06:09:21.185.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Cancel]' started.
+    real-input (ios): s3 load at start 32.4
+    real-input (ios): s3 Q1 quick taps: onPress once and no menu 10/10
+    real-input (ios): s3 screenshot s3-ios-open -> /tmp/s3-ios-shots/s3-ios-open.png
+    real-input (ios): s3 Q1 holds: opened 10/10, onPress after an open 0, fresh tap once 10/10, picks 10/10
+    real-input (ios): s3 Q4 JS order per pick: open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close
+    real-input (ios): s3 Q4 native order per pick: cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close
+    real-input (ios): s3 Q7 touch-down to willDisplay per hold: dt=753 cfgToDisplay=595 cancel=ok load1=26.2 | dt=741 cfgToDisplay=588 cancel=ok load1=24.4 | dt=738 cfgToDisplay=586 cancel=ok load1=21.6 | dt=743 cfgToDisplay=585 cancel=ok load1=20.3 | dt=748 cfgToDisplay=583 cancel=ok load1=18.8 | dt=740 cfgToDisplay=586 cancel=ok load1=16.6 | dt=737 cfgToDisplay=583 cancel=ok load1=17.2 | dt=740 cfgToDisplay=582 cancel=ok load1=16.0 | dt=744 cfgToDisplay=583 cancel=ok load1=14.2 | dt=741 cfgToDisplay=582 cancel=ok load1=13.2
+    real-input (ios): s3 load at end 12.2
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 red proof (cancelTouches=false): opened=1 onPress after the hold=0 pressIn=1 pressOut=1 next three taps onPress=0,1,1
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Cancel]' passed (117.297 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Layout]' started.
+    real-input (ios): s3 Q3 fixture box 128.0x68.0 child at 14.0,14.0; twin box 128.0x68.0 child at 14.0,14.0
+    real-input (ios): s3 Q3 native report: report=-
+    real-input (ios): s3 Q3 churn: churn=rounds=50/50;ok=49;bad=r23:js=c123,c122:native=c121,c122 app=4
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Layout]' failed (36.081 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Misc]' started.
+    real-input (ios): s3 screenshot s3-ios-synth-open -> /tmp/s3-ios-shots/s3-ios-synth-open.png
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q8 synthesized UITouch held 1 s: opened=1 opens=1 onPress=0 pressIn=1 trace=synth>cfg>display
+    real-input (ios): s3 Q8 a real hold after the synthesized one opens: 0
+    real-input (ios): s3 screenshot s3-ios-preview -> /tmp/s3-ios-shots/s3-ios-preview.png
+    real-input (ios): s3 D4.4 outside tap on "below" with the menu up (up=0): closes=0 below=1
+    real-input (ios): s3 bottom edge: press at (120.6, 845.9999771118164) row "Bottom one" at (16.0, 620.3333333333334, 250.0, 42.0)
+    real-input (ios): s3 screenshot s3-ios-bottom -> /tmp/s3-ios-shots/s3-ios-bottom.png
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Bottom one"
+    real-input (ios): s3 Q6 wrapper (not accessible): exists=true label="" type=1
+    real-input (ios): s3 Q6 inner Pressable: label="s3-target" type=1
+    real-input (ios): s3 Q6 wrapper (accessible): exists=true label="" type=1 innerStillExposed=1
+    real-input (ios): s3 Q6 native report with accessible: report=-
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Inner action"
+    real-input (ios): s3 D4.8 nested: inner=1 outer=0 innerRow=1 outerRow=0
+    real-input (ios): s3 D4.10 disabled: menu=0 dOpens=0 dPress=0
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Misc]' passed (108.637 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Scroll]' started.
+    real-input (ios): s3 Q2 ancestor drags: scrolled 10/10, menus opened 0
+    real-input (ios): s3 Q2 hold-then-drag: opened 10/10, list still 10/10
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q2 swipe-under-menu 2: the hold opened no menu
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q2 swipe-under-menu 4: the hold opened no menu
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q2 swipe-under-menu 6: the hold opened no menu
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q2 swipe-under-menu 8: the hold opened no menu
+    real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    real-input (ios): s3 Q2 swipe-under-menu 10: the hold opened no menu
+    real-input (ios): s3 Q2 swipe under an open menu: list still 5/5 (menus up 5/10)
+    real-input (ios): s3 Q2 inner horizontal pans: panned 10/10, menus opened 0
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputS3Scroll]' failed (384.682 seconds).
+    Test Suite 'RealInputTests' failed at 2026-11-03 06:20:07.887.
+    Test Suite 'NitroUiExampleUITests.xctest' failed at 2026-11-03 06:20:07.888.
+    Test Suite 'Selected tests' failed at 2026-11-03 06:20:07.889.
+    ** TEST EXECUTE FAILED **
+
+  s3-cancel: S3 Q1/Q4/Q7: a hold opens the menu with no onPress, a tap presses once
+    · real-input (ios): s3 load at start 32.4
+    · real-input (ios): s3 Q1 quick taps: onPress once and no menu 10/10
+    · real-input (ios): s3 screenshot s3-ios-open -> /tmp/s3-ios-shots/s3-ios-open.png
+    · real-input (ios): s3 Q1 holds: opened 10/10, onPress after an open 0, fresh tap once 10/10, picks 10/10
+    · real-input (ios): s3 Q4 JS order per pick: open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close open>select:copy>close
+    · real-input (ios): s3 Q4 native order per pick: cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close cfg>display>handler>willEnd>close
+    · real-input (ios): s3 Q7 touch-down to willDisplay per hold: dt=753 cfgToDisplay=595 cancel=ok load1=26.2 | dt=741 cfgToDisplay=588 cancel=ok load1=24.4 | dt=738 cfgToDisplay=586 cancel=ok load1=21.6 | dt=743 cfgToDisplay=585 cancel=ok load1=20.3 | dt=748 cfgToDisplay=583 cancel=ok load1=18.8 | dt=740 cfgToDisplay=586 cancel=ok load1=16.6 | dt=737 cfgToDisplay=583 cancel=ok load1=17.2 | dt=740 cfgToDisplay=582 cancel=ok load1=16.0 | dt=744 cfgToDisplay=583 cancel=ok load1=14.2 | dt=741 cfgToDisplay=582 cancel=ok load1=13.2
+    · real-input (ios): s3 load at end 12.2
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 red proof (cancelTouches=false): opened=1 onPress after the hold=0 pressIn=1 pressOut=1 next three taps onPress=0,1,1
+    ✓ XCUITest reported "passed" for testRealInputS3Cancel in 117.297s
+
+  s3-scroll: S3 Q2: scrolls open nothing, and nothing scrolls under an open menu
+    · real-input (ios): s3 Q2 ancestor drags: scrolled 10/10, menus opened 0
+    · real-input (ios): s3 Q2 hold-then-drag: opened 10/10, list still 10/10
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q2 swipe-under-menu 2: the hold opened no menu
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q2 swipe-under-menu 4: the hold opened no menu
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q2 swipe-under-menu 6: the hold opened no menu
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q2 swipe-under-menu 8: the hold opened no menu
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q2 swipe-under-menu 10: the hold opened no menu
+    · real-input (ios): s3 Q2 swipe under an open menu: list still 5/5 (menus up 5/10)
+    · real-input (ios): s3 Q2 inner horizontal pans: panned 10/10, menus opened 0
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:4643: error: -[NitroUiExampleUITests.RealInputTests testRealInputS3Scroll] : XCTAssertEqual failed: ("5") is not equal to ("10") - Q2: the hold opened the menu before the swipe
+    ✗ XCUITest reported "failed" for testRealInputS3Scroll in 384.682s
+
+  s3-layout: S3 Q3: children keep Yoga frames with padding and border, and churn
+    · real-input (ios): s3 Q3 fixture box 128.0x68.0 child at 14.0,14.0; twin box 128.0x68.0 child at 14.0,14.0
+    · real-input (ios): s3 Q3 native report: report=-
+    · real-input (ios): s3 Q3 churn: churn=rounds=50/50;ok=49;bad=r23:js=c123,c122:native=c121,c122 app=4
+    · <repo>/example/ios/NitroUiExampleUITests/RealInputTests.swift:4673: error: -[NitroUiExampleUITests.RealInputTests testRealInputS3Layout] : XCTAssertTrue failed - Q3: 50 churn rounds keep the native order
+    ✗ XCUITest reported "failed" for testRealInputS3Layout in 36.081s
+
+  s3-misc: S3 Q5/Q6/Q8: anchor, screen-reader tree, synthesized hold, nested
+    · real-input (ios): s3 screenshot s3-ios-synth-open -> /tmp/s3-ios-shots/s3-ios-synth-open.png
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Copy text"
+    · real-input (ios): s3 Q8 synthesized UITouch held 1 s: opened=1 opens=1 onPress=0 pressIn=1 trace=synth>cfg>display
+    · real-input (ios): s3 Q8 a real hold after the synthesized one opens: 0
+    · real-input (ios): s3 screenshot s3-ios-preview -> /tmp/s3-ios-shots/s3-ios-preview.png
+    · real-input (ios): s3 D4.4 outside tap on "below" with the menu up (up=0): closes=0 below=1
+    · real-input (ios): s3 bottom edge: press at (120.6, 845.9999771118164) row "Bottom one" at (16.0, 620.3333333333334, 250.0, 42.0)
+    · real-input (ios): s3 screenshot s3-ios-bottom -> /tmp/s3-ios-shots/s3-ios-bottom.png
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Bottom one"
+    · real-input (ios): s3 Q6 wrapper (not accessible): exists=true label="" type=1
+    · real-input (ios): s3 Q6 inner Pressable: label="s3-target" type=1
+    · real-input (ios): s3 Q6 wrapper (accessible): exists=true label="" type=1 innerStillExposed=1
+    · real-input (ios): s3 Q6 native report with accessible: report=-
+    · real-input (ios): accessibility hierarchy - the S3 menu to close: something still on screen carries "Inner action"
+    · real-input (ios): s3 D4.8 nested: inner=1 outer=0 innerRow=1 outerRow=0
+    · real-input (ios): s3 D4.10 disabled: menu=0 dOpens=0 dPress=0
+    ✓ XCUITest reported "passed" for testRealInputS3Misc in 108.637s
+
+s3-cancel: PASS (no retries)
+s3-scroll: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputS3Scroll in 384.682s
+s3-layout: FAIL (no retries)
+    failed: XCUITest reported "failed" for testRealInputS3Layout in 36.081s
+s3-misc: PASS (no retries)
+
+real-input (ios): 2/4 controls passed · 0 press sequence(s) needed a retry
+gate: real-input:ios:--control:s3-cancel:--control:s3-scroll:--control:s3-layout:--control:s3-misc FAIL in 738.4 s
+gate: recorded in .gates/task/S3-contextmenu-spike.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/S3-contextmenu-spike/real-input+ios+--control+s3-cancel+--control+s3-scroll+--control+s3-layout+--control+s3-misc-2026-11-03T06-07-50.160Z.log (4 probe(s))
+
+```
