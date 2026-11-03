@@ -59,7 +59,12 @@ import {
   Switch,
   nitroUiCore,
 } from 'react-native-nitro-ui';
-import { waitForHandle } from './handles';
+import {
+  forgetPromisedHandles,
+  handleOf,
+  handleRef,
+  waitForPromisedHandle,
+} from './handles';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -231,23 +236,6 @@ function need<T>(value: T | undefined, what: string): T {
 }
 
 /**
- * Wait for a control's `hybridRef` handle to exist, then hand it back.
- *
- * `render` and `boxOf` resolve when the view is laid out, and the callback runs on a
- * commit after that, so a read straight after a mount can find nothing: on a loaded
- * machine this file failed `No hybrid handle for "segmented row"` twice in one merge
- * run, and HostControls lost a Slider's handle the same way. The wait is on existence
- * only. Every value a test asserts is still read after it, unchanged.
- *
- * A test that mounts the same id again (a re-add, or a fresh `render` into the same
- * log) deletes the old entry first. Otherwise this would return the dropped view's
- * handle at once.
- */
-function handleOf<T>(read: () => T | undefined, what: string): Promise<T> {
-  return waitForHandle(read, { what: `"${what}"` });
-}
-
-/**
  * Wait for a press's answer to reach JS, or fail naming the press that is missing.
  *
  * The device this runs on shares a machine with other tasks' emulators, so "answered
@@ -275,12 +263,21 @@ async function waitForAnswer<T>(
   }
 }
 
-/** Poll for a `testID`; a hosted control mounts through the Host's composition. */
+/**
+ * Poll for a `testID`; a hosted control mounts through the Host's composition.
+ *
+ * As in `HostControls.harness.tsx`: a box whose control was wired with `handleRef` is
+ * handed back once that control's handle has landed too (`handles.ts`).
+ */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
   for (;;) {
     const box = harnessUi.queryByTestId(testId);
     if (box != null) {
+      await waitForPromisedHandle(
+        testId,
+        Math.max(5000, deadline - nitroUiCore.now())
+      );
       return box;
     }
     if (nitroUiCore.now() > deadline) {
@@ -746,6 +743,7 @@ function TwoPopupOwners({ log }: { log: Log }) {
 
 afterEach(() => {
   cleanup();
+  forgetPromisedHandles();
 });
 
 beforeAll(async () => {
@@ -795,9 +793,7 @@ function SegRows({
         }}
         testID="seg-first"
         accessibilityLabel="Segmented first"
-        hybridRef={(view: SegmentedHandle) => {
-          log.segments.first = view;
-        }}
+        hybridRef={handleRef(log.segments, 'first', 'seg-first')}
       />
       <SegmentedControl
         options={['One', 'Two', 'Three']}
@@ -808,9 +804,7 @@ function SegRows({
         }}
         testID="seg-second"
         accessibilityLabel="Segmented second"
-        hybridRef={(view: SegmentedHandle) => {
-          log.segments.second = view;
-        }}
+        hybridRef={handleRef(log.segments, 'second', 'seg-second')}
       />
     </Host>
   );

@@ -1,0 +1,81 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-02T18:25:43.496Z on code tree `a28d2fe556ca` at HEAD `a5239d7` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 567 ms
+- Load: start 11.66, end 11.66, median 11.66, max 11.66
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-h83ki`
+- Full log: `task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log` (<store>/task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (still live)
+  |   G12-h83ki                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 11.66 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree a28d2fe556ca at HEAD a5239d7
+gate: git tree 2359faffa2af
+gate: log task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log
+gate:       <store>/task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 8b2aa490 at 31db76f0c68654c3d40bf4c29928c9c7930eca66, now a28d2fe5 at a5239d7400fdf8a4a1948d7a45f37f8b4e0e6843)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 8b2aa490 at 31db76f0c68654c3d40bf4c29928c9c7930eca66, now a28d2fe5 at a5239d7400fdf8a4a1948d7a45f37f8b4e0e6843)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:ios FAIL in 0.6 s
+gate: recorded in .gates/task/G12-chip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G12-chip/harness+ios-2026-11-02T18-25-43.115Z.log (4 probe(s))
+
+```

@@ -46,7 +46,7 @@ import {
   findTab,
   parseHierarchy,
 } from './uiautomator.mjs';
-import { nativeChecked } from './android-tree.mjs';
+import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
   calendarGridProblems,
@@ -91,6 +91,11 @@ const ECHO = {
   pickerGone: 'real-input-drop-gone',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
+  chipValue: 'real-input-chip-value',
+  chipEvents: 'real-input-chip-events',
+  chipRefusedLast: 'real-input-chip-refused-last',
+  chipRefusedEvents: 'real-input-chip-refused-events',
+  chipPresses: 'real-input-chip-presses',
   dialogLog: 'dialog-log',
   sheetLog: 'sheet-log',
   hostValue: 'host-controlled-value',
@@ -1311,6 +1316,173 @@ const CHECKS = {
       pollMs: DUMP_POLL_MS,
     });
     await t.requireControlOnScreen('Hosted date picker');
+  },
+
+  /**
+   * A real tap toggles a Material 3 FilterChip, a toggle the parent refuses snaps back,
+   * an AssistChip presses, and a disabled chip of either kind takes nothing (G12).
+   * `RealInputTests.testRealInputChip` on the other platform, assertion for assertion.
+   *
+   * The chip's own state is read from the tree as well as from the echo: Compose
+   * publishes a FilterChip's `selected` as `checkable`/`checked` (the same mapping the
+   * Picker's rows reach the dump through), so `nativeChecked` is both the a11y read of
+   * "selected" and the witness that tells a dropped tap from a lost event.
+   *
+   * The refusing chip's oracle is SegmentedControl's: the parent keeps `selected={false}`,
+   * so every tap asks for `true`. A chip that kept the refused selection would ask for
+   * `false` on the second tap.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'chip': async (t) => {
+    const named = (label) => t.requireControl(label);
+    t.log.checkEquals(
+      'the filter chip starts unselected',
+      t.requireEcho(ECHO.chipValue),
+      'off'
+    );
+    t.log.checkEquals(
+      "the filter chip's own node starts not checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 1. On, then off.
+    t.log.checkEquals(
+      'one real tap selects the filter chip (React renders "on")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'on',
+        'the real tap that selects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'on'
+    );
+    t.log.checkEquals(
+      "the selected chip's node says it is checked",
+      t.nativeChecked('Real-input chip'),
+      'on'
+    );
+    t.log.checkEquals(
+      'a second real tap deselects it (React renders "off")',
+      await t.tapUntilValue(
+        () => named('Real-input chip'),
+        ECHO.chipValue,
+        'off',
+        'the real tap that deselects the chip',
+        { nativeLabel: 'Real-input chip' }
+      ),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes',
+      t.requireEcho(ECHO.chipEvents),
+      '2'
+    );
+    t.log.checkEquals(
+      "the deselected chip's node stops saying it is checked",
+      t.nativeChecked('Real-input chip'),
+      'off'
+    );
+
+    // 2. The refusing parent: two requests, both for `true`, and the chip's node still
+    //    unchecked after each.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onSelectedChange`,
+        await t.tapUntilValue(
+          () => named('Real-input refusing chip'),
+          ECHO.chipRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true (a chip that kept the refused ` +
+          'selection would ask for false on the second tap)',
+        t.requireEcho(ECHO.chipRefusedLast),
+        'true'
+      );
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused chip snaps back to unchecked after request ${request}`,
+        t.nativeChecked('Real-input refusing chip'),
+        'off'
+      );
+    }
+
+    // 3. The assist chip presses once per tap.
+    t.log.checkEquals(
+      'one real tap on the assist chip reaches onPress once',
+      await t.tapUntilValue(
+        () => named('Real-input assist chip'),
+        ECHO.chipPresses,
+        '1',
+        'the real tap on the assist chip'
+      ),
+      '1'
+    );
+
+    // 4. Neither disabled chip takes a tap. Each is wired to its enabled twin's
+    //    counter, so a stray delivery is a number that moved. Not retried: the claim
+    //    is about a period in which nothing may move.
+    const disabledFilter = named('Real-input disabled chip');
+    const disabledAssist = named('Real-input disabled assist chip');
+    // Read off the clickable touch target around the label, not the labelled node:
+    // `nativeEnabled` says why (the labelled node reports enabled either way).
+    t.log.checkEquals(
+      'the disabled filter chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled chip'),
+      'false'
+    );
+    t.log.checkEquals(
+      'the disabled assist chip announces itself not enabled',
+      t.nativeEnabled('Real-input disabled assist chip'),
+      'false'
+    );
+    t.log.checkEquals(
+      'its enabled twin announces itself enabled (so the reads above can say true)',
+      t.nativeEnabled('Real-input assist chip'),
+      'true'
+    );
+    await t.tapNode(disabledFilter);
+    t.log.checkEquals(
+      'a real tap on the disabled filter chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipEvents,
+        '2',
+        'a tap on the disabled filter chip to be refused'
+      ),
+      '2'
+    );
+    await t.tapNode(disabledAssist);
+    t.log.checkEquals(
+      'a real tap on the disabled assist chip is refused',
+      t.requireEchoToStay(
+        ECHO.chipPresses,
+        '1',
+        'a tap on the disabled assist chip to be refused'
+      ),
+      '1'
+    );
+
+    // 5. The barrier: the enabled twin, tapped the same way, still presses. At
+    //    least once more, not exactly once: a tap that stalls past the window lands
+    //    with its retry (G12: 1 -> 3), and "presses once per tap" is item 3's claim.
+    const barrier = await t.tapUntilValue(
+      () => named('Real-input assist chip'),
+      ECHO.chipPresses,
+      '2',
+      'the barrier tap on the assist chip',
+      { atLeast: true }
+    );
+    t.log.check(
+      'the enabled assist chip still presses after the refused taps — expected ' +
+        `at least 2, saw ${barrier}`,
+      Number(barrier) >= 2
+    );
   },
 
   /**
@@ -3564,6 +3736,7 @@ class DeviceHarness {
       datepicker: 'Dates',
       picker: 'Picker',
       menu: 'Menu',
+      chip: 'Chip',
       dialog: 'Dialogs',
       sheet: 'Sheet',
       host: 'Host',
@@ -3577,6 +3750,7 @@ class DeviceHarness {
       datepicker: ECHO.dateValue,
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
+      chip: ECHO.chipValue,
       dialog: ECHO.dialogLog,
       sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
@@ -4161,6 +4335,17 @@ function makeContext(harness, log) {
     },
 
     /**
+     * See `nativeEnabled` in `android-tree.mjs`: the clickable node's `enabled`,
+     * which is where Compose puts a disabled control's state.
+     *
+     * @param {string} description the control's `accessibilityLabel`
+     * @returns {string | null} `"true"` / `"false"`, or null when nothing answers
+     */
+    nativeEnabled(description) {
+      return nativeEnabled(harness.hierarchy(), description);
+    },
+
+    /**
      * Tap a control until the on-screen *value* it should change says so.
      *
      * The value, not merely a change: `waitForEchoToChange` is satisfied by any
@@ -4177,8 +4362,13 @@ function makeContext(harness, log) {
      * @param {string} testID the echo whose value proves the press arrived
      * @param {string} expected what the echo has to say
      * @param {string} waitingFor what this tap was meant to do
-     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string}} [options]
+     * @param {{aim?: (node: import('./uiautomator.mjs').UiautomatorNode) => Promise<void>, attempts?: number, nativeLabel?: string, atLeast?: boolean}} [options]
      *   `aim` - how to press it, for the taps that aim at a fraction of the control.
+     *   `atLeast` - the echo is a counter and any count from `expected` up passes.
+     *   For a barrier, whose claim is "a press still arrives": a tap that stalled
+     *   past the window can land together with the retry, and the counter then
+     *   skips `expected` (G12: 1 -> 3), which proves the claim twice rather than
+     *   failing it. Not for a check that counts presses per tap.
      *   `nativeLabel` - the control's `accessibilityLabel` when it publishes its own
      *   state, which for a Switch it does: `pressUntil` then refuses to retry a press
      *   whose touch clearly landed (F1 M3). Pass it for every single-value control
@@ -4191,7 +4381,7 @@ function makeContext(harness, log) {
       // options object, and a callsite left behind would keep tapping the
       // middle of the control - which is a wrong-place tap, not a dropped one,
       // and it showed up as two segmented checks going red for the wrong reason.
-      const known = ['aim', 'attempts', 'nativeLabel'];
+      const known = ['aim', 'attempts', 'nativeLabel', 'atLeast'];
       const unknown = Object.keys(options).filter((k) => !known.includes(k));
       if (typeof options === 'function' || unknown.length > 0) {
         log.abort(
@@ -4199,12 +4389,18 @@ function makeContext(harness, log) {
             typeof options === 'function'
               ? 'a positional aim function (it is now { aim })'
               : `unknown option(s) ${unknown.join(', ')} - the fifth argument is ` +
-                '{ aim, attempts, nativeLabel }'
+                '{ aim, attempts, nativeLabel, atLeast }'
           }. Refusing to tap: an ignored aim presses the middle of the control, ` +
             'which fails a segment check and blames delivery.'
         );
       }
-      const { aim, attempts = 3, nativeLabel } = options;
+      const { aim, attempts = 3, nativeLabel, atLeast = false } = options;
+      const target = Number(expected);
+      if (atLeast && !Number.isInteger(target)) {
+        log.abort(
+          `${waitingFor}: atLeast needs a counter, and "${expected}" is not one`
+        );
+      }
       const { delivered, shown } = await this.pressUntil({
         what: `"${testID}"`,
         waitingFor,
@@ -4234,13 +4430,16 @@ function makeContext(harness, log) {
           nativeLabel == null
             ? undefined
             : () => this.nativeChecked(nativeLabel),
-        raised: (current) => current === expected,
+        raised: (current) =>
+          atLeast
+            ? current != null && Number(current) >= target
+            : current === expected,
       });
       if (!delivered) {
         log.abort(
           `${waitingFor}: ${String(attempts)} real taps left ${testID} at "${String(
             shown
-          )}" rather than "${expected}" - either the taps were never delivered ` +
+          )}" rather than ${atLeast ? 'at least ' : ''}"${expected}" - either the taps were never delivered ` +
             '(FOLLOWUPS.md:58) or the control ignores a real touch. One delivered ' +
             'tap was enough to pass, so this is not a control that answers sometimes.'
         );

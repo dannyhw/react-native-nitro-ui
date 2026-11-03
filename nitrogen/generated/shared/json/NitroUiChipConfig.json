@@ -1,0 +1,23 @@
+{
+  "uiViewClassName": "NitroUiChip",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "label": true,
+    "variant": true,
+    "selected": true,
+    "defaultSelected": true,
+    "mostRecentEventCount": true,
+    "disabled": true,
+    "systemImage": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onSelectedChange": true,
+    "onPress": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

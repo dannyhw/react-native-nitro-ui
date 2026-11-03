@@ -47,6 +47,7 @@ final class RealInputTests: XCTestCase {
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
     static let menuTab = "tab-menu"
+    static let chipTab = "tab-chip"
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
@@ -72,6 +73,11 @@ final class RealInputTests: XCTestCase {
     static let pickerEvents = "real-input-picker-events"
     static let menuPick = "real-input-menu-pick"
     static let menuEvents = "real-input-menu-events"
+    static let chipValue = "real-input-chip-value"
+    static let chipEvents = "real-input-chip-events"
+    static let chipRefusedLast = "real-input-chip-refused-last"
+    static let chipRefusedEvents = "real-input-chip-refused-events"
+    static let chipPresses = "real-input-chip-presses"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -367,6 +373,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.pickerTab, screenAnchor: Echo.pickerIndex),
       A11yCase(id: "menu", testId: "real-input-menu", label: "Real-input menu",
                tab: Tab.menuTab, screenAnchor: Echo.menuPick),
+      A11yCase(id: "chip", testId: "real-input-chip", label: "Real-input chip",
+               tab: Tab.chipTab, screenAnchor: Echo.chipValue),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -2505,6 +2513,181 @@ final class RealInputTests: XCTestCase {
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
     )
+  }
+
+  // MARK: - Chip
+
+  /// A real tap toggles a filter chip, a toggle the parent refuses snaps back, an
+  /// assist chip presses, and a disabled chip of either kind takes nothing (G12).
+  ///
+  /// This is also where the Chip's iOS accessibility is asserted: the SwiftUI hosting
+  /// view exposes no element to an in-app probe on iOS 27, so the harness cannot read
+  /// it, and XCUITest can. The filter chip's own element has to say it is selected
+  /// after a tap and not after the next one - read from the element's `value`, which
+  /// is what VoiceOver speaks, not from the echo.
+  ///
+  /// The refusing chip's oracle is the same as SegmentedControl's: its parent keeps
+  /// `selected={false}`, so each tap asks for `true` again. A chip that had kept the
+  /// refused selection would ask for `false` on the second tap, so two requests that
+  /// both say `true` are the snap-back.
+  func testRealInputChip() throws {
+    try goToTab(Tab.chipTab, showing: Echo.chipValue)
+    let filter = try required("real-input-chip", as: "the controlled filter chip")
+    let disabled = try required("real-input-chip-disabled", as: "the disabled filter chip")
+    let assist = try required("real-input-chip-assist", as: "the assist chip")
+    let assistDisabled = try required(
+      "real-input-chip-assist-disabled", as: "the disabled assist chip")
+    XCTAssertEqual(try read(Echo.chipValue), "off", "the filter chip should start unselected")
+    XCTAssertEqual(try read(Echo.chipEvents), "0", "no change should be reported before a tap")
+    XCTAssertEqual(
+      nativeChipState(of: "real-input-chip"), "off",
+      "the filter chip's own element should start by announcing itself not selected")
+
+    // 1. On, then off: each tap is one change, the echo follows, and so does the
+    //    element VoiceOver reads.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip",
+        echo: Echo.chipValue,
+        expected: "on",
+        as: "the controlled filter chip",
+        waitingFor: "the real tap that selects the chip",
+        nativeState: { self.nativeChipState(of: "real-input-chip") }
+      ),
+      "on",
+      "one real tap should select the filter chip and React should render on"
+    )
+    XCTAssertEqual(
+      waitForChipState("real-input-chip", "on"), "on",
+      "the selected chip's element should announce itself selected")
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip",
+        echo: Echo.chipValue,
+        expected: "off",
+        as: "the controlled filter chip",
+        waitingFor: "the real tap that deselects the chip",
+        nativeState: { self.nativeChipState(of: "real-input-chip") }
+      ),
+      "off",
+      "a second real tap should deselect the chip"
+    )
+    XCTAssertEqual(try read(Echo.chipEvents), "2", "two taps should report two changes")
+    XCTAssertEqual(
+      waitForChipState("real-input-chip", "off"), "off",
+      "the deselected chip's element should stop announcing itself selected")
+
+    // 2. The refusing parent: two requests, both for `true`, and the chip still not
+    //    selected after either.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-chip-refusing",
+          echo: Echo.chipRefusedEvents,
+          expected: request,
+          as: "the refusing filter chip",
+          waitingFor: "refused request \(request)"
+        ),
+        request,
+        "each real tap on the refusing chip should reach onSelectedChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.chipRefusedLast), "true",
+        "refused request \(request) should ask for true: a chip that kept the refused "
+          + "selection would ask for false on the second tap"
+      )
+      XCTAssertEqual(
+        waitForChipState("real-input-chip-refusing", "off"), "off",
+        "the refused chip should snap back to not selected after request \(request)")
+    }
+
+    // 3. The assist chip presses once per tap.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip-assist",
+        echo: Echo.chipPresses,
+        expected: "1",
+        as: "the assist chip",
+        waitingFor: "the real tap on the assist chip"
+      ),
+      "1",
+      "one real tap on the assist chip should reach onPress once"
+    )
+
+    // 4. Neither disabled chip takes a tap. Both are wired to the same counters as
+    //    their enabled twins, so a stray delivery is a number that moved.
+    XCTAssertFalse(
+      chipElement(of: "real-input-chip-disabled")?.isEnabled ?? true,
+      "the disabled filter chip's element should announce itself dimmed")
+    disabled.fingerTap()
+    assistDisabled.fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.chipEvents, timeout: 1.5) { $0 != "2" }, "2",
+      "a real tap on the disabled filter chip should be refused")
+    XCTAssertEqual(
+      readUntil(Echo.chipPresses, timeout: 1.5) { $0 != "1" }, "1",
+      "a real tap on the disabled assist chip should be refused")
+    XCTAssertEqual(try read(Echo.chipValue), "off", "the refused taps should leave the chip off")
+
+    // 5. The barrier: the same taps, on the enabled twins, still land - so the silence
+    //    above was a refusal and not a screen that stopped answering.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip-assist",
+        echo: Echo.chipPresses,
+        expected: "2",
+        as: "the assist chip",
+        waitingFor: "the barrier tap on the assist chip"
+      ),
+      "2",
+      "the enabled assist chip, tapped the same way, should still press"
+    )
+    XCTAssert(filter.isHittable, "the filter chip should still be touchable")
+    XCTAssert(assist.isHittable, "the assist chip should still be touchable")
+  }
+
+  /// The chip's own accessibility element: the SwiftUI control inside the React Native
+  /// component view that carries the `testID` - the same reason `nativeSwitchState`
+  /// asks the inner element first.
+  private func chipElement(of identifier: String) -> XCUIElement? {
+    let container = app.descendants(matching: .any)[identifier].firstMatch
+    guard container.exists else { return nil }
+    // A filter chip's `Toggle(.button)` is reported as a switch (measured), an assist
+    // chip's `Button` as a button.
+    for type in [XCUIElement.ElementType.`switch`, .button] {
+      let inner = container.descendants(matching: type).firstMatch
+      if inner.exists { return inner }
+    }
+    return nil
+  }
+
+  /// Whether the chip's element says it is selected, as "on"/"off", or nil when nothing
+  /// answers. The filter chip's element answers with `value` 1/0 (measured); a selected
+  /// button would answer with `isSelected`, so either counts.
+  private func nativeChipState(of identifier: String) -> String? {
+    guard let element = chipElement(of: identifier) else { return nil }
+    if element.isSelected { return "on" }
+    let raw = element.value
+    let text = (raw as? NSNumber)?.stringValue ?? (raw as? String) ?? ""
+    switch text {
+    case "1", "1.0", "true": return "on"
+    case "0", "0.0", "false", "": return "off"
+    default: return nil
+    }
+  }
+
+  /// Poll a chip's element until it reports `expected` (3 s), and return its last word.
+  private func waitForChipState(_ identifier: String, _ expected: String) -> String? {
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeChipState(of: identifier)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeChipState(of: identifier)
+    }
+    if shown != expected {
+      dumpHierarchy("\(identifier) never announced \(expected)")
+    }
+    return shown
   }
 
   // MARK: - Dialog

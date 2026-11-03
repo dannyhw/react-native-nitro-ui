@@ -1,0 +1,60 @@
+# Failure excerpt — real-input:ios:--control:chip
+
+- Ran: 2026-11-02T17:11:24.456Z on code tree `8c8fcf0965f9` at HEAD `4886176` (branch `task/G12-chip`)
+- Command: `node scripts/real-input/ios.mjs --control chip`
+- Result: fail, exit 1, 105054 ms
+- Load: start 8.01, end 63.79, median 62.73, max 84.61
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-h83ki`
+- Full log: `task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log` (<store>/task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (still live)
+  |   G12-h83ki                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 63.79 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 21 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: real-input:ios:--control:chip
+gate: node scripts/real-input/ios.mjs --control chip (cwd .)
+gate: code tree 8c8fcf0965f9 at HEAD 4886176
+gate: git tree 65b9a6fbfc74 with a DIRTY worktree (not reusable)
+gate: log task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log
+gate:       <store>/task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log
+real-input (ios): iPhone 17 · F08675D3-A32B-4F88-BC81-02D7E0CB797E · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+
+real-input (ios): Error: real-input: the code tree changed during the build (before 8c8fcf0965f9, after d4fe1a391134: 721 files when it started, 722 now). No stamp was written - nothing here proves which sources this binary came from. Run the build again with nothing else writing to the tree.
+       an incremental xcodebuild that never recompiled the generated hybrids is the usual cause: `rm -rf example/ios/build` and run again.
+gate: real-input:ios:--control:chip FAIL in 105.1 s - note: the code tree moved during the run (d4fe1a391134 now), so this line describes 8c8fcf0965f9
+gate: recorded in .gates/task/G12-chip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G12-chip/real-input+ios+--control+chip-2026-11-02T17-11-23.997Z.log (4 probe(s))
+
+```

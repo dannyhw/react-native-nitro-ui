@@ -14,7 +14,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'host'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -26,6 +26,7 @@ export const SCREEN_FILE = Object.freeze({
   picker: 'example/src/PickerScreen.tsx',
   progress: 'example/src/ProgressScreen.tsx',
   menu: 'example/src/MenuScreen.tsx',
+  chip: 'example/src/ChipScreen.tsx',
   host: 'example/src/HostScreen.tsx',
   textfield: 'example/src/TextFieldScreen.tsx',
 });

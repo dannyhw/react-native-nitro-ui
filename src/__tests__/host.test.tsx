@@ -20,6 +20,7 @@ import {
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
 import { BottomSheet } from '../components/BottomSheet/BottomSheet';
+import { Chip } from '../components/Chip/Chip';
 import {
   HOSTABLE_CONTROLS,
   UNHOSTABLE_CONTROLS,
@@ -187,6 +188,18 @@ describe('Host children', () => {
     expect(error?.message).toMatch(/Child 1/);
     expect(error?.message).toMatch(/<View>/);
     expect(error?.message).toMatch(/Move it outside/);
+  });
+
+  /**
+   * `Chip` (G12) is refused too: it was built without a round that measured it inside
+   * a Host. The refusal names it, and says whose `<Chip>` it is - an app may well have
+   * a chip of its own.
+   */
+  it('names the Chip, which no round has measured inside a Host', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('Chip');
+    const error = errorFor(<Chip label="Vegan" />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/react-native-nitro-ui's <Chip>/);
   });
 
   /**

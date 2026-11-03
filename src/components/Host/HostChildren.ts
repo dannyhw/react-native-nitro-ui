@@ -32,6 +32,7 @@ import { Menu } from '../Menu/Menu';
 import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
 import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { TextField } from '../TextField/TextField';
+import { Chip } from '../Chip/Chip';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -80,19 +81,23 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * Empty from H2b until G13: every control the library shipped was hosted. Two kinds of
- * control start here now:
+ * Empty from H2b until G12 and G13 added controls without a round inside a Host. Two
+ * kinds of control are refused now:
  *
  * - **refused until a round measures it** - the TextField (G13): a field inside a shared
  *   composition means IME sessions and focus owned by the Host, and no round has measured
- *   that yet (G13 report, follow-ups). The next unmeasured control starts here too.
+ *   that yet (G13 report, follow-ups); and the Chip (G12), built without that round
+ *   (`docs/components/chip.md`, "Limits"). The next unmeasured control starts here too.
  * - **refused by design** - the BottomSheet (G14): its content is React Native views, and a
  *   Host has no place for an RN view (`docs/components/host.md`, "What a Host cannot hold").
  *
- * `host.test.tsx` asks the refusal sentence of each row.
+ * The rows are hand-written rather than generated: the registry writes the imports and
+ * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
+ * and asks the refusal sentence of each row.
  */
 export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [TextField, 'TextField'],
+  [Chip, 'Chip'],
   [BottomSheet, 'BottomSheet'],
 ]);
 

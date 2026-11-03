@@ -681,20 +681,10 @@ describe('the generated tables cover what they claim', () => {
       [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
         (m) => m[1]
       );
-    // The rows of UNHOSTABLE_CONTROLS: a control a Host refuses by design (G14's
-    // BottomSheet) is imported for that table, not for HOSTABLE_CONTROLS.
-    const refused = (text) => {
-      const at = text.indexOf('export const UNHOSTABLE_CONTROLS');
-      return [
-        ...text
-          .slice(at, text.indexOf(']);', at))
-          .matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm),
-      ].map((m) => m[1]);
-    };
     const before = readRepo('src/components/Host/HostChildren.ts');
-    expect([...imports(before)].sort()).toEqual(
-      [...rows(before), ...refused(before)].sort()
-    );
+    // One import per row of either table, in whatever order the two lists happen to
+    // keep: three controls are refused now (TextField, Chip, BottomSheet).
+    expect([...imports(before)].sort()).toEqual([...rows(before)].sort());
 
     const flipped = repoManifests().map((m) =>
       m.name === 'Switch' ? { ...m, hostable: false } : m

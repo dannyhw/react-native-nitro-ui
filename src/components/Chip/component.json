@@ -1,0 +1,15 @@
+{
+  "name": "Chip",
+  "hybridView": "NitroUiChip",
+  "implementation": "HybridNitroUiChip",
+  "id": "chip",
+  "sizing": "intrinsic",
+  "hostable": false,
+  "exampleTab": "chip",
+  "exampleLabel": "Chip",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither"
+}

@@ -103,6 +103,9 @@ describe('the a11y rule, on measured trees', () => {
       // table whose Android node is a real platform widget rather than Compose semantics,
       // which is exactly why the Compose controls are the ones with debt.
       'menu',
+      // G12's Chip, measured on pair-a: the name sits inside the FilterChip's own
+      // checkable, clickable 48 dp node - the Switch's shape - so no debt row.
+      'chip',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
