@@ -151,9 +151,10 @@ struct CheckboxContent: NitroUIContent {
         Text("")
       }
     }
-    // A `Toggle` with a label keeps the label visible and the whole row tappable,
-    // which is the row behaviour the component promises; a label-less one hides the
-    // empty text so the box is the switch alone.
+    // A `Toggle` with a label keeps the label visible; a label-less one hides the empty
+    // text so the box is the switch alone. The row's tap target is added at the end of
+    // this chain rather than assumed: measured here, a switch-style `Toggle` answers
+    // touches on its glyph only, and a press on the label delivers nothing at all.
     .modifier(OptionalHideLabels(hidden: model.label == nil))
     .toggleStyle(.switch)
     .disabled(model.disabled)
@@ -163,6 +164,22 @@ struct CheckboxContent: NitroUIContent {
     // (an empty `accessibilityLabel("")` would silence the text it does have, so it
     // is applied only when there is a name - Switch's and Chip's rule).
     .modifier(OptionalAccessibility(label: name))
+    // The label is part of the control, so touching it is touching the control - which
+    // is also what Android's merged `Row` node does. A switch-style `Toggle` answers
+    // touches on the glyph only: a press on a labelled Checkbox's label was measured
+    // here (`real-input:ios --control checkbox`) as no `value` change and no event at
+    // all, while a press on the glyph toggled. So the row gets a tap target of its own,
+    // and it asks through the hook a press is documented to take - `press()`: the
+    // opposite of what the box shows, refused while `disabled`. The overlay takes the
+    // glyph's touches as well, which is the point - one handler, once per tap (the
+    // harness's event counter and real-input's counts are what go red on a double), and
+    // out of the accessibility tree, so the element a reader meets is still the switch.
+    .overlay {
+      Color.clear
+        .contentShape(Rectangle())
+        .accessibilityHidden(true)
+        .onTapGesture { model.press() }
+    }
   }
 }
 

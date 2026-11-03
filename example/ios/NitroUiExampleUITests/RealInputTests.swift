@@ -2739,6 +2739,25 @@ final class RealInputTests: XCTestCase {
       "the Checkbox's own element should start by reporting value 0"
     )
 
+    // Where the taps below land is part of this check, not a detail of it. The fixture
+    // gives this Checkbox a label, which makes the row wider than the switch, so the
+    // row's middle - where every press here goes - is on the label's side of the glyph.
+    // The taps therefore ask "is touching the label touching the control?", which a
+    // switch-style `Toggle` does not answer on its own (`HybridNitroUiCheckbox.swift`
+    // carries the row's tap target for exactly this reason). Asserted rather than
+    // assumed: a fixture whose label went short would move the aim onto the glyph and
+    // leave the claim unproven while still going green.
+    let glyph = enabled.descendants(matching: .`switch`).allElementsBoundByIndex.min {
+      $0.frame.width < $1.frame.width
+    }
+    XCTAssertNotNil(glyph, "the Checkbox should offer a switch element of its own")
+    XCTAssert(
+      (glyph?.frame.minX ?? .greatestFiniteMagnitude) > enabled.frame.midX,
+      "the switch glyph starts at x=\(glyph?.frame.minX ?? -1) and the row's middle is at "
+        + "x=\(enabled.frame.midX) - a press at the middle has to land on the label's side "
+        + "of the glyph, or these taps prove nothing about the label"
+    )
+
     // 1. Checked, then unchecked: one change per tap, in both directions.
     XCTAssertEqual(
       try tapUntilValue(
