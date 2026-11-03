@@ -96,6 +96,11 @@ const ECHO = {
   chipRefusedLast: 'real-input-chip-refused-last',
   chipRefusedEvents: 'real-input-chip-refused-events',
   chipPresses: 'real-input-chip-presses',
+  checkboxValue: 'real-input-checkbox-value',
+  checkboxEvents: 'real-input-checkbox-events',
+  checkboxRefusedLast: 'real-input-checkbox-refused-last',
+  checkboxRefusedEvents: 'real-input-checkbox-refused-events',
+  checkboxDisabledEvents: 'real-input-checkbox-disabled-events',
   dialogLog: 'dialog-log',
   sheetLog: 'sheet-log',
   hostValue: 'host-controlled-value',
@@ -1482,6 +1487,205 @@ const CHECKS = {
       'the enabled assist chip still presses after the refused taps — expected ' +
         `at least 2, saw ${barrier}`,
       Number(barrier) >= 2
+    );
+  },
+
+  /**
+   * A real tap checks a Material 3 Checkbox and the new value comes back to React, a
+   * change the parent refuses snaps back, and a disabled box takes nothing (G15).
+   * `RealInputTests.testRealInputCheckbox` on the other platform, assertion for
+   * assertion.
+   *
+   * The box's own state is read from the tree as well as from the echo, and for a
+   * Checkbox that read is its role: the library gives the box `Role.Checkbox` so
+   * TalkBack is offered a toggleable node, and `nativeChecked` answers only for a node
+   * with `checkable="true"` that carries the labelled control (`android-tree.mjs`). An
+   * `'off'` below is therefore both "the box says unchecked" and "the box publishes a
+   * toggle at all" — a control that published a name and no state reads null, goes red
+   * here, and then aborts inside `tapUntilValue`'s native-state guard rather than being
+   * tapped until some reading looks green (F1 M3).
+   *
+   * The refusing parent's oracle is the Chip's and SegmentedControl's: `checked` stays
+   * `false`, so every tap asks for `true` again, and a box that had kept a refused
+   * change would ask for `false` on the second tap.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'checkbox': async (t) => {
+    const named = (label) => t.requireControl(label);
+    const BOX = 'Real-input checkbox';
+    const REFUSING = 'Real-input refusing checkbox';
+    const DISABLED = 'Real-input disabled checkbox';
+
+    // 1. Before any touch: the three echoes at rest, and the box's own state. The
+    //    native read is the one a stale render cannot fake.
+    t.log.checkEquals(
+      'the checkbox starts unchecked (React renders "off")',
+      t.requireEcho(ECHO.checkboxValue),
+      'off'
+    );
+    t.log.checkEquals(
+      'the checkbox has reported no change before a touch',
+      t.requireEcho(ECHO.checkboxEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the counter the disabled checkbox reports into starts at zero, so a stray ' +
+        'delivery is a number that moved rather than a callback nobody saw',
+      t.requireEcho(ECHO.checkboxDisabledEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the box publishes a toggleable state, and it says unchecked',
+      t.nativeChecked(BOX),
+      'off'
+    );
+    // The raw flags of the node that carries the name, as evidence: the `class=`
+    // Compose writes for `Role.Checkbox` has not been measured on a device the way the
+    // Spinner class the Picker and Menu checks assert has, so it is recorded rather than
+    // guessed at, the way the Menu's popup rows are. The toggle itself is asserted
+    // above, where the reading is the library's own.
+    for (const node of t.nodesNamed(BOX)) {
+      t.log.note(
+        `name node "${node.contentDesc}": checkable=${node.checkable} ` +
+          `checked=${node.checked} enabled=${node.enabled} ` +
+          `clickable=${node.clickable} class=${node.className}`
+      );
+    }
+
+    // 2. Checked: one tap, one change, and the box agrees. Each tap is confirmed by the
+    //    value it should produce before the next one is made (as in `switch`), and
+    //    carries the box's own state as the witness that tells a dropped delivery from a
+    //    lost change event.
+    t.log.checkEquals(
+      'one real tap checks the checkbox (React renders "on")',
+      await t.tapUntilValue(
+        () => named(BOX),
+        ECHO.checkboxValue,
+        'on',
+        'the real tap that checks the box',
+        { nativeLabel: BOX }
+      ),
+      'on'
+    );
+    t.log.checkEquals(
+      "the checked box's node says it is checked",
+      t.nativeChecked(BOX),
+      'on'
+    );
+    t.log.checkEquals(
+      'one real tap reports one change',
+      t.requireEcho(ECHO.checkboxEvents),
+      '1'
+    );
+
+    // 3. Unchecked again. This is the assertion that catches a native box which only
+    //    ever asks for `true`: the tap above would have lit the "on" echo all the same,
+    //    so the echo back at "off", the node back at unchecked and the counter at
+    //    exactly 2 are what say a second tap asked for `false`.
+    t.log.checkEquals(
+      'a second real tap unchecks it (React renders "off")',
+      await t.tapUntilValue(
+        () => named(BOX),
+        ECHO.checkboxValue,
+        'off',
+        'the real tap that unchecks the box',
+        { nativeLabel: BOX }
+      ),
+      'off'
+    );
+    t.log.checkEquals(
+      'the unchecked box reports it back',
+      t.nativeChecked(BOX),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes, one per tap',
+      t.requireEcho(ECHO.checkboxEvents),
+      '2'
+    );
+
+    // 4. The refusing parent: two requests, both for `true`, and its node still
+    //    unchecked after either. No `nativeLabel` on these taps, unlike the pair above:
+    //    that guard reads a box whose state moves while the echo sits still, and a
+    //    refused box is meant to be pushed back — asserting its node below is what says
+    //    it went back, and the guard would only call a dropped press a lost event.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onCheckedChange`,
+        await t.tapUntilValue(
+          () => named(REFUSING),
+          ECHO.checkboxRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true — a checkbox that kept the refused ` +
+          'change would ask for false on the second tap',
+        t.requireEcho(ECHO.checkboxRefusedLast),
+        'true'
+      );
+      // The wait is the Chip's: Compose paints a tapped toggle before React has pushed
+      // the refused value back down, so reading the node the instant the echo moves can
+      // catch the flip the app is about to undo and report a snap-back that stuck.
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused checkbox snaps back to unchecked after request ${request}`,
+        t.nativeChecked(REFUSING),
+        'off'
+      );
+    }
+
+    // 5. The disabled box takes nothing. It is drawn from the enabled one's value and
+    //    reports into a counter of its own, so a delivery that should not have happened
+    //    is a number or a word that moved — and the enabled one's counter staying put is
+    //    also what says the press was refused where it landed rather than aimed one row
+    //    too high.
+    const disabledBox = named(DISABLED);
+    t.log.note(
+      `disabled box node: enabled=${disabledBox.enabled} ` +
+        `checkable=${disabledBox.checkable} class=${disabledBox.className} — kept as ` +
+        'evidence, not asserted, for the reason given above'
+    );
+    await t.tapNode(disabledBox);
+    t.log.checkEquals(
+      'a real tap on the disabled checkbox reports no change',
+      t.requireEchoToStay(
+        ECHO.checkboxDisabledEvents,
+        '0',
+        'a tap on the disabled checkbox to be refused'
+      ),
+      '0'
+    );
+    t.log.checkEquals(
+      'and nothing reached the enabled checkbox either',
+      t.requireEchoToStay(
+        ECHO.checkboxEvents,
+        '2',
+        'the enabled checkbox to be left alone by a tap on the disabled one'
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'the refused tap leaves the value echo where it was',
+      t.requireEcho(ECHO.checkboxValue),
+      'off'
+    );
+
+    // 6. The barrier: the same press on the enabled box still lands, so the silence
+    //    above was a refusal and not a screen that had stopped answering.
+    t.log.checkEquals(
+      'the enabled checkbox, tapped the same way, still answers',
+      await t.tapUntilValue(
+        () => named(BOX),
+        ECHO.checkboxValue,
+        'on',
+        'the barrier tap on the enabled checkbox',
+        { nativeLabel: BOX }
+      ),
+      'on'
     );
   },
 
@@ -3737,6 +3941,7 @@ class DeviceHarness {
       picker: 'Picker',
       menu: 'Menu',
       chip: 'Chip',
+      checkbox: 'Checkbox',
       dialog: 'Dialogs',
       sheet: 'Sheet',
       host: 'Host',
@@ -3751,6 +3956,7 @@ class DeviceHarness {
       picker: ECHO.pickerIndex,
       menu: ECHO.menuPick,
       chip: ECHO.chipValue,
+      checkbox: ECHO.checkboxValue,
       dialog: ECHO.dialogLog,
       sheet: ECHO.sheetLog,
       host: ECHO.hostValue,

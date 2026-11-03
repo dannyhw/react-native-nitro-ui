@@ -647,6 +647,16 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 96, height: 48 },
     ios: { width: 80, height: 28 },
   },
+  // `HybridNitroUiCheckbox.kt` (`FALLBACK_*_DP`) and `HybridNitroUiCheckbox.swift`
+  // (`declaresFallback`): Material 3's 40 dp box, and the `.switch` Toggle's box -
+  // which is the Switch's own number, because on iOS a Checkbox *is* that control,
+  // per OS (the same Swift-version split as the Switch row below). A Checkbox is a
+  // `CONTENT_SIZED_BOX` control - its width is its label's - so the suite never asks
+  // a measured Checkbox to equal these.
+  NitroUiCheckbox: {
+    android: { width: 40, height: 40 },
+    ios: { width: 56, height: 28 },
+  },
 });
 
 /**
@@ -706,6 +716,11 @@ export const CONTENT_SIZED_BOX = Object.freeze([
   // and "Measured" at 88 wide on iOS), and on Android a selected filter chip grows by
   // its check mark, so no measured configuration is any single number. `intrinsic`.
   'NitroUiChip',
+  // A checkbox is a fixed box *plus its label*: the same width rule as the Chip's, so
+  // only a bare one measures the declaration (`docs/components/checkbox.md` measures
+  // 40x40 dp for a bare box on Android and the Switch's box on iOS, and 132.1 dp wide
+  // for the shortest labelled configuration the harness mounts). `intrinsic`.
+  'NitroUiCheckbox',
 ]);
 
 /**
@@ -728,6 +743,10 @@ export const CONTENT_SIZED_BOX = Object.freeze([
  */
 export const DECLARED_FALLBACK_EXCEPTIONS = Object.freeze([
   'NitroUiSwitch ios: 51x31 under Swift <6.2 (UINavigationBar API changed)',
+  // The Checkbox's iOS row is the Switch's number for the same reason: on iOS a
+  // Checkbox renders the same `.switch` Toggle, so it declares the same
+  // OS-dependent box and pays the same older-compiler false red.
+  'NitroUiCheckbox ios: 51x31 under Swift <6.2 (the same Toggle as NitroUiSwitch)',
 ]);
 
 /**
