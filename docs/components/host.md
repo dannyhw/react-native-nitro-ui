@@ -64,7 +64,7 @@ H2a re-ran the same plan with them in the host arm, so the four were priced firs
 quiet — 37 % of its load samples sat over the ceiling**, so the run was indicative and a
 quiet re-run was pending. A5 has since run the plan quiet on `maintainer-mac-2`
 (`abe68a1`, 8 launches, 0.04 % of samples over the ceiling); its numbers are in
-[`A5-quiet-bench-mac2.report.md`](../tasks/A5-quiet-bench-mac2.report.md) and in `README.md`, and
+[`A5-quiet-bench-mac2.report.md`](../tasks/A5-quiet-bench-mac2.report.md) and in [`docs/performance.md`](../performance.md), and
 they reproduce this table's shape — `Switch` 0.91x memory / 0.84x UI CPU, `Progress` 0.45x
 (`n/v`) and `Button` 0.80x, `Slider` level at 1.02x — and five of the ᴺ flags in the table below
 clear (unhosted `Switch` and `Button` UI CPU, unhosted `Button` JS, hosted `Button` JS 0.69x,
