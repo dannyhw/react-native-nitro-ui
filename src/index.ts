@@ -125,3 +125,14 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+
+// A search field (G17, DECISIONS D38 item 2): UIKit's `UISearchTextField` on iOS and Material
+// 3's search-bar input field on Android, sharing TextField's model, handshake, IME guard and
+// `maxLength`. It has no keyboard props - the Search key is always the Return key, and an empty
+// query never submits - and it is its own native view rather than a TextField variant because
+// a declared fallback is keyed by component, so it needs its own first-frame height.
+export {
+  SearchField,
+  type SearchFieldHandle,
+  type SearchFieldProps,
+} from './components/SearchField/SearchField';

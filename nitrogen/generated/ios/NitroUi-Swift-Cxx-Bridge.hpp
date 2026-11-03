@@ -26,6 +26,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
+// Forward declaration of `HybridNitroUiSearchFieldSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiSearchFieldSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
@@ -48,6 +50,8 @@ namespace margelo::nitro::nitroui { struct NitroUiMenuRow; }
 namespace margelo::nitro::nitroui { struct NitroUiMenuSize; }
 // Forward declaration of `NitroUiPickerSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiPickerSize; }
+// Forward declaration of `NitroUiSearchFieldTestState` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiSearchFieldTestState; }
 // Forward declaration of `NitroUiSegmentedControlSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
 // Forward declaration of `NitroUiSheetDetent` to properly resolve imports.
@@ -78,6 +82,8 @@ namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
+// Forward declaration of `HybridNitroUiSearchFieldSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiSearchFieldSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
@@ -97,6 +103,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
+#include "HybridNitroUiSearchFieldSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
@@ -108,6 +115,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "NitroUiMenuRow.hpp"
 #include "NitroUiMenuSize.hpp"
 #include "NitroUiPickerSize.hpp"
+#include "NitroUiSearchFieldTestState.hpp"
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSheetDetent.hpp"
 #include "NitroUiSize.hpp"
@@ -731,6 +739,94 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return Result<bool>::withError(error);
   }
   
+  // pragma MARK: std::function<void(const std::string& /* value */, double /* eventCount */)>
+  /**
+   * Specialized version of `std::function<void(const std::string&, double)>`.
+   */
+  using Func_void_std__string_double = std::function<void(const std::string& /* value */, double /* eventCount */)>;
+  /**
+   * Wrapper class for a `std::function<void(const std::string& / * value * /, double / * eventCount * /)>`, this can be used from Swift.
+   */
+  class Func_void_std__string_double_Wrapper final {
+  public:
+    explicit Func_void_std__string_double_Wrapper(std::function<void(const std::string& /* value */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(const std::string& /* value */, double /* eventCount */)>>(std::move(func))) {}
+    inline void call(std::string value, double eventCount) const noexcept {
+      _function->operator()(value, eventCount);
+    }
+  private:
+    std::unique_ptr<std::function<void(const std::string& /* value */, double /* eventCount */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_std__string_double create_Func_void_std__string_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_std__string_double_Wrapper wrap_Func_void_std__string_double(Func_void_std__string_double value) noexcept {
+    return Func_void_std__string_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const std::string& / * value * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_const_std__string_____value_____double____eventCount______ = std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>> create_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::function<void(const std::string& /* value */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const std::string& /* value */, double /* eventCount */)> get_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::optional<std::function<void(bool /* focused */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(bool / * focused * /)>>`.
+   */
+  using std__optional_std__function_void_bool____focused______ = std::optional<std::function<void(bool /* focused */)>>;
+  inline std::optional<std::function<void(bool /* focused */)>> create_std__optional_std__function_void_bool____focused______(const std::function<void(bool /* focused */)>& value) noexcept {
+    return std::optional<std::function<void(bool /* focused */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_bool____focused______(const std::optional<std::function<void(bool /* focused */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(bool /* focused */)> get_std__optional_std__function_void_bool____focused______(const std::optional<std::function<void(bool /* focused */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::optional<std::function<void(const std::string& /* text */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const std::string& / * text * /)>>`.
+   */
+  using std__optional_std__function_void_const_std__string_____text______ = std::optional<std::function<void(const std::string& /* text */)>>;
+  inline std::optional<std::function<void(const std::string& /* text */)>> create_std__optional_std__function_void_const_std__string_____text______(const std::function<void(const std::string& /* text */)>& value) noexcept {
+    return std::optional<std::function<void(const std::string& /* text */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_std__string_____text______(const std::optional<std::function<void(const std::string& /* text */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const std::string& /* text */)> get_std__optional_std__function_void_const_std__string_____text______(const std::optional<std::function<void(const std::string& /* text */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiSearchFieldSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiSearchFieldSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiSearchFieldSpec_ = std::shared_ptr<HybridNitroUiSearchFieldSpec>;
+  std::shared_ptr<HybridNitroUiSearchFieldSpec> create_std__shared_ptr_HybridNitroUiSearchFieldSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiSearchFieldSpec_(std__shared_ptr_HybridNitroUiSearchFieldSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiSearchFieldSpec>
+  using std__weak_ptr_HybridNitroUiSearchFieldSpec_ = std::weak_ptr<HybridNitroUiSearchFieldSpec>;
+  inline std__weak_ptr_HybridNitroUiSearchFieldSpec_ weakify_std__shared_ptr_HybridNitroUiSearchFieldSpec_(const std::shared_ptr<HybridNitroUiSearchFieldSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiSearchFieldTestState>
+  using Result_NitroUiSearchFieldTestState_ = Result<NitroUiSearchFieldTestState>;
+  inline Result_NitroUiSearchFieldTestState_ create_Result_NitroUiSearchFieldTestState_(const NitroUiSearchFieldTestState& value) noexcept {
+    return Result<NitroUiSearchFieldTestState>::withValue(value);
+  }
+  inline Result_NitroUiSearchFieldTestState_ create_Result_NitroUiSearchFieldTestState_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiSearchFieldTestState>::withError(error);
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiSegmentedControlSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridNitroUiSegmentedControlSpec>`.
@@ -814,73 +910,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiSwitchSpec>
   using std__weak_ptr_HybridNitroUiSwitchSpec_ = std::weak_ptr<HybridNitroUiSwitchSpec>;
   inline std__weak_ptr_HybridNitroUiSwitchSpec_ weakify_std__shared_ptr_HybridNitroUiSwitchSpec_(const std::shared_ptr<HybridNitroUiSwitchSpec>& strong) noexcept { return strong; }
-  
-  // pragma MARK: std::function<void(const std::string& /* value */, double /* eventCount */)>
-  /**
-   * Specialized version of `std::function<void(const std::string&, double)>`.
-   */
-  using Func_void_std__string_double = std::function<void(const std::string& /* value */, double /* eventCount */)>;
-  /**
-   * Wrapper class for a `std::function<void(const std::string& / * value * /, double / * eventCount * /)>`, this can be used from Swift.
-   */
-  class Func_void_std__string_double_Wrapper final {
-  public:
-    explicit Func_void_std__string_double_Wrapper(std::function<void(const std::string& /* value */, double /* eventCount */)>&& func): _function(std::make_unique<std::function<void(const std::string& /* value */, double /* eventCount */)>>(std::move(func))) {}
-    inline void call(std::string value, double eventCount) const noexcept {
-      _function->operator()(value, eventCount);
-    }
-  private:
-    std::unique_ptr<std::function<void(const std::string& /* value */, double /* eventCount */)>> _function;
-  } SWIFT_NONCOPYABLE;
-  Func_void_std__string_double create_Func_void_std__string_double(void* NON_NULL swiftClosureWrapper) noexcept;
-  inline Func_void_std__string_double_Wrapper wrap_Func_void_std__string_double(Func_void_std__string_double value) noexcept {
-    return Func_void_std__string_double_Wrapper(std::move(value));
-  }
-  
-  // pragma MARK: std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>
-  /**
-   * Specialized version of `std::optional<std::function<void(const std::string& / * value * /, double / * eventCount * /)>>`.
-   */
-  using std__optional_std__function_void_const_std__string_____value_____double____eventCount______ = std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>;
-  inline std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>> create_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::function<void(const std::string& /* value */, double /* eventCount */)>& value) noexcept {
-    return std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>(value);
-  }
-  inline bool has_value_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline std::function<void(const std::string& /* value */, double /* eventCount */)> get_std__optional_std__function_void_const_std__string_____value_____double____eventCount______(const std::optional<std::function<void(const std::string& /* value */, double /* eventCount */)>>& optional) noexcept {
-    return optional.value();
-  }
-  
-  // pragma MARK: std::optional<std::function<void(bool /* focused */)>>
-  /**
-   * Specialized version of `std::optional<std::function<void(bool / * focused * /)>>`.
-   */
-  using std__optional_std__function_void_bool____focused______ = std::optional<std::function<void(bool /* focused */)>>;
-  inline std::optional<std::function<void(bool /* focused */)>> create_std__optional_std__function_void_bool____focused______(const std::function<void(bool /* focused */)>& value) noexcept {
-    return std::optional<std::function<void(bool /* focused */)>>(value);
-  }
-  inline bool has_value_std__optional_std__function_void_bool____focused______(const std::optional<std::function<void(bool /* focused */)>>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline std::function<void(bool /* focused */)> get_std__optional_std__function_void_bool____focused______(const std::optional<std::function<void(bool /* focused */)>>& optional) noexcept {
-    return optional.value();
-  }
-  
-  // pragma MARK: std::optional<std::function<void(const std::string& /* text */)>>
-  /**
-   * Specialized version of `std::optional<std::function<void(const std::string& / * text * /)>>`.
-   */
-  using std__optional_std__function_void_const_std__string_____text______ = std::optional<std::function<void(const std::string& /* text */)>>;
-  inline std::optional<std::function<void(const std::string& /* text */)>> create_std__optional_std__function_void_const_std__string_____text______(const std::function<void(const std::string& /* text */)>& value) noexcept {
-    return std::optional<std::function<void(const std::string& /* text */)>>(value);
-  }
-  inline bool has_value_std__optional_std__function_void_const_std__string_____text______(const std::optional<std::function<void(const std::string& /* text */)>>& optional) noexcept {
-    return optional.has_value();
-  }
-  inline std::function<void(const std::string& /* text */)> get_std__optional_std__function_void_const_std__string_____text______(const std::optional<std::function<void(const std::string& /* text */)>>& optional) noexcept {
-    return optional.value();
-  }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiTextFieldSpec>
   /**
