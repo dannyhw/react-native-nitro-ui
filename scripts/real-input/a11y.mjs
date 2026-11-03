@@ -239,6 +239,21 @@ export const A11Y_CONTROLS = Object.freeze([
     iosTrait: 'switch',
   },
   {
+    id: 'checkbox',
+    component: 'Checkbox',
+    hybridView: 'NitroUiCheckbox',
+    screen: 'checkbox',
+    label: 'Real-input checkbox',
+    role: 'interactive',
+    anchorTestId: 'real-input-checkbox',
+    // iOS has no checkbox, so this is a `Toggle(.switch)`: the toggle trait, which
+    // XCUITest reports as `switch` with `value` 0/1 — the same answer Chip's filter
+    // chip measures, for the same reason (`Checkbox` renders that Toggle; see
+    // `docs/components/checkbox.md`). Android's `Role.Checkbox` is read from the
+    // uiautomator tree by `CHECKS.checkbox`, which asserts `checkable`/`checked`.
+    iosTrait: 'switch',
+  },
+  {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
     // (see the header — `uiautomator dump` never idles while an indeterminate
     // indicator animates, the same refusal that makes the manifest say

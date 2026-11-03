@@ -29,5 +29,6 @@ export const SCREEN_FILE = Object.freeze({
   chip: 'example/src/ChipScreen.tsx',
   host: 'example/src/HostScreen.tsx',
   textfield: 'example/src/TextFieldScreen.tsx',
+  checkbox: 'example/src/CheckboxScreen.tsx',
   contextmenu: 'example/src/ContextMenuScreen.tsx',
 });
