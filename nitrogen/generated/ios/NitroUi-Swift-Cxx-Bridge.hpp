@@ -34,6 +34,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `HybridNitroUiTextFieldSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiTextFieldSpec; }
+// Forward declaration of `HybridNitroUiTooltipSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiTooltipSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiChipSize` to properly resolve imports.
@@ -58,6 +60,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSize; }
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 // Forward declaration of `NitroUiTextFieldTestState` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
+// Forward declaration of `NitroUiTooltipAction` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiTooltipAction; }
 
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiBottomSheetSpec_cxx` to properly resolve imports.
@@ -86,6 +90,8 @@ namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 // Forward declaration of `HybridNitroUiTextFieldSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
+// Forward declaration of `HybridNitroUiTooltipSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 
 // Include C++ defined types
 #include "HybridNitroUiBottomSheetSpec.hpp"
@@ -101,6 +107,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "HybridNitroUiTextFieldSpec.hpp"
+#include "HybridNitroUiTooltipSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiChipSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
@@ -113,6 +120,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
 #include "NitroUiTextFieldTestState.hpp"
+#include "NitroUiTooltipAction.hpp"
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -902,5 +910,28 @@ namespace margelo::nitro::nitroui::bridge::swift {
   inline Result_NitroUiTextFieldTestState_ create_Result_NitroUiTextFieldTestState_(const std::exception_ptr& error) noexcept {
     return Result<NitroUiTextFieldTestState>::withError(error);
   }
+  
+  // pragma MARK: std::vector<NitroUiTooltipAction>
+  /**
+   * Specialized version of `std::vector<NitroUiTooltipAction>`.
+   */
+  using std__vector_NitroUiTooltipAction_ = std::vector<NitroUiTooltipAction>;
+  inline std::vector<NitroUiTooltipAction> create_std__vector_NitroUiTooltipAction_(size_t size) noexcept {
+    std::vector<NitroUiTooltipAction> vector;
+    vector.reserve(size);
+    return vector;
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiTooltipSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiTooltipSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiTooltipSpec_ = std::shared_ptr<HybridNitroUiTooltipSpec>;
+  std::shared_ptr<HybridNitroUiTooltipSpec> create_std__shared_ptr_HybridNitroUiTooltipSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiTooltipSpec_(std__shared_ptr_HybridNitroUiTooltipSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiTooltipSpec>
+  using std__weak_ptr_HybridNitroUiTooltipSpec_ = std::weak_ptr<HybridNitroUiTooltipSpec>;
+  inline std__weak_ptr_HybridNitroUiTooltipSpec_ weakify_std__shared_ptr_HybridNitroUiTooltipSpec_(const std::shared_ptr<HybridNitroUiTooltipSpec>& strong) noexcept { return strong; }
 
 } // namespace margelo::nitro::nitroui::bridge::swift

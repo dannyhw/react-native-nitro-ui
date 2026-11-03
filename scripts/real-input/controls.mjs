@@ -113,6 +113,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
     screen: 'chip',
   },
+  {
+    id: 'tooltip',
+    title:
+      'a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone',
+    screen: 'tooltip',
+  },
   // @end-generated
 ]);
 

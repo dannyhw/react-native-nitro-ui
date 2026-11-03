@@ -125,3 +125,14 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+// A tooltip the app opens next to a view (G18, DECISIONS D38): Material 3's
+// `PlainTooltip` / `RichTooltip` on Android, a UIKit popover with SwiftUI content on
+// iOS, which has no tooltip. `isPresented` is controlled through the event-count
+// handshake, an action reports `onAction` before `onIsPresentedChange(false)` (D32),
+// and it stays up until it is dismissed. The children are the anchor (`sizing: null`).
+export {
+  Tooltip,
+  type TooltipAction,
+  type TooltipPlacement,
+  type TooltipProps,
+} from './components/Tooltip/Tooltip';

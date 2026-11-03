@@ -8,21 +8,21 @@
 import NitroModules
 
 /**
- * Wraps a Swift `(_ value: Bool, _ eventCount: Double) -> Void` as a class.
+ * Wraps a Swift `(_ presented: Bool, _ eventCount: Double) -> Void` as a class.
  * This class can be used from C++, e.g. to wrap the Swift closure as a `std::function`.
  */
 public final class Func_void_bool_double {
   public typealias bridge = margelo.nitro.nitroui.bridge.swift
 
-  private let closure: (_ value: Bool, _ eventCount: Double) -> Void
+  private let closure: (_ presented: Bool, _ eventCount: Double) -> Void
 
-  public init(_ closure: @escaping (_ value: Bool, _ eventCount: Double) -> Void) {
+  public init(_ closure: @escaping (_ presented: Bool, _ eventCount: Double) -> Void) {
     self.closure = closure
   }
 
   @inline(__always)
-  public func call(value: Bool, eventCount: Double) -> Void {
-    self.closure(value, eventCount)
+  public func call(presented: Bool, eventCount: Double) -> Void {
+    self.closure(presented, eventCount)
   }
 
   /**
