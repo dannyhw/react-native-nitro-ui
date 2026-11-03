@@ -64,12 +64,12 @@ import {
 
 ## Requirements
 
-| Platform | Minimum                                                                                    |
-| -------- | ------------------------------------------------------------------------------------------ |
-| RN       | `>= 0.88` with the new architecture, or Expo SDK 58                                        |
-| iOS      | `min_ios_version_supported` (React Native's own floor — 15.1 on RN 0.88)                   |
+| Platform | Minimum                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| RN       | `>= 0.88` with the new architecture, or Expo SDK 58                                                     |
+| iOS      | `min_ios_version_supported` (React Native's own floor — 15.1 on RN 0.88)                                |
 | Android  | `minSdkVersion` 24; the app compiles with `compileSdkVersion` 37 and Android Gradle Plugin 9.1 or newer |
-| Nitro    | `react-native-nitro-modules ^0.37.1`                                                       |
+| Nitro    | `react-native-nitro-modules ^0.37.1`                                                                    |
 
 A new RN 0.88 or Expo SDK 58 app already meets the Android line: both templates
 compile against SDK 37 with AGP 9.2. An app upgraded from an older template may
