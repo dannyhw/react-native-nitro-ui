@@ -1,0 +1,123 @@
+# Failure excerpt — real-input:android:--control:bottom-sheet
+
+- Ran: 2026-11-02T23:11:47.567Z on code tree `9552728ceaa3` at HEAD `7b0b8ed` (branch `task/G14-bottomsheet`)
+- Command: `node scripts/real-input/android.mjs --control bottom-sheet`
+- Result: fail, exit 1, 460000 ms
+- Load: start 3.26, end 11.94, median 4.62, max 11.94
+- Device: android / device `emulator-5574` / lease `G14-v1501`
+- Full log: `task/G14-bottomsheet/real-input+android+--control+bottom-sheet-2026-11-02T23-11-47.567Z.log` (<store>/task/G14-bottomsheet/real-input+android+--control+bottom-sheet-2026-11-02T23-11-47.567Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 0`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/real-input+android+--control+bottom-sheet-2026-11-02T23-11-47.567Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-v1501 (still live)
+  |   G13-tj4up                G13          both              pair-b
+  |   G14-v1501                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 11.94 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 79 log line(s)
+
+```
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  bottom-sheet: a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one
+    ✓ no sheet has reported anything before a touch — expected none, saw none
+    ✓ the sheet's content is not mounted before it is presented — expected 0, saw 0
+    ✓ the presented sheet is the node named sheet-fit-sheet — expected true, saw true
+    ✓ a real tap inside the sheet presses its Pressable once — expected Pressed 1 times, saw Pressed 1 times
+    · a real tap on the TextInput to reach JS, in and out: tap 1/3 on the TextInput inside the sheet left "Input touches: in 1 out 0" - tapping again
+    · a real tap on the TextInput to reach JS, in and out: tap 2/3 on the TextInput inside the sheet left "Input touches: in 1 out 0" - tapping again
+    · a real tap on the TextInput to reach JS, in and out: tap 3/3 on the TextInput inside the sheet left "Input touches: in 1 out 0" - tapping again
+    ✗ a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 0
+    ✓ a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out) — expected true, saw true
+    ✓ and leaves the sheet up — expected 1, saw 1
+    ✓ the Pressable still takes a real tap after the scroll — expected Pressed 2 times, saw Pressed 2 times
+    ✓ Back, a tap outside and a drag down each reported the close, then the dismissal — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss
+    ✓ Back leaves the sticky sheet up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ and so does a drag down — expected 1, saw 1
+    ✓ only the sticky sheet button closed it — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss
+    · bottom-sheet: the two-detent header moved from y=1391 to y=321
+    ✓ a drag up on the header expands the sheet (its top moves up by more than a third) — expected true, saw true
+    ✓ Back from the expanded detent leaves the sheet up, half expanded — expected 1, saw 1
+    ✓ a drag up reported detent 1, Back stepped down to detent 0, and Back closed it — expected presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss, saw presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,738][1038,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,738][492,864]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2054][1038,2180]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2085][714,2211]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,384][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+bottom-sheet: FAIL (no retries)
+    failed: a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 0
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 14/14 auxiliary checks passed
+
+
+
+```
