@@ -561,8 +561,8 @@ newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields: an empty field with the platform's own prompt, a query with its clear button, a capped query and a placeholder of its own on iOS" /></td>
-    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields: an empty field with the platform's own prompt, a query with its clear button, a capped query and a placeholder of its own on Android" /></td>
+    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty field with UIKit's own prompt, a query with its clear button, a query capped at maxLength 8 and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty field with the platform's own prompt, a query with its clear button, a query capped at maxLength 8 and a field that is not editable" /></td>
   </tr>
 </table>
 
