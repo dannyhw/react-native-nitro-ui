@@ -1,0 +1,197 @@
+# Failure excerpt — harness:android:BottomSheet.harness
+
+- Ran: 2026-11-02T21:23:16.174Z on code tree `32079ce34574` at HEAD `53d8bec` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android BottomSheet.harness`
+- Result: fail, exit 1, 102466 ms
+- Load: start 4.37, end 4.16, median 3.82, max 4.55
+- Device: android / device `emulator-5574` / lease `G14-ndzag`
+- Full log: `task/G14-bottomsheet/harness+android+BottomSheet.harness-2026-11-02T21-23-16.174Z.log` (<store>/task/G14-bottomsheet/harness+android+BottomSheet.harness-2026-11-02T21-23-16.174Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet › does nothing for a user dismissal when dismissible is false`
+- `● BottomSheet › presents again when the app refuses a dismissal`
+- `● BottomSheet › gives a recycled view none of its previous sheet`
+- `expected '3' to be '0' // Object.is equality`
+- `● BottomSheet › presents at mount once its view is in a window`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 1)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 2)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 3)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+- `● BottomSheet · 50 cycles › leaves nothing behind after fifty cycles`
+- `expected +0 to be 50 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+android+BottomSheet.harness-2026-11-02T21-23-16.174Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-ndzag (still live)
+  |   G14-ndzag                G14          both              pair-a
+  |   G13-pppmh                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.16 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 141 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android BottomSheet.harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 32079ce34574, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.37/4.45 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+android+BottomSheet.harness-2026-11-02T21-23-16.174Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet › does nothing for a user dismissal when dismissible is false
+
+    "sticky" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › presents again when the app refuses a dismissal
+
+    "refuse" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet › gives a recycled view none of its previous sheet
+
+    expected '3' to be '0' // Object.is equality
+
+      [0m [90m 558 |[39m       [32m'closed'[39m
+       [90m 559 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 560 |[39m     expect(fresh[33m.[39mpresentCount)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 561 |[39m     expect(fresh[33m.[39mchildren)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 562 |[39m     expect(fresh[33m.[39minSheet)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 563 |[39m     expect(fresh[33m.[39mselected)[33m.[39mtoBe([32m'0'[39m)[33m;[39m[0m
+
+  ● BottomSheet › presents at mount once its view is in a window
+
+    "mount" never reached presented (up, counted, content in it); its report is "presented=0;js=1;live=1;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=1;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 1)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    "cycle" never reached cycle 1 up (up, counted, content in it); its report is "presented=0;js=1;live=0;presentCount=3;sheetValue=none;detents=fit;selected=0;boxW=411;boxH=240;contentW=0;contentH=0;hostH=240;children=2;inSheet=0;focused=0;roots=0;userDismissals=1;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 216 |[39m     }[33m,[39m
+       [90m 217 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 218 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 219 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 220 |[39m       )[33m,[39m
+       [90m 221 |[39m     timeoutMs[0m
+
+  ● BottomSheet · 50 cycles › leaves nothing behind after fifty cycles
+
+    expected +0 to be 50 // Object.is equality
+
+      [0m [90m 704 |[39m
+       [90m 705 |[39m   it([32m'leaves nothing behind after fifty cycles'[39m[33m,[39m [36masync[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 706 |[39m     expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 707 |[39m     [36mconst[39m probeId [33m=[39m [36mawait[39m probe()[33m;[39m
+       [90m 708 |[39m     [36mconst[39m after [33m=[39m [36mawait[39m waitForReport(
+       [90m 709 |[39m       probeId[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       10 failed, 14 passed, 24 total
+Snapshots:   0 total
+Time:        101.026 s
+Ran all test suites matching BottomSheet.harness.
+
+
+
+```

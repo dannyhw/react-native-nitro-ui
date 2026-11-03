@@ -1410,6 +1410,39 @@ describe('countsForDisplay (M3)', () => {
     ).toMatch(/2 failed of 398 tests/);
   });
 
+  it('shows a full harness run with its isolated run beside it (G14)', () => {
+    const ISOLATED = {
+      suites: { passed: 1, total: 1 },
+      tests: { passed: 2, total: 2 },
+    };
+    const passing = line({
+      gate: 'harness:ios',
+      counts: JEST,
+      summaries: [JEST, ISOLATED],
+    });
+    expect(renderGateTable({ entries: [passing], tree: TREE_A })).toContain(
+      '391 tests / 23 suites + isolated 2 tests / 1 suites'
+    );
+    const red = {
+      suites: { passed: 1, failed: 1, total: 2 },
+      tests: { passed: 2, failed: 1, total: 3 },
+    };
+    const failing = line({
+      gate: 'harness:android',
+      result: 'fail',
+      counts: JEST,
+      summaries: [JEST, red],
+    });
+    expect(
+      renderGateTable({
+        entries: [{ ...failing, result: 'fail' }],
+        tree: TREE_A,
+      })
+    ).toContain(
+      '391 tests / 23 suites + isolated 1 failed of 3 tests / 2 suites'
+    );
+  });
+
   it('still reports a single step as itself', () => {
     expect(
       countsForDisplay(line({ gate: 'harness:ios', counts: JEST }))

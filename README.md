@@ -14,27 +14,30 @@ the layout engine, and React never sees a native node.
 
 ## Components
 
-| Component            | iOS                                                         | Android                                                      | Status | Docs                                                         |
-| -------------------- | ----------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
-| `Switch`             | `Toggle(…).toggleStyle(.switch)`                            | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
-| `Slider`             | `Slider(value:in:step:onEditingChanged:)`                   | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
-| `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`  | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
-| `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`             | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
-| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                         | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                     | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)       | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)` | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
-| `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                 | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
-| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`           | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
-| `TextField`          | `UITextField` / `UITextView` (multi-line)                   | `BasicTextField(TextFieldState)`                             | next   | [text-field.md](docs/components/text-field.md)               |
-| `Host`               | a plain `View` (passthrough, by design)                     | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
+| Component            | iOS                                                            | Android                                                      | Status | Docs                                                         |
+| -------------------- | -------------------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| `Switch`             | `Toggle(…).toggleStyle(.switch)`                               | `androidx.compose.material3.Switch`                          | 0.1.0  | [switch.md](docs/components/switch.md)                       |
+| `Slider`             | `Slider(value:in:step:onEditingChanged:)`                      | `androidx.compose.material3.Slider`                          | 0.1.0  | [slider.md](docs/components/slider.md)                       |
+| `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0  | [progress.md](docs/components/progress.md)                   |
+| `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                       | 0.1.0  | [button.md](docs/components/button.md)                       |
+| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | `SingleChoiceSegmentedButtonRow`                             | 0.1.0  | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0  | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0  | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0  | [menu.md](docs/components/menu.md)                           |
+| `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | next   | [chip.md](docs/components/chip.md)                           |
+| `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | next   | [dialog.md](docs/components/dialog.md)                       |
+| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | next   | [dialog.md](docs/components/dialog.md)                       |
+| `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | next   | [text-field.md](docs/components/text-field.md)               |
+| `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content              | next   | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
+| `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children       | 0.1.0  | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It held Switches only
 in 0.1.0; `Slider`, `Progress` and `Button` joined it in 0.2.0,
-`SegmentedControl`, `Picker` and `DatePicker` in 0.3.0, and `Menu` in 0.4.0, so
-it holds every control the library ships. See [Performance](#performance) for
-what it buys and what it costs.
+`SegmentedControl`, `Picker` and `DatePicker` in 0.3.0, and `Menu` in 0.4.0.
+`Chip` is the one control it does not hold yet: a Host refuses it with an error
+that names it. See [Performance](#performance) for what it buys and what it
+costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -43,7 +46,9 @@ diagnostics) and `prewarm` (see [Sizing](#sizing)):
 ```ts
 import {
   AlertDialog,
+  BottomSheet,
   Button,
+  Chip,
   ConfirmationDialog,
   DatePicker,
   Host,
@@ -413,6 +418,44 @@ fires `onSelect` before the `onClose` that follows it. `systemImage` and
 submenu nests on iOS and appears inline under a divider on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
+### Chip
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/chip-ios.png" width="300" alt="Chip states: filter chips with two selected, assist chips and a disabled row on iOS" /></td>
+    <td><img src="docs/images/components/chip-android.png" width="300" alt="Chip states: filter chips with two selected, assist chips and a disabled row on Android" /></td>
+  </tr>
+</table>
+
+A compact control sized to its label, in two kinds. A filter chip (the default)
+has a selection: `selected` is controlled the way a Switch's `value` is, and
+`defaultSelected` starts an uncontrolled one. An assist chip is an action with
+`onPress`.
+
+```tsx name=chip
+export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+  const [openNow, setOpenNow] = useState(false);
+
+  return (
+    <>
+      <Chip label="Open now" selected={openNow} onSelectedChange={setOpenNow} />
+      <Chip label="Vegan" defaultSelected />
+      <Chip
+        variant="assist"
+        label="Directions"
+        systemImage="map"
+        onPress={onDirections}
+      />
+    </>
+  );
+}
+```
+
+`systemImage` is iOS-only. On Android a selected filter chip shows Material's
+check mark and is wider by it; on iOS selection only changes the fill.
+[chip.md](docs/components/chip.md) has the sizes and the limits.
+
 ### AlertDialog and ConfirmationDialog
 
 Two exports over one native view. A dialog has no box: the view React Native
@@ -536,6 +579,67 @@ export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
 an emoji in half. A multi-line field grows with its text; Return then inserts a
 newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
 [text-field.md](docs/components/text-field.md) has the details.
+
+### BottomSheet
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/bottom-sheet-ios.png" width="300" alt="A fit BottomSheet holding React Native content, as tall as that content, on iOS" /></td>
+    <td><img src="docs/images/components/bottom-sheet-android.png" width="300" alt="A fit BottomSheet holding React Native content, as tall as that content, on Android" /></td>
+  </tr>
+</table>
+
+A modal sheet whose content is React Native: UIKit's sheet presentation on iOS,
+Material 3's `ModalBottomSheet` on Android. The children are laid out at the
+sheet's width and take touches as anywhere else in the app; they are mounted
+only while the sheet is up.
+
+```tsx name=bottom-sheet
+export function Filters() {
+  const [open, setOpen] = useState(false);
+  const [detent, setDetent] = useState(0);
+
+  return (
+    <>
+      <Button
+        title="Filters"
+        variant="tonal"
+        size="medium"
+        onPress={() => setOpen(true)}
+      />
+      <BottomSheet
+        isPresented={open}
+        onIsPresentedChange={setOpen}
+        detents={['medium', 'large']}
+        onDetentChange={setDetent}
+        // The next presentation opens at the first detent again.
+        onDismiss={() => setDetent(0)}
+        accessibilityLabel="Filters"
+      >
+        <View style={{ padding: 24, gap: 12 }}>
+          <Text>{detent === 0 ? 'Half height' : 'Full height'}</Text>
+          <Button
+            title="Done"
+            variant="filled"
+            size="medium"
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </BottomSheet>
+    </>
+  );
+}
+```
+
+Detents use SwiftUI's names - `'fit'` (the default: as tall as the content, and
+following it), `'medium'`, `'large'`, `{ height }` and `{ fraction }` - and the
+detent the user drags to is reported, not controlled. Android's Material sheet
+has two rest positions, so there `'medium'` is the half-expanded one and the
+largest other detent the expanded one. `isPresented` works as a dialog's does. On
+iOS the sheet presents in the screen's own chain, and from a window of its own
+when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
+[bottom-sheet.md](docs/components/bottom-sheet.md) has the platform details.
 
 ### Host
 

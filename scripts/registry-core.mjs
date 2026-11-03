@@ -183,6 +183,25 @@ export const MANIFEST_SCHEMA = {
    * manifest; what is keyed to the *public* name - the Host's import and its
    * `HOSTABLE_CONTROLS` rows, and the barrel check - takes one per export.
    */
+  /**
+   * The hand-written Android view manager registered *instead of* nitrogen's
+   * generated `HybridNitroUi<Name>Manager`, when there is one. Optional, and absent
+   * for every control whose children are not React Native's.
+   *
+   * It exists for a Hybrid View whose React Native children Fabric must mount: nitrogen
+   * emits a `SimpleViewManager`, which has no `IViewGroupManager` half, so Fabric would
+   * have no `addView` for the children (the `<Host>`'s reason, `NitroUiHostViewManager`).
+   * The BottomSheet is the first control with one. The generated import and
+   * `createViewManagers` row are then left out, and `checkAndroidViewManagers` proves the
+   * package registers this class and not the generated one.
+   */
+  androidViewManager: {
+    type: 'string',
+    pattern: /^NitroUi[A-Z][A-Za-z0-9]*ViewManager$/,
+    optional: true,
+    readBy:
+      "NitroUiPackage.kt's createViewManagers: the class registered in place of the generated manager",
+  },
   exports: {
     type: 'array',
     items: /^[A-Z][A-Za-z0-9]*$/,
@@ -676,6 +695,12 @@ export function regionsFor(manifests) {
    */
   const hostArm = () =>
     manifests.filter((m) => m.hostable === true && m.bench === true);
+  /**
+   * The controls Android registers through nitrogen's generated manager: every one
+   * without an `androidViewManager` of its own (see `MANIFEST_SCHEMA`).
+   */
+  const generatedManagers = () =>
+    manifests.filter((m) => m.androidViewManager == null);
   const withManifests = (spec) => ({
     ...spec,
     manifests,
@@ -770,7 +795,7 @@ export function regionsFor(manifests) {
       anchor: 'import com.margelo.nitro.nitroui.core.NitroUiDeclaredFallbacks',
       describe: 'the view-manager imports',
       shipped: true,
-      entries: manifests,
+      entries: generatedManagers(),
       keyOf: NAME,
       entryStart:
         /^import com\.margelo\.nitro\.nitroui\.views\.HybridNitroUi([A-Z]\w*)Manager$/,
@@ -782,7 +807,7 @@ export function regionsFor(manifests) {
       anchor: '  ): List<ViewManager<*, *>> = listOf(',
       describe: 'the createViewManagers rows',
       shipped: true,
-      entries: manifests,
+      entries: generatedManagers(),
       keyOf: NAME,
       entryStart: /^ {4}HybridNitroUi([A-Z]\w*)Manager\(\),$/,
       render: (m) => `    HybridNitroUi${m.name}Manager(),`,
@@ -1127,6 +1152,42 @@ export function checkAutolinking(manifests, nitro, onDisk) {
   return problems;
 }
 
+/** Where Android's view managers are registered. */
+export const ANDROID_PACKAGE_FILE =
+  'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt';
+
+/**
+ * The hand-written Android view managers against the manifests that name one.
+ *
+ * The generator leaves such a control out of the generated rows (`regionsFor`), so
+ * without this nothing would notice the hand-written row going missing: Fabric would
+ * then find no manager for the view and the app would fail at its first mount. Both
+ * directions, because the other mistake is as quiet - the generated manager registered
+ * as well, which makes Fabric's choice the last registration and not this class.
+ *
+ * @param {any[]} manifests
+ * @param {string | null} packageText `NitroUiPackage.kt` as the plan produced it
+ */
+export function checkAndroidViewManagers(manifests, packageText) {
+  const problems = [];
+  if (packageText == null) return problems;
+  const lines = packageText.split('\n').map((line) => line.trim());
+  for (const manifest of manifests) {
+    if (manifest.androidViewManager == null) continue;
+    if (!lines.includes(`${manifest.androidViewManager}(),`)) {
+      problems.push(
+        `${ANDROID_PACKAGE_FILE}: ${manifest.name} names androidViewManager ${manifest.androidViewManager} and createViewManagers does not register it - add \`${manifest.androidViewManager}(),\` to its listOf`
+      );
+    }
+    if (lines.includes(`HybridNitroUi${manifest.name}Manager(),`)) {
+      problems.push(
+        `${ANDROID_PACKAGE_FILE}: ${manifest.name} registers the generated HybridNitroUi${manifest.name}Manager as well as ${manifest.androidViewManager} - remove the generated row`
+      );
+    }
+  }
+  return problems;
+}
+
 /**
  * The real-input table against the manifests.
  *
@@ -1409,6 +1470,12 @@ export function planRegistry(manifests, readFile) {
       manifests,
       working.get('example/src/App.tsx') ?? readFile('example/src/App.tsx'),
       readFile
+    )
+  );
+  problems.push(
+    ...checkAndroidViewManagers(
+      manifests,
+      working.get(ANDROID_PACKAGE_FILE) ?? readFile(ANDROID_PACKAGE_FILE)
     )
   );
   return { files, problems, checked: [...checked] };

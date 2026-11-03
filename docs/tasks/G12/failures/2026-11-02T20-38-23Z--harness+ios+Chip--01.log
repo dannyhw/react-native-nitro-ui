@@ -1,0 +1,124 @@
+# Failure excerpt — harness:ios:Chip
+
+- Ran: 2026-11-02T20:38:23.017Z on code tree `ff06eef20479` at HEAD `6801258` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Chip`
+- Result: fail, exit 1, 50149 ms
+- Load: start 10.82, end 9.73, median 10.82, max 12.15
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-h83ki`
+- Full log: `task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log` (<store>/task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · G12 › lays both variants out at the size the control measured`
+- `● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android`
+- `● Chip · G12 › re-keys a toggle: each state keeps its own size`
+- `● Chip · G12 › re-measures when the label changes`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-h83ki (no longer live)
+  |   M2-pd4m5                 M2           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.73 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 80 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:Chip
+gate: node ../scripts/harness.mjs --harnessRunner ios Chip (cwd example)
+gate: code tree ff06eef20479 at HEAD 6801258
+gate: git tree 4685fcb4edfb with a DIRTY worktree (not reusable)
+gate: log task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log
+gate:       <store>/task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Chip
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree ff06eef20479, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.82/17.44 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · G12 › lays both variants out at the size the control measured
+
+    testID "filter" (filter) never reached 88.00x28.00 - last box 80.00x28.00, control measured 88.00x28.00.
+
+      [0m [90m 193 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 194 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 195 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 196 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 197 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 198 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android
+
+    testID "off" (unselected) never reached 58.00x28.00 - last box 80.00x28.00, control measured 58.00x28.00.
+
+      [0m [90m 193 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 194 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 195 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 196 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 197 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 198 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● Chip · G12 › re-keys a toggle: each state keeps its own size
+
+    testID "toggled" (before the toggle) never reached 85.33x28.00 - last box 80.00x28.00, control measured 85.33x28.00.
+
+      [0m [90m 193 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 194 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 195 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 196 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 197 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 198 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● Chip · G12 › re-measures when the label changes
+
+    testID "label" (the short label) never reached 57.67x28.00 - last box 80.00x28.00, control measured 57.67x28.00.
+
+      [0m [90m 193 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 194 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 195 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 196 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 197 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 198 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 6 passed, 10 total
+Snapshots:   0 total
+Time:        48.622 s
+Ran all test suites matching Chip.
+gate: harness:ios:Chip FAIL in 50.1 s
+gate: recorded in .gates/task/G12-chip.jsonl
+
+
+gate: appended the device context to task/G12-chip/harness+ios+Chip-2026-11-02T20-38-22.515Z.log (4 probe(s))
+
+```

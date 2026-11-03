@@ -36,6 +36,7 @@
  *   | 'segmented'
  *   | 'datepicker'
  *   | 'picker'
+ *   | 'sheet'
  *   | 'host'
  * } screen The example app's tab to be
  *   on. Must be a tab `example/src/App.tsx` actually renders, and the screen
@@ -99,6 +100,18 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     title:
       'real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it',
     screen: 'textfield',
+  },
+  {
+    id: 'bottom-sheet',
+    title:
+      'a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one',
+    screen: 'sheet',
+  },
+  {
+    id: 'chip',
+    title:
+      'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
+    screen: 'chip',
   },
   // @end-generated
 ]);

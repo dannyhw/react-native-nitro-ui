@@ -19,6 +19,8 @@ import {
   assertHostChildren,
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
+import { BottomSheet } from '../components/BottomSheet/BottomSheet';
+import { Chip } from '../components/Chip/Chip';
 import {
   HOSTABLE_CONTROLS,
   UNHOSTABLE_CONTROLS,
@@ -189,13 +191,25 @@ describe('Host children', () => {
   });
 
   /**
+   * `Chip` (G12) is refused too: it was built without a round that measured it inside
+   * a Host. The refusal names it, and says whose `<Chip>` it is - an app may well have
+   * a chip of its own.
+   */
+  it('names the Chip, which no round has measured inside a Host', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('Chip');
+    const error = errorFor(<Chip label="Vegan" />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/react-native-nitro-ui's <Chip>/);
+  });
+
+  /**
    * The refusal sentence for a nitro-ui control that has not been measured inside a
    * Host. From H2b until G13 no shipped control was refused, so this used a stand-in;
    * the TextField is the first real row (`UNHOSTABLE_CONTROLS`), and the sentence is
    * asked of it directly.
    */
   it('names a control the Host does not render yet', () => {
-    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['TextField']);
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('TextField');
     const error = errorFor(<TextField placeholder="Name" />);
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/<TextField>/);
@@ -210,6 +224,19 @@ describe('Host children', () => {
     } finally {
       HOSTABLE_CONTROLS.delete(TextField);
     }
+  });
+
+  /**
+   * `BottomSheet` (G14) is refused by design rather than for want of a measurement: its
+   * content is React Native views, which a Host has no place for. The same sentence.
+   */
+  it('names a control the Host refuses by design', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('BottomSheet');
+    expect(HOSTABLE_CONTROLS.has(BottomSheet)).toBe(false);
+    const error = errorFor(<BottomSheet isPresented={false} />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/<BottomSheet>/);
+    expect(error?.message).toMatch(/react-native-nitro-ui's <BottomSheet>/);
   });
 
   /**

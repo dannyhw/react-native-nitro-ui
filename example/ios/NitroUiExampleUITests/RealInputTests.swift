@@ -47,7 +47,9 @@ final class RealInputTests: XCTestCase {
     static let datePickerTab = "tab-datepicker"
     static let pickerTab = "tab-picker"
     static let menuTab = "tab-menu"
+    static let chipTab = "tab-chip"
     static let dialogTab = "tab-dialog"
+    static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
   }
@@ -71,7 +73,14 @@ final class RealInputTests: XCTestCase {
     static let pickerEvents = "real-input-picker-events"
     static let menuPick = "real-input-menu-pick"
     static let menuEvents = "real-input-menu-events"
+    static let chipValue = "real-input-chip-value"
+    static let chipEvents = "real-input-chip-events"
+    static let chipRefusedLast = "real-input-chip-refused-last"
+    static let chipRefusedEvents = "real-input-chip-refused-events"
+    static let chipPresses = "real-input-chip-presses"
     static let dialogLog = "dialog-log"
+    static let sheetLog = "sheet-log"
+    static let sheetPresses = "sheet-presses"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -364,6 +373,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.pickerTab, screenAnchor: Echo.pickerIndex),
       A11yCase(id: "menu", testId: "real-input-menu", label: "Real-input menu",
                tab: Tab.menuTab, screenAnchor: Echo.menuPick),
+      A11yCase(id: "chip", testId: "real-input-chip", label: "Real-input chip",
+               tab: Tab.chipTab, screenAnchor: Echo.chipValue),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -2504,6 +2515,181 @@ final class RealInputTests: XCTestCase {
     )
   }
 
+  // MARK: - Chip
+
+  /// A real tap toggles a filter chip, a toggle the parent refuses snaps back, an
+  /// assist chip presses, and a disabled chip of either kind takes nothing (G12).
+  ///
+  /// This is also where the Chip's iOS accessibility is asserted: the SwiftUI hosting
+  /// view exposes no element to an in-app probe on iOS 27, so the harness cannot read
+  /// it, and XCUITest can. The filter chip's own element has to say it is selected
+  /// after a tap and not after the next one - read from the element's `value`, which
+  /// is what VoiceOver speaks, not from the echo.
+  ///
+  /// The refusing chip's oracle is the same as SegmentedControl's: its parent keeps
+  /// `selected={false}`, so each tap asks for `true` again. A chip that had kept the
+  /// refused selection would ask for `false` on the second tap, so two requests that
+  /// both say `true` are the snap-back.
+  func testRealInputChip() throws {
+    try goToTab(Tab.chipTab, showing: Echo.chipValue)
+    let filter = try required("real-input-chip", as: "the controlled filter chip")
+    let disabled = try required("real-input-chip-disabled", as: "the disabled filter chip")
+    let assist = try required("real-input-chip-assist", as: "the assist chip")
+    let assistDisabled = try required(
+      "real-input-chip-assist-disabled", as: "the disabled assist chip")
+    XCTAssertEqual(try read(Echo.chipValue), "off", "the filter chip should start unselected")
+    XCTAssertEqual(try read(Echo.chipEvents), "0", "no change should be reported before a tap")
+    XCTAssertEqual(
+      nativeChipState(of: "real-input-chip"), "off",
+      "the filter chip's own element should start by announcing itself not selected")
+
+    // 1. On, then off: each tap is one change, the echo follows, and so does the
+    //    element VoiceOver reads.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip",
+        echo: Echo.chipValue,
+        expected: "on",
+        as: "the controlled filter chip",
+        waitingFor: "the real tap that selects the chip",
+        nativeState: { self.nativeChipState(of: "real-input-chip") }
+      ),
+      "on",
+      "one real tap should select the filter chip and React should render on"
+    )
+    XCTAssertEqual(
+      waitForChipState("real-input-chip", "on"), "on",
+      "the selected chip's element should announce itself selected")
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip",
+        echo: Echo.chipValue,
+        expected: "off",
+        as: "the controlled filter chip",
+        waitingFor: "the real tap that deselects the chip",
+        nativeState: { self.nativeChipState(of: "real-input-chip") }
+      ),
+      "off",
+      "a second real tap should deselect the chip"
+    )
+    XCTAssertEqual(try read(Echo.chipEvents), "2", "two taps should report two changes")
+    XCTAssertEqual(
+      waitForChipState("real-input-chip", "off"), "off",
+      "the deselected chip's element should stop announcing itself selected")
+
+    // 2. The refusing parent: two requests, both for `true`, and the chip still not
+    //    selected after either.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-chip-refusing",
+          echo: Echo.chipRefusedEvents,
+          expected: request,
+          as: "the refusing filter chip",
+          waitingFor: "refused request \(request)"
+        ),
+        request,
+        "each real tap on the refusing chip should reach onSelectedChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.chipRefusedLast), "true",
+        "refused request \(request) should ask for true: a chip that kept the refused "
+          + "selection would ask for false on the second tap"
+      )
+      XCTAssertEqual(
+        waitForChipState("real-input-chip-refusing", "off"), "off",
+        "the refused chip should snap back to not selected after request \(request)")
+    }
+
+    // 3. The assist chip presses once per tap.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip-assist",
+        echo: Echo.chipPresses,
+        expected: "1",
+        as: "the assist chip",
+        waitingFor: "the real tap on the assist chip"
+      ),
+      "1",
+      "one real tap on the assist chip should reach onPress once"
+    )
+
+    // 4. Neither disabled chip takes a tap. Both are wired to the same counters as
+    //    their enabled twins, so a stray delivery is a number that moved.
+    XCTAssertFalse(
+      chipElement(of: "real-input-chip-disabled")?.isEnabled ?? true,
+      "the disabled filter chip's element should announce itself dimmed")
+    disabled.fingerTap()
+    assistDisabled.fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.chipEvents, timeout: 1.5) { $0 != "2" }, "2",
+      "a real tap on the disabled filter chip should be refused")
+    XCTAssertEqual(
+      readUntil(Echo.chipPresses, timeout: 1.5) { $0 != "1" }, "1",
+      "a real tap on the disabled assist chip should be refused")
+    XCTAssertEqual(try read(Echo.chipValue), "off", "the refused taps should leave the chip off")
+
+    // 5. The barrier: the same taps, on the enabled twins, still land - so the silence
+    //    above was a refusal and not a screen that stopped answering.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-chip-assist",
+        echo: Echo.chipPresses,
+        expected: "2",
+        as: "the assist chip",
+        waitingFor: "the barrier tap on the assist chip"
+      ),
+      "2",
+      "the enabled assist chip, tapped the same way, should still press"
+    )
+    XCTAssert(filter.isHittable, "the filter chip should still be touchable")
+    XCTAssert(assist.isHittable, "the assist chip should still be touchable")
+  }
+
+  /// The chip's own accessibility element: the SwiftUI control inside the React Native
+  /// component view that carries the `testID` - the same reason `nativeSwitchState`
+  /// asks the inner element first.
+  private func chipElement(of identifier: String) -> XCUIElement? {
+    let container = app.descendants(matching: .any)[identifier].firstMatch
+    guard container.exists else { return nil }
+    // A filter chip's `Toggle(.button)` is reported as a switch (measured), an assist
+    // chip's `Button` as a button.
+    for type in [XCUIElement.ElementType.`switch`, .button] {
+      let inner = container.descendants(matching: type).firstMatch
+      if inner.exists { return inner }
+    }
+    return nil
+  }
+
+  /// Whether the chip's element says it is selected, as "on"/"off", or nil when nothing
+  /// answers. The filter chip's element answers with `value` 1/0 (measured); a selected
+  /// button would answer with `isSelected`, so either counts.
+  private func nativeChipState(of identifier: String) -> String? {
+    guard let element = chipElement(of: identifier) else { return nil }
+    if element.isSelected { return "on" }
+    let raw = element.value
+    let text = (raw as? NSNumber)?.stringValue ?? (raw as? String) ?? ""
+    switch text {
+    case "1", "1.0", "true": return "on"
+    case "0", "0.0", "false", "": return "off"
+    default: return nil
+    }
+  }
+
+  /// Poll a chip's element until it reports `expected` (3 s), and return its last word.
+  private func waitForChipState(_ identifier: String, _ expected: String) -> String? {
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeChipState(of: identifier)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeChipState(of: identifier)
+    }
+    if shown != expected {
+      dumpHierarchy("\(identifier) never announced \(expected)")
+    }
+    return shown
+  }
+
   // MARK: - Dialog
 
   /// A real tap opens each dialog, a real tap on an action reaches JS before the
@@ -2660,6 +2846,192 @@ final class RealInputTests: XCTestCase {
       "a sheet's action reports its id, then the close"
     )
     waitUntilOptionGone("Copy link", "the action to take the sheet down")
+  }
+
+  /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN
+  /// button, a tap on a `Pressable` *inside* the sheet reaches JS through the sheet's own
+  /// touch root, and a drag down and a tap outside each close a dismissible sheet -
+  /// reported as the close, then the dismissal - while neither closes a sticky one.
+  /// A drag up on the two-detent sheet reports the second detent.
+  ///
+  /// The screen's log is read only with every sheet down: a presented sheet is modal to
+  /// VoiceOver (`accessibilityViewIsModal`), which keeps the app's own elements out of
+  /// the tree XCUITest reads while it is up. Inside the sheet, `sheet-presses` is the
+  /// sheet's own echo.
+  func testRealInputBottomSheet() throws {
+    try goToTab(Tab.sheetTab, showing: Echo.sheetLog)
+    XCTAssertEqual(try read(Echo.sheetLog), "none", "no sheet has reported anything before a touch")
+    XCTAssertFalse(
+      app.descendants(matching: .any)["sheet-press"].exists,
+      "the sheet's content is not mounted before it is presented"
+    )
+
+    // 1. A real tap opens the fit sheet, whose content is React Native.
+    try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
+    // The sheet's own view carries `<testID>-sheet`, for a test or an a11y tool to find.
+    _ = try required("sheet-fit-sheet", as: "the presented sheet, by its testID")
+    let pressable = try required("sheet-press", as: "the Pressable inside the sheet")
+    let title = try required("sheet-fit-title", as: "the fit sheet's title")
+    XCTAssertGreaterThan(
+      title.frame.minY,
+      app.frame.height * 0.4,
+      "a fit sheet sits low on the screen, as tall as its content (title at \(title.frame))"
+    )
+
+    // 2. A real tap on the Pressable inside the sheet reaches JS: the sheet's own echo.
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the Pressable inside the sheet",
+        waitingFor: "the real tap inside the sheet to reach JS",
+        press: { _ in pressable.fingerTap() },
+        reading: { self.echoText(Echo.sheetPresses) }
+      ) { shown in
+        shown == "Pressed 1 times"
+      },
+      "Pressed 1 times",
+      "a real tap inside the sheet presses its Pressable once"
+    )
+
+    // 3. A drag down closes it: the close, then the dismissal.
+    try dragSheetDown(from: "sheet-fit-title", until: "sheet-press")
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0 == "press:1 > presented:false > dismiss" },
+      "press:1 > presented:false > dismiss",
+      "a drag down reports the close, then the dismissal - and the press before them"
+    )
+
+    // 4. A tap outside closes it too.
+    try tapUntilElement("sheet-open-fit", as: "the fit sheet's opener", appears: "sheet-press")
+    try tapOutsideSheet(until: "sheet-press")
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0.hasSuffix("dismiss > presented:false > dismiss") },
+      "press:1 > presented:false > dismiss > presented:false > dismiss",
+      "a tap outside reports the close, then the dismissal"
+    )
+
+    // 5. A sticky sheet: neither a drag down nor a tap outside closes it; its button does.
+    try tapUntilElement("sheet-open-sticky", as: "the sticky sheet's opener", appears: "sheet-sticky-close")
+    let stickyTitle = try required("sheet-sticky-title", as: "the sticky sheet's title")
+    stickyTitle.centre.press(
+      forDuration: 0.05,
+      thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
+    )
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertTrue(
+      app.descendants(matching: .any)["sheet-sticky-close"].exists,
+      "a drag down leaves a sticky sheet up"
+    )
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).fingerTap()
+    Thread.sleep(forTimeInterval: 1.5)
+    XCTAssertTrue(
+      app.descendants(matching: .any)["sheet-sticky-close"].exists,
+      "and so does a tap outside"
+    )
+    try pressUntil(
+      named: "the sticky sheet's own button",
+      waitingFor: "the real tap on the sticky sheet's button to close it",
+      press: { attempt in
+        let close = self.app.descendants(matching: .any)["sheet-sticky-close"]
+        if attempt > 1 && !close.exists { return }
+        close.fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)["sheet-sticky-close"].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+    XCTAssertEqual(
+      readUntil(Echo.sheetLog) { $0.hasSuffix("close > dismiss") },
+      "press:1 > presented:false > dismiss > presented:false > dismiss > close > dismiss",
+      "only the sticky sheet's own button closed it, and that close is the app's: no presented:false"
+    )
+
+    // 6. The two-detent sheet: a drag up on its header reports the second detent.
+    try tapUntilElement("sheet-open-two", as: "the two-detent sheet's opener", appears: "sheet-two-header")
+    let header = try required("sheet-two-header", as: "the two-detent sheet's header")
+    let mediumTop = header.frame.minY
+    header.centre.press(
+      forDuration: 0.1,
+      thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+    )
+    let largeTop = waitForFrame("sheet-two-header") { $0.minY < mediumTop - 100 }
+    print("real-input (ios): bottom-sheet: header from y=\(mediumTop) to y=\(largeTop.minY)")
+    // A drag down from large may stop at medium first (UIKit reports that as detent 0)
+    // and the helper drags again, so the log is read for what it must contain.
+    try dragSheetDown(from: "sheet-two-header", until: "sheet-two-header")
+    let twoLog = readUntil(Echo.sheetLog) { $0.hasSuffix("presented:false > dismiss") && $0.contains("detent:1") }
+    print("real-input (ios): bottom-sheet: log after the two-detent sheet: \(twoLog)")
+    XCTAssertTrue(
+      twoLog.hasPrefix(
+        "press:1 > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1"),
+      "a drag up reports detent 1 after everything before it (log: \(twoLog))"
+    )
+    XCTAssertTrue(
+      twoLog.hasSuffix("presented:false > dismiss"),
+      "and a drag down closes it, reported as the close, then the dismissal (log: \(twoLog))"
+    )
+  }
+
+  /// Tap a plain RN element until another element appears (a sheet's content).
+  private func tapUntilElement(_ identifier: String, as what: String, appears other: String) throws {
+    try pressUntil(
+      named: "\(what) (\(identifier))",
+      waitingFor: "the real tap on \(identifier) to bring up \(other)",
+      press: { attempt in
+        if attempt > 1 && self.app.descendants(matching: .any)[other].exists { return }
+        try self.required(identifier, as: what).fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)[other].exists ? "up" : "down" }
+    ) { shown in
+      shown == "up"
+    }
+  }
+
+  /// Drag a sheet down from one of its elements until `gone` has left the screen.
+  private func dragSheetDown(from identifier: String, until gone: String) throws {
+    try pressUntil(
+      named: "a drag down from \(identifier)",
+      waitingFor: "the drag down to take the sheet away",
+      press: { attempt in
+        let start = self.app.descendants(matching: .any)[identifier]
+        if attempt > 1 && !start.exists { return }
+        start.centre.press(
+          forDuration: 0.05,
+          thenDragTo: self.app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.99)),
+          withVelocity: .fast,
+          thenHoldForDuration: 0
+        )
+      },
+      reading: { self.app.descendants(matching: .any)[gone].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+  }
+
+  /// Tap the dimmed screen above a sheet until `gone` has left.
+  private func tapOutsideSheet(until gone: String) throws {
+    try pressUntil(
+      named: "the dimming view above the sheet",
+      waitingFor: "the tap outside to take the sheet away",
+      press: { attempt in
+        if attempt > 1 && !self.app.descendants(matching: .any)[gone].exists { return }
+        self.app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).fingerTap()
+      },
+      reading: { self.app.descendants(matching: .any)[gone].exists ? "up" : "gone" }
+    ) { shown in
+      shown == "gone"
+    }
+  }
+
+  /// Wait for an element's frame to satisfy `check`, and hand it back (or the last one).
+  private func waitForFrame(_ identifier: String, _ check: (CGRect) -> Bool) -> CGRect {
+    let deadline = Date().addingTimeInterval(reactTimeout)
+    var frame = app.descendants(matching: .any)[identifier].frame
+    while !check(frame) && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      frame = app.descendants(matching: .any)[identifier].frame
+    }
+    XCTAssertTrue(check(frame), "\(identifier) never moved as expected: \(frame)")
+    return frame
   }
 
   /// UIKit's own word for Cancel, which is what the library puts on the implicit

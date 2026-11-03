@@ -1,0 +1,78 @@
+# Failure excerpt — harness:ios:BottomSheet.harness:-t:dropped%2080%20ms
+
+- Ran: 2026-11-03T01:08:12.799Z on code tree `c64dbc836aac` at HEAD `5dcf416` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios BottomSheet.harness -t dropped 80 ms`
+- Result: fail, exit 1, 19986 ms
+- Load: start 7.35, end 6.18, median 6.46, max 7.35
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G14-zj47g`
+- Full log: `task/G14-bottomsheet/harness+ios+BottomSheet.harness+-t+dropped+2080+20ms-2026-11-03T01-08-12.799Z.log` (<store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness+-t+dropped+2080+20ms-2026-11-03T01-08-12.799Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet › leaves nothing when dropped 80 ms after presenting`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness+-t+dropped+2080+20ms-2026-11-03T01-08-12.799Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-zj47g (still live)
+  |   D4-vge5e                 D4           both              pair-b
+  |   G14-zj47g                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.18 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios BottomSheet.harness -t dropped 80 ms
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree c64dbc836aac, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.35/4.99 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+ios+BottomSheet.harness+-t+dropped+2080+20ms-2026-11-03T01-08-12.799Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet › leaves nothing when dropped 80 ms after presenting
+
+    "drop-80-probe" never reached nothing left after a drop at 80 ms; its report is "seq=244;presented=0;js=0;live=1;presentCount=0;onScreen=0;detents=fit;selected=0;contentW=0;contentH=0;inSheet=0;hidden=1;children=0;sheetH=0;ownWindow=0;appTop=-;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=1;touchRoots=1;userDismissals=0;unasked=0;presentWaits=0;presentWaitsTotal=0;anchored=1;drops=0;recycles=0"; events=[]
+
+      [0m [90m 231 |[39m     }[33m,[39m
+       [90m 232 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 233 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 234 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 235 |[39m       )[33m,[39m
+       [90m 236 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 24 skipped, 25 total
+Snapshots:   0 total
+Time:        18.359 s, estimated 97 s
+Ran all test suites matching BottomSheet.harness with tests matching "dropped 80 ms".
+
+
+
+```

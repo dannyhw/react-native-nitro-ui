@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:BottomSheet.harness:-t:detents%20changed
+
+- Ran: 2026-11-02T23:03:53.038Z on code tree `b8f04a65ddf0` at HEAD `7b0b8ed` (branch `task/G14-bottomsheet`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android BottomSheet.harness -t detents changed`
+- Result: fail, exit 1, 10866 ms
+- Load: start 4.02, end 3.63, median 3.83, max 4.02
+- Device: android / device `emulator-5574` / lease `G14-v1501`
+- Full log: `task/G14-bottomsheet/harness+android+BottomSheet.harness+-t+detents+20changed-2026-11-02T23-03-53.038Z.log` (<store>/task/G14-bottomsheet/harness+android+BottomSheet.harness+-t+detents+20changed-2026-11-02T23-03-53.038Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet · detents changed while up › stays up when medium joins and leaves the list, and opens with the new list next time`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G14-bottomsheet/harness+android+BottomSheet.harness+-t+detents+20changed-2026-11-02T23-03-53.038Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G14-v1501 (still live)
+  |   G13-tj4up                G13          both              pair-b
+  |   G14-v1501                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.63 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android BottomSheet.harness -t detents changed
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree b8f04a65ddf0, 11 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.02/12.23 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G14-bottomsheet/harness+android+BottomSheet.harness+-t+detents+20changed-2026-11-02T23-03-53.038Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet · detents changed while up › stays up when medium joins and leaves the list, and opens with the new list next time
+
+    "change" did not stay up after medium joined the list: report "presented=1;js=1;live=1;presentCount=1;sheetValue=Hidden;detents=medium,large;selected=0;boxW=411;boxH=851;contentW=411;contentH=851;hostH=851;children=1;inSheet=1;focused=1;roots=1;userDismissals=0;unasked=0;anchored=1;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 282 |[39m     [36mconst[39m report [33m=[39m reportOf(testId)[33m;[39m
+       [90m 283 |[39m     [36mif[39m ([33m![39misUp(report) [33m||[39m eventLog[33m.[39mlength [33m!==[39m events) {
+      [31m[1m>[22m[39m[90m 284 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 285 |[39m         [32m`"${testId}" did not stay up ${what}: report "${report.raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 286 |[39m       )[33m;[39m
+       [90m 287 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 26 skipped, 27 total
+Snapshots:   0 total
+Time:        9.564 s, estimated 31 s
+Ran all test suites matching BottomSheet.harness with tests matching "detents changed".
+
+
+
+```

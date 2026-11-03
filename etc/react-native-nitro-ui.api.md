@@ -18,6 +18,43 @@ export function AlertDialog(props: AlertDialogProps): JSX.Element;
 export type AlertDialogProps = DialogProps;
 
 // @public
+export function BottomSheet(input: BottomSheetProps): JSX.Element;
+
+// @public
+export type BottomSheetDetent = 'fit' | 'medium' | 'large' | {
+    height: number;
+} | {
+    fraction: number;
+};
+
+// @public
+export interface BottomSheetProps {
+    accessibilityLabel?: string | undefined;
+    children?: ReactNode;
+    containerColor?: ColorValue | undefined;
+    cornerRadius?: number | undefined;
+    detents?: readonly BottomSheetDetent[] | undefined;
+    dismissible?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly presented: boolean;
+        readonly mostRecentEventCount: number;
+        readonly dismissible: boolean;
+        nuiTestStateReport(): string;
+        nuiTestDismiss(): void;
+        nuiTestSelectDetent(index: number): void;
+    }) => void) | undefined;
+    isPresented: boolean;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onDetentChange?: ((index: number) => void) | undefined;
+    onDismiss?: (() => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    showsGrabber?: boolean | undefined;
+    testID?: string | undefined;
+}
+
+// @public
 export function Button(input: ButtonProps): JSX.Element;
 
 // @public
@@ -52,6 +89,43 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 
 // @public
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
+
+// @public
+export function Chip(input: ChipProps): JSX.Element;
+
+// @public
+export interface ChipProps extends ViewProps {
+    defaultSelected?: boolean | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly label: string;
+        readonly variant: string;
+        readonly selected: boolean | null;
+        readonly mostRecentEventCount: number;
+        readonly disabled: boolean;
+        readonly systemImage: string | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPress(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    label: string;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onPress?: (() => void) | undefined;
+    onSelectedChange?: ((selected: boolean) => void) | undefined;
+    selected?: boolean | undefined;
+    systemImage?: string | undefined;
+    variant?: ChipVariant | undefined;
+}
+
+// @public
+export type ChipVariant = 'filter' | 'assist';
 
 // @public
 export function ConfirmationDialog(props: ConfirmationDialogProps): JSX.Element;

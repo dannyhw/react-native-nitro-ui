@@ -29,6 +29,15 @@
 // generated code refers to, so nothing else has to change. See
 // docs/architecture/sizing.md.
 //
+// Third patch: content children (G14). `RCTViewComponentView` mounts a view's
+// React Native children into `currentContainerView` - the component view itself -
+// *beside* the Hybrid View's `contentView`. For a view whose children are its
+// content and whose content view is presented elsewhere (a BottomSheet's sheet
+// adopts it), they have to be mounted *into* the content view, as RN's own `Modal`
+// mounts into its controller's view. For every view in `CONTENT_CHILDREN_VIEWS` the
+// generated iOS `.mm` gains the two overrides. Android needs no patch: its
+// hand-written `ViewGroupManager` already redirects the children.
+//
 // Called by `bun run nitrogen`, which bob's `custom` target also runs, so
 // `prepare`/`npm pack` always ship patched code.
 
@@ -390,6 +399,136 @@ export function patchSizingKotlin(source, className, fileName = 'Manager.kt') {
   return { code, status: 'patched' };
 }
 
+// ---------------------------------------------------------------------------
+// Content children (G14)
+// ---------------------------------------------------------------------------
+
+export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
+
+/**
+ * The Hybrid Views whose React Native children are mounted into their content
+ * view (see the file header). A list here rather than a manifest key: it is a fact
+ * about how the generated iOS component mounts, which only this file changes.
+ */
+export const CONTENT_CHILDREN_VIEWS = ['HybridNitroUiBottomSheet'];
+
+/**
+ * Give the generated iOS component view `mountChildComponentView:index:` and
+ * `unmountChildComponentView:index:` overrides that use its `contentView`.
+ *
+ * @param {string} source contents of a generated iOS `*Component.mm`
+ * @param {string} className e.g. `HybridNitroUiBottomSheet`
+ * @param {string} fileName only used for error messages
+ * @returns {{ code: string, status: string, error?: string }}
+ */
+export function patchContentChildrenObjC(
+  source,
+  className,
+  fileName = 'Component.mm'
+) {
+  if (source.includes(CONTENT_CHILDREN_MARKER)) {
+    return source.includes('- (void)mountChildComponentView:') &&
+      source.includes('- (void)unmountChildComponentView:') &&
+      source.includes(
+        '[content insertSubview:childComponentView atIndex:index];'
+      )
+      ? { code: source, status: 'already-patched' }
+      : {
+          code: source,
+          status: 'error',
+          error: `${fileName}: marker found but the mount overrides are missing.`,
+        };
+  }
+  if (!source.includes(`@implementation ${className}Component`)) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: "@implementation ${className}Component" not found - nitrogen changed its output shape, update patch-nitrogen.mjs.`,
+    };
+  }
+  if (!source.includes('[self setContentView:view];')) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: "[self setContentView:view];" not found - the Hybrid View is no longer the content view, so mounting into it means something else now; update patch-nitrogen.mjs.`,
+    };
+  }
+  // A nitrogen that starts generating either override would otherwise get a
+  // duplicate method, which Objective-C++ accepts and resolves to whichever one the
+  // linker picks.
+  if (
+    source.includes('- (void)mountChildComponentView:') ||
+    source.includes('- (void)unmountChildComponentView:')
+  ) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: already defines a child mount override - nitrogen generates it now, so this patch must be dropped rather than duplicated.`,
+    };
+  }
+  const end = source.lastIndexOf('@end');
+  if (end === -1) {
+    return {
+      code: source,
+      status: 'error',
+      error: `${fileName}: no "@end" to insert the mount overrides before.`,
+    };
+  }
+  const methods = [
+    `${CONTENT_CHILDREN_MARKER} (G14, scripts/patch-nitrogen.mjs)`,
+    '//',
+    "// This view's React Native children are its content, and its content view is",
+    '// what native presents. `RCTViewComponentView` would mount them beside the',
+    '// content view (into `currentContainerView`, itself), where they would stay in',
+    "// the app's window; mount them into it instead, as RN's `Modal` mounts into its",
+    "// controller's view. Indices are Fabric's, and nothing else lives in there.",
+    '- (void)mountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView',
+    '                          index:(NSInteger)index {',
+    '  UIView *content = self.contentView;',
+    '  if (content == nil) {',
+    '    [super mountChildComponentView:childComponentView index:index];',
+    '    return;',
+    '  }',
+    '  [content insertSubview:childComponentView atIndex:index];',
+    '}',
+    '',
+    '- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView',
+    '                            index:(NSInteger)index {',
+    '  UIView *content = self.contentView;',
+    '  if (content == nil || childComponentView.superview != content) {',
+    '    [super unmountChildComponentView:childComponentView index:index];',
+    '    return;',
+    '  }',
+    '  [childComponentView removeFromSuperview];',
+    '}',
+    '',
+  ].join('\n');
+  return {
+    code: `${source.slice(0, end)}${methods}${source.slice(end)}`,
+    status: 'patched',
+  };
+}
+
+/**
+ * The Hybrid View names `nitro.json` declares under `autolinking` (e.g.
+ * `NitroUiBottomSheet`), or `null` when the tree has no `nitro.json` at all. An
+ * unreadable file declares nothing, so every listed view then fails.
+ *
+ * @param {string} root
+ * @returns {Set<string> | null}
+ */
+function declaredHybridViews(root) {
+  const file = join(root, 'nitro.json');
+  if (!existsSync(file)) return null;
+  try {
+    return new Set(
+      Object.keys(JSON.parse(readFileSync(file, 'utf8')).autolinking ?? {})
+    );
+  } catch {
+    return new Set();
+  }
+}
+
 /**
  * First match for `fileName` below `dir`, depth first. Generated Kotlin lives
  * under a package folder that only `nitro.json` knows about.
@@ -512,6 +651,39 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
       }
       record(path.slice(path.lastIndexOf('/') + 1), applyToFile(path, patch));
     }
+  }
+
+  // 3. Content children (G14). The sizing step's rule: a tree with no `nitro.json`
+  // (read from where the sizing config is) declares no views and is not asked for
+  // any; in a tree that has one, every listed view must be declared *and* generated,
+  // so a renamed or dropped spec fails here instead of quietly losing the patch.
+  const declared = declaredHybridViews(options.sizingConfigRoot ?? root);
+  for (const className of declared == null ? [] : CONTENT_CHILDREN_VIEWS) {
+    if (!declared.has(className.slice('Hybrid'.length))) {
+      record(className, {
+        status: 'error',
+        error: `CONTENT_CHILDREN_VIEWS lists ${className}, and nitro.json declares no ${className.slice('Hybrid'.length)} - remove it from the list, or declare the view.`,
+      });
+      continue;
+    }
+    const path = join(
+      root,
+      'nitrogen/generated/ios/c++/views',
+      `${className}Component.mm`
+    );
+    if (!existsSync(path)) {
+      record(className, {
+        status: 'error',
+        error: `CONTENT_CHILDREN_VIEWS lists ${className}, but ${path} does not exist - is the view generated?`,
+      });
+      continue;
+    }
+    record(
+      path.slice(path.lastIndexOf('/') + 1),
+      applyToFile(path, (source, name) =>
+        patchContentChildrenObjC(source, className, name)
+      )
+    );
   }
 
   if (failed) {

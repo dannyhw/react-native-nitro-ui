@@ -98,6 +98,15 @@ export {
   type DialogProps,
 } from './components/Dialog/Dialog';
 
+// A modal bottom sheet with React Native content (G14, DECISIONS D33/D35): UIKit's sheet
+// presentation on iOS, Material 3's `ModalBottomSheet` on Android. `isPresented` is
+// controlled through the event-count handshake, detents use SwiftUI's names, and the
+// content is mounted only while the sheet is up.
+export {
+  BottomSheet,
+  type BottomSheetDetent,
+  type BottomSheetProps,
+} from './components/BottomSheet/BottomSheet';
 // A single- or multi-line text field (G13, DECISIONS D34): `UITextField` (a
 // `UITextView` when `multiline`) on iOS, Compose `BasicTextField(TextFieldState)`
 // on Android. The text is controlled through the event-count handshake, a `value`
@@ -111,3 +120,8 @@ export {
   type TextFieldProps,
   type TextFieldReturnKeyType,
 } from './components/TextField/TextField';
+// A compact choice or action (G12): Material 3 `FilterChip` / `AssistChip` on
+// Android, SwiftUI `Toggle(.button)` / a bordered capsule `Button` on iOS, which has
+// no chip. A filter chip's `selected` is controlled through the event-count
+// handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
+export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
