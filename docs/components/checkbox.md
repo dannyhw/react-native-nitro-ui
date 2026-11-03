@@ -48,7 +48,7 @@ const [terms, setTerms] = useState(false);
 | Label           | the `Toggle`'s label, visible, row tappable                | a `Row` of box + `Text`, both tappable                          |
 | Value           | `NitroUiControlledValue<Bool>` on `CheckboxModel`          | `NitroUiControlledValue<Boolean>` on `CheckboxModel`           |
 | Role            | SwiftUI's toggle trait                                     | `Role.Checkbox` with its `ToggleableState`, published by M3    |
-| Name            | `.accessibilityLabel(_:)` on the `Toggle`                  | `contentDescription` on the box and the merged row             |
+| Name            | `.accessibilityLabel(_:)` on the `Toggle`                  | `contentDescription` on the merged row only — the box is presentational |
 | Host            | `UIHostingController` inside `NitroSwiftUIHost`            | `NitroComposeHost<M>: AbstractComposeView`                     |
 
 ### Why `indeterminate` is a prop and not a third `checked` value
@@ -170,5 +170,11 @@ The control is the platform's, so the accessibility element is too:
   gesture, and a `.switch` `Toggle` is a gesture recognizer (`Button.harness.tsx`
   measured that for `Button`). The harness presses through `nuiTestToggle()`, and
   `real-input:ios` does the real taps.
+  Those real taps are also what pin the row: a switch-style `Toggle` answers touches on
+  its glyph only — measured, a press on a labelled Checkbox's label delivered no value
+  change and no event at all — so the row carries a tap target of its own that calls the
+  same `press()` a tap takes, the way Android's merged `Row` does. The check taps the
+  row's middle and asserts that middle is on the label's side of the glyph, so the claim
+  cannot quietly become a tap on the box.
 - **No bench arm.** `component.json` says `bench: false`, so the bench host has no
   Checkbox row yet; Switch's arms are the template when one is added.
