@@ -227,7 +227,7 @@ const SHARED = {
       },
       "ios": {
         "width": 200,
-        "height": 37
+        "height": 28
       }
     },
     "NitroUiChip": {

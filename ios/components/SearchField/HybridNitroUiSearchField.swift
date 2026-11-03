@@ -12,8 +12,10 @@
 //  report, and a clear button of UIKit's own. `NitroUiTextEditing.swift` holds the
 //  bodies both controls run, and `TextFieldModel` is the same model, so the only
 //  thing this file decides is what a *search* field looks like: one line, the Search
-//  key, no auto-capitalisation, a clear button while editing, and the platform's own
-//  localized "Search" as the placeholder nobody asked for.
+//  key, no auto-capitalisation, a clear button while editing, and no placeholder
+//  nobody asked for — UIKit sets none on the bare field (it draws "Search" only inside
+//  a search bar), so the default is read back from the control at init and stays empty
+//  today; `docs/components/search-field.md` carries the claim the harness asserts.
 //
 //  It is its own Hybrid View rather than `variant="search"` on TextField because a
 //  declared fallback is keyed by component (docs/architecture/sizing.md §5): as a
