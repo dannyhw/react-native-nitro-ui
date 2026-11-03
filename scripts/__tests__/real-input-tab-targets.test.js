@@ -117,6 +117,29 @@ describe('exampleTabs', () => {
   });
 });
 
+describe('the tab bar App.tsx draws', () => {
+  it('sizes its tabs from the same minimums the rule holds them to', () => {
+    const text = read(APP);
+    const select =
+      /const TAB_MIN = Platform\.select\(\{ android: (\d+), default: (\d+) \}\);/.exec(
+        text
+      );
+    expect(select).not.toBeNull();
+    expect({ android: Number(select?.[1]), ios: Number(select?.[2]) }).toEqual(
+      TAB_TARGET_MIN
+    );
+    expect(text).toMatch(/minWidth: TAB_MIN,\n\s+minHeight: TAB_MIN,/);
+  });
+
+  it('scrolls sideways instead of sharing one row between every tab', () => {
+    const text = read(APP);
+    expect(text).toMatch(/<ScrollView\n\s+horizontal\n/);
+    // `flex: 1` on a tab is the shared row that shrank every tab with each component.
+    const tabStyle = /\n {2}tab: \{([^}]*)\}/.exec(text)?.[1] ?? '';
+    expect(tabStyle).not.toMatch(/flex: 1/);
+  });
+});
+
 describe('checkTabTargets', () => {
   const tabs = [
     { id: 'switch', label: 'Switch' },
