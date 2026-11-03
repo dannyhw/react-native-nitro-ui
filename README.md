@@ -162,8 +162,10 @@ Each control has the props of the platform control it wraps, not a
 lowest-common-denominator subset. The tables in the component docs list every
 prop against the TypeScript type; these are the shapes you will actually write.
 The screenshots are the example app's Storybook (`bun run storybook:ios` /
-`bun run storybook:android`) on an iPhone 17 simulator (iOS 27) and an Android 15
-emulator, light appearance.
+`bun run storybook:android`) in light appearance at the default text size, on an
+iOS 27 iPhone simulator at 3x and an API 35 (Android 15) emulator — each cropped
+to 804 px (iOS) or 720 px (Android) wide and shown here 300 px across. A dialog
+or a sheet is shown presented.
 
 ### Switch
 
@@ -417,6 +419,26 @@ lays out is a `0 × 0` anchor, and the window is the platform's — UIKit's
 `UIAlertController` on iOS (an alert, or an action sheet for a confirmation),
 Material 3's `AlertDialog` on Android, and a `ModalBottomSheet` of rows for a
 confirmation. The actions are data, like a `Menu`'s rows.
+
+An alert, presented:
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/alert-dialog-ios.png" width="300" alt="AlertDialog presented on iOS: a title, a message, a cancel action and a destructive action" /></td>
+    <td><img src="docs/images/components/alert-dialog-android.png" width="300" alt="AlertDialog presented on Android: a title, a message, a cancel action and a destructive action" /></td>
+  </tr>
+</table>
+
+A confirmation, presented — UIKit's action sheet on the left, Material's bottom sheet of rows on the right:
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/confirmation-dialog-ios.png" width="300" alt="ConfirmationDialog presented on iOS as a popover anchored to its button: a title and three rows, the last one destructive" /></td>
+    <td><img src="docs/images/components/confirmation-dialog-android.png" width="300" alt="ConfirmationDialog presented on Android as a bottom sheet with one row per action" /></td>
+  </tr>
+</table>
 
 ```tsx name=dialog
 const DRAFT_ACTIONS: DialogAction[] = [
