@@ -148,6 +148,16 @@
         "implementationClassName": "HybridNitroUiChip"
       }
     },
+    "NitroUiCheckbox": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiCheckbox"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiCheckbox"
+      }
+    },
     "NitroUiContextMenu": {
       "ios": {
         "language": "swift",

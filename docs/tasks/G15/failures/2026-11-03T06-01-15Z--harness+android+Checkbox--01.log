@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:Checkbox
+
+- Ran: 2026-11-03T06:01:15.059Z on code tree `65797517990f` at HEAD `3afdf5d` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Checkbox`
+- Result: fail, exit 1, 14403 ms
+- Load: start 3.12, end 3.18, median 3.15, max 3.18
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log` (<store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › TEMP g15 measure sizes for the docs`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-69l63 (still live)
+  |   G15-69l63                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.18 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Checkbox
+gate: node ../scripts/harness.mjs --harnessRunner android Checkbox (cwd example)
+gate: code tree 65797517990f at HEAD 3afdf5d4
+gate: git tree 95fdd0532483 with a DIRTY worktree (not reusable)
+gate: log task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log
+gate:       <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Checkbox
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 65797517990f, 14 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.03/3.31 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › TEMP g15 measure sizes for the docs
+
+    MEASURE m-bare=48.00x48.00 m-labelled=131.05x48.00 m-mixed=131.05x48.00
+
+      [0m [90m 631 |[39m       out[33m.[39mpush([32m`${testId}=${describeSize(size)}`[39m)[33m;[39m
+       [90m 632 |[39m     }
+      [31m[1m>[22m[39m[90m 633 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`MEASURE ${out.join(' ')}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 634 |[39m   })[33m;[39m
+       [90m 635 |[39m
+       [90m 636 |[39m   it([32m'is one node with the label as its name when a label is shown'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        13.375 s
+Ran all test suites matching Checkbox.
+gate: harness:android:Checkbox FAIL in 14.4 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+
+gate: appended the device context to task/G15-checkbox/harness+android+Checkbox-2026-11-03T06-01-14.727Z.log (5 probe(s))
+
+```

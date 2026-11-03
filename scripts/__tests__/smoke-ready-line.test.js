@@ -36,7 +36,7 @@ const READY_LINE =
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
   'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 chip=58x28 ' +
-  'host=310x96';
+  'checkbox=40x40 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -59,6 +59,7 @@ const READY_LINE_FRACTIONAL =
   'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
   'picker=280x56.09523010253906 menu=97.619049072265625x48 ' +
   'text-field=363.4285583496094x24 chip=66.28571319580078x48 ' +
+  'checkbox=48x48 ' +
   'host=363.4285583496094x96';
 
 describe('smoke ready line', () => {
