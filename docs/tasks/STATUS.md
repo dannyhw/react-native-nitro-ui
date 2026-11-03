@@ -90,4 +90,6 @@
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
 | G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | running |
 | G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | running |
+| X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | running |
+| Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
