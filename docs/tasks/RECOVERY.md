@@ -95,6 +95,11 @@
 > **0.4.3 live, 0.5.0 staged (2026-11-02):** the owner approved 0.4.3 (tagged by a dispatched `Release tag`). Version
 > Packages PR #25 merged (`4f931b2`, minor: the dialogs); Release run 41483605054 green with `Stage on npm` succeeded.
 >
+> **G13 merged (2026-11-03, PR #26): TextField** (`UITextField` on iOS, `BasicTextField` on Android; D34). After the
+> second fix round the orchestrator applied the re-review's small fixes on the merge (`15d9db3`: a refused iOS edit is
+> refused whole, the native view survives hidden effects, the Android probe closes a composing region before a typed
+> key). Device gates green on maintainer-mac-1 and `check` on mac-2, on code tree `9cabf5fbe5e4`. Minor changeset.
+>
 > **0.5.0 live (2026-11-03):** the owner approved the staged 0.5.0 (AlertDialog, ConfirmationDialog); `latest` is 0.5.0, and
 > a dispatched `Release tag` tagged `v0.5.0` at `06f4d08` with its GitHub release. Version Packages PR #30 (G10's patches) is
 > held so the TextField, Chip and BottomSheet minors ship with it.
