@@ -15,6 +15,7 @@
 #include <fbjni/fbjni.h>
 #include <NitroModules/HybridObjectRegistry.hpp>
 
+#include "JHybridNitroUiMaterialThemeSpec.hpp"
 #include "JHybridNitroUiBottomSheetSpec.hpp"
 #include "JFunc_void_bool_double.hpp"
 #include "JFunc_void_double.hpp"
@@ -173,12 +174,21 @@ struct JHybridNitroUiCheckboxSpecImpl: public jni::JavaClass<JHybridNitroUiCheck
     return javaPart->getJHybridNitroUiCheckboxSpec();
   }
 };
+struct JHybridNitroUiMaterialThemeSpecImpl: public jni::JavaClass<JHybridNitroUiMaterialThemeSpecImpl, JHybridNitroUiMaterialThemeSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiMaterialTheme;";
+  static std::shared_ptr<JHybridNitroUiMaterialThemeSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiMaterialThemeSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiMaterialThemeSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiMaterialThemeSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
   using namespace margelo::nitro::nitroui;
 
   // Register native JNI methods
+  margelo::nitro::nitroui::JHybridNitroUiMaterialThemeSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiBottomSheetSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_bool_double_cxx::registerNatives();
   margelo::nitro::nitroui::JFunc_void_double_cxx::registerNatives();
@@ -307,6 +317,12 @@ void registerAllNatives() {
     "NitroUiCheckbox",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiCheckboxSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiMaterialTheme",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiMaterialThemeSpecImpl::create();
     }
   );
 }

@@ -507,7 +507,7 @@ release we take, drop its row and its mitigation note.
 
 This repo builds against `nitrogen ^0.37.1` and peers on
 `react-native-nitro-modules ^0.37.1` (`package.json` and peerDependencies),
-with RN floor 0.86 (D8).
+with RN floor 0.88 (D39; 0.86 under D8 when this was written).
 
 ### N1 — Android base `ViewProps` dropped for Hybrid Views (nitro#1655 → #1656)
 

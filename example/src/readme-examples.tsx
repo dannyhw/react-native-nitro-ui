@@ -29,6 +29,7 @@ import {
   Switch,
   TextField,
   type TextFieldHandle,
+  setMaterialTheme,
 } from 'react-native-nitro-ui';
 import { useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -325,4 +326,9 @@ const styles = StyleSheet.create({
   // Say how tall a Host is: it draws its children into this box.
   settings: { height: 96 },
 });
+// #endregion
+
+// #region material-theme
+// Once, at startup — before the first screen renders.
+setMaterialTheme('baseline');
 // #endregion

@@ -7,7 +7,9 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -1437,17 +1439,40 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 }
 
 /**
- * The library's Material theme: dynamic colour on Android 12+, the default M3
- * schemes below, both following the system dark mode.
+ * The library's Material theme: Material 3 Expressive - its motion scheme, and its
+ * shapes and type as Material defines them - over dynamic colour on Android 12+ and
+ * the default M3 schemes below, both following the system dark mode (D39).
+ *
+ * The app can opt out to the baseline Material 3 theme, process-wide
+ * ([NitroUiMaterialTheme], `setMaterialTheme('baseline')` in JS). The colour scheme is
+ * the same either way; what moves is what Material reads from the theme - today the
+ * motion scheme, and whatever later Material releases tie to `MaterialExpressiveTheme`.
  *
  * A Hybrid View is its own composition, so it cannot inherit the app's theme;
- * this is the closest equivalent to what the surrounding app sees.
+ * this is the closest equivalent to what the surrounding app sees. Every composition
+ * this library owns starts here - each control's own, and each `<Host>`'s, whose
+ * children compose inside it - so this is the one place the theme is chosen.
+ *
+ * Switching themes at runtime swaps the theme composable at the root, so each
+ * control's content is composed afresh under the new one; that is what a theme
+ * change is, and the documented use is a single call before the first control.
  */
 @Composable
 fun NitroUiTheme(content: @Composable () -> Unit) {
   val dark = isSystemInDarkTheme()
   val context = LocalContext.current
-  MaterialTheme(colorScheme = NitroUiColorSchemes.forContext(context, dark), content = content)
+  val colorScheme = NitroUiColorSchemes.forContext(context, dark)
+  if (NitroUiMaterialTheme.expressive) {
+    MaterialExpressiveTheme(colorScheme = colorScheme, motionScheme = MotionScheme.expressive()) {
+      NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
+      content()
+    }
+  } else {
+    MaterialTheme(colorScheme = colorScheme, motionScheme = MotionScheme.standard()) {
+      NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
+      content()
+    }
+  }
 }
 
 /**
