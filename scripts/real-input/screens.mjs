@@ -27,4 +27,5 @@ export const SCREEN_FILE = Object.freeze({
   progress: 'example/src/ProgressScreen.tsx',
   menu: 'example/src/MenuScreen.tsx',
   host: 'example/src/HostScreen.tsx',
+  textfield: 'example/src/TextFieldScreen.tsx',
 });

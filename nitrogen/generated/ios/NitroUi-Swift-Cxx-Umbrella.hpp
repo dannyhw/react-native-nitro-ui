@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
+// Forward declaration of `HybridNitroUiTextFieldSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiTextFieldSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
@@ -46,6 +48,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSegmentedControlSize; }
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
 // Forward declaration of `NitroUiSliderSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
+// Forward declaration of `NitroUiTextFieldTestState` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 
 // Include C++ defined types
 #include "HybridNitroUiButtonSpec.hpp"
@@ -58,6 +62,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
+#include "HybridNitroUiTextFieldSpec.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
 #include "NitroUiDialogAction.hpp"
@@ -67,6 +72,7 @@ namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
 #include "NitroUiSegmentedControlSize.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
+#include "NitroUiTextFieldTestState.hpp"
 #include <NitroModules/Null.hpp>
 #include <NitroModules/Result.hpp>
 #include <exception>
@@ -107,6 +113,8 @@ namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
+// Forward declaration of `HybridNitroUiTextFieldSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 
 // Include Swift defined types
 #if __has_include("NitroUi-Swift.h")

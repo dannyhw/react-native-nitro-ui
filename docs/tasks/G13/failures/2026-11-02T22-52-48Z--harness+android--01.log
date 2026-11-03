@@ -1,0 +1,103 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-02T22:52:48.158Z on code tree `c399a86acd1a` at HEAD `48e667f` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 914236 ms
+- Load: start 3.22, end 4.74, median 7.66, max 139.88
+- Device: android
+- Full log: `task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log` (<store>/task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● Console`
+- `● TextField › commits a keystroke about as fast as RN TextInput`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G13-tj4up                G13          both              pair-b
+  |   G14-v1501                G14          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.92 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 57 log line(s)
+
+```
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree c399a86acd1a at HEAD 48e667f
+gate: git tree 03ed6e68199a
+gate: log task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log
+gate:       <store>/task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c399a86acd1a, 11 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.22/4.59 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Using existing Android emulator nitroui...
+HARNESS Runner android ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      textfield grow: line=24 heights=24,48,72 tall=96
+
+
+    console.log
+      textfield recycle round 0: drops=8 recycles=8 measuresAfterDrop=3 layoutsAfterDrop=2 giveUps=0 floatingFlushes=0
+
+  ● TextField › commits a keystroke about as fast as RN TextInput
+
+    nitro: "ab" never committed
+
+      [0m [90m 861 |[39m           }
+       [90m 862 |[39m           [36mif[39m (commit [33m==[39m [36mnull[39m) {
+      [31m[1m>[22m[39m[90m 863 |[39m             [36mthrow[39m [36mnew[39m [33mError[39m([32m`${arm}: "${want}" never committed`[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 864 |[39m           }
+       [90m 865 |[39m           samples[arm][33m.[39mpush(commit[33m.[39mat [33m-[39m started)[33m;[39m
+       [90m 866 |[39m           [36mawait[39m sleep([35m120[39m)[33m;[39m[0m
+
+HARNESS Shutting down Android emulator nitroui...
+
+Test Suites: 1 failed, 17 passed, 18 total
+Tests:       1 failed, 3 skipped, 336 passed, 340 total
+Snapshots:   0 total
+Time:        913.334 s
+Ran all test suites.
+gate: harness:android FAIL in 914.2 s
+gate: recorded in .gates/task/G13-textfield.jsonl
+
+
+gate: appended the device context to task/G13-textfield/harness+android-2026-11-02T22-52-47.869Z.log (5 probe(s))
+
+```
