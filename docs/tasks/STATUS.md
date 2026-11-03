@@ -86,7 +86,7 @@
 | G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | merged (PR #31; 1 impl + 1 fix round, re-review MERGE WITH FIXES applied at merge; all five merge gates green on mac-2). Incident: `pkill -P 1` powered off every device on mac-2 (AGENTS rule tightened) |
 | Q6 | ContextMenu design (Q1 depth; children in place, gesture arbitration, spike questions) | Opus (on mac-1) | Opus | done (report merged; D36 adopts its recommendations; spike S3 next) |
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
-| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | reviewed MERGE (PR #33); merging with Checkbox on mac-1, then gates |
+| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
 | G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | running |
 | G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | running |
