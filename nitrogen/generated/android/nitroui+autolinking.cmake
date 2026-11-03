@@ -38,6 +38,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiChipSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
@@ -67,8 +69,10 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiBottomSheetStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
-  ../nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.cpp
   ../nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp

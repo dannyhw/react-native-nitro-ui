@@ -33,6 +33,7 @@ import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
 import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { TextField } from '../TextField/TextField';
 import { Chip } from '../Chip/Chip';
+import { Checkbox } from '../Checkbox/Checkbox';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -98,6 +99,7 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
 export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [TextField, 'TextField'],
   [Chip, 'Chip'],
+  [Checkbox, 'Checkbox'],
   [BottomSheet, 'BottomSheet'],
 ]);
 

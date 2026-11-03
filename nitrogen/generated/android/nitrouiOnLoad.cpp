@@ -24,6 +24,8 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiCheckboxSpec.hpp"
+#include "views/JHybridNitroUiCheckboxStateUpdater.hpp"
 #include "JHybridNitroUiChipSpec.hpp"
 #include "views/JHybridNitroUiChipStateUpdater.hpp"
 #include "JHybridNitroUiDatePickerSpec.hpp"
@@ -163,6 +165,14 @@ struct JHybridNitroUiChipSpecImpl: public jni::JavaClass<JHybridNitroUiChipSpecI
     return javaPart->getJHybridNitroUiChipSpec();
   }
 };
+struct JHybridNitroUiCheckboxSpecImpl: public jni::JavaClass<JHybridNitroUiCheckboxSpecImpl, JHybridNitroUiCheckboxSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiCheckbox;";
+  static std::shared_ptr<JHybridNitroUiCheckboxSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiCheckboxSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiCheckboxSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiCheckboxSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -178,6 +188,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiCheckboxSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiCheckboxStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiChipSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiChipStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDatePickerSpec::CxxPart::registerNatives();
@@ -289,6 +301,12 @@ void registerAllNatives() {
     "NitroUiChip",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiChipSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiCheckbox",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiCheckboxSpecImpl::create();
     }
   );
 }

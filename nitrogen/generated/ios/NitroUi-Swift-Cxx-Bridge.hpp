@@ -12,6 +12,8 @@
 namespace margelo::nitro::nitroui { class HybridNitroUiBottomSheetSpec; }
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiCheckboxSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiCheckboxSpec; }
 // Forward declaration of `HybridNitroUiChipSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiChipSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
@@ -36,6 +38,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiTextFieldSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
+// Forward declaration of `NitroUiCheckboxSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiCheckboxSize; }
 // Forward declaration of `NitroUiChipSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiChipSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
@@ -64,6 +68,8 @@ namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 namespace NitroUi { class HybridNitroUiBottomSheetSpec_cxx; }
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiCheckboxSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiCheckboxSpec_cxx; }
 // Forward declaration of `HybridNitroUiChipSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiChipSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
@@ -90,6 +96,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 // Include C++ defined types
 #include "HybridNitroUiBottomSheetSpec.hpp"
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiCheckboxSpec.hpp"
 #include "HybridNitroUiChipSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiDialogSpec.hpp"
@@ -102,6 +109,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "HybridNitroUiTextFieldSpec.hpp"
 #include "NitroUiButtonSize.hpp"
+#include "NitroUiCheckboxSize.hpp"
 #include "NitroUiChipSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
 #include "NitroUiDialogAction.hpp"
@@ -461,6 +469,42 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline std__variant_bool__nitro__NullType_ create_std__variant_bool__nitro__NullType_(nitro::NullType value) noexcept {
     return std__variant_bool__nitro__NullType_(value);
+  }
+  
+  // pragma MARK: std::optional<std::function<void(bool /* checked */, double /* eventCount */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(bool / * checked * /, double / * eventCount * /)>>`.
+   */
+  using std__optional_std__function_void_bool____checked_____double____eventCount______ = std::optional<std::function<void(bool /* checked */, double /* eventCount */)>>;
+  inline std::optional<std::function<void(bool /* checked */, double /* eventCount */)>> create_std__optional_std__function_void_bool____checked_____double____eventCount______(const std::function<void(bool /* checked */, double /* eventCount */)>& value) noexcept {
+    return std::optional<std::function<void(bool /* checked */, double /* eventCount */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_bool____checked_____double____eventCount______(const std::optional<std::function<void(bool /* checked */, double /* eventCount */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(bool /* checked */, double /* eventCount */)> get_std__optional_std__function_void_bool____checked_____double____eventCount______(const std::optional<std::function<void(bool /* checked */, double /* eventCount */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiCheckboxSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiCheckboxSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiCheckboxSpec_ = std::shared_ptr<HybridNitroUiCheckboxSpec>;
+  std::shared_ptr<HybridNitroUiCheckboxSpec> create_std__shared_ptr_HybridNitroUiCheckboxSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiCheckboxSpec_(std__shared_ptr_HybridNitroUiCheckboxSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiCheckboxSpec>
+  using std__weak_ptr_HybridNitroUiCheckboxSpec_ = std::weak_ptr<HybridNitroUiCheckboxSpec>;
+  inline std__weak_ptr_HybridNitroUiCheckboxSpec_ weakify_std__shared_ptr_HybridNitroUiCheckboxSpec_(const std::shared_ptr<HybridNitroUiCheckboxSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiCheckboxSize>
+  using Result_NitroUiCheckboxSize_ = Result<NitroUiCheckboxSize>;
+  inline Result_NitroUiCheckboxSize_ create_Result_NitroUiCheckboxSize_(const NitroUiCheckboxSize& value) noexcept {
+    return Result<NitroUiCheckboxSize>::withValue(value);
+  }
+  inline Result_NitroUiCheckboxSize_ create_Result_NitroUiCheckboxSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiCheckboxSize>::withError(error);
   }
   
   // pragma MARK: std::optional<std::function<void(bool /* selected */, double /* eventCount */)>>

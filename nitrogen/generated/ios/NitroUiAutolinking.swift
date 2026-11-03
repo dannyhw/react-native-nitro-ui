@@ -167,4 +167,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiChipRecyclable() -> Bool {
     return HybridNitroUiChip.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiCheckbox() -> bridge.std__shared_ptr_HybridNitroUiCheckboxSpec_ {
+    let hybridObject = HybridNitroUiCheckbox()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiCheckboxSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiCheckboxRecyclable() -> Bool {
+    return HybridNitroUiCheckbox.self is any RecyclableView.Type
+  }
 }
