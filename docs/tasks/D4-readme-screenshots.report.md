@@ -77,3 +77,30 @@ file byte-identically (`git status` clean afterwards).
 - `lease.mjs list` still pairs the stale `x16_avd` record with `emulator-5574`, which is the serial pair-a's AVD boots on; both pool emulators went down within the same few minutes this round, from outside this task.
 - Nothing records which device a picture came from; the eight older pairs are pair-a's iPhone 17, and pair-b's iPhone Air would crop differently.
 - `example/ios/NitroUiExampleUITests/RealInputTests.swift:14` carries a stale claim that `agent-device` cannot tap the iOS 27 simulator. True for real-input's purposes, wrong as a general statement — it is why nobody tried it for a screenshot.
+
+## Fix round 1
+
+Retaken `confirmation-dialog-ios.png`. iOS 27 draws a confirmation as a popover over the dialog's
+own box, so on a populated page the card hides the copy - the old crop sat 4 px from content at the
+left edge with 228 px of blank below. `Dialog`'s `Confirmation Plain` story now puts one trigger low
+on an empty page: the card opens upward, its arrow points back down at the button, both stay whole.
+The picture is 804x866 with 94-97 px of margin per side, measured off the trimmed content box; shot
+on the leased pair (iPhone Air, iOS 27, `agent-device` tap, `simctl` screenshot). The README alt says
+"popover anchored to its button"; CONTRIBUTING records the trap and the story to shoot from. No new
+test, so the only new red proof is the guard's width mutation on the retaken file. `lease.mjs list`'s
+stale `x16_avd` pairing is now in `docs/tasks/FOLLOWUPS.md`.
+
+- `readme-components` -> rewrite the retaken PNG's IHDR width 804 -> 634 (still a valid PNG) -> `ConfirmationDialog: docs/images/components/confirmation-dialog-ios.png is 634 px wide, and the convention says 804 or 803 for ios`
+
+Gates on the final tree (`fd8aa780b782`, lease `D4-vge5e`) - the merge set, printed by `gate.mjs table`:
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1659 tests / 64 suites | `fd8aa780b782` | 3 m 19 s | start 14.9 / med 18.9 / max 44.1 |
+| `harness:ios` | **PASS** | 270 tests / 17 suites | `fd8aa780b782` (ios tree) | 5 m 02 s | start 9.4 / med 5.8 / max 9.6 |
+| `harness:android` | **PASS** | 319 tests / 17 suites | `fd8aa780b782` (android tree) | 8 m 54 s | start 4.6 / med 3.4 / max 7.2 |
+| `real-input:ios` | **PASS** | — | `fd8aa780b782` (ios tree) | 17 m 33 s | start 2.3 / med 5.3 / max 42.5 |
+| `real-input:android` | **PASS** | — | `fd8aa780b782` (android tree) | 23 m 40 s | start 2.6 / med 4.7 / max 10.9 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.` (exit 0). Ledger re-exported to
+`docs/tasks/D4/gates.jsonl`; no failed run, so no failure excerpt.
