@@ -79,7 +79,7 @@
 | T19 | TextField restart: the D31 measurements (iOS release latency, Android alternating arms, N=200 retention, P1 failures, composition, X4 rules) and a go/no-go against Q2 | Apex | Opus | done: build TextField on `UITextField` (D34); report on main, prototype branch kept |
 | Q5 | Next components: rank the candidates and design the top two at Q1's depth (run on maintainer-mac-1) | Opus (on mac-1) | orchestrator | merged (`83d4659`, PR #21); decisions in D33 |
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged (`74efeb6`, PR #24) |
-| G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
+| G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged with G14 (PR #27; 1 impl + 1 fix round, re-review MERGE; landed through G14's merge of `239c370`, gated on the combined tree; mac-1's own merge gates also green, `b5cfb7c`) |
 | G13 | TextField (Q2 + T19 + D34; `UITextField` on iOS, `BasicTextField` on Android) | Opus | Opus | merged (PR #26; 1 impl + 2 fix rounds, merge fixes applied by the orchestrator; device gates on maintainer-mac-1, check on mac-2) |
-| G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | fix round 2 (last; PR #28; re-review MERGE WITH FIXES: iOS drop tests read a stale report, Android hover super) |
+| G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | merged (PR #28; 1 impl + 2 fix rounds, re-review MERGE; all five merge gates green on mac-2 on the main + D4 + Chip + BottomSheet tree `87d4b2ab0814`) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
