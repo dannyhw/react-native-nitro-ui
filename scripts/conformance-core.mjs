@@ -641,14 +641,15 @@ export const DECLARED_FALLBACKS = Object.freeze({
   // `HybridNitroUiSearchField.kt` (`FALLBACK_HEIGHT_DP`) and
   // `HybridNitroUiSearchField.swift` (`fallbackSize`): Material 3's
   // `SearchBarDefaults.InputFieldHeight` (56 dp) and the height UIKit's
-  // `UISearchTextField` measures at the body font (37 pt). Both are a *bar*, not a line
-  // of text — which is the whole reason SearchField is its own Hybrid View: keyed by
-  // component, a cold SearchField is laid out at the bar's height rather than at
-  // TextField's line for one frame (`docs/architecture/sizing.md` §5).
+  // `UISearchTextField` measures at the body font (28 pt — the same height UIKit gives
+  // the field inside its own search bar). Both are taller than a line of text — which is
+  // the whole reason SearchField is its own Hybrid View: keyed by component, a cold
+  // SearchField is laid out at the bar's height rather than at TextField's line for one
+  // frame (`docs/architecture/sizing.md` §5).
   // `fillWidth`, so only the height is the control's own and only it is compared.
   NitroUiSearchField: {
     android: { width: 200, height: 56 },
-    ios: { width: 200, height: 37 },
+    ios: { width: 200, height: 28 },
   },
   // `HybridNitroUiChip.swift` (`fallbackSize`) and `HybridNitroUiChip.kt`
   // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`): a short label's capsule on iOS, and a
