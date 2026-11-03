@@ -20,12 +20,12 @@ import {
   HOSTABLE_NAMES,
 } from '../components/Host/HostChildren';
 import { Chip } from '../components/Chip/Chip';
-import { Picker } from '../components/Picker/Picker';
 import {
   HOSTABLE_CONTROLS,
   UNHOSTABLE_CONTROLS,
 } from '../components/Host/HostChildren';
 import { Switch } from '../components/Switch/Switch';
+import { TextField } from '../components/TextField/TextField';
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 
 /**
@@ -190,12 +190,12 @@ describe('Host children', () => {
   });
 
   /**
-   * `Chip` (G12) is the one control the library ships that a Host refuses: it was
-   * built without a round that measured it inside one. The refusal names it, and
-   * says whose `<Chip>` it is - an app may well have a chip of its own.
+   * `TextField` (G13) and `Chip` (G12) are the controls the library ships that a Host
+   * refuses: neither has had a round that measured it inside one. The refusal names
+   * the Chip, and says whose `<Chip>` it is - an app may well have a chip of its own.
    */
   it('names the Chip, which no round has measured inside a Host', () => {
-    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['Chip']);
+    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['TextField', 'Chip']);
     const error = errorFor(<Chip label="Vegan" />);
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/react-native-nitro-ui's <Chip>/);
@@ -203,32 +203,25 @@ describe('Host children', () => {
 
   /**
    * The refusal sentence for a nitro-ui control that has not been measured inside a
-   * Host is the rule the *next* control meets too, so it is also proved on a stand-in:
-   * put one in the table, ask the check, and take it back out. A row that was never
-   * exercised is a row that can rot, and this is the difference between a rule and a
-   * comment.
+   * Host. From H2b until G13 no shipped control was refused, so this used a stand-in;
+   * the TextField is the first real row (`UNHOSTABLE_CONTROLS`), and the sentence is
+   * asked of it directly.
    */
   it('names a control the Host does not render yet', () => {
-    // The allowlist is consulted first, so a control cannot be refused while it is
-    // still on it - which is the right order (a table cannot take back a permission
-    // the other table granted). To ask the sentence the question the next control
-    // will get, move `Picker` across for the length of the check.
-    UNHOSTABLE_CONTROLS.set(Picker, 'Picker');
-    HOSTABLE_CONTROLS.delete(Picker);
+    const error = errorFor(<TextField placeholder="Name" />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/<TextField>/);
+    // "nitro-ui's", so the sentence says whose control it is before saying what is
+    // wrong with it - `TextField` and `Switch` exist in more than one library.
+    expect(error?.message).toMatch(/react-native-nitro-ui's <TextField>/);
+    // The allowlist is consulted first, so a table cannot take back a permission the
+    // other granted: a control on both is accepted.
+    HOSTABLE_CONTROLS.set(TextField, 'TextField');
     try {
-      const error = errorFor(
-        <Picker options={['a', 'b']} selectedIndex={0} onChange={() => {}} />
-      );
-      expect(error).not.toBeNull();
-      expect(error?.message).toMatch(/<Picker>/);
-      // "nitro-ui's", so the sentence says whose control it is before saying what
-      // is wrong with it - `Switch` and `Picker` exist in more than one library.
-      expect(error?.message).toMatch(/react-native-nitro-ui's <Picker>/);
+      expect(errorFor(<TextField placeholder="Name" />)).toBeNull();
     } finally {
-      UNHOSTABLE_CONTROLS.delete(Picker);
-      HOSTABLE_CONTROLS.set(Picker, 'Picker');
+      HOSTABLE_CONTROLS.delete(TextField);
     }
-    expect(errorFor(createElement(Picker as never))).toBeNull();
   });
 
   /**

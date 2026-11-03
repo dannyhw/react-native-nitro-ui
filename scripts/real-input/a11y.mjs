@@ -320,6 +320,16 @@ export const A11Y_CONTROLS = Object.freeze([
     anchorTestId: 'host-mixed-progress-linear',
     iosTrait: 'progress indicator',
   },
+  {
+    id: 'text-field',
+    component: 'TextField',
+    hybridView: 'NitroUiTextField',
+    screen: 'textfield',
+    label: 'Typing field',
+    role: 'interactive',
+    anchorTestId: 'text-typing',
+    iosTrait: 'text field',
+  },
 ]);
 
 /**

@@ -639,6 +639,14 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 96, height: 48 },
     ios: { width: 80, height: 28 },
   },
+  // `HybridNitroUiTextField.swift` (`declaresFallback`) and `HybridNitroUiTextField.kt`
+  // (`FALLBACK_*_DP`): one line of the body font - UITextField's 22 pt, Material 3
+  // `bodyLarge`'s 24 dp - at the width a field draws under a parent that gives it none.
+  // `fillWidth`, so only the height is the control's own and only it is compared.
+  NitroUiTextField: {
+    android: { width: 200, height: 24 },
+    ios: { width: 200, height: 22 },
+  },
 });
 
 /**

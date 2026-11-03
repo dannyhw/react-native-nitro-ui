@@ -11,6 +11,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
 } from 'react-native-nitro-ui';
 import * as React from 'react';
 import {
@@ -97,6 +98,7 @@ const SMOKE_CONTROLS = [
   'picker',
   'menu',
   'chip',
+  'text-field',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -292,6 +294,11 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('chip')}
           label="Filter"
           testID="SMOKE-chip"
+        />
+        <TextField
+          onLayout={measureFor('text-field')}
+          placeholder="Name"
+          testID="SMOKE-text-field"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a

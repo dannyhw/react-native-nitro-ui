@@ -28,4 +28,5 @@ export const SCREEN_FILE = Object.freeze({
   menu: 'example/src/MenuScreen.tsx',
   chip: 'example/src/ChipScreen.tsx',
   host: 'example/src/HostScreen.tsx',
+  textfield: 'example/src/TextFieldScreen.tsx',
 });

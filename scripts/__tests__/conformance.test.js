@@ -186,6 +186,7 @@ describe('coverage', () => {
       'SegmentedControl',
       'Slider',
       'Switch',
+      'TextField',
     ]);
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(read('nitro-ui.sizing.json')),
@@ -1907,6 +1908,7 @@ describe('the a11y sweep, against a fake device', () => {
         'menu',
         'chip',
         'host',
+        'textfield',
       ]);
     });
   });

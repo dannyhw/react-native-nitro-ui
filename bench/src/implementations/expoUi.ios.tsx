@@ -7,8 +7,10 @@ import {
   ProgressView,
   Slider,
   Text,
+  TextField,
   Toggle,
   VStack,
+  useNativeState,
 } from '@expo/ui/swift-ui';
 import {
   buttonStyle,
@@ -19,6 +21,8 @@ import {
   progressViewStyle,
   tag,
 } from '@expo/ui/swift-ui/modifiers';
+
+import { useEffect } from 'react';
 
 import type { BenchListProps } from '../types';
 import {
@@ -42,6 +46,8 @@ import {
   segmentedOptions,
   sliderValue,
   stackStyle,
+  onTextChange,
+  textFieldValue,
 } from './shared';
 
 /**
@@ -182,6 +188,25 @@ function BenchSlider({ index, value }: { index: number; value: boolean }) {
       min={0}
       max={1}
       onValueChange={onSliderChange}
+    />
+  );
+}
+
+/**
+ * `@expo/ui`'s SwiftUI `TextField`, with its text in an observable - the one way
+ * Expo takes a value - written when the runner flips, so `update.text-field` is a
+ * text write here as it is for the other arms.
+ */
+function BenchTextField({ index, value }: { index: number; value: boolean }) {
+  const text = useNativeState<string>(textFieldValue(value));
+  useEffect(() => {
+    text.value = textFieldValue(value);
+  }, [text, value]);
+  return (
+    <TextField
+      testID={`bench-expo-text-field-${String(index)}`}
+      text={text}
+      onTextChange={onTextChange}
     />
   );
 }
@@ -331,6 +356,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
           </Host>
+        ) : component === 'text-field' ? (
+          <Host key={index} style={style}>
+            <BenchTextField index={index} value={value} />
+          </Host>
         ) : component === 'progress' ? (
           <Host key={index} style={style}>
             <BenchProgress index={index} value={value} />
@@ -388,6 +417,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'slider' ? (
             <BenchSlider key={index} index={index} value={value} />
+          ) : component === 'text-field' ? (
+            <BenchTextField key={index} index={index} value={value} />
           ) : component === 'progress' ? (
             <BenchProgress key={index} index={index} value={value} />
           ) : (

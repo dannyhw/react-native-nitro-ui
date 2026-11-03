@@ -19,6 +19,7 @@
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
+#include "HybridNitroUiTextFieldSpecSwift.hpp"
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
@@ -229,6 +230,38 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiSwitchSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(const std::string& /* value */, double /* eventCount */)>
+  Func_void_std__string_double create_Func_void_std__string_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_std__string_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& value, double eventCount) mutable -> void {
+      swiftClosure.call(value, eventCount);
+    };
+  }
+  
+  // pragma MARK: std::function<void(bool /* focused */)>
+  Func_void_bool create_Func_void_bool(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_bool::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](bool focused) mutable -> void {
+      swiftClosure.call(focused);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiTextFieldSpec>
+  std::shared_ptr<HybridNitroUiTextFieldSpec> create_std__shared_ptr_HybridNitroUiTextFieldSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiTextFieldSpec_cxx swiftPart = NitroUi::HybridNitroUiTextFieldSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiTextFieldSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiTextFieldSpec_(std__shared_ptr_HybridNitroUiTextFieldSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiTextFieldSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiTextFieldSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiTextFieldSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiTextFieldSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
 

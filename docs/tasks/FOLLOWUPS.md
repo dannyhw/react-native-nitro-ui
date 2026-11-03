@@ -112,4 +112,13 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G12: `scripts/conformance/make-a11y-fixtures.mjs` dumps for switch/button/menu now differ from the committed fixtures (only `chip.xml` was regenerated).
 - G12: `app.stamp` hashes `etc/`, which the gate ledger treats as check-only, so an API-report update forces app rebuilds.
 - Wall-clock-sensitive tooling tests go red under heavy load: `lease.test.js` "holds new leases back for a waiting exclusive request" and "waits in the process rather than refusing" (jest's 5 s default), and `ci-workflows.test.js` "the diagnostics step gives up on its own budget" (700 ms per command). All three failed twice in `check` at load1 62–68 on maintainer-mac-1 and passed 87/87 alone at load ~18 (M2). Give them a timing budget that scales with load, or a fake clock.
-
+- TextField (G13 merge review): iOS `nuiSetText` after the backstop cuts text in the middle of the field moves the caret to the end (`HybridNitroUiTextField.swift` ~874); keep the caret after the kept part of the edit.
+- TextField Android parity: Compose 1.12 maps `autoCorrect=false` to "no autocorrect" only, while RN also sets `TYPE_TEXT_FLAG_NO_SUGGESTIONS`, so the keyboard still shows suggestions (and may open a composing region over the word at the caret) on our field.
+- TextField Android: `observe` pays an owed `maxLength` cut before `settle`, so the cut's event makes a write held through the composition stale. Unreachable today (the input transformation already cuts composing text), but the order should be settle first.
+- TextField Android harness: `commits a keystroke about as fast as RN TextInput` failed twice at load1 3-5 with `nitro: "ab" never committed` (G13 fix round 2). The merge makes the probe's `commit` finish any composing region first and prints the field's state on failure; if it recurs, the state says whether the key landed on a keyboard-opened composition (`b`) or never arrived (`a`).
+- `lease.mjs list` pairs the stale `x16_avd` record with `emulator-5574`, the serial pair-a's `nitroui_a` boots on, so one console reads as both an unowned pool device and a leased one (D4).
+- G12 real-input: the Chip barrier also passes a late extra press, so accept a count of 3 only after a retry has shown it is not still climbing.
+- G12 harness: the quick-toggle test has no witness that the "behind" props batch happened; add one, or the test can pass without exercising the race.
+- G12 Chip (Android): a held correction can be dropped when the catching-up batch fails the stamp check (`HybridNitroUiChip.kt` ~556-566); re-measure instead of dropping it.
+- G12 Chip: no JS unit test covers the count echo or a switch between controlled and uncontrolled `selected`.
+- G12: `Host.harness.tsx:153` keeps a local `handleOf` instead of importing the shared one, as `HostPopups.harness.tsx` does.

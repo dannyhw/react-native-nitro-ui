@@ -9,6 +9,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
@@ -25,6 +26,7 @@ import {
   onPickerChange,
   onSegmentChange,
   onSliderChange,
+  onTextChange,
   onValueChange,
   pickerOptions,
   pickerSelection,
@@ -34,6 +36,7 @@ import {
   segmentedOptions,
   sliderValue,
   stackStyle,
+  textFieldValue,
 } from './shared';
 
 /**
@@ -247,6 +250,13 @@ export function NitroUiHostList({
         />
       );
     }
+    if (component === 'text-field') {
+      // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): the plan never asks
+      // this arm for it (`BenchImplementation.components`), and a Host would refuse it.
+      throw new Error(
+        'nitro-ui-host cannot compose text-field: a Host refuses it'
+      );
+    }
     // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.
@@ -413,6 +423,24 @@ export function NitroUiList({
             testID={`bench-nitro-ui-slider-${String(index)}`}
             value={sliderValue(value)}
             onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'text-field') {
+    // A controlled single-line field: `update.text-field` writes new text
+    // through the handshake, the path an app's `setText` takes.
+    return (
+      <>
+        {range(n).map((index) => (
+          <TextField
+            key={index}
+            testID={`bench-nitro-ui-text-field-${String(index)}`}
+            value={textFieldValue(value)}
+            onChangeText={onTextChange}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />
