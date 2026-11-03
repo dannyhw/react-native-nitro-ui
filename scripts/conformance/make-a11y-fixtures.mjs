@@ -33,6 +33,7 @@ const TAB_LABEL = {
   menu: 'Menu',
   chip: 'Chip',
   host: 'Host',
+  textfield: 'Text',
 };
 
 function adb(args) {

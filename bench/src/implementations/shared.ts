@@ -20,14 +20,17 @@ const ROW_HEIGHTS: Record<
   number
 > = {
   // RN's Switch, SwiftUI's Toggle and M3's Switch all fit; 34 is T02/T10's row.
-  switch: 34,
+  'switch': 34,
   // Above SwiftUI's measured 31 pt and Material 3's measured 40 dp, so nothing
   // clips and every arm still lays out the identical area.
-  slider: 44,
+  'slider': 44,
   // The circular variants are the tall ones: SwiftUI's `.circular` ProgressView
   // is 32 pt and Material 3's loading indicator is 40 dp, so the row is as tall
   // as the slider's to hold either without clipping the arm under test.
-  progress: 44,
+  'progress': 44,
+  // One line of text: UITextField's 22 pt, `TextInput`'s ~22 pt and Material 3
+  // `bodyLarge`'s 24 dp all fit, and every arm lays out the identical area.
+  'text-field': 44,
 };
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
@@ -94,6 +97,7 @@ const styles = StyleSheet.create({
   row: { height: ROW_HEIGHTS.switch, width: '100%' },
   sliderRow: { height: ROW_HEIGHTS.slider, width: '100%' },
   progressRow: { height: ROW_HEIGHTS.progress, width: '100%' },
+  textFieldRow: { height: ROW_HEIGHTS['text-field'], width: '100%' },
 });
 
 /**
@@ -109,6 +113,9 @@ export function rowStyle(component: ComponentName) {
   }
   if (component === 'slider') {
     return styles.sliderRow;
+  }
+  if (component === 'text-field') {
+    return styles.textFieldRow;
   }
   return component === 'progress' ? styles.progressRow : styles.row;
 }
@@ -166,6 +173,21 @@ export function onSliderChange(_value: number): void {
  */
 export function sliderValue(value: boolean): number {
   return value ? 0.75 : 0.25;
+}
+
+/**
+ * The text every TextField arm shows, flipped by the `update.text-field` cell.
+ *
+ * Two lengths, so a flip is a real write of new text through each arm's
+ * controlled path (the nitro-ui handshake, `TextInput`'s `value`).
+ */
+export function textFieldValue(value: boolean): string {
+  return value ? 'Hello, world' : 'Hello';
+}
+
+/** `onChangeText` for the TextField arms: the runner owns the text. */
+export function onTextChange(_text: string): void {
+  // Intentionally empty: state is driven by the runner.
 }
 
 /**

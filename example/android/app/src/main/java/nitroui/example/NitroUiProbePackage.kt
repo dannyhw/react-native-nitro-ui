@@ -92,6 +92,87 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * Type into the focused field the way an IME does, for the TextField harness (G13):
+   * `commit` commits [text] through the focused view's `InputConnection`, `compose`
+   * sets it as composing text (an open IME composition, the way Gboard holds every
+   * Latin word while autocorrect is on), `finish` commits the composition, `cancel`
+   * deletes it, `action` presses the keyboard's Return, and `connect` starts over with a
+   * fresh connection for the focused field. Answers the focused view's class name.
+   *
+   * The Android twin of `HarnessUI.typeChar`, which only reaches an `EditText`: a
+   * Compose field has no `EditText` (Q2 §4), and its keystrokes arrive the way every
+   * IME's do, through the `InputConnection` its `AndroidComposeView` creates. Nothing
+   * is a shortcut into the field's state - the connection is Compose's own, and the
+   * edit runs its `InputTransformation` (`maxLength`) as a keyboard's would. The
+   * OS-level oracle is still the real-input runner's `adb shell input text`.
+   */
+  /**
+   * The connection [imeInput] reuses for a composition, and the view it belongs to.
+   * `connect` makes a new one. On the lease's emulator a composition opened this way
+   * is still committed before the app sees it (G13 round 1), so the composing kinds
+   * are kept for a device whose keyboard leaves it open.
+   */
+  private var connection: android.view.inputmethod.InputConnection? = null
+  private var connectionView: android.view.View? = null
+
+  @ReactMethod
+  fun imeInput(kind: String, text: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity")
+      return
+    }
+    activity.runOnUiThread {
+      try {
+        val focused = activity.currentFocus
+        if (focused == null) {
+          promise.reject("NO_FOCUS", "no view has focus")
+          return@runOnUiThread
+        }
+        // A composition is held on one connection, the way an IME holds one; every
+        // other kind gets a fresh connection, because a pooled view that comes back
+        // for another field keeps no session a cached connection could still reach.
+        val composing = kind == "compose" || kind == "finish" || kind == "cancel"
+        if (!composing || kind == "connect" || connectionView !== focused || connection == null) {
+          connection = focused.onCreateInputConnection(android.view.inputmethod.EditorInfo())
+          connectionView = focused
+        }
+        val ic = connection
+        if (ic == null) {
+          promise.reject("NO_INPUT", "${focused.javaClass.simpleName} has no input connection")
+          return@runOnUiThread
+        }
+        when (kind) {
+          "connect" -> Unit
+          // A typed key, not the end of a composition: close any composing region the
+          // keyboard opened over the word at the caret first, or `commitText` replaces
+          // that word instead of adding to it (Compose never sets NO_SUGGESTIONS).
+          "commit" -> {
+            ic.finishComposingText()
+            ic.commitText(text, 1)
+          }
+          "compose" -> ic.setComposingText(text, 1)
+          "finish" -> ic.finishComposingText()
+          // The user deleting the whole composition: empty composing text, then done.
+          "cancel" -> {
+            ic.setComposingText("", 1)
+            ic.finishComposingText()
+          }
+          // Return on the soft keyboard: the editor action a single-line field submits on.
+          "action" -> ic.performEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
+          else -> {
+            promise.reject("BAD_KIND", "unknown input kind $kind")
+            return@runOnUiThread
+          }
+        }
+        promise.resolve(focused.javaClass.simpleName)
+      } catch (error: Throwable) {
+        promise.reject("IME_INPUT", error)
+      }
+    }
+  }
+
   private companion object {
     /** The name JS asks the module registry for. */
     const val MODULE_NAME = "NitroUiProbe"

@@ -36,6 +36,7 @@ enum NitroUiDeclaredFallbacks {
     HybridNitroUiPicker.declareFallback()
     HybridNitroUiMenu.declareFallback()
     HybridNitroUiChip.declareFallback()
+    HybridNitroUiTextField.declareFallback()
     return true
   }()
 

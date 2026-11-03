@@ -9,6 +9,7 @@ import com.margelo.nitro.nitroui.HybridNitroUiSegmentedControl
 import com.margelo.nitro.nitroui.HybridNitroUiSwitch
 import com.margelo.nitro.nitroui.HybridNitroUiMenu
 import com.margelo.nitro.nitroui.HybridNitroUiChip
+import com.margelo.nitro.nitroui.HybridNitroUiTextField
 
 /**
  * The startup half of `NitroUiSizing.setFallback` (T14) - Android's version of
@@ -45,5 +46,6 @@ object NitroUiDeclaredFallbacks {
     HybridNitroUiPicker.declareFallback()
     HybridNitroUiMenu.declareFallback()
     HybridNitroUiChip.declareFallback()
+    HybridNitroUiTextField.declareFallback()
   }
 }

@@ -103,3 +103,16 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+// A single- or multi-line text field (G13, DECISIONS D34): `UITextField` (a
+// `UITextView` when `multiline`) on iOS, Compose `BasicTextField(TextFieldState)`
+// on Android. The text is controlled through the event-count handshake, a `value`
+// write is dropped while an IME composition is open, and `ref` gives `focus()` /
+// `blur()`.
+export {
+  TextField,
+  type TextFieldAutoCapitalize,
+  type TextFieldHandle,
+  type TextFieldKeyboardType,
+  type TextFieldProps,
+  type TextFieldReturnKeyType,
+} from './components/TextField/TextField';

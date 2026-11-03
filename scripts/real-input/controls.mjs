@@ -100,6 +100,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
     screen: 'chip',
   },
+  {
+    id: 'text-field',
+    title:
+      'real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it',
+    screen: 'textfield',
+  },
   // @end-generated
 ]);
 

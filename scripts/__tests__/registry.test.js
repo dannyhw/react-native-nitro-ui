@@ -601,7 +601,7 @@ describe('the generated tables cover what they claim', () => {
       '"HybridNitroUiButton": "intrinsic"'
     );
     const withHost = table.replace(
-      /("intrinsic")\n\}\n$/,
+      /("(?:intrinsic|fillWidth)")\n\}\n$/,
       '$1,\n  "HybridNitroUiHost": "intrinsic"\n}\n'
     );
     expect(withHost).toContain('"HybridNitroUiHost"');
@@ -657,11 +657,15 @@ describe('the generated tables cover what they claim', () => {
     // comment says the next control "starts here, refused". An imports region that
     // wanted only the hostable ones would therefore delete the import of a control
     // that flips the flag, and `tsc` would not find the name (review M2).
-    const host = (text) =>
+    const table = (text, name) =>
       text.slice(
-        text.indexOf('export const HOSTABLE_CONTROLS'),
-        text.indexOf(']);', text.indexOf('export const HOSTABLE_CONTROLS'))
+        text.indexOf(`export const ${name}`),
+        text.indexOf(']);', text.indexOf(`export const ${name}`))
       );
+    // Both tables: a refused control (G13's TextField) is imported for its row in
+    // UNHOSTABLE_CONTROLS, so "one import per row" reads the two together.
+    const host = (text) =>
+      table(text, 'HOSTABLE_CONTROLS') + table(text, 'UNHOSTABLE_CONTROLS');
     // One import per component directory, naming every export its manifest lists
     // (`exports`: Dialog's file exports AlertDialog and ConfirmationDialog).
     const importLines = (text) => [
@@ -676,9 +680,8 @@ describe('the generated tables cover what they claim', () => {
       [...host(text).matchAll(/^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm)].map(
         (m) => m[1]
       );
-    // The refused side, read the same way. G12's Chip is the first control a Host
-    // refuses since H2b, so the imports are the two tables together, not the
-    // allowlist alone.
+    // The refused side alone, read the same way: G13's TextField and G12's Chip are
+    // the controls a Host refuses since H2b (`rows` already reads both tables).
     const refused = (text) => {
       const start = text.indexOf('export const UNHOSTABLE_CONTROLS');
       return [
@@ -688,10 +691,8 @@ describe('the generated tables cover what they claim', () => {
       ].map((m) => m[1]);
     };
     const before = readRepo('src/components/Host/HostChildren.ts');
-    expect(refused(before)).toEqual(['Chip']);
-    expect([...imports(before)].sort()).toEqual(
-      [...rows(before), ...refused(before)].sort()
-    );
+    expect(refused(before)).toEqual(['TextField', 'Chip']);
+    expect([...imports(before)].sort()).toEqual([...rows(before)].sort());
 
     const flipped = repoManifests().map((m) =>
       m.name === 'Switch' ? { ...m, hostable: false } : m
@@ -700,7 +701,13 @@ describe('the generated tables cover what they claim', () => {
     expect(flippedRun.drift).toContain('src/components/Host/HostChildren.ts');
     const after = flippedRun.files['src/components/Host/HostChildren.ts'];
     // the row leaves HOSTABLE_CONTROLS...
-    expect(rows(after)).not.toContain('Switch');
+    expect(
+      [
+        ...table(after, 'HOSTABLE_CONTROLS').matchAll(
+          /^ {2}\[([A-Z]\w*), '[A-Z]\w*'\],$/gm
+        ),
+      ].map((m) => m[1])
+    ).not.toContain('Switch');
     // ...and the import stays, because UNHOSTABLE_CONTROLS is where it goes
     expect(imports(after)).toContain('Switch');
     // and every control the library has is imported, hostable or not

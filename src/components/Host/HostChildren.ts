@@ -30,6 +30,7 @@ import { Slider } from '../Slider/Slider';
 import { Switch } from '../Switch/Switch';
 import { Menu } from '../Menu/Menu';
 import { AlertDialog, ConfirmationDialog } from '../Dialog/Dialog';
+import { TextField } from '../TextField/TextField';
 import { Chip } from '../Chip/Chip';
 
 /**
@@ -79,14 +80,20 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * added without a row in one of the two tables, so this list cannot quietly fall
  * behind the library.
  *
- * H2b emptied it, and `Chip` (G12) is the first control to start here again: a
- * control goes on this table until a round has measured it inside a Host, and G12
- * built the chip without that round (`docs/components/chip.md`, "Limits"). The
- * row is hand-written rather than generated: the registry writes the imports and
- * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable`
- * flag.
+ * Empty from H2b until G13: every control the library shipped was hosted. A
+ * control goes on this table until a round has measured it inside a Host, as this
+ * table always said the next control would. `TextField` (G13) starts here because a
+ * field inside a shared composition means IME sessions and focus owned by the Host,
+ * and no round has measured that yet (G13 report, follow-ups); `Chip` (G12) because
+ * it was built without that round (`docs/components/chip.md`, "Limits"). The rows
+ * are hand-written rather than generated: the registry writes the imports and the
+ * allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
+ * and proves the refusal with both rows.
  */
-export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([[Chip, 'Chip']]);
+export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
+  [TextField, 'TextField'],
+  [Chip, 'Chip'],
+]);
 
 /**
  * The RN views an app reaches for, so that "no RN views in a Host" is checked
