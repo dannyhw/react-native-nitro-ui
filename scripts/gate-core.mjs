@@ -1274,6 +1274,26 @@ export function countsForDisplay(entry) {
   return failed > 0 ? combineSummaries(summaries) : summaries[0];
 }
 
+/**
+ * The Counts cell of a row. A full `harness:<platform>` run prints two summaries - the
+ * shared run, then the isolated suites' own app instance (`scripts/harness-isolated.mjs`)
+ * - and both are shown, each with its own failures, so a table says the isolated run
+ * happened and what it held.
+ *
+ * @param {object | undefined} entry a ledger line
+ * @returns {string}
+ */
+export function formatRowCounts(entry) {
+  const summaries = Array.isArray(entry?.summaries) ? entry.summaries : [];
+  if (
+    /^harness:(ios|android)$/.test(entry?.gate ?? '') &&
+    summaries.length === 2
+  ) {
+    return `${formatCounts(summaries[0])} + isolated ${formatCounts(summaries[1])}`;
+  }
+  return formatCounts(countsForDisplay(entry));
+}
+
 /** Sum two or more step summaries into one, so a red row can lead with them. */
 export function combineSummaries(summaries) {
   const keys = ['passed', 'failed', 'skipped', 'pending', 'total'];
@@ -1374,7 +1394,7 @@ export function renderGateTable({
     const label = `${STATE_LABELS[row.state] ?? row.state}${row.reused != null ? ' *(reused)*' : ''}`;
     return (
       `| \`${row.gate}\` | ${label} | ` +
-      `${formatCounts(countsForDisplay(entry))} | ${formatTreeCell(row)} | ` +
+      `${formatRowCounts(entry)} | ${formatTreeCell(row)} | ` +
       `${entry == null ? '—' : formatDuration(entry.durationMs)} | ` +
       `${entry == null ? '—' : formatLoad(entry.load)}${evidenceText} |`
     );

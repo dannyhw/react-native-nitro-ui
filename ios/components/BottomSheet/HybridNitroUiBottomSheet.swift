@@ -601,6 +601,10 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
 
   private let reportLock = NSLock()
   private var report = ""
+  /// How many reports this instance has built. A read returns the last one built and
+  /// asks main for the next, so it is one behind: a test that needs state from after a
+  /// moment reads `seq` once after it, then waits for a larger one (G14 review).
+  private var reportSeq = 0
 
   override init() {
     super.init()
@@ -1079,7 +1083,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
   /// only once a report has been asked for.
   private func publishReport() {
     guard Self.reportsWanted.value > 0 else { return }
-    var fields: [String] = []
+    reportSeq += 1
+    var fields: [String] = ["seq=\(reportSeq)"]
     fields.append("presented=\(state.displayed ? 1 : 0)")
     fields.append("js=\(state.js == true ? 1 : 0)")
     fields.append("live=\(Self.live.value)")
