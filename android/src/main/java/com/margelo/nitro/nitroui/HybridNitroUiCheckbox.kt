@@ -23,7 +23,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
@@ -49,6 +53,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.roundToInt
 
 /*
  * The Checkbox component: Material 3 `Checkbox`, and `TriStateCheckbox` while
@@ -112,6 +117,25 @@ internal class CheckboxModel : NitroUiModel() {
   private var accessibilityReport = "none"
 
   /**
+   * The label's centring, as `labelOff=<dp>,<dp>`: how far the text's middle sits from the
+   * row's middle (negative means it rides high), and how much taller the row is than the
+   * text. Both `none` when no label is drawn.
+   *
+   * A labelled Checkbox is a `Row` of box, spacer and text, and the height of that row is
+   * set by the box's 48 dp touch target, so a `Row` that aligns its children to the top
+   * draws the label along the top of a row that looks 48 dp tall. That is invisible to a
+   * measurement - the box, the row and the screenshot all come back 48 dp - and visible to
+   * anybody reading the screen, so it is measured in the one place that knows both boxes:
+   * the label's own layout coordinates, against its parent's.
+   *
+   * The second number is what stops the first from proving nothing. Text as tall as its
+   * row is centred by every alignment there is, so a `labelOff` of `0` measured in a row
+   * that snug as the text is a tautology; the harness reads the gap before it believes the
+   * offset.
+   */
+  private var labelBox = "none"
+
+  /**
    * Record what the composable was handed: `mixed` while Material draws the third
    * state, so a test can tell "indeterminate" from "checked" and from "never drew".
    */
@@ -131,10 +155,15 @@ internal class CheckboxModel : NitroUiModel() {
     }
   }
 
-  /** `displayed=…;probes=…;merged=…;a11y=…`. Safe from any thread. */
+  /** Record [labelBox] from the label's own layout pass. */
+  fun recordLabelBox(value: String) {
+    synchronized(reportLock) { labelBox = value }
+  }
+
+  /** `displayed=…;probes=…;merged=…;a11y=…;labelBox=…`. Safe from any thread. */
   fun stateReport(): String =
     synchronized(reportLock) {
-      "displayed=$drawn;probes=$probes;merged=$merged;a11y=$accessibilityReport"
+      "displayed=$drawn;probes=$probes;merged=$merged;a11y=$accessibilityReport;labelBox=$labelBox"
     }
 
   override fun reset() {
@@ -157,6 +186,7 @@ internal class CheckboxModel : NitroUiModel() {
       probes = 0
       merged = "none"
       accessibilityReport = "none"
+      labelBox = "none"
     }
   }
 }
@@ -271,6 +301,7 @@ private class CheckboxHost(
     val label = model.label
     val name = model.accessibilityLabel ?: label
     val colors = checkboxColors(model.tint)
+    val density = LocalDensity.current
     if (label == null) {
       // A bare box: Material's own node is the one a reader acts on, and the name
       // goes on it (Chip's rule: the name belongs on the actionable node).
@@ -298,6 +329,14 @@ private class CheckboxHost(
       // own centre - what a caller, a test and TalkBack all aim at - lands in the
       // gap and does nothing.
       Row(
+        // Centre the label against the box. `Row` aligns its children to the top by
+        // default, and this row is 48 dp tall because the box asks for a 48 dp touch
+        // target - so the default draws a ~24 dp label along the top of a row that still
+        // measures 48 dp, with its middle 12 dp above the row's. Every size assertion is
+        // blind to that: box, row and screenshot all come back 48 dp. Material's own
+        // labelled checkbox centres its text for the same reason, and
+        // `Checkbox.harness.tsx`'s centring case measures this row's label to prove it.
+        verticalAlignment = Alignment.CenterVertically,
         modifier =
           Modifier.semantics(mergeDescendants = true) {
             role = Role.Checkbox
@@ -316,8 +355,9 @@ private class CheckboxHost(
       ) {
         // Presentational here: the row already carries the toggle and the state, and
         // a second toggleable node inside it is the second focus stop again. Its own
-        // semantics are cleared rather than merely unused, because `TriStateCheckbox`
-        // insists on an `onClick` and would publish a click of its own.
+        // semantics are cleared rather than merely unused: the row already publishes the
+        // one toggle a reader should meet, and a second node with one is the second focus
+        // stop this file exists to avoid.
         //
         // The 48 dp touch target comes with the box's *own* toggleable modifier, so a
         // presentational box loses it - measured here as a labelled checkbox 24 dp
@@ -334,6 +374,29 @@ private class CheckboxHost(
         // One line, tail-truncated: the checkbox's intrinsic width is the row's, and
         // a caller's narrower `width` truncates the label instead of painting outside.
         Text(
+          modifier =
+            Modifier.onGloballyPositioned { where ->
+              // Both boxes in the Row's own space: the label's middle against the
+              // middle of the height it was laid out in.
+              val row = where.parentLayoutCoordinates
+              model.recordLabelBox(
+                if (row == null) {
+                  "none"
+                } else {
+                  // Both numbers in dp: the offset from the row's middle, and the room
+                  // the row leaves around the text. Rounded to 1/100 dp, which is well
+                  // inside what either number is asserting.
+                  val fromMiddle =
+                    row.localPositionOf(where, Offset.Zero).y +
+                      where.size.height / 2f - row.size.height / 2f
+                  val room = (row.size.height - where.size.height).toFloat()
+                  fun dp(value: Float): String =
+                    ((with(density) { value.toDp().value } * 100f).roundToInt() / 100f)
+                      .toString()
+                  "${dp(fromMiddle)},${dp(room)}"
+                },
+              )
+            },
           text = label,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
@@ -353,8 +416,12 @@ private class CheckboxHost(
    * Material rather than asserted by us. A labelled box does not: the row around it
    * carries the toggle, the name and the state (see [Component]), so `Checkbox` is
    * handed a `null` `onCheckedChange` - which is M3's own way to say "draw it, do not
-   * make it actionable" - and `TriStateCheckbox`, whose `onClick` is not nullable,
-   * keeps one but arrives with its semantics cleared.
+   * make it actionable" - and `TriStateCheckbox` is handed the same `null` for the same
+   * answer. Its `onClick` has been nullable since Material 3 1.2 and this repo ships 1.4.0,
+   * so neither box publishes a click of its own once the row owns the tap. Round 1's comment
+   * claimed it insists on a non-null `onClick`, which is why it kept one - and an `onClick`
+   * installs the box's own interaction handling, whose ripple is bounded by the 48 dp box,
+   * while a labelled control's press belongs to the row it is in.
    */
   @Composable
   private fun CheckboxBox(
@@ -370,7 +437,7 @@ private class CheckboxHost(
             model.displayed -> ToggleableState.On
             else -> ToggleableState.Indeterminate
           },
-        onClick = { press() },
+        onClick = if (interactive) ({ press() }) else null,
         modifier = modifier,
         enabled = model.enabled,
         colors = colors,
@@ -412,14 +479,26 @@ class HybridNitroUiCheckbox(
     /**
      * The size to lay a Checkbox out with before anything has been measured, in dp.
      *
-     * One number for every configuration, for Button's reason (fallbacks are keyed
-     * by component). A bare M3 checkbox is 40 dp square - the control inside the
-     * 48 dp minimum interactive size - and a labelled one is wider by its label, so
-     * the height is the part that is the same everywhere and the width is a guess
-     * inside `docs/components/checkbox.md`'s measured table.
+     * One number for every configuration, for Button's reason (fallbacks are keyed by
+     * component), so each axis says what it can promise.
+     *
+     * The height is not a guess. `minimumInteractiveComponentSize` will not publish a
+     * touch target smaller than 48 dp, so bare, labelled, checked and indeterminate are all
+     * 48 dp tall - measured 48.00 bare and 48.00 labelled - and the conformance run compares
+     * this constant with that box. Round 1 declared 40, which is the Material 3 glyph's box
+     * *inside* the 48 dp target: the first frame of every Checkbox on its way to being
+     * measured was laid out 8 dp short of the size it would settle at, and no run noticed,
+     * because the control was exempt from having its own box compared with its own
+     * declaration. `HEIGHT_ONLY_FALLBACK` in `scripts/conformance-core.mjs` ends that, and
+     * its `declared-fallback` row is what goes red here.
+     *
+     * The width is a bare box's, and is not claimed for the labelled one: `Checkbox` measures
+     * 48 dp wide with nothing beside it and 131.05 dp with a label, and the engine keys
+     * fallbacks by component alone. `docs/components/checkbox.md` has the table;
+     * `Checkbox.harness.tsx` is where a label's effect on width is measured.
      */
     private const val FALLBACK_WIDTH_DP = 40.0
-    private const val FALLBACK_HEIGHT_DP = 40.0
+    private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
 

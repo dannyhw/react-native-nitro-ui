@@ -208,6 +208,34 @@ function reportOf(testId: string): Record<string, string> {
   return fields;
 }
 
+/**
+ * Poll until the labelled checkbox reports its centring, as `{ off, room }` in dp.
+ *
+ * `off` is the label's middle measured against the row's middle, `room` how much taller
+ * the row is than the text. Both come from the label's own layout pass, so they arrive a
+ * frame after the mount: until then the field reads `none` and there is nothing to read.
+ */
+async function waitForLabelBox(
+  testId: string,
+  what: string
+): Promise<{ off: number; room: number }> {
+  return pollUntil(
+    () => {
+      const value = reportOf(testId).labelBox;
+      if (value == null || value === 'none') return null;
+      const [off = NaN, room = NaN] = value.split(',').map(Number);
+      return Number.isFinite(off) && Number.isFinite(room)
+        ? { off, room }
+        : null;
+    },
+    () =>
+      new Error(
+        `"${testId}" (${what}) never reported its label's centring - it answers ` +
+          `"${reportOf(testId).labelBox ?? 'no field'}".`
+      )
+  );
+}
+
 /** Poll until the checkbox is drawing `displayed` (`1`, `0`, `mixed` or `none`). */
 async function waitForDisplayed(testId: string, displayed: string) {
   return pollUntil(
@@ -659,6 +687,49 @@ describe('Checkbox · G15', () => {
       for (const report of [off, on, bare, disabled]) {
         expect(report).toBe('unavailable');
       }
+    }
+  });
+
+  it('centres its label against the box', async () => {
+    // The row is 48 dp tall because the box asks for a 48 dp touch target, and the text
+    // is far shorter than that, so something has to decide where the label sits inside
+    // the extra height. A `Row` that defaults to top alignment draws the text along the
+    // top of a row that still measures 48 dp, which is why no size assertion in this
+    // suite ever saw it: the box, the row and the screenshot all agree, and the label is
+    // the one thing that disagrees. Measured in the control, from the label's own layout
+    // coordinates against its parent's (`CheckboxModel.recordLabelBox`).
+    await render(
+      <View style={rowStyle}>
+        <Checkbox
+          label="Email me offers"
+          testID="centred"
+          hybridRef={captureHybrid('centred')}
+        />
+      </View>
+    );
+    await waitForTestId('centred');
+    if (Platform.OS === 'android') {
+      const { off, room } = await waitForLabelBox(
+        'centred',
+        'the labelled Checkbox'
+      );
+      // Both numbers or neither. An offset on its own cannot tell a real mis-centring
+      // from a fixture that left nothing to mis-centre - text as tall as its row is
+      // centred by every alignment there is - so the room the row leaves around the text
+      // is checked before the offset is believed, and 8 dp of slack is a sixth of a
+      // 48 dp row. The offset itself gets a rounding step of the middle.
+      if (room < 8 || Math.abs(off) > 1) {
+        throw new Error(
+          `"centred" draws its label ${String(off)}dp from the middle of a row that ` +
+            `leaves ${String(room)}dp around the text`
+        );
+      }
+    } else {
+      // Nothing to read on iOS, and that is the honest answer rather than a skip: the
+      // platform's `Toggle` lays out its own label, so there is no row of ours to align
+      // wrongly. Asserted absent so the day this control grows a `labelBox`, this case
+      // has to grow the claim instead of quietly measuring nothing.
+      expect(reportOf('centred').labelBox).toBeUndefined();
     }
   });
 });

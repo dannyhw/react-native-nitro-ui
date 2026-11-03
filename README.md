@@ -463,8 +463,8 @@ check mark and is wider by it; on iOS selection only changes the fill.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/checkbox-ios.png" width="300" alt="Checkbox states: labelled and bare switches, one checked, a third-state row that reads as off on iOS, and two disabled rows" /></td>
-    <td><img src="docs/images/components/checkbox-android.png" width="300" alt="Checkbox states: labelled and bare Material 3 boxes, one checked, one indeterminate, and two disabled rows" /></td>
+    <td><img src="docs/images/components/checkbox-ios.png" width="300" alt="Checkbox on iOS: three switches (off, checked, and one with no label), a third-state column the switch reads as off and then on, and two disabled switches" /></td>
+    <td><img src="docs/images/components/checkbox-android.png" width="300" alt="Checkbox on Android: three Material 3 boxes (off, checked, and one with no label), a third-state column showing a dash and then a checked box, and two disabled boxes" /></td>
   </tr>
 </table>
 
@@ -492,8 +492,13 @@ export function CheckoutOptions({
 }
 ```
 
-`indeterminate` asks for a third glyph, not a third value: a tap still reports
-`true`, and on iOS it reads as off.
+`indeterminate` asks for a third glyph, not a third value, and iOS has nowhere to put it.
+A press reports the opposite of what the box shows — empty box → `true`, check mark →
+`false`, dash → `true` — and since Android draws a check mark for a _checked_
+`indeterminate` box, the press that empties that one reports `false`. Nothing clears
+`indeterminate` for you, so an Android caller resolves it in `onCheckedChange`
+(`setIndeterminate(false)` beside `setChecked(next)`). On iOS every press reports
+`!checked` and the third state reads as off.
 [checkbox.md](docs/components/checkbox.md) has the sizes and the limits.
 
 ### AlertDialog and ConfirmationDialog

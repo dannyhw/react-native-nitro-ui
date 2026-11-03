@@ -125,6 +125,23 @@ function sizingVariantFor(label: string, indeterminate: boolean): string {
 }
 
 /**
+ * A name that is not a name, mapped to "none": `""` renders no text and names
+ * nothing, so it is the bare box.
+ *
+ * Sending `""` is not harmless. iOS applies `accessibilityLabel(_:)` whenever the
+ * name is non-nil (`OptionalAccessibility` in `HybridNitroUiCheckbox.swift`), and an
+ * empty one *silences* the element instead of naming it; Android's merged row would
+ * carry an empty `contentDescription` for the same reason. Normalising here, once,
+ * before the sizing key and before both props, is what makes `label=""`,
+ * `accessibilityLabel=""` and no label at all one configuration on both platforms —
+ * which the wrapper test pins, because the device suite sees a zero-width label and
+ * a missing one identically.
+ */
+function nameOrNull(value: string | undefined): string | null {
+  return value == null || value === '' ? null : value;
+}
+
+/**
  * What a self-sizing control is laid out with, before any `style`: Switch's and
  * Chip's base style, for their reason (a column's `alignItems: stretch` would
  * otherwise decide the width and the measurement would never be asked for).
@@ -173,6 +190,9 @@ export function Checkbox({
     onCheckedChange ?? onCheckedChangeNotProvided
   );
   const hybridRefCallback = useStableCallback(hybridRef);
+  // Both names, before anything reads them: see `nameOrNull`.
+  const labelText = nameOrNull(label);
+  const nameText = nameOrNull(accessibilityLabel);
 
   return (
     <NativeNitroUiCheckbox
@@ -181,14 +201,14 @@ export function Checkbox({
       defaultChecked={controlled.defaultValue}
       indeterminate={indeterminate ? true : null}
       mostRecentEventCount={controlled.mostRecentEventCount}
-      label={label ?? null}
+      label={labelText}
       disabled={disabled}
       tintColor={tint}
       testID={testID ?? null}
-      accessibilityLabel={accessibilityLabel ?? null}
+      accessibilityLabel={nameText}
       nuiPerfId={nuiPerfId}
       onCheckedChange={controlled.onNativeChange}
-      nuiSizingKey={sizingVariantFor(label ?? '', indeterminate)}
+      nuiSizingKey={sizingVariantFor(labelText ?? '', indeterminate)}
       nuiSizingId={sizingId}
       hybridRef={hybridRefCallback ?? undefined}
       style={[SELF_SIZING_BASE_STYLE, style]}

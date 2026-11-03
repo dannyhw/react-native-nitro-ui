@@ -2863,6 +2863,45 @@ final class RealInputTests: XCTestCase {
       "the enabled Checkbox, tapped the same way, should still answer"
     )
     XCTAssert(enabled.isHittable, "the controlled Checkbox should still be touchable")
+
+    // 5. The glyph itself, and one event for it. Every tap above aims at the row's middle,
+    //    which the guard above proved is on the label's side of the switch, so none of them
+    //    says the switch's own picture still takes a touch. It matters which one does: the
+    //    row carries a tap target of its own (`HybridNitroUiCheckbox.swift`), and a control
+    //    that answered a press on the glyph twice - once through its own gesture and once
+    //    through the row's - would look exactly right from the middle, where only the row's
+    //    handler is within reach. So: aim at the glyph, and count. One tap, one event, and
+    //    the value echo moved by one step, which is also what rules out a tap that did
+    //    nothing and a counter that was simply read too early.
+    let glyphBefore = Int(try read(Echo.checkboxEvents)) ?? -1
+    let glyphWanted = String(glyphBefore + 1)
+    glyph?.tap()
+    // The counter first, and read twice: the surplus event in Chip's G12 red proof arrived
+    // *after* the count was reached, so a count taken once proves nothing. One press on the
+    // glyph is one `onCheckedChange` - a second is the row's tap target and the Toggle's own
+    // gesture both answering the same touch, which is the failure this step is here for.
+    XCTAssertEqual(
+      readUntil(Echo.checkboxEvents, timeout: 3) { $0 != "\(glyphBefore)" }, glyphWanted,
+      "a real tap on the switch's own glyph should report exactly one change (the counter "
+        + "was at \"\(glyphBefore)\")"
+    )
+    Thread.sleep(forTimeInterval: 0.5)
+    XCTAssertEqual(
+      try read(Echo.checkboxEvents), glyphWanted,
+      "one press on the glyph is one `onCheckedChange`, no more, after a quiet period"
+    )
+    // Then what that one event did: the echo and the element both move by one step, which
+    // rules out a press that reported without acting - and a press that acted twice, which
+    // would have landed back on "on".
+    XCTAssertEqual(
+      readUntil(Echo.checkboxValue, timeout: 3) { $0 == "off" }, "off",
+      "a real tap on the switch's own glyph should flip the Checkbox, and the value echo "
+        + "should follow it to \"off\""
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox", "off"), "off",
+      "the tapped glyph's own element should report the value it was tapped into"
+    )
   }
 
   /// Poll a control's own Switch value until it reports `expected` (3 s), and return its
