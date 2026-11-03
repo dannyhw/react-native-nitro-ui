@@ -275,6 +275,90 @@ ledger these checks read. `<ID>` comes from `--task` or the branch name, and
 `--only coverage,report` runs a subset while iterating and prints `PARTIAL`, so a subset
 cannot be read as a pass.
 
+### README screenshots
+
+Every component the README lists is also **shown**, on both platforms, and
+`scripts/__tests__/readme-components.test.js` fails `check` until it is: a row in the Components
+table, the name in the README import block, and
+`docs/images/components/<kebab-case name>-{ios,android}.png` referenced from the component's Usage
+section in an `<img>` and present on disk at the documented width. `Host` is the only exemption — a
+container with no look of its own, whose pair would be a picture of a control that already has one —
+and the reason sits next to the name in that test.
+
+The convention the pictures are taken to:
+
+| Field   | Rule                                                                                                                                                           |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source  | the component's story in the example app's Storybook (`STORYBOOK_ENABLED=true`; `bun run storybook:ios` / `:android`), light appearance, default text size     |
+| iOS     | an iOS 27 iPhone simulator at 3x — whichever one the lease hands out — cropped to **804 px** wide                                                              |
+| Android | the lease's API 35 emulator, cropped to **720 px** wide                                                                                                        |
+| Names   | `<kebab-case name>-ios.png` / `-android.png`, so `SegmentedControl` is `segmented-control-ios.png` and `AlertDialog` is `alert-dialog-ios.png`                 |
+| README  | the same `<table>` Switch's Usage section uses: a `<tr><th>iOS</th><th>Android</th></tr>` header, `width="300"`, and alt text that says what the picture shows |
+
+A presentation — a dialog, a sheet, an open menu — is photographed **presented**: open it first, the
+way Menu's pair does. Two exports over one native view (`AlertDialog` and `ConfirmationDialog`) get
+one pair each, because the thing a reader compares is the two platforms.
+
+An iOS 27 confirmation is a popover anchored to the dialog's own box, and UIKit draws it **over**
+that box — with the trigger anywhere near the middle of a populated page, the picture is a card on
+top of half-hidden copy. Photograph it from `Dialog`'s `Confirmation Plain` story: one trigger low on
+an empty page, so the card opens upward and its arrow lands on the button it points at.
+
+The control pairs are crops at the simulator's native scale, so 804 and 720 px are two thirds of
+those two windows. A **presentation usually is not**: the iOS 27 alert card measures ~970 px at 3x
+and the Material dialog ~735 px on a 1080-px screen, so a 804/720 px crop of the window would slice
+the corners off. Take the band at the window's own width and scale it down to the documented width —
+the README draws every picture 300 px across, so nothing there can tell the two apart. Measure the
+card's edges rather than eyeballing them: dump a row and a column of pixels (`magick shot.png -crop
+1206x1+0+1360 +repage txt:-`) and look for where they stop matching the dimmed backdrop.
+
+The test reads the width out of the PNG's own IHDR chunk, so a renamed or re-encoded file cannot
+satisfy it: 804 px for iOS (803 is accepted, because the first committed `button-ios.png` is 803
+wide) and 720 px for Android.
+
+How a pair is taken. Nothing below is a committed change — the scratch edits go back before the
+screenshots leave the machine:
+
+```sh
+node scripts/lease.mjs acquire --task <ID> --boot      # "Leasing a device or port"
+node scripts/build-app.mjs --platform <p>              # an app to install on that device
+bun run storybook:generate                             # the story list, from example/
+
+# A scratch `initialSelection: '<component>--<story>'` (kebab-case of the file and the export, so
+# `Dialog.stories.tsx`'s `Playground` is `dialog--playground`) in the getStorybookUI options in
+# `example/.rnstorybook/index.tsx`, so the app cold-launches into the story to photograph: the
+# on-device story list is not in the iOS accessibility tree, so there is nothing to tap. Switching
+# stories means editing this line and relaunching. Restore the entry afterwards.
+STORYBOOK_ENABLED=true bun --cwd example start --port <metro port from the lease>
+
+# Point the installed app at that server the way scripts/real-input/ does: on iOS
+# `xcrun simctl spawn <udid> defaults write <bundle id> RCT_jsLocation -string localhost:<port>`
+# (delete the default afterwards), on Android the `debug_http_host` shared preference plus
+# `adb -s <serial> reverse tcp:<port>` (remove the reverse afterwards).
+# Android needs `adb -s <serial> shell am start -n nitroui.example/.MainActivity`: `monkey -p` prints
+# a SYS_KEYS line and leaves the launcher on screen.
+
+# Dismiss React Native's "Open debugger to view warnings" banner before photographing a bottom
+# sheet — it is pinned to the bottom of the window and draws over it. On iOS `agent-device open
+# --session sim --platform ios --device "<simulator name>" <bundle id>` then `agent-device
+# react-native dismiss-overlay --session sim`; on Android a tap on its ✕, which is not in the
+# accessibility tree, so measure it from a screenshot. It comes back on every launch.
+
+# Present what is worth photographing. iOS: `agent-device press 'text="Open the alert"' --session
+# sim --settle`, and `agent-device close --session sim` at the end — the driver does reach the iOS 27
+# simulator, whatever an older note in `RealInputTests.swift` says (it is still not what real-input
+# taps with: those have to come from XCUITest). Android: `adb -s <serial> shell uiautomator dump`
+# for the button's bounds, then `input tap` its centre.
+
+xcrun simctl io <udid> screenshot /tmp/story-full.png
+adb -s <serial> exec-out screencap -p > /tmp/story-full.png
+magick /tmp/story-full.png -crop 1206x660+0+1040 +repage -resize 804x docs/images/components/<name>-ios.png
+magick /tmp/story-full.png -crop 1080x640+0+930  +repage -resize 720x docs/images/components/<name>-android.png
+```
+
+`magick`/`sips` are a developer's tools, not a dependency: nothing in the repo resizes a picture at
+build time, and the guard only ever reads what shipped.
+
 ### Merging two components
 
 `bun run regen` is the merge recipe, and `bun run check` passing afterwards is the
