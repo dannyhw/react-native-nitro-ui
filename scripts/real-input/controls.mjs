@@ -113,6 +113,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
     screen: 'chip',
   },
+  {
+    id: 'search-field',
+    title:
+      'real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard',
+    screen: 'searchfield',
+  },
   // @end-generated
 ]);
 
