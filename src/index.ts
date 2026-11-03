@@ -125,3 +125,10 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+
+// A checkbox (G15): Material 3 `Checkbox`, or `TriStateCheckbox` while
+// `indeterminate`, on Android - and SwiftUI `Toggle(isOn:)` with the switch style on
+// iOS, which has no checkbox (`CheckboxToggleStyle` is unavailable there), as Expo's
+// universal Checkbox renders. `checked` is controlled through the event-count
+// handshake; `indeterminate` is a display and is Android-only.
+export { Checkbox, type CheckboxProps } from './components/Checkbox/Checkbox';
