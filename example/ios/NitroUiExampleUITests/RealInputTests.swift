@@ -48,6 +48,7 @@ final class RealInputTests: XCTestCase {
     static let pickerTab = "tab-picker"
     static let menuTab = "tab-menu"
     static let chipTab = "tab-chip"
+    static let checkboxTab = "tab-checkbox"
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
@@ -78,6 +79,11 @@ final class RealInputTests: XCTestCase {
     static let chipRefusedLast = "real-input-chip-refused-last"
     static let chipRefusedEvents = "real-input-chip-refused-events"
     static let chipPresses = "real-input-chip-presses"
+    static let checkboxValue = "real-input-checkbox-value"
+    static let checkboxEvents = "real-input-checkbox-events"
+    static let checkboxRefusedLast = "real-input-checkbox-refused-last"
+    static let checkboxRefusedEvents = "real-input-checkbox-refused-events"
+    static let checkboxDisabledEvents = "real-input-checkbox-disabled-events"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -375,6 +381,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.menuTab, screenAnchor: Echo.menuPick),
       A11yCase(id: "chip", testId: "real-input-chip", label: "Real-input chip",
                tab: Tab.chipTab, screenAnchor: Echo.chipValue),
+      A11yCase(id: "checkbox", testId: "real-input-checkbox", label: "Real-input checkbox",
+               tab: Tab.checkboxTab, screenAnchor: Echo.checkboxValue),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -2686,6 +2694,177 @@ final class RealInputTests: XCTestCase {
     }
     if shown != expected {
       dumpHierarchy("\(identifier) never announced \(expected)")
+    }
+    return shown
+  }
+
+  // MARK: - Checkbox
+
+  /// A real tap checks a Checkbox, a toggle its parent refuses snaps back, and a disabled
+  /// one takes nothing (G15).
+  ///
+  /// iOS has no checkbox, so the control renders SwiftUI `Toggle(isOn:)` with the `.switch`
+  /// style, which XCUITest reports as a switch-type element carrying a toggle trait and
+  /// `value` 0/1 - the same element a filter chip's `Toggle(.button)` produces, read here
+  /// with the Switch's own witness, `nativeSwitchState`.
+  ///
+  /// The element's value is asserted alongside the echo for a reason the Switch check does
+  /// not have: a native implementation that always requested `true` would light the "on"
+  /// echo on the first tap all the same. It is the *second* tap that has to ask for
+  /// `false`, so the value echo returning to `off`, the element returning to `0` and the
+  /// counter reading exactly `2` are said out loud rather than left to be inferred.
+  ///
+  /// The refusing one's oracle is the chip's and the SegmentedControl's: its parent keeps
+  /// `checked={false}`, so every tap asks for `true` again, and a Checkbox that had kept
+  /// the refused selection would ask for `false` on the second tap.
+  func testRealInputCheckbox() throws {
+    try goToTab(Tab.checkboxTab, showing: Echo.checkboxValue)
+    let enabled = try required("real-input-checkbox", as: "the controlled Checkbox")
+    let disabled = try required("real-input-checkbox-disabled", as: "the disabled Checkbox")
+    XCTAssertEqual(
+      try read(Echo.checkboxValue), "off",
+      "the Checkbox should start unchecked before any touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxEvents), "0",
+      "no change should be reported before a tap"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxDisabledEvents), "0",
+      "the counter the disabled Checkbox reports into should start at zero, so a stray "
+        + "delivery is a number that moved rather than a callback nobody saw"
+    )
+    XCTAssertEqual(
+      nativeSwitchState(of: "real-input-checkbox"), "off",
+      "the Checkbox's own element should start by reporting value 0"
+    )
+
+    // 1. Checked, then unchecked: one change per tap, in both directions.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox",
+        echo: Echo.checkboxValue,
+        expected: "on",
+        as: "the controlled Checkbox",
+        waitingFor: "the real tap that checks the box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox") }
+      ),
+      "on",
+      "one real tap should check the Checkbox, and React should render \"on\""
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox", "on"), "on",
+      "the checked Checkbox's own element should report value 1"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxEvents), "1",
+      "one tap should report exactly one change"
+    )
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox",
+        echo: Echo.checkboxValue,
+        expected: "off",
+        as: "the controlled Checkbox",
+        waitingFor: "the real tap that unchecks the box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox") }
+      ),
+      "off",
+      "a second real tap should ask for false: the value echo going back to \"off\" and "
+        + "the element back to value 0 is what rules out a native toggle that always "
+        + "requests true, which the tap above cannot see"
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox", "off"), "off",
+      "the unchecked Checkbox's own element should report value 0 again"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxEvents), "2",
+      "two taps should report two changes, one per tap"
+    )
+
+    // 2. The refusing parent: two requests, both for `true`, and the box still unchecked
+    //    after either. No `nativeState` witness is passed here, unlike the pair above: a
+    //    refused toggle is *supposed* to move natively and be pushed back by the next
+    //    render, so its value would say "the control moved and the echo sat still" about a
+    //    press that was simply dropped. The element is asserted directly, below, instead.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-checkbox-refusing",
+          echo: Echo.checkboxRefusedEvents,
+          expected: request,
+          as: "the refusing Checkbox",
+          waitingFor: "refused request \(request)"
+        ),
+        request,
+        "each real tap on the refusing Checkbox should reach onCheckedChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.checkboxRefusedLast), "true",
+        "refused request \(request) should ask for true: a Checkbox that kept the refused "
+          + "selection would ask for false on the second tap"
+      )
+      XCTAssertEqual(
+        waitForNativeSwitchState("real-input-checkbox-refusing", "off"), "off",
+        "the refused Checkbox should snap back to value 0 after request \(request)"
+      )
+    }
+
+    // 3. The disabled box takes nothing. It renders with the enabled one's value, so a
+    //    delivery that should not have happened is a number or a word that moved.
+    disabled.fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.checkboxDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap on the disabled Checkbox should be refused"
+    )
+    XCTAssertEqual(
+      readUntil(Echo.checkboxEvents, timeout: 1.5) { $0 != "2" }, "2",
+      "nothing reached the enabled Checkbox's counter either: the press was aimed at the "
+        + "disabled row, and a reading that stayed put is also what says it landed there "
+        + "and was refused rather than on the row above it"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxValue), "off",
+      "the refused tap should leave the value echo where it was"
+    )
+
+    // 4. The barrier: the same press, on the enabled box, still lands - so the silence
+    //    above was a refusal and not a screen that had stopped answering.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox",
+        echo: Echo.checkboxValue,
+        expected: "on",
+        as: "the controlled Checkbox",
+        waitingFor: "the barrier tap on the enabled Checkbox",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox") }
+      ),
+      "on",
+      "the enabled Checkbox, tapped the same way, should still answer"
+    )
+    XCTAssert(enabled.isHittable, "the controlled Checkbox should still be touchable")
+  }
+
+  /// Poll a control's own Switch value until it reports `expected` (3 s), and return its
+  /// last reading.
+  ///
+  /// `waitForChipState` for the controls whose element answers with a toggle's `value`
+  /// rather than a chip's `isSelected`; the two stay apart because what counts as "on"
+  /// differs between them, and a witness has to be exact about its own vocabulary.
+  ///
+  /// The wait is what makes a snap-back assertable at all: SwiftUI paints a tapped toggle
+  /// before JS has answered, so reading the element the instant the echo moves would catch
+  /// the flip the app is about to undo and report a refused change as one that stuck.
+  private func waitForNativeSwitchState(_ identifier: String, _ expected: String) -> String? {
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeSwitchState(of: identifier)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeSwitchState(of: identifier)
+    }
+    if shown != expected {
+      dumpHierarchy("\(identifier) never reported value \(expected == "on" ? "1" : "0")")
     }
     return shown
   }

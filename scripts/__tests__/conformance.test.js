@@ -173,11 +173,14 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the ten controls today', () => {
+  it('is complete for every control the registry declares', () => {
     const manifests = repoManifests();
+    // The list is the registry's own: a new control has to be looked at here, and
+    // the assertion under it is the one that decides whether it is covered.
     expect(manifests.map((m) => m.name)).toEqual([
       'BottomSheet',
       'Button',
+      'Checkbox',
       'Chip',
       'DatePicker',
       'Dialog',
@@ -1909,6 +1912,7 @@ describe('the a11y sweep, against a fake device', () => {
         'picker',
         'menu',
         'chip',
+        'checkbox',
         'host',
         'textfield',
       ]);
