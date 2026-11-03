@@ -228,3 +228,30 @@ animator past `prepareForRecycle`.
 - harness:android disabled copies nothing -> copy every event -> `expected '2' to be '0'`
 - real-input:android `ctx-bottom` -> no non-accessible branch -> `offers TalkBack no long-click — expected false, saw true`
 - unit debt row -> unanchored `/2 element\(s\)/` -> `Expected: false Received: true`
+
+## Fix round 2
+
+Merge round (main plus Checkbox, then ContextMenu) on maintainer-mac-1, lease `G16-w8ewe`
+(pair-a). **The crowded-tab diagnosis is not confirmed.** The failure dump has the "Picker" tap
+at (468,183), inside `tab-picker` [438,153][499,227] (61×74 px, about 23×28 dp). An injected tap
+lands where it is aimed, whatever the target's size. The filtered `--control picker` run crosses
+the same Dates→Picker step in its a11y sweep, and it passed at load1 median 5.5, max 10.3. The
+full run passed too, at median 6.4. The three failures had load1 39.8, 68.7 and 130 at failure,
+so load, not tab geometry, is the cause. Navigation is unchanged, so this round has no
+navigation fix and no red proof for one. README's three Host sentences now name all five
+refused controls. The `harness:*` and `real-input:ios` greens are from earlier on this code
+tree; README is outside it.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1729 tests / 68 suites | `14982f98d1ab` | 3 m 31 s | start 9.4 / med 15.6 / max 35.3 |
+| `harness:ios` | **PASS** | 381 tests / 22 suites + isolated 2 tests / 1 suites | `14982f98d1ab` (ios tree) | 9 m 50 s | start 25.1 / med 10.8 / max 25.1 |
+| `harness:android` | **PASS** | 430 tests / 22 suites + isolated 2 tests / 1 suites | `14982f98d1ab` (android tree) | 13 m 22 s | start 15.1 / med 8.9 / max 17.6 |
+| `real-input:ios` | **PASS** | — | `14982f98d1ab` (ios tree) | 37 m 12 s | start 6.9 / med 59.0 / max 374.2 |
+| `real-input:android` | **PASS** | — | `14982f98d1ab` (android tree) | 35 m 38 s | start 6.7 / med 6.4 / max 107.7 |
+| `real-input:android:--control:picker` | **PASS** | — | `14982f98d1ab` (android tree) | 9 m 18 s | start 10.3 / med 5.5 / max 10.3 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.`
+
+- Follow-up: the example's tabs are about 23×28 dp on Android, under 48 dp. Tooltip (G18) and SearchField shrink them further.
+- Follow-up: `docs/components/host.md` still says eight controls are hosted, "every control this library ships".

@@ -1,0 +1,94 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-03T15:18:29.316Z on code tree `14982f98d1ab` at HEAD `5870e36` (branch `task/G16-contextmenu`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 383589 ms
+- Load: start 62.77, end 136.30, median 205.63, max 452.41
+- Device: android / device `emulator-5574` / lease `G16-qdjcd`
+- Full log: `task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log` (<store>/task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-qdjcd (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 130.19 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 51 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: real-input:android
+gate: node scripts/real-input/android.mjs (cwd .)
+gate: code tree 14982f98d1ab at HEAD 5870e360
+gate: git tree 1549e88ff439
+gate: log task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log
+gate:       <store>/task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log
+real-input (android): emulator-5574 · nitroui_t03 · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  switch: real tap flips the Switch and JS sees the new value
+    ✓ the Switch starts off — expected off, saw off
+    · "Controlled switch" occupies 901,755 → 1038,839
+    ✓ one real tap flips the Switch (React renders "on") — expected on, saw on
+    · "Controlled switch" occupies 901,755 → 1038,839
+    ✓ a second real tap flips it back (React renders "off") — expected off, saw off
+
+  slider: real drag moves the Slider and fires start, change and complete
+    · "Phases slider" occupies 42,1117 → 1038,1243
+    ✓ no gesture has been reported yet — expected start=0 change=0 complete=0, saw start=0 change=0 complete=0
+    ✓ one drag fires onSlidingStart exactly once — expected start=1, saw start=1
+    ✓ one drag fires onSlidingComplete exactly once — expected complete=1, saw complete=1
+    ✓ a drag reports the way over, not only the end (change=16)
+    ✓ the thumb lands right of centre (value=0.674)
+    ✓ a second drag fires both phases again — expected start=2 complete=2, saw start=2 complete=2
+    ✓ dragging back moves the value the other way (value=0.313)
+    · "Controlled slider" occupies 42,734 → 1038,860
+    ✓ the controlled Slider starts at 0.25 — expected 0.25, saw 0.25
+    ✓ the controlled value echo follows the real drag (0.25 → 0.756)
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+    · "Real-input button" occupies 42,788 → 332,893
+    · "Real-input disabled button" occupies 42,935 → 486,1040
+    ✓ the Button starts with no presses recorded — expected 0, saw 0
+    · "Real-input button" occupies 42,788 → 332,893
+    ✓ one real tap on the enabled Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled Button does not press it — expected 1, saw 1
+    · "Real-input button" occupies 42,788 → 332,893
+    ✓ a second real tap presses the enabled Button again — expected 2, saw 2
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+
+real-input (android): Error: real-input: tapping the "Segments" tab did not bring up its screen.
+gate: real-input:android FAIL in 383.6 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G16-contextmenu/real-input+android-2026-11-03T15-18-25.255Z.log (5 probe(s))
+
+```

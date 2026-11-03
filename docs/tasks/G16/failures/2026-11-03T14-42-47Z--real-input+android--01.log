@@ -1,0 +1,193 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-03T14:42:47.389Z on code tree `14982f98d1ab` at HEAD `5870e36` (branch `task/G16-contextmenu`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 2123325 ms
+- Load: start 9.36, end 35.80, median 12.29, max 89.64
+- Device: android / device `emulator-5574` / lease `G16-qdjcd`
+- Full log: `task/G16-contextmenu/real-input+android-2026-11-03T14-42-46.906Z.log` (<store>/task/G16-contextmenu/real-input+android-2026-11-03T14-42-46.906Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/real-input+android-2026-11-03T14-42-46.906Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-qdjcd (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 39.82 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 445 — the rest is in the full log above)
+
+```
+    ✓ and the page under it did not move (scrollY) — expected 0, saw 0
+    ✓ Back closes it, reported once — expected 1, saw 1
+    ✓ the inner horizontal ScrollView pans
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ the hold before the outside tap opens the menu
+    ✓ an outside tap closes the menu — expected 1, saw 1
+    ✓ and the press under it never lands — expected 0, saw 0
+    ✓ a hold on the inner ContextMenu opens the inner menu (rows Inner action)
+    ✓ the inner reports the open — expected 1, saw 1
+    ✓ the outer does not — expected 0, saw 0
+    ✓ a disabled ContextMenu opens nothing on a hold
+    ✓ and reports no open — expected 0, saw 0
+    ✓ the child keeps the gesture: one press on release — expected 1, saw 1
+    ✓ one node carries "Message from Grace" — expected 1, saw 1
+    ✓ and it is long-clickable — expected true, saw true
+    ✓ and focusable — expected true, saw true
+    ✓ a ContextMenu that is not accessible offers TalkBack no long-click — expected false, saw false
+    ✓ and is not focusable — expected false, saw false
+    · bottom edge: press=324,2351 popup=324,1678 → 618,2098
+    ✓ near the bottom edge the popup opens above the finger
+    ✓ and that ContextMenu reported the open — expected 1, saw 1
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,895 → 179,979
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,895 → 179,979
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=45, hosted=51/55/59, note=62; named nodes: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Menu | 25:Menu | 26:Dialogs | 27:Dialogs | 28:Sheet | 29:Sheet | 30:Text | 31:Text | 32:Chip | 33:Chip | 34:Checkbox | 35:Checkbox | 36:Context | 37:Context | 38:Host | 39:Host | 43:react-native-nitro-ui  | 44:Everything inside a Ho | 45:THREE SWITCHES, ONE CO | 51:Hosted switch 0 | 55:Hosted switch 1 | 59:Hosted switch 2 | 62:The Host has a height; | 63:first switch, as JS se | 64:off | 65:changes JS has accepte | 66:2 | 67:flip the first from JS | 68:flip the first from JS | 69:A SLIDER AND A BUTTON, | 70:hosted Slider, as JS s | 71:0.40 | 72:presses the hosted But | 73:0 | 78:Hosted slider | 80:Hosted button | 81:Hosted action | 84:Hosted disabled button | 85:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 51,55,59, saw 51,55,59
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2187 → 397,2292
+    · "Hosted disabled button" occupies 42,2313 → 551,2418
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,2187 → 397,2292
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,2187 → 397,2292
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2050 → 1038,2176
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.84)
+    ✓ dragging back moves a hosted Slider the other way (0.84 -> 0.16)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2089 → 377,2194
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 10:Switch | 11:Switch | 12:Slider | 13:Slider | 14:Button | 15:Button | 16:Progress | 17:Progress | 18:Segments | 19:Segments | 20:Dates | 21:Dates | 22:Picker | 23:Picker | 24:Menu | 25:Menu | 26:Dialogs | 27:Dialogs | 28:Sheet | 29:Sheet | 30:Text | 31:Text | 32:Chip | 33:Chip | 34:Checkbox | 35:Checkbox | 36:Context | 37:Context | 38:Host | 39:Host | 48:Hosted switch 0 | 52:Hosted switch 1 | 56:Hosted switch 2 | 59:The Host has a height; | 60:first switch, as JS se | 61:off | 62:changes JS has accepte | 63:2 | 64:flip the first from JS | 65:flip the first from JS | 66:A SLIDER AND A BUTTON, | 67:hosted Slider, as JS s | 68:0.16 | 69:presses the hosted But | 70:2 | 75:Hosted slider | 77:Hosted button | 78:Hosted action | 81:Hosted disabled button | 82:Hosted action, disable | 84:The Slider fills the H | 85:FOUR KINDS OF CONTROL, | 86:mixed Host, as JS sees | 87:off 0.50 0 | 93:Mixed switch | 96:Mixed slider | 97:Mixed linear progress | 98:Mixed circular progres | 100:Mixed button | 101:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 93,96,97,98,100, saw 93,96,97,98,100
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2089 → 377,2194
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1731 → 179,1815
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 2 scrolls to come on screen
+    · "Hosted segmented" occupies 42,2045 → 714,2171
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,2045 → 714,2171
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,2045 → 714,2171
+    ✓ the drawing did not move out from under the finger — expected 42,2045 → 714,2171, saw 42,2045 → 714,2171
+    · "Hosted segmented" occupies 42,2045 → 714,2171
+    ✓ a real tap on the last segment reaches JS as index 2 — expected 2, saw 2
+    ✓ and a SegmentedControl opens no window of its own, hosted or not — expected 0, saw 0
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · "Hosted picker" needed 2 scrolls to come on screen
+    · "Hosted picker" occupies 42,1378 → 777,1546
+    ✓ the hosted Picker shows the index JS gave it — expected 1, saw 1
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1378 → 777,1546
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 74,1856 -> 202,1909; hosted anchor at 42,1378 -> 777,1546
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1378 → 777,1546
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+    · "Hosted date picker" needed 3 scrolls to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted date picker" occupies 42,1153 → 386,1279
+    ✓ the hosted DatePicker shows the day JS gave it — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1153 → 386,1279
+    ✓ the hosted dialog's day cells are in the accessibility tree (31 of them, clickable and named with a year)
+    ✓ the dialog opens on the month the Host is drawing, not on a default
+    ✓ while the hosted dialog is up it is a window of its own - the app's own echo is not in the same dump
+    ✓ Back closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    ✓ and the app text is readable again once the dialog is gone
+    · "Hosted date picker" occupies 42,1153 → 386,1279
+    ✓ Cancel closes the hosted dialog and reports no day — expected 2026-05-17, saw 2026-05-17
+    · "Hosted date picker" occupies 42,1153 → 386,1279
+    · tapping dialog day "Saturday, May 16, 2026"
+    ✓ a real tap on a dialog day ("Saturday, May 16, 2026") reaches JS through the Host as a new day
+    ✓ and OK closed it: the app text is readable again
+    ✓ and no popup window of any kind is left owned by the app — expected 0, saw 0
+    · "Hosted date picker" occupies 42,1174 → 386,1300
+    ✓ removing only the hosted DatePicker child leaves no dialog window behind
+    ✓ a teardown is not a choice - the day JS holds is the one it was given — expected 2026-05-16, saw 2026-05-16
+    · "Hosted date picker" occupies 42,1153 → 386,1279
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,734][1038,860]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,734][492,860]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+
+real-input (android): Error: real-input: tapping the "Picker" tab did not bring up its screen.
+gate: real-input:android FAIL in 2123.3 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G16-contextmenu/real-input+android-2026-11-03T14-42-46.906Z.log (5 probe(s))
+
+```
