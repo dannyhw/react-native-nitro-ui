@@ -3225,6 +3225,16 @@ async function contextMenuCheck(t) {
       'true'
     );
     log.checkEquals('and focusable', named[0]?.focusable, 'true');
+    // And one that is not `accessible`, around Text only, is a `View` to TalkBack: a
+    // long-clickable node is an actionable stop, which would read its Text as one stop
+    // the app never asked for (D36 item 1 makes the element opt-in).
+    const plain = t.nodeByTestId('ctx-bottom');
+    log.checkEquals(
+      'a ContextMenu that is not accessible offers TalkBack no long-click',
+      plain?.longClickable,
+      'false'
+    );
+    log.checkEquals('and is not focusable', plain?.focusable, 'false');
   }
 
   // 10. At the bottom edge the popup opens above the finger. Last, from the top of the

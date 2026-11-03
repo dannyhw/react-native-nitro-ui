@@ -1463,7 +1463,11 @@ function contextMenuReportOf(handle: Handle): Record<string, string> {
 const captureContextMenu =
   (testId: string) =>
   (view: object): void => {
-    handles.set(testId, view as unknown as Handle);
+    const handle = view as unknown as Handle;
+    handles.set(testId, handle);
+    // A ContextMenu builds its report only once a harness asks (an app never does), and
+    // a recycle clears that: ask now, so the single reads below find one built.
+    handle.nuiTestContextMenuReport?.();
   };
 
 const DIALOG_TITLE = 'Conformance dialog';

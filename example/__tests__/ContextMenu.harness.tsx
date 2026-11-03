@@ -28,6 +28,7 @@ import {
   PixelRatio,
   Platform,
   Pressable,
+  StyleSheet,
   Text,
   TurboModuleRegistry,
   View,
@@ -124,7 +125,9 @@ function parse(line: string): Record<string, string> {
 
 /**
  * The report once it satisfies `ok`: the native side publishes it on the UI thread and
- * each read asks for a fresh one, so a read can trail the event it is about.
+ * each read asks for a fresh one, so a read can trail the event it is about. A view
+ * builds no report before the first read asks (`pending`), and `ok` is never shown that
+ * one: `undefined !== '-1'` would pass it.
  */
 async function reportWhen(
   testId: string,
@@ -135,7 +138,7 @@ async function reportWhen(
   const handle = await handleFor(testId);
   const deadline = Date.now() + timeoutMs;
   let report = parse(handle.nuiTestContextMenuReport());
-  while (!ok(report)) {
+  while (report.seq === undefined || !ok(report)) {
     if (Date.now() > deadline) {
       throw new Error(
         `${what}: the report never got there - ${handle.nuiTestContextMenuReport()}`
@@ -147,12 +150,15 @@ async function reportWhen(
   return report;
 }
 
-/** The report after it has had time to settle (two reads 150 ms apart). */
+/**
+ * The report after it has had time to settle: two reads 150 ms apart, and the second
+ * one built (a first read can be the one that asked for it).
+ */
 async function settledReport(testId: string): Promise<Record<string, string>> {
   const handle = await handleFor(testId);
   handle.nuiTestContextMenuReport();
   await sleep(150);
-  return parse(handle.nuiTestContextMenuReport());
+  return reportWhen(testId, () => true, 'a settled report');
 }
 
 function box(testId: string): ViewInfo {
@@ -500,6 +506,9 @@ describe('ContextMenu · the gesture', () => {
       const on = await settledReport('on');
       expect(off.arms).toBe('0');
       expect(on.arms).toBe('1');
+      // And a view that cannot open copies no event for it; the armed twin does.
+      expect(off.copies).toBe('0');
+      expect(Number(on.copies)).toBeGreaterThan(0);
     } else {
       // iOS refuses in the configuration provider: no tree to hand UIKit.
       (await handleFor('off')).nuiTestMenuProbe();
@@ -510,6 +519,91 @@ describe('ContextMenu · the gesture', () => {
     await until('the disabled hold to press', () => count('off:press') === 2);
     await sleep(500);
     expect(eventsOf('off')).toEqual([]);
+  });
+});
+
+describe('ContextMenu · not the touch target', () => {
+  function Layers(): ReactElement {
+    return (
+      <View style={{ paddingTop: 40, paddingHorizontal: 16, gap: 16 }}>
+        <View style={{ height: 96 }}>
+          <Pressable
+            testID="under"
+            onPress={bump('under:press')}
+            style={[StyleSheet.absoluteFill, { backgroundColor: '#cde' }]}
+          />
+          <ContextMenu
+            testID="pe-none"
+            pointerEvents="none"
+            group={GROUP}
+            style={[StyleSheet.absoluteFill, { padding: 12 }]}
+            hybridRef={capture('pe-none')}
+            {...record('pe-none')}
+          >
+            <Text>pointerEvents none</Text>
+          </ContextMenu>
+        </View>
+        <ContextMenu
+          testID="pe-box-none"
+          pointerEvents="box-none"
+          group={GROUP}
+          style={{ height: 96, padding: 12, backgroundColor: '#efe' }}
+          hybridRef={capture('pe-box-none')}
+          {...record('pe-box-none')}
+        >
+          <View
+            testID="pe-box-none-child"
+            style={{ width: 60, height: 24, backgroundColor: '#9c9' }}
+          />
+        </ContextMenu>
+      </View>
+    );
+  }
+
+  it('opens nothing for a tap or a hold that goes through it, and lets the view under it press', async () => {
+    await render(<Layers />);
+    await handleFor('pe-none');
+    await handleFor('pe-box-none');
+    const none = pointIn('pe-none', 0.5, 0.5);
+    // A tap: the press under it is the barrier that says the touch landed here.
+    await userEvent.pressAt(none.x, none.y);
+    await until('the press under it', () => count('under:press') === 1);
+    // Longer than the long-press timeout on both platforms (Android 400 ms, iOS ~740).
+    await sleep(1200);
+    // A hold: the view under it has no `onLongPress`, so it presses on release - unless
+    // something cancelled its touch.
+    await userEvent.longPressAt(none.x, none.y, 1000);
+    await until('the held press under it', () => count('under:press') === 2);
+    await sleep(600);
+    // `box-none` on its empty area: the same, with nothing under it to press.
+    const empty = pointIn('pe-box-none', 0.85, 0.8);
+    await userEvent.pressAt(empty.x, empty.y);
+    await sleep(1200);
+    await userEvent.longPressAt(empty.x, empty.y, 1000);
+    await sleep(800);
+    const noneReport = await settledReport('pe-none');
+    const boxNoneReport = await settledReport('pe-box-none');
+    console.log(
+      `    · under presses=${String(count('under:press'))} none ` +
+        `opens=${String(noneReport.opens)} armed=${String(noneReport.armed)} ` +
+        `box-none opens=${String(boxNoneReport.opens)} armed=${String(boxNoneReport.armed)}`
+    );
+    expect(eventsOf('pe-none')).toEqual([]);
+    expect(eventsOf('pe-box-none')).toEqual([]);
+    expect(count('under:press')).toBe(2);
+    expect(noneReport.opens).toBe('0');
+    expect(boxNoneReport.opens).toBe('0');
+    if (!IOS) {
+      expect(noneReport.armed).toBe('0');
+      expect(boxNoneReport.armed).toBe('0');
+    }
+    // The barrier for box-none: a hold on its child is its own, and opens the menu.
+    await holdAt('pe-box-none-child', 0.5, 0.5);
+    await until('the box-none child hold to open', () =>
+      eventsOf('pe-box-none').includes('open')
+    );
+    (await handleFor('pe-box-none')).nuiTestSelectRow('reply');
+    await until('the close', () => eventsOf('pe-box-none').includes('close'));
   });
 });
 
@@ -564,6 +658,71 @@ describe('ContextMenu · the menu', () => {
       'select:reply',
       'close',
     ]);
+  });
+
+  it('opens again, with onOpen, for a hold that starts while the last menu is closing', async () => {
+    await render(<Message testId="race" />);
+    const handle = await handleFor('race');
+    await openedBy('race-target');
+    // The pick starts the dismiss animation; the hold right behind it is a new touch
+    // while that runs, and UIKit asks for a new configuration for it at once (iOS).
+    handle.nuiTestSelectRow('reply');
+    await holdAt('race-target', 0.6, 0.5);
+    await until('the close', () => eventsOf('race').includes('close'));
+    await until(
+      'the second open',
+      () => eventsOf('race').filter((e) => e === 'open').length === 2
+    );
+    const report = await reportWhen('race', (r) => r.open === '1', 'open');
+    console.log(
+      `    · configs=${String(report.configs)} events=${eventsOf('race').join(',')}`
+    );
+    handle.nuiTestSelectRow('copy');
+    await until('the second close', () => {
+      return eventsOf('race').filter((e) => e === 'close').length === 2;
+    });
+    await sleep(200);
+    expect(eventsOf('race')).toEqual([
+      'open',
+      'select:reply',
+      'close',
+      'open',
+      'select:copy',
+      'close',
+    ]);
+  });
+
+  it('builds no report until a harness asks for one', async () => {
+    function Titled({ n }: { n: number }): ReactElement {
+      return (
+        <ContextMenu
+          testID="quiet"
+          group={GROUP}
+          title={`Title ${String(n)}`}
+          hybridRef={capture('quiet')}
+        >
+          <Text>quiet</Text>
+        </ContextMenu>
+      );
+    }
+    const { rerender } = await render(<Titled n={0} />);
+    await handleFor('quiet');
+    // Ten prop updates, each an `afterUpdate`, and no read yet: what an app does.
+    for (let n = 1; n <= 10; n += 1) {
+      await rerender(<Titled n={n} />);
+    }
+    await sleep(300);
+    const report = await reportWhen(
+      'quiet',
+      (r) => r.seq !== undefined,
+      'the first report'
+    );
+    console.log(
+      `    · seq=${String(report.seq)} title=${String(report.title)}`
+    );
+    expect(report.title).toBe('Title 10');
+    // The builds the reads themselves asked for, and nothing from the updates before.
+    expect(Number(report.seq)).toBeLessThanOrEqual(2);
   });
 
   it('closes an open menu when it becomes disabled, and applies a group change live', async () => {
@@ -756,6 +915,66 @@ describe('ContextMenu · drop and recycle', () => {
       );
       expect(Number(settled.live)).toBe(before);
     }
+  });
+
+  it('leaves no layout listener behind a pick, a drop, or a drop while open (Android)', async () => {
+    if (IOS) {
+      console.log(
+        '    · iOS: no layout rule, so no listener (the menu is over a snapshot)'
+      );
+      return;
+    }
+    function Scene({
+      step,
+      tick,
+    }: {
+      step: 'picked' | 'open' | 'gone';
+      tick: number;
+    }): ReactElement {
+      // `tick` changes the text above, so every step draws a frame - the frames a leaked
+      // pre-draw listener would run in.
+      return (
+        <View>
+          <Text>{`frame ${String(tick)}`}</Text>
+          {step === 'picked' ? <Message testId="watch-pick" /> : null}
+          {step === 'open' ? <Message testId="watch-drop" /> : null}
+          {step === 'gone' ? <Message testId="watch-probe" /> : null}
+        </View>
+      );
+    }
+    let tick = 0;
+    const { rerender } = await render(<Scene step="picked" tick={tick} />);
+    const frames = async (step: 'picked' | 'open' | 'gone'): Promise<void> => {
+      for (let i = 0; i < 6; i += 1) {
+        tick += 1;
+        await rerender(<Scene step={step} tick={tick} />);
+        await sleep(60);
+      }
+    };
+    const before = Number((await settledReport('watch-pick')).watchStray);
+    // 1. A pick - what a row press calls - with the view still mounted, then frames.
+    await openedBy('watch-pick-target');
+    (await handleFor('watch-pick')).nuiTestSelectRow('reply');
+    await until('the pick close', () =>
+      eventsOf('watch-pick').includes('close')
+    );
+    await frames('picked');
+    const afterPick = Number((await settledReport('watch-pick')).watchStray);
+    // 2. That view dropped, and another dropped while its menu is open, then frames.
+    await rerender(<Scene step="open" tick={++tick} />);
+    await openedBy('watch-drop-target');
+    await rerender(<Scene step="gone" tick={++tick} />);
+    await until('the dropped close', () =>
+      eventsOf('watch-drop').includes('close')
+    );
+    await frames('gone');
+    const after = Number((await settledReport('watch-probe')).watchStray);
+    console.log(
+      `    · stray listener runs: before=${String(before)} afterPick=${String(afterPick)} ` +
+        `afterDrops=${String(after)}`
+    );
+    expect(afterPick).toBe(before);
+    expect(after).toBe(before);
   });
 
   it('drops a pending press with the view (Android)', async () => {

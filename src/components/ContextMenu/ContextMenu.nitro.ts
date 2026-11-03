@@ -111,10 +111,16 @@ export interface NitroUiContextMenuMethods extends HybridViewMethods {
    *   `-` for an unlabelled one;
    * - `press`, `menu` (Android): the last press point and the open popup's window,
    *   screen px; `live`: popups this process has composed right now (Menu's rule);
-   * - `arms`: long presses armed since mount (Android), `armed`: one is pending now.
+   * - `arms`: long presses armed since mount (Android), `armed`: one is pending now,
+   *   `copies`: `MotionEvent` copies since mount (Android, made only while one is);
+   * - `watchStray` (Android): runs of a layout-move listener whose menu was closed or
+   *   whose view had left its window, process-wide - a leaked registration;
+   * - `seq`: reports this object has built.
    *
    * A field a platform cannot answer reads `-1`, never `0`. Reads a snapshot published
-   * on the UI thread, so it is safe from the JS thread and never waits.
+   * on the UI thread, so it is safe from the JS thread and never waits. Nothing builds
+   * that snapshot until the first read asks for it (an app never does), so the first
+   * read answers `pending`.
    *
    * @internal Not app API (DECISIONS D14).
    */

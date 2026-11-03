@@ -510,8 +510,9 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // carries the label, the second Text is hidden under it, and the first Text is still
     // listed - twice, as XCUITest lists every element. A regression of D37 item 2 (the
     // wrapper not an element at all) lists both Texts, four stops, and stays red.
+    // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
     matches:
-      /2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+      /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
   },
 ]);
 
