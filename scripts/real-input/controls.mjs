@@ -113,6 +113,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
     screen: 'chip',
   },
+  {
+    id: 'context-menu',
+    title:
+      'a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing',
+    screen: 'contextmenu',
+  },
   // @end-generated
 ]);
 

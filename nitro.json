@@ -147,6 +147,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiChip"
       }
+    },
+    "NitroUiContextMenu": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      }
     }
   },
   "ignorePaths": [
