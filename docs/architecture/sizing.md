@@ -545,7 +545,7 @@ launch-paired ratio to `expo-ui-shared-host` from one run (`quick` plan, ART `sp
 the ceiling), so every cell below is indicative**: every cell whose spread
 across launches is over 10 % is marked **ᴺ** and carries no verdict. A5 has since re-measured all
 of it quiet on `maintainer-mac-2` (`abe68a1`, 8 launches, 0.04 % over the ceiling), and that run's
-cells are in `docs/tasks/A5-quiet-bench-mac2.report.md` and `README.md`; they reproduce this
+cells are in `docs/tasks/A5-quiet-bench-mac2.report.md` and `docs/performance.md`; they reproduce this
 table's shape, with six ᴺ flags cleared (unhosted `Switch` UI CPU and unmount, unhosted `Button`
 UI and JS, hosted `Button` JS 0.69x, hosted `Slider` JS 1.11x), three gained (`Progress` memory on both sides, 1.70x and 0.45x,
 where the shared host's own spread is 16 %, and unhosted `Progress` unmount, 2.24x at 15 %), and
