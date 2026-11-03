@@ -1,0 +1,90 @@
+# Failure excerpt — harness:ios:HostControls%7CHostPopups
+
+- Ran: 2026-11-02T22:12:08.824Z on code tree `2bc87eca5cb7` at HEAD `8b70dca` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios HostControls|HostPopups`
+- Result: fail, exit 1, 39227 ms
+- Load: start 34.18, end 29.76, median 33.71, max 34.18
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-sigr7`
+- Full log: `task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-12-08.824Z.log` (<store>/task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-12-08.824Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Console`
+- `● Host · all seven kinds of control, one composition › keeps the two window-opening controls live in the same Host`
+- `expected undefined to be 3 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-12-08.824Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-sigr7 (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+  |   G12-sigr7                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 29.76 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios HostControls|HostPopups
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 2bc87eca5cb7, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 34.18/18.49 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-12-08.824Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/HostControls.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+
+    console.error
+      Each child in a list should have a unique "key" prop.
+      
+      Check the render method of `View`. It was passed a child from MixedList. See https://react.dev/link/warning-keys for more information.
+
+  ● Host · all seven kinds of control, one composition › keeps the two window-opening controls live in the same Host
+
+    expected undefined to be 3 // Object.is equality
+
+      [0m [90m 1385 |[39m     )[33m;[39m
+       [90m 1386 |[39m     [90m// Props land on both controls on either platform.[39m
+      [31m[1m>[22m[39m[90m 1387 |[39m     expect(log[33m.[39mpickers[[32m'mix-pk-5'[39m][33m?[39m[33m.[39moptions[33m.[39mlength)[33m.[39mtoBe([35m3[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1388 |[39m     expect(log[33m.[39mdates[[32m'mix-dp-6'[39m][33m?[39m[33m.[39mmode)[33m.[39mtoBe([32m'date'[39m)[33m;[39m
+       [90m 1389 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m!==[39m [32m'android'[39m) {
+       [90m 1390 |[39m       [90m// A SwiftUI `Picker` keeps its menu in the system's own presentation and reports[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        36.945 s
+Ran all test suites matching HostControls|HostPopups.
+
+
+
+```

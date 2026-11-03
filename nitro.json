@@ -137,6 +137,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiBottomSheet"
       }
+    },
+    "NitroUiChip": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiChip"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiChip"
+      }
     }
   },
   "ignorePaths": [

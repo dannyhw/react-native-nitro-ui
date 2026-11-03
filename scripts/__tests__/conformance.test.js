@@ -178,6 +178,7 @@ describe('coverage', () => {
     expect(manifests.map((m) => m.name)).toEqual([
       'BottomSheet',
       'Button',
+      'Chip',
       'DatePicker',
       'Dialog',
       'Menu',
@@ -1907,6 +1908,7 @@ describe('the a11y sweep, against a fake device', () => {
         'datepicker',
         'picker',
         'menu',
+        'chip',
         'host',
         'textfield',
       ]);

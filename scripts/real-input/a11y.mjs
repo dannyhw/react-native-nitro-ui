@@ -114,7 +114,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'host'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -216,6 +216,20 @@ export const A11Y_CONTROLS = Object.freeze([
     // measured value never goes here. If the popup chrome makes XCUITest report something
     // else, that is a finding with a debt row, not a reason to soften this one.
     iosTrait: 'button',
+  },
+  {
+    id: 'chip',
+    component: 'Chip',
+    hybridView: 'NitroUiChip',
+    screen: 'chip',
+    label: 'Real-input chip',
+    role: 'interactive',
+    anchorTestId: 'real-input-chip',
+    // A filter chip is an on/off control, and that is what it should announce: SwiftUI's
+    // `Toggle(.button)` carries the toggle trait, which XCUITest reports as `switch` with
+    // `value` 0/1 (measured, G12) - it has no separate type for a toggle *button*. The
+    // assist chip is a `Button` and is not a case here; real input asserts it presses.
+    iosTrait: 'switch',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all

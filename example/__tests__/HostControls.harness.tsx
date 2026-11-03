@@ -62,7 +62,12 @@ import {
   Switch,
   nitroUiCore,
 } from 'react-native-nitro-ui';
-import { waitForHandle } from './handles';
+import {
+  forgetPromisedHandles,
+  handleOf,
+  handleRef,
+  waitForPromisedHandle,
+} from './handles';
 
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
@@ -209,12 +214,23 @@ function settle(ms: number) {
  * Poll for a `testID` and hand back its box. `screen.findByTestId` has no timeout, and a
  * hosted control mounts through the Host's composition — slower than the single pass the
  * harness makes, on a loaded machine.
+ *
+ * A box whose control was wired with `handleRef` is handed back only once that
+ * control's handle has landed as well (`handles.ts`): the box exists before the
+ * `hybridRef` callback has run, and the reads after a `boxOf` here go through the
+ * handle. Waiting here covers the reads that have no `handleOf` of their own.
  */
 async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
   const deadline = nitroUiCore.now() + timeoutMs;
   for (;;) {
     const box = harnessUi.queryByTestId(testId);
     if (box != null) {
+      // At least the handle helper's own 5 s, and the rest of this call's budget
+      // when that is longer, so a slow mount is not judged twice as harshly.
+      await waitForPromisedHandle(
+        testId,
+        Math.max(5000, deadline - nitroUiCore.now())
+      );
       return box;
     }
     if (nitroUiCore.now() > deadline) {
@@ -228,20 +244,6 @@ async function boxOf(testId: string, timeoutMs = 15000): Promise<ViewInfo> {
 
 async function mount(ui: Parameters<typeof render>[0], timeoutMs = 30000) {
   return await render(ui, { timeout: timeoutMs });
-}
-
-/**
- * Wait for a control's `hybridRef` handle to exist, then hand it back.
- *
- * `render` and `boxOf` resolve when the view is laid out, and the callback runs on a
- * commit after that. So `log.sliders[id]` read straight after a mount can be
- * `undefined`: "reports a hosted drag" failed on exactly that (`log.sliders['slide-0']`
- * undefined), and an `?.` in front of a seam call turns the same miss into a drag that
- * never ran. The wait is on existence only. Every value a test asserts is still read
- * after it, unchanged.
- */
-function handleOf<T>(read: () => T | undefined, what: string): Promise<T> {
-  return waitForHandle(read, { what: `"${what}"` });
 }
 
 /**
@@ -432,9 +434,7 @@ function Slide({
       maximumValue={maximumValue}
       step={step}
       disabled={disabled}
-      hybridRef={(view: SliderHandle) => {
-        log.sliders[id] = view;
-      }}
+      hybridRef={handleRef(log.sliders, id)}
       onSlidingStart={record('start')}
       onValueChange={record('change')}
       onSlidingComplete={(next) => {
@@ -475,9 +475,7 @@ function Bar({
       variant={variant}
       accessibilityLabel={id}
       value={value}
-      hybridRef={(view: ProgressHandle) => {
-        log.bars[id] = view;
-      }}
+      hybridRef={handleRef(log.bars, id)}
     />
   );
 }
@@ -503,9 +501,7 @@ function Press({
       title={title}
       accessibilityLabel={title}
       disabled={disabled}
-      hybridRef={(view: ButtonHandle) => {
-        log.buttons[id] = view;
-      }}
+      hybridRef={handleRef(log.buttons, id)}
       onPress={() => {
         log.taps.push(id);
       }}
@@ -608,9 +604,7 @@ function Toggle({
       style={style}
       accessibilityLabel={id}
       value={value}
-      hybridRef={(view: SwitchHandle) => {
-        log.switches[id] = view;
-      }}
+      hybridRef={handleRef(log.switches, id)}
       onValueChange={(next) => {
         log.taps.push(id);
         log.acceptedSwitches[id] = next;
@@ -629,9 +623,7 @@ function Segment({ id, log }: { id: string; log: Log }) {
       options={['One', 'Two', 'Three']}
       selectedIndex={index}
       accessibilityLabel={`Mixed segmented ${id.slice(-1)}`}
-      hybridRef={(view: SegmentHandle) => {
-        log.segments[id] = view;
-      }}
+      hybridRef={handleRef(log.segments, id)}
       onChange={(event) => {
         log.taps.push(id);
         log.acceptedSegments[id] = event.index;
@@ -651,9 +643,7 @@ function Pick({ id, log }: { id: string; log: Log }) {
       selectedIndex={index}
       label={`Pick ${id.slice(-1)}`}
       accessibilityLabel={`Mixed picker ${id.slice(-1)}`}
-      hybridRef={(view: PickerHandle) => {
-        log.pickers[id] = view;
-      }}
+      hybridRef={handleRef(log.pickers, id)}
       onChange={(event) => {
         log.taps.push(id);
         log.acceptedPickers[id] = event.index;
@@ -674,9 +664,7 @@ function Dates({ id, log }: { id: string; log: Log }) {
       disabled={off}
       value={date}
       accessibilityLabel={`Mixed date picker ${id.slice(-1)}`}
-      hybridRef={(view: DateHandle) => {
-        log.dates[id] = view;
-      }}
+      hybridRef={handleRef(log.dates, id)}
       onChange={setDate}
     />
   );
@@ -742,6 +730,7 @@ const tappableOf = (ids: string[]) =>
 
 afterEach(() => {
   cleanup();
+  forgetPromisedHandles();
 });
 
 beforeAll(async () => {

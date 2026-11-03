@@ -1,0 +1,210 @@
+# Failure excerpt — harness:ios:HostControls%7CHostPopups
+
+- Ran: 2026-11-02T22:11:16.316Z on code tree `a611576fe478` at HEAD `8b70dca` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios HostControls|HostPopups`
+- Result: fail, exit 1, 33960 ms
+- Load: start 32.45, end 41.09, median 40.08, max 43.79
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-sigr7`
+- Full log: `task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-11-16.316Z.log` (<store>/task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-11-16.316Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Console`
+- `● Host · a hosted Slider is still a Slider › reports a hosted drag through all three callbacks`
+- `expected undefined to be defined`
+- `● Host · a hosted Slider is still a Slider › snaps a hosted Slider back when JS refuses the drag`
+- `● Host · a hosted Slider is still a Slider › keeps a disabled hosted Slider inert, and the same drag answers once enabled`
+- `expected undefined to be true // Object.is equality`
+- `● Host · a hosted Progress still draws what JS sets › draws a JS write made while the control is hosted`
+- `● Host · a hosted Progress still draws what JS sets › animates a hosted indeterminate bar and stops at determinate`
+- `● Host · a hosted Progress still draws what JS sets › leaves a hosted circular Progress alone to size itself`
+- `● Host · a hosted Button still presses › keeps a hosted Button props live on both platforms`
+- `expected undefined to be 'Deploy' // Object.is equality`
+- `● Host · four kinds of control, one composition › keeps every kind of control live in one Host`
+- `expected undefined to be close to 0.6, received difference is NaN, but expected 0.005`
+- `● Host · all seven kinds of control, one composition › keeps the two window-opening controls live in the same Host`
+- `expected undefined to be 3 // Object.is equality`
+- `FAIL __tests__/HostPopups.harness.tsx`
+- `● Host · a hosted SegmentedControl is still a SegmentedControl › takes a real press on a segment, through the Host’s composition`
+- `● Host · a hosted SegmentedControl is still a SegmentedControl › goes back to what React kept when the app refuses a change`
+- `● Host · a hosted SegmentedControl is still a SegmentedControl › answers nothing while disabled, and the twin beside it still does`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+ios+HostControls+7CHostPopups-2026-11-02T22-11-16.316Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-sigr7 (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+  |   G12-sigr7                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 41.09 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 190 — the rest is in the full log above)
+
+```
+
+      [0m [90m 765 |[39m     [90m// yet was a silent no-op, and the test then failed on "no events" — a fixture that[39m
+       [90m 766 |[39m     [90m// did not wait, reading like a Slider that ignores a drag.[39m
+      [31m[1m>[22m[39m[90m 767 |[39m     ([36mawait[39m handleOf(log[33m.[39msliders[33m,[39m id))[33m.[39mnuiTestDrag(to[33m,[39m steps[33m,[39m msPerStep)[33m;[39m
+       [90m     |[39m                                                  [31m[1m^[22m[39m
+       [90m 768 |[39m     [36mawait[39m settle(msPerStep [33m>[39m [35m0[39m [33m?[39m msPerStep [33m*[39m steps [33m+[39m [35m500[39m [33m:[39m [35m700[39m)[33m;[39m
+       [90m 769 |[39m   }
+       [90m 770 |[39m[0m
+
+  ● Host · a hosted Slider is still a Slider › keeps a disabled hosted Slider inert, and the same drag answers once enabled
+
+    expected undefined to be true // Object.is equality
+
+      [0m [90m 862 |[39m     )[33m;[39m
+       [90m 863 |[39m     [36mawait[39m boxOf([32m'disabled-slide-0'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 864 |[39m     expect(log[33m.[39msliders[[32m'disabled-slide-0'[39m][33m?[39m[33m.[39mdisabled)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                           [31m[1m^[22m[39m
+       [90m 865 |[39m     [36mawait[39m drag([32m'disabled-slide-0'[39m[33m,[39m [35m0.6[39m)[33m;[39m
+       [90m 866 |[39m     expect(log[33m.[39mslides)[33m.[39mtoHaveLength([35m0[39m)[33m;[39m
+       [90m 867 |[39m[0m
+
+  ● Host · a hosted Progress still draws what JS sets › draws a JS write made while the control is hosted
+
+    expected undefined to be defined
+
+      [0m [90m 895 |[39m     [36mawait[39m boxOf([32m'bar-0'[39m)[33m;[39m
+       [90m 896 |[39m     [36mconst[39m handle [33m=[39m log[33m.[39mbars[[32m'bar-0'[39m][33m;[39m
+      [31m[1m>[22m[39m[90m 897 |[39m     expect(handle)[33m.[39mtoBeDefined()[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 898 |[39m     [90m// The mount write reached the drawing (this is the witness that the reader reads[39m
+       [90m 899 |[39m     [90m// *something* — a control that never drew would answer `displayed=none` forever).[39m
+       [90m 900 |[39m     [36mawait[39m waitForDisplayed(handle[33m![39m[33m,[39m [32m'displayed=0.25'[39m)[33m;[39m[0m
+
+  ● Host · a hosted Progress still draws what JS sets › animates a hosted indeterminate bar and stops at determinate
+
+    expected undefined to be defined
+
+      [0m [90m 921 |[39m     [36mconst[39m spinning [33m=[39m log[33m.[39mbars[[32m'anim-indeterminate'[39m][33m;[39m
+       [90m 922 |[39m     [36mconst[39m still [33m=[39m log[33m.[39mbars[[32m'anim-determinate'[39m][33m;[39m
+      [31m[1m>[22m[39m[90m 923 |[39m     expect(spinning)[33m.[39mtoBeDefined()[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 924 |[39m     expect(still)[33m.[39mtoBeDefined()[33m;[39m
+       [90m 925 |[39m     [90m// The pair is in one Host: the same composition keeps one indicator animating and[39m
+       [90m 926 |[39m     [90m// does not animate the other, so "the animation gate survived hosting" cannot be a[39m[0m
+
+  ● Host · a hosted Progress still draws what JS sets › leaves a hosted circular Progress alone to size itself
+
+    Cannot read property 'nuiTestDisplayedValue' of undefined
+
+      [0m [90m 340 |[39m   [36mlet[39m seen [33m=[39m [32m'never read'[39m[33m;[39m
+       [90m 341 |[39m   [36mfor[39m ([33m;[39m[33m;[39m) {
+      [31m[1m>[22m[39m[90m 342 |[39m     seen [33m=[39m handle[33m.[39mnuiTestDisplayedValue()[33m;[39m
+       [90m     |[39m                                        [31m[1m^[22m[39m
+       [90m 343 |[39m     [36mif[39m (seen [33m===[39m expected) {
+       [90m 344 |[39m       [36mreturn[39m seen[33m;[39m
+       [90m 345 |[39m     }[0m
+
+  ● Host · a hosted Button still presses › keeps a hosted Button props live on both platforms
+
+    expected undefined to be 'Deploy' // Object.is equality
+
+      [0m [90m  999 |[39m     )[33m;[39m
+       [90m 1000 |[39m     [36mawait[39m boxOf([32m'props-press-0'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1001 |[39m     expect(log[33m.[39mbuttons[[32m'props-press-0'[39m][33m?[39m[33m.[39mtitle)[33m.[39mtoBe([32m'Deploy'[39m)[33m;[39m
+       [90m      |[39m                                                     [31m[1m^[22m[39m
+       [90m 1002 |[39m     expect(log[33m.[39mbuttons[[32m'props-press-0'[39m][33m?[39m[33m.[39mdisabled)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1003 |[39m
+       [90m 1004 |[39m     log[33m.[39msetButtonDisabled[33m?[39m[33m.[39m([36mfalse[39m)[33m;[39m[0m
+
+  ● Host · four kinds of control, one composition › keeps every kind of control live in one Host
+
+    expected undefined to be close to 0.6, received difference is NaN, but expected 0.005
+
+      [0m [90m 1112 |[39m     log[33m.[39msliders[[32m'mix-sl-2'[39m][33m?[39m[33m.[39mnuiTestDrag([35m0.6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+       [90m 1113 |[39m     [36mawait[39m settle([35m700[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1114 |[39m     expect(log[33m.[39macceptedSliders[[32m'mix-sl-2'[39m])[33m.[39mtoBeCloseTo([35m0.6[39m[33m,[39m [35m2[39m)[33m;[39m
+       [90m      |[39m                                                        [31m[1m^[22m[39m
+       [90m 1115 |[39m
+       [90m 1116 |[39m     [90m// Progress: the drawing reports the value JS set.[39m
+       [90m 1117 |[39m     [36mawait[39m waitForDisplayed(log[33m.[39mbars[[32m'mix-pr-3'[39m][33m![39m[33m,[39m [32m'displayed=0.25'[39m)[33m;[39m[0m
+
+  ● Host · all seven kinds of control, one composition › keeps the two window-opening controls live in the same Host
+
+    expected undefined to be 3 // Object.is equality
+
+      [0m [90m 1385 |[39m     )[33m;[39m
+       [90m 1386 |[39m     [90m// Props land on both controls on either platform.[39m
+      [31m[1m>[22m[39m[90m 1387 |[39m     expect(log[33m.[39mpickers[[32m'mix-pk-5'[39m][33m?[39m[33m.[39moptions[33m.[39mlength)[33m.[39mtoBe([35m3[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1388 |[39m     expect(log[33m.[39mdates[[32m'mix-dp-6'[39m][33m?[39m[33m.[39mmode)[33m.[39mtoBe([32m'date'[39m)[33m;[39m
+       [90m 1389 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m!==[39m [32m'android'[39m) {
+       [90m 1390 |[39m       [90m// A SwiftUI `Picker` keeps its menu in the system's own presentation and reports[39m[0m
+
+FAIL __tests__/HostPopups.harness.tsx
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › takes a real press on a segment, through the Host’s composition
+
+    Cannot read property 'selectedIndex' of undefined
+
+      [0m [90m 840 |[39m     [90m// after `mount` failed intermittently on main (G11-merge) and on G12's branch.[39m
+       [90m 841 |[39m     [36mconst[39m control [33m=[39m [36mawait[39m handleOf(log[33m.[39msegments[33m,[39m [32m'first'[39m[33m,[39m [32m'segmented row'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 842 |[39m     expect(control[33m.[39mselectedIndex)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                   [31m[1m^[22m[39m
+       [90m 843 |[39m     [36mconst[39m hostBox [33m=[39m [36mawait[39m boxOf([32m'seg-host'[39m)[33m;[39m
+       [90m 844 |[39m     [36mconst[39m aim [33m=[39m [36mawait[39m aimAt(hostBox[33m,[39m [35m0[39m[33m,[39m [32m'seg-first'[39m)[33m;[39m
+       [90m 845 |[39m     [36mawait[39m userEvent[33m.[39mpressAt(aim[33m.[39mx[33m,[39m aim[33m.[39my)[33m;[39m[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › goes back to what React kept when the app refuses a change
+
+    Cannot read property 'selectedIndex' of undefined
+
+      [0m [90m 859 |[39m     [36mconst[39m hostBox [33m=[39m [36mawait[39m boxOf([32m'seg-host'[39m)[33m;[39m
+       [90m 860 |[39m     [36mconst[39m aim [33m=[39m [36mawait[39m aimAt(hostBox[33m,[39m [35m0[39m[33m,[39m [32m'seg-first'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 861 |[39m     expect(control[33m.[39mselectedIndex)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                   [31m[1m^[22m[39m
+       [90m 862 |[39m     [36mawait[39m userEvent[33m.[39mpressAt(aim[33m.[39mx[33m,[39m aim[33m.[39my)[33m;[39m
+       [90m 863 |[39m     [90m// The press reached JS (so the row is live), the app said no, and the control still[39m
+       [90m 864 |[39m     [90m// shows what React holds.[39m[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › answers nothing while disabled, and the twin beside it still does
+
+    Cannot read property 'disabled' of undefined
+
+      [0m [90m 888 |[39m     [36mconst[39m hostBox [33m=[39m [36mawait[39m boxOf([32m'seg-host'[39m)[33m;[39m
+       [90m 889 |[39m     [90m// The Host's box says nothing about the row's handle (`handles.ts`).[39m
+      [31m[1m>[22m[39m[90m 890 |[39m     expect(([36mawait[39m handleOf(log[33m.[39msegments[33m,[39m [32m'first'[39m[33m,[39m [32m'first row'[39m))[33m.[39mdisabled)[33m.[39mtoBe(
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 891 |[39m       [36mtrue[39m
+       [90m 892 |[39m     )[33m;[39m
+       [90m 893 |[39m     [36mconst[39m aim [33m=[39m [36mawait[39m aimAt(hostBox[33m,[39m [35m0[39m[33m,[39m [32m'seg-first'[39m)[33m;[39m[0m
+
+  ● Host · a hosted SegmentedControl is still a SegmentedControl › draws its own width at the leading edge, not the Host’s (D24)
+
+    Cannot read property 'selectedIndex' of undefined
+
+      [0m [90m 917 |[39m     [36mawait[39m settle([35m350[39m)[33m;[39m
+       [90m 918 |[39m     expect(log[33m.[39macceptedSegments[33m.[39mfirst)[33m.[39mtoBeUndefined()[33m;[39m
+      [31m[1m>[22m[39m[90m 919 |[39m     expect(control[33m.[39mselectedIndex)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                   [31m[1m^[22m[39m
+       [90m 920 |[39m     [36mconst[39m aim [33m=[39m [36mawait[39m aimAt(hostBox[33m,[39m [35m0[39m[33m,[39m [32m'seg-first'[39m)[33m;[39m
+       [90m 921 |[39m     [36mawait[39m userEvent[33m.[39mpressAt(aim[33m.[39mx[33m,[39m aim[33m.[39my)[33m;[39m
+       [90m 922 |[39m     [36mawait[39m settle([35m350[39m)[33m;[39m[0m
+
+Test Suites: 2 failed, 2 total
+Tests:       13 failed, 2 passed, 15 total
+Snapshots:   0 total
+Time:        30.498 s, estimated 87 s
+Ran all test suites matching HostControls|HostPopups.
+
+
+
+```
