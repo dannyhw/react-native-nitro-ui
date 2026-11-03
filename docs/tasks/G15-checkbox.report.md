@@ -149,3 +149,18 @@ the human's emulator is nobody else's to start. `doctor.mjs` reports the pool he
 ("every booted pool device is held by a lease"), because there is nothing booted to
 disagree with. Whoever owns the other running tasks should expect a dead Metro or a
 powered-off device at roughly 2026-11-03 06:20 UTC and re-acquire.
+
+## Questions for orchestrator
+
+- **The device incident: who powers the pair back on?** My `pkill -P 1` left `nitro-ui B`,
+  `nitroui_b` and the maintainer's `iPhone Air` simulator off (and any other task's Metro).
+  Options: (a) leave them — the next `lease.mjs acquire --boot` pays one boot (209 s
+  measured on this box for my pair) and the maintainer's simulator is theirs to start;
+  (b) I boot the pool pair. **Recommend (a)** — I have released `G15-69l63`, and an idle
+  device is the pool's business.
+- **Keep the iOS row-wide tap target?** It is what makes a labelled Checkbox behave like
+  Android's merged `Row` and like the docs' "a label is part of the control", and it is
+  what `365a0acb` shipped. The alternative is iOS's native glyph-only behaviour with the
+  difference documented, which costs the overlay, the caveat's middle half, and the aim
+  guard in `testRealInputCheckbox`. **Recommend keeping it**; the mutation record (rows
+  13–14) is the evidence either way.
