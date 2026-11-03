@@ -1401,7 +1401,7 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Seven cases across three controls: `slider` and `hosted-slider` both guard `Slider`,
+    // Eight cases across four controls: `slider` and `hosted-slider` both guard `Slider`,
     // and the debt list carries both platforms' rows for a control. The matrix is about
     // controls, so every row for one control makes exactly one failing cell.
     //
@@ -1409,12 +1409,15 @@ describe('the debt, as the matrix sees it', () => {
     // widened to reach it: measured under XCUITest, a hosted Picker's control announces
     // "Hosted picker, Hosted picker" and no element carries the name alone. That is a
     // finding about the control, so it is recorded as debt with a FOLLOWUPS line and
-    // printed on every run rather than asserted away.
+    // printed on every run rather than asserted away. `ContextMenu` is the same kind of
+    // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
+    // as an element of its own under the wrapper that carries the label (G16).
     expect(failingKeys()).toEqual([
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
+      'ContextMenu|a11y-name-on-focusable-node',
     ]);
   });
 

@@ -165,6 +165,28 @@ describe('the iOS a11y rule', () => {
       );
     });
 
+    it('reports the shipped tree as its recorded debt, and only that', () => {
+      // The shipped code on iOS 27: the wrapper is the element with the label, and the
+      // first Text is still listed under it. Debt, printed every run - and the regression
+      // (the wrapper not an element, four stops) is not covered by the same row.
+      const read = (name) =>
+        parseIosA11yLog(
+          readFileSync(`${__dirname}/fixtures/a11y/${name}.log`, 'utf8')
+        ).get('context-menu');
+      const shipped = checkIosControlA11y(
+        control('context-menu'),
+        read('ios-context-menu')
+      );
+      expect(shipped.failures).toEqual([]);
+      expect(shipped.known).toHaveLength(1);
+      const regressed = checkIosControlA11y(
+        control('context-menu'),
+        read('ios-context-menu-not-an-element')
+      );
+      expect(regressed.failures).toHaveLength(1);
+      expect(regressed.exempt).toBe(false);
+    });
+
     it('is the only case that may grade its wrapper', () => {
       // Every other control keeps the exclusion: React Native puts the label on the
       // wrapper whatever the control does, so for them it proves nothing.

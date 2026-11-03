@@ -339,6 +339,7 @@ describe('the debt list', () => {
       'ios:slider',
       'ios:hosted-slider',
       'ios:hosted-picker',
+      'ios:context-menu',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.
