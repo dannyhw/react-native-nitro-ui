@@ -23,6 +23,7 @@ import {
   type MenuGroup,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
@@ -279,6 +280,34 @@ export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
         onChangeText={setPassword}
         onSubmitEditing={onSignIn}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region search-field
+export function ProductSearch({
+  onSearch,
+}: {
+  onSearch: (query: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  return (
+    <>
+      <SearchField
+        accessibilityLabel="Search products"
+        placeholder="Search the catalogue"
+        maxLength={40}
+        value={query}
+        onChangeText={setQuery}
+        onSubmitEditing={onSearch}
+      />
+      <Text>
+        {query === ''
+          ? 'Type a product name, then press search.'
+          : `Searching for ${query}…`}
+      </Text>
     </>
   );
 }

@@ -33,8 +33,10 @@ export interface SearchFieldHandle {
  * search input field takes no keyboard options at all (D38 item 2). A field that
  * needs other keyboard options is a `TextField`.
  */
-export interface SearchFieldProps
-  extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
+export interface SearchFieldProps extends Omit<
+  ViewProps,
+  'onFocus' | 'onBlur'
+> {
   /**
    * The query. Pass it to control the field; leave it `undefined` for an
    * uncontrolled one (native owns the text then, and typing costs no React

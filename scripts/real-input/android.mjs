@@ -114,6 +114,10 @@ const ECHO = {
   textFrozen: 'text-frozen-echo',
   textCapped: 'text-capped-echo',
   textFocus: 'text-focus-echo',
+  searchTyping: 'search-typing-echo',
+  searchFrozen: 'search-frozen-echo',
+  searchCapped: 'search-capped-echo',
+  searchFocus: 'search-focus-echo',
 };
 
 /** The Enter key, which a single-line field takes as its editor action (submit). */
@@ -2419,6 +2423,258 @@ const CHECKS = {
       'and one that calls ref.blur() blurs it',
       t.waitForEcho(
         ECHO.textFocus,
+        'focus: 2 blur: 2 submitted: go',
+        'blur from JS'
+      ),
+      'focus: 2 blur: 2 submitted: go'
+    );
+    // Leave no keyboard up for the next check.
+    await t.hideKeyboard();
+  },
+
+  /**
+   * Real keystrokes into Material 3's search input, plus the two things a *search*
+   * field does that a text field does not: the Search key refuses an empty query, and
+   * the field grows a clear button that takes the query out without losing focus.
+   *
+   * Four assertions here are not in `CHECKS['text-field']`, and each is the out-of-app
+   * half of a claim the component makes:
+   *
+   * - **the Search key with nothing in the field reports nothing**: the rule
+   *   `HybridNitroUiSearchField.kt`'s `onSearch` enforces, driven by a real key rather
+   *   than by a call. iOS states the same rule with `enablesReturnKeyAutomatically`.
+   * - **the Search key submits the query and then blurs**, as a single-line field does.
+   * - **the clear button empties the field** — aimed at from the tree, so a clear that
+   *   only *looks* tappable goes red.
+   * - **clearing keeps focus**: the blur counter does not move, so a clear that also
+   *   dismissed the keyboard — what `clearFocus()` beside `clearText()` would do — is
+   *   caught.
+   *
+   * The clear button is found by geometry, not by name: its label is the framework's own
+   * localized "clear query" string (`SearchFieldStrings`), which this script has no
+   * business spelling out in English. What *is* asserted is that the node it taps is
+   * named, because an unnamed button is one TalkBack cannot describe.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'search-field': async (t) => {
+    /**
+     * The editable node inside the named field's box.
+     *
+     * `fieldText` requires the *same* box, which is how `HybridNitroUiTextField`
+     * publishes its name; a search bar names the whole input row and holds the text in
+     * a node inset by its own leading icon, so containment is the right relation here.
+     *
+     * @param {string} description
+     */
+    const queryText = (description) => {
+      const nodes = t.dump();
+      const named = nodes.find(
+        (node) => node.contentDesc === description && node.bounds.width > 0
+      );
+      if (named == null) {
+        t.log.abort(`no search field named "${description}" on screen`);
+      }
+      const held = nodes.filter(
+        (node) =>
+          node.className === 'android.widget.EditText' &&
+          node.bounds.x1 >= named.bounds.x1 &&
+          node.bounds.y1 >= named.bounds.y1 &&
+          node.bounds.x2 <= named.bounds.x2 &&
+          node.bounds.y2 <= named.bounds.y2
+      );
+      if (held.length !== 1) {
+        t.log.abort(
+          `"${description}" holds ${String(held.length)} editable nodes in its box - ` +
+            'a check cannot say which one a keystroke reached'
+        );
+      }
+      return held[0].text;
+    };
+
+    /**
+     * The clear affordance of a focused field: the clickable node the field owns inside
+     * its own box, on the side away from the search glyph.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} field
+     */
+    const clearButtonIn = (field) => {
+      const candidates = t
+        .dump()
+        .filter(
+          (node) =>
+            node.clickable === 'true' &&
+            node.bounds.cx > field.bounds.cx &&
+            node.bounds.cx < field.bounds.x2 &&
+            node.bounds.cy > field.bounds.y1 &&
+            node.bounds.cy < field.bounds.y2 &&
+            node.bounds.width > 0 &&
+            node.bounds.width < field.bounds.width * 0.6 &&
+            !(
+              node.bounds.x1 === field.bounds.x1 &&
+              node.bounds.x2 === field.bounds.x2
+            )
+        );
+      if (candidates.length !== 1) {
+        t.log.abort(
+          `the focused search field offers ${String(candidates.length)} ` +
+            'clickable nodes on its trailing side — expected exactly the clear ' +
+            'button, so a tap cannot be aimed at it'
+        );
+      }
+      const clear = candidates[0];
+      t.log.note(
+        `the clear button is "${clear.contentDesc}" at ` +
+          `${String(clear.bounds.x1)},${String(clear.bounds.y1)} → ` +
+          `${String(clear.bounds.x2)},${String(clear.bounds.y2)}`
+      );
+      return clear;
+    };
+
+    t.log.checkEquals(
+      'the search field starts empty',
+      t.requireEcho(ECHO.searchTyping),
+      'query:  (0)'
+    );
+    t.log.checkEquals(
+      'and nothing has been focused, blurred or submitted yet',
+      t.requireEcho(ECHO.searchFocus),
+      'focus: 0 blur: 0 submitted: -'
+    );
+    t.log.check(
+      'a placeholder nobody chose still draws a word for search',
+      t
+        .dump()
+        .some((node) => node.text.includes('earch') && node.text.length > 0)
+    );
+    t.log.check(
+      'and a placeholder that was chosen is drawn too',
+      t.dump().some((node) => node.text === 'Search recipes')
+    );
+
+    // Lowest field first: once a keyboard is up it covers the lower half of the
+    // screen, and every later tap is aimed higher than the one before it.
+    await t.tapNode(await t.requireControlOnScreen('Capped search field'));
+    await t.type('abcdefg');
+    t.log.checkEquals(
+      'maxLength 5 keeps five of seven keys',
+      t.waitForEcho(ECHO.searchCapped, 'capped: abcde (5)', 'the capped query'),
+      'capped: abcde (5)'
+    );
+    t.log.checkEquals(
+      'and the field holds the same five',
+      queryText('Capped search field'),
+      'abcde'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Frozen search field'));
+    await t.type('xy');
+    t.log.checkEquals(
+      'every key into the frozen field is reported to JS',
+      t.waitForEcho(
+        ECHO.searchFrozen,
+        'frozen: 2 edits refused',
+        'two refused edits'
+      ),
+      'frozen: 2 edits refused'
+    );
+    t.log.checkEquals(
+      'and each one is reverted: the field still shows what JS kept',
+      queryText('Frozen search field'),
+      'frozen'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Typing search field'));
+    await t.type('latte');
+    t.log.checkEquals(
+      'real keystrokes reach the field, and React sees the query',
+      t.waitForEcho(ECHO.searchTyping, 'query: latte (5)', 'the typed query'),
+      'query: latte (5)'
+    );
+    t.log.checkEquals(
+      'the field shows what React was told',
+      queryText('Typing search field'),
+      'latte'
+    );
+
+    // 1. Focus, and the key that must not answer.
+    await t.tapNode(await t.requireControlOnScreen('Focus search field'));
+    t.log.checkEquals(
+      'a real tap focuses the field (onFocus)',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'the focus'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+    t.key(KEY_ENTER);
+    t.log.checkEquals(
+      'the Search key with an empty query submits nothing and blurs nobody',
+      t.requireEchoToStay(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'an empty Search key to stay silent'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+
+    // 2. The clear button: one edit, focus kept.
+    await t.type('go');
+    t.log.checkEquals(
+      'the field holds the query before anything clears it',
+      queryText('Focus search field'),
+      'go'
+    );
+    const focused = await t.requireControlOnScreen('Focus search field');
+    const clear = clearButtonIn(focused);
+    t.log.check(
+      'the clear button names itself, so TalkBack can say what it does',
+      clear.contentDesc.length > 0
+    );
+    await t.tapNode(clear);
+    t.log.checkEquals(
+      'a real tap on the clear button empties the field',
+      queryText('Focus search field'),
+      ''
+    );
+    t.log.checkEquals(
+      'and clearing keeps focus: no blur, no submit',
+      t.requireEchoToStay(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'the clear button to hold focus'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+
+    // 3. The key that must answer, and the two imperative handles.
+    await t.type('go');
+    t.key(KEY_ENTER);
+    t.log.checkEquals(
+      'the Search key submits the query and then blurs the field',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 1 blur: 1 submitted: go',
+        'the submit and blur'
+      ),
+      'focus: 1 blur: 1 submitted: go'
+    );
+    await t.tapTestId('search-focus-js');
+    t.log.checkEquals(
+      'a real tap on a button that calls ref.focus() focuses it',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 2 blur: 1 submitted: go',
+        'focus from JS'
+      ),
+      'focus: 2 blur: 1 submitted: go'
+    );
+    await t.tapTestId('search-blur-js');
+    t.log.checkEquals(
+      'and one that calls ref.blur() blurs it',
+      t.waitForEcho(
+        ECHO.searchFocus,
         'focus: 2 blur: 2 submitted: go',
         'blur from JS'
       ),

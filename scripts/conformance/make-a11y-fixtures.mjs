@@ -34,6 +34,7 @@ const TAB_LABEL = {
   chip: 'Chip',
   host: 'Host',
   textfield: 'Text',
+  searchfield: 'Search',
 };
 
 function adb(args) {

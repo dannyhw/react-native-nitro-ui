@@ -104,6 +104,7 @@ import {
   Menu,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
@@ -219,6 +220,16 @@ const SHARED = {
         "height": 22
       }
     },
+    "NitroUiSearchField": {
+      "android": {
+        "width": 200,
+        "height": 56
+      },
+      "ios": {
+        "width": 200,
+        "height": 37
+      }
+    },
     "NitroUiChip": {
       "android": {
         "width": 96,
@@ -251,6 +262,7 @@ const SHARED = {
     "NitroUiDatePicker": "both",
     "NitroUiPicker": "both",
     "NitroUiTextField": "height",
+    "NitroUiSearchField": "height",
     "NitroUiChip": "none"
   },
   "exemptions": [
@@ -1929,6 +1941,150 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const handle = handleFor('conformance-text-field');
+        await settle(200);
+        return [
+          {
+            label: 'the text the controlled second owner shows',
+            expected: 'ctl',
+            actual: handle.nuiTestState?.().text,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'SearchField',
+    component: 'NitroUiSearchField',
+    label: 'Conformance search field',
+    testId: 'conformance-search-field',
+    owner: (second) => (
+      <View style={columnStyle}>
+        <SearchField
+          value={second ? 'second' : 'first'}
+          testID="conformance-search-field"
+          accessibilityLabel={
+            second
+              ? `Conformance search field, ${SECOND}`
+              : 'Conformance search field'
+          }
+          hybridRef={captureFor('conformance-search-field')}
+        />
+      </View>
+    ),
+    control: (testId, variant) => (
+      <SearchField
+        value={variant ? 'Leak B' : 'Leak A'}
+        testID={testId}
+        accessibilityLabel={`Leak search field ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'value',
+        expected: second ? 'second' : 'first',
+        actual: handle.value,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance search field, ${SECOND}`
+          : 'Conformance search field',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    probe: {
+      leaveBehind:
+        'typing `x` into an uncontrolled field seeded `first`, then a second owner whose ' +
+        'own `defaultValue` is `second` - text the control can only hold if the reset ' +
+        're-armed the default and cleared what the first owner typed',
+      first: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue="first"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-search-field', 'x', 'firstx');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-search-field:firstx',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue="second"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-search-field');
+        await settle(200);
+        const state = handle.nuiTestState?.();
+        return [
+          {
+            label: 'the text the control holds',
+            expected: 'second',
+            actual: state?.text,
+          },
+          {
+            label: 'native events counted for this owner',
+            expected: 0,
+            actual: state?.nativeEvents,
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'three keystrokes into an uncontrolled field, then a second owner *controlled* at ' +
+        '`ctl` - counts left at `nativeEvents 3` would refuse that write as stale',
+      first: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue=""
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-search-field', 'abc', 'abc');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-search-field:a',
+            'conformance-search-field:ab',
+            'conformance-search-field:abc',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <SearchField
+            value="ctl"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-search-field');
         await settle(200);
         return [
           {
