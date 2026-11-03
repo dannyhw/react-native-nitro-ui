@@ -129,9 +129,7 @@ describe('MaterialTheme', () => {
     );
     await settle();
     const moved = delta(before, readReport());
-    console.log(
-      `[theme] default: ${JSON.stringify(moved)} (${after.setting})`
-    );
+    console.log(`[theme] default: ${JSON.stringify(moved)} (${after.setting})`);
     expect(moved.baseline).toBe(0);
     expect(moved.other).toBe(0);
   });

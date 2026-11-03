@@ -587,8 +587,8 @@ export function replaceRegion(content, region) {
     region.entries.map((manifest) => [region.keyOf(manifest), manifest])
   );
   // Something in the file the region has no manifest for, and which the region is
-  // told to leave alone (`keep`): `nitro.json`'s `NitroUiCore` and `NitroUiHost`,
-  // which are autolinked but are not controls. Dropping them would be the generator
+  // told to leave alone (`keep`): `nitro.json`'s `NitroUiCore`, `NitroUiHost` and
+  // `NitroUiMaterialTheme`, which are autolinked but are not controls. Dropping them would be the generator
   // deleting a file's own config because it has no opinion on it, and `checkAutolinking`
   // is where a name nobody declares belongs - as a report, not a silent edit.
   const kept = existing
@@ -604,7 +604,7 @@ export function replaceRegion(content, region) {
   const blocks = ordered.map((key) => {
     const current = byKey.get(key);
     const manifest = wantedByKey.get(key);
-    // A kept key (`nitro.json`'s NitroUiCore / NitroUiHost) has no manifest, so its
+    // A kept key (`nitro.json`'s NitroUiCore / NitroUiHost / NitroUiMaterialTheme) has no manifest, so its
     // bytes are all it has - and they are not the registry's to rewrite anyway.
     if (manifest == null) return current.lines;
     // In a *shipped* file an entry already there is copied rather than re-rendered:
@@ -1052,15 +1052,21 @@ export function sizingTableContent(manifests, current, currentText) {
 
 /**
  * Autolinked HybridObjects that are not components with a manifest:
- * `NitroUiCore` (a plain HybridObject - no view, nothing per-component to generate)
- * and `NitroUiHost` (the shared-composition container, which the example app,
- * `HostChildren.ts` and the bench arm all treat as something other than a control).
+ * `NitroUiCore` (a plain HybridObject - no view, nothing per-component to generate),
+ * `NitroUiHost` (the shared-composition container, which the example app,
+ * `HostChildren.ts` and the bench arm all treat as something other than a control)
+ * and `NitroUiMaterialTheme` (Android's process-wide theme setting behind
+ * `setMaterialTheme`, a plain Kotlin HybridObject - X18).
  *
  * Named rather than skipped by a prefix rule, because a check that ignored every
  * unknown key would also ignore a component deleted from the registry and left
  * behind in `nitro.json`.
  */
-export const NON_CONTROL_AUTOLINKING = ['NitroUiCore', 'NitroUiHost'];
+export const NON_CONTROL_AUTOLINKING = [
+  'NitroUiCore',
+  'NitroUiHost',
+  'NitroUiMaterialTheme',
+];
 
 /**
  * Exports from `src/index.ts` whose directory has no manifest: `<Host>`, the shared
