@@ -429,3 +429,22 @@ follow the content. The orchestrator's answers to S2's questions:
 5. **The stranded-Modal hazard case** runs in its own app instance, never in the shared harness process.
 
 Android needs no equivalent. Q5 Appendix C6's presentation choice is reversed accordingly. The build is G14.
+
+## D36 — ContextMenu: design rulings and a spike first (2026-11-03)
+
+Q6 (`docs/tasks/Q6-contextmenu-design.report.md`) designed ContextMenu: a `View` that opens Menu's `group` on a long
+press, children in place, `sizing: null`, no value and no `open()`, with `onOpen`/`onClose` on both platforms. The
+orchestrator adopted Q6's recommendations; the owner may override any of them before the build.
+
+1. **Screen readers (A):** the app sets `accessible` on the ContextMenu to make the wrapper the element that carries
+   the menu action. Not accessible by default (that would hide inner buttons). Spike question 6 decides if iOS needs more.
+2. **A held press in the harness (B):** patch `@react-native-harness/ui` with `longPressAt` under D5/D11; the library
+   ships no touch injector.
+3. **v1 scope (C):** no custom preview, `previewBackgroundColor`, tap-to-open, imperative `open()`, or Android
+   mouse/stylus right-click.
+4. **Shared Menu rows (D):** the build moves Menu's Android row code and `useMenuRows` into shared files; Menu's
+   harness re-runs on both platforms.
+5. **iOS mounting:** no `.mm` patch for ContextMenu. Fabric already mounts children into the component view, and
+   G14's content-view patch would offset a padded ContextMenu's children twice. BottomSheet keeps its patch.
+6. **Order (E):** a spike first (S3, one round, D19's spike rule, prototype never merged). GO means Q6 Appendix G
+   questions 1, 2, 3 and 5 pass on both platforms; the build (G16) follows a GO.
