@@ -194,3 +194,37 @@ Each one was run against the shipped code with one thing broken, on the leased p
    - (b) drop the reset and support iOS 27 only.
 
    **Recommend (a).** The machine already has 26.4 simulators outside the pool.
+
+## Fix round 1
+
+Lease `G16-lq26x` (pair-a). Merged `origin/main` (README kept main's structure, plus the
+ContextMenu row, import and Usage). **1:** Android stores the observer its pre-draw
+listener went on, and unwatches from the model's close funnel (every close path) and
+`onDetachedFromWindow`. `watchStray` counts listener runs on a closed or detached view.
+**2:** a DOWN the wrapper does not take drops the pending press. **3:** iOS matches a close
+to the ended configuration's identifier, and never resets `generation`. **4:** both reports
+are built only once asked (cleared on recycle); event copies only while pending. Also:
+`nuiTestSelectRow` calls `host.choose` only, the debt matcher is anchored, and a
+non-accessible wrapper offers TalkBack no long-click (it did). Android README screenshot
+taken. `real-input:ios` was green on a rerun after TextField's frozen-field key flake.
+`generation` across a recycle has no proof: nothing in the harness can hold an end
+animator past `prepareForRecycle`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1720 tests / 67 suites | `a8ccfd7d641c` | 1 m 60 s | start 9.1 / med 9.1 / max 13.3 |
+| `harness:ios` | **PASS** | 366 tests / 21 suites + isolated 2 tests / 1 suites | `a8ccfd7d641c` (ios tree) | 8 m 51 s | start 4.1 / med 5.5 / max 8.1 |
+| `harness:android` | **PASS** | 415 tests / 21 suites + isolated 2 tests / 1 suites | `a8ccfd7d641c` (android tree) | 12 m 29 s | start 9.1 / med 4.4 / max 9.1 |
+| `real-input:ios` | **PASS** | — | `a8ccfd7d641c` (ios tree) | 16 m 44 s | start 4.9 / med 4.8 / max 13.4 |
+| `real-input:android` | **PASS** | — | `a8ccfd7d641c` (android tree) | 32 m 08 s | start 3.7 / med 4.1 / max 8.0 |
+
+`need --for review`: `need: review is satisfied on this code tree.`
+
+- harness:android no layout listener left -> no unwatch in the close funnel -> `expected 6 to be +0` (after a pick)
+- harness:android the same -> unwatch through today's `viewTreeObserver`, no detach unwatch -> `expected 10 to be 3` (drop while open: Fabric detaches first)
+- harness:android not the touch target -> no drop for an untaken DOWN -> `timed out waiting for the held press under it`
+- harness:ios a hold during the close -> the reviewed `generation` guard -> `timed out waiting for the close`
+- harness:ios / android no report until asked -> publish ungated -> `expected 11 (Android 12) to be less than or equal to 2`
+- harness:android disabled copies nothing -> copy every event -> `expected '2' to be '0'`
+- real-input:android `ctx-bottom` -> no non-accessible branch -> `offers TalkBack no long-click — expected false, saw true`
+- unit debt row -> unanchored `/2 element\(s\)/` -> `Expected: false Received: true`
