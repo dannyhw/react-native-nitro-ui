@@ -122,8 +122,9 @@ export interface NitroUiContextMenuMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: Android performs `ACTION_LONG_CLICK` on the wrapper - the
-   * action TalkBack's double-tap-and-hold sends. A no-op on iOS, whose screen readers
-   * reach the menu through UIKit's own "Show Context Menu". Hops to the UI thread.
+   * action TalkBack's double-tap-and-hold sends. A no-op on iOS, where the menu's
+   * accessibility action is UIKit's, derived from the interaction (nothing here can
+   * perform it). Hops to the UI thread.
    *
    * @internal Not app API (DECISIONS D14).
    */

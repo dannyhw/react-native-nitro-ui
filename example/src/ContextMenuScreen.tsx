@@ -40,8 +40,15 @@ const MESSAGE_GROUP: MenuGroup = {
     },
   ],
 };
-const OUTER_GROUP: MenuGroup = { actions: [{ id: 'outer', title: 'Outer' }] };
-const INNER_GROUP: MenuGroup = { actions: [{ id: 'inner', title: 'Inner' }] };
+// Row titles no text on the screen repeats: iOS reads an open menu's rows from the same
+// accessibility tree as the page behind it, so a row called "Outer" would match the
+// `<Text>Outer</Text>` below whether or not any menu is up.
+const OUTER_GROUP: MenuGroup = {
+  actions: [{ id: 'outer', title: 'Outer action' }],
+};
+const INNER_GROUP: MenuGroup = {
+  actions: [{ id: 'inner', title: 'Inner action' }],
+};
 const BOTTOM_GROUP: MenuGroup = {
   actions: [
     { id: 'b1', title: 'Bottom one' },

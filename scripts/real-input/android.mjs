@@ -3176,8 +3176,8 @@ async function contextMenuCheck(t) {
     log.check(
       `a hold on the inner ContextMenu opens the inner menu (rows ${popup == null ? '-' : popup.rows.join('/')})`,
       popup != null &&
-        popup.rows.includes('Inner') &&
-        !popup.rows.includes('Outer')
+        popup.rows.includes('Inner action') &&
+        !popup.rows.includes('Outer action')
     );
     await contextClose(t);
     const after = await contextEchoWhen(t, (e) => e.inner === before.inner + 1);

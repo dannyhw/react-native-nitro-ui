@@ -254,8 +254,8 @@ export const Disabled: Story = {
 
 /**
  * `accessible` and an `accessibilityLabel` make the ContextMenu one screen-reader
- * element that carries the menu: UIKit's "Show Context Menu" on iOS, a long-click
- * action labelled "Show menu" on Android.
+ * element that carries the menu: the view with its context-menu interaction on iOS,
+ * a node with a long-click action labelled "Show menu" on Android.
  */
 export const Accessible: Story = {
   render: function AccessibleStory() {

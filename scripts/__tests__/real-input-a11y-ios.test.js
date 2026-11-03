@@ -22,6 +22,8 @@
 
 import { describe, expect, it } from '@jest/globals';
 
+import { readFileSync } from 'node:fs';
+
 import {
   A11Y_CONTROLS,
   checkIosControlA11y,
@@ -142,6 +144,24 @@ describe('the iOS a11y rule', () => {
       ]);
       expect(problems.join('\n')).toContain(
         '2 elements under "ctx-accessible"'
+      );
+    });
+
+    it('goes red on the measured tree of a wrapper that is not one element', () => {
+      // The content view's getter forced false, on iOS 27: the wrapper is still listed
+      // with its label (XCUITest lists any view with an identifier), so the name check
+      // alone passes - what gives it away is the children reached as stops of their own.
+      const tree = parseIosA11yLog(
+        readFileSync(
+          `${__dirname}/fixtures/a11y/ios-context-menu-not-an-element.log`,
+          'utf8'
+        )
+      ).get('context-menu');
+      expect(tree).toHaveLength(6);
+      const problems = iosA11yProblems(control('context-menu'), tree);
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(
+        '4 element(s) under "ctx-accessible" are stops'
       );
     });
 
