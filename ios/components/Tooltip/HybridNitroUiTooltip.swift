@@ -16,7 +16,9 @@
 //  It presents from a window of its own (`NitroUiPresentation.presentInOwnWindow`), as
 //  the dialogs do, and never from the app's chain: a popover in the chain is what the app's
 //  top controller is presenting, so UIKit refuses the RN `Modal` an app opens while the
-//  tooltip is up (measured, G18), and a `Modal` closing under it would strand (D35).
+//  tooltip is up (measured, G18). A window of its own also keeps a tooltip out of an RN
+//  `Modal`'s chain, which is where a dialog stranded the Modal (D35); for a tooltip that
+//  strand was not reproduced (`TooltipModalHazard.harness.tsx` pins it either way).
 //
 
 import NitroModules
@@ -419,7 +421,8 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
     // Presented in the app's chain, the popover is what the top controller is presenting,
     // so an RN `Modal` the app opens while a tooltip is up is refused by UIKit and never
     // appears (`Tooltip.harness.tsx`, "closes and reports when a full-screen Modal takes
-    // its view out of the window"), and a `Modal` closing under one would strand (D35).
+    // its view out of the window"). The isolated `TooltipModalHazard` suite pins that a
+    // `Modal` closing under an open tooltip leaves no Modal host behind.
     let presented = presentation.presentInOwnWindow(
       controller,
       over: anchor,

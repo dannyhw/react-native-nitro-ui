@@ -28,9 +28,10 @@ import {
   Switch,
   TextField,
   type TextFieldHandle,
+  Tooltip,
 } from 'react-native-nitro-ui';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 // #region switch
 export function WifiSettings() {
@@ -246,6 +247,30 @@ export function Filters() {
         </View>
       </BottomSheet>
     </>
+  );
+}
+// #endregion
+
+// #region tooltip
+export function StarHint({ onStar }: { onStar: () => void }) {
+  const [hint, setHint] = useState(true);
+
+  return (
+    <Tooltip
+      isPresented={hint}
+      onIsPresentedChange={setHint}
+      title="Saved searches"
+      message="Tap the star to keep this search."
+      actions={[{ id: 'ok', title: 'Got it' }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Star this search"
+        onPress={onStar}
+      >
+        <Text>★</Text>
+      </Pressable>
+    </Tooltip>
   );
 }
 // #endregion

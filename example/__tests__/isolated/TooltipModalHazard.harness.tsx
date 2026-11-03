@@ -2,16 +2,19 @@
  * The stranded-Modal hazard (DECISIONS D35 item 5) for Tooltip, in an app instance of
  * its own.
  *
- * React Native closes a `Modal` by dismissing *its own* controller. A popover presented
- * in that controller's chain is what UIKit dismisses instead, and the `Modal`'s host
- * stays over the app for good (G11's finding). A tooltip opened inside a `Modal` is the
- * plainest way to get there, so on iOS a tooltip always presents from a window of its
- * own (`docs/components/tooltip.md`, "Presenting").
+ * React Native closes a `Modal` by dismissing *its own* controller. A dialog presented
+ * in that controller's chain is what UIKit dismissed instead, and the `Modal`'s host
+ * stayed over the app for good (G11's finding). A tooltip opened inside a `Modal` is
+ * the plainest way to get there. On iOS a tooltip always presents from a window of its
+ * own (`docs/components/tooltip.md`, "Presenting"), for a reason measured elsewhere: a
+ * popover in the app's chain makes UIKit refuse the next `Modal` (`Tooltip.harness.tsx`).
+ * With the popover put back in the chain, the full-screen case below did *not* strand
+ * (G18, measured) - it went red on the window it presented from - so this file pins the
+ * outcome either way rather than claiming the strand.
  *
- * This file closes the Modal *while the tooltip inside it is up* - the move that strands
- * it. If the rule ever regresses, RN's host is left over the app and every later file
- * in the same process lays out under it, so this file must never run in the shared
- * harness process. `example/jest.harness.config.mjs` keeps `__tests__/isolated/` out of
+ * This file closes the Modal *while the tooltip inside it is up*. Were a Modal host ever
+ * left over the app, every later file in the same process would lay out under it, so
+ * this file must never run in the shared harness process. `example/jest.harness.config.mjs` keeps `__tests__/isolated/` out of
  * the shared run; run it alone with
  *
  *   NITRO_UI_HARNESS_ISOLATED=1 node scripts/gate.mjs harness:ios -- TooltipModalHazard
@@ -146,11 +149,6 @@ describe('Tooltip · the stranded-Modal hazard (own app instance)', () => {
       await sleep(600);
       setters.get('tip')?.(true);
       const shown = await waitForReport('tip', up, 'up inside the Modal');
-      if (IOS) {
-        // Why: a window of its own, so RN's dismissal of the Modal reaches the Modal.
-        expect(shown.presenter).toBe('ownWindow');
-        expect(shown.appTop).toContain('ModalHostViewController');
-      }
       // The move that strands a popover in the Modal's chain. On iOS React Native keeps
       // a closing Modal's content mounted until its native dismissal has ended, so the
       // tooltip sees its window go first - the window-loss close, reported once - and is
@@ -174,6 +172,12 @@ describe('Tooltip · the stranded-Modal hazard (own app instance)', () => {
         'nothing of the tooltip or the Modal left'
       );
       expect(after.presented).toBe('0');
+      if (IOS) {
+        // Why, asserted after the strand itself so a regression reads as the strand: a
+        // window of its own, so RN's dismissal of the Modal reaches the Modal.
+        expect(shown.presenter).toBe('ownWindow');
+        expect(shown.appTop).toContain('ModalHostViewController');
+      }
       console.log(
         `tooltip in a closing ${style} Modal reported: [${eventLog.join(',')}]`
       );

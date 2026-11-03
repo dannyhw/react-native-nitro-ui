@@ -29,11 +29,12 @@ the layout engine, and React never sees a native node.
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content              | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
+| `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`          | next  | [tooltip.md](docs/components/tooltip.md)                     |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children       | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField` and `BottomSheet`, and refuses those three with an
+except `Chip`, `TextField`, `BottomSheet` and `Tooltip`, and refuses those four with an
 error that names them. See [Performance](#performance) for what it buys and what
 it costs.
 
@@ -57,6 +58,7 @@ import {
   Slider,
   Switch,
   TextField,
+  Tooltip,
 } from 'react-native-nitro-ui';
 ```
 
@@ -615,12 +617,57 @@ iOS the sheet presents in the screen's own chain, and from a window of its own
 when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
 [bottom-sheet.md](docs/components/bottom-sheet.md) has the platform details.
 
+### Tooltip
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/tooltip-ios.png" width="300" alt="A Tooltip with a title, a message and a Got it action, pointing at a star button, on iOS" /></td>
+    <td><img src="docs/images/components/tooltip-android.png" width="300" alt="A Tooltip with a title, a message and a Got it action, pointing at a star button, on Android" /></td>
+  </tr>
+</table>
+
+A tooltip the app opens next to its own views: Material 3's plain or rich
+tooltip on Android, and a popover on iOS, which has no tooltip control. The
+children are the anchor, laid out in place, and keep their own taps.
+
+```tsx name=tooltip
+export function StarHint({ onStar }: { onStar: () => void }) {
+  const [hint, setHint] = useState(true);
+
+  return (
+    <Tooltip
+      isPresented={hint}
+      onIsPresentedChange={setHint}
+      title="Saved searches"
+      message="Tap the star to keep this search."
+      actions={[{ id: 'ok', title: 'Got it' }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Star this search"
+        onPress={onStar}
+      >
+        <Text>★</Text>
+      </Pressable>
+    </Tooltip>
+  );
+}
+```
+
+There is no long-press trigger and no timeout: the app sets `isPresented`, and
+the tooltip stays up until a tap outside, an action, Back (Android, with an
+action) or the app closes it. `onAction` comes before the close it causes. The
+tooltip follows its anchor through a layout change or a scroll. At most two
+actions; a title or an action makes Android's tooltip the rich one.
+[tooltip.md](docs/components/tooltip.md) has the platform details.
+
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField` and `BottomSheet`; one of those three, an RN view, plain
-text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `BottomSheet` and `Tooltip`; one of those four, an RN view,
+plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -771,8 +818,8 @@ The full list per control is in its doc; these are the ones that bite.
   Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
   changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField` and `BottomSheet`. Any other child — one of
-  those three, an RN view, text, another `<Host>` — throws in development. Give
+  one except `Chip`, `TextField`, `BottomSheet` and `Tooltip`. Any other child —
+  one of those four, an RN view, text, another `<Host>` — throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
