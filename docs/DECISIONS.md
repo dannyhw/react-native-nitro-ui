@@ -469,3 +469,20 @@ questions 1, 2, 3 and 5 met 10/10 on both platforms with real input. The orchest
    `replaceAccessibilityAction`, which dropped `testID`), the wrapper laying out its 0×0 compose host itself, the
    layout-move dismissal, and the documented platform notes (iOS inner `onLongPress` ~240 ms before the menu;
    Material's 48 dp edge inset).
+
+## D38 — The next components, and what to do when a platform has no control (2026-11-03)
+
+Q7 (`docs/tasks/Q7-next-components-2.report.md`) re-ranked Q5's remainder: SearchField, Tooltip, a Popover with RN
+content (spike first), Picker `variant="radio"`, Stepper. The orchestrator adopted its recommendations; the owner may
+override any of them.
+
+1. **A platform with no native control (Q7 question A):** build it from that platform's real controls and say so in
+   the docs (e.g. Stepper on Android as two M3 icon buttons; Popover on Android as a popup window). Never draw our own
+   imitation of a control (so no self-drawn iOS toast: Toast/Snackbar stays out).
+2. **SearchField** is its own native view (not a TextField variant), sharing TextField's model, handshake, IME guard,
+   `maxLength` and focus code; v1 has no keyboard props (search defaults on both platforms).
+3. **Tooltip** is the data version (message, optional title, up to two actions), opened only by the app (like Dialog)
+   and up until dismissed; the name `Popover` is kept for the RN-content version.
+4. **Picker `variant="radio"`** falls back to the menu on iOS.
+5. **Order:** SearchField (G17) and Tooltip (G18) build now in parallel; Picker radio next; Stepper after; the Popover
+   spike after Tooltip merges.
