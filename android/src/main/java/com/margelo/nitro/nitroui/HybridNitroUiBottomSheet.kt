@@ -21,6 +21,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.rememberNestedScrollInteropConnection
 import androidx.compose.ui.platform.testTag
@@ -129,6 +131,9 @@ internal class BottomSheetModel : NitroUiModel() {
   @Volatile var selected = 0
   @Volatile var boxReport = "boxW=0;boxH=0"
 
+  /** The sheet surface's measured height and its allowed height, px, for the report. */
+  @Volatile var geometryReport = "sheetPx=0;containerPx=0"
+
   /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
     val next = state.displayed
@@ -218,6 +223,7 @@ internal class BottomSheetModel : NitroUiModel() {
     sheetValue = "none"
     selected = 0
     boxReport = "boxW=0;boxH=0"
+    geometryReport = "sheetPx=0;containerPx=0"
   }
 
   companion object {
@@ -570,13 +576,18 @@ internal class BottomSheetHost(
         }
       }
     }
-    DetentReporter(model, sheetState, detents, expanded)
+    val geometry = remember(model) { SheetGeometry() }
+    DetentReporter(model, sheetState, detents, expanded, geometry)
     TestSeam(sheetState, detents, canPartiallyExpand = !skipPartiallyExpanded)
     val radius = model.cornerRadius
     val color = model.containerColor
     ModalBottomSheet(
       onDismissRequest = { model.userDismissed() },
-      modifier = Modifier.sheetTestTag(model.testID).semantics { model.label?.let { paneTitle = it } },
+      modifier =
+        Modifier
+          .measureSheet(geometry, model)
+          .sheetTestTag(model.testID)
+          .semantics { model.label?.let { paneTitle = it } },
       sheetState = sheetState,
       shape = radius?.let { RoundedCornerShape(topStart = it.dp, topEnd = it.dp) } ?: BottomSheetDefaults.ExpandedShape,
       containerColor = color?.let { ComposeColor(it) } ?: BottomSheetDefaults.ContainerColor,
@@ -623,6 +634,7 @@ internal class BottomSheetHost(
     sheetState: SheetState,
     detents: List<NitroUiSheetDetent>,
     expanded: NitroUiSheetDetent?,
+    geometry: SheetGeometry,
   ) {
     // The lists as they are now, not as they were when the effects started: a detent
     // change while the sheet is up does not restart them (one state per presentation).
@@ -631,10 +643,12 @@ internal class BottomSheetHost(
     // Distinct on the *detent*, not on Material's value: a converged sheet that grows
     // past half the screen is promoted from `PartiallyExpanded` to `Expanded` without
     // moving off its detent, and that is not a change to report.
+    // Read together with the sheet's measured geometry, which can move without the
+    // value moving (a `fit` sheet growing past half the container).
     LaunchedEffect(sheetState) {
-      snapshotFlow { sheetState.currentValue }
-        .filter { it != SheetValue.Hidden }
-        .map { value -> detentIndexOf(value, currentDetents, currentExpanded) }
+      snapshotFlow { Triple(sheetState.currentValue, geometry.known, geometry.converged) }
+        .filter { (value, known, _) -> value != SheetValue.Hidden && known }
+        .map { (value, _, converged) -> detentIndexOf(value, currentDetents, currentExpanded, converged) }
         .distinctUntilChanged()
         .drop(1)
         .collect { index ->
@@ -643,10 +657,10 @@ internal class BottomSheetHost(
         }
     }
     LaunchedEffect(sheetState) {
-      snapshotFlow { sheetState.currentValue }.collect { value ->
+      snapshotFlow { sheetState.currentValue to geometry.converged }.collect { (value, converged) ->
         model.sheetValue = value.name
         if (value != SheetValue.Hidden) {
-          model.selected = detentIndexOf(value, currentDetents, currentExpanded)
+          model.selected = detentIndexOf(value, currentDetents, currentExpanded, converged)
         }
       }
     }
@@ -683,28 +697,25 @@ internal class BottomSheetHost(
   /** The test seam's way into the composed sheet, while one is composed. */
   var selectDetent: ((Int) -> Unit)? = null
 
+  /**
+   * The detent a resting sheet stands for. `PartiallyExpanded` is `medium` - unless
+   * Material has put it on top of `Expanded` ([SheetGeometry.converged]), where the sheet
+   * rests at the expanded detent's height, and that detent is the honest answer (it is
+   * also what the old sheet state, which had no such anchor, reported).
+   */
   @OptIn(ExperimentalMaterial3Api::class)
   private fun detentIndexOf(
     value: SheetValue,
     detents: List<NitroUiSheetDetent>,
     expanded: NitroUiSheetDetent?,
+    converged: Boolean,
   ): Int {
-    val medium = value == SheetValue.PartiallyExpanded && !(expanded != null && convergesWithMedium(expanded))
+    val medium = value == SheetValue.PartiallyExpanded && !(expanded != null && converged)
     if (medium || expanded == null) {
       return detents.indexOfFirst { it.kind == "medium" }.coerceAtLeast(0)
     }
     return detents.indexOf(expanded).coerceAtLeast(0)
   }
-
-  /**
-   * Whether Material puts `PartiallyExpanded` on top of `Expanded` for this detent: the
-   * sheet is no taller than half the screen, so material3 1.5's state rests a `medium`
-   * sheet at the sheet's own height, where `medium` would be the taller of the two. The
-   * old state had no `PartiallyExpanded` anchor at all in that case, so this is the
-   * one place the 1.5 migration needs an answer of its own (see [Sheet]).
-   */
-  private fun convergesWithMedium(expanded: NitroUiSheetDetent): Boolean =
-    detentHeightPx(expanded, model.fitHeightPx) <= resources.displayMetrics.heightPixels / 2.0
 
   /** The height a non-`medium` detent asks for, in px; `large` is the whole screen. */
   private fun detentHeightPx(
@@ -952,6 +963,7 @@ class HybridNitroUiBottomSheet(
       ";presented=${if (model.state.displayed) 1 else 0};js=${if (model.state.js == true) 1 else 0}" +
       ";live=${BottomSheetModel.livePresentations.get()};presentCount=${model.presentCount.get()}" +
       ";sheetValue=${model.sheetValue};detents=${model.detents.joinToString(",") { it.kind }}" +
+      ";${model.geometryReport}" +
       ";selected=${model.selected};${model.boxReport};${host.facts()}" +
       ";roots=${BottomSheetModel.liveRoots.get()};userDismissals=${model.userDismissals.get()}" +
       ";unasked=${model.unaskedExits.get()};anchored=${if (host.isAttachedToWindow) 1 else 0}" +
@@ -977,3 +989,50 @@ class HybridNitroUiBottomSheet(
     mainHandler.post { action() }
   }
 }
+
+/**
+ * The two numbers Material builds a sheet's anchors from - material3 1.5.0-beta02's
+ * `BottomSheetImpl`, in `draggableAnchors { sheetSize, constraints -> }`: the sheet
+ * surface's measured height, and the height it was allowed (`constraints.maxHeight`,
+ * Material's `fullHeight`).
+ *
+ * Material keeps `PartiallyExpanded` at `fullHeight - min(fullHeight / 2, sheetHeight)`
+ * and `Expanded` at `fullHeight - sheetHeight`. The two coincide exactly when the sheet is
+ * no taller than half of what it was allowed - [converged]. The sheet's height is the
+ * whole surface: drag handle, content, and the insets padding inside it. A guess from the
+ * detent and the screen gets that wrong just under half (review of X18 round 1:
+ * `['medium', {fraction: 0.47}]` with the handle has two anchors, not one).
+ */
+@Stable
+private class SheetGeometry {
+  var sheetPx by mutableIntStateOf(0)
+  var containerPx by mutableIntStateOf(0)
+
+  /** Both numbers measured at least once. */
+  val known: Boolean
+    get() = sheetPx > 0 && containerPx > 0
+
+  /** Whether Material's `PartiallyExpanded` anchor sits on its `Expanded` one. */
+  val converged: Boolean
+    get() = known && sheetPx * 2 <= containerPx
+}
+
+/**
+ * Record [SheetGeometry] where Material reads it. The `modifier` given to
+ * `ModalBottomSheet` is the outer end of the sheet surface's chain, and what lies between
+ * it and Material's `draggableAnchors` (`align`, `consumeWindowInsets`, `widthIn`,
+ * `fillMaxWidth`, `nestedScroll`) changes only the width. So the height measured here and
+ * the height constraint seen here are the two Material used.
+ */
+private fun Modifier.measureSheet(
+  geometry: SheetGeometry,
+  model: BottomSheetModel,
+): Modifier =
+  layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    val container = if (constraints.hasBoundedHeight) constraints.maxHeight else 0
+    geometry.sheetPx = placeable.height
+    geometry.containerPx = container
+    model.geometryReport = "sheetPx=${placeable.height};containerPx=$container"
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+  }

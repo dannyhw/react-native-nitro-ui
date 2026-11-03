@@ -81,6 +81,11 @@ configured inside this package's `android/build.gradle`, so your app does not
 have to opt in to Compose to use one slider, and no Podfile or Gradle edits are
 needed either way.
 
+Material 3 1.5 is still a beta (`androidx.compose.material3:material3:1.5.0-beta02`),
+and it is the version this library needs for the Expressive theme. Gradle picks
+the newest version any library asks for, so if your app uses Material 3 itself,
+installing this library raises your app's Material 3 to that beta as well.
+
 A dev build is required: Expo Go is not supported, because Nitro Modules needs
 native code.
 
@@ -708,7 +713,8 @@ since Android 16, over the device's dynamic colours (Android 12+) or the default
 Material 3 colours, light or dark with the system. Today what the Expressive
 theme changes is motion: a Switch's thumb, a Checkbox's mark, a menu or a sheet
 opening move with Material's expressive springs, and Material ties more to the
-theme with each release.
+theme with each release. It comes from Material 3 1.5, currently a beta, which
+this library brings into your app (see [Requirements](#requirements)).
 
 To keep the baseline Material 3 theme instead, call `setMaterialTheme` once:
 

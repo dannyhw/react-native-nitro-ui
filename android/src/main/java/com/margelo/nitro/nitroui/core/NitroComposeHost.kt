@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.IntState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -1444,34 +1445,47 @@ abstract class NitroComposeHost<M : NitroUiModel>(
  * the default M3 schemes below, both following the system dark mode (D39).
  *
  * The app can opt out to the baseline Material 3 theme, process-wide
- * ([NitroUiMaterialTheme], `setMaterialTheme('baseline')` in JS). The colour scheme is
- * the same either way; what moves is what Material reads from the theme - today the
- * motion scheme, and whatever later Material releases tie to `MaterialExpressiveTheme`.
+ * ([NitroUiMaterialTheme], `setMaterialTheme('baseline')` in JS).
+ *
+ * **One call site, whatever the setting.** The setting only chooses the motion scheme
+ * handed to the one `MaterialExpressiveTheme` below. Two call sites - one theme
+ * composable per setting - would be two different groups. Switching would then dispose
+ * every control's composition and build it again: a presented sheet ends its
+ * presentation, a focused field loses its focus and its IME, an open menu closes and a
+ * drag loses its end (X18 fix round 1). With one call site a switch changes values and
+ * recomposes; nothing is disposed.
+ *
+ * That this is still exactly the baseline theme when the setting says so is a fact
+ * about material3 1.5.0-beta02, checked rather than assumed:
+ * - `MaterialExpressiveTheme(colorScheme, motionScheme)` at the root is
+ *   `MaterialTheme(colorScheme, motionScheme, Shapes(), Typography())` plus the internal
+ *   `LocalUsingExpressiveTheme = true`;
+ * - a root `MaterialTheme(colorScheme)` resolves to the same shapes and type, with
+ *   `MotionScheme.standard()`;
+ * - the internal flag is read by nothing but `MaterialExpressiveTheme` itself, and this
+ *   library never nests one.
+ *
+ * So the motion scheme is the whole difference. `NitroUiMaterialThemeLibraryTest` fails
+ * the day a material3 release ties anything else to that flag.
  *
  * A Hybrid View is its own composition, so it cannot inherit the app's theme;
  * this is the closest equivalent to what the surrounding app sees. Every composition
  * this library owns starts here - each control's own, and each `<Host>`'s, whose
  * children compose inside it - so this is the one place the theme is chosen.
- *
- * Switching themes at runtime swaps the theme composable at the root, so each
- * control's content is composed afresh under the new one; that is what a theme
- * change is, and the documented use is a single call before the first control.
  */
 @Composable
 fun NitroUiTheme(content: @Composable () -> Unit) {
   val dark = isSystemInDarkTheme()
   val context = LocalContext.current
-  val colorScheme = NitroUiColorSchemes.forContext(context, dark)
-  if (NitroUiMaterialTheme.expressive) {
-    MaterialExpressiveTheme(colorScheme = colorScheme, motionScheme = MotionScheme.expressive()) {
-      NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
-      content()
-    }
-  } else {
-    MaterialTheme(colorScheme = colorScheme, motionScheme = MotionScheme.standard()) {
-      NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
-      content()
-    }
+  MaterialExpressiveTheme(
+    colorScheme = NitroUiColorSchemes.forContext(context, dark),
+    motionScheme = if (NitroUiMaterialTheme.expressive) MotionScheme.expressive() else MotionScheme.standard(),
+  ) {
+    // The harness's readings: a content subtree created (once per root, unless a theme
+    // switch rebuilt it), and the motion scheme Material handed it.
+    remember { NitroUiMaterialTheme.noteContentCreated() }
+    NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
+    content()
   }
 }
 

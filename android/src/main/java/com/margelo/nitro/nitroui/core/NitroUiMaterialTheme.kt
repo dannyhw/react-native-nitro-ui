@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * It is snapshot state rather than a plain field so that a change reaches the
  * controls already on screen: each root that read it is invalidated and recomposes
- * under the other theme, in whatever composition it lives in. Written from the JS
+ * with the other motion scheme, in whatever composition it lives in - recomposes, not
+ * rebuilds (see [NitroUiTheme]). Written from the JS
  * thread (`HybridNitroUiMaterialTheme`), which is allowed - a write to the global
  * snapshot from any thread is what Compose's `GlobalSnapshotManager` schedules the
  * apply notification for - so the call never waits for the UI thread.
@@ -48,6 +49,17 @@ object NitroUiMaterialTheme {
   private val baselineRoots = AtomicInteger(0)
   private val otherRoots = AtomicInteger(0)
 
+  /**
+   * Content subtrees created under a theme root: one per root when it mounts, and none
+   * when the setting moves, because a switch must change values rather than rebuild what
+   * is on screen (see [NitroUiTheme]). A switch that disposed the content would count
+   * once more per root, which is the reading the harness holds at zero.
+   */
+  private val contentCreated = AtomicInteger(0)
+
+  /** Called from a `remember` inside [NitroUiTheme]'s content: once per creation. */
+  internal fun noteContentCreated(): Int = contentCreated.incrementAndGet()
+
   /** Called by [NitroUiTheme] with the motion scheme its content sees. */
   internal fun noteComposed(motionScheme: MotionScheme) {
     when {
@@ -57,10 +69,11 @@ object NitroUiMaterialTheme {
     }
   }
 
-  /** `setting=<expressive|baseline>;expressive=<n>;baseline=<n>;other=<n>`. Any thread. */
+  /** `setting=<…>;expressive=<n>;baseline=<n>;other=<n>;created=<n>`. Any thread. */
   fun report(): String =
     "setting=${if (expressive) "expressive" else "baseline"}" +
       ";expressive=${expressiveRoots.get()}" +
       ";baseline=${baselineRoots.get()}" +
-      ";other=${otherRoots.get()}"
+      ";other=${otherRoots.get()}" +
+      ";created=${contentCreated.get()}"
 }

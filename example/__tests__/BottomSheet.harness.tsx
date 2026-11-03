@@ -460,11 +460,50 @@ describe('BottomSheet', () => {
     setters.get('short')?.(true);
     const up = await waitForUp('short');
     expect(up.detents).toBe('medium,height');
-    await waitForReport('short', (r) => r.selected === '1', 'selected=1');
+    const rested = await waitForReport(
+      'short',
+      (r) => r.selected === '1',
+      'selected=1'
+    );
+    // The case it is: the whole measured sheet is no taller than half of what it was
+    // allowed, which is when Material puts the two anchors on one place.
+    expect(num(rested, 'sheetPx') * 2).toBeLessThanOrEqual(
+      num(rested, 'containerPx')
+    );
     // Resting is not a change, before or after its box arrives.
     await staysUp('short', 1500, 'once its box arrived');
     expect(reportOf('short').selected).toBe('1');
     expect(eventLog.filter((e) => e.startsWith('short:detent:'))).toEqual([]);
+  });
+
+  // Android only, and the other side of the case above (X18 fix round 1). A detent of
+  // 0.49 of the screen is under half, but the sheet Material measures is the whole
+  // surface - drag handle, content and insets - and that is taller than half of what it
+  // was allowed, so Material keeps two anchors. The sheet opens at `medium` and a move to
+  // the other detent is a change. A guess from the detent and the screen calls this one
+  // converged, and then reports neither.
+  it('reads a sheet just under half the screen by the anchors Material measured', async () => {
+    if (IOS) return;
+    await render(
+      <Stage testId="near" detents={['medium', { fraction: 0.49 }]} />
+    );
+    await waitForHandle('near');
+    setters.get('near')?.(true);
+    const up = await waitForUp('near');
+    expect(up.detents).toBe('medium,fraction');
+    const opened = await waitForReport(
+      'near',
+      (r) => r.selected === '0' && r.sheetValue === 'PartiallyExpanded',
+      'selected=0 at PartiallyExpanded'
+    );
+    expect(num(opened, 'sheetPx') * 2).toBeGreaterThan(
+      num(opened, 'containerPx')
+    );
+    await staysUp('near', 1500, 'once its box arrived');
+    expect(eventLog.filter((e) => e.startsWith('near:detent:'))).toEqual([]);
+    handles.get('near')?.nuiTestSelectDetent(1);
+    await waitForEvent('near:detent:1');
+    await waitForReport('near', (r) => r.selected === '1', 'selected=1');
   });
 
   it('gives a ScrollView inside the sheet the sheet box', async () => {
