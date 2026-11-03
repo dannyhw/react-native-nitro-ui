@@ -84,5 +84,6 @@
 | G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | merged (PR #28; 1 impl + 2 fix rounds, re-review MERGE; all five merge gates green on mac-2 on the main + D4 + Chip + BottomSheet tree `87d4b2ab0814`) |
 | G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | running |
 | Q6 | ContextMenu design (Q1 depth; children in place, gesture arbitration, spike questions) | Opus (on mac-1) | Opus | done (report merged; D36 adopts its recommendations; spike S3 next) |
-| S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | running |
+| S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
+| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
