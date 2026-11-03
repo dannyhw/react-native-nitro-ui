@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T23:07:06.965Z on code tree `5d53bc692c77` at HEAD `df69dde` (branch `task/G12-chip`)
+- Command: `bun run check`
+- Result: fail, exit 1, 344401 ms
+- Load: start 12.08, end 28.37, median 82.26, max 125.72
+- Device: none recorded (not a device gate)
+- Full log: `task/G12-chip/check-2026-11-02T23-07-06.965Z.log` (<store>/task/G12-chip/check-2026-11-02T23-07-06.965Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/check-runner.test.js (41.045 s)`
+- `● check.mjs, spawning real steps › runs no more steps at once than --jobs, and honours the flag`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 4`
+- `Received: 3`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/lease.test.js (48.424 s)`
+- `● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 620 — the rest is in the full log above)
+
+```
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+FAIL scripts/__tests__/lease.test.js (48.424 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+PASS scripts/__tests__/lease-metro-port.test.js (49.333 s)
+PASS scripts/__tests__/ci-workflows.test.js (65.23 s)
+PASS scripts/__tests__/gate.test.js (112.192 s)
+PASS scripts/__tests__/gate-check.test.js (125.793 s)
+PASS scripts/__tests__/gate-logs.test.js (186.54 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (193.992 s)
+PASS scripts/__tests__/bench-gate.test.js (320.13 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/check-runner.test.js (41.045 s)
+  ● check.mjs, spawning real steps › runs no more steps at once than --jobs, and honours the flag
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 4
+    Received: 3
+
+      953 |       }
+      954 |       expect(peak).toBeLessThanOrEqual(jobs);
+    > 955 |       expect(peak).toBe(jobs);
+          |                    ^
+      956 |     }
+      957 |   }, 120_000);
+      958 |
+
+      at Object.toBe (scripts/__tests__/check-runner.test.js:955:20)
+
+FAIL scripts/__tests__/lease.test.js (48.424 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+
+Test Suites: 2 failed, 61 passed, 63 total
+Tests:       2 failed, 1659 passed, 1661 total
+Snapshots:   0 total
+Time:        322.209 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+
+```

@@ -78,26 +78,7 @@ The Android README screenshot is missing (question 2). Bench arms are a follow-u
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1661 tests / 63 suites | `5d984fea21a2` | 2 m 09 s | start 11.1 / med 18.2 / max 23.5 |
-| `harness:ios` | **PASS** | 285 tests / 18 suites | `5d984fea21a2` (ios tree) | 5 m 10 s | start 15.9 / med 7.1 / max 15.9 |
-| `harness:android` | **PASS** | 334 tests / 18 suites | `5d984fea21a2` (android tree) | 8 m 59 s | start 5.6 / med 6.5 / max 8.8 |
-| `real-input:ios` | **PASS** | — | `5d984fea21a2` (ios tree) | 16 m 31 s | start 5.1 / med 9.3 / max 95.7 |
-| `real-input:android` | **PASS** | — | `5d984fea21a2` (android tree) | 24 m 52 s | start 6.7 / med 6.1 / max 16.5 |
-| `harness:android:Chip` | stale | 4 failed of 10 tests / 1 suites | ff06eef20479 (not this tree) | 46.1 s | start 9.7 / med 9.0 / max 9.9 |
-| `harness:android:Conformance` | stale | 1 failed of 50 tests / 1 suites | 65fdd5da9754 (not this tree) | 1 m 39 s | start 8.8 / med 8.9 / max 13.1 |
-| `harness:ios:Chip` | stale | 4 failed of 10 tests / 1 suites | ff06eef20479 (not this tree) | 50.1 s | start 10.8 / med 10.8 / max 12.2 |
-| `harness:ios:Chip%7CHostControls` | stale | 21 tests / 2 suites | a28d2fe556ca (not this tree) | 22.1 s | start 5.0 / med 5.3 / max 5.5 |
-| `harness:ios:Conformance` | stale | 1 failed of 50 tests / 1 suites | 65fdd5da9754 (not this tree) | 1 m 41 s | start 8.8 / med 8.5 / max 10.2 |
-| `harness:ios:Conformance%7CHostControls` | stale | 1 failed of 16 tests / 2 suites | 01e53f4d7438 (not this tree) | 19.0 s | start 6.3 / med 6.7 / max 7.2 |
-| `harness:ios:HostControls` | stale | 11 tests / 1 suites | a28d2fe556ca (not this tree) | 19.2 s | start 4.7 / med 4.8 / max 5.1 |
-| `real-input:android:--control:chip` | stale | — | 0eb7ba6d99f0 (not this tree) | 7 m 12 s | start 28.6 / med 45.0 / max 101.9 |
-| `real-input:ios:--control:chip` | stale | — | 6afcf3ff6cff (not this tree) | 5 m 27 s | start 5.8 / med 18.4 / max 81.0 |
-
-The stale rows are the filtered red-proof and bisect runs, each on its mutated tree.
-
-`need --for review`: `need: review is satisfied on this code tree.`
+Round 1 had all five gates green on `5d984fea21a2`; those rows stay in `docs/tasks/G12/gates.jsonl`. The current table is under Fix round 1.
 
 ## Red proofs
 
@@ -153,3 +134,49 @@ The stale rows are the filtered red-proof and bisect runs, each on its mutated t
    screencap` on the lease. The README cell says it is to come.
 3. **iOS trait for a filter chip.** The a11y table expects `switch`, which is what XCUITest reports for
    `Toggle(.button)` (no toggle-button type exists). Recommend accepting it.
+
+## Fix round 1
+
+Lease `G12-sigr7`. `origin/main` at `2327271` (M2) was merged before every gate below.
+
+1. **Screenshots:** Storybook `Chip/States`, light, on the lease's devices, scaled like the others: `chip-ios.png` 804×534, `chip-android.png` 720×600.
+2. **Host race:** M2's `handleOf` is now one shared helper in `example/__tests__/handles.ts`, on
+   `waitForHandle`, keeping M2's delete-before-remount rule. `handleRef` fixtures promise their handle and
+   `boxOf` waits for it. With handles 400 ms late, both platforms stay green.
+3. **Size hold:** ends only when `jsEvents >= nativeEvents`, and an uncontrolled Android chip echoes its
+   event count. New case: "files nothing under a key two quick toggles have already left".
+4. **Barrier:** accepts ≥2.
+
+FOLLOWUPS gains Picker's hold, `escapeField`'s copies, the Switch probe and the iOS slowdown.
+
+Red proofs:
+
+- quick toggles (Android) -> pre-fix `Chip.tsx` + `HybridNitroUiChip.kt` -> `expected 1 to be +0`, 2 of 2
+- Host waits (iOS) -> handles 400 ms late, waits off -> 13 of 15 failed (`Cannot read property 'nuiTestDrag' of undefined`)
+- barrier -> assist `onPress` counts once -> `real-input-chip-presses at "1" rather than at least "2"`
+
+Before the merge, `check` failed four times on load-sensitive tests and one `real-input:android` run was
+stopped. `real-input:ios` lost taps twice, then passed.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1673 tests / 64 suites | `d597d76e5fe5` | 5 m 32 s | start 9.7 / med 81.2 / max 113.5 |
+| `harness:ios` | **PASS** | 289 tests / 18 suites | `d597d76e5fe5` (ios tree) | 7 m 32 s | start 27.5 / med 9.1 / max 29.4 |
+| `harness:android` | **PASS** | 338 tests / 18 suites | `d597d76e5fe5` (android tree) | 9 m 32 s | start 5.2 / med 6.2 / max 11.7 |
+| `real-input:ios` | **PASS** | — | `d597d76e5fe5` (ios tree) | 14 m 32 s | start 4.0 / med 8.8 / max 12.5 |
+| `real-input:android` | **PASS** | — | `d597d76e5fe5` (android tree) | 26 m 09 s | start 33.4 / med 10.4 / max 96.7 |
+| `harness:android:Chip` | stale | 11 tests / 1 suites | 9beedf93e0a7 (not this tree) | 16.7 s | start 9.3 / med 9.3 / max 9.3 |
+| `harness:android:Conformance` | stale | 1 failed of 50 tests / 1 suites | 65fdd5da9754 (not this tree) | 1 m 39 s | start 8.8 / med 8.9 / max 13.1 |
+| `harness:android:HostControls%7CHostPopups` | stale | 48 tests / 2 suites | 32e7343291d9 (not this tree) | 2 m 25 s | start 31.2 / med 16.1 / max 31.2 |
+| `harness:ios:Chip` | stale | 4 failed of 10 tests / 1 suites | ff06eef20479 (not this tree) | 50.1 s | start 10.8 / med 10.8 / max 12.2 |
+| `harness:ios:Chip%7CHostControls` | stale | 21 tests / 2 suites | a28d2fe556ca (not this tree) | 22.1 s | start 5.0 / med 5.3 / max 5.5 |
+| `harness:ios:Conformance` | stale | 1 failed of 50 tests / 1 suites | 65fdd5da9754 (not this tree) | 1 m 41 s | start 8.8 / med 8.5 / max 10.2 |
+| `harness:ios:Conformance%7CHostControls` | stale | 1 failed of 16 tests / 2 suites | 01e53f4d7438 (not this tree) | 19.0 s | start 6.3 / med 6.7 / max 7.2 |
+| `harness:ios:HostControls` | stale | 11 tests / 1 suites | a28d2fe556ca (not this tree) | 19.2 s | start 4.7 / med 4.8 / max 5.1 |
+| `harness:ios:HostControls%7CHostPopups` | stale | 15 tests / 2 suites | 32e7343291d9 (not this tree) | 37.4 s | start 51.2 / med 43.2 / max 51.2 |
+| `real-input:android:--control:chip` | stale | — | 7f29c0fb50b6 (not this tree) | 7 m 21 s | start 6.0 / med 6.5 / max 12.7 |
+| `real-input:ios:--control:chip` | stale | — | 6afcf3ff6cff (not this tree) | 5 m 27 s | start 5.8 / med 18.4 / max 81.0 |
+
+The stale rows are the filtered red-proof, bisect and late-handle runs, each on its mutated tree.
+
+`need --for review`: `need: review is satisfied on this code tree.`
