@@ -485,19 +485,14 @@ class HybridNitroUiCheckbox(
      * The height is not a guess. `minimumInteractiveComponentSize` will not publish a
      * touch target smaller than 48 dp, so bare, labelled, checked and indeterminate are all
      * 48 dp tall - measured 48.00 bare and 48.00 labelled - and the conformance run compares
-     * this constant with that box. Round 1 declared 40, which is the Material 3 glyph's box
-     * *inside* the 48 dp target: the first frame of every Checkbox on its way to being
-     * measured was laid out 8 dp short of the size it would settle at, and no run noticed,
-     * because the control was exempt from having its own box compared with its own
-     * declaration. `HEIGHT_ONLY_FALLBACK` in `scripts/conformance-core.mjs` ends that, and
-     * its `declared-fallback` row is what goes red here.
+     * this constant with that box.
      *
-     * The width is a bare box's, and is not claimed for the labelled one: `Checkbox` measures
+     * The width is a bare box's measured 48 dp, and is not claimed for the labelled one: `Checkbox` measures
      * 48 dp wide with nothing beside it and 131.05 dp with a label, and the engine keys
      * fallbacks by component alone. `docs/components/checkbox.md` has the table;
      * `Checkbox.harness.tsx` is where a label's effect on width is measured.
      */
-    private const val FALLBACK_WIDTH_DP = 40.0
+    private const val FALLBACK_WIDTH_DP = 48.0
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)

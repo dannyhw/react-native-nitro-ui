@@ -649,7 +649,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
   },
   // `HybridNitroUiCheckbox.kt` (`FALLBACK_*_DP`) and `HybridNitroUiCheckbox.swift`
   // (`declaresFallback`), both read off those sources and nowhere else: the Material 3
-  // box's 48 dp touch target with a bare box's 40 dp width, and the `.switch` Toggle's box.
+  // box's 48 dp touch target, which is also a bare box's measured width, and the `.switch` Toggle's box.
   //
   // The iOS row is the Switch's number, and says so: on iOS a Checkbox renders the same
   // `Toggle(.switch)`, so it declares the same box per OS (the same Swift-version split
@@ -663,19 +663,16 @@ export const DECLARED_FALLBACKS = Object.freeze({
   // The Android height is 48 because `minimumInteractiveComponentSize` will not publish a
   // smaller touch target: bare, labelled, checked and indeterminate all measure 48 dp
   // tall, and the conformance fixture - a bare box, 48.00x48.00 - is compared against
-  // exactly that. Round 1 shipped 40 here, which is the glyph's box *inside* the 48 dp
-  // target, and nothing saw it because the control was exempt from having its own box
-  // compared with its own declaration; `HEIGHT_ONLY_FALLBACK` ends that, and the
-  // `declared-fallback` row went red on 40 the moment the exemption became a comparison.
+  // exactly that.
   //
-  // The width is not compared, because it is the label's: 40 dp is a bare box's width on
+  // The width is not compared, because it is the label's: 48 dp is a bare box's width on
   // Android and 61 pt a bare box's on iOS, while `docs/components/checkbox.md` measures
   // 131.05 dp / 145 pt with one mounted (`Checkbox.harness.tsx`, which is where a label's
   // effect on width is pinned). A fixture that is labelled would make the width
   // assertable too, and the conformance fixture is deliberately bare - the same node the
   // recycle and naming rules probe - so the axis this table can promise is the height.
   NitroUiCheckbox: {
-    android: { width: 40, height: 48 },
+    android: { width: 48, height: 48 },
     ios: { width: 61, height: 28 },
   },
 });

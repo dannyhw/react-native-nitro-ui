@@ -232,7 +232,7 @@ const SHARED = {
     },
     "NitroUiCheckbox": {
       "android": {
-        "width": 40,
+        "width": 48,
         "height": 48
       },
       "ios": {

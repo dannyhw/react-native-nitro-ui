@@ -140,7 +140,7 @@ that equals its own declared fallback (61 × 28 pt), which is exactly why
 agreement has to be earned by a correction, not handed over by the fallback.
 
 The fallback — the size of the very first frame before anything is measured — is
-61 × 28 pt on iOS (51 × 31 pt before iOS 26) and 40 × 48 dp on Android
+61 × 28 pt on iOS (51 × 31 pt before iOS 26) and 48 × 48 dp on Android
 (`NitroUiSizing.setFallback` in `ios/components/Checkbox/HybridNitroUiCheckbox.swift`
 and `android/.../HybridNitroUiCheckbox.kt`). Its **height is not a guess**:
 `minimumInteractiveComponentSize` will not publish a smaller Android target than 48 dp,
@@ -149,13 +149,6 @@ that constant against the box it measures. The width is a bare box's, because th
 engine keys fallbacks by component alone and a labelled Checkbox is wider by its label
 (`Checkbox.harness.tsx` measures 48 against 131.05 dp, 61 against 145 pt). The first
 instance of a new configuration can show it for one frame (DECISIONS D17).
-
-Round 1 declared `40 × 40 dp` on Android — the Material glyph's box *inside* the 48 dp
-touch target — so the first frame of every Checkbox was laid out 8 dp short of the size
-it settled at. Nothing saw it, because the control was exempt from having its measured
-box compared with its own declaration; `HEIGHT_ONLY_FALLBACK` in
-`scripts/conformance-core.mjs` replaced that exemption with a height comparison, and the
-`declared-fallback` row went red the moment it could see.
 
 A user `style` wins. A `width` narrower than the control truncates the label with a
 trailing ellipsis on both platforms rather than painting outside the box.
@@ -205,8 +198,8 @@ The control is the platform's, so the accessibility element is too:
 - An empty name is no name. `accessibilityLabel=""` would silence the label it is meant
   to replace, and `label=""` would ask iOS for a checkbox with an empty name, so `''` is
   read as "unset" on both props, on both platforms: the control keeps the label it has and
-  gets no `accessibilityLabel` applied at all. Switch's and Chip's rule, and the same one
-  `label` follows for sizing — `''` is the bare configuration, so `label=""` and no `label`
+  gets no `accessibilityLabel` applied at all. The same rule
+  covers `label` for sizing — `''` is the bare configuration, so `label=""` and no `label`
   share one sizing key rather than paying for two first frames.
 
 ## Behaviour notes
