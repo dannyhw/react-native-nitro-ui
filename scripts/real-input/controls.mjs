@@ -113,6 +113,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither',
     screen: 'chip',
   },
+  {
+    id: 'checkbox',
+    title:
+      'real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing',
+    screen: 'checkbox',
+  },
   // @end-generated
 ]);
 

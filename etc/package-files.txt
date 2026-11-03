@@ -11,6 +11,7 @@ android/src/main/cpp/NitroUiSizingJni.hpp
 android/src/main/cpp/cpp-adapter.cpp
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiBottomSheet.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiChip.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt
@@ -44,6 +45,7 @@ cpp/core/NitroUiPerf.hpp
 cpp/core/NitroUiSizing.hpp
 ios/components/BottomSheet/HybridNitroUiBottomSheet.swift
 ios/components/Button/HybridNitroUiButton.swift
+ios/components/Checkbox/HybridNitroUiCheckbox.swift
 ios/components/Chip/HybridNitroUiChip.swift
 ios/components/DatePicker/HybridNitroUiDatePicker.swift
 ios/components/Dialog/HybridNitroUiDialog.swift
@@ -85,6 +87,14 @@ lib/module/components/Button/NativeNitroUiButton.js
 lib/module/components/Button/NativeNitroUiButton.js.map
 lib/module/components/Button/NitroUiButtonConfig.js
 lib/module/components/Button/NitroUiButtonConfig.js.map
+lib/module/components/Checkbox/Checkbox.js
+lib/module/components/Checkbox/Checkbox.js.map
+lib/module/components/Checkbox/Checkbox.nitro.js
+lib/module/components/Checkbox/Checkbox.nitro.js.map
+lib/module/components/Checkbox/NativeNitroUiCheckbox.js
+lib/module/components/Checkbox/NativeNitroUiCheckbox.js.map
+lib/module/components/Checkbox/NitroUiCheckboxConfig.js
+lib/module/components/Checkbox/NitroUiCheckboxConfig.js.map
 lib/module/components/Chip/Chip.js
 lib/module/components/Chip/Chip.js.map
 lib/module/components/Chip/Chip.nitro.js
@@ -211,6 +221,14 @@ lib/typescript/src/components/Button/NativeNitroUiButton.d.ts
 lib/typescript/src/components/Button/NativeNitroUiButton.d.ts.map
 lib/typescript/src/components/Button/NitroUiButtonConfig.d.ts
 lib/typescript/src/components/Button/NitroUiButtonConfig.d.ts.map
+lib/typescript/src/components/Checkbox/Checkbox.d.ts
+lib/typescript/src/components/Checkbox/Checkbox.d.ts.map
+lib/typescript/src/components/Checkbox/Checkbox.nitro.d.ts
+lib/typescript/src/components/Checkbox/Checkbox.nitro.d.ts.map
+lib/typescript/src/components/Checkbox/NativeNitroUiCheckbox.d.ts
+lib/typescript/src/components/Checkbox/NativeNitroUiCheckbox.d.ts.map
+lib/typescript/src/components/Checkbox/NitroUiCheckboxConfig.d.ts
+lib/typescript/src/components/Checkbox/NitroUiCheckboxConfig.d.ts.map
 lib/typescript/src/components/Chip/Chip.d.ts
 lib/typescript/src/components/Chip/Chip.d.ts.map
 lib/typescript/src/components/Chip/Chip.nitro.d.ts
@@ -328,6 +346,8 @@ nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiChipSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
@@ -351,6 +371,7 @@ nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.hpp
 nitrogen/generated/android/c++/JNitroUiButtonSize.hpp
+nitrogen/generated/android/c++/JNitroUiCheckboxSize.hpp
 nitrogen/generated/android/c++/JNitroUiChipSize.hpp
 nitrogen/generated/android/c++/JNitroUiDatePickerSize.hpp
 nitrogen/generated/android/c++/JNitroUiDialogAction.hpp
@@ -372,6 +393,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiBottomSheetStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiBottomSheetStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
@@ -403,6 +426,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__strin
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string_double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiBottomSheetSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiCheckboxSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiChipSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDatePickerSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDialogSpec.kt
@@ -415,6 +439,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderS
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTextFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonSize.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiCheckboxSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiChipSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDatePickerSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDialogAction.kt
@@ -434,6 +459,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiB
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiBottomSheetStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiCheckboxManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiCheckboxStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiChipManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiChipStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiDatePickerManager.kt
@@ -470,6 +497,8 @@ nitrogen/generated/ios/c++/HybridNitroUiBottomSheetSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiBottomSheetSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiButtonSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiCheckboxSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiCheckboxSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiChipSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiChipSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiDatePickerSpecSwift.cpp
@@ -494,6 +523,7 @@ nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiBottomSheetComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiCheckboxComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiChipComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDatePickerComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiDialogComponent.mm
@@ -516,6 +546,8 @@ nitrogen/generated/ios/swift/HybridNitroUiBottomSheetSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiBottomSheetSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiButtonSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiCheckboxSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiCheckboxSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiChipSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiChipSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiDatePickerSpec.swift
@@ -539,6 +571,7 @@ nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec_cxx.swift
 nitrogen/generated/ios/swift/NitroUiButtonSize.swift
+nitrogen/generated/ios/swift/NitroUiCheckboxSize.swift
 nitrogen/generated/ios/swift/NitroUiChipSize.swift
 nitrogen/generated/ios/swift/NitroUiDatePickerSize.swift
 nitrogen/generated/ios/swift/NitroUiDialogAction.swift
@@ -557,6 +590,8 @@ nitrogen/generated/shared/c++/HybridNitroUiBottomSheetSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiBottomSheetSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiChipSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiChipSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
@@ -582,6 +617,7 @@ nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.hpp
 nitrogen/generated/shared/c++/NitroUiButtonSize.hpp
+nitrogen/generated/shared/c++/NitroUiCheckboxSize.hpp
 nitrogen/generated/shared/c++/NitroUiChipSize.hpp
 nitrogen/generated/shared/c++/NitroUiDatePickerSize.hpp
 nitrogen/generated/shared/c++/NitroUiDialogAction.hpp
@@ -600,6 +636,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
@@ -624,6 +662,7 @@ nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.hpp
 nitrogen/generated/shared/json/NitroUiBottomSheetConfig.json
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
+nitrogen/generated/shared/json/NitroUiCheckboxConfig.json
 nitrogen/generated/shared/json/NitroUiChipConfig.json
 nitrogen/generated/shared/json/NitroUiDatePickerConfig.json
 nitrogen/generated/shared/json/NitroUiDialogConfig.json
@@ -646,6 +685,10 @@ src/components/Button/Button.nitro.ts
 src/components/Button/Button.tsx
 src/components/Button/NativeNitroUiButton.ts
 src/components/Button/NitroUiButtonConfig.ts
+src/components/Checkbox/Checkbox.nitro.ts
+src/components/Checkbox/Checkbox.tsx
+src/components/Checkbox/NativeNitroUiCheckbox.ts
+src/components/Checkbox/NitroUiCheckboxConfig.ts
 src/components/Chip/Chip.nitro.ts
 src/components/Chip/Chip.tsx
 src/components/Chip/NativeNitroUiChip.ts

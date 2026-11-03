@@ -99,6 +99,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
   DatePicker,
   Menu,
@@ -228,6 +229,16 @@ const SHARED = {
         "width": 80,
         "height": 28
       }
+    },
+    "NitroUiCheckbox": {
+      "android": {
+        "width": 40,
+        "height": 48
+      },
+      "ios": {
+        "width": 61,
+        "height": 28
+      }
     }
   },
   "poisonSizes": {
@@ -251,7 +262,8 @@ const SHARED = {
     "NitroUiDatePicker": "both",
     "NitroUiPicker": "both",
     "NitroUiTextField": "height",
-    "NitroUiChip": "none"
+    "NitroUiChip": "none",
+    "NitroUiCheckbox": "height"
   },
   "exemptions": [
     {
@@ -375,6 +387,42 @@ type Handle = {
    * Chip there (`Chip.harness.tsx` measured it).
    */
   nuiTestPress?(): void;
+  /**
+   * Checkbox's value, the props half of its recycle rule. `Chip`'s `label` and `Switch`'s
+   * `value` have the same job: `useControlled` echoes it back, so it is what React last
+   * sent rather than what the view shows — which is why each of the two recycle probes
+   * below is an interaction and not a read of this field.
+   */
+  readonly checked?: boolean | null;
+  /**
+   * Checkbox's toggle, through the tap's own path (`CheckboxModel.press()`). On iOS the
+   * harness's HID-less touch reaches no SwiftUI gesture and a `.switch` `Toggle` is one,
+   * so this is how a probe toggles a Checkbox there (`Checkbox.harness.tsx`'s
+   * `toggleCheckbox` says why). Both platforms end in `press()`, which is where the
+   * residue a reset has to clear is written.
+   */
+  nuiTestToggle?(): void;
+};
+
+/**
+ * Toggle a Checkbox: a real harness tap on Android, the control's own press path on iOS,
+ * where the harness's HID-less touch reaches no SwiftUI gesture (`Checkbox.harness.tsx`'s
+ * `toggleCheckbox` and `Chip.harness.tsx`'s `pressChip` measure the same thing). Both go
+ * through `press()`, so a probe and a finger cannot disagree about what a press means.
+ */
+const pressCheckbox = async (testId: string): Promise<void> => {
+  if (PLATFORM === 'ios') {
+    await screen.findByTestId(testId);
+    const handle = handleFor(testId);
+    if (handle.nuiTestToggle == null) {
+      throw new Error(
+        `"${testId}" is not a Checkbox - it has no nuiTestToggle()`
+      );
+    }
+    handle.nuiTestToggle();
+    return;
+  }
+  await pressControl(testId);
 };
 
 /**
@@ -2884,7 +2932,144 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
   },
+  {
+    name: 'Checkbox',
+    component: 'NitroUiCheckbox',
+    label: 'Conformance checkbox',
+    testId: 'conformance-checkbox',
+    owner: (second) => (
+      <Checkbox
+        checked={second}
+        testID="conformance-checkbox"
+        accessibilityLabel={
+          second ? `Conformance checkbox, ${SECOND}` : 'Conformance checkbox'
+        }
+        hybridRef={captureFor('conformance-checkbox')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Checkbox
+        checked={variant}
+        testID={testId}
+        accessibilityLabel={`Leak checkbox ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      { label: 'checked', expected: second, actual: handle.checked },
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance checkbox, ${SECOND}`
+          : 'Conformance checkbox',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): a reset has two
+    // lines, `didApplyDefault = false` and a fresh `NitroUiControlledValue`, and an
+    // uncontrolled owner can only read the first. The residue here is `false` because
+    // that is what `prepareForRecycle` writes (`HybridNitroUiCheckbox.swift`'s
+    // `NitroUiControlledValue<Bool>(displayed: false)`, `CheckboxModel.reset()` on
+    // Android), so the display alone can never be the evidence and the first press after
+    // the second mount is.
+    probe: {
+      leaveBehind:
+        'an uncontrolled Checkbox that started ON and was pressed off, then a second ' +
+        'owner whose own default is ON - a number the control can only be standing on ' +
+        'because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <Checkbox
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      act: async () => {
+        await pressCheckbox('conformance-checkbox');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-checkbox:false'])
+        );
+      },
+      second: () => (
+        <Checkbox
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressCheckbox('conformance-checkbox');
+        // A second owner whose default was applied shows ON, so its first press reports
+        // `false`. One still believing it applied its default shows the `false` its
+        // previous owner pressed, and its first press reports `true`.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-checkbox:false',
+            actual: await eventsSettled(from, 'conformance-checkbox:false'),
+          },
+        ];
+      },
+    },
+    // A press asks for the opposite of what is showing on both platforms, which is what
+    // makes this probe read the way Switch's does rather than the way Chip's does: a
+    // checkbox that asked for `true` whatever it showed would report `true` here whether
+    // or not the counters were reset, and the line it is testing would be unmeasured.
+    controlledProbe: {
+      leaveBehind:
+        'a press that turns an uncontrolled Checkbox on, then a second owner that is ' +
+        '*controlled* at `false` - the only shape that reads the handshake\u2019s ' +
+        'counters, which is what `model.state = NitroUiControlledValue(\u2026)` uniquely owns',
+      first: () => (
+        <Checkbox
+          defaultChecked={false}
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      act: async () => {
+        await pressCheckbox('conformance-checkbox');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-checkbox:true'])
+        );
+      },
+      // Controlled at `false` while the residue is `true`, so the app's own value is the
+      // opposite of what the first owner left. `useControlled.ts` sends
+      // `mostRecentEventCount` 0 with it; only `nativeEvents` back at 0 can accept the
+      // write. Leave the counters alone and `reconcile()` sees `jsEvents 0 <
+      // nativeEvents 1`, refuses it as stale, and the control keeps showing the previous
+      // app's `true` - so its first press asks for `false`, the app's own value coming
+      // back out of a control with somebody else's counters.
+      second: () => (
+        <Checkbox
+          checked={false}
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressCheckbox('conformance-checkbox');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-checkbox:true',
+            actual: await eventsSettled(from, 'conformance-checkbox:true'),
+          },
+        ];
+      },
+    },
+  },
 ];
+
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
 

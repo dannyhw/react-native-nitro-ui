@@ -1,0 +1,60 @@
+# Failure excerpt — real-input:ios:--control:checkbox
+
+- Ran: 2026-11-03T10:12:06.343Z on code tree `c46ad16568e8` at HEAD `6409138` (branch `task/G15-checkbox`)
+- Command: `node scripts/real-input/ios.mjs --control checkbox`
+- Result: fail, exit 1, 85564 ms
+- Load: start 2.92, end 21.40, median 12.60, max 21.40
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G15-h2yzp`
+- Full log: `task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log` (<store>/task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-h2yzp (still live)
+  |   G15-h2yzp                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 21.40 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 20 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:checkbox
+gate: node scripts/real-input/ios.mjs --control checkbox (cwd .)
+gate: code tree c46ad16568e8 at HEAD 6409138c
+gate: git tree 13ee7d5f4252 with a DIRTY worktree (not reusable)
+gate: log task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log
+gate:       <store>/task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+gate: real-input:ios:--control:checkbox FAIL in 85.6 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G15-checkbox/real-input+ios+--control+checkbox-2026-11-03T10-12-05.764Z.log (4 probe(s))
+
+```

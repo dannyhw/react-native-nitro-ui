@@ -21,7 +21,9 @@ import { describe, expect, it } from '@jest/globals';
 import {
   CONFORMANCE_EXEMPTIONS,
   CONFORMANCE_RULES,
+  CONTENT_SIZED_BOX,
   DECLARED_FALLBACKS,
+  HEIGHT_ONLY_FALLBACK,
   POISON_SIZES,
   repoRoot,
   RULE_IDS,
@@ -173,11 +175,14 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the ten controls today', () => {
+  it('is complete for every control the registry declares', () => {
     const manifests = repoManifests();
+    // The list is the registry's own: a new control has to be looked at here, and
+    // the assertion under it is the one that decides whether it is covered.
     expect(manifests.map((m) => m.name)).toEqual([
       'BottomSheet',
       'Button',
+      'Checkbox',
       'Chip',
       'DatePicker',
       'Dialog',
@@ -527,10 +532,43 @@ describe('the declared-fallback rule', () => {
     const copied = clone(DECLARED_FALLBACKS);
     copied.NitroUiSlider.ios = { ...copied.NitroUiSwitch.ios };
     const problems = checkFallbackTable(manifests, sizing, copied);
+    // Three names, since the honest Checkbox row joined the Switch's 61x28: the
+    // Checkbox's share is excused by name (see the next test), and a third name in the
+    // group is not.
     expect(problems.join('\n')).toContain(
-      '61x28 on ios for NitroUiSlider and NitroUiSwitch'
+      '61x28 on ios for NitroUiCheckbox and NitroUiSlider and NitroUiSwitch'
     );
     expect(problems.join('\n')).toContain('one of these rows was copied');
+  });
+
+  it('excuses exactly the one shared row, and nobody else at that size', () => {
+    // A Checkbox on iOS *is* a Switch: both render `Toggle(isOn:).toggleStyle(.switch)`,
+    // so both declare that control's box, and the honest table says 61x28 twice.
+    // `SHARED_FALLBACK_ROWS` is what lets it; this test is what keeps the exception a
+    // row rather than a hole.
+    const asItStands = checkFallbackTable(repoManifests(), repoSizingTable());
+    expect(asItStands.join('\n')).not.toContain('61x28');
+
+    // A third control at the same size is still the paste the rule exists to catch: the
+    // exception names two owners, and three is not two.
+    const sizing = repoSizingTable();
+    const three = clone(DECLARED_FALLBACKS);
+    three.NitroUiSlider.ios = { ...three.NitroUiSwitch.ios };
+    const joined = checkFallbackTable(repoManifests(), sizing, three).join(
+      '\n'
+    );
+    expect(joined).toContain('61x28 on ios for');
+    expect(joined).toContain('NitroUiSlider');
+    expect(joined).toContain('one of these rows was copied');
+
+    // And it is a statement about that number: the same two components sharing a
+    // different one is a copy again.
+    const moved = clone(DECLARED_FALLBACKS);
+    moved.NitroUiMenu.ios = { width: 61, height: 30 };
+    moved.NitroUiSwitch.ios = { width: 61, height: 30 };
+    expect(
+      checkFallbackTable(repoManifests(), sizing, moved).join('\n')
+    ).toContain('61x30 on ios');
   });
 
   it('goes red when a control has no row in the table', () => {
@@ -788,6 +826,95 @@ describe('which axes a declared fallback describes', () => {
       declaredTable: table,
     });
     expect(strict[0].problem).toContain('is not the measured');
+  });
+
+  it('gives a Checkbox its height, and not its whole box', () => {
+    // The narrowness the review asked for, in both directions: the Checkbox left
+    // `CONTENT_SIZED_BOX` (which skipped the box and hid a declaration 8 dp shorter than
+    // every measured configuration of the control) and joined the list whose height is
+    // still compared.
+    const sizing = repoSizingTable();
+    expect(boxRuleFor('NitroUiCheckbox', sizing)).toBe('height');
+    expect(CONTENT_SIZED_BOX).not.toContain('NitroUiCheckbox');
+    expect(HEIGHT_ONLY_FALLBACK).toContain('NitroUiCheckbox');
+  });
+
+  it('catches a stale height on a height-only control, and ignores a width its label owns', () => {
+    // Round 1's bug spelled as an argument. Every measured Checkbox is 48 dp tall
+    // (`minimumInteractiveComponentSize` will not publish a smaller touch target) while the
+    // declaration said 40, which is the glyph's box inside that target. The measurements
+    // below are the box the suite really mounts - a bare Checkbox - on each platform.
+    const staleTable = {
+      NitroUiCheckbox: {
+        ios: { width: 61, height: 28 },
+        android: { width: 40, height: 40 },
+      },
+    };
+    const staleAndroid = fallbackFindings({
+      component: 'Checkbox',
+      platform: 'android',
+      declared: staleTable.NitroUiCheckbox.android,
+      measured: { width: 48, height: 48 },
+      corrections: 1,
+      boxRule: 'height',
+      declaredTable: staleTable,
+    });
+    expect(staleAndroid[0].problem).toContain('is not the measured 48x48');
+    expect(staleAndroid[0].problem).toContain('whose own axis is its height');
+
+    // The same control on the same platform, with the height the component declares and the
+    // harness measures. The width still disagrees - a bare Material 3 box is 48 dp wide
+    // against a declared 40 - and forgiving *that* is what the narrowing is for: the width a
+    // Checkbox measures is its label's, and `Checkbox.harness.tsx` measures the pair (48
+    // against 131.05 dp, 61 against 145 pt), which is the axis the sizing key is written for.
+    const fixed = {
+      NitroUiCheckbox: {
+        ios: { width: 61, height: 28 },
+        android: { width: 40, height: 48 },
+      },
+    };
+    expect(
+      fallbackFindings({
+        component: 'Checkbox',
+        platform: 'android',
+        declared: fixed.NitroUiCheckbox.android,
+        measured: { width: 48, height: 48 },
+        corrections: 1,
+        boxRule: 'height',
+        declaredTable: fixed,
+      })
+    ).toEqual([]);
+
+    // The other platform is under the same rule, so the mode cannot be an Android-only
+    // concession - and iOS is where the measured box *does* equal the declared one on both
+    // axes, which is why this rule compares heights and does not also demand that a
+    // height-only control measure wider than its own declaration.
+    expect(
+      fallbackFindings({
+        component: 'Checkbox',
+        platform: 'ios',
+        declared: { width: 61, height: 28 },
+        measured: { width: 61, height: 28 },
+        corrections: 0,
+        boxRule: 'height',
+        declaredTable: fixed,
+      })
+    ).toEqual([]);
+    const staleIos = fallbackFindings({
+      component: 'Checkbox',
+      platform: 'ios',
+      declared: { width: 61, height: 31 },
+      measured: { width: 61, height: 28 },
+      corrections: 0,
+      boxRule: 'height',
+      declaredTable: {
+        NitroUiCheckbox: {
+          ios: { width: 61, height: 31 },
+          android: { width: 40, height: 48 },
+        },
+      },
+    });
+    expect(staleIos[0].problem).toContain('is not the measured 61x28');
   });
 
   it('still catches a poisoned fallback for both narrowed modes', () => {
@@ -1909,6 +2036,7 @@ describe('the a11y sweep, against a fake device', () => {
         'picker',
         'menu',
         'chip',
+        'checkbox',
         'host',
         'textfield',
       ]);

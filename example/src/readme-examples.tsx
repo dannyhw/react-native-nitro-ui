@@ -15,6 +15,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
   DatePicker,
   type DialogAction,
@@ -176,6 +177,23 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
         systemImage="map"
         onPress={onDirections}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region checkbox
+export function CheckoutOptions({
+  onEmailMe,
+}: {
+  onEmailMe: (email: boolean) => void;
+}) {
+  const [gift, setGift] = useState(false);
+
+  return (
+    <>
+      <Checkbox label="Gift wrap" checked={gift} onCheckedChange={setGift} />
+      <Checkbox label="Email me the receipt" onCheckedChange={onEmailMe} />
     </>
   );
 }
