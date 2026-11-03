@@ -142,3 +142,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G16: ContextMenu is not in the consumer smoke app (`smoke: false`).
 - G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS — measured on iOS 27 by real input's XCUITest pass: the wrapper is the element and carries the label, the second Text is hidden under it, and the first ("Grace Hopper" on the example screen) is still listed as a static text of its own. Whether VoiceOver stops on it is not known (no screen reader runs here, D37 item 4); the next step is the same tree for a plain RN `View` with `accessible` and two Texts, which says whether this is React Native's or the ContextMenu's.
 - G15 (review): no test fires two toggles before JS echoes one - every harness and real-input press waits for the value echo before the next, so a handshake that drops the *second* in-flight request while the first is still owed is unmeasured on both platforms.
+- G16 (merge re-review): `claimIfFree` (the nested take-back) has no test or red proof: a nested ContextMenu whose child is `pointerEvents="none"` should let the parent open.
+- G16 (merge re-review): `onDetachedFromWindow` unwatches but leaves an open menu open, so a reattach without a drop loses the layout-move close.
+- G16 (merge re-review): `ContextMenu.harness.tsx` ~663: a hold after a pick may land during the popup's exit animation.
+- G16 (merge re-review): the anchor witness gate has no red proof of its own.

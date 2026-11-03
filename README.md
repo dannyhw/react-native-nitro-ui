@@ -450,8 +450,9 @@ iOS lifts the view itself as the preview (its corners follow `borderRadius`);
 Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
 both platforms, `onSelect` before the `onClose` that follows it. Set
 `accessible` and an `accessibilityLabel` to make it one screen-reader element
-with the menu on it. [context-menu.md](docs/components/context-menu.md) has the
-gesture rules and the limits.
+with the menu on it. Without `accessible`, Android screen readers can't open the
+menu. [context-menu.md](docs/components/context-menu.md) has the gesture rules
+and the limits.
 
 ### Chip
 
