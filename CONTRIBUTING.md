@@ -86,6 +86,7 @@ scripts/bench/       bench build/run/report tooling
 scripts/perf/        Reassure render-count gate
 docs/components/     one page per component (props, platform mapping, limits)
 docs/architecture/   core runtime, sizing engine, benchmarks
+docs/performance.md  every benchmark cell behind the README's Performance summary
 docs/research/       the research notes behind the design
 docs/DECISIONS.md    the decisions, numbered (D1, D2, …)
 ```
@@ -1055,7 +1056,7 @@ NITRO_UI_SMOKE_READY switch=61x28 slider=354x31 button=61x34.333343505859375 pro
 ```
 
 `scripts/smoke/lib.mjs` owns the contract (one `name=WxH` box per control -
-the eight controls the app mounts today plus `host`, the `<Host>` container, each
+the ten controls the app mounts today plus `host`, the `<Host>` container, each
 greater than `0x0`;
 a number may be fractional, because `onLayout` reports computed layout metrics -
 `52.19047546386719x48` on a density-scaled Android display,
@@ -1110,6 +1111,37 @@ daemons and devices it booted are cleaned up on every exit path (Gradle also
 runs `--no-daemon`). Logs, screenshots and timings always stay under
 `$SMOKE_TMP/artifacts/<script>-<timestamp>-<pid>/`, including the full console
 of the run in `run.log`.
+
+### Results
+
+The install routes the README gives are the ones these scripts run: Expo
+Continuous Native Generation (`npx expo prebuild`), a bare React Native CLI app
+(`cd ios && bundle install && bundle exec pod install`), and, for an app
+installing from a clone, `bun run smoke:pack` and then `npm install` of the
+tarball into a freshly generated app.
+
+The consumer smoke tests (`scripts/smoke/`) install the packed tarball with
+`npm` into a fresh app, build **Release**, launch it and check that every
+control mounts with a non-zero size - the ten controls the app mounts today,
+plus a `<Host>` holding two Switches. The `Smoke` workflow is disabled and
+dispatch-only, so these run by hand; `CI`, `Release`, `Release tag` and
+`Changeset status` are the workflows that run on GitHub. Every ticked cell below
+was green for the 0.1.0 tarball on 2026-10-26 and nothing has been re-run since -
+`Menu`, `TextField` and `Chip` joined the smoke app after that, so no consumer
+run has printed a `menu=WxH`, `text-field=WxH` or `chip=WxH` box:
+
+| Consumer              | iOS | Android |
+| --------------------- | --- | ------- |
+| Expo SDK 58 (RN 0.88) | ✅  | ✅      |
+| RN CLI 0.88.0         | ✅  | ✅      |
+| RN CLI 0.86.3         | n/a | ✅      |
+
+RN 0.86.3 is the supported floor, and its iOS cell could not be ticked on the
+machine that ran these: UIKit terminates a freshly generated 0.86.3 app at
+launch on the iOS 27 simulator runtime for not adopting the scene lifecycle,
+before any JavaScript runs, and the crash names UIKit's scene check with no
+library frames in it. The same launch failure was measured earlier with this
+library absent. The row needs a run on an older iOS runtime.
 
 ### Keeping `scripts/smoke/App.tsx` current
 
