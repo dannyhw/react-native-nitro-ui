@@ -505,3 +505,21 @@ holding back on for older RN versions."
 4. **Anything held back for an older RN or SDK is lifted:** workarounds, pinned versions, smoke rows, docs. iOS's
    floor stays RN's own `min_ios_version_supported`; a SwiftUI fallback for an older iOS that the current RN still
    supports is not "held back", but one for an iOS RN no longer supports is removed.
+
+## D40 — Expressive per component: build order and Android icons (2026-11-03)
+
+Q8 (`docs/tasks/Q8-expressive-and-holdbacks.report.md`) mapped every Android control to its Material 3 Expressive
+counterpart in material3 1.5.0-beta02 (mostly stable APIs; the theme switch alone changes motion only). The
+orchestrator adopted its recommendations; the owner may override any of them.
+
+1. **Order:** pass 0 alongside X18 (G17, G18, and lifting the RN 0.84–0.86 branch of `cpp/NitroUiPropsCompat.hpp`
+   inside X18); pass 1 after X18 — buttons (Button shapes/sizes, SegmentedControl as connected toggle buttons with
+   radio semantics, Chip) and menus (Menu/ContextMenu on `DropdownMenuPopup` with groups, `subtitle`, `checked`;
+   Picker rows) on the two machines in parallel; pass 2 — ButtonGroup (Android `ButtonGroup`, iOS `ControlGroup`),
+   SplitButton (Menu's `primaryAction` on Android), Progress `variant="loading"`/`appearance="wavy"`, the
+   state-based Slider; pass 3 — real Android wheels (Picker `wheel`, DatePicker time), Picker `radio`, Dialog rows,
+   SearchField v2 (keyboard props via the new `InputField`), Stepper.
+2. **Android icons (Q8 question A):** an `androidIcon` prop naming a drawable resource the app ships (e.g. a Material
+   Symbols vector), alongside iOS's `systemImage`; the library bundles no icon set. IconButton and icon-only group
+   items build on it.
+3. Q8's other calls (SegmentedControl's new look, the Button size remap, LoadingIndicator as a Progress variant) stand.
