@@ -143,8 +143,11 @@ fix it, investigate it further, or widen the task. Tasks have a hard round cap (
 server — including your private one — also sees the human's `emulator-5560`, so an unqualified `adb`
 command can reach it.
 
-**Never `pkill`/`killall` by process name** (logcat, emulator, node, Metro…): other tasks run the same
-processes. Kill only PIDs you started, or use the tool's own shutdown for your device/port.
+**Never `pkill`/`killall` at all** — not by name (logcat, emulator, node, Metro…), not by pattern (`-f`), not by
+parent (`pkill -P 1` signals every daemon launchd started: on 2026-11-03 it powered off every simulator and emulator on
+the machine, the human's included, and every Metro and Gradle daemon), and not by process group unless you created
+that group yourself. Kill only PIDs you started and recorded, one `kill <pid>` each, or use the tool's own shutdown
+for your device/port.
 
 **Any change to a harness test file must be run on both platforms before you report**, even in a
 "small" final round — a test edited for one platform can break the other (G1 round 2 did).
