@@ -143,7 +143,7 @@ export const MANIFEST_SCHEMA = {
     type: 'string',
     quoteSafe: true,
     readBy:
-      'the example tab-bar label (the bar is narrow: "Segments", "Dates")',
+      'the example tab-bar label (the bar scrolls, so a label sets its tab\'s width; keep it one short word: "Segments", "Dates")',
   },
   bench: {
     type: 'boolean',
