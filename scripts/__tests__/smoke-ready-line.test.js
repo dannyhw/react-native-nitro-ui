@@ -51,9 +51,9 @@ const READY_LINE =
  * measurement; a real device line for it is a one-line follow-up. `chip=` (G12) is
  * written the same way, from the 66.29 x 48 dp the harness measured for a short
  * unselected filter chip on `nitroui_t03`. `search-field=` (G17) is written from the
- * height each platform's own search control measures at the body font - 37 pt on iOS,
- * Material 3's 56 dp `InputFieldHeight` on Android - which is also its declared
- * fallback, so it is the box a smoke run prints unless the device disagrees.
+ * height the Android control measures - Material 3's 56 dp `InputFieldHeight`, which is
+ * also its declared fallback (iOS's own field is 28 pt, and the line is an Android
+ * logline) - so it is the box a smoke run prints unless the device disagrees.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +

@@ -603,9 +603,10 @@ export function ProductSearch({
 
 The Search key submits the query and then dismisses the keyboard, and an empty
 query never submits — pressing it with nothing typed reports nothing. Tapping the
-clear button is one edit: `onChangeText('')`, with the field still focused. The
-placeholder defaults to the platform's own localized word for search, so a field
-nobody labelled still says the right thing in every language. A `SearchField`
+clear button is one edit: `onChangeText('')`, with the field still focused. Android
+puts the framework's own localized word in an unset placeholder; iOS's standalone
+UIKit field has no prompt of its own, so pass one if you want a word there. A
+`SearchField`
 cannot be a child of `<Host>` yet.
 [search-field.md](docs/components/search-field.md) has the details.
 

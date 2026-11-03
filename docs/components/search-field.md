@@ -24,8 +24,8 @@ those is a `TextField`.
 
 Why each platform's control rather than a styled `TextField`: a search field is
 recognized by its shape, and the two shapes are not one shape — Android's is a
-56 dp bar with a glyph in front and a prompt in the platform's own word, iOS's
-is UIKit's bordered field. A `TextField` with a glyph drawn over it is a
+56 dp bar with a glyph in front and the framework's own word as its prompt, iOS's
+is UIKit's 28 pt bordered field. A `TextField` with a glyph drawn over it is a
 `TextField` with a glyph drawn over it. iOS could not use SwiftUI either: it has
 no standalone search field, only the `searchable` modifier, which needs a
 navigation container to attach to. `UISearchBar` itself was rejected because it
@@ -36,7 +36,7 @@ rewritten rather than reused — and its `searchTextField` is this same class.
 It is its own Hybrid View rather than `variant="search"` on `TextField` because
 a declared fallback is keyed by component (`docs/architecture/sizing.md` §5): as
 a variant, every cold SearchField would be laid out at TextField's 22 pt / 24 dp
-line for one frame and then correct to a 37 pt / 56 dp bar — a jump at the top
+line for one frame and then correct to a 28 pt / 56 dp bar — a jump at the top
 of a search screen.
 
 ## API
@@ -46,7 +46,7 @@ of a search screen.
 | `value`              | `string \| undefined`      | unset   | Controlled query. Omit it for an uncontrolled field. |
 | `defaultValue`       | `string \| undefined`      | `''`    | Initial query of an uncontrolled field. |
 | `onChangeText`       | `(text: string) => void`   | —       | After every edit the user makes — the clear button's tap included — with the text native shows. |
-| `placeholder`        | `string \| undefined`      | platform's own | `UITextField.placeholder` / the input field's placeholder slot. |
+| `placeholder`        | `string \| undefined`      | none on iOS, the framework's hint on Android | `UITextField.placeholder` / the input field's placeholder slot. |
 | `maxLength`          | `number \| null \| undefined` | none | Enforced natively, in UTF-16 code units, as `TextField`'s. |
 | `editable`           | `boolean \| undefined`     | `true`  | `false`: the query shows, but the field takes no focus, no input and no clear. |
 | `onSubmitEditing`    | `(text: string) => void`   | —       | The Search key, with the query as a string; the field then loses focus. Never called for an empty query. |
@@ -90,7 +90,7 @@ wrapper and run when it arrives, and a field that is not `editable` ignores
 | Focus                | `editingDidBegin`/`End`, `becomeFirstResponder()`               | `onFocusChanged`, `FocusRequester`, `FocusManager.clearFocus()`  |
 | Search key           | `textFieldShouldReturn`, with `enablesReturnKeyAutomatically` on | the input field's `onSearch`                                      |
 | Empty query          | UIKit disables the Return key                                   | `onSearch` returns without reporting                              |
-| Prompt nobody asked for | `UISearchTextField`'s own placeholder                        | the framework's `search_hint` string                             |
+| Prompt nobody asked for | nothing — UIKit sets no `placeholder` on the bare field       | the framework's `search_hint` string                             |
 | Announcement         | the `.searchField` accessibility trait                          | the editable node under the field's name                         |
 
 ## The text, and the handshake
@@ -146,14 +146,26 @@ not change height while focused.
 
 ## The placeholder
 
-`placeholder` is the app's word. Without one the field says the platform's own
-word for search: iOS's `UISearchTextField` brings its own prompt, and Android
-reads the framework's `search_hint` string resource. That resource is private to
-the framework — `android.R.string` names only `search_go` of the family, checked
-against the android-35 stub — so it is resolved by name once per process, and an
-answer of 0 falls back to the English the platform itself uses. The library
-writes no search string of its own, so a field nobody labelled is not English in
-a German app.
+`placeholder` is the app's word, and what the field says without one differs by
+platform — the first iOS run measured the difference rather than assuming it:
+
+- **iOS draws no prompt.** `UISearchTextField` has no `placeholder` of its own —
+  UIKit writes "Search" *inside a search bar*, as its own drawing, and never sets
+  the property on the bare field. The control reads its own `placeholder` once at
+  init and uses that as the default, so the day UIKit does set one, an unset
+  `placeholder` starts saying the platform's word with no change here. Until then,
+  pass `placeholder` if you want a word on iOS.
+- **Android says the framework's word.** Material 3's input field leaves the prompt
+  to the app, so the component reads the framework's `search_hint` string resource.
+  That resource is private to the framework — `android.R.string` names only
+  `search_go` of the family, checked against the android-35 stub — so it is resolved
+  by name once per process, and an answer of 0 falls back to the English the
+  platform itself uses.
+
+Either way the library writes no search string of its own: an empty field is not
+English in a German app. `SearchField.harness.tsx` asserts the two halves
+separately — Android's word is non-empty, iOS's is empty — because "the platform's
+own" is a claim you can only make one platform at a time.
 
 ## Sizing
 
@@ -161,10 +173,11 @@ a German app.
 the height is the field's own — and the height is one number, because a search
 field does not grow with its query, its prompt or its width:
 
-- **37 pt** on iOS 27 (the height UIKit's `UISearchTextField` measures at the
-  body font) and **56 dp** on Android (`SearchBarDefaults.InputFieldHeight`) at
-  the default text size.
-- Those are also the declared fallbacks (200 × 37 pt, 200 × 56 dp — 200 being
+- **28 pt** on iOS 27 (the height UIKit's `UISearchTextField` measures at the body
+  font, and the height UIKit gives the field inside its own search bar) and
+  **56 dp** on Android (`SearchBarDefaults.InputFieldHeight`) at the default text
+  size. Both are measured on the devices the gates run on, not read out of a header.
+- Those are also the declared fallbacks (200 × 28 pt, 200 × 56 dp — 200 being
   the width a `fillWidth` control draws under a parent that gives it none), so a
   cold first mount is the right height rather than a frame at something else.
   `prewarm(['NitroUiSearchField'])` makes it exact, and because the sizing key is
@@ -186,7 +199,8 @@ no round has measured that.
 
 A recycled field comes back with none of its previous owner: the query, focus,
 the handshake's counts, `maxLength`, `editable`, the accessibility label and the
-placeholder — which returns to the platform's own prompt, not the last row's
+placeholder — which returns to whatever the platform shows by default (nothing on
+iOS, the framework's hint on Android), not the last row's
 (`SearchField.harness.tsx`'s recycle case, and the X4 conformance probes, which
 leave typed text behind on purpose and read it back from the next owner). On iOS
 the UIKit control outlives the mount with the hosting controller, so the reset
