@@ -434,7 +434,7 @@ A confirmation, presented — UIKit's action sheet on the left, Material's botto
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/confirmation-dialog-ios.png" width="300" alt="ConfirmationDialog presented on iOS as an action sheet: a title and three rows, the last one destructive" /></td>
+    <td><img src="docs/images/components/confirmation-dialog-ios.png" width="300" alt="ConfirmationDialog presented on iOS as a popover over its button: a title and three rows, the last one destructive" /></td>
     <td><img src="docs/images/components/confirmation-dialog-android.png" width="300" alt="ConfirmationDialog presented on Android as a bottom sheet with one row per action" /></td>
   </tr>
 </table>
