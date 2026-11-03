@@ -86,5 +86,8 @@
 | G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | fix round 1 (PR #31; review: Android label alignment, false conformance fallback, Android fallback height, iOS glyph tap test). Incident: `pkill -P 1` powered off every device on mac-2 (AGENTS rule tightened) |
 | Q6 | ContextMenu design (Q1 depth; children in place, gesture arbitration, spike questions) | Opus (on mac-1) | Opus | done (report merged; D36 adopts its recommendations; spike S3 next) |
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
-| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | fix round 1 (PR #33; review: Android layout listener leak, pointerEvents none opens the menu, iOS close guard, witness built in production) |
+| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | reviewed MERGE (PR #33); merging with Checkbox on mac-1, then gates |
+| Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
+| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | running |
+| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
