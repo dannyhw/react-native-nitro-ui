@@ -100,6 +100,7 @@ import {
   BottomSheet,
   Button,
   Chip,
+  ContextMenu,
   DatePicker,
   Menu,
   Picker,
@@ -375,6 +376,13 @@ type Handle = {
    * Chip there (`Chip.harness.tsx` measured it).
    */
   nuiTestPress?(): void;
+  /**
+   * ContextMenu's report (`ContextMenu.nitro.ts`): `open`, `opens`/`closes`/`selects`,
+   * `title` and the rest, `;`-separated, from a snapshot the UI thread publishes.
+   */
+  nuiTestContextMenuReport?(): string;
+  /** ContextMenu's pick, through the path a row press takes. */
+  nuiTestSelectRow?(id: string): void;
 };
 
 /**
@@ -1390,6 +1398,15 @@ type Fixture = {
    * directions, so a self-sizing control cannot opt out of its sizing rules here.
    */
   selfSizing?: false;
+  /**
+   * `true` for a component that **is** a React Native `View` - ContextMenu, whose box is
+   * Yoga's and whose accessibility props are React Native's own, landing on the view the
+   * `testID` names (D36 item 1). The a11y rule then holds the labelled box to that box on
+   * both platforms (an RN view's `contentDescription` is what the Android harness query
+   * walks, unlike a Compose control's semantics) and skips the handle's label, which a
+   * `View` does not have.
+   */
+  isView?: true;
 };
 
 const SECOND = 'second owner';
@@ -1424,6 +1441,30 @@ const MENU_GROUP: MenuGroup = {
  */
 const MENU_TITLE = 'Conformance actions';
 const MENU_TITLE_SECOND = 'Second owner’s actions';
+
+/** The ContextMenu fixture's name, and the header its menu draws for the first owner. */
+const CONTEXT_LABEL = 'Conformance context menu';
+const CONTEXT_TITLE = 'Conformance rows';
+
+/** ContextMenu's report, as `key -> value`. */
+function contextMenuReportOf(handle: Handle): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const pair of (handle.nuiTestContextMenuReport?.() ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return fields;
+}
+
+/**
+ * `captureFor` for a ContextMenu, whose handle is its own type (no `accessibilityLabel`,
+ * no `measureContent()`: it is a `View`), filed under the shared one as Dialog's is.
+ */
+const captureContextMenu =
+  (testId: string) =>
+  (view: object): void => {
+    handles.set(testId, view as unknown as Handle);
+  };
 
 const DIALOG_TITLE = 'Conformance dialog';
 const DIALOG_TITLE_SECOND = 'Second owner’s dialog';
@@ -2884,6 +2925,113 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
   },
+  {
+    name: 'ContextMenu',
+    component: 'NitroUiContextMenu',
+    label: CONTEXT_LABEL,
+    testId: 'conformance-context-menu',
+    selfSizing: false,
+    isView: true,
+    owner: (second) => (
+      <ContextMenu
+        group={MENU_GROUP}
+        title={second ? undefined : CONTEXT_TITLE}
+        accessible
+        accessibilityLabel={
+          second ? `${CONTEXT_LABEL}, ${SECOND}` : CONTEXT_LABEL
+        }
+        testID="conformance-context-menu"
+        hybridRef={captureContextMenu('conformance-context-menu')}
+        style={{ padding: 8 }}
+      >
+        <View style={{ height: 40 }} />
+      </ContextMenu>
+    ),
+    control: (testId, variant) => (
+      <ContextMenu group={MENU_GROUP} disabled={variant} testID={testId}>
+        <View style={{ height: variant ? 40 : 20 }} />
+      </ContextMenu>
+    ),
+    // Read from the view's own report, never from React's props: a `null` title the
+    // second owner sends has to arrive as `-`, and the menu must not come back open.
+    state: (handle, second) => {
+      const report = contextMenuReportOf(handle);
+      return [
+        {
+          label: 'title',
+          expected: second ? '-' : CONTEXT_TITLE,
+          actual: report.title,
+        },
+        { label: 'open', expected: '0', actual: report.open },
+      ];
+    },
+    // The residue is the menu's own history: a pick counts into `selects` (and an open
+    // menu into `opens`), state no prop writes. A recycled view that kept it would report
+    // a pick its owner never made - and on Android the same reset is what closes a menu
+    // the previous owner left open (`ContextMenuModel.reset`, "a recycled view must never
+    // come back open").
+    probe: {
+      leaveBehind:
+        'a pick the first owner made through the row path (selects=1) - the second ' +
+        'owner made none, so a count left over is the reset missing',
+      first: () => (
+        <ContextMenu
+          group={MENU_GROUP}
+          title={CONTEXT_TITLE}
+          onSelect={recordRecycle('conformance-context-menu')}
+          testID="conformance-context-menu"
+          hybridRef={captureContextMenu('conformance-context-menu')}
+        >
+          <View style={{ height: 40 }} />
+        </ContextMenu>
+      ),
+      act: async () => {
+        const handle = await ensureHandle('conformance-context-menu');
+        const from = recycleEvents.length;
+        handle.nuiTestSelectRow?.('two');
+        const seen = await eventsSettled(from, 'conformance-context-menu:two');
+        if (seen !== 'conformance-context-menu:two') {
+          throw new Error(
+            `the pick reported "${seen}", so the first owner has no pick for a reset ` +
+              'to clear'
+          );
+        }
+        const deadline = Date.now() + 2000;
+        while (contextMenuReportOf(handle).selects !== '1') {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner reported its pick but its own counter never moved: ' +
+                (handle.nuiTestContextMenuReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(50);
+        }
+      },
+      second: () => (
+        <ContextMenu
+          group={MENU_GROUP}
+          onSelect={recordRecycle('conformance-context-menu')}
+          testID="conformance-context-menu"
+          hybridRef={captureContextMenu('conformance-context-menu')}
+        >
+          <View style={{ height: 40 }} />
+        </ContextMenu>
+      ),
+      read: async () => {
+        const report = contextMenuReportOf(
+          handleFor('conformance-context-menu')
+        );
+        return [
+          {
+            label: 'picks this mount reports',
+            expected: '0',
+            actual: report.selects,
+          },
+          { label: 'the menu is open', expected: '0', actual: report.open },
+        ];
+      },
+    },
+  },
 ];
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
@@ -3308,6 +3456,21 @@ describe('conformance · every control, four rules', () => {
         await ensureHandle(fixture.testId);
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
+        if (fixture.isView === true) {
+          // A `View`'s own accessibility props (D36 item 1): the box the testID names is
+          // the element, on both platforms - the harness query walks an RN view's
+          // `contentDescription` on Android, which it cannot do for a Compose control. The
+          // platform tree (VoiceOver's element, TalkBack's node) is asserted by real input.
+          console.log(
+            `    · a View: box=${describeBox(box)} labelBox=${describeBox(labelled)}`
+          );
+          expect(box).not.toBeNull();
+          expect(labelled).not.toBeNull();
+          expect(Math.abs(labelled!.width - box!.width)).toBeLessThan(2);
+          expect(Math.abs(labelled!.height - box!.height)).toBeLessThan(2);
+          mounted.unmount();
+          return;
+        }
         if (fixture.selfSizing === false) {
           // The presentation-aware half (Q5 Appendix B5): a closed dialog's anchor is
           // hidden from accessibility, so nothing on screen may carry its title - a

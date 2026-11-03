@@ -34,6 +34,7 @@ const TAB_LABEL = {
   chip: 'Chip',
   host: 'Host',
   textfield: 'Text',
+  contextmenu: 'Context',
 };
 
 function adb(args) {

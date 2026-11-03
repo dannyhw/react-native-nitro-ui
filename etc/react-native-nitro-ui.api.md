@@ -136,6 +136,32 @@ export interface ConfirmationDialogProps extends DialogProps {
 }
 
 // @public
+export function ContextMenu(input: ContextMenuProps): JSX.Element;
+
+// @public
+export interface ContextMenuProps extends ViewProps {
+    children?: ReactNode;
+    disabled?: boolean | undefined;
+    group: MenuGroup;
+    // @internal
+    hybridRef?: ((view: {
+        readonly disabled: boolean;
+        readonly title: string | null;
+        readonly previewCornerRadius: number | null;
+        nuiTestSelectRow(id: string): void;
+        nuiTestMenuProbe(): void;
+        nuiTestContextMenuReport(): string;
+        nuiTestA11yLongClick(): void;
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onClose?: (() => void) | undefined;
+    onOpen?: (() => void) | undefined;
+    onSelect?: ((id: string) => void) | undefined;
+    title?: string | undefined;
+}
+
+// @public
 export function DatePicker(input: DatePickerProps): JSX.Element;
 
 // @public
