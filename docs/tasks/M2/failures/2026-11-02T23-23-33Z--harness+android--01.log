@@ -1,0 +1,196 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-02T23:23:33.334Z on code tree `e99634813021` at HEAD `28dcde3` (branch `task/M2-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 580110 ms
+- Load: start 10.03, end 9.53, median 12.74, max 19.00
+- Device: android / device `emulator-5570` / lease `M2-uaigu`
+- Full log: `task/M2-merge/harness+android-2026-11-02T23-23-32.013Z.log` (<store>/task/M2-merge/harness+android-2026-11-02T23-23-32.013Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, 6, 9, 6 ] to deeply equal [ 3, 6, 9, 10 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/M2-merge/harness+android-2026-11-02T23-23-32.013Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: M2-uaigu (still live)
+  |   G12-sigr7                G12          both              pair-a
+  |   M2-uaigu                 M2           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.53 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 165 — the rest is in the full log above)
+
+```
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      slider size: box=300.19x48.00 measured=300.19x48.00 expectedHeight=48
+
+
+    console.log
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=76->75 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #35840 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #35847 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: #1 performed SetProgress(3.0) on #35861 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: starts=[0] change=[3,3,6,9] complete=[9]
+
+
+    console.log
+      inverted range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 78.2ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 78.2ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 10.33/load5 21.22 over 14 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, 6, 9, 6 ] to deeply equal [ 3, 6, 9, 10 ]
+
+      [0m [90m 1563 |[39m       expectPerformed(report[33m,[39m what)[33m;[39m
+       [90m 1564 |[39m       [36mconst[39m index [33m=[39m events[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m[33m;[39m
+      [31m[1m>[22m[39m[90m 1565 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual(expected[33m.[39mslice([35m0[39m[33m,[39m index [33m+[39m [35m1[39m))[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1566 |[39m       [90m// The start of each step is the value it began from: the control's seed for[39m
+       [90m 1567 |[39m       [90m// the first, and each previously reported value after that. And never more[39m
+       [90m 1568 |[39m       [90m// starts than ends - the drag that never ends would show up here.[39m[0m
+
+
+Test Suites: 1 failed, 16 passed, 17 total
+Tests:       1 failed, 321 passed, 322 total
+Snapshots:   0 total
+Time:        576.683 s
+Ran all test suites.
+gate: harness:android FAIL in 580.1 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+
+gate: appended the device context to task/M2-merge/harness+android-2026-11-02T23-23-32.013Z.log (5 probe(s))
+
+```

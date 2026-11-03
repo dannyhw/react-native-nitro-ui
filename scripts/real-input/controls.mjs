@@ -96,6 +96,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     screen: 'dialog',
   },
   {
+    id: 'text-field',
+    title:
+      'real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it',
+    screen: 'textfield',
+  },
+  {
     id: 'bottom-sheet',
     title:
       'a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one',

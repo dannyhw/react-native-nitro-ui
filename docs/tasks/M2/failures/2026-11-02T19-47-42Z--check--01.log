@@ -1,0 +1,173 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-02T19:47:42.778Z on code tree `ce46251baad7` at HEAD `c6502aa` (branch `task/M2-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 277312 ms
+- Load: start 7.59, end 16.18, median 36.94, max 59.03
+- Device: none recorded (not a device gate)
+- Full log: `task/M2-merge/check-2026-11-02T19-47-41.991Z.log` (<store>/task/M2-merge/check-2026-11-02T19-47-41.991Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/lease.test.js (42.498 s)`
+- `● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2771 — the rest is in the full log above)
+
+```
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/component-coverage.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/emulator-launch.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+FAIL scripts/__tests__/lease.test.js (42.498 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+PASS scripts/__tests__/lease-pool-cli.test.js (45.347 s)
+PASS scripts/__tests__/lease-metro-port.test.js (46.918 s)
+PASS scripts/__tests__/ci-workflows.test.js (66.829 s)
+PASS scripts/__tests__/gate.test.js (124.069 s)
+PASS scripts/__tests__/gate-check.test.js (137.952 s)
+PASS scripts/__tests__/gate-logs.test.js (169.77 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (174.584 s)
+PASS scripts/__tests__/bench-gate.test.js (260.729 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/lease.test.js (42.498 s)
+  ● the CLI, in a real state directory › waits in the process rather than refusing, when told to wait
+
+    thrown: "Exceeded timeout of 5000 ms for a test.
+    Add a timeout value to this test to increase the timeout, if this is a long-running test. See https://jestjs.io/docs/api#testname-fn-timeout."
+
+      964 |   });
+      965 |
+    > 966 |   it('waits in the process rather than refusing, when told to wait', async () => {
+          |     ^
+      967 |     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(0);
+      968 |     const waiter = spawnLease([
+      969 |       'acquire',
+
+      at scripts/__tests__/lease.test.js:966:5
+      at Object.<anonymous> (scripts/__tests__/lease.test.js:804:9)
+
+
+Test Suites: 1 failed, 63 passed, 64 total
+Tests:       1 failed, 1666 passed, 1667 total
+Snapshots:   0 total
+Time:        262.966 s, estimated 365 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 277.3 s
+gate: recorded in .gates/task/M2-merge.jsonl
+
+```

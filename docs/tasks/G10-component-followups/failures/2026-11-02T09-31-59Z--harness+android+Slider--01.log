@@ -1,0 +1,93 @@
+# Failure excerpt — harness:android:Slider
+
+- Ran: 2026-11-02T09:31:59.705Z on code tree `51cc4d0faf56` at HEAD `605b7e7` (branch `task/G10-component-followups`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider`
+- Result: fail, exit 1, 20647 ms
+- Load: start 2.03, end 1.81, median 1.87, max 2.03
+- Device: android / device `emulator-5574` / lease `G10-y963t`
+- Full log: `task/G10-component-followups/harness+android+Slider-2026-11-02T09-31-59.705Z.log` (<store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-31-59.705Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected 3 to be +0 // Object.is equality`
+- `● Slider › renders a range whose two ends are the wrong way round`
+- `expected [ 1 ] to deeply equal [ 5 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-31-59.705Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G10-y963t (still live)
+  |   G10-y963t                G10          both              pair-a
+  |   T19-18jd1                T19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 1.81 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 51cc4d0faf56, 9 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 1.95/3.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G10-component-followups/harness+android+Slider-2026-11-02T09-31-59.705Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected 3 to be +0 // Object.is equality
+
+      [0m [90m 1634 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1635 |[39m     [36mawait[39m drag(alignedHandle[33m,[39m aligned[33m,[39m [35m6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1636 |[39m     expect(aligned[33m.[39mstart[aligned[33m.[39mstart[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1637 |[39m     expect(aligned[33m.[39mcomplete[aligned[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m6[39m)[33m;[39m
+       [90m 1638 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1639 |[39m     expect(alignedHandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+  ● Slider › renders a range whose two ends are the wrong way round
+
+    expected [ 1 ] to deeply equal [ 5 ]
+
+      [0m [90m 1736 |[39m         [32m`complete=${JSON.stringify(events.complete)}`[39m
+       [90m 1737 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 1738 |[39m     expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m5[39m])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 1739 |[39m     expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m5[39m])[33m;[39m
+       [90m 1740 |[39m     expect(events[33m.[39mchange[33m.[39mevery((value) [33m=>[39m value [33m===[39m [35m5[39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1741 |[39m     expect(handle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 22 passed, 24 total
+Snapshots:   0 total
+Time:        19.482 s
+Ran all test suites matching Slider.
+
+
+
+```

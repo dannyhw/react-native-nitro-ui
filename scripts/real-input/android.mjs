@@ -105,7 +105,14 @@ const ECHO = {
   hostDateDropButton: 'host-datepicker-drop',
   hostDateGone: 'host-datepicker-drop-gone',
   hostDateRemount: 'host-datepicker-drop-remount',
+  textTyping: 'text-typing-echo',
+  textFrozen: 'text-frozen-echo',
+  textCapped: 'text-capped-echo',
+  textFocus: 'text-focus-echo',
 };
+
+/** The Enter key, which a single-line field takes as its editor action (submit). */
+const KEY_ENTER = 66;
 
 /** The system Back key, which is how a person dismisses an open popup. */
 const KEY_BACK = 4;
@@ -2134,6 +2141,121 @@ const CHECKS = {
    *    activity), so `popupWindowCount()` is a reading that survives the popup leaving
    *    the accessibility tree - the only way to see a popup that leaked.
    */
+  /**
+   * Real keystrokes into a Compose `BasicTextField`, from outside the app: `adb shell
+   * input text` injects key events into the focused window, so they travel
+   * InputDispatcher → the field → Nitro → JS → re-render (Q2's Android oracle,
+   * orchestrator answer 2). `input text` has no target, so every burst is preceded by a
+   * real tap that has to have focused the field - which is also the focus check.
+   *
+   * What each part proves, on the app's own `Text` and the field's own accessibility
+   * text (the string Compose publishes for an editable node):
+   * - **typing**: the keys reach React as the field's text;
+   * - **a refused edit reverts**: the frozen field reports every key and keeps showing
+   *   `frozen` - the handshake's revert, driven by a keyboard rather than a write;
+   * - **`maxLength`**: seven keys into a cap of five leave five;
+   * - **focus and blur**: a tap focuses, Enter submits the text and blurs (RN's
+   *   single-line default), and the screen's own `ref.focus()` / `ref.blur()` buttons,
+   *   pressed for real, move it again.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'text-field': async (t) => {
+    t.log.checkEquals(
+      'the typing field starts empty',
+      t.requireEcho(ECHO.textTyping),
+      'typed:  (0)'
+    );
+    // Lowest field first: once a keyboard is up it covers the lower half of the
+    // screen, and every later tap is aimed higher than the one before it.
+    await t.tapNode(await t.requireControlOnScreen('Capped field'));
+    await t.type('abcdefg');
+    t.log.checkEquals(
+      'maxLength 5 keeps five of seven keys',
+      t.waitForEcho(ECHO.textCapped, 'capped: abcde (5)', 'the capped text'),
+      'capped: abcde (5)'
+    );
+    t.log.checkEquals(
+      'and the field holds the same five',
+      t.fieldText('Capped field'),
+      'abcde'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Frozen field'));
+    await t.type('xy');
+    t.log.checkEquals(
+      'every key into the frozen field is reported to JS',
+      t.waitForEcho(
+        ECHO.textFrozen,
+        'frozen: 2 edits refused',
+        'two refused edits'
+      ),
+      'frozen: 2 edits refused'
+    );
+    t.log.checkEquals(
+      'and each one is reverted: the field still shows what JS kept',
+      t.fieldText('Frozen field'),
+      'frozen'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Typing field'));
+    await t.type('abc12');
+    t.log.checkEquals(
+      'real keystrokes reach the field, and React sees its text',
+      t.waitForEcho(ECHO.textTyping, 'typed: abc12 (5)', 'the typed text'),
+      'typed: abc12 (5)'
+    );
+    t.log.checkEquals(
+      'the field shows what React was told',
+      t.fieldText('Typing field'),
+      'abc12'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Focus field'));
+    t.log.checkEquals(
+      'a real tap focuses the field (onFocus)',
+      t.waitForEcho(
+        ECHO.textFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'the focus'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+    await t.type('go');
+    t.key(KEY_ENTER);
+    t.log.checkEquals(
+      'Enter submits the text and then blurs the field',
+      t.waitForEcho(
+        ECHO.textFocus,
+        'focus: 1 blur: 1 submitted: go',
+        'the submit and blur'
+      ),
+      'focus: 1 blur: 1 submitted: go'
+    );
+    await t.tapTestId('text-focus-js');
+    t.log.checkEquals(
+      'a real tap on a button that calls ref.focus() focuses it',
+      t.waitForEcho(
+        ECHO.textFocus,
+        'focus: 2 blur: 1 submitted: go',
+        'focus from JS'
+      ),
+      'focus: 2 blur: 1 submitted: go'
+    );
+    await t.tapTestId('text-blur-js');
+    t.log.checkEquals(
+      'and one that calls ref.blur() blurs it',
+      t.waitForEcho(
+        ECHO.textFocus,
+        'focus: 2 blur: 2 submitted: go',
+        'blur from JS'
+      ),
+      'focus: 2 blur: 2 submitted: go'
+    );
+    // Leave no keyboard up for the next check.
+    await t.hideKeyboard();
+  },
+
   'picker': async (t) => {
     // The three titles of `real-input-picker`, spelled as `PickerScreen` spells
     // them. None appears anywhere else on the screen, which is what lets a text
@@ -2518,6 +2640,36 @@ const CHECKS = {
     );
   },
 };
+
+/**
+ * `adb shell input text`'s argument form.
+ *
+ * The string is parsed twice - by the device's shell and by the `input` tool - so a
+ * space travels as `%s`. Anything outside a safe set is refused rather than escaped
+ * by guesswork: a check that typed the wrong string and asserted on it is worse than
+ * one that says it cannot type that string. `input text` cannot type an emoji at
+ * all, which is why the emoji half of `maxLength` is the harness's
+ * (`TextField.harness.tsx`).
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function encodeInputText(text) {
+  let encoded = '';
+  for (const char of text) {
+    if (char === ' ') {
+      encoded += '%s';
+    } else if (/^[A-Za-z0-9._\-@:/]$/.test(char)) {
+      encoded += char;
+    } else {
+      throw new Error(
+        `real-input: cannot type "${char}" with \`input text\` (outside the set it ` +
+          'accepts after being parsed twice)'
+      );
+    }
+  }
+  return encoded;
+}
 
 /**
  * Tap back onto the day an inline calendar is showing, and require that JS is told.
@@ -3415,6 +3567,7 @@ class DeviceHarness {
       dialog: 'Dialogs',
       sheet: 'Sheet',
       host: 'Host',
+      textfield: 'Text',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -3427,6 +3580,7 @@ class DeviceHarness {
       dialog: ECHO.dialogLog,
       sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
+      textfield: ECHO.textTyping,
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
@@ -3513,6 +3667,27 @@ class DeviceHarness {
    */
   key(keyCode) {
     this.shell(`input keyevent ${String(keyCode)}`);
+  }
+
+  /**
+   * Whether the soft keyboard is on screen, as the input method service says.
+   *
+   * @returns {boolean}
+   */
+  imeShown() {
+    return /mInputShown=true/.test(this.shell('dumpsys input_method'));
+  }
+
+  /**
+   * Type real characters through `adb shell input text`: key events injected into the
+   * focused window, the same InputManager path `input tap` uses. No target argument,
+   * so the field must already have focus. See {@link encodeInputText} for what it can
+   * and cannot type.
+   *
+   * @param {string} text
+   */
+  typeText(text) {
+    this.shell(`input text ${encodeInputText(text)}`);
   }
 
   /**
@@ -4187,6 +4362,85 @@ function makeContext(harness, log) {
      */
     async settle(ms) {
       await sleep(ms);
+    },
+
+    /**
+     * Type into the focused field, then give React a moment to render the echo.
+     *
+     * @param {string} text
+     */
+    async type(text) {
+      harness.typeText(text);
+      await sleep(300);
+    },
+
+    /**
+     * Press a hardware key (`input keyevent`).
+     *
+     * @param {number} keyCode
+     */
+    key(keyCode) {
+      harness.key(keyCode);
+    },
+
+    /**
+     * Take the soft keyboard down if it is up, and leave focus where it is.
+     *
+     * Only when it is up: Back is offered to the IME first, but with no keyboard it is
+     * the app's Back, which sends a React Native root to the background - and every
+     * later check then finds the launcher.
+     */
+    async hideKeyboard() {
+      if (harness.imeShown()) {
+        harness.key(KEY_BACK);
+        await sleep(500);
+      }
+    },
+
+    /**
+     * The text a Compose field holds, as its editable node publishes it.
+     *
+     * The node that carries a `TextField`'s `accessibilityLabel` is a child of the
+     * `EditText` node, with the same box (`HybridNitroUiTextField.kt`), and only the
+     * `EditText` carries the text - so this finds the label, then the editable node
+     * whose box it shares.
+     *
+     * @param {string} description the field's `accessibilityLabel`
+     * @returns {string}
+     */
+    fieldText(description) {
+      const nodes = harness.hierarchy();
+      const named = findByDescription(nodes, description);
+      if (named == null) {
+        log.abort(
+          `no field with accessibilityLabel "${description}" on screen`
+        );
+      }
+      const same = (a, b) =>
+        a.x1 === b.x1 && a.y1 === b.y1 && a.x2 === b.x2 && a.y2 === b.y2;
+      const editable = nodes.find(
+        (node) =>
+          node.className === 'android.widget.EditText' &&
+          same(node.bounds, named.bounds)
+      );
+      if (editable == null) {
+        log.abort(`"${description}" has no editable node in its box`);
+      }
+      return editable.text;
+    },
+
+    /**
+     * Tap the React Native view carrying `testID`, or abort naming it.
+     *
+     * @param {string} testID
+     */
+    async tapTestId(testID) {
+      const node = findByTestId(harness.hierarchy(), testID);
+      if (node == null) {
+        log.abort(`no view with testID "${testID}" on screen to tap`);
+      }
+      harness.tap(node);
+      await sleep(250);
     },
 
     /**

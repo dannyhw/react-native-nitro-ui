@@ -43,6 +43,9 @@
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "views/JHybridNitroUiSwitchStateUpdater.hpp"
+#include "JHybridNitroUiTextFieldSpec.hpp"
+#include "JFunc_void_std__string_double.hpp"
+#include "views/JHybridNitroUiTextFieldStateUpdater.hpp"
 #include "HybridNitroUiCore.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
@@ -134,6 +137,14 @@ struct JHybridNitroUiDialogSpecImpl: public jni::JavaClass<JHybridNitroUiDialogS
     return javaPart->getJHybridNitroUiDialogSpec();
   }
 };
+struct JHybridNitroUiTextFieldSpecImpl: public jni::JavaClass<JHybridNitroUiTextFieldSpecImpl, JHybridNitroUiTextFieldSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiTextField;";
+  static std::shared_ptr<JHybridNitroUiTextFieldSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiTextFieldSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiTextFieldSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiTextFieldSpec();
+  }
+};
 struct JHybridNitroUiBottomSheetSpecImpl: public jni::JavaClass<JHybridNitroUiBottomSheetSpecImpl, JHybridNitroUiBottomSheetSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiBottomSheet;";
   static std::shared_ptr<JHybridNitroUiBottomSheetSpec> create() {
@@ -176,6 +187,9 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiTextFieldSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiTextFieldStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -245,6 +259,12 @@ void registerAllNatives() {
     "NitroUiDialog",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiDialogSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiTextField",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiTextFieldSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

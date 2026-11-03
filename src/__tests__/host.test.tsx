@@ -25,6 +25,7 @@ import {
   UNHOSTABLE_CONTROLS,
 } from '../components/Host/HostChildren';
 import { Switch } from '../components/Switch/Switch';
+import { TextField } from '../components/TextField/TextField';
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 
 /**
@@ -189,19 +190,39 @@ describe('Host children', () => {
   });
 
   /**
-   * `BottomSheet` (G14) is the first control the library ships that a Host refuses for
-   * being what it is: its content is React Native views, which a Host has no place for.
-   * So the refusal sentence for a nitro-ui control - the one the *next* unmeasured
-   * control (a TextField) will meet too - is asked of a real row now, not a stand-in.
+   * The refusal sentence for a nitro-ui control that has not been measured inside a
+   * Host. From H2b until G13 no shipped control was refused, so this used a stand-in;
+   * the TextField is the first real row (`UNHOSTABLE_CONTROLS`), and the sentence is
+   * asked of it directly.
    */
-  it('names a control the Host refuses', () => {
-    expect([...UNHOSTABLE_CONTROLS.values()]).toEqual(['BottomSheet']);
+  it('names a control the Host does not render yet', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('TextField');
+    const error = errorFor(<TextField placeholder="Name" />);
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/<TextField>/);
+    // "nitro-ui's", so the sentence says whose control it is before saying what is
+    // wrong with it - `TextField` and `Switch` exist in more than one library.
+    expect(error?.message).toMatch(/react-native-nitro-ui's <TextField>/);
+    // The allowlist is consulted first, so a table cannot take back a permission the
+    // other granted: a control on both is accepted.
+    HOSTABLE_CONTROLS.set(TextField, 'TextField');
+    try {
+      expect(errorFor(<TextField placeholder="Name" />)).toBeNull();
+    } finally {
+      HOSTABLE_CONTROLS.delete(TextField);
+    }
+  });
+
+  /**
+   * `BottomSheet` (G14) is refused by design rather than for want of a measurement: its
+   * content is React Native views, which a Host has no place for. The same sentence.
+   */
+  it('names a control the Host refuses by design', () => {
+    expect([...UNHOSTABLE_CONTROLS.values()]).toContain('BottomSheet');
     expect(HOSTABLE_CONTROLS.has(BottomSheet)).toBe(false);
     const error = errorFor(<BottomSheet isPresented={false} />);
     expect(error).not.toBeNull();
     expect(error?.message).toMatch(/<BottomSheet>/);
-    // "nitro-ui's", so the sentence says whose control it is before saying what is
-    // wrong with it - `Switch` and `Picker` exist in more than one library.
     expect(error?.message).toMatch(/react-native-nitro-ui's <BottomSheet>/);
   });
 

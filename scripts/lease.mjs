@@ -62,7 +62,9 @@ const USAGE =
   'usage: node scripts/lease.mjs acquire --task <id> [--platform ios|android|both]\n' +
   '                                          [--exclusive] [--wait-minutes N]\n' +
   '                                          [--ttl-minutes N] [--out <file>] [--config <file>] [--json]\n' +
-  '                                          [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
+  '                                          [--boot] [--no-boot] [--no-reset] [--boot-timeout-minutes N]\n' +
+  '         (--exclusive --boot needs --platform ios|android|both: an exclusive lease boots only\n' +
+  '          the half it names, and never for NITRO_UI_LEASE_BOOT alone)\n' +
   '       node scripts/lease.mjs renew <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs release <lease-id> | --task <id>\n' +
   '       node scripts/lease.mjs reap [--idle-minutes N] [--config <file>]   (the only reaper)\n' +
@@ -722,11 +724,19 @@ function main(argv) {
     );
     for (const key of spare)
       log(`lease: spared ${key} (already up, this lease's own)`);
-    const reaped = pool.reap({
+    const swept = pool.reap({
       shutdownKeys,
       reason: 'exclusive acquire',
       exceptLeaseId: lease.id,
     });
+    // A spared key comes back under `kept` - the pool kept it because a live lease holds it, and
+    // that lease is this one - so counting `kept` as well would say "1 spared, 1 held by a lease"
+    // for one device, and read as another task's lease keeping a device under the bench (X17
+    // item 2). `kept` here means held by somebody else; the spare has its own count.
+    const reaped = {
+      ...swept,
+      kept: (swept.kept ?? []).filter((entry) => !spare.includes(entry.key)),
+    };
     reportReap(reaped, log);
     // The promise an exclusive lease makes, stated only when it was kept. A reap that was skipped
     // (an unreadable `pool.json`) or that could not power something off leaves devices running

@@ -106,6 +106,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
   nitroUiCore,
   type MenuGroup,
   type NitroUiSizingStats,
@@ -206,6 +207,16 @@ const SHARED = {
         "width": 72,
         "height": 35
       }
+    },
+    "NitroUiTextField": {
+      "android": {
+        "width": 200,
+        "height": 24
+      },
+      "ios": {
+        "width": 200,
+        "height": 22
+      }
     }
   },
   "poisonSizes": {
@@ -227,7 +238,8 @@ const SHARED = {
     "NitroUiProgress": "height",
     "NitroUiSegmentedControl": "both",
     "NitroUiDatePicker": "both",
-    "NitroUiPicker": "both"
+    "NitroUiPicker": "both",
+    "NitroUiTextField": "height"
   },
   "exemptions": [
     {
@@ -262,6 +274,7 @@ type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
   queryByAccessibilityLabel(label: string): ViewInfo | null;
+  typeChar(character: string): Promise<void>;
 };
 const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
@@ -278,7 +291,7 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
  */
 type Handle = {
   readonly accessibilityLabel: string | null;
-  readonly value?: boolean | number | null;
+  readonly value?: boolean | number | string | null;
   readonly selectedIndex?: number | null;
   /**
    * Menu's trigger text (`HybridNitroUiMenu.swift`'s `title` getter). Read because the
@@ -331,7 +344,50 @@ type Handle = {
   readonly presented?: boolean;
   /** Dialog's test hook: dismiss as a user would, through the real path. */
   nuiTestDismiss?(): void;
+  /**
+   * TextField's own report: the text the control holds (not React's `value`), its focus,
+   * and the handshake's counts - state no prop rewrites.
+   */
+  nuiTestState?(): { text: string; focused: boolean; nativeEvents: number };
+  /** TextField's focus, through the native method its `ref` calls. */
+  focus?(): void;
+  blur?(): void;
 };
+
+/**
+ * Type into the focused TextField the way a keyboard does: `insertText` on the iOS first
+ * responder, the focused view's `InputConnection` on Android (the example app's probe -
+ * `TextField.harness.tsx` says why `HarnessUI` cannot reach a Compose field).
+ */
+async function typeIntoFocusedField(text: string): Promise<void> {
+  for (const key of Array.from(text)) {
+    if (PLATFORM === 'ios') {
+      await harnessUi.typeChar(key);
+    } else {
+      const probe = TurboModuleRegistry.getEnforcing(
+        'NitroUiProbe'
+      ) as unknown as {
+        imeInput(kind: string, text: string): Promise<string>;
+      };
+      await probe.imeInput('commit', key);
+    }
+    await sleep(30);
+  }
+}
+
+/** Focus a TextField fixture and type `text` into it; waits for the field to hold it. */
+async function typeIntoField(testId: string, text: string, expected: string) {
+  const handle = handleFor(testId);
+  handle.focus?.();
+  await waitFor(() => expect(handle.nuiTestState?.().focused).toBe(true), {
+    timeout: 5000,
+  });
+  await typeIntoFocusedField(text);
+  await waitFor(() => expect(handle.nuiTestState?.().text).toBe(expected), {
+    timeout: 5000,
+  });
+  handle.blur?.();
+}
 
 /**
  * The recycle rule's per-control oracle, and the honest answer to what round 1 asserted.
@@ -1699,6 +1755,144 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: 'where the controlled second mount was standing',
             expected: '0.0',
             actual: stepFrom(report),
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'TextField',
+    component: 'NitroUiTextField',
+    label: 'Conformance field',
+    testId: 'conformance-text-field',
+    owner: (second) => (
+      <View style={columnStyle}>
+        <TextField
+          value={second ? 'second' : 'first'}
+          testID="conformance-text-field"
+          accessibilityLabel={
+            second ? `Conformance field, ${SECOND}` : 'Conformance field'
+          }
+          hybridRef={captureFor('conformance-text-field')}
+        />
+      </View>
+    ),
+    control: (testId, variant) => (
+      <TextField
+        value={variant ? 'Leak B' : 'Leak A'}
+        testID={testId}
+        accessibilityLabel={`Leak field ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'value',
+        expected: second ? 'second' : 'first',
+        actual: handle.value,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second ? `Conformance field, ${SECOND}` : 'Conformance field',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    probe: {
+      leaveBehind:
+        'typing `x` into an uncontrolled field seeded `first`, then a second owner whose ' +
+        'own `defaultValue` is `second` - text the control can only hold if the reset ' +
+        're-armed the default and cleared what the first owner typed',
+      first: () => (
+        <View style={columnStyle}>
+          <TextField
+            defaultValue="first"
+            onChangeText={recordRecycle('conformance-text-field')}
+            testID="conformance-text-field"
+            accessibilityLabel="Conformance field"
+            hybridRef={captureFor('conformance-text-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-text-field', 'x', 'firstx');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-text-field:firstx'])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <TextField
+            defaultValue="second"
+            onChangeText={recordRecycle('conformance-text-field')}
+            testID="conformance-text-field"
+            accessibilityLabel="Conformance field"
+            hybridRef={captureFor('conformance-text-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-text-field');
+        await settle(200);
+        const state = handle.nuiTestState?.();
+        return [
+          {
+            label: 'the text the control holds',
+            expected: 'second',
+            actual: state?.text,
+          },
+          {
+            label: 'native events counted for this owner',
+            expected: 0,
+            actual: state?.nativeEvents,
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'three keystrokes into an uncontrolled field, then a second owner *controlled* at ' +
+        '`ctl` - counts left at `nativeEvents 3` would refuse that write as stale',
+      first: () => (
+        <View style={columnStyle}>
+          <TextField
+            defaultValue=""
+            onChangeText={recordRecycle('conformance-text-field')}
+            testID="conformance-text-field"
+            accessibilityLabel="Conformance field"
+            hybridRef={captureFor('conformance-text-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-text-field', 'abc', 'abc');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-text-field:a',
+            'conformance-text-field:ab',
+            'conformance-text-field:abc',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <TextField
+            value="ctl"
+            onChangeText={recordRecycle('conformance-text-field')}
+            testID="conformance-text-field"
+            accessibilityLabel="Conformance field"
+            hybridRef={captureFor('conformance-text-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-text-field');
+        await settle(200);
+        return [
+          {
+            label: 'the text the controlled second owner shows',
+            expected: 'ctl',
+            actual: handle.nuiTestState?.().text,
           },
         ];
       },

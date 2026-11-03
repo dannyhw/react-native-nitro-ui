@@ -62,6 +62,10 @@ Background (read the sections your brief points to):
     `main.async` hops when already on main;
   - controlled values use the event-count handshake (core-architecture §4).
 - Benchmarks for components: include numbers in your report.
+- A new component lands its README Components row, its name in the README import block, its Usage
+  section and **both screenshots** — `docs/images/components/<kebab>-{ios,android}.png` at the widths
+  in CONTRIBUTING's "README screenshots". `scripts/__tests__/readme-components.test.js` fails `check`
+  when any of those is missing, so a component cannot ship as prose only (D4).
 - **Wait for a gate with `gate.mjs`, never a `sleep`/`tail` loop:** `node scripts/gate.mjs <gate>
   --background` starts it detached and prints its pid and log path; `node scripts/gate.mjs wait
   --gate <gate> [--timeout-minutes N]` blocks, prints one progress line a minute, and leaves with the

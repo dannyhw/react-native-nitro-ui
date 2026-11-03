@@ -50,6 +50,7 @@ final class RealInputTests: XCTestCase {
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
+    static let textFieldTab = "tab-textfield"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -86,6 +87,10 @@ final class RealInputTests: XCTestCase {
     static let hostSegmentedIndex = "host-segmented-index"
     static let hostPickerIndex = "host-picker-index"
     static let hostDateValue = "host-datepicker-value"
+    static let textTyping = "text-typing-echo"
+    static let textFrozen = "text-frozen-echo"
+    static let textCapped = "text-capped-echo"
+    static let textFocus = "text-focus-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -378,6 +383,8 @@ final class RealInputTests: XCTestCase {
       A11yCase(id: "hosted-progress", testId: "host-mixed-progress-linear",
                label: "Mixed linear progress",
                tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
+      A11yCase(id: "text-field", testId: "text-typing", label: "Typing field",
+               tab: Tab.textFieldTab, screenAnchor: Echo.textTyping),
     ]
   }
 
@@ -453,6 +460,9 @@ final class RealInputTests: XCTestCase {
     // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
+    case .textField: return "text field"
+    case .secureTextField: return "secure text field"
+    case .textView: return "text view"
     case .progressIndicator: return "progress indicator"
     case .staticText: return "static text"
     case .group: return "group"
@@ -2849,6 +2859,117 @@ final class RealInputTests: XCTestCase {
   }
 
   // MARK: - Reading the screen
+
+  /// Real keystrokes into the hosted `UITextField`, from XCUITest's keyboard, read back
+  /// from React's own text and from the field's accessibility value.
+  ///
+  /// - **typing**: the keys reach React as the field's text;
+  /// - **a refused edit reverts**: the frozen field reports every key and keeps showing
+  ///   `frozen` - the handshake's revert, driven by a keyboard rather than a write;
+  /// - **`maxLength`**: seven keys into a cap of five leave five;
+  /// - **focus and blur**: a real tap focuses, Return submits and blurs (RN's single-line
+  ///   default), and the screen's own `ref.focus()` / `ref.blur()` buttons, tapped for
+  ///   real, move it again.
+  ///
+  /// The emoji half of `maxLength` and the composition guard are the harness's
+  /// (`TextField.harness.tsx`): XCUITest's keyboard types neither marked text nor emoji
+  /// reliably.
+  func testRealInputTextField() throws {
+    try goToTab(Tab.textFieldTab, showing: Echo.textTyping)
+    XCTAssertEqual(try read(Echo.textTyping), "typed:  (0)", "the typing field should start empty")
+
+    let typing = try textField(labelled: "Typing field")
+    try focusByTap(typing, echo: nil, as: "the typing field")
+    typing.typeText("abc12")
+    XCTAssertEqual(
+      readUntil(Echo.textTyping) { $0 == "typed: abc12 (5)" },
+      "typed: abc12 (5)",
+      "real keystrokes should reach the field, and React should see its text"
+    )
+    XCTAssertEqual(typing.value as? String, "abc12", "the field should show what React was told")
+
+    let frozen = try textField(labelled: "Frozen field")
+    try focusByTap(frozen, echo: nil, as: "the frozen field")
+    frozen.typeText("xy")
+    XCTAssertEqual(
+      readUntil(Echo.textFrozen) { $0 == "frozen: 2 edits refused" },
+      "frozen: 2 edits refused",
+      "every key into the frozen field should be reported to JS"
+    )
+    XCTAssertEqual(
+      frozen.value as? String,
+      "frozen",
+      "and each one reverted: the field should still show what JS kept"
+    )
+
+    let capped = try textField(labelled: "Capped field")
+    try focusByTap(capped, echo: nil, as: "the capped field")
+    capped.typeText("abcdefg")
+    XCTAssertEqual(
+      readUntil(Echo.textCapped) { $0 == "capped: abcde (5)" },
+      "capped: abcde (5)",
+      "maxLength 5 should keep five of seven keys"
+    )
+    XCTAssertEqual(capped.value as? String, "abcde", "and the field should hold the same five")
+
+    let focus = try textField(labelled: "Focus field")
+    try focusByTap(focus, echo: Echo.textFocus, as: "the focus field")
+    XCTAssertEqual(
+      readUntil(Echo.textFocus) { $0 == "focus: 1 blur: 0 submitted: -" },
+      "focus: 1 blur: 0 submitted: -",
+      "a real tap should focus the field (onFocus)"
+    )
+    focus.typeText("go\n")
+    XCTAssertEqual(
+      readUntil(Echo.textFocus) { $0 == "focus: 1 blur: 1 submitted: go" },
+      "focus: 1 blur: 1 submitted: go",
+      "Return should submit the text, then blur the field"
+    )
+    try required("text-focus-js", as: "the Focus from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.textFocus) { $0 == "focus: 2 blur: 1 submitted: go" },
+      "focus: 2 blur: 1 submitted: go",
+      "a real tap on a button that calls ref.focus() should focus the field"
+    )
+    try required("text-blur-js", as: "the Blur from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.textFocus) { $0 == "focus: 2 blur: 2 submitted: go" },
+      "focus: 2 blur: 2 submitted: go",
+      "and one that calls ref.blur() should blur it"
+    )
+  }
+
+  /// The text field element carrying `label`: the `UITextField` itself, which is what
+  /// takes the keyboard (the React component view around it carries the testID).
+  private func textField(labelled label: String) throws -> XCUIElement {
+    let node = app.textFields.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    if !node.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no text field labelled \"\(label)\"")
+      XCTFail("no text field labelled \"\(label)\" appeared within \(reactTimeout)s")
+      throw RealInputCheckAborted(identifier: label)
+    }
+    return node
+  }
+
+  /// Tap a field until it has the keyboard focus, retrying a dropped delivery the way
+  /// `pressUntil` does for every other control. With `echo`, the witness is also that
+  /// echo moving (the focus field's own `onFocus` count).
+  private func focusByTap(_ field: XCUIElement, echo: String?, as what: String) throws {
+    let before = echo.map { echoText($0) }
+    for _ in 0..<3 {
+      field.fingerTap()
+      let deadline = Date().addingTimeInterval(3)
+      repeat {
+        let focused = (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+        let moved = echo.map { echoText($0) != before } ?? true
+        if focused, moved { return }
+        Thread.sleep(forTimeInterval: 0.2)
+      } while Date() < deadline
+    }
+    dumpHierarchy("\(what) never took the keyboard focus")
+    XCTFail("\(what) never took the keyboard focus after three real taps")
+    throw RealInputCheckAborted(identifier: what)
+  }
 
   /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
   /// real tap on a day inside it must reach JS as a new instant.
