@@ -11,6 +11,7 @@
 #include "HybridNitroUiBottomSheetSpecSwift.hpp"
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiChipSpecSwift.hpp"
+#include "HybridNitroUiContextMenuProtoSpecSwift.hpp"
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
 #include "HybridNitroUiHostSpecSwift.hpp"
@@ -287,6 +288,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiTextFieldSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiContextMenuProtoSpec>
+  std::shared_ptr<HybridNitroUiContextMenuProtoSpec> create_std__shared_ptr_HybridNitroUiContextMenuProtoSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiContextMenuProtoSpec_cxx swiftPart = NitroUi::HybridNitroUiContextMenuProtoSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiContextMenuProtoSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiContextMenuProtoSpec_(std__shared_ptr_HybridNitroUiContextMenuProtoSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiContextMenuProtoSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiContextMenuProtoSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiContextMenuProtoSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiContextMenuProtoSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
 

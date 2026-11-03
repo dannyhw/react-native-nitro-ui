@@ -14,6 +14,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiBottomSheetSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiChipSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiChipSpec; }
+// Forward declaration of `HybridNitroUiContextMenuProtoSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiContextMenuProtoSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
 // Forward declaration of `HybridNitroUiDialogSpec` to properly resolve imports.
@@ -66,6 +68,8 @@ namespace NitroUi { class HybridNitroUiBottomSheetSpec_cxx; }
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiChipSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiChipSpec_cxx; }
+// Forward declaration of `HybridNitroUiContextMenuProtoSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiContextMenuProtoSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiDialogSpec_cxx` to properly resolve imports.
@@ -91,6 +95,7 @@ namespace NitroUi { class HybridNitroUiTextFieldSpec_cxx; }
 #include "HybridNitroUiBottomSheetSpec.hpp"
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiChipSpec.hpp"
+#include "HybridNitroUiContextMenuProtoSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiDialogSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
@@ -902,5 +907,32 @@ namespace margelo::nitro::nitroui::bridge::swift {
   inline Result_NitroUiTextFieldTestState_ create_Result_NitroUiTextFieldTestState_(const std::exception_ptr& error) noexcept {
     return Result<NitroUiTextFieldTestState>::withError(error);
   }
+  
+  // pragma MARK: std::optional<std::function<void(const std::string& /* line */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(const std::string& / * line * /)>>`.
+   */
+  using std__optional_std__function_void_const_std__string_____line______ = std::optional<std::function<void(const std::string& /* line */)>>;
+  inline std::optional<std::function<void(const std::string& /* line */)>> create_std__optional_std__function_void_const_std__string_____line______(const std::function<void(const std::string& /* line */)>& value) noexcept {
+    return std::optional<std::function<void(const std::string& /* line */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_const_std__string_____line______(const std::optional<std::function<void(const std::string& /* line */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(const std::string& /* line */)> get_std__optional_std__function_void_const_std__string_____line______(const std::optional<std::function<void(const std::string& /* line */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiContextMenuProtoSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiContextMenuProtoSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiContextMenuProtoSpec_ = std::shared_ptr<HybridNitroUiContextMenuProtoSpec>;
+  std::shared_ptr<HybridNitroUiContextMenuProtoSpec> create_std__shared_ptr_HybridNitroUiContextMenuProtoSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiContextMenuProtoSpec_(std__shared_ptr_HybridNitroUiContextMenuProtoSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiContextMenuProtoSpec>
+  using std__weak_ptr_HybridNitroUiContextMenuProtoSpec_ = std::weak_ptr<HybridNitroUiContextMenuProtoSpec>;
+  inline std__weak_ptr_HybridNitroUiContextMenuProtoSpec_ weakify_std__shared_ptr_HybridNitroUiContextMenuProtoSpec_(const std::shared_ptr<HybridNitroUiContextMenuProtoSpec>& strong) noexcept { return strong; }
 
 } // namespace margelo::nitro::nitroui::bridge::swift

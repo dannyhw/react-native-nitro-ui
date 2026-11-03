@@ -416,7 +416,13 @@ async function main() {
       // iterates on one control, and the accessibility rule is the one thing on this
       // platform that needs no gesture to be worth re-checking — excluding it would mean
       // the mutation that proves it red had to be run as a full suite.
-      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`);
+      // S3 spike only: a run of nothing but the spike's controls skips the a11y pass,
+      // which measures no ContextMenu.
+      .concat(
+        toRun.every((control) => control.id.startsWith('s3-'))
+          ? []
+          : [`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`]
+      );
     status = await xcodebuild(
       [
         'test-without-building',
@@ -472,7 +478,10 @@ async function main() {
       );
     }
 
-    reportA11yPass({ log, suite, status, testLog });
+    // S3 spike only: no a11y pass ran (see the selectors above), so none is reported.
+    if (!toRun.every((control) => control.id.startsWith('s3-'))) {
+      reportA11yPass({ log, suite, status, testLog });
+    }
   } finally {
     clearJsLocation(device.udid);
     stopMetro();

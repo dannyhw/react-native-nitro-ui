@@ -68,6 +68,8 @@ class NitroUiPackage : BaseReactPackage() {
     // (`androidViewManager`), and the registry checks it is registered here instead of
     // the generated manager. See `NitroUiBottomSheetViewManager`.
     NitroUiBottomSheetViewManager(),
+    // S3 spike only (never merged): the ContextMenu prototype's hand-written manager.
+    NitroUiContextMenuProtoViewManager(),
   )
 
   companion object {

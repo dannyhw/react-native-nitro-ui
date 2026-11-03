@@ -48,6 +48,8 @@
 #include "JHybridNitroUiTextFieldSpec.hpp"
 #include "JFunc_void_std__string_double.hpp"
 #include "views/JHybridNitroUiTextFieldStateUpdater.hpp"
+#include "JHybridNitroUiContextMenuProtoSpec.hpp"
+#include "views/JHybridNitroUiContextMenuProtoStateUpdater.hpp"
 #include "HybridNitroUiCore.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
@@ -163,6 +165,14 @@ struct JHybridNitroUiChipSpecImpl: public jni::JavaClass<JHybridNitroUiChipSpecI
     return javaPart->getJHybridNitroUiChipSpec();
   }
 };
+struct JHybridNitroUiContextMenuProtoSpecImpl: public jni::JavaClass<JHybridNitroUiContextMenuProtoSpecImpl, JHybridNitroUiContextMenuProtoSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiContextMenuProto;";
+  static std::shared_ptr<JHybridNitroUiContextMenuProtoSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiContextMenuProtoSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiContextMenuProtoSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiContextMenuProtoSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -202,6 +212,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiTextFieldSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiTextFieldStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiContextMenuProtoSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiContextMenuProtoStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -289,6 +301,12 @@ void registerAllNatives() {
     "NitroUiChip",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiChipSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiContextMenuProto",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiContextMenuProtoSpecImpl::create();
     }
   );
 }

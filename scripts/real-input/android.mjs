@@ -22,6 +22,7 @@
  * started, so this script boots nothing and shuts nothing down.
  */
 
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import path from 'node:path';
@@ -160,6 +161,11 @@ const MIN_PRESSABLE_PX = 16;
  * check cannot reach adb, Nitro or the app process by accident.
  */
 const CHECKS = {
+  // S3 spike only (never merged): the ContextMenu prototype, see `s3Cancel` below.
+  's3-cancel': async (t) => s3Cancel(t),
+  's3-scroll': async (t) => s3Scroll(t),
+  's3-layout': async (t) => s3Layout(t),
+  's3-misc': async (t) => s3Misc(t),
   /**
    * A real tap must flip the hosted Material 3 Switch and bring the new value
    * back to React. The echo is React's own render, so it only changes if the
@@ -2813,6 +2819,624 @@ const CHECKS = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// S3 spike only (never merged): the ContextMenu prototype's Android measurements,
+// Q6 Appendix G questions 1, 2, 3, 5 and 8 (and the D4 cases that inform the build).
+// Every line the report quotes is a `t.log.note('s3 ...')`, so it lands in the
+// gate's log; the GO lines are `t.log.check`s.
+// ---------------------------------------------------------------------------
+
+const S3_ECHO = 's3-echo';
+
+/** @param {ReturnType<typeof makeContext>} t */
+function s3Echo(t) {
+  const raw = t.echo(S3_ECHO) ?? '';
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const part of raw.split(';')) {
+    const [key, value] = part.split('=');
+    if (key != null && value != null && /^-?\d+$/.test(value)) {
+      out[key] = Number(value);
+    }
+  }
+  return out;
+}
+
+/**
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {(e: Record<string, number>) => boolean} ok
+ */
+async function s3WaitEcho(t, ok, timeoutMs = 6000) {
+  const deadline = Date.now() + timeoutMs;
+  let e = s3Echo(t);
+  while (!ok(e) && Date.now() < deadline) {
+    await sleep(300);
+    e = s3Echo(t);
+  }
+  return e;
+}
+
+/** @param {ReturnType<typeof makeContext>} t @param {string} id */
+function s3Bounds(t, id) {
+  const node = findByTestId(t.raw.hierarchy(), id);
+  if (node == null) {
+    t.log.abort(`s3: no node "${id}" on screen`);
+  }
+  return node.bounds;
+}
+
+/** @param {{x1:number,y1:number,x2:number,y2:number}} b */
+function s3At(b, fx, fy) {
+  return {
+    x: Math.round(b.x1 + (b.x2 - b.x1) * fx),
+    y: Math.round(b.y1 + (b.y2 - b.y1) * fy),
+  };
+}
+
+/**
+ * The open popup's content box and its rows, or null when the app window is on top.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+function s3Popup(t) {
+  const nodes = t.raw.hierarchy();
+  const width = t.raw.displayWidth();
+  const height = t.raw.displayHeight();
+  const content = nodes.find(
+    (n) =>
+      n.resourceId === 'android:id/content' &&
+      !(
+        n.bounds.x1 === 0 &&
+        n.bounds.y1 === 0 &&
+        n.bounds.x2 === width &&
+        n.bounds.y2 === height
+      )
+  );
+  if (content == null) return null;
+  const rows = nodes.filter((n) => n.text !== '').map((n) => n.text);
+  return { bounds: content.bounds, rows, nodes };
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3WaitPopup(t, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const popup = s3Popup(t);
+    if (popup != null || Date.now() > deadline) return popup;
+    await sleep(300);
+  }
+}
+
+/** Tap somewhere that is no control: the echo text, above every ContextMenu. */
+function s3TapOutside(t) {
+  t.raw.shell(`input tap ${String(Math.round(t.raw.displayWidth() / 2))} 330`);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3CloseIfOpen(t) {
+  if (s3Popup(t) != null) {
+    s3TapOutside(t);
+    await sleep(900);
+  }
+}
+
+/**
+ * Back to the top of the page. The echoes sit in a fixed header above the
+ * ScrollView, so the swipe starts low, inside the ScrollView, on the right-edge
+ * strip that no ContextMenu covers.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ */
+async function s3ScrollTop(t) {
+  const edge = t.raw.displayWidth() - 8;
+  for (let k = 0; k < 4; k += 1) {
+    if ((s3Echo(t).scrollY ?? 0) <= 0) return;
+    t.raw.swipe(edge, 1300, edge, 2200, 300);
+    await sleep(900);
+  }
+}
+
+/**
+ * Scroll slowly (no fling) until a node lies wholly inside the page's ScrollView.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {string} id
+ */
+async function s3Reveal(t, id) {
+  const edge = t.raw.displayWidth() - 8;
+  for (let k = 0; k < 8; k += 1) {
+    const nodes = t.raw.hierarchy();
+    const view = findByTestId(nodes, 's3-scroll')?.bounds;
+    const node = findByTestId(nodes, id)?.bounds;
+    if (view == null) t.log.abort('s3: the page ScrollView is not on screen');
+    // A node scrolled out of sight is not in the dump at all: it is further down.
+    if (node != null && node.y1 >= view.y1 + 8 && node.y2 <= view.y2 - 8)
+      return node;
+    const up = node == null || node.y2 > view.y2 - 8;
+    const from = Math.round((view.y1 + view.y2) / 2);
+    t.raw.swipe(edge, from, edge, up ? from - 350 : from + 350, 900);
+    await sleep(900);
+  }
+  return s3Bounds(t, id);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3Reset(t) {
+  await s3CloseIfOpen(t);
+  await s3ScrollTop(t);
+  const reset = s3Bounds(t, 's3-reset');
+  const at = s3At(reset, 0.5, 0.5);
+  t.raw.shell(`input tap ${String(at.x)} ${String(at.y)}`);
+  await s3WaitEcho(t, (e) => e.press === 0 && e.opens === 0);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+function s3Load(t) {
+  const out = t.raw.shell('cat /proc/loadavg').stdout.trim().split(' ')[0];
+  return out;
+}
+
+/** @param {ReturnType<typeof makeContext>} t @param {string} id */
+async function s3TapId(t, id) {
+  const at = s3At(s3Bounds(t, id), 0.5, 0.5);
+  t.raw.shell(`input tap ${String(at.x)} ${String(at.y)}`);
+  await sleep(500);
+}
+
+/** A long press that holds `ms` and lifts, at one point: `input swipe` at zero distance. */
+function s3Hold(t, at, ms = 1000) {
+  t.raw.swipe(at.x, at.y, at.x, at.y, ms);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3Cancel(t) {
+  const log = t.log;
+  await s3Reset(t);
+  const target = s3Bounds(t, 's3-target');
+  // Off-centre on purpose: the press point is the anchor, and the centre would hide a
+  // menu anchored to the view instead of the finger.
+  const at = s3At(target, 0.3, 0.4);
+  log.note(`s3 load at start: ${s3Load(t)}`);
+
+  // Q1a: ten quick taps press once each and open nothing.
+  let quickOk = 0;
+  for (let i = 1; i <= 10; i += 1) {
+    const before = s3Echo(t);
+    t.raw.shell(`input tap ${String(at.x)} ${String(at.y)}`);
+    await s3WaitEcho(t, (e) => e.press === before.press + 1, 5000);
+    await sleep(700);
+    const after = s3Echo(t);
+    if (after.press === before.press + 1 && after.opens === before.opens)
+      quickOk += 1;
+    else
+      log.note(
+        `s3 Q1 quick tap ${String(i)}: ${JSON.stringify({ before, after })}`
+      );
+  }
+  log.note(`s3 Q1 quick taps: onPress once and no menu ${String(quickOk)}/10`);
+
+  // Q1b: ten holds open the menu with no onPress; a row picks; the next tap presses once.
+  let opened = 0;
+  let pressAfterOpen = 0;
+  let freshOk = 0;
+  let picked = 0;
+  const orders = [];
+  for (let i = 1; i <= 10; i += 1) {
+    const before = s3Echo(t);
+    s3Hold(t, at, 1000);
+    const popup = await s3WaitPopup(t);
+    if (popup != null && popup.rows.includes('Copy text')) {
+      opened += 1;
+      const row = popup.nodes.find((n) => n.text === 'Copy text');
+      const rowAt = s3At(row.bounds, 0.5, 0.5);
+      t.raw.shell(`input tap ${String(rowAt.x)} ${String(rowAt.y)}`);
+      await sleep(900);
+    } else {
+      log.note(`s3 Q1 hold ${String(i)}: no popup`);
+    }
+    await s3CloseIfOpen(t);
+    const mid = await s3WaitEcho(
+      t,
+      (e) => e.closes === before.closes + 1,
+      4000
+    );
+    pressAfterOpen += mid.press - before.press;
+    if (mid.selects === before.selects + 1) picked += 1;
+    orders.push(
+      (t.echo('s3-order') ?? '')
+        .replace('order=', '')
+        .split(',')
+        .slice(-3)
+        .join('>')
+    );
+    t.raw.shell(`input tap ${String(at.x)} ${String(at.y)}`);
+    await s3WaitEcho(t, (e) => e.press === mid.press + 1, 5000);
+    await sleep(700);
+    const after = s3Echo(t);
+    if (after.press === mid.press + 1) freshOk += 1;
+    else
+      log.note(
+        `s3 Q1 fresh tap ${String(i)}: ${JSON.stringify({ mid, after })}`
+      );
+  }
+  const anchor = t.echo('s3-anchor') ?? '-';
+  const timings = t.echo('s3-timings') ?? '-';
+  log.note(
+    `s3 Q1 holds: opened ${String(opened)}/10, onPress after an open ${String(pressAfterOpen)}, fresh tap once ${String(freshOk)}/10, picks ${String(picked)}/10`
+  );
+  log.note(`s3 D32 order per pick: ${orders.join(' ')}`);
+  log.note(`s3 open latency (last 12): ${timings}`);
+  log.note(`s3 last anchor: ${anchor}`);
+  log.note(`s3 load at end: ${s3Load(t)}`);
+  log.checkEquals(
+    's3 Q1: quick taps press once with no menu (of 10)',
+    quickOk,
+    10
+  );
+  log.checkEquals('s3 Q1: holds open the menu (of 10)', opened, 10);
+  log.checkEquals('s3 Q1: onPress after an open', pressAfterOpen, 0);
+  log.checkEquals(
+    's3 Q1: a fresh tap after each cycle presses once (of 10)',
+    freshOk,
+    10
+  );
+
+  // The red proof, in the same run: without the notify, the hold presses on release.
+  await s3TapId(t, 's3-cancel-toggle');
+  await s3WaitEcho(t, (e) => e.cancel === 0);
+  const redBefore = s3Echo(t);
+  s3Hold(t, at, 1000);
+  const redPopup = await s3WaitPopup(t);
+  await s3CloseIfOpen(t);
+  const redAfter = await s3WaitEcho(
+    t,
+    (e) => e.closes === redBefore.closes + 1,
+    4000
+  );
+  await sleep(500);
+  const red = s3Echo(t);
+  const nextTaps = [];
+  for (let k = 0; k < 3; k += 1) {
+    const tapBefore = s3Echo(t);
+    t.raw.shell(`input tap ${String(at.x)} ${String(at.y)}`);
+    await sleep(1200);
+    nextTaps.push(s3Echo(t).press - tapBefore.press);
+  }
+  log.note(
+    `s3 red proof (cancelTouches=false): opened=${redPopup == null ? 0 : 1} onPress=${String(red.press - redBefore.press)} closes=${String(redAfter.closes - redBefore.closes)} next three taps onPress=${nextTaps.join(',')}`
+  );
+  await s3TapId(t, 's3-cancel-toggle');
+  await s3WaitEcho(t, (e) => e.cancel === 1);
+  log.check(
+    's3 red proof: with the cancel skipped, the hold presses on release',
+    red.press - redBefore.press >= 1
+  );
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3Scroll(t) {
+  const log = t.log;
+  await s3Reset(t);
+  const edge = t.raw.displayWidth() - 8;
+  const restore = async () => s3ScrollTop(t);
+  // Q2a: a drag in the ancestor ScrollView that starts on the ContextMenu scrolls
+  // and opens nothing.
+  let scrolled = 0;
+  let openedByScroll = 0;
+  for (let i = 1; i <= 10; i += 1) {
+    const at = s3At(s3Bounds(t, 's3-target'), 0.5, 0.5);
+    const before = s3Echo(t);
+    t.raw.swipe(at.x, at.y, at.x, at.y - 500, 250);
+    await sleep(1200);
+    const after = s3Echo(t);
+    if (after.scrollY !== before.scrollY) scrolled += 1;
+    openedByScroll += after.opens - before.opens;
+    if (s3Popup(t) != null) {
+      openedByScroll += 1;
+      await s3CloseIfOpen(t);
+    }
+    await restore();
+  }
+  log.note(
+    `s3 Q2 ancestor drags: scrolled ${String(scrolled)}/10, menus opened ${String(openedByScroll)}`
+  );
+
+  // Q2b: hold, then drag in the same gesture: the menu opens and the list does not move.
+  let stillAfterHoldDrag = 0;
+  let openedHoldDrag = 0;
+  for (let i = 1; i <= 10; i += 1) {
+    const at = s3At(s3Bounds(t, 's3-target'), 0.4, 0.5);
+    const before = s3Echo(t);
+    t.raw.shell(`input motionevent DOWN ${String(at.x)} ${String(at.y)}`);
+    await sleep(900);
+    for (let step = 1; step <= 5; step += 1) {
+      t.raw.shell(
+        `input motionevent MOVE ${String(at.x)} ${String(at.y - step * 80)}`
+      );
+    }
+    t.raw.shell(`input motionevent UP ${String(at.x)} ${String(at.y - 400)}`);
+    const popup = await s3WaitPopup(t, 2000);
+    if (popup != null) openedHoldDrag += 1;
+    await s3CloseIfOpen(t);
+    await sleep(600);
+    const after = s3Echo(t);
+    if (after.scrollY === before.scrollY) stillAfterHoldDrag += 1;
+    else
+      log.note(
+        `s3 Q2 hold-drag ${String(i)} moved the list: ${String(before.scrollY)} -> ${String(after.scrollY)}`
+      );
+    await restore();
+  }
+  log.note(
+    `s3 Q2 hold-then-drag: opened ${String(openedHoldDrag)}/10, list still ${String(stillAfterHoldDrag)}/10`
+  );
+
+  // Q2c: with the menu up and the finger lifted, a swipe on the list closes it and
+  // scrolls nothing.
+  let stillAfterSwipe = 0;
+  let menusUp = 0;
+  let closedBySwipe = 0;
+  for (let i = 1; i <= 10; i += 1) {
+    const at = s3At(s3Bounds(t, 's3-target'), 0.6, 0.5);
+    // Read before the hold: with the popup up, the dump holds the popup's window only.
+    const before = s3Echo(t);
+    s3Hold(t, at, 1000);
+    if ((await s3WaitPopup(t, 3000)) == null) {
+      log.note(`s3 Q2 swipe-under-menu ${String(i)}: the hold opened no menu`);
+      continue;
+    }
+    menusUp += 1;
+    t.raw.swipe(edge - 200, 1900, edge - 200, 1100, 300);
+    await sleep(1000);
+    if (s3Popup(t) == null) closedBySwipe += 1;
+    await s3CloseIfOpen(t);
+    const after = s3Echo(t);
+    if (after.scrollY === before.scrollY) stillAfterSwipe += 1;
+    else
+      log.note(
+        `s3 Q2 swipe-under-menu ${String(i)} moved the list: ${String(before.scrollY)} -> ${String(after.scrollY)}`
+      );
+    await restore();
+  }
+  log.note(
+    `s3 Q2 swipe under an open menu: list still ${String(stillAfterSwipe)}/${String(menusUp)} (menus up ${String(menusUp)}/10, closed by the swipe ${String(closedBySwipe)})`
+  );
+
+  // Q2d: a horizontal ScrollView inside pans and opens nothing.
+  let panned = 0;
+  let openedByPan = 0;
+  for (let i = 1; i <= 10; i += 1) {
+    const strip = s3Bounds(t, 's3-hscroll');
+    const from = s3At(strip, 0.8, 0.5);
+    const to = s3At(strip, 0.2, 0.5);
+    const before = s3Echo(t);
+    t.raw.swipe(from.x, from.y, to.x, to.y, 300);
+    await sleep(1000);
+    const after = s3Echo(t);
+    if (after.hX !== before.hX) panned += 1;
+    openedByPan += after.opens - before.opens;
+    t.raw.swipe(to.x, to.y, from.x, from.y, 300);
+    await sleep(800);
+  }
+  log.note(
+    `s3 Q2 inner horizontal pans: panned ${String(panned)}/10, menus opened ${String(openedByPan)}`
+  );
+  log.checkEquals('s3 Q2: ancestor drags scroll (of 10)', scrolled, 10);
+  log.checkEquals('s3 Q2: ancestor drags open nothing', openedByScroll, 0);
+  log.checkEquals(
+    's3 Q2: hold-then-drag leaves the list still (of 10)',
+    stillAfterHoldDrag,
+    10
+  );
+  log.checkEquals(
+    's3 Q2: a swipe under an open menu leaves the list still (of 10)',
+    stillAfterSwipe,
+    10
+  );
+  log.checkEquals(
+    's3 Q2: the inner horizontal ScrollView pans (of 10)',
+    panned,
+    10
+  );
+  log.checkEquals('s3 Q2: the inner pans open nothing', openedByPan, 0);
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3Layout(t) {
+  const log = t.log;
+  await s3Reset(t);
+  const density = t.raw.density();
+  const box = s3Bounds(t, 's3-fixture');
+  const child = s3Bounds(t, 's3-fixture-child');
+  const twin = s3Bounds(t, 's3-twin');
+  const twinChild = s3Bounds(t, 's3-twin-child');
+  const dp = (px) => (px / density).toFixed(1);
+  log.note(
+    `s3 Q3 fixture box ${dp(box.x2 - box.x1)}x${dp(box.y2 - box.y1)} child at ${dp(child.x1 - box.x1)},${dp(child.y1 - box.y1)}; ` +
+      `twin box ${dp(twin.x2 - twin.x1)}x${dp(twin.y2 - twin.y1)} child at ${dp(twinChild.x1 - twin.x1)},${dp(twinChild.y1 - twin.y1)}`
+  );
+  log.checkEquals(
+    's3 Q3: child x offset equals the twin View (px)',
+    child.x1 - box.x1,
+    twinChild.x1 - twin.x1
+  );
+  log.checkEquals(
+    's3 Q3: child y offset equals the twin View (px)',
+    child.y1 - box.y1,
+    twinChild.y1 - twin.y1
+  );
+  log.checkEquals(
+    's3 Q3: box width equals the twin View (px)',
+    box.x2 - box.x1,
+    twin.x2 - twin.x1
+  );
+  const probe = s3At(await s3Reveal(t, 's3-probe'), 0.5, 0.5);
+  t.raw.shell(`input tap ${String(probe.x)} ${String(probe.y)}`);
+  await sleep(800);
+  await s3Reveal(t, 's3-report');
+  log.note(`s3 Q3 native report: ${t.echo('s3-report') ?? '-'}`);
+  // The churn button sits below the fold.
+  const churnButton = s3At(await s3Reveal(t, 's3-churn'), 0.5, 0.5);
+  t.raw.shell(`input tap ${String(churnButton.x)} ${String(churnButton.y)}`);
+  const deadline = Date.now() + 90000;
+  let churn = '';
+  while (Date.now() < deadline) {
+    churn = t.echo('s3-churn-result') ?? '';
+    if (churn.includes(`rounds=50/50`)) break;
+    await sleep(1000);
+  }
+  log.note(`s3 Q3 churn: ${churn}`);
+  log.check(
+    's3 Q3: 50 churn rounds keep native child order',
+    churn.includes('rounds=50/50;ok=50;')
+  );
+}
+
+/** @param {ReturnType<typeof makeContext>} t */
+async function s3Misc(t) {
+  const log = t.log;
+  await s3Reset(t);
+  // Q5: the popup's top-start at an off-centre press point, three points, read from
+  // the composition's own report (`s3-anchor`) and from the popup's window bounds.
+  const target = s3Bounds(t, 's3-target');
+  const recording = spawn(
+    'adb',
+    [
+      '-s',
+      t.raw.serial,
+      'shell',
+      'screenrecord',
+      '--time-limit',
+      '30',
+      '/sdcard/s3-anchor.mp4',
+    ],
+    { stdio: 'ignore' }
+  );
+  await sleep(1500);
+  const anchors = [];
+  for (const [fx, fy] of [
+    [0.15, 0.3],
+    [0.55, 0.7],
+    [0.35, 0.5],
+  ]) {
+    const at = s3At(target, fx, fy);
+    s3Hold(t, at, 1000);
+    const popup = await s3WaitPopup(t);
+    const where =
+      popup == null
+        ? '-'
+        : `${String(popup.bounds.x1)},${String(popup.bounds.y1)}`;
+    await s3CloseIfOpen(t);
+    anchors.push(
+      `press=${String(at.x)},${String(at.y)} popupTopStart=${where} dx=${popup == null ? '-' : String(popup.bounds.x1 - at.x)} dy=${popup == null ? '-' : String(popup.bounds.y1 - at.y)}`
+    );
+  }
+  await new Promise((resolve) => {
+    const timer = setTimeout(resolve, 35000);
+    recording.on('exit', () => {
+      clearTimeout(timer);
+      resolve(undefined);
+    });
+  });
+  const pulled = t.raw.adb([
+    'pull',
+    '/sdcard/s3-anchor.mp4',
+    path.join(t.raw.out, 's3-anchor.mp4'),
+  ]);
+  log.note(
+    `s3 Q5 screen recording: ${pulled.status === 0 ? path.join(t.raw.out, 's3-anchor.mp4') : pulled.stderr.trim()}`
+  );
+  log.note(
+    `s3 Q5 anchor (px, density ${String(t.raw.density())}): ${anchors.join(' | ')}`
+  );
+  log.note(`s3 Q5 last composition report: ${t.echo('s3-anchor') ?? '-'}`);
+  // Near the bottom edge: it flips above (its bottom at the press point).
+  const bottom = s3Bounds(t, 's3-bottom');
+  const low = s3At(bottom, 0.3, 0.5);
+  s3Hold(t, low, 1000);
+  const flipped = await s3WaitPopup(t);
+  await s3CloseIfOpen(t);
+  log.note(
+    `s3 Q5 bottom edge: press=${String(low.x)},${String(low.y)} popup=${flipped == null ? '-' : JSON.stringify(flipped.bounds)} ` +
+      `bottomMinusPress=${flipped == null ? '-' : String(flipped.bounds.y2 - low.y)}`
+  );
+  log.note(`s3 Q5 bottom composition report: ${t.echo('s3-anchor') ?? '-'}`);
+
+  // Q8 (Android half): MotionEvents dispatched through the root view, held 1 s.
+  const before = s3Echo(t);
+  await s3TapId(t, 's3-synth');
+  await sleep(2000);
+  const synthPopup = await s3WaitPopup(t, 1500);
+  await s3CloseIfOpen(t);
+  const after = s3Echo(t);
+  log.note(
+    `s3 Q8 synthesized 1 s hold through the root: opened=${synthPopup == null ? 0 : 1} onPress=${String(after.press - before.press)} opens=${String(after.opens - before.opens)}`
+  );
+
+  // D4 case 4: an outside tap closes the menu and presses nothing below it. The
+  // bounds are read first: with the popup up, the dump holds the popup's window only.
+  const outsideAt = s3At(target, 0.5, 0.5);
+  const belowAt = s3At(s3Bounds(t, 's3-below'), 0.5, 0.5);
+  const b0 = s3Echo(t);
+  s3Hold(t, outsideAt, 1000);
+  const belowPopup = await s3WaitPopup(t);
+  t.raw.shell(`input tap ${String(belowAt.x)} ${String(belowAt.y)}`);
+  await sleep(800);
+  await s3CloseIfOpen(t);
+  const b1 = s3Echo(t);
+  log.note(
+    `s3 D4.4 outside tap on "below" with the menu up (up=${belowPopup == null ? 0 : 1}): closes=${String(b1.closes - b0.closes)} below=${String(b1.below - b0.below)}`
+  );
+
+  // D4 case 8 and 10: nested and disabled.
+  const n0 = s3Echo(t);
+  s3Hold(t, s3At(await s3Reveal(t, 's3-inner'), 0.5, 0.5), 1000);
+  const nestedPopup = await s3WaitPopup(t);
+  await s3CloseIfOpen(t);
+  const n1 = s3Echo(t);
+  log.note(
+    `s3 D4.8 nested: inner=${String(n1.inner - n0.inner)} outer=${String(n1.outer - n0.outer)} rows=${nestedPopup == null ? '-' : nestedPopup.rows.join('/')}`
+  );
+  const d0 = s3Echo(t);
+  s3Hold(t, s3At(await s3Reveal(t, 's3-disabled-target'), 0.5, 0.5), 1000);
+  const disabledPopup = await s3WaitPopup(t, 1500);
+  await s3CloseIfOpen(t);
+  await sleep(500);
+  const d1 = s3Echo(t);
+  log.note(
+    `s3 D4.10 disabled: popup=${disabledPopup == null ? 0 : 1} dOpens=${String(d1.dOpens - d0.dOpens)} dPress=${String(d1.dPress - d0.dPress)}`
+  );
+
+  // Q6 (what a tree can say): an accessible wrapper is one long-clickable node with its label.
+  await s3ScrollTop(t);
+  await s3TapId(t, 's3-a11y-toggle');
+  await sleep(800);
+  const node = t.raw
+    .hierarchy()
+    .find((n) => n.contentDesc === 'Message from Ada');
+  log.note(
+    `s3 Q6 accessible wrapper node: ${node == null ? 'none' : JSON.stringify({ id: node.resourceId, desc: node.contentDesc, bounds: node.bounds })}`
+  );
+  const raw = t.raw.shell(
+    `uiautomator dump /sdcard/s3-a11y.xml && cat /sdcard/s3-a11y.xml`
+  ).stdout;
+  const line =
+    raw
+      .split('<node')
+      .find((n) => n.includes('content-desc="Message from Ada"')) ?? '';
+  log.note(`s3 Q6 accessible wrapper attributes: ${line.slice(0, 400)}`);
+  const a0 = s3Echo(t);
+  await s3TapId(t, 's3-a11y-click');
+  const a11yPopup = await s3WaitPopup(t, 2000);
+  await s3CloseIfOpen(t);
+  const a1 = s3Echo(t);
+  log.note(
+    `s3 Q6 ACTION_LONG_CLICK on the wrapper (what TalkBack sends): popup=${a11yPopup == null ? 0 : 1} opens=${String(a1.opens - a0.opens)}`
+  );
+  await s3TapId(t, 's3-a11y-toggle');
+  log.check('s3 Q5: popups anchored (see notes)', anchors.length === 3);
+}
+
 /**
  * `adb shell input text`'s argument form.
  *
@@ -3454,26 +4078,30 @@ async function main() {
     // would misattribute it. `a11y-sweep.mjs` says why this gate is where the rule lives —
     // no in-app query can see a Compose control's name, and a dedicated gate is a gate
     // nobody runs.
-    await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
-      goToScreen: (screen) => harness.goToScreen(screen),
-      dump: () => harness.hierarchy(),
-      scrollToTop: () => harness.scrollToTop(),
-      scrollPage: async (pixels) => {
-        const width = harness.displayWidth();
-        const height = harness.displayHeight();
-        // Aimed at the empty strip at the right edge, for the reason on `scrollPage`:
-        // anywhere else the swipe can start on Material 3's own calendar scroller and
-        // turn the month instead of moving the page.
-        harness.swipe(
-          width - 8,
-          Math.round(height * 0.7),
-          width - 8,
-          Math.round(height * 0.7) - pixels,
-          400
-        );
-        await sleep(500);
-      },
-    });
+    // S3 spike only: a run of nothing but the spike's controls skips the shared a11y
+    // sweep, which measures no ContextMenu (and costs five minutes a run).
+    const spikeOnly = toRun.every((control) => control.id.startsWith('s3-'));
+    if (!spikeOnly)
+      await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
+        goToScreen: (screen) => harness.goToScreen(screen),
+        dump: () => harness.hierarchy(),
+        scrollToTop: () => harness.scrollToTop(),
+        scrollPage: async (pixels) => {
+          const width = harness.displayWidth();
+          const height = harness.displayHeight();
+          // Aimed at the empty strip at the right edge, for the reason on `scrollPage`:
+          // anywhere else the swipe can start on Material 3's own calendar scroller and
+          // turn the month instead of moving the page.
+          harness.swipe(
+            width - 8,
+            Math.round(height * 0.7),
+            width - 8,
+            Math.round(height * 0.7) - pixels,
+            400
+          );
+          await sleep(500);
+        },
+      });
   } finally {
     harness.teardown();
     stopMetro();
@@ -3741,6 +4369,7 @@ class DeviceHarness {
       sheet: 'Sheet',
       host: 'Host',
       textfield: 'Text',
+      ctx: 'Ctx',
     }[screen];
     const anchor = {
       switch: ECHO.switchValue,
@@ -3755,6 +4384,7 @@ class DeviceHarness {
       sheet: ECHO.sheetLog,
       host: ECHO.hostValue,
       textfield: ECHO.textTyping,
+      ctx: 's3-echo',
     }[screen];
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
@@ -4013,6 +4643,9 @@ function makeContext(harness, log) {
 
   return {
     log,
+
+    /** S3 spike only: the device harness itself, for holds and motion events. */
+    raw: harness,
 
     /**
      * @param {string} testID

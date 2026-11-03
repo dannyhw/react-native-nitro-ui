@@ -4309,6 +4309,486 @@ final class RealInputTests: XCTestCase {
     }
   }
 
+
+  // MARK: - S3 spike only (never merged): the ContextMenu prototype, Q6 Appendix G
+
+  private enum S3 {
+    static let tab = "tab-ctx"
+    static let echo = "s3-echo"
+    static let target = "s3-target"
+    static let pickRow = "Copy text"
+  }
+
+  private func s3Log(_ line: String) {
+    print("real-input (ios): s3 \(line)")
+  }
+
+  private func s3Echo() -> [String: Int] {
+    var out: [String: Int] = [:]
+    for part in echoText(S3.echo).split(separator: ";") {
+      let pair = part.split(separator: "=", maxSplits: 1)
+      if pair.count == 2, let value = Int(pair[1]) {
+        out[String(pair[0])] = value
+      }
+    }
+    return out
+  }
+
+  @discardableResult
+  private func s3Wait(
+    timeout: TimeInterval = 6,
+    _ ok: ([String: Int]) -> Bool
+  ) -> [String: Int] {
+    let deadline = Date().addingTimeInterval(timeout)
+    var echo = s3Echo()
+    while !ok(echo) && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      echo = s3Echo()
+    }
+    return echo
+  }
+
+  private func s3Load() -> String {
+    var loads = [Double](repeating: 0, count: 3)
+    getloadavg(&loads, 3)
+    return String(format: "%.1f", loads[0])
+  }
+
+  private func s3Shot(_ name: String) {
+    let shot = XCUIScreen.main.screenshot()
+    let attachment = XCTAttachment(image: shot.image)
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    let dir = URL(fileURLWithPath: "/tmp/s3-ios-shots")
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let url = dir.appendingPathComponent("\(name).png")
+    try? shot.pngRepresentation.write(to: url)
+    s3Log("screenshot \(name) -> \(url.path)")
+  }
+
+  private func s3Start() throws {
+    try goToTab(S3.tab, showing: S3.echo)
+    // Back to the top of the page, from the echo strip (no ContextMenu there).
+    let scroll = app.descendants(matching: .any)["s3-scroll"].firstMatch
+    for _ in 0..<3 where s3Echo()["scrollY", default: 0] > 0 {
+      scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.2))
+        .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)))
+      Thread.sleep(forTimeInterval: 0.8)
+    }
+    try required("s3-reset", as: "the S3 reset button").fingerTap()
+    s3Wait { $0["press"] == 0 && $0["opens"] == 0 }
+  }
+
+  private static let s3RowTitles = [S3.pickRow, "Bottom one", "Inner action", "Outer action"]
+
+  /// Close a menu that is up by tapping the dimmed area on the side of the screen away
+  /// from its rows, and wait out UIKit's dismissal: a hold that starts while it still
+  /// animates is ignored (no `configurationForMenuAtLocation` at all - measured in this
+  /// spike's first run). Not the top edge: measured, a tap at 4 % of the height (the
+  /// status-bar band) left the menu up in 7 of this spike's closes, and every later
+  /// count then read the wrong screen.
+  private func s3CloseMenu() {
+    let screen = app.frame
+    let menuUp = { Self.s3RowTitles.contains(where: { self.optionLabels(containing: $0) > 0 }) }
+    for attempt in 0..<3 where menuUp() {
+      let rows = Self.s3RowTitles.map { optionRow($0) }.filter { $0.exists }
+      let mid = rows.isEmpty
+        ? screen.midY : rows.map { $0.frame.midY }.reduce(0, +) / CGFloat(rows.count)
+      let dy: CGFloat = mid < screen.midY ? 0.88 : 0.18
+      let dx: CGFloat = [0.5, 0.15, 0.85][attempt]
+      app.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy)).fingerTap()
+      let deadline = Date().addingTimeInterval(3)
+      while menuUp() && Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.25)
+      }
+      if attempt > 0 { s3Log("close needed \(attempt + 1) outside taps") }
+    }
+    if menuUp() {
+      dumpHierarchy("the S3 menu to close: still up after three outside taps")
+    }
+    s3Settle()
+  }
+
+  /// Every open of the main ContextMenu has closed (its completion ran), plus a margin.
+  private func s3Settle() {
+    s3Wait(timeout: 4) { $0["closes", default: 0] >= $0["opens", default: 0] }
+    Thread.sleep(forTimeInterval: 1.2)
+  }
+
+  /// Scroll the page until an element lies wholly inside the ScrollView.
+  @discardableResult
+  private func s3Reveal(_ identifier: String) throws -> XCUIElement {
+    let scroll = try required("s3-scroll", as: "the page's ScrollView")
+    var element = try required(identifier, as: identifier)
+    for _ in 0..<8 {
+      let frame = element.frame
+      if frame.minY >= scroll.frame.minY + 4, frame.maxY <= scroll.frame.maxY - 4 {
+        return element
+      }
+      let delta: CGFloat = frame.maxY > scroll.frame.maxY - 4 ? -140 : 140
+      let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.6))
+      start.press(forDuration: 0.3, thenDragTo: start.withOffset(CGVector(dx: 0, dy: delta)), withVelocity: 300, thenHoldForDuration: 0.3)
+      Thread.sleep(forTimeInterval: 0.8)
+      element = try required(identifier, as: identifier)
+    }
+    return element
+  }
+
+  private func s3TraceEvents() -> [String] {
+    let raw = echoText("s3-trace").replacingOccurrences(of: "trace=", with: "")
+    return raw.components(separatedBy: " ; ").compactMap { line in
+      let parts = line.split(separator: "|")
+      return parts.count >= 2 ? String(parts[1]) : nil
+    }
+  }
+
+  /// Q1, Q4 and Q7: holds open the menu with no `onPress`, a quick tap presses once
+  /// and opens nothing, the next tap after each cycle presses once; the order of a
+  /// pick; touch-down -> willDisplay.
+  func testRealInputS3Cancel() throws {
+    try s3Start()
+    let target = try required(S3.target, as: "the Pressable inside the ContextMenu")
+    // Off-centre: the press point is also the menu's location.
+    let point = target.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+    s3Log("load at start \(s3Load())")
+
+    var quickOk = 0
+    for index in 1...10 {
+      let before = s3Echo()
+      point.fingerTap()
+      s3Wait(timeout: 5) { $0["press"] == before["press", default: 0] + 1 }
+      Thread.sleep(forTimeInterval: 0.6)
+      let after = s3Echo()
+      if after["press"] == before["press", default: 0] + 1, after["opens"] == before["opens"] {
+        quickOk += 1
+      } else {
+        s3Log("Q1 quick tap \(index): before=\(before) after=\(after)")
+      }
+    }
+    s3Log("Q1 quick taps: onPress once and no menu \(quickOk)/10")
+
+    var opened = 0
+    var pressAfterOpen = 0
+    var freshOk = 0
+    var picks = 0
+    var jsOrders: [String] = []
+    var nativeOrders: [String] = []
+    var displayLines: [String] = []
+    for index in 1...10 {
+      let before = s3Echo()
+      point.press(forDuration: 1.0)
+      let row = optionRow(S3.pickRow)
+      if row.waitForExistence(timeout: 4) {
+        opened += 1
+        if index == 1 {
+          s3Shot("s3-ios-open")
+        }
+        Thread.sleep(forTimeInterval: 0.4)
+        row.fingerTap()
+      } else {
+        s3Log("Q1 hold \(index): no row \"\(S3.pickRow)\" appeared")
+      }
+      let mid = s3Wait(timeout: 5) { $0["closes"] == before["closes", default: 0] + 1 }
+      waitUntilOptionGone(S3.pickRow, "the menu to close after a pick", timeout: 4)
+      pressAfterOpen += mid["press", default: 0] - before["press", default: 0]
+      if mid["selects"] == before["selects", default: 0] + 1 { picks += 1 }
+      let jsOrder = echoText("s3-order").replacingOccurrences(of: "order=", with: "")
+        .split(separator: ",").suffix(3).joined(separator: ">")
+      jsOrders.append(jsOrder)
+      let events = s3TraceEvents()
+      nativeOrders.append(events.suffix(5).joined(separator: ">"))
+      let timing = echoText("s3-timings").replacingOccurrences(of: "timings=", with: "")
+        .components(separatedBy: " ; ").last ?? "-"
+      displayLines.append(timing)
+      point.fingerTap()
+      s3Wait(timeout: 5) { $0["press"] == mid["press", default: 0] + 1 }
+      Thread.sleep(forTimeInterval: 0.6)
+      let after = s3Echo()
+      if after["press"] == mid["press", default: 0] + 1 {
+        freshOk += 1
+      } else {
+        s3Log("Q1 fresh tap \(index): mid=\(mid) after=\(after)")
+      }
+    }
+    s3Log(
+      "Q1 holds: opened \(opened)/10, onPress after an open \(pressAfterOpen), "
+        + "fresh tap once \(freshOk)/10, picks \(picks)/10"
+    )
+    s3Log("Q4 JS order per pick: \(jsOrders.joined(separator: " "))")
+    s3Log("Q4 native order per pick: \(nativeOrders.joined(separator: " "))")
+    s3Log("Q7 touch-down to willDisplay per hold: \(displayLines.joined(separator: " | "))")
+    s3Log("load at end \(s3Load())")
+
+    // The red proof, in the same run: without the cancel, what does the hold do?
+    try required("s3-cancel-toggle", as: "the cancel knob").fingerTap()
+    s3Wait { $0["cancel"] == 0 }
+    let redBefore = s3Echo()
+    point.press(forDuration: 1.0)
+    let redOpened = optionRow(S3.pickRow).waitForExistence(timeout: 4)
+    s3CloseMenu()
+    let redMid = s3Echo()
+    var nextTaps: [Int] = []
+    for _ in 1...3 {
+      let tapBefore = s3Echo()
+      point.fingerTap()
+      Thread.sleep(forTimeInterval: 1.2)
+      nextTaps.append(s3Echo()["press", default: 0] - tapBefore["press", default: 0])
+    }
+    s3Log(
+      "red proof (cancelTouches=false): opened=\(redOpened ? 1 : 0) "
+        + "onPress after the hold=\(redMid["press", default: 0] - redBefore["press", default: 0]) "
+        + "pressIn=\(redMid["pressIn", default: 0] - redBefore["pressIn", default: 0]) "
+        + "pressOut=\(redMid["pressOut", default: 0] - redBefore["pressOut", default: 0]) "
+        + "next three taps onPress=\(nextTaps.map(String.init).joined(separator: ","))"
+    )
+    try required("s3-cancel-toggle", as: "the cancel knob").fingerTap()
+    s3Wait { $0["cancel"] == 1 }
+
+    XCTAssertEqual(quickOk, 10, "Q1: a quick tap presses once and opens no menu")
+    XCTAssertEqual(opened, 10, "Q1: a hold opens the menu")
+    XCTAssertEqual(pressAfterOpen, 0, "Q1: no onPress after an open")
+    XCTAssertEqual(freshOk, 10, "Q1: the next tap after a cycle presses once")
+  }
+
+  /// Q2: a drag in the ancestor ScrollView scrolls and opens nothing; with the menu
+  /// up, the list does not move; a horizontal ScrollView inside pans.
+  func testRealInputS3Scroll() throws {
+    try s3Start()
+    let scroll = try required("s3-scroll", as: "the page's ScrollView")
+    func restore() {
+      for _ in 0..<3 where s3Echo()["scrollY", default: 0] > 0 {
+        scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.2))
+          .press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9)))
+        Thread.sleep(forTimeInterval: 0.8)
+      }
+    }
+
+    var scrolled = 0
+    var openedByScroll = 0
+    for _ in 1...10 {
+      let target = try required(S3.target, as: "the Pressable inside the ContextMenu")
+      let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      let end = start.withOffset(CGVector(dx: 0, dy: -220))
+      let before = s3Echo()
+      start.press(forDuration: 0.05, thenDragTo: end)
+      Thread.sleep(forTimeInterval: 1.0)
+      let after = s3Echo()
+      if after["scrollY"] != before["scrollY"] { scrolled += 1 }
+      openedByScroll += after["opens", default: 0] - before["opens", default: 0]
+      if optionLabels(containing: S3.pickRow) > 0 {
+        openedByScroll += 1
+        s3CloseMenu()
+      }
+      restore()
+    }
+    s3Log("Q2 ancestor drags: scrolled \(scrolled)/10, menus opened \(openedByScroll)")
+
+    var stillAfterHoldDrag = 0
+    var openedHoldDrag = 0
+    for index in 1...10 {
+      s3Settle()
+      let target = try required(S3.target, as: "the Pressable inside the ContextMenu")
+      let start = target.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.5))
+      let before = s3Echo()
+      start.press(forDuration: 1.0, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -200)))
+      Thread.sleep(forTimeInterval: 0.6)
+      if optionLabels(containing: S3.pickRow) > 0 || s3Echo()["opens", default: 0] > before["opens", default: 0] {
+        openedHoldDrag += 1
+      }
+      s3CloseMenu()
+      Thread.sleep(forTimeInterval: 0.5)
+      let after = s3Echo()
+      if after["scrollY"] == before["scrollY"] {
+        stillAfterHoldDrag += 1
+      } else {
+        s3Log("Q2 hold-drag \(index) moved the list: \(before["scrollY", default: 0]) -> \(after["scrollY", default: 0])")
+      }
+      restore()
+    }
+    s3Log("Q2 hold-then-drag: opened \(openedHoldDrag)/10, list still \(stillAfterHoldDrag)/10")
+
+    var stillAfterSwipe = 0
+    var menusUp = 0
+    for index in 1...10 {
+      s3Settle()
+      let target = try required(S3.target, as: "the Pressable inside the ContextMenu")
+      target.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).press(forDuration: 1.0)
+      guard optionRow(S3.pickRow).waitForExistence(timeout: 4) else {
+        s3Log("Q2 swipe-under-menu \(index): the hold opened no menu")
+        restore()
+        continue
+      }
+      menusUp += 1
+      let before = s3Echo()
+      app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.85))
+        .press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.45)))
+      Thread.sleep(forTimeInterval: 1.0)
+      s3CloseMenu()
+      let after = s3Echo()
+      if after["scrollY"] == before["scrollY"] {
+        stillAfterSwipe += 1
+      } else {
+        s3Log("Q2 swipe-under-menu \(index) moved the list: \(before["scrollY", default: 0]) -> \(after["scrollY", default: 0])")
+      }
+      restore()
+    }
+    s3Log("Q2 swipe under an open menu: list still \(stillAfterSwipe)/\(menusUp) (menus up \(menusUp)/10)")
+
+    var panned = 0
+    var openedByPan = 0
+    for _ in 1...10 {
+      let strip = try required("s3-hscroll", as: "the horizontal ScrollView inside")
+      let from = strip.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+      let to = strip.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+      let before = s3Echo()
+      from.press(forDuration: 0.05, thenDragTo: to)
+      Thread.sleep(forTimeInterval: 1.0)
+      let after = s3Echo()
+      if after["hX"] != before["hX"] { panned += 1 }
+      openedByPan += after["opens", default: 0] - before["opens", default: 0]
+      to.press(forDuration: 0.05, thenDragTo: from)
+      Thread.sleep(forTimeInterval: 0.8)
+    }
+    s3Log("Q2 inner horizontal pans: panned \(panned)/10, menus opened \(openedByPan)")
+
+    XCTAssertEqual(scrolled, 10, "Q2: ancestor drags scroll")
+    XCTAssertEqual(openedByScroll, 0, "Q2: ancestor drags open nothing")
+    XCTAssertEqual(stillAfterHoldDrag, 10, "Q2: hold-then-drag leaves the list still")
+    XCTAssertEqual(menusUp, 10, "Q2: the hold opened the menu before the swipe")
+    XCTAssertEqual(stillAfterSwipe, menusUp, "Q2: a swipe under an open menu leaves the list still")
+    XCTAssertEqual(panned, 10, "Q2: the inner horizontal ScrollView pans")
+    XCTAssertEqual(openedByPan, 0, "Q2: the inner pans open nothing")
+  }
+
+  /// Q3: the padding 12 / border 2 fixture places its child where a twin View does,
+  /// and 50 rounds of child churn keep the native order with no assertion.
+  func testRealInputS3Layout() throws {
+    try s3Start()
+    let box = try required("s3-fixture", as: "the ContextMenu fixture").frame
+    let child = try required("s3-fixture-child", as: "the fixture's child").frame
+    let twin = try required("s3-twin", as: "the twin View").frame
+    let twinChild = try required("s3-twin-child", as: "the twin's child").frame
+    let dx = child.minX - box.minX
+    let dy = child.minY - box.minY
+    let twinDx = twinChild.minX - twin.minX
+    let twinDy = twinChild.minY - twin.minY
+    s3Log(
+      "Q3 fixture box \(box.width)x\(box.height) child at \(dx),\(dy); "
+        + "twin box \(twin.width)x\(twin.height) child at \(twinDx),\(twinDy)"
+    )
+    try s3Reveal("s3-probe").fingerTap()
+    Thread.sleep(forTimeInterval: 0.8)
+    s3Log("Q3 native report: \(echoText("s3-report"))")
+    try s3Reveal("s3-churn").fingerTap()
+    let churn = readUntil("s3-churn-result", timeout: 90) { $0.contains("rounds=50/50") }
+    s3Log("Q3 churn: \(churn) app=\(app.state.rawValue)")
+    XCTAssertEqual(abs(dx - twinDx) <= 0.5 && abs(dy - twinDy) <= 0.5, true, "Q3: the child sits at the twin's offset")
+    XCTAssertEqual(abs(box.width - twin.width) <= 0.5 && abs(box.height - twin.height) <= 0.5, true, "Q3: the box is the twin's")
+    XCTAssertTrue(churn.contains("rounds=50/50;ok=50;"), "Q3: 50 churn rounds keep the native order")
+    XCTAssertEqual(app.state, .runningForeground, "Q3: no RN assertion took the app down")
+  }
+
+  /// Q6 (what XCUITest can read), Q8 (the harness's private touch, held), the lifted
+  /// preview, nested, disabled, outside tap and the bottom edge.
+  func testRealInputS3Misc() throws {
+    try s3Start()
+    // Q8: HarnessUI's private UITouch path, held 1 s.
+    let synthBefore = s3Echo()
+    try required("s3-synth", as: "the synth button").fingerTap()
+    let synthOpened = optionRow(S3.pickRow).waitForExistence(timeout: 4)
+    if synthOpened { s3Shot("s3-ios-synth-open") }
+    s3CloseMenu()
+    let synthAfter = s3Echo()
+    s3Log(
+      "Q8 synthesized UITouch held 1 s: opened=\(synthOpened ? 1 : 0) "
+        + "opens=\(synthAfter["opens", default: 0] - synthBefore["opens", default: 0]) "
+        + "onPress=\(synthAfter["press", default: 0] - synthBefore["press", default: 0]) "
+        + "pressIn=\(synthAfter["pressIn", default: 0] - synthBefore["pressIn", default: 0]) "
+        + "trace=\(s3TraceEvents().suffix(4).joined(separator: ">"))"
+    )
+
+    // After the synthesized touch, a real hold must still open the menu.
+    let target = try required(S3.target, as: "the Pressable inside the ContextMenu")
+    for attempt in 1...2 {
+      let r0 = s3Echo()
+      target.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)).press(forDuration: 1.0)
+      let realAfterSynth = optionRow(S3.pickRow).waitForExistence(timeout: 4)
+      let r1 = s3Echo()
+      s3Log(
+        "Q8 real hold \(attempt) after the synthesized one: opened=\(realAfterSynth ? 1 : 0) "
+          + "opens=\(r1["opens", default: 0] - r0["opens", default: 0]) "
+          + "press=\(r1["press", default: 0] - r0["press", default: 0]) "
+          + "trace=\(s3TraceEvents().suffix(3).joined(separator: ">"))"
+      )
+      s3CloseMenu()
+      if realAfterSynth { break }
+    }
+
+    // The lifted preview (borderRadius 16), and D4 case 4: an outside tap with the menu
+    // up presses nothing below it. "below" is tapped at its right end, clear of the
+    // rows, which open at the press on the left.
+    target.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)).press(forDuration: 1.0)
+    let previewUp = optionRow(S3.pickRow).waitForExistence(timeout: 4)
+    if previewUp { s3Shot("s3-ios-preview") }
+    let below = try required("s3-below", as: "the Pressable below")
+    let b0 = s3Echo()
+    below.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.5)).fingerTap()
+    Thread.sleep(forTimeInterval: 1.0)
+    let closedByTap = optionLabels(containing: S3.pickRow) == 0
+    s3CloseMenu()
+    let b1 = s3Echo()
+    s3Log("D4.4 outside tap on \"below\" with the menu up (up=\(previewUp ? 1 : 0)): closedByTap=\(closedByTap ? 1 : 0) closes=\(b1["closes", default: 0] - b0["closes", default: 0]) below=\(b1["below", default: 0] - b0["below", default: 0]) selects=\(b1["selects", default: 0] - b0["selects", default: 0])")
+
+    // Bottom edge.
+    s3Settle()
+    let bottom = try required("s3-bottom", as: "the bottom-edge ContextMenu")
+    let bottomPoint = bottom.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
+    bottomPoint.press(forDuration: 1.0)
+    let bottomRow = optionRow("Bottom one")
+    if bottomRow.waitForExistence(timeout: 4) {
+      s3Log("bottom edge: press at \(bottomPoint.screenPoint) row \"Bottom one\" at \(bottomRow.frame)")
+      s3Shot("s3-ios-bottom")
+    } else {
+      s3Log("bottom edge: no menu")
+    }
+    s3CloseMenu()
+
+    // Q6: what the tree says, with and without `accessible` on the wrapper.
+    let wrapperPlain = app.descendants(matching: .any)["s3-menu"].firstMatch
+    s3Log("Q6 wrapper (not accessible): exists=\(wrapperPlain.exists) label=\"\(wrapperPlain.exists ? wrapperPlain.label : "-")\" type=\(wrapperPlain.exists ? String(wrapperPlain.elementType.rawValue) : "-")")
+    let innerPlain = app.descendants(matching: .any)[S3.target].firstMatch
+    s3Log("Q6 inner Pressable: label=\"\(innerPlain.label)\" type=\(innerPlain.elementType.rawValue)")
+    try required("s3-a11y-toggle", as: "the a11y knob").fingerTap()
+    Thread.sleep(forTimeInterval: 0.8)
+    let accessible = app.descendants(matching: .any)["s3-menu"].firstMatch
+    s3Log("Q6 wrapper (accessible): exists=\(accessible.exists) label=\"\(accessible.exists ? accessible.label : "-")\" type=\(accessible.exists ? String(accessible.elementType.rawValue) : "-") innerStillExposed=\(app.descendants(matching: .any)[S3.target].firstMatch.exists ? 1 : 0)")
+    try s3Reveal("s3-probe").fingerTap()
+    Thread.sleep(forTimeInterval: 0.8)
+    s3Log("Q6 native report with accessible: \(echoText("s3-report"))")
+    try required("s3-a11y-toggle", as: "the a11y knob").fingerTap()
+
+    // D4 case 8 and 10: nested and disabled.
+    s3Settle()
+    let n0 = s3Echo()
+    try s3Reveal("s3-inner").coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+      .press(forDuration: 1.0)
+    let innerRow = optionRow("Inner action").waitForExistence(timeout: 4)
+    let outerRow = optionLabels(containing: "Outer action") > 0
+    s3CloseMenu()
+    let n1 = s3Echo()
+    s3Log("D4.8 nested: inner=\(n1["inner", default: 0] - n0["inner", default: 0]) outer=\(n1["outer", default: 0] - n0["outer", default: 0]) innerRow=\(innerRow ? 1 : 0) outerRow=\(outerRow ? 1 : 0)")
+    let d0 = s3Echo()
+    try s3Reveal("s3-disabled-target")
+      .coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
+    Thread.sleep(forTimeInterval: 1.0)
+    let disabledRow = optionLabels(containing: S3.pickRow) > 0
+    s3CloseMenu()
+    let d1 = s3Echo()
+    s3Log("D4.10 disabled: menu=\(disabledRow ? 1 : 0) dOpens=\(d1["dOpens", default: 0] - d0["dOpens", default: 0]) dPress=\(d1["dPress", default: 0] - d0["dPress", default: 0])")
+    XCTAssertEqual(app.state, .runningForeground, "the app is still up")
+  }
+
   /// Print the accessibility tree.
   ///
   /// A real-input failure is worth little without the screen it happened on, and
