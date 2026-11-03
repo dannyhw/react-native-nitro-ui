@@ -78,6 +78,13 @@ internal class NitroUiContextMenuViewManager : ReactViewManager() {
     // `ReactViewManager`'s half resets the `View` (background, borders, pointer events)
     // and removes every child - the compose host too - so the host is put back after it.
     val prepared = super.prepareToRecycleView(reactContext, view) ?: return null
+    // React Native's reset clears the label's *tag* and leaves the view's own
+    // `contentDescription` and `importantForAccessibility` as the last owner set them, and
+    // `updateViewContentDescription` only ever writes a non-empty description - so a wrapper
+    // recycled into an owner with no label would still be announced by the old one
+    // (measured: real input's a11y sweep found "Message from Grace" on `ctx-outer`).
+    prepared.contentDescription = null
+    prepared.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
     val holder = holder(prepared) ?: return null
     holder.lastState = null
     holder.hybridView.prepareForRecycle()

@@ -115,6 +115,7 @@ describe('the a11y rule, on measured trees', () => {
       // node with the same box (Compose's own shape for a text field's label), and the
       // rule's box test finds the actionable `EditText` there.
       'text-field',
+      'context-menu',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
