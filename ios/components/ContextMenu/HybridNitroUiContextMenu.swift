@@ -99,7 +99,7 @@ final class ContextMenuInteractionDelegate: NSObject, UIContextMenuInteractionDe
     willDisplayMenuFor configuration: UIContextMenuConfiguration,
     animator: UIContextMenuInteractionAnimating?
   ) {
-    owner?.willDisplay()
+    owner?.willDisplay(configuration)
   }
 
   func contextMenuInteraction(
@@ -107,7 +107,7 @@ final class ContextMenuInteractionDelegate: NSObject, UIContextMenuInteractionDe
     willEndFor configuration: UIContextMenuConfiguration,
     animator: UIContextMenuInteractionAnimating?
   ) {
-    owner?.willEnd(animator: animator)
+    owner?.willEnd(configuration, animator: animator)
   }
 
   @available(iOS 16.0, *)
@@ -198,8 +198,13 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   // State, main thread only.
   private var isOpen = false
-  /// Bumped per configuration, so a close that belongs to an earlier menu is ignored.
+  /// Bumped per configuration and written into its `identifier`. Never reset, not even by
+  /// a recycle: an end animator that completes after one must not match a new menu.
   private var generation = 0
+  /// The `identifier` of the configuration whose menu is up, or `-1`. A close is matched
+  /// to it, never to `generation`: UIKit asks for a new configuration as soon as a new
+  /// touch begins, which can be during the last menu's dismiss animation.
+  private var openGeneration = -1
   private var opens = 0
   private var closes = 0
   private var selects = 0
@@ -210,6 +215,12 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
 
   private let reportLock = NSLock()
   private var report = "pending"
+  /// Whether a harness has asked this object for a report (under `reportLock`). An app
+  /// never does, so its ContextMenus never build one. A recycle clears it, so a new owner
+  /// is built for only once it is asked about.
+  private var reportsWanted = false
+  /// Reports built (main thread).
+  private var reportSeq = 0
 
   override init() {
     super.init()
@@ -303,7 +314,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     // menu already closed and reports nothing twice.
     if isOpen {
       interaction?.dismissMenu()
-      finishClose(generation: generation)
+      finishClose(generation: openGeneration)
     }
     select = nil
     open = nil
@@ -325,7 +336,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     select = nil
     open = nil
     close = nil
-    generation = 0
+    openGeneration = -1
     opens = 0
     closes = 0
     selects = 0
@@ -335,7 +346,11 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     drawn = "-1"
     mark(.recycled)
     perfInstanceId = nitroUiPerfNoInstance
-    publishReport()
+    reportSeq = 0
+    reportLock.lock()
+    reportsWanted = false
+    report = "pending"
+    reportLock.unlock()
   }
 
   // MARK: - Methods
@@ -365,10 +380,14 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   }
 
   func nuiTestContextMenuReport() throws -> String {
-    DispatchQueue.main.async { [weak self] in self?.publishReport() }
+    // From the first read on, every state change keeps the report fresh; until then
+    // nothing builds it. This read returns the last one built.
     reportLock.lock()
-    defer { reportLock.unlock() }
-    return report
+    reportsWanted = true
+    let line = report
+    reportLock.unlock()
+    DispatchQueue.main.async { [weak self] in self?.publishReport() }
+    return line
   }
 
   func nuiTestA11yLongClick() throws {
@@ -419,20 +438,31 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     return configuration
   }
 
-  fileprivate func willDisplay() {
+  fileprivate func willDisplay(_ configuration: UIContextMenuConfiguration) {
     // First the cancel, so the `Pressable` under the finger never presses for this hold.
     if NitroUiReactTouches.cancel(around: host) {
       cancels += 1
     }
-    guard !isOpen else { return }
+    let showing = Self.menuId(of: configuration)
+    if isOpen {
+      guard showing != openGeneration else { return }
+      // A new menu before the last one's end animator completed: that close is due now,
+      // so every `onOpen` still has its one `onClose`, in order.
+      finishClose(generation: openGeneration)
+    }
     isOpen = true
+    openGeneration = showing
     opens += 1
     open?()
     publishReport()
   }
 
-  fileprivate func willEnd(animator: UIContextMenuInteractionAnimating?) {
-    let ending = generation
+  fileprivate func willEnd(
+    _ configuration: UIContextMenuConfiguration,
+    animator: UIContextMenuInteractionAnimating?
+  ) {
+    // The configuration that ended, not the latest one asked for (see `openGeneration`).
+    let ending = Self.menuId(of: configuration)
     if let animator {
       animator.addCompletion { [weak self] in
         self?.finishClose(generation: ending)
@@ -447,11 +477,16 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
   }
 
   private func finishClose(generation ending: Int) {
-    guard isOpen, ending == generation else { return }
+    guard isOpen, ending == openGeneration else { return }
     isOpen = false
+    openGeneration = -1
     closes += 1
     close?()
     publishReport()
+  }
+
+  private static func menuId(of configuration: UIContextMenuConfiguration) -> Int {
+    return (configuration.identifier as? NSNumber)?.intValue ?? -1
   }
 
   fileprivate func targetedPreview() -> UITargetedPreview? {
@@ -575,8 +610,14 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     NitroUiContextMenuPerf.mark(perfInstanceId, kind.rawValue)
   }
 
-  /// The report line (`ContextMenu.nitro.ts`), published on main for JS to read.
+  /// The report line (`ContextMenu.nitro.ts`), published on main for JS to read - once a
+  /// harness has asked for one, and never before.
   private func publishReport() {
+    reportLock.lock()
+    let wanted = reportsWanted
+    reportLock.unlock()
+    guard wanted else { return }
+    reportSeq += 1
     var kids: [String] = []
     var box = "-1"
     var contentIndex = "-1"
@@ -600,7 +641,7 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
       + "cancels=\(cancels);rows=\(actionableRowCount);drawn=\(drawn);title=\(rawTitle ?? "-");"
       + "box=\(box);contentIndex=\(contentIndex);interaction=\(attached);ax=\(ax);a11yAction=-1;"
       + "radius=\(lastRadius < 0 ? "-1" : fmt(lastRadius));press=-1;menu=-1;live=-1;arms=-1;armed=-1;"
-      + "kids=\(kids.joined(separator: "|"))"
+      + "copies=-1;watchStray=-1;seq=\(reportSeq);kids=\(kids.joined(separator: "|"))"
     reportLock.lock()
     report = line
     reportLock.unlock()

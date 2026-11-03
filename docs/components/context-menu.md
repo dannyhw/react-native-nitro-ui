@@ -141,7 +141,10 @@ it **one** element that carries the menu (D36 item 1):
   "Show menu" — the action TalkBack's double-tap-and-hold sends — which opens the menu at
   its centre.
 
-An inner focusable child keeps the focus and its own actions.
+An inner focusable child keeps the focus and its own actions. Without `accessible`, the
+Android node is a plain `View`'s: it offers TalkBack no long-click, so a ContextMenu around
+`Text` alone does not become one actionable stop that reads its text. The menu then has no
+screen-reader path on Android; set `accessible` to give it one.
 
 **What is verified, and how.** Only by automation (D37 item 4), on both platforms:
 
@@ -150,6 +153,7 @@ An inner focusable child keeps the focus and its own actions.
 | `accessible` makes it an element; without it, it is not one  | harness (`ax`: the view's own `isAccessibilityElement`)              | harness (`ax`: the wrapper is focusable)                     |
 | one element carries the label, on the wrapper's box          | real input: XCUITest's tree — **with one gap**, below                | real input: `uiautomator`'s tree, one node with the label    |
 | that element can be acted on                                 | real input (enabled, hittable)                                       | real input (focusable, `long-clickable`)                     |
+| without `accessible`, no actionable stop of its own          | —                                                                    | real input: `ctx-bottom` is neither long-clickable nor focusable |
 | it offers the menu as an action                              | harness: the view carries the `UIContextMenuInteraction`, only that  | harness: `ACTION_LONG_CLICK` "Show menu", none while disabled |
 | performing that action opens the menu                        | not exercised: UIKit derives the action, and no tool here reads it   | harness: the action performed on the node opens the menu     |
 | a recycled wrapper keeps no previous owner's label           | harness                                                              | harness                                                      |

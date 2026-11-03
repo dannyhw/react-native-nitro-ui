@@ -187,6 +187,16 @@ describe('the iOS a11y rule', () => {
       expect(regressed.exempt).toBe(false);
     });
 
+    it('excuses exactly two stops of its own, not 12 or 22', () => {
+      const [row] = exemptionsFor('context-menu', 'ios');
+      const sentence = (count) =>
+        `NitroUiContextMenu: ${String(count)} element(s) under "ctx-accessible" ` +
+        'are stops of their own (static text "Grace Hopper" at 32,400 300x20)';
+      expect(row.matches.test(sentence(2))).toBe(true);
+      expect(row.matches.test(sentence(12))).toBe(false);
+      expect(row.matches.test(sentence(22))).toBe(false);
+    });
+
     it('is the only case that may grade its wrapper', () => {
       // Every other control keeps the exclusion: React Native puts the label on the
       // wrapper whatever the control does, so for them it proves nothing.

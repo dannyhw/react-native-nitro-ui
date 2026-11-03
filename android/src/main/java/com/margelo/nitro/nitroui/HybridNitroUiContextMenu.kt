@@ -100,6 +100,18 @@ internal object ContextMenuGestureSlot {
       downTime = -1L
     }
   }
+
+  /**
+   * Take the slot back for an ancestor when the descendant that claimed it let go on the
+   * same DOWN (it was not a touch target: `pointerEvents="none"`, or `"box-none"` with
+   * nothing under the finger). A slot another view still holds for this gesture stays its.
+   */
+  fun claimIfFree(
+    downTime: Long,
+    view: View,
+  ) {
+    if (this.downTime != downTime || owner?.get() == null) claim(downTime, view)
+  }
 }
 
 /** State of one ContextMenu. See [NitroUiModel] for the shape this has to have. */
@@ -126,6 +138,14 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
   var onSelect: ((String) -> Unit)? = null
   var onOpen: (() -> Unit)? = null
   var onClose: (() -> Unit)? = null
+
+  /**
+   * The native side of every close, ahead of the app's `onClose`: the wrapper stops
+   * watching the layout here, so no close path - a row press, an outside tap, Back, the
+   * popup leaving the composition, `disabled`, a layout move or a drop - can leave its
+   * pre-draw listener on the window. Installed once by the Hybrid and never reset.
+   */
+  var afterClose: (() -> Unit)? = null
 
   /** Counters, for the report. UI thread. */
   var opens = 0
@@ -174,6 +194,7 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
       onOpen?.invoke()
     } else {
       closes += 1
+      afterClose?.invoke()
       onClose?.invoke()
     }
   }
@@ -253,6 +274,14 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     menuRowCount = rows
   }
 
+  /**
+   * Whether a harness has asked this mount's Hybrid for a report
+   * (`nuiTestContextMenuReport`). An app never does, so it never pays for one: the
+   * report and the anchor witness are built only once this is set. A recycle clears it
+   * with the counters, so a new owner is built for only once it is asked about.
+   */
+  @Volatile var reportsWanted = false
+
   /** Where Compose last placed the anchor, window px, and how often: test witness. */
   @Volatile var anchorPlaced = "-1"
     private set
@@ -290,6 +319,7 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     clearMenuFrame()
     anchorPlaced = "-1"
     anchorPlacements = 0
+    reportsWanted = false
   }
 
   companion object {
@@ -325,8 +355,11 @@ internal class ContextMenuHost(
     // press point costs a placement and no recomposition.
     Box(
       Modifier.offset { IntOffset(model.pressX, model.pressY) }.size(0.dp).onGloballyPositioned {
-        val at = it.positionInWindow()
-        model.noteAnchor(at.x.roundToInt(), at.y.roundToInt())
+        // A test witness: nothing reads it until a harness asks for a report.
+        if (model.reportsWanted) {
+          val at = it.positionInWindow()
+          model.noteAnchor(at.x.roundToInt(), at.y.roundToInt())
+        }
       },
     ) {
       DropdownMenu(
@@ -374,6 +407,10 @@ internal class ContextMenuView(
   var cancels = 0
     private set
 
+  /** `MotionEvent` copies made since the mount: only while a press is pending. */
+  var eventCopies = 0
+    private set
+
   /** Whether a long press is pending right now. */
   val armed: Boolean
     get() = pending
@@ -381,7 +418,19 @@ internal class ContextMenuView(
   // The wrapper's place on screen when the menu opened, for the layout-move rule.
   private val openedAt = IntArray(2)
   private val nowAt = IntArray(2)
-  private var watchingLayout = false
+
+  /**
+   * The observer [layoutWatch] was added to, or `null` when it is on none.
+   *
+   * The observer, not a flag (`NitroComposeHost`'s `PreDrawWatch` rule): a view that is no
+   * longer attached answers `viewTreeObserver` with a *fresh* floating observer, so a
+   * removal through it after a detach removes nothing and leaves the listener on the
+   * window's observer - which then holds this view for the life of the window, and runs
+   * the listener every frame.
+   */
+  private var watchedObserver: ViewTreeObserver? = null
+  private var moveClosePosted = false
+
   /**
    * A pre-draw check, not a layout listener: Fabric moves a view by calling its `layout`
    * directly, outside any traversal, so a global-layout listener never hears it (measured:
@@ -390,12 +439,22 @@ internal class ContextMenuView(
    */
   private val layoutWatch =
     ViewTreeObserver.OnPreDrawListener {
+      if (!hybrid.isMenuOpen() || !isAttachedToWindow) {
+        // A registration that outlived its menu or its window: the leak witness. Every
+        // close and every detach removes the listener, so this never runs.
+        strayWatchFires.incrementAndGet()
+        return@OnPreDrawListener true
+      }
       getLocationOnScreen(nowAt)
-      if (nowAt[0] != openedAt[0] || nowAt[1] != openedAt[1]) {
+      if ((nowAt[0] != openedAt[0] || nowAt[1] != openedAt[1]) && !moveClosePosted) {
         // The popup follows its anchor, so it would now point somewhere the finger
         // never was (S3 measured 73 dp off): down it goes. Nothing scrolls under an open
-        // menu - the gesture is the wrapper's - so a move here is a layout's.
-        post { hybrid.closeForLayoutMove() }
+        // menu - the gesture is the wrapper's - so a move here is a layout's. Posted once.
+        moveClosePosted = true
+        post {
+          moveClosePosted = false
+          hybrid.closeForLayoutMove()
+        }
       }
       true
     }
@@ -433,6 +492,15 @@ internal class ContextMenuView(
 
   override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
     super.onInitializeAccessibilityNodeInfo(info)
+    if (!isFocusable) {
+      // Not `accessible` (D36 item 1): the node is a plain `View`'s. The view stays
+      // long-clickable for the action below, but a node that says so is an actionable
+      // TalkBack stop, which would swallow a ContextMenu's Text children into one stop
+      // that is not the element the app asked for.
+      info.isLongClickable = false
+      info.removeAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK)
+      return
+    }
     if (hybrid.canOpen()) {
       info.addAction(
         AccessibilityNodeInfo.AccessibilityAction(AccessibilityNodeInfo.ACTION_LONG_CLICK, "Show menu"),
@@ -543,24 +611,39 @@ internal class ContextMenuView(
 
   fun watchLayout() {
     getLocationOnScreen(openedAt)
-    if (!watchingLayout) {
-      viewTreeObserver.addOnPreDrawListener(layoutWatch)
-      watchingLayout = true
+    if (watchedObserver == null) {
+      val observer = viewTreeObserver
+      observer.addOnPreDrawListener(layoutWatch)
+      watchedObserver = observer
     }
   }
 
+  /** Called from the model's close funnel, `onDetachedFromWindow`, recycle and drop. */
   fun unwatchLayout() {
-    if (watchingLayout) {
-      viewTreeObserver.removeOnPreDrawListener(layoutWatch)
-      watchingLayout = false
-    }
+    val observer = watchedObserver ?: return
+    watchedObserver = null
+    moveClosePosted = false
+    // A floating observer that the attach merged into the window's is dead, and its
+    // listeners went with the merge: then the window's - the view's own, if attached.
+    val target =
+      when {
+        observer.isAlive -> observer
+        isAttachedToWindow -> viewTreeObserver
+        else -> return
+      }
+    target.removeOnPreDrawListener(layoutWatch)
+  }
+
+  override fun onDetachedFromWindow() {
+    // Fabric detaches a view before `onDropView`, and `viewTreeObserver` is still the
+    // window's only until this returns.
+    unwatchLayout()
+    super.onDetachedFromWindow()
   }
 
   // MARK: arbitration
 
   override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-    lastEvent?.recycle()
-    lastEvent = MotionEvent.obtain(ev)
     when (ev.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         tookOver = false
@@ -580,7 +663,25 @@ internal class ContextMenuView(
       MotionEvent.ACTION_POINTER_DOWN -> drop()
       MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> drop()
     }
+    if (pending) {
+      // The event a take-over hands to `notifyNativeGestureStarted`: copied only while a
+      // press is pending, so a view that cannot open costs no copy per event.
+      lastEvent?.recycle()
+      lastEvent = MotionEvent.obtain(ev)
+      eventCopies += 1
+    }
     val handled = super.dispatchTouchEvent(ev)
+    if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+      if (!handled) {
+        // Not the touch target (`pointerEvents="none"`, or `"box-none"` with nothing
+        // under the finger): this view never hears the UP or the CANCEL, so the timer
+        // would open a menu for a tap and cancel the touch of whatever did take it.
+        drop()
+      } else if (pending) {
+        // A descendant ContextMenu that let go above gives the slot back.
+        ContextMenuGestureSlot.claimIfFree(ev.downTime, this)
+      }
+    }
     if (tookOver &&
       (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL)
     ) {
@@ -605,12 +706,14 @@ internal class ContextMenuView(
     super.requestDisallowInterceptTouchEvent(disallowIntercept)
   }
 
-  /** Forget a pending press. */
+  /** Forget a pending press, and its copy of the event. */
   fun drop() {
     if (!pending) return
     pending = false
     removeCallbacks(fire)
     ContextMenuGestureSlot.release(this)
+    lastEvent?.recycle()
+    lastEvent = null
   }
 
   private fun onLongPressTimeout() {
@@ -648,6 +751,16 @@ internal class ContextMenuView(
   fun resetCounters() {
     arms = 0
     cancels = 0
+    eventCopies = 0
+  }
+
+  companion object {
+    /**
+     * Pre-draw runs of a layout watch whose menu was closed or whose view had left its
+     * window, process-wide: a leaked registration, which a mount that leaked cannot report
+     * itself, so the next one reads it.
+     */
+    val strayWatchFires = AtomicInteger(0)
   }
 }
 
@@ -668,11 +781,21 @@ class HybridNitroUiContextMenu(
 
   @Volatile private var report = "pending"
 
+  /** Reports this object has built: none until a harness asks ([ContextMenuModel.reportsWanted]). */
+  private var reportSeq = 0
+
   init {
     wrapper.installHost(host)
+    // Every close, whichever path it took, goes through `setOpen(false)`.
+    model.afterClose = {
+      wrapper.unwatchLayout()
+      publish()
+    }
   }
 
   internal fun canOpen(): Boolean = model.canOpen
+
+  internal fun isMenuOpen(): Boolean = model.expanded
 
   // MARK: - Props
   // Setters store and mark dirty; `afterUpdate` applies the rules that read two of them.
@@ -767,9 +890,10 @@ class HybridNitroUiContextMenu(
     rawRadius = null
     pressScreen[0] = -1
     pressScreen[1] = -1
-    // Resets the model - `expanded` first - and the host's flags.
+    // Resets the model - `expanded` first, `reportsWanted` too - and the host's flags.
     host.prepareForRecycle()
-    publish()
+    reportSeq = 0
+    report = "pending"
   }
 
   override fun onDropView() {
@@ -815,20 +939,18 @@ class HybridNitroUiContextMenu(
 
   // MARK: - Methods
 
+  /** What a row press calls (`MenuEntries`' `onPick`), and nothing more. */
   override fun nuiTestSelectRow(id: String) {
-    val run = {
-      host.choose(id)
-      host.applyModelWrites()
-      wrapper.unwatchLayout()
-      publish()
-    }
-    if (Looper.myLooper() == Looper.getMainLooper()) run() else wrapper.post { run() }
+    if (Looper.myLooper() == Looper.getMainLooper()) host.choose(id) else wrapper.post { host.choose(id) }
   }
 
   /** A no-op: Android has no second renderer to ask (see the spec); `drawn` stays `-1`. */
   override fun nuiTestMenuProbe() = Unit
 
   override fun nuiTestContextMenuReport(): String {
+    // From the first read on, every state change keeps the report fresh; until then
+    // nothing builds it. This read returns the last one built.
+    model.reportsWanted = true
     wrapper.post { publish() }
     return report
   }
@@ -840,7 +962,10 @@ class HybridNitroUiContextMenu(
     }
   }
 
+  /** Snapshot the state for [nuiTestContextMenuReport]. UI thread, and only once asked. */
   private fun publish() {
+    if (!model.reportsWanted) return
+    reportSeq += 1
     val density = wrapper.resources.displayMetrics.density
 
     fun dp(px: Int): String = "%.1f".format(px / density)
@@ -859,6 +984,7 @@ class HybridNitroUiContextMenu(
       "contentIndex=${wrapper.indexOfChild(host)}/${wrapper.childCount};interaction=-1;" +
       "ax=${if (wrapper.isFocusable) 1 else 0};a11yAction=${wrapper.a11yActionLabel()};" +
       "radius=-1;press=$press;menu=${model.menuFrame};anchor=${model.anchorPlaced};live=${ContextMenuModel.liveMenus.get()};" +
-      "arms=${wrapper.arms};armed=${if (wrapper.armed) 1 else 0};kids=$kids"
+      "arms=${wrapper.arms};armed=${if (wrapper.armed) 1 else 0};copies=${wrapper.eventCopies};" +
+      "watchStray=${ContextMenuView.strayWatchFires.get()};seq=$reportSeq;kids=$kids"
   }
 }
