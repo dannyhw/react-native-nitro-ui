@@ -68,6 +68,10 @@ class NitroUiPackage : BaseReactPackage() {
     // (`androidViewManager`), and the registry checks it is registered here instead of
     // the generated manager. See `NitroUiBottomSheetViewManager`.
     NitroUiBottomSheetViewManager(),
+    // A ContextMenu is a `View` around React Native children, styled like one: its
+    // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
+    // Fabric's child indices. See `NitroUiContextMenuViewManager`.
+    NitroUiContextMenuViewManager(),
   )
 
   companion object {

@@ -16,6 +16,7 @@ import { NitroUiDialogConfig } from '../components/Dialog/NitroUiDialogConfig';
 import { NitroUiBottomSheetConfig } from '../components/BottomSheet/NitroUiBottomSheetConfig';
 import { NitroUiTextFieldConfig } from '../components/TextField/NitroUiTextFieldConfig';
 import { NitroUiChipConfig } from '../components/Chip/NitroUiChipConfig';
+import { NitroUiContextMenuConfig } from '../components/ContextMenu/NitroUiContextMenuConfig';
 // @end-generated
 // `<Host>` is a container rather than a control, so it has no manifest and the
 // registry writes no row for it. The "covers every generated config" test below is
@@ -50,6 +51,7 @@ const copies: Record<string, unknown> = {
   'NitroUiBottomSheetConfig.json': NitroUiBottomSheetConfig,
   'NitroUiTextFieldConfig.json': NitroUiTextFieldConfig,
   'NitroUiChipConfig.json': NitroUiChipConfig,
+  'NitroUiContextMenuConfig.json': NitroUiContextMenuConfig,
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.
   'NitroUiHostConfig.json': NitroUiHostConfig,

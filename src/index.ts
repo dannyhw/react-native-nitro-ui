@@ -125,3 +125,11 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+// A `View` that opens Menu's `group` on a long press (G16, DECISIONS D36/D37):
+// `UIContextMenuInteraction` on iOS, a Material 3 `DropdownMenu` at the finger on
+// Android. The children stay in place, a hold cancels their touch, and `onOpen`/
+// `onClose` fire on both platforms - unlike Menu's, which are Android-only (D32).
+export {
+  ContextMenu,
+  type ContextMenuProps,
+} from './components/ContextMenu/ContextMenu';
