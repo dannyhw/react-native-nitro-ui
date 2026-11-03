@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, render, type RenderResult } from '@testing-library/react-native';
-import { createRef } from 'react';
+import { Activity, createRef } from 'react';
 
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 import {
@@ -286,5 +286,30 @@ describe('TextField · callbacks and ref', () => {
     });
     expect(focus).not.toHaveBeenCalled();
     expect(blur).not.toHaveBeenCalled();
+  });
+  it('still focuses after <Activity> hid and showed it again', async () => {
+    // Hiding runs the field's effect cleanups and showing runs the effects again, but
+    // the native view stays - and Nitro hands `hybridRef` over once per native view,
+    // so the wrapper must not forget the view it already has.
+    const ref = createRef<TextFieldHandle>();
+    const focus = jest.fn();
+    const blur = jest.fn();
+    const field = (mode: 'visible' | 'hidden') => (
+      <Activity mode={mode}>
+        <TextField ref={ref} testID="field" />
+      </Activity>
+    );
+    const view = await render(field('visible'));
+    await act(async () =>
+      fire(nativeProps(view, 'field'), 'hybridRef', { focus, blur })
+    );
+    await act(async () => {
+      view.rerender(field('hidden'));
+    });
+    await act(async () => {
+      view.rerender(field('visible'));
+    });
+    ref.current?.focus();
+    expect(focus).toHaveBeenCalledTimes(1);
   });
 });

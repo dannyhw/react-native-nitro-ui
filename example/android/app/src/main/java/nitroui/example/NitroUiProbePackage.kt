@@ -145,7 +145,13 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
         }
         when (kind) {
           "connect" -> Unit
-          "commit" -> ic.commitText(text, 1)
+          // A typed key, not the end of a composition: close any composing region the
+          // keyboard opened over the word at the caret first, or `commitText` replaces
+          // that word instead of adding to it (Compose never sets NO_SUGGESTIONS).
+          "commit" -> {
+            ic.finishComposingText()
+            ic.commitText(text, 1)
+          }
           "compose" -> ic.setComposingText(text, 1)
           "finish" -> ic.finishComposingText()
           // The user deleting the whole composition: empty composing text, then done.

@@ -1,4 +1,4 @@
-import { useEffect, useImperativeHandle, useRef, type Ref } from 'react';
+import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { type ViewProps } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
@@ -317,12 +317,16 @@ export function TextField({
     []
   );
 
-  useEffect(() => {
+  // A layout effect, so a parent's layout effect that focuses the field (they run
+  // after their children's) finds it mounted - also when StrictMode or `<Activity>`
+  // runs the cleanups and then the effects again. The native view is kept across
+  // that: Nitro hands `hybridRef` over once per native view, not once per effect
+  // run, and `mounted` alone keeps an unmounted field from acting on it.
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       pendingFocus.current = null;
-      nativeView.current = null;
     };
   }, []);
 

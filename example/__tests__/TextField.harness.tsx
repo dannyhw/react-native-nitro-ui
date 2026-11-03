@@ -860,7 +860,17 @@ describe('TextField', () => {
             commit = commits.find((c) => c.arm === arm && c.text === want);
           }
           if (commit == null) {
-            throw new Error(`${arm}: "${want}" never committed`);
+            // What the field holds says which way it went: `b` alone means a key landed
+            // on a composing region the keyboard opened, `a` that the key never arrived.
+            const state =
+              arm === 'nitro'
+                ? JSON.stringify(
+                    (await handleOf('latency-nitro')).nuiTestState()
+                  )
+                : 'not read';
+            throw new Error(
+              `${arm}: "${want}" never committed (field: ${state})`
+            );
           }
           samples[arm].push(commit.at - started);
           await sleep(120);
