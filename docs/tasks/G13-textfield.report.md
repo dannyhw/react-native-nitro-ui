@@ -235,3 +235,75 @@ Not red-provable: `reloadInputViews` (no keyboard read-back) and the recycle ord
 - follow-up: iOS `reloadInputViews()` on a focused trait change has no read-back test.
 - follow-up: iOS reports a composition at its commit, Android at every step; align iOS with RN (which emits during marked text) if wanted.
 - follow-up: `HostControls … keeps the two window-opening controls live` once read a Picker handle before it arrived (`expected undefined to be 3`).
+
+## Fix round 2
+
+Three review findings on `1964d5a..8d809a9`, all fixed.
+
+**iOS - the backstop cut the field, not the edit.** `NitroUiCommitDelta` (UIKit-free) recovers
+the edit from the text before and after, walking the shared `Character` prefix and suffix so no
+cluster splits, and `userEdited` caps only that edit: `abcd` with a `かき` commit after the `a`
+keeps its `bcd`, and text a JS write left over the cap is kept while the new text is refused.
+
+**Android - the backstop edited inside a composition.** `observe` defers it (`capOwed`) while
+composing and applies it on the observation that reports the field once the composition has
+ended; `reset` clears the debt.
+
+**JS - a queued `focus()` outlived its field.** Cleared at the unmount; a `hybridRef` arriving
+afterwards is dropped.
+
+**README images** retaken from the rendered `States` story, light, iPhone Air (iOS 27, 3x) and
+API 35: 804 and 720 px wide.
+
+**Red proofs** (source mutated, then reverted; all green after the fix):
+
+- `text-limit.test.swift` -> `clamped` back to a whole-field `truncate` -> 5 red: `aかきbc`,
+  family -> `ab`, emoji -> `a😀bc`, JS write -> `abcde`, deletion -> `abcde`
+- `TextFieldModelTest` -> cut unconditional again -> 3 red, incl.
+  `theBackstopWaitsForAnOpenComposition` (`helloな` cut mid-composition)
+- `textField.test.tsx` -> the round-1 wrapper -> `expect(focus).not.toHaveBeenCalled()`,
+  `1: called with 0 arguments`
+
+Marked text still cannot be driven on the lease devices (round 1: an `InputConnection`
+composition is committed before the app sees it), so the JVM cases pass the flag as round 1's do.
+`harness:android` flaked twice on `commits a keystroke…` (`maxLength` is null in that arm, so
+this diff cannot reach it) and is green here.
+
+Gates (`node scripts/gate.mjs table --for review`):
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1669 tests / 64 suites | `c399a86acd1a` | 2 m 43 s | start 12.2 / med 7.9 / max 12.2 |
+| `harness:ios` | **PASS** | 291 tests / 18 suites | `c399a86acd1a` (ios tree) | 5 m 53 s | start 3.2 / med 35.1 / max 139.9 |
+| `harness:android` | **PASS** | 340 tests / 18 suites | `c399a86acd1a` (android tree) | 9 m 17 s | start 5.6 / med 3.2 / max 5.7 |
+| `real-input:ios` | **PASS** | — | `c399a86acd1a` (ios tree) | 18 m 19 s | start 4.3 / med 7.2 / max 23.4 |
+| `real-input:android` | **PASS** | — | `c399a86acd1a` (android tree) | 25 m 09 s | start 5.5 / med 4.8 / max 11.5 |
+| `harness:android:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 4.8 / med 4.4 / max 5.5 |
+| `harness:android:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 0f1ba858cb60 (not this tree) | 17.8 s | start 6.7 / med 6.1 / max 6.7 |
+| `harness:android:TextField` | stale | 16 tests / 1 suites | 4ba7b96778ce (not this tree) | 34.5 s | start 42.2 / med 34.2 / max 42.2 |
+| `harness:android:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.4 s | start 3.8 / med 3.9 / max 4.1 |
+| `harness:android:TextField:-t:drops%20a%20JS%20write` | stale | 1 failed of 13 tests / 1 suites | cae4cc5c8f62 (not this tree) | 15.1 s | start 9.1 / med 8.6 / max 9.1 |
+| `harness:android:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.4 s | start 5.9 / med 5.0 / max 5.9 |
+| `harness:android:TextField:-t:mount%20effect` | stale | 1 failed of 16 tests / 1 suites | 38585a488857 (not this tree) | 14.6 s | start 26.0 / med 24.0 / max 26.0 |
+| `harness:android:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 85a8d82fefe2 (not this tree) | 13.3 s | start 3.8 / med 3.8 / max 3.8 |
+| `harness:android:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | 0f1ba858cb60 (not this tree) | 9.0 s | start 6.2 / med 6.4 / max 6.7 |
+| `harness:android:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 14.2 s | start 4.2 / med 4.3 / max 4.3 |
+| `harness:android:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 8c4e0386b374 (not this tree) | 8.7 s | start 4.6 / med 4.7 / max 4.9 |
+| `harness:ios:Conformance` | stale | 50 tests / 1 suites | de8285a7348d (not this tree) | 1 m 46 s | start 3.1 / med 4.6 / max 5.3 |
+| `harness:ios:Conformance:-t:TextField` | stale | 1 failed of 50 tests / 1 suites | 539b032e02b8 (not this tree) | 21.6 s | start 4.1 / med 4.2 / max 4.6 |
+| `harness:ios:HostControls` | stale | 11 tests / 1 suites | 351fe07229be (not this tree) | 19.5 s | start 4.7 / med 6.6 / max 7.1 |
+| `harness:ios:TextField` | stale | 1 failed of 16 tests / 1 suites | a9c73096f789 (not this tree) | 26.8 s | start 12.3 / med 10.7 / max 12.3 |
+| `harness:ios:TextField:-t:applies%20a%20JS%20write` | stale | 1 failed of 12 tests / 1 suites | 378a298679a7 (not this tree) | 15.6 s | start 4.5 / med 4.5 / max 4.8 |
+| `harness:ios:TextField:-t:composition%20is%20deleted` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 15.3 s | start 6.0 / med 5.4 / max 6.0 |
+| `harness:ios:TextField:-t:keystroke` | stale | 1 failed of 13 tests / 1 suites | 4559587e55a3 (not this tree) | 17.9 s | start 7.9 / med 6.9 / max 7.9 |
+| `harness:ios:TextField:-t:mid-text%20paste` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 10.7 s | start 4.5 / med 5.2 / max 6.0 |
+| `harness:ios:TextField:-t:mount%20effect` | stale | 1 failed of 16 tests / 1 suites | e7c676bd5194 (not this tree) | 14.2 s | start 5.4 / med 5.6 / max 5.8 |
+| `harness:ios:TextField:-t:obscures` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 14.1 s | start 12.6 / med 13.7 / max 14.9 |
+| `harness:ios:TextField:-t:paste` | stale | 16 tests / 1 suites | 13bfea012ecf (not this tree) | 10.2 s | start 4.5 / med 4.4 / max 4.5 |
+| `harness:ios:TextField:-t:pool` | stale | 1 failed of 12 tests / 1 suites | af5ba759f19a (not this tree) | 11.3 s | start 3.8 / med 4.2 / max 4.6 |
+| `harness:ios:TextField:-t:round-trips` | stale | 1 failed of 12 tests / 1 suites | 3d991b350151 (not this tree) | 15.8 s | start 5.8 / med 12.6 / max 12.6 |
+| `harness:ios:TextField:-t:single-line%20field` | stale | 1 failed of 12 tests / 1 suites | 853846df2617 (not this tree) | 10.6 s | start 6.4 / med 6.3 / max 6.4 |
+| `real-input:android:--control:text-field` | stale | — | 9f3efe5aec0e (not this tree) | 5 m 31 s | start 4.5 / med 4.7 / max 8.2 |
+| `real-input:ios:--control:text-field` | stale | — | 5fb226e019db (not this tree) | 6 m 13 s | start 3.0 / med 10.0 / max 20.1 |
+
+**Questions for orchestrator**: the story these images show is not mounted by the example app (no `.storybook`, `index.js` registers `src/App`), so it was rendered through a temporary Metro entry, since reverted. Should the example app grow a Storybook host so shots are reproducible?
