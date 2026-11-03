@@ -299,6 +299,11 @@ A presentation — a dialog, a sheet, an open menu — is photographed **present
 way Menu's pair does. Two exports over one native view (`AlertDialog` and `ConfirmationDialog`) get
 one pair each, because the thing a reader compares is the two platforms.
 
+An iOS 27 confirmation is a popover anchored to the dialog's own box, and UIKit draws it **over**
+that box — with the trigger anywhere near the middle of a populated page, the picture is a card on
+top of half-hidden copy. Photograph it from `Dialog`'s `Confirmation Plain` story: one trigger low on
+an empty page, so the card opens upward and its arrow lands on the button it points at.
+
 The control pairs are crops at the simulator's native scale, so 804 and 720 px are two thirds of
 those two windows. A **presentation usually is not**: the iOS 27 alert card measures ~970 px at 3x
 and the Material dialog ~735 px on a 1080-px screen, so a 804/720 px crop of the window would slice
