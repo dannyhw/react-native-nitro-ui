@@ -1,0 +1,99 @@
+# Failure excerpt — harness:android:HostControls%7CHostPopups
+
+- Ran: 2026-11-02T22:15:30.668Z on code tree `1ea34f32c69a` at HEAD `8b70dca` (branch `task/G12-chip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android HostControls|HostPopups`
+- Result: fail, exit 1, 150458 ms
+- Load: start 26.60, end 11.25, median 12.74, max 26.60
+- Device: android / device `emulator-5574` / lease `G12-sigr7`
+- Full log: `task/G12-chip/harness+android+HostControls+7CHostPopups-2026-11-02T22-15-30.668Z.log` (<store>/task/G12-chip/harness+android+HostControls+7CHostPopups-2026-11-02T22-15-30.668Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Console`
+- `● Host · a hosted Button still presses › keeps a disabled hosted Button inert, and the same tap answers once enabled`
+- `expected undefined to be true // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/harness+android+HostControls+7CHostPopups-2026-11-02T22-15-30.668Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-sigr7 (still live)
+  |   M2-rmz6t                 M2           both              pair-b
+  |   G12-sigr7                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 11.25 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 53 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android HostControls|HostPopups
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1ea34f32c69a, 11 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 26.60/23.17 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G12-chip/harness+android+HostControls+7CHostPopups-2026-11-02T22-15-30.668Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/HostControls.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.error
+      Each child in a list should have a unique "key" prop.
+      
+      Check the render method of `Host`. It was passed a child from MixedList. See https://react.dev/link/warning-keys for more information.
+
+
+    console.error
+      A <Host> cannot compose a ReactViewGroup (not a nitro-ui control): it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+
+    console.error
+      A <Host> cannot compose a ReactViewGroup (not a nitro-ui control): it will not be drawn on Android. A Host holds the controls it is built for directly, and a child component is only hosted if what it renders is one of those (docs/components/host.md).
+
+  ● Host · a hosted Button still presses › keeps a disabled hosted Button inert, and the same tap answers once enabled
+
+    expected undefined to be true // Object.is equality
+
+      [0m [90m 1040 |[39m       )[33m;[39m
+       [90m 1041 |[39m       [36mconst[39m host [33m=[39m [36mawait[39m boxOf([32m'off-press-host'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1042 |[39m       expect(log[33m.[39mbuttons[[32m'off-press-0'[39m][33m?[39m[33m.[39mdisabled)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m      |[39m                                                        [31m[1m^[22m[39m
+       [90m 1043 |[39m       expect([36mawait[39m pressRow(host[33m,[39m [32m'off-press-0'[39m[33m,[39m log))[33m.[39mtoBeNull()[33m;[39m
+       [90m 1044 |[39m       expect(log[33m.[39mtaps)[33m.[39mtoEqual([])[33m;[39m
+       [90m 1045 |[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 47 passed, 48 total
+Snapshots:   0 total
+Time:        147.476 s
+Ran all test suites matching HostControls|HostPopups.
+
+
+
+```
