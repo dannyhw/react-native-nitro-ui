@@ -91,6 +91,38 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
 
 // @public
+export function Checkbox(input: CheckboxProps): JSX.Element;
+
+// @public
+export interface CheckboxProps extends ViewProps {
+    checked?: boolean | undefined;
+    defaultChecked?: boolean | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly checked: boolean | null;
+        readonly mostRecentEventCount: number;
+        readonly label: string | null;
+        readonly disabled: boolean;
+        readonly indeterminate: boolean | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestToggle(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    indeterminate?: boolean | undefined;
+    label?: string | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onCheckedChange?: ((checked: boolean) => void) | undefined;
+    tintColor?: ColorValue | undefined;
+}
+
+// @public
 export function Chip(input: ChipProps): JSX.Element;
 
 // @public
