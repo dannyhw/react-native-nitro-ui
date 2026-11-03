@@ -475,6 +475,11 @@ final class RealInputTests: XCTestCase {
     // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
+    // SearchField (G17): the first control in the table that is not one of the types
+    // this file was written for. Without the case the sweep printed the raw value —
+    // `announced as a type-45` — for a field XCUITest had already put in
+    // `app.searchFields`, so the failure was this table's, not the control's.
+    case .searchField: return "search field"
     case .textField: return "text field"
     case .secureTextField: return "secure text field"
     case .textView: return "text view"
