@@ -1,0 +1,64 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-11-03T02:13:22.495Z on code tree `3c07e464090a` at HEAD `2b88487` (branch `task/G12-chip`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 9234 ms
+- Load: start 6.59, end 8.35, median 7.47, max 8.35
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G12-1yncg`
+- Full log: `task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log` (<store>/task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: Clang dependency scanning failure: While building module 'NitroUi' imported from module-include.input:1:`
+- `error: Compilation search paths unable to resolve module dependency: 'NitroUi' (in target 'NitroUi' from project 'Pods')`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G12-1yncg (still live)
+  |   G12-1yncg                G12          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.35 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: real-input:ios
+gate: node scripts/real-input/ios.mjs (cwd .)
+gate: code tree 3c07e464090a at HEAD 2b884879
+gate: git tree ce5a66bfd586
+gate: log task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log
+gate:       <store>/task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log
+real-input (ios): iPhone 17 · F08675D3-A32B-4F88-BC81-02D7E0CB797E · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    error: Clang dependency scanning failure: While building module 'NitroUi' imported from module-include.input:1:
+    error: Compilation search paths unable to resolve module dependency: 'NitroUi' (in target 'NitroUi' from project 'Pods')
+    error: Clang dependency scanning failure: While building module 'NitroUi' imported from module-include.input:1:
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+gate: real-input:ios FAIL in 9.2 s
+gate: recorded in .gates/task/G12-chip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G12-chip/real-input+ios-2026-11-03T02-13-22.122Z.log (4 probe(s))
+
+```
