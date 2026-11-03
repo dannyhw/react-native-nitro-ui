@@ -82,7 +82,9 @@ from the expanded detent it returns to `medium` (reported as `onDetentChange`), 
 next Back closes the sheet. That is Material's own behaviour. **Changing the list while the sheet is up** applies at once on iOS; on Android a
 change to the expanded height applies at once, and a change to whether `'medium'` is in
 the list applies at the next presentation (Material's sheet state is built for one
-presentation; rebuilding it under an open sheet hid it).
+presentation; rebuilding it under an open sheet hid it). One consequence: a sheet resting
+half-expanded when `'medium'` leaves the list stays half-expanded, and until it moves
+`selected` and the next `onDetentChange` name the expanded detent, the only one left.
 
 `onDetentChange` reports a drag only — never the detent the sheet opens at, and never a
 change the app made.

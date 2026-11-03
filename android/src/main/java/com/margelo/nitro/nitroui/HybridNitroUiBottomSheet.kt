@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -320,7 +321,7 @@ internal class NitroUiSheetRootView(
   /** Hover reaches JS as pointer events, as in React Native's `Modal` root. */
   override fun onInterceptHoverEvent(event: MotionEvent): Boolean {
     eventDispatcher?.let { dispatcher -> jsPointerDispatcher?.handleMotionEvent(event, dispatcher, true) }
-    return super.onHoverEvent(event)
+    return super.onInterceptHoverEvent(event)
   }
 
   override fun onHoverEvent(event: MotionEvent): Boolean {
@@ -607,13 +608,17 @@ internal class BottomSheetHost(
     detents: List<NitroUiSheetDetent>,
     expanded: NitroUiSheetDetent?,
   ) {
-    LaunchedEffect(sheetState, detents, expanded) {
+    // The lists as they are now, not as they were when the effects started: a detent
+    // change while the sheet is up does not restart them (one state per presentation).
+    val currentDetents by rememberUpdatedState(detents)
+    val currentExpanded by rememberUpdatedState(expanded)
+    LaunchedEffect(sheetState) {
       snapshotFlow { sheetState.currentValue }
         .distinctUntilChanged()
         .filter { it != SheetValue.Hidden }
         .drop(1)
         .collect { value ->
-          val index = indexOf(value, detents, expanded)
+          val index = indexOf(value, currentDetents, currentExpanded)
           model.selected = index
           model.onDetentChange?.invoke(index.toDouble())
         }
@@ -621,7 +626,9 @@ internal class BottomSheetHost(
     LaunchedEffect(sheetState) {
       snapshotFlow { sheetState.currentValue }.collect { value ->
         model.sheetValue = value.name
-        if (value != SheetValue.Hidden) model.selected = indexOf(value, detents, expanded)
+        if (value != SheetValue.Hidden) {
+          model.selected = indexOf(value, currentDetents, currentExpanded)
+        }
       }
     }
   }
@@ -635,12 +642,14 @@ internal class BottomSheetHost(
     canPartiallyExpand: Boolean,
   ) {
     val scope = rememberCoroutineScope()
+    val currentDetents by rememberUpdatedState(detents)
+    val currentCanPartiallyExpand by rememberUpdatedState(canPartiallyExpand)
     DisposableEffect(sheetState) {
       selectDetent = { index ->
-        val detent = detents.getOrNull(index)
+        val detent = currentDetents.getOrNull(index)
         if (detent != null) {
           scope.launch {
-            if (detent.kind == "medium" && canPartiallyExpand) {
+            if (detent.kind == "medium" && currentCanPartiallyExpand) {
               sheetState.partialExpand()
             } else {
               sheetState.expand()
@@ -901,8 +910,12 @@ class HybridNitroUiBottomSheet(
 
   // MARK: - Methods
 
+  /** Bumped per report. Android builds each report when it is read, so every read is fresh. */
+  private val reportSeq = AtomicInteger(0)
+
   override fun nuiTestStateReport(): String =
-    "presented=${if (model.state.displayed) 1 else 0};js=${if (model.state.js == true) 1 else 0}" +
+    "seq=${reportSeq.incrementAndGet()}" +
+      ";presented=${if (model.state.displayed) 1 else 0};js=${if (model.state.js == true) 1 else 0}" +
       ";live=${BottomSheetModel.livePresentations.get()};presentCount=${model.presentCount.get()}" +
       ";sheetValue=${model.sheetValue};detents=${model.detents.joinToString(",") { it.kind }}" +
       ";selected=${model.selected};${model.boxReport};${host.facts()}" +

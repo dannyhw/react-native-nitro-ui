@@ -118,8 +118,12 @@ const sharedCode = await runHarness(process.env);
 // the shared run, for a full platform run only. Its Jest summary lands in the same log,
 // which is how the gate's ledger line records it beside the shared run's.
 const isolatedDir = join(repoRoot, 'example', ISOLATED_DIR);
+// Recursive, as `testMatch` is (`__tests__/isolated/**`): a file in a subdirectory
+// there runs in the isolated run, so it has to count towards having one.
 const isolatedFiles = existsSync(isolatedDir)
-  ? readdirSync(isolatedDir).filter((name) => /\.harness\.[jt]sx?$/.test(name))
+  ? readdirSync(isolatedDir, { recursive: true })
+      .map(String)
+      .filter((name) => /\.harness\.[jt]sx?$/.test(name))
   : [];
 let isolatedCode = null;
 if (wantsIsolatedRun({ args, env: process.env, isolatedFiles })) {

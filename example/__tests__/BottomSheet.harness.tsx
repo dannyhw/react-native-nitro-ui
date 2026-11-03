@@ -261,6 +261,39 @@ async function probe(): Promise<string> {
   return probeId;
 }
 
+/**
+ * Poll `testId`'s report for one built *after this call*. iOS returns the report it
+ * built last and asks main for the next, so every read is one behind; a read made now
+ * can still describe the moment before. Its `seq` says which build it is, so this takes
+ * the `seq` of a read made now and accepts only a later one (G14 review, round 2).
+ */
+async function waitForFreshReport(
+  testId: string,
+  check: (report: Report) => boolean,
+  what: string,
+  timeoutMs = 8000
+): Promise<Report> {
+  const now = Number(reportOf(testId).seq ?? 0);
+  return waitForReport(
+    testId,
+    (r) => Number(r.seq ?? 0) > now && check(r),
+    what,
+    timeoutMs
+  );
+}
+
+/**
+ * Wait until Fabric has dropped `testId`'s view: its own lifetime count of drops moved
+ * past `before`. What a probe reads after this is about a world without that view.
+ */
+async function waitForDropped(testId: string, before: Report) {
+  await waitForReport(
+    testId,
+    (r) => num(r, 'drops') > num(before, 'drops'),
+    'its view dropped by Fabric'
+  );
+}
+
 /** Nothing of any sheet is left anywhere: no window, no controller, no root. */
 const nothingLeft = (baseline: Report) => (report: Report) =>
   report.live === '0' &&
@@ -529,7 +562,7 @@ describe('BottomSheet', () => {
     await sleep(120);
     setters.get('mid')?.(false);
     await waitForEvent('mid:dismiss');
-    await waitForReport(
+    await waitForFreshReport(
       'mid',
       nothingLeft(baseline),
       'nothing left after a mid-entry false'
@@ -558,10 +591,12 @@ describe('BottomSheet', () => {
         (r) => r.raw !== '' && r.live === '0',
         'a baseline with nothing up'
       );
+      const before = await waitForReport(id, (r) => r.raw !== '', 'a report');
       setters.get(id)?.(true);
       if (delay > 0) await sleep(delay);
       setters.get(`${id}:shown`)?.(false);
-      await waitForReport(
+      await waitForDropped(id, before);
+      await waitForFreshReport(
         probeId,
         nothingLeft(baseline),
         `nothing left after a drop at ${delay} ms`
@@ -607,9 +642,6 @@ describe('BottomSheet', () => {
   });
 
   it('presents inside an RN Modal and closes cleanly before the Modal does', async () => {
-    const baselineId = await probe();
-    const baseline = reportOf(baselineId);
-    reset();
     function InModal() {
       const [modal, setModal] = useState(true);
       setters.set('modal-host', setModal);
@@ -621,7 +653,20 @@ describe('BottomSheet', () => {
         </Modal>
       );
     }
-    await render(<InModal />);
+    // The probe is on the screen under the Modal from the start, so it is never a view
+    // the recycle pool hands back after the sheet went.
+    await render(
+      <>
+        <Stage testId="modal-probe" />
+        <InModal />
+      </>
+    );
+    await waitForHandle('modal-probe');
+    const baseline = await waitForReport(
+      'modal-probe',
+      (r) => r.raw !== '' && r.live === '0',
+      'a baseline with nothing up'
+    );
     await waitForHandle('in-modal');
     await sleep(500);
     setters.get('in-modal')?.(true);
@@ -641,12 +686,10 @@ describe('BottomSheet', () => {
     await waitForEvent('in-modal:dismiss');
     setters.get('modal-host')?.(false);
     await sleep(800);
-    reset();
-    const probeId = await probe();
-    const after = await waitForReport(
-      probeId,
-      nothingLeft(baseline),
-      'nothing left'
+    const after = await waitForFreshReport(
+      'modal-probe',
+      (r) => nothingLeft(baseline)(r) && r.anchored === '1',
+      'nothing left, read back on the screen the Modal covered'
     );
     if (IOS) expect(after.modalHosts).toBe('0');
   });
@@ -835,13 +878,24 @@ describe('BottomSheet · 50 cycles', () => {
 
   for (let round = 0; round < 5; round += 1) {
     it(`cycles 10 more times (round ${round + 1})`, async () => {
-      if (baseline == null) {
-        const baselineId = await probe();
-        baseline = reportOf(baselineId);
-        reset();
-      }
-      await render(<Stage testId="cycle" />);
+      // A probe mounted beside the cycling sheet from the start of each round, so the
+      // last round reads what fifty cycles left through a view that was never the
+      // cycling one handed back by the recycle pool.
+      await render(
+        <>
+          <Stage testId="cycle-probe" />
+          <Stage testId="cycle" />
+        </>
+      );
+      await waitForHandle('cycle-probe');
       await waitForHandle('cycle');
+      if (baseline == null) {
+        baseline = await waitForReport(
+          'cycle-probe',
+          (r) => r.raw !== '' && r.live === '0',
+          'a baseline with nothing up'
+        );
+      }
       for (let i = 0; i < 10; i += 1) {
         eventLog.length = 0;
         setters.get('cycle')?.(true);
@@ -857,19 +911,16 @@ describe('BottomSheet · 50 cycles', () => {
       }
       expect(mounts.get('cycle')).toBe(10);
       expect(unmounts.get('cycle')).toBe(10);
+      if (round === 4) {
+        expect(cycles).toBe(50);
+        await waitForFreshReport(
+          'cycle-probe',
+          nothingLeft(baseline ?? reportOf('cycle-probe')),
+          'nothing left after 50 cycles',
+          10000
+        );
+      }
       reset();
     });
   }
-
-  it('leaves nothing behind after fifty cycles', async () => {
-    expect(cycles).toBe(50);
-    const probeId = await probe();
-    const after = await waitForReport(
-      probeId,
-      nothingLeft(baseline ?? reportOf(probeId)),
-      'nothing left after 50 cycles',
-      10000
-    );
-    console.log(`after 50 cycles: ${after.raw}`);
-  });
 });
