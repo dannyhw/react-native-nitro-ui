@@ -350,9 +350,9 @@ export const A11Y_CONTROLS = Object.freeze([
     // anchor itself rather than looking under it.
     wrapperIsControl: true,
     // No `iosTrait`, by design rather than as debt: what the element is announced as is
-    // the app's `accessibilityRole`, exactly as on a `View` - UIKit adds its own "Show
-    // Context Menu" action, not a type. The name, the box and the single element are
-    // still graded.
+    // the app's `accessibilityRole`, exactly as on a `View`; the menu's action is UIKit's,
+    // derived from the interaction, and not a type. The name, the box and the single
+    // element are still graded.
   },
 ]);
 
@@ -688,6 +688,26 @@ export function iosA11yProblems(control, tree) {
         'element is a control a screen reader announces twice, and only one of those ' +
         'stops carries the value'
     );
+  }
+
+  if (control.wrapperIsControl === true) {
+    // One element *with the menu on it* means its children are inside it: a view that is
+    // an accessibility element hides its subtree. Measured the other way round (G16, the
+    // content view's getter forced false): XCUITest still listed the wrapper with its
+    // label - it lists any view with an identifier - and its two texts as stops of their
+    // own, so the name check alone passed a wrapper VoiceOver never stops on.
+    const separate = tree.filter(
+      (node) => !node.anchor && node.label !== '' && hasArea(node)
+    );
+    if (separate.length > 0) {
+      problems.push(
+        `${control.hybridView}: ${String(separate.length)} element(s) under ` +
+          `"${control.anchorTestId}" are stops of their own ` +
+          `(${separate.map(describeIosNode).join('; ')}) — the wrapper is not one ` +
+          'accessibility element, so a screen reader reaches its children and never ' +
+          'the menu on it'
+      );
+    }
   }
 
   const node = named[0];

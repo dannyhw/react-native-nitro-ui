@@ -2594,11 +2594,11 @@ final class RealInputTests: XCTestCase {
     let inner = try contextMenuReveal("ctx-inner")
     inner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
     XCTAssertTrue(
-      optionRow("Inner").waitForExistence(timeout: 4),
+      optionRow("Inner action").waitForExistence(timeout: 4),
       "a hold on the inner ContextMenu should open the inner menu"
     )
-    XCTAssertEqual(optionLabels(containing: "Outer"), 0, "and not the outer one")
-    contextMenuDismiss(rows: ["Inner", "Outer"])
+    XCTAssertEqual(optionLabels(containing: "Outer action"), 0, "and not the outer one")
+    contextMenuDismiss(rows: ["Inner action", "Outer action"])
     after = contextMenuEcho { $0["inner"] == (before["inner"] ?? 0) + 1 }
     XCTAssertEqual(after["inner"], (before["inner"] ?? 0) + 1, "the inner reports its open")
     XCTAssertEqual(after["outer"], before["outer"], "the outer reports none")

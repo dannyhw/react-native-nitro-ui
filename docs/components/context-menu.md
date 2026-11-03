@@ -134,18 +134,30 @@ A ContextMenu is not an accessibility element by default, because that would hid
 buttons inside it. Set `accessible` and an `accessibilityLabel` on the ContextMenu to make
 it **one** element that carries the menu (D36 item 1):
 
-- iOS: the view is the element, and UIKit offers its own "Show Context Menu". React
-  Native answers `isAccessibilityElement` from a component's content view, so the content
-  view answers with the value React Native stored on the component view (D37 item 2,
-  held by the harness);
+- iOS: the view is the element, and the menu is UIKit's own on it. React Native answers
+  `isAccessibilityElement` from a component's content view, so the content view answers
+  with the value React Native stored on the component view (D37 item 2);
 - Android: the wrapper is the focusable node, and carries `ACTION_LONG_CLICK` labelled
-  "Show menu" — what TalkBack's double-tap-and-hold sends — which opens the menu at its
-  centre.
+  "Show menu" — the action TalkBack's double-tap-and-hold sends — which opens the menu at
+  its centre.
 
-An inner focusable child keeps the focus and its own actions. **Provisional:** whether
-VoiceOver and TalkBack reach the menu by double-tap-and-hold on a real device is the
-owner's human pass (D37 item 4); the simulator has no VoiceOver, and the emulator could
-not produce TalkBack's gesture (S3).
+An inner focusable child keeps the focus and its own actions.
+
+**What is verified, and how.** Only by automation (D37 item 4), on both platforms:
+
+| Claim                                                        | iOS                                                                  | Android                                                      |
+| ------------------------------------------------------------ | -------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `accessible` makes it an element; without it, it is not one  | harness (`ax`: the view's own `isAccessibilityElement`)              | harness (`ax`: the wrapper is focusable)                     |
+| one element carries the label, on the wrapper's box          | real input: XCUITest's tree, with nothing under the wrapper a stop   | real input: `uiautomator`'s tree, one node with the label    |
+| that element can be acted on                                 | real input (enabled, hittable)                                       | real input (focusable, `long-clickable`)                     |
+| it offers the menu as an action                              | harness: the view carries the `UIContextMenuInteraction`, only that  | harness: `ACTION_LONG_CLICK` "Show menu", none while disabled |
+| performing that action opens the menu                        | not exercised: UIKit derives the action, and no tool here reads it   | harness: the action performed on the node opens the menu     |
+| a recycled wrapper keeps no previous owner's label           | harness                                                              | harness                                                      |
+
+**Not exercised:** VoiceOver and TalkBack themselves. Neither screen reader ran, and their
+double-tap-and-hold was not performed on a device: the simulator has no VoiceOver, and the
+emulator could not produce TalkBack's gesture (S3). What the table proves is the tree and
+the actions a screen reader is handed, not what it does with them.
 
 ## Limits
 
