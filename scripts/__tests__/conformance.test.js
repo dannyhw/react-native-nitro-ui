@@ -148,24 +148,24 @@ describe('the rule list', () => {
     // and a verdict from every rule — `not-applicable` or `covered`, never silence.
     const sizing = JSON.parse(read('nitro-ui.sizing.json'));
     const extra = repoWithExtraControl({
-      id: 'tooltip',
-      name: 'Tooltip',
-      hybridView: 'NitroUiTooltip',
+      id: 'rating',
+      name: 'Rating',
+      hybridView: 'NitroUiRating',
       sizing: 'intrinsic',
-      exampleTab: 'tooltip',
+      exampleTab: 'rating',
     });
     const matrix = coverageMatrix(extra, { sizing });
-    const tooltip = matrix.find((row) => row.name === 'Tooltip');
-    expect(tooltip).toBeDefined();
-    expect(tooltip.rules['a11y-name-on-focusable-node'].state).toBe('covered');
-    expect(tooltip.rules['declared-fallback'].state).toBe('covered');
-    expect(tooltip.rules['recycle-reset'].state).toBe('covered');
+    const rating = matrix.find((row) => row.name === 'Rating');
+    expect(rating).toBeDefined();
+    expect(rating.rules['a11y-name-on-focusable-node'].state).toBe('covered');
+    expect(rating.rules['declared-fallback'].state).toBe('covered');
+    expect(rating.rules['recycle-reset'].state).toBe('covered');
     // A control with no a11y case is a red run, not a matrix cell that explains itself.
     // Round 1 had both, and the matrix half could not be reached: `checkA11yTable` fails
-    // the same tree first, so a cell waiting to say "no case for Tooltip" was dead code
+    // the same tree first, so a cell waiting to say "no case for Rating" was dead code
     // (review N9). One owner for the condition, and it is this.
     expect(checkA11yTable(extra, read).join('\n')).toContain(
-      'no a11y case for Tooltip'
+      'no a11y case for Rating'
     );
   });
 });
@@ -188,6 +188,7 @@ describe('coverage', () => {
       'Slider',
       'Switch',
       'TextField',
+      'Tooltip',
     ]);
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(read('nitro-ui.sizing.json')),
@@ -197,11 +198,11 @@ describe('coverage', () => {
 
   it('goes red for a manifest no rule covers', () => {
     const manifests = repoWithExtraControl({
-      id: 'tooltip',
-      name: 'Tooltip',
-      hybridView: 'NitroUiTooltip',
+      id: 'rating',
+      name: 'Rating',
+      hybridView: 'NitroUiRating',
       sizing: undefined,
-      exampleTab: 'tooltip',
+      exampleTab: 'rating',
     });
     const matrix = coverageMatrix(manifests, { sizing: {} });
     const problems = checkCoverage(manifests, matrix, () => null);
@@ -209,7 +210,7 @@ describe('coverage', () => {
     // the a11y rule's reason is a gap, and `checkA11yTable` is where that is caught.
     expect(problems).toEqual([]);
     expect(checkA11yTable(manifests, () => null).join('\n')).toContain(
-      'no a11y case for Tooltip'
+      'no a11y case for Rating'
     );
   });
 
@@ -535,22 +536,22 @@ describe('the declared-fallback rule', () => {
 
   it('goes red when a control has no row in the table', () => {
     const manifests = repoWithExtraControl({
-      id: 'tooltip',
-      name: 'Tooltip',
-      hybridView: 'NitroUiTooltip',
+      id: 'rating',
+      name: 'Rating',
+      hybridView: 'NitroUiRating',
       sizing: 'intrinsic',
-      exampleTab: 'tooltip',
+      exampleTab: 'rating',
     });
     const problems = checkFallbackTable(
       manifests,
       {
         ...JSON.parse(read('nitro-ui.sizing.json')),
-        HybridNitroUiTooltip: 'intrinsic',
+        HybridNitroUiRating: 'intrinsic',
       },
       DECLARED_FALLBACKS
     );
     expect(problems.join('\n')).toContain(
-      'no DECLARED_FALLBACKS row for NitroUiTooltip'
+      'no DECLARED_FALLBACKS row for NitroUiRating'
     );
   });
 
@@ -643,10 +644,10 @@ describe('the declared-fallback rule', () => {
   });
 
   it('goes red rather than being vacuous when the control has no row', () => {
-    // `Tooltip`, because every control the repo has now has a row — and this is the check
+    // `Rating`, because every control the repo has now has a row — and this is the check
     // that goes red the day one is added without its number written down.
     const findings = fallbackFindings({
-      component: 'Tooltip',
+      component: 'Rating',
       platform: 'ios',
       declared: { width: 10, height: 10 },
       measured: { width: 10, height: 10 },
@@ -698,7 +699,7 @@ describe('which axes a declared fallback describes', () => {
     expect(boxRuleFor('NitroUiMenu', sizing)).toBe('none');
     // An unknown control keeps the strictest rule: a policy the table lost should cost a
     // red run, not a widened assertion.
-    expect(boxRuleFor('NitroUiTooltip', sizing)).toBe('both');
+    expect(boxRuleFor('NitroUiRating', sizing)).toBe('both');
   });
 
   it('lets a fillWidth control be wider than its declaration, and still checks its height', () => {
@@ -1237,10 +1238,11 @@ describe('the a11y presentation cases', () => {
   const withDialog = (patch) =>
     repoManifests().map((m) => (m.name === 'Dialog' ? { ...m, ...patch } : m));
 
-  it('covers Dialog and BottomSheet, and only through their real-input checks', () => {
+  it('covers Dialog, BottomSheet and Tooltip, and only through their real-input checks', () => {
     expect(A11Y_PRESENTATIONS.map((entry) => entry.component)).toEqual([
       'Dialog',
       'BottomSheet',
+      'Tooltip',
     ]);
     expect(checkA11yTable(repoManifests(), read)).toEqual([]);
   });
@@ -1513,18 +1515,18 @@ describe('the in-app fixture table cross-check', () => {
   });
 
   it('goes red for a manifest with no fixture, and names it', () => {
-    const withTooltip = [
+    const withRating = [
       ...repoManifests(),
       manifest({
-        id: 'tooltip',
-        name: 'Tooltip',
-        hybridView: 'NitroUiTooltip',
+        id: 'rating',
+        name: 'Rating',
+        hybridView: 'NitroUiRating',
         sizing: 'intrinsic',
-        exampleTab: 'tooltip',
+        exampleTab: 'rating',
       }),
     ];
-    expect(checkInAppFixtures(withTooltip, harness()).join('\n')).toContain(
-      'no fixture for Tooltip'
+    expect(checkInAppFixtures(withRating, harness()).join('\n')).toContain(
+      'no fixture for Rating'
     );
   });
 

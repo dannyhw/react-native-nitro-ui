@@ -375,6 +375,15 @@ export const A11Y_PRESENTATIONS = Object.freeze([
       "(scripts/real-input/android.mjs): the sheet's React Native content is read " +
       'and pressed through the accessibility tree, and the sheet carries <testID>-sheet',
   },
+  {
+    id: 'tooltip',
+    component: 'Tooltip',
+    hybridView: 'NitroUiTooltip',
+    assertedBy:
+      '`testRealInputTooltip` (RealInputTests.swift) and `CHECKS.tooltip` ' +
+      "(scripts/real-input/android.mjs): the presented tooltip's title, message and " +
+      'action are read and tapped through the accessibility tree',
+  },
 ]);
 
 /**

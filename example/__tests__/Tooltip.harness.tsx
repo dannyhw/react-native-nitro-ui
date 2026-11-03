@@ -16,9 +16,9 @@
  * (`nuiTestPerformAction`, `nuiTestDismiss`). Real taps are `real-input:*`'s job.
  *
  * The first block is the design's three early checks (Q7 C9): a tap reaches the
- * anchor through the overlay, the Android popup sits where Material's spacing puts it
- * and closes on a move, and on iOS a popover presented from a window of its own still
- * points at the anchor.
+ * anchor through the overlay, the popup sits where the platform puts it (on Android,
+ * Material's spacing) and follows its anchor on a move, and on iOS a popover presented
+ * from a window of its own still points at the anchor.
  */
 import { useState } from 'react';
 import {
