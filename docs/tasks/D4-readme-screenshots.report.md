@@ -77,6 +77,7 @@ file byte-identically (`git status` clean afterwards).
 - `lease.mjs list` still pairs the stale `x16_avd` record with `emulator-5574`, which is the serial pair-a's AVD boots on; both pool emulators went down within the same few minutes this round, from outside this task.
 - Nothing records which device a picture came from; the eight older pairs are pair-a's iPhone 17, and pair-b's iPhone Air would crop differently.
 - `example/ios/NitroUiExampleUITests/RealInputTests.swift:14` carries a stale claim that `agent-device` cannot tap the iOS 27 simulator. True for real-input's purposes, wrong as a general statement — it is why nobody tried it for a screenshot.
+- `agent-device open --device "iPhone Air"` matches by name and found a booted simulator outside the pool (two devices answer to that name), where its failed attempt left a claim under `~/.agent-device/device-claims` that had to be removed by hand; pass `--udid`, which is what the lease prints anyway.
 
 ## Fix round 1
 
