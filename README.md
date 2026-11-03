@@ -35,9 +35,11 @@ the layout engine, and React never sees a native node.
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField` and `BottomSheet`, and refuses those three with an
-error that names them. It refuses `ContextMenu` too, by design: that one is a
-`View` around React Native children, not a control a composition could draw.
+except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`, and
+refuses those five with an error that names them. The first three wait for a
+round that measures them inside a Host; the last two are refused by design,
+because each is a `View` around React Native children, not a control a
+composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
@@ -724,8 +726,8 @@ when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField` and `BottomSheet`; one of those three, an RN view, plain
-text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`; one of those
+five, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -876,8 +878,9 @@ The full list per control is in its doc; these are the ones that bite.
   Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
   changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField` and `BottomSheet`. Any other child — one of
-  those three, an RN view, text, another `<Host>` — throws in development. Give
+  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`.
+  Any other child — one of those five, an RN view, text, another `<Host>` —
+  throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
