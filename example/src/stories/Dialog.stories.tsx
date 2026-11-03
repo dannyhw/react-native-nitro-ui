@@ -281,19 +281,20 @@ export const NotDismissible: Story = {
 /**
  * The same confirmation with nothing else on screen: one trigger, and the sheet.
  *
- * iOS 27 draws a confirmation as a popover anchored to the dialog's own box, so
- * in `Confirmation` the showcase's copy ends up half-covered behind it - right to
- * read, wrong to photograph. This is the story
- * `docs/images/components/confirmation-dialog-ios.png` is taken from: the button,
- * the popover it points at, and a clean background behind both.
+ * iOS 27 draws a confirmation as a popover anchored to the dialog's own box, and
+ * the box is where its host View sits. So in `Confirmation` the popover lands on
+ * the showcase's copy and hides half of it - right to read, wrong to photograph.
+ * This is the story `docs/images/components/confirmation-dialog-ios.png` is taken
+ * from: one button low on an empty page, with the room above it that makes the
+ * popover open upward and point back down at the button rather than over it.
  */
 export const ConfirmationPlain: Story = {
   render: function ConfirmationPlainStory() {
     const [open, setOpen] = useState(false);
     return (
       <View style={styles.plain}>
-        {/* The dialog's box is its anchor: over the button, so the popover points
-            at it from wherever the button landed. */}
+        {/* The dialog's box is its anchor: exactly the button's, so the popover
+            points at the button and not at the page around it. */}
         <View>
           <Opener label="Share the photo" onPress={() => setOpen(true)} />
           <ConfirmationDialog
@@ -351,9 +352,15 @@ export const RefusedDismissal: Story = {
 
 const styles = StyleSheet.create({
   playground: { padding: 24, gap: 16, alignItems: 'flex-start' },
-  // The screenshot story: the trigger centred, so the iOS popover drops onto it
-  // with the same margin either side and no copy behind it.
-  plain: { flex: 1, alignItems: 'center', paddingTop: 48 },
+  // The screenshot story: one trigger low on the page, where the popover has room
+  // to open upward. Centred or near the top, iOS puts the card *over* the button.
+  plain: {
+    flex: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    paddingRight: 80,
+    paddingBottom: 220,
+  },
   opener: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,
