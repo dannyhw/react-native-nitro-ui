@@ -81,5 +81,5 @@
 | G11 | AlertDialog + ConfirmationDialog (Q5 Appendix B, D33), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged (`74efeb6`, PR #24) |
 | G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | running |
 | G13 | TextField (Q2 + T19 + D34; `UITextField` on iOS, `BasicTextField` on Android) | Opus | Opus | running |
-| G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | fix round 1 (PR #28; review: drop test hits the pool, iOS present budget, Android touch-intercept override, isolated suite never run) |
+| G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | fix round 2 (last; PR #28; re-review MERGE WITH FIXES: iOS drop tests read a stale report, Android hover super) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
