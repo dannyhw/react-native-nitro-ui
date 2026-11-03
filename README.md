@@ -53,6 +53,7 @@ import {
   SegmentedControl,
   Slider,
   Switch,
+  TextField,
 } from 'react-native-nitro-ui';
 ```
 
