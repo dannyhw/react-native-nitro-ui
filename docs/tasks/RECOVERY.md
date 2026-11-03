@@ -95,6 +95,11 @@
 > **0.4.3 live, 0.5.0 staged (2026-11-02):** the owner approved 0.4.3 (tagged by a dispatched `Release tag`). Version
 > Packages PR #25 merged (`4f931b2`, minor: the dialogs); Release run 41483605054 green with `Stage on npm` succeeded.
 >
+> **G14 and G12 merged (2026-11-03, PRs #28/#27): BottomSheet and Chip.** G14's merge took main + D4 and Chip's
+> reviewed head `239c370`, resolved the TextField x Chip x BottomSheet registrations, and passed all five gates on code
+> tree `87d4b2ab0814` (mac-2). mac-1's separate Chip merge (`b5cfb7c`, also green) was not needed. Minor changesets:
+> TextField, Chip, BottomSheet; Version Packages PR #30 is now the next minor.
+>
 > **D4 merged (2026-11-03, PR #29): every component in the README with iOS/Android screenshots**, and a `check`-time guard
 > (`scripts/__tests__/readme-components.test.js`: Components row, import line, 804/720 px screenshots per exported
 > component; Host exempt). Convention in CONTRIBUTING and AGENTS' quality bar. All five merge gates green on mac-2.
