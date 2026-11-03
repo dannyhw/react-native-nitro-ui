@@ -45,7 +45,7 @@ const [terms, setTerms] = useState(false);
 | --------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
 | Control         | `Toggle(isOn:) { label }.toggleStyle(.switch)`             | `androidx.compose.material3.Checkbox`                          |
 | Third state     | none — the switch has two positions, so it reads as off    | `androidx.compose.material3.TriStateCheckbox`                  |
-| Label           | the `Toggle`'s label, visible, row tappable                | a `Row` of box + `Text`, both tappable                          |
+| Label           | the `Toggle`'s label, visible; the row is one tap target   | a `Row` of box + `Text`, both tappable                          |
 | Value           | `NitroUiControlledValue<Bool>` on `CheckboxModel`          | `NitroUiControlledValue<Boolean>` on `CheckboxModel`           |
 | Role            | SwiftUI's toggle trait                                     | `Role.Checkbox` with its `ToggleableState`, published by M3    |
 | Name            | `.accessibilityLabel(_:)` on the `Toggle`                  | `contentDescription` on the merged row only — the box is presentational |

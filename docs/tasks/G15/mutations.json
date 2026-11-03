@@ -1,0 +1,183 @@
+{
+  "task": "G15",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so `before` is findable verbatim in `file`). Device rows ran on lease G15-69l63, pair-a, on 2026-11-03; the `harness:android:Checkbox` / `harness:ios:Checkbox` runs are filtered, so they satisfy nothing but their own name. Rows marked `organic` are not mutations at all: they are the test going red against the real bug before the fix landed, which is the stronger evidence and is recorded here because the logs are the proof (`gate.mjs logs --branch task/G15-checkbox`).",
+  "mutations": [
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt",
+      "mutation": "a press asks for checked whatever the box shows",
+      "before": "    press(!model.displayed)",
+      "after": "    press(true)",
+      "run": "harness:android:Checkbox — FAIL, 3 of 9",
+      "redTests": [
+        "follows a controlled checked in both directions: expected [ Array(2) ] to deeply equal [ 'controlled:true', …(1) ]",
+        "applies a value written from JS, and keeps its own when uncontrolled: expected [ 'free:true' ] to deeply equal [ 'free:false' ]"
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "ios/components/Checkbox/HybridNitroUiCheckbox.swift",
+      "mutation": "the same half-truth on the other platform: the press hook always asks the switch for on",
+      "before": "    userToggle(to: !state.displayed)",
+      "after": "    userToggle(to: true)",
+      "run": "harness:ios:Checkbox — FAIL, 3 of 10 (the third failure is the temporary measurement probe)",
+      "redTests": [
+        "follows a controlled checked in both directions: expected [ Array(2) ] to deeply equal [ 'controlled:true', …(1) ]",
+        "applies a value written from JS, and keeps its own when uncontrolled: expected [ 'free:true' ] to deeply equal [ 'free:false' ]"
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "src/components/Checkbox/Checkbox.tsx",
+      "mutation": "the label leaves the sizing key, so a bare box and a labelled one are the same configuration",
+      "before": "  return [indeterminateField, escapeField(label)].join(FIELD_SEPARATOR);",
+      "after": "  return indeterminateField;",
+      "run": "harness:android:Checkbox — FAIL, 3 of 9",
+      "note": "The shared JS key builder, so one run covers the `label` field of both platforms' keys. The failing line is the interesting one: the bare box was laid out at the *labelled* checkbox's width, which is what a cache collision looks like from JS.",
+      "redTests": [
+        "lays out bare and labelled at the size the control measured: testID \"bare\" (bare) never reached 48.00x48.00 - last box 131.05x48.00, control measured 48.00x48.00."
+      ]
+    },
+    {
+      "test": "scripts/__tests__/real-input-a11y.test.js",
+      "file": "scripts/real-input/a11y.mjs",
+      "mutation": "a11yProblems stops reporting a name carried by more than one node (the Android branch, the second of the two identical lines — line 1201, not the iOS one at 671)",
+      "before": "  if (named.length > 1) {",
+      "after": "  if (false && named.length > 1) {",
+      "run": "jest scripts/__tests__/real-input-a11y.test.js — 2 of 15 failed",
+      "note": "The same mutation applied to the *first* occurrence (the iOS checker) was run as a control and left the Android rows green, which is the evidence that the checkbox case reads the Android tree and not a shared helper.",
+      "redTests": [
+        "goes red when a labelled checkbox splits its name across two nodes: Expected substring: \"2 nodes carry the name\" / Received string: \"\"",
+        "goes red when the name is on the control AND on something else: Expected substring: \"2 nodes carry the name\""
+      ]
+    },
+    {
+      "test": "src/__tests__/viewConfigs.test.ts",
+      "file": "src/components/Checkbox/NitroUiCheckboxConfig.ts",
+      "mutation": "the checked-in copy of nitrogen's Fabric config drifts",
+      "before": "  uiViewClassName: 'NitroUiCheckbox',",
+      "after": "  uiViewClassName: 'NitroUiCheckboxDrifted',",
+      "run": "jest src/__tests__/viewConfigs.test.ts — FAIL",
+      "redTests": [
+        "NitroUiCheckboxConfig.json matches nitrogen output: - \"uiViewClassName\": \"NitroUiCheckbox\", / + \"uiViewClassName\": \"NitroUiCheckboxDrifted\","
+      ]
+    },
+    {
+      "test": "scripts/__tests__/component-coverage.test.js",
+      "file": "src/components/Checkbox/component.json",
+      "mutation": "the manifest is deleted, so the control leaves the registry while every table still has a row for it",
+      "before": "  \"hybridView\": \"NitroUiCheckbox\",",
+      "after": "(file removed)",
+      "run": "jest scripts/__tests__/component-coverage.test.js — FAIL",
+      "redTests": [
+        "the a11y table covers every case: scripts/real-input/a11y.mjs: the case \"checkbox\" guards \"Checkbox\" and no manifest declares that control",
+        "the in-app fixtures cover every control: example/__tests__/Conformance.harness.tsx: a fixture guards \"Checkbox\" and no manifest declares that control"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/conformance.test.js",
+      "file": "src/components/Checkbox/component.json",
+      "mutation": "the same deletion: the coverage list is the registry's own, so a control that vanishes has to show up as a diff",
+      "before": "  \"hybridView\": \"NitroUiCheckbox\",",
+      "after": "(file removed)",
+      "run": "jest scripts/__tests__/conformance.test.js — FAIL",
+      "redTests": [
+        "coverage is complete for every control the registry declares: - \"Checkbox\"",
+        "the a11y sweep walks one screen per control: the tab list diff drops \"checkbox\""
+      ]
+    },
+    {
+      "test": "scripts/__tests__/smoke-ready-line.test.js",
+      "file": "scripts/smoke/App.tsx",
+      "mutation": "the Checkbox is taken out of the smoke app, so its measurement never reaches the ready line",
+      "before": "          testID=\"SMOKE-checkbox\"",
+      "after": "(the Checkbox element removed)",
+      "run": "jest scripts/__tests__/smoke-ready-line.test.js — FAIL",
+      "redTests": [
+        "Expected substring: \"testID=\\\"SMOKE-checkbox\\\"\""
+      ]
+    },
+    {
+      "test": "scripts/__tests__/readme-components.test.js",
+      "file": "docs/images/components/checkbox-ios.png",
+      "organic": true,
+      "mutation": "not a mutation: the component was in the README with no pictures yet",
+      "before": "(no file)",
+      "after": "804x1020 PNG, the Checkbox/States story on iOS 27",
+      "run": "jest scripts/__tests__/readme-components.test.js — FAIL, then PASS once both pairs existed",
+      "redTests": [
+        "ships each screenshot as a PNG of the documented width: + \"Checkbox: docs/images/components/checkbox-ios.png does not exist\"",
+        "ships each screenshot as a PNG of the documented width: + \"Checkbox: docs/images/components/checkbox-android.png does not exist\""
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt",
+      "organic": true,
+      "mutation": "not a mutation: the labelled branch Compose refused to merge — a clickable box beside a clickable label",
+      "before": "(pre-fix labelled branch: CheckboxBox with its own onCheckedChange, plus a clickable Text)",
+      "after": "          Modifier.clearAndSetSemantics {}.minimumInteractiveComponentSize(),",
+      "run": "harness:android — FAIL, 5 of 9; real-input:android --control checkbox — FAIL",
+      "redTests": [
+        "is one node with the label as its name when a label is shown: merged=2 where the assertion is '1'",
+        "lays out bare and labelled at the size the control measured: expected 24 to be less than 0.6 — the labelled row measured 24 dp tall",
+        "real-input:android: a11y:checkbox — 2 nodes carry the name \"Real-input checkbox\" (android.view.View no actions [42,737][387,863]; android.widget.CheckBox clickable|checkable|focusable [43,738][169,863])",
+        "real-input:android: the real tap that checks the box: \"real-input-checkbox-value\" was given a native-state witness and it read nothing"
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt",
+      "organic": true,
+      "mutation": "not a mutation: recordDrawn read `indeterminate` before `displayed`, which is not the order Material draws in",
+      "before": "        model.displayed -> \"1\"",
+      "after": "        model.indeterminate -> \"mixed\" (first)",
+      "run": "harness:android:Checkbox — FAIL, 2 of 9",
+      "redTests": [
+        "draws the third state on Android, and off on iOS: \"mixed\" never drew displayed=1 - it reports \"displayed=mixed;probes=0;merged=none;a11y=none\""
+      ]
+    },
+    {
+      "test": "example/__tests__/Checkbox.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt",
+      "organic": true,
+      "mutation": "not a mutation: the first Android build of the whole suite, against `press()` that only ever asked for checked",
+      "before": "    press(!model.displayed)",
+      "after": "    press(true)",
+      "run": "harness:android — FAIL, 5 of 9, every one of them an empty event log",
+      "note": "Recorded separately from row 1 because it is the original red: five toggle cases failed with `expected events […], saw []`, which is the signature of a box that never changes state — a dropped event is invisible in a screenshot and unmistakable here.",
+      "redTests": [
+        "follows a controlled checked in both directions: expected events [\"controlled:true\"], saw []",
+        "reverts a toggle JS refused: expected events [\"refused:true\"], saw []",
+        "applies a value written from JS, and keeps its own when uncontrolled: expected events [\"free:false\"], saw []",
+        "draws the third state on Android, and off on iOS: expected events [\"mixed:true\"], saw []",
+        "takes no toggle while disabled: expected events [\"barrier:true\"], saw []"
+      ]
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift › testRealInputCheckbox",
+      "file": "ios/components/Checkbox/HybridNitroUiCheckbox.swift",
+      "organic": true,
+      "mutation": "not a mutation: the first iOS real-input run of the new case, against the Toggle with no row tap target — the same shape as deleting the overlay below",
+      "before": "    .overlay {\n      Color.clear\n        .contentShape(Rectangle())\n        .accessibilityHidden(true)\n        .onTapGesture { model.press() }\n    }",
+      "after": "",
+      "run": "real-input:ios — FAIL (50.5s, the whole suite's first run of the case, on the tree before 365a0acb)",
+      "redTests": [
+        "the real tap that checks the box: 3 real presses on the controlled Checkbox (real-input-checkbox) left it at \"off\". Its own state never moved either, so on the evidence here the touch was never delivered (FOLLOWUPS.md:58)"
+      ],
+      "note": "The probe that read the tree in that same run said why: a press at the row's middle — over the label — changed nothing, a press on the glyph toggled, and a press at 0.20 of the row (still on the label) delivered nothing again. A switch-style Toggle hit-tests its glyph only, so the row got a tap target; the case is green on 365a0acb in 43.4s, with the event counter reaching exactly 1 then 2, which is what would go red on a double delivery."
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift › testRealInputCheckbox",
+      "file": "example/src/CheckboxScreen.tsx",
+      "mutation": "drift the fixture: the controlled Checkbox's label goes from \"Real input\" to \"x\", moving the row's middle onto the glyph",
+      "before": "            label=\"Real input\"\n            checked={realChecked}",
+      "after": "            label=\"x\"\n            checked={realChecked}",
+      "run": "real-input:ios:--control:checkbox — FAIL (264s)",
+      "redTests": [
+        "the switch glyph starts at x=32.666666666666664 and the row's middle is at x=54.83333206176758 - a press at the middle has to land on the label's side of the glyph, or these taps prove nothing about the label"
+      ],
+      "note": "The row-tap fix is only worth what its aim is worth, so the aim is asserted before the first press: with the label this short the middle is over the box and the guard goes red, which is the fixture drift that would otherwise turn the case into a switch-only check."
+    }
+  ]
+}
