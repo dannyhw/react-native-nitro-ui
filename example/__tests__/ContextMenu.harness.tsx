@@ -49,6 +49,7 @@ const IOS = Platform.OS === 'ios';
 type ViewInfo = { x: number; y: number; width: number; height: number };
 type HarnessUiModule = {
   queryByTestId(testId: string): ViewInfo | null;
+  queryByAccessibilityLabel(label: string): ViewInfo | null;
 };
 const harnessUi = TurboModuleRegistry.getEnforcing(
   'HarnessUI'
@@ -848,6 +849,42 @@ describe('ContextMenu · drop and recycle', () => {
     await openedBy('second-target');
     (await handleFor('second')).nuiTestSelectRow('only');
     await until('the pick', () => eventsOf('second').includes('select:only'));
+  });
+});
+
+describe('ContextMenu · a recycled wrapper', () => {
+  it('keeps no previous owner’s accessibility label', async () => {
+    // React Native's own recycle reset clears the label's tag and leaves the view's
+    // `contentDescription`, and only ever writes a non-empty one back - so a wrapper
+    // recycled into an owner with no label would still be announced by the old one.
+    // Measured by real input's a11y sweep: "Message from Grace" on `ctx-outer`.
+    function Owner({
+      step,
+    }: {
+      step: 'labelled' | 'none' | 'plain';
+    }): ReactElement {
+      if (step === 'none') return <View />;
+      return step === 'labelled' ? (
+        <Message testId="label-first" accessible label="A label from before" />
+      ) : (
+        <Message testId="label-second" />
+      );
+    }
+    const { rerender } = await render(<Owner step="labelled" />);
+    await settledReport('label-first');
+    expect(
+      harnessUi.queryByAccessibilityLabel('A label from before')
+    ).not.toBeNull();
+    await rerender(<Owner step="none" />);
+    await sleep(300);
+    await rerender(<Owner step="plain" />);
+    const second = await settledReport('label-second');
+    const stale = harnessUi.queryByAccessibilityLabel('A label from before');
+    console.log(
+      `    · second owner ax=${second.ax} stale label box=${stale == null ? 'none' : `${String(stale.width)}x${String(stale.height)}`}`
+    );
+    expect(stale).toBeNull();
+    expect(second.ax).toBe('0');
   });
 });
 
