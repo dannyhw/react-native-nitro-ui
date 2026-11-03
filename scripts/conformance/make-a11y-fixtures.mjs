@@ -32,6 +32,7 @@ const TAB_LABEL = {
   picker: 'Picker',
   menu: 'Menu',
   host: 'Host',
+  textfield: 'Text',
 };
 
 function adb(args) {

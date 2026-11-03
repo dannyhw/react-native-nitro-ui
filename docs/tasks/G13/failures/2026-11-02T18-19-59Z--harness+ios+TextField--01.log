@@ -1,0 +1,131 @@
+# Failure excerpt — harness:ios:TextField
+
+- Ran: 2026-11-02T18:19:59.882Z on code tree `08a2a172af6d` at HEAD `47ef1a3` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios TextField`
+- Result: fail, exit 1, 36454 ms
+- Load: start 3.65, end 4.73, median 4.63, max 5.11
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G13-houpr`
+- Full log: `task/G13-textfield/harness+ios+TextField-2026-11-02T18-19-59.882Z.log` (<store>/task/G13-textfield/harness+ios+TextField-2026-11-02T18-19-59.882Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● TextField › holds maxLength in UTF-16 units and never splits an emoji`
+- `● TextField › keeps the part of an insertion that fits, cut at a grapheme boundary`
+- `● TextField › drops a JS write while a composition is open, and keeps the composition`
+- `● TextField › reports focus and blur, focuses on a tap, and submits on Return`
+- `expected [ 'focus' ] to deeply equal [ 'focus', 'blur' ]`
+- `● TextField › grows a multi-line field with its text, one correction a step, and keeps two fields apart`
+- `expected 66 to be greater than 88`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+ios+TextField-2026-11-02T18-19-59.882Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G13-houpr (still live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.73 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 82 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios TextField
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 08a2a172af6d, 11 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.65/4.78 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G13-textfield/harness+ios+TextField-2026-11-02T18-19-59.882Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● TextField › holds maxLength in UTF-16 units and never splits an emoji
+
+    TextField capped: the cap never happened; last report {"text":"abcd�","focused":true,"composing":false,"nativeEvents":5,"jsEvents":5,"lastWrite":"none","editable":true,"multiline":false,"secure":false,"keyboardType":"default","returnKeyType":"default","autoCapitalize":"none","autoCorrect":false,"maxLength":5,"placeholder":"","accessibilityLabel":"Field capped"}
+
+      [0m [90m 132 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 133 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 134 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 135 |[39m         [32m`TextField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 136 |[39m       )[33m;[39m
+       [90m 137 |[39m     }[0m
+
+  ● TextField › keeps the part of an insertion that fits, cut at a grapheme boundary
+
+    TextField paste: the cut never happened; last report {"text":"ab👨‍�","focused":true,"composing":false,"nativeEvents":1,"jsEvents":1,"lastWrite":"applied","editable":true,"multiline":false,"secure":false,"keyboardType":"default","returnKeyType":"default","autoCapitalize":"none","autoCorrect":false,"maxLength":6,"placeholder":"","accessibilityLabel":"Field paste"}
+
+      [0m [90m 132 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 133 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 134 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 135 |[39m         [32m`TextField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 136 |[39m       )[33m;[39m
+       [90m 137 |[39m     }[0m
+
+  ● TextField › drops a JS write while a composition is open, and keeps the composition
+
+    TextField ime: the dropped write never happened; last report {"text":"zzz","focused":true,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"applied","editable":true,"multiline":false,"secure":false,"keyboardType":"default","returnKeyType":"default","autoCapitalize":"none","autoCorrect":false,"maxLength":-1,"placeholder":"","accessibilityLabel":"Field ime"}
+
+      [0m [90m 132 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 133 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 134 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 135 |[39m         [32m`TextField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 136 |[39m       )[33m;[39m
+       [90m 137 |[39m     }[0m
+
+  ● TextField › reports focus and blur, focuses on a tap, and submits on Return
+
+    expected [ 'focus' ] to deeply equal [ 'focus', 'blur' ]
+
+      [0m [90m 494 |[39m     ([36mawait[39m handleOf([32m'focus'[39m))[33m.[39mblur()[33m;[39m
+       [90m 495 |[39m     [36mawait[39m stateWhen([32m'focus'[39m[33m,[39m (s) [33m=>[39m [33m![39ms[33m.[39mfocused[33m,[39m [32m'the blur'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 496 |[39m     [36mawait[39m waitFor(() [33m=>[39m expect(eventsOf([32m'focus'[39m))[33m.[39mtoEqual([[32m'focus'[39m[33m,[39m [32m'blur'[39m])[33m,[39m {
+       [90m     |[39m                                                          [31m[1m^[22m[39m
+       [90m 497 |[39m       timeout[33m:[39m [35m5000[39m[33m,[39m
+       [90m 498 |[39m     })[33m;[39m
+       [90m 499 |[39m[0m
+
+  ● TextField › grows a multi-line field with its text, one correction a step, and keeps two fields apart
+
+    expected 66 to be greater than 88
+
+      [0m [90m 629 |[39m       [32m`textfield grow: line=${line} heights=${heights.join(',')} tall=${boxHeight('tall')}`[39m
+       [90m 630 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 631 |[39m     expect(heights[[35m2[39m])[33m.[39mtoBeGreaterThan(heights[[35m0[39m] [33m?[39m[33m?[39m [35m0[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 632 |[39m     [90m// The four-line field kept its own height through every re-measure of the other:[39m
+       [90m 633 |[39m     [90m// one shared cache entry would have handed it the growing field's.[39m
+       [90m 634 |[39m     expect(boxHeight([32m'tall'[39m))[33m.[39mtoBeGreaterThan(line [33m*[39m [35m3.5[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 7 passed, 12 total
+Snapshots:   0 total
+Time:        35.005 s
+Ran all test suites matching TextField.
+
+
+
+```

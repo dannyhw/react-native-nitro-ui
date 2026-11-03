@@ -21,6 +21,7 @@
 #include "HybridNitroUiPickerSpecSwift.hpp"
 #include "HybridNitroUiMenuSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
+#include "HybridNitroUiTextFieldSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -107,6 +108,13 @@
     "NitroUiDialog",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiDialogSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiDialog();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiTextField",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiTextFieldSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTextField();
       return hybridObject;
     }
   );

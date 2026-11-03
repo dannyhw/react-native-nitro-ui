@@ -510,6 +510,9 @@ export const PLANS = {
     { scenario: 'mount.menu', n: 50 },
     { scenario: 'update.menu', n: 50 },
     { scenario: 'memory.menu', n: 200 },
+    { scenario: 'mount.text-field', n: 50 },
+    { scenario: 'update.text-field', n: 50 },
+    { scenario: 'memory.text-field', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -568,6 +571,13 @@ export const PLANS = {
     { scenario: 'update.menu', n: 50 },
     { scenario: 'memory.menu', n: 200 },
     { scenario: 'leak.menu', n: 200 },
+    { scenario: 'mount.text-field', n: 1 },
+    { scenario: 'mount.text-field', n: 50 },
+    { scenario: 'mount.text-field', n: 200 },
+    { scenario: 'update.text-field', n: 1 },
+    { scenario: 'update.text-field', n: 50 },
+    { scenario: 'memory.text-field', n: 200 },
+    { scenario: 'leak.text-field', n: 200 },
   ],
 };
 

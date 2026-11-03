@@ -1,0 +1,77 @@
+# Failure excerpt — harness:ios:TextField:-t:keystroke
+
+- Ran: 2026-11-02T18:54:13.688Z on code tree `4559587e55a3` at HEAD `501a5c0` (branch `task/G13-textfield`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios TextField -t keystroke`
+- Result: fail, exit 1, 17930 ms
+- Load: start 7.86, end 6.94, median 6.94, max 7.86
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G13-houpr`
+- Full log: `task/G13-textfield/harness+ios+TextField+-t+keystroke-2026-11-02T18-54-13.688Z.log` (<store>/task/G13-textfield/harness+ios+TextField+-t+keystroke-2026-11-02T18-54-13.688Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● TextField › commits a keystroke about as fast as RN TextInput`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G13-textfield/harness+ios+TextField+-t+keystroke-2026-11-02T18-54-13.688Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G13-houpr (still live)
+  |   S2-g2lpi                 S2           both              pair-a
+  |   G13-houpr                G13          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.94 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios TextField -t keystroke
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4559587e55a3, 11 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.86/6.16 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G13-textfield/harness+ios+TextField+-t+keystroke-2026-11-02T18-54-13.688Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● TextField › commits a keystroke about as fast as RN TextInput
+
+    LATENCY {"summary":{"nitro":{"p50":6.4842080026865005,"p95":8.858874998986721},"rn":{"p50":4.647208996117115,"p95":9.771291993558407}},"samples":{"nitro":[4.8524159938097,2.250749997794628,2.027957998216152,1.9876249954104424,5.525208994746208,6.528457999229431,6.82616700232029,6.623458996415138,8.667957998812199,7.546875,6.661375001072884,2.0447919964790344,2.4157079979777336,5.626665994524956,8.858874998986721,6.4842080026865005],"rn":[8.104583993554115,5.647749997675419,7.779417000710964,8.497042000293732,3.1245839968323708,2.92212500423193,4.361417002975941,9.771291993558407,3.162542000412941,2.940124996006489,4.647208996117115,9.122249998152256,3.4416669979691505,3.14537500590086,3.682334005832672,8.351750001311302]}}
+
+      [0m [90m 781 |[39m       note[33m:[39m [32m`nitro p50 ${summary.nitro.p50.toFixed(1)} / p95 ${summary.nitro.p95.toFixed(1)}, rn p50 ${summary.rn.p50.toFixed(1)} / p95 ${summary.rn.p95.toFixed(1)}`[39m[33m,[39m
+       [90m 782 |[39m     })[33m;[39m
+      [31m[1m>[22m[39m[90m 783 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`LATENCY ${JSON.stringify({ summary, samples })}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 784 |[39m   })[33m;[39m
+       [90m 785 |[39m
+       [90m 786 |[39m   it([32m'comes back from the pool with none of its previous owner'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 11 skipped, 1 passed, 13 total
+Snapshots:   0 total
+Time:        16.826 s
+Ran all test suites matching TextField with tests matching "keystroke".
+
+
+
+```

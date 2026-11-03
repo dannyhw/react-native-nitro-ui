@@ -173,7 +173,7 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the nine controls today', () => {
+  it('is complete for the ten controls today', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
       'Button',
@@ -185,6 +185,7 @@ describe('coverage', () => {
       'SegmentedControl',
       'Slider',
       'Switch',
+      'TextField',
     ]);
     const matrix = coverageMatrix(manifests, {
       sizing: JSON.parse(read('nitro-ui.sizing.json')),
@@ -1905,6 +1906,7 @@ describe('the a11y sweep, against a fake device', () => {
         'picker',
         'menu',
         'host',
+        'textfield',
       ]);
     });
   });

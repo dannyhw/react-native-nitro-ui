@@ -131,4 +131,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiDialogRecyclable() -> Bool {
     return HybridNitroUiDialog.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiTextField() -> bridge.std__shared_ptr_HybridNitroUiTextFieldSpec_ {
+    let hybridObject = HybridNitroUiTextField()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiTextFieldSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiTextFieldRecyclable() -> Bool {
+    return HybridNitroUiTextField.self is any RecyclableView.Type
+  }
 }
