@@ -13,7 +13,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 - **D6** Single npm package `react-native-nitro-ui`; core lives inside it (no `@nitro-ui/core`).
 - **D7** No optional (`?:`) Hybrid View props (nitro#1184); native specs use `T | null` and the JS
   wrapper always passes every prop.
-- **D8 (T03)** Supported floor stays **RN >= 0.86** (Expo SDK 57+). Android deps (Compose BOM etc.)
+- **D8 (T03) — superseded by D39.** Supported floor stays **RN >= 0.86** (Expo SDK 57+). Android deps (Compose BOM etc.)
   must be pinned to versions whose AAR metadata works with RN 0.86's default compileSdk/AGP, so
   0.86 consumers need zero changes. RN 0.86 iOS can't be verified on this machine's iOS 27 runtime;
   verify it in CI on an older runtime later.
@@ -486,3 +486,22 @@ override any of them.
 4. **Picker `variant="radio"`** falls back to the menu on iOS.
 5. **Order:** SearchField (G17) and Tooltip (G18) build now in parallel; Picker radio next; Stepper after; the Popover
    spike after Tooltip merges.
+
+## D39 — Current platforms only; Material 3 Expressive on Android (owner, 2026-11-03)
+
+The owner: "raise the floor, we want to match and improve on expo ui, we aren't here to be outdated. Do the best
+possible thing, not the thing that supports all the old react native versions. You can improve anything we were
+holding back on for older RN versions."
+
+1. **Supersedes D8.** The supported floor is the current React Native and Expo SDK: **RN >= 0.88, Expo SDK 58**.
+   When a newer RN or SDK is released, the floor moves up with the next minor once our gates pass on it; we don't keep
+   older versions working at the cost of the current one.
+2. **Android dependencies track current:** the Compose BOM / Compose 1.12+, `material3` 1.5 (beta02 now; stable as
+   soon as it ships), and whatever compileSdk/AGP they need (37 / 9.1), matching RN 0.88's template.
+3. **Material 3 Expressive is the Android design** (Android's design language since Android 16): the library theme
+   becomes `MaterialExpressiveTheme`, by default, with an app-level opt-out to the baseline M3 theme. Every Android
+   component adopts its Expressive counterpart where one exists (menus, buttons and button groups, loading
+   indicator, …), aiming to match `@expo/ui` and go past it.
+4. **Anything held back for an older RN or SDK is lifted:** workarounds, pinned versions, smoke rows, docs. iOS's
+   floor stays RN's own `min_ios_version_supported`; a SwiftUI fallback for an older iOS that the current RN still
+   supports is not "held back", but one for an iOS RN no longer supports is removed.
