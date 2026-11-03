@@ -1,0 +1,194 @@
+# Failure excerpt — harness:android:Checkbox%7CConformance
+
+- Ran: 2026-11-03T09:44:36.929Z on code tree `9d7e5522abbf` at HEAD `6409138` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Checkbox|Conformance`
+- Result: fail, exit 1, 140195 ms
+- Load: start 2.12, end 2.69, median 4.71, max 8.98
+- Device: android / device `emulator-5574` / lease `G15-h2yzp`
+- Full log: `task/G15-checkbox/harness+android+Checkbox+7CConformance-2026-11-03T09-44-36.605Z.log` (<store>/task/G15-checkbox/harness+android+Checkbox+7CConformance-2026-11-03T09-44-36.605Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Checkbox › has its own declared fallback, and still corrects a wrong guess`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android+Checkbox+7CConformance-2026-11-03T09-44-36.605Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-h2yzp (still live)
+  |   G15-h2yzp                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.69 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 539 — the rest is in the full log above)
+
+```
+      react-native-nitro-ui: a dialog was dismissed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`, or pass `dismissible={false}` to keep the dialog up.
+
+
+    console.log
+          · conformance-dialog after the uncontrolled second owner: the dialog the second owner asked for is presented=1 (expected 1)
+
+
+    console.log
+          · conformance-dialog after the uncontrolled second owner: the title its window shows=Second owner’s dialog (expected Second owner’s dialog)
+
+
+    console.log
+          · presentation: box=0.0x0.0 labelBox=null - the window's name is asserted by real input
+
+
+    console.log
+          · BottomSheet declares no sizing policy, so it has no fallback to declare and never enters the engine to guess one (component.json sizing: null)
+
+
+    console.log
+          · BottomSheet is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · BottomSheet is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · conformance-sheet props after the second owner: presented=false
+
+
+    console.log
+          · conformance-sheet residue probe (uncontrolled second owner): a dismissal the first owner took (one native event), and the content the first owner's sheet held - the second owner presents with a fresh count and content of another height
+
+
+    console.warn
+      react-native-nitro-ui: a BottomSheet was dismissed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`, or pass `dismissible={false}` to keep the sheet up.
+
+
+    console.log
+          · conformance-sheet after the uncontrolled second owner: the sheet the second owner asked for is presented=1 (expected 1)
+
+
+    console.log
+          · conformance-sheet after the uncontrolled second owner: the content height its sheet holds (the second owner's)=260 (expected 260)
+
+
+    console.log
+          · presentation: box=null labelBox=null - the window's name is asserted by real input
+
+
+    console.log
+          · poisoned measured=179.4x48.0 box=179.4x48.0 corrections=1 poison=111.0x13.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=179.4x48.0 declared=96.0x48.0 boxRule=none locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 3→4 across 50 mounts
+
+
+    console.log
+          · conformance-chip props after the second owner: label=Second owner chip accessibilityLabel=Conformance chip, second owner
+
+
+    console.log
+          · conformance-chip residue probe (uncontrolled second owner): an uncontrolled filter chip that started selected and was pressed off, then a second owner whose own default is selected - which the control can only be showing because `didApplyDefault` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-chip after the uncontrolled second owner: the first press after the second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · conformance-chip residue probe (controlled second owner): a press that turns an uncontrolled filter chip off, then a second owner that is *controlled* at `true` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-chip after the controlled second owner: the first press on the controlled second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=48.0x48.0 box=48.0x48.0 corrections=1 poison=111.0x13.0 locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-checkbox props after the second owner: checked=true accessibilityLabel=Conformance checkbox, second owner
+
+
+    console.log
+          · conformance-checkbox residue probe (uncontrolled second owner): an uncontrolled Checkbox that started ON and was pressed off, then a second owner whose own default is ON - a number the control can only be standing on because `didApplyDefault` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-checkbox after the uncontrolled second owner: the first press after the second mount reports=conformance-checkbox:false (expected conformance-checkbox:false)
+
+
+    console.log
+          · conformance-checkbox residue probe (controlled second owner): a press that turns an uncontrolled Checkbox on, then a second owner that is *controlled* at `false` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-checkbox after the controlled second owner: the first press on the controlled second mount reports=conformance-checkbox:true (expected conformance-checkbox:true)
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+  ● conformance · every control, four rules › · Checkbox › has its own declared fallback, and still corrects a wrong guess
+
+    1 conformance finding(s):
+
+        - Checkbox × declared-fallback: the fallback 40x40 is not the measured 48x48 for a control whose own axis is its height (its width is its parent’s) — a mismatch means the declaration drifted from the component
+      [0m [90m 1209 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1210 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1211 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1212 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1213 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1214 |[39m [32m        .join('\n')}`[39m[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 74 passed, 75 total
+Snapshots:   0 total
+Time:        139.117 s
+Ran all test suites matching Checkbox|Conformance.
+gate: harness:android:Checkbox%7CConformance FAIL in 140.2 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+
+gate: appended the device context to task/G15-checkbox/harness+android+Checkbox+7CConformance-2026-11-03T09-44-36.605Z.log (5 probe(s))
+
+```

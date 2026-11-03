@@ -30,7 +30,10 @@ export interface CheckboxProps extends ViewProps {
 `etc/react-native-nitro-ui.api.md` is the record; the native props
 (`src/components/Checkbox/Checkbox.nitro.ts`) are the same set with `T | null` and no
 optionals, and every one is always sent. Sizing key `indeterminate|label`; declared
-fallback 61 × 28 pt on iOS (51 × 31 before iOS 26), 40 × 40 dp on Android. `hostable` is
+fallback 61 × 28 pt on iOS (51 × 31 before iOS 26), 40 × 48 dp on Android — the height is
+every configuration's touch target, the width is a bare box's (`Checkbox` is `height`-only
+in `scripts/conformance-core.mjs`, so the device run compares that axis). `''` on `label`
+or `accessibilityLabel` is read as "not set" on both platforms. `hostable` is
 false and `bench` is false (see Follow-ups).
 
 ## Summary
@@ -164,3 +167,30 @@ powered-off device at roughly 2026-11-03 06:20 UTC and re-acquire.
   difference documented, which costs the overlay, the caveat's middle half, and the aim
   guard in `testRealInputCheckbox`. **Recommend keeping it**; the mutation record (rows
   13–14) is the evidence either way.
+
+## Fix round 1
+
+**Lease:** `G15-h2yzp` (pair-a) · round 1 of 2 · `origin/main` merged in first, for the
+never-`pkill` rule.
+
+Four fixes, each with a red (rows 15–23 of `docs/tasks/G15/mutations.json`). The Android label
+is `CenterVertically`, measured against its own row — 12 dp high before, in a box every size
+assertion read as correct. The iOS conformance row states 61×28, the Switch's box, through the
+narrow exception the check itself reads. The Android fallback is 48 dp tall, and `Checkbox`
+moved from a skipped box to `HEIGHT_ONLY_FALLBACK`. `real-input:ios` taps the glyph itself and
+counts twice, where a double toggle shows. The `.background` tap target was tried and measured
+— three presses, no event — so the overlay ships and the docs were corrected. `''` is no name on
+either prop; a labelled `TriStateCheckbox` takes a null `onClick` like its two-state neighbour,
+so the ripple is the row's; the States story's bare row is bare, and both screenshots are
+retaken.
+
+| Gate | Result | Counts | Code tree | Duration |
+| --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1720 tests / 68 suites | `6eb3bf950a3a` | 2 m 38 s |
+| `harness:ios` | **PASS** | 355 tests / 21 suites + isolated 2 / 1 | `6eb3bf950a3a` (ios tree) | 8 m 31 s |
+| `harness:android` | **PASS** | 404 tests / 21 suites + isolated 2 / 1 | `6eb3bf950a3a` (android tree) | 11 m 59 s |
+| `real-input:ios` | **PASS** | — | `6eb3bf950a3a` (ios tree) | 20 m 39 s |
+| `real-input:android` | **PASS** | — | `6eb3bf950a3a` (android tree) | 31 m 06 s |
+
+`need --for review`: satisfied. `harness:android` was red once on the Slider a11y-step flake on
+record at `FOLLOWUPS.md:56` (the same `[3, 6, 3]`), green on the re-run.
