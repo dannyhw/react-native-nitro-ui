@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-03T09:29:13.570Z on code tree `234b0b5c2ce3` at HEAD `6142204` (branch `task/G16-contextmenu`)
+- Command: `bun run check`
+- Result: fail, exit 1, 108398 ms
+- Load: start 3.81, end 9.99, median 11.61, max 17.48
+- Device: android / device `emulator-5574` / lease `G16-dymmb`
+- Full log: `task/G16-contextmenu/check-2026-11-03T09-29-12.987Z.log` (<store>/task/G16-contextmenu/check-2026-11-03T09-29-12.987Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/readme-components.test.js`
+- `● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width`
+- `expect(received).toEqual(expected) // deep equality`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2917 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/changesets.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/check-runner.test.js (14.002 s)
+PASS scripts/__tests__/lease-pool-cli.test.js (14.82 s)
+PASS scripts/__tests__/lease-metro-port.test.js (21.359 s)
+PASS scripts/__tests__/gate-check.test.js (31.847 s)
+PASS scripts/__tests__/gate-logs.test.js (49.332 s)
+PASS scripts/__tests__/gate.test.js (52.042 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (56.714 s)
+PASS scripts/__tests__/ci-workflows.test.js (70.179 s)
+PASS scripts/__tests__/bench-gate.test.js (102.96 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/readme-components.test.js
+  ● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "ContextMenu: docs/images/components/context-menu-android.png does not exist",
+    + ]
+
+      252 |     }
+      253 |
+    > 254 |     expect(problems).toEqual([]);
+          |                      ^
+      255 |   });
+      256 | });
+      257 |
+
+      at Object.toEqual (scripts/__tests__/readme-components.test.js:254:22)
+
+
+Test Suites: 1 failed, 66 passed, 67 total
+Tests:       1 failed, 1718 passed, 1719 total
+Snapshots:   0 total
+Time:        103.274 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 108.4 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+
+```

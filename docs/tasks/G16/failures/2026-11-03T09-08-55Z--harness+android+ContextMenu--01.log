@@ -1,0 +1,195 @@
+# Failure excerpt — harness:android:ContextMenu
+
+- Ran: 2026-11-03T09:08:55.277Z on code tree `8c7ab9549fb5` at HEAD `ee78536` (branch `task/G16-contextmenu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ContextMenu`
+- Result: fail, exit 1, 67542 ms
+- Load: start 4.77, end 11.97, median 10.18, max 17.04
+- Device: android / device `emulator-5574` / lease `G16-dymmb`
+- Full log: `task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log` (<store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNCSlider", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNDateTimePickerCGen", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rngesturehandler_codegen", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnreanimated", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnsvg", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/safeareacontext", skipping. Add this directory to your ignore list to exclude it.`
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once`
+- `timed out waiting for the open`
+- `● ContextMenu · the gesture › opens the inner of two nested ContextMenus only`
+- `timed out waiting for the inner open`
+- `● ContextMenu · the menu › refuses a disabled row and an unknown id, and still closes`
+- `timed out waiting for "refuse-target" to open`
+- `● ContextMenu · the menu › closes an open menu when it becomes disabled, and applies a group change live`
+- `timed out waiting for "live-target" to open`
+- `● ContextMenu · the menu › closes an open menu that a layout moves (Android: the popup follows its anchor)`
+- `timed out waiting for "move-target" to open`
+- `● ContextMenu · the menu › opens the popup at the finger, not at the view (Android)`
+- `● ContextMenu · drop and recycle › reports the close of a menu dropped while open, and leaves no popup`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-dymmb (still live)
+  |   G16-dymmb                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 11.97 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 134 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:ContextMenu
+gate: node ../scripts/harness.mjs --harnessRunner android ContextMenu (cwd example)
+gate: code tree 8c7ab9549fb5 at HEAD ee785363
+gate: git tree 93d35feecf8f with a DIRTY worktree (not reusable)
+gate: log task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log
+gate:       <store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ContextMenu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 8c7ab9549fb5, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.77/6.92 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNCSlider", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNDateTimePickerCGen", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rngesturehandler_codegen", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnreanimated", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnsvg", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/safeareacontext", skipping. Add this directory to your ignore list to exclude it.
+HARNESS Runner android ready
+
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once
+
+    timed out waiting for the open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the gesture › opens the inner of two nested ContextMenus only
+
+    timed out waiting for the inner open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › refuses a disabled row and an unknown id, and still closes
+
+    timed out waiting for "refuse-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › closes an open menu when it becomes disabled, and applies a group change live
+
+    timed out waiting for "live-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › closes an open menu that a layout moves (Android: the popup follows its anchor)
+
+    timed out waiting for "move-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › opens the popup at the finger, not at the view (Android)
+
+    timed out waiting for the open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · drop and recycle › reports the close of a menu dropped while open, and leaves no popup
+
+    timed out waiting for "drop-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · drop and recycle › comes back from the recycle pool with no previous owner and its interaction
+
+    timed out waiting for "first-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 9 passed, 17 total
+Snapshots:   0 total
+Time:        66.396 s
+Ran all test suites matching ContextMenu.
+gate: harness:android:ContextMenu FAIL in 67.5 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+
+
+gate: appended the device context to task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T09-08-54.778Z.log (5 probe(s))
+
+```
