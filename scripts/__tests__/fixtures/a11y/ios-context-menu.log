@@ -1,0 +1,5 @@
+Measured, not written (G16): the iOS a11y sweep's lines for context-menu on the shipped code, iOS 27 (accessible ContextMenu with two Text children). The wrapper carries the label; the first Text is still listed under it.
+real-input a11y case=context-menu kind=anchor id=ctx-accessible x=12.0 y=430.00000762939453 w=378.0 h=68.0 nodes=3
+real-input a11y case=context-menu kind=node trait="other" enabled=true hittable=true id="ctx-accessible" label="Message from Grace" value="" x=12.0 y=430.00000762939453 w=378.0 h=68.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="Grace Hopper" value="" x=25.0 y=443.00000762939453 w=352.0 h=17.0
+real-input a11y case=context-menu kind=node trait="static text" enabled=true hittable=true id="" label="Grace Hopper" value="" x=25.0 y=443.00000762939453 w=352.0 h=17.0

@@ -53,6 +53,7 @@ final class RealInputTests: XCTestCase {
     static let sheetTab = "tab-sheet"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
+    static let contextMenuTab = "tab-contextmenu"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -74,6 +75,8 @@ final class RealInputTests: XCTestCase {
     static let pickerEvents = "real-input-picker-events"
     static let menuPick = "real-input-menu-pick"
     static let menuEvents = "real-input-menu-events"
+    static let contextMenu = "ctx-echo"
+    static let contextMenuOrder = "ctx-order"
     static let chipValue = "real-input-chip-value"
     static let chipEvents = "real-input-chip-events"
     static let chipRefusedLast = "real-input-chip-refused-last"
@@ -401,6 +404,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
       A11yCase(id: "text-field", testId: "text-typing", label: "Typing field",
                tab: Tab.textFieldTab, screenAnchor: Echo.textTyping),
+      A11yCase(id: "context-menu", testId: "ctx-accessible", label: "Message from Grace",
+               tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
     ]
   }
 
@@ -2521,6 +2526,189 @@ final class RealInputTests: XCTestCase {
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
     )
+  }
+
+  // MARK: - ContextMenu
+
+  /// A ContextMenu under a real finger (G16): a quick tap is the child's, a still hold
+  /// opens the menu and the child's `onPress` never fires for it, a row picks with
+  /// select before close, a drag that starts on it scrolls the page and opens nothing,
+  /// the innermost of two nested menus wins, and a disabled one leaves the hold to its
+  /// child. S3 measured each of these on a prototype (questions 1, 2 and 4); this is
+  /// the same reading on the shipped component, from the screen's own echo
+  /// (`ctx-echo`, React's counters, in a header the menu never covers).
+  func testRealInputContextMenu() throws {
+    try goToTab(Tab.contextMenuTab, showing: Echo.contextMenu)
+    try contextMenuToTop()
+    try required("ctx-reset", as: "the counters' reset").fingerTap()
+    contextMenuEcho { $0["press"] == 0 && $0["opens"] == 0 }
+    let target = try required("ctx-target", as: "the Pressable inside the ContextMenu")
+    // Off-centre: what is under the finger is the child, wherever it is pressed.
+    let point = target.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4))
+
+    // 1. A quick tap presses the child once and opens nothing.
+    var before = contextMenuEcho()
+    point.fingerTap()
+    var after = contextMenuEcho { $0["press"] == (before["press"] ?? 0) + 1 }
+    Thread.sleep(forTimeInterval: 0.6)
+    XCTAssertEqual(after["press"], (before["press"] ?? 0) + 1, "a quick tap presses the child once")
+    XCTAssertEqual(contextMenuEcho()["opens"], before["opens"], "and opens no menu")
+
+    // 2. A still hold opens it with no onPress; the pick reports select, then close; the
+    //    next tap presses once.
+    for round in 1...2 {
+      before = contextMenuEcho()
+      point.press(forDuration: 1.0)
+      let row = optionRow("Copy text")
+      XCTAssertTrue(
+        row.waitForExistence(timeout: 4),
+        "hold \(round): a still hold should open the menu with its \"Copy text\" row"
+      )
+      Thread.sleep(forTimeInterval: 0.4)
+      row.fingerTap()
+      let mid = contextMenuEcho { $0["closes"] == (before["closes"] ?? 0) + 1 }
+      waitUntilOptionGone("Copy text", "the menu to close after a pick", timeout: 4)
+      XCTAssertEqual(mid["opens"], (before["opens"] ?? 0) + 1, "hold \(round): one open")
+      XCTAssertEqual(
+        mid["press"],
+        before["press"],
+        "hold \(round): the child's onPress must not fire for a hold that opened the menu "
+          + "(pressIn \(mid["pressIn"] ?? -1), pressOut \(mid["pressOut"] ?? -1))"
+      )
+      XCTAssertEqual(mid["selects"], (before["selects"] ?? 0) + 1, "hold \(round): the pick")
+      let order = echoText(Echo.contextMenuOrder).replacingOccurrences(of: "order=", with: "")
+        .split(separator: ",").suffix(3).joined(separator: ">")
+      XCTAssertEqual(order, "open>select:copy>close", "hold \(round): select before close (D32)")
+      // UIKit ignores a hold that starts while its dismissal still animates.
+      Thread.sleep(forTimeInterval: 1.0)
+      point.fingerTap()
+      after = contextMenuEcho { $0["press"] == (mid["press"] ?? 0) + 1 }
+      XCTAssertEqual(after["press"], (mid["press"] ?? 0) + 1, "hold \(round): a fresh tap presses once")
+    }
+
+    // 3. A drag starting on the ContextMenu scrolls the page and opens nothing.
+    before = contextMenuEcho()
+    let from = target.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+    from.press(forDuration: 0.05, thenDragTo: from.withOffset(CGVector(dx: 0, dy: -220)))
+    Thread.sleep(forTimeInterval: 1.0)
+    after = contextMenuEcho()
+    XCTAssertNotEqual(after["scrollY"], before["scrollY"], "a drag on the ContextMenu scrolls the page")
+    XCTAssertEqual(after["opens"], before["opens"], "and opens no menu")
+    XCTAssertEqual(optionLabels(containing: "Copy text"), 0, "nothing is on screen from a menu")
+    try contextMenuToTop()
+
+    // 4. Nested: the inner ContextMenu's menu, not the outer's.
+    before = contextMenuEcho()
+    let inner = try contextMenuReveal("ctx-inner")
+    inner.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
+    XCTAssertTrue(
+      optionRow("Inner action").waitForExistence(timeout: 4),
+      "a hold on the inner ContextMenu should open the inner menu"
+    )
+    XCTAssertEqual(optionLabels(containing: "Outer action"), 0, "and not the outer one")
+    contextMenuDismiss(rows: ["Inner action", "Outer action"])
+    after = contextMenuEcho { $0["inner"] == (before["inner"] ?? 0) + 1 }
+    XCTAssertEqual(after["inner"], (before["inner"] ?? 0) + 1, "the inner reports its open")
+    XCTAssertEqual(after["outer"], before["outer"], "the outer reports none")
+
+    // 5. Disabled: no menu, and the hold stays the child's (a Pressable with no
+    //    onLongPress presses on release).
+    before = contextMenuEcho()
+    let disabled = try contextMenuReveal("ctx-disabled-target")
+    disabled.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(forDuration: 1.0)
+    Thread.sleep(forTimeInterval: 1.0)
+    XCTAssertEqual(optionLabels(containing: "Copy text"), 0, "a disabled ContextMenu opens nothing")
+    contextMenuDismiss(rows: ["Copy text"])
+    after = contextMenuEcho { $0["dPress"] == (before["dPress"] ?? 0) + 1 }
+    XCTAssertEqual(after["dOpens"], before["dOpens"], "and reports no open")
+    XCTAssertEqual(after["dPress"], (before["dPress"] ?? 0) + 1, "the child keeps the hold: one press")
+    try contextMenuToTop()
+  }
+
+  /// The `ctx-echo` counters, polled until `ok` accepts them (or once, with no `ok`).
+  @discardableResult
+  private func contextMenuEcho(
+    timeout: TimeInterval = 6,
+    _ ok: (([String: Int]) -> Bool)? = nil
+  ) -> [String: Int] {
+    func parse() -> [String: Int] {
+      var out: [String: Int] = [:]
+      for part in echoText(Echo.contextMenu).split(separator: ";") {
+        let pair = part.split(separator: "=", maxSplits: 1)
+        if pair.count == 2, let value = Int(pair[1]) {
+          out[String(pair[0])] = value
+        }
+      }
+      return out
+    }
+    guard let ok else { return parse() }
+    let deadline = Date().addingTimeInterval(timeout)
+    var echo = parse()
+    while !ok(echo) && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      echo = parse()
+    }
+    return echo
+  }
+
+  /// Back to the top of the page, dragging the right-edge strip no ContextMenu covers.
+  private func contextMenuToTop() throws {
+    let scroll = try required("ctx-scroll", as: "the ContextMenu screen's ScrollView")
+    for _ in 0..<4 where (contextMenuEcho()["scrollY"] ?? 0) > 0 {
+      scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.2))
+        .press(
+          forDuration: 0.05,
+          thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.9))
+        )
+      Thread.sleep(forTimeInterval: 0.8)
+    }
+  }
+
+  /// Scroll slowly (no fling) until the element lies wholly inside the page's ScrollView.
+  private func contextMenuReveal(_ identifier: String) throws -> XCUIElement {
+    let scroll = try required("ctx-scroll", as: "the ContextMenu screen's ScrollView")
+    var element = try required(identifier, as: identifier)
+    for _ in 0..<8 {
+      let frame = element.frame
+      if frame.minY >= scroll.frame.minY + 4, frame.maxY <= scroll.frame.maxY - 4 {
+        return element
+      }
+      let delta: CGFloat = frame.maxY > scroll.frame.maxY - 4 ? -140 : 140
+      let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.6))
+      start.press(
+        forDuration: 0.3,
+        thenDragTo: start.withOffset(CGVector(dx: 0, dy: delta)),
+        withVelocity: 300,
+        thenHoldForDuration: 0.3
+      )
+      Thread.sleep(forTimeInterval: 0.8)
+      element = try required(identifier, as: identifier)
+    }
+    return element
+  }
+
+  /// Close an open context menu by tapping the dimmed area on the side away from its
+  /// rows, then wait out UIKit's dismissal (a hold that starts during it is ignored).
+  /// Not the top edge: S3 measured a tap in the status-bar band leaving the menu up.
+  private func contextMenuDismiss(rows: [String]) {
+    let screen = app.frame
+    let menuUp = { rows.contains(where: { self.optionLabels(containing: $0) > 0 }) }
+    for attempt in 0..<3 where menuUp() {
+      let shown = rows.map { optionRow($0) }.filter { $0.exists }
+      let mid = shown.isEmpty
+        ? screen.midY : shown.map { $0.frame.midY }.reduce(0, +) / CGFloat(shown.count)
+      let dy: CGFloat = mid < screen.midY ? 0.88 : 0.18
+      let dx: CGFloat = [0.5, 0.15, 0.85][attempt]
+      app.coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy)).fingerTap()
+      let deadline = Date().addingTimeInterval(3)
+      while menuUp() && Date() < deadline {
+        Thread.sleep(forTimeInterval: 0.25)
+      }
+    }
+    if menuUp() {
+      dumpHierarchy("the context menu to close: still up after three outside taps")
+    }
+    Thread.sleep(forTimeInterval: 1.0)
   }
 
   // MARK: - Chip

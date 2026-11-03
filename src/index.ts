@@ -132,3 +132,11 @@ export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
 // universal Checkbox renders. `checked` is controlled through the event-count
 // handshake; `indeterminate` is a display and is Android-only.
 export { Checkbox, type CheckboxProps } from './components/Checkbox/Checkbox';
+// A `View` that opens Menu's `group` on a long press (G16, DECISIONS D36/D37):
+// `UIContextMenuInteraction` on iOS, a Material 3 `DropdownMenu` at the finger on
+// Android. The children stay in place, a hold cancels their touch, and `onOpen`/
+// `onClose` fire on both platforms - unlike Menu's, which are Android-only (D32).
+export {
+  ContextMenu,
+  type ContextMenuProps,
+} from './components/ContextMenu/ContextMenu';
