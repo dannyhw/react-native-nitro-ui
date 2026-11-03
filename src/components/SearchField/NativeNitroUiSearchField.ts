@@ -81,7 +81,10 @@ export interface NativeNitroUiSearchFieldProps
 export const NativeNitroUiSearchField = getHostComponent<
   NativeNitroUiSearchFieldProps,
   NitroUiSearchFieldMethods
->('NitroUiSearchField', () => NitroUiSearchFieldConfig) as unknown as ComponentType<
+>(
+  'NitroUiSearchField',
+  () => NitroUiSearchFieldConfig
+) as unknown as ComponentType<
   Omit<ViewProps, 'testID' | 'accessibilityLabel' | 'onFocus' | 'onBlur'> &
     NativeNitroUiSearchFieldProps
 >;

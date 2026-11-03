@@ -173,7 +173,7 @@ describe('the rule list', () => {
 /* ---------------------------------- coverage ---------------------------------- */
 
 describe('coverage', () => {
-  it('is complete for the ten controls today', () => {
+  it('is complete for every control in the registry', () => {
     const manifests = repoManifests();
     expect(manifests.map((m) => m.name)).toEqual([
       'BottomSheet',
@@ -184,6 +184,7 @@ describe('coverage', () => {
       'Menu',
       'Picker',
       'Progress',
+      'SearchField',
       'SegmentedControl',
       'Slider',
       'Switch',
@@ -1911,6 +1912,7 @@ describe('the a11y sweep, against a fake device', () => {
         'chip',
         'host',
         'textfield',
+        'searchfield',
       ]);
     });
   });
