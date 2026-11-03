@@ -151,12 +151,16 @@ enum NitroUiCommitDelta {
       // end of the text - the answer that is right for text appended at the end.
       return NitroUiTextLimit.truncate(incoming, to: limit)
     }
-    let allowed = NitroUiTextLimit.fitting(
+    // Nothing of the edit fits: refuse it whole, its deletion included, the way the keyboard
+    // path (`shouldChangeCharactersIn`) does.
+    guard let allowed = NitroUiTextLimit.fitting(
       current: displayed,
       range: NSRange(location: change.location, length: change.deletionLength),
       replacement: change.insertion,
       limit: limit
-    ) ?? ""
+    ) else {
+      return displayed
+    }
     if allowed == change.insertion {
       return incoming
     }

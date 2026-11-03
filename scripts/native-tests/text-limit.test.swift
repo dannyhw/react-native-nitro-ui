@@ -115,6 +115,14 @@ struct TextLimitTest {
       "a deletion from text past the cap is left alone")
     checkClamped("abcd", "aXd", 3, "aXd",
       "a selection replaced with text that fits is taken")
+    // A refused edit is refused whole, deletion included: the keyboard path
+    // (`shouldChangeCharactersIn`) leaves the field as it was, and so must the backstop.
+    checkClamped("abcd", "a\u{1F600}cd", 4, "abcd",
+      "a selection replaced with an emoji that does not fit keeps the selected text")
+    checkClamped("abcdefgh", "abXYdefgh", 5, "abcdefgh",
+      "a replacement in text JS wrote past the cap is refused, and the replaced text stays")
+    checkClamped("e", "e\u{0301}", 1, "e",
+      "a combining mark that does not fit leaves the base letter it would have joined")
 
     print("NitroUiText ==")
     check(NitroUiText("abc") == NitroUiText("abc"), "the same code units are equal")
