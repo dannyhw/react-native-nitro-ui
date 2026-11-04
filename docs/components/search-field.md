@@ -1,7 +1,8 @@
 # SearchField
 
 A search field: **one line**, the keyboard's Search key, a leading search glyph,
-and a clear button that appears with the query. UIKit's `UISearchTextField` —
+and a clear button that comes with the query — on iOS only while the field is
+editing, which is UIKit's own rule for a search field. UIKit's `UISearchTextField` —
 the field `UISearchBar` itself vends — on iOS, Material 3's search input field
 (`SearchBarDefaults.InputField` in a `DockedSearchBar` held collapsed) on
 Android. Both are hosted by the core runtime (`docs/architecture/core.md`), so
@@ -113,15 +114,22 @@ and `autoCorrect` on, and no prop moves them.
 
 ## The clear button
 
-It appears with the query and is one edit:
+It is one edit, and *when it is visible* is the one place the two controls
+visibly disagree:
 
-- iOS uses UIKit's own clear button (`clearButtonMode = .whileEditing`). UIKit
+- iOS uses UIKit's own clear button (`clearButtonMode = .whileEditing`), so it is
+  there while the field is editing and not in the bar before that — a field with a
+  query that nobody has tapped into shows no button. That is UIKit's search-field
+  rule, kept rather than replaced by `.always`, which would offer a clear button on
+  an empty field. UIKit
   asks the delegate first — `textFieldShouldClear` refuses it on a field that is
   not `editable` — then empties the field and sends `editingChanged`, so
   `onChangeText('')` arrives through the same path as any other edit.
 - Android has no built-in one, so the trailing slot holds an `IconButton` with
   Material's close glyph. It calls `TextFieldState.clearText()`, which the
-  `snapshotFlow` above reports as the edit it is.
+  `snapshotFlow` above reports as the edit it is, and the bar shows it as soon as
+  the query is non-empty, focused or not — which is why the same story row carries
+  an ✕ on Android and none on iOS.
 
 Either way focus stays: clearing a query is not leaving the field, and a clear
 that also dismissed the keyboard would be a second thing to do. The harness runs

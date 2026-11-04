@@ -439,6 +439,61 @@ export interface ProgressProps extends ViewProps {
 export type ProgressVariant = 'linear' | 'circular';
 
 // @public
+export function SearchField(input: SearchFieldProps): JSX.Element;
+
+// @public
+export interface SearchFieldHandle {
+    blur(): void;
+    focus(): void;
+}
+
+// @public
+export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
+    defaultValue?: string | undefined;
+    editable?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: string | null;
+        readonly mostRecentEventCount: number;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        focus(): void;
+        blur(): void;
+        nuiTestState(): {
+            text: string;
+            focused: boolean;
+            composing: boolean;
+            nativeEvents: number;
+            jsEvents: number;
+            lastWrite: string;
+            editable: boolean;
+            maxLength: number;
+            placeholder: string;
+            accessibilityLabel: string;
+            returnKeyType: string;
+            expanded: boolean;
+            canClear: boolean;
+        };
+        nuiTestClear(): void;
+        nuiTestSubmit(): void;
+        nuiTestLifetimeReport(): string;
+    }) => void) | undefined;
+    maxLength?: number | null | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onBlur?: (() => void) | undefined;
+    onChangeText?: ((text: string) => void) | undefined;
+    onFocus?: (() => void) | undefined;
+    onSubmitEditing?: ((text: string) => void) | undefined;
+    placeholder?: string | undefined;
+    ref?: Ref<SearchFieldHandle> | undefined;
+    value?: string | undefined;
+}
+
+// @public
 export function SegmentedControl(input: SegmentedControlProps): JSX.Element;
 
 // @public
