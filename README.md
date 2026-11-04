@@ -24,6 +24,7 @@ the layout engine, and React never sees a native node.
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 `DropdownMenu` opened at the finger                       | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
 | `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
@@ -34,9 +35,12 @@ the layout engine, and React never sees a native node.
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField` and `BottomSheet`, and refuses those three with an
-error that names them. See [Performance](#performance) for what it buys and what
-it costs.
+except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`, and
+refuses those five with an error that names them. The first three wait for a
+round that measures them inside a Host; the last two are refused by design,
+because each is a `View` around React Native children, not a control a
+composition could draw.
+See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -50,6 +54,7 @@ import {
   Checkbox,
   Chip,
   ConfirmationDialog,
+  ContextMenu,
   DatePicker,
   Host,
   Menu,
@@ -405,6 +410,63 @@ expansion binding, so iOS never reports either one — and a pick fires
 submenu nests on iOS and appears inline under a divider on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
+### ContextMenu
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/context-menu-ios.png" width="300" alt="A message held open with its context menu on iOS" /></td>
+    <td><img src="docs/images/components/context-menu-android.png" width="300" alt="A message held open with its context menu on Android, at the finger" /></td>
+  </tr>
+</table>
+
+A `View` that opens a menu on a long press. Its children stay where they are and
+keep their own gestures: a tap is theirs, a scroll is the scroll view's, and a
+hold that opens the menu cancels their touch, so a `Pressable` inside never
+fires `onPress` for it. The rows are `Menu`'s `group`.
+
+```tsx name=context-menu
+const MESSAGE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+    { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+  ],
+  sections: [
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function MessageRow() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <ContextMenu
+      group={MESSAGE_ACTIONS}
+      onSelect={setLast}
+      style={messageStyles.bubble}
+    >
+      <Text>Hold this message for its menu.</Text>
+      <Text>Last action: {last}</Text>
+    </ContextMenu>
+  );
+}
+
+const messageStyles = StyleSheet.create({
+  bubble: { padding: 12, borderRadius: 16, backgroundColor: '#f2f2f7' },
+});
+```
+
+iOS lifts the view itself as the preview (its corners follow `borderRadius`);
+Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
+both platforms, `onSelect` before the `onClose` that follows it. Set
+`accessible` and an `accessibilityLabel` to make it one screen-reader element
+with the menu on it. Without `accessible`, Android screen readers can't open the
+menu. [context-menu.md](docs/components/context-menu.md) has the gesture rules
+and the limits.
+
 ### Chip
 
 <table>
@@ -675,8 +737,8 @@ when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField` and `BottomSheet`; one of those three, an RN view, plain
-text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`; one of those
+five, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -849,8 +911,9 @@ The full list per control is in its doc; these are the ones that bite.
   Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
   changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField` and `BottomSheet`. Any other child — one of
-  those three, an RN view, text, another `<Host>` — throws in development. Give
+  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`.
+  Any other child — one of those five, an RN view, text, another `<Host>` —
+  throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules

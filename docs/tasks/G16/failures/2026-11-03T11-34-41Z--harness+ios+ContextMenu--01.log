@@ -1,0 +1,86 @@
+# Failure excerpt — harness:ios:ContextMenu
+
+- Ran: 2026-11-03T11:34:41.393Z on code tree `de72b17c1904` at HEAD `24355d5` (branch `task/G16-contextmenu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios ContextMenu`
+- Result: fail, exit 1, 48797 ms
+- Load: start 7.10, end 5.39, median 5.78, max 7.10
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G16-lq26x`
+- Full log: `task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log` (<store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● ContextMenu · the menu › builds the rows Menu builds: nested, sections, destructive, disabled`
+- `expected undefined to be 'Reply,Copy,Pin~,{More:Archive,Mail},(…' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-lq26x (still live)
+  |   G16-lq26x                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.39 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:ContextMenu
+gate: node ../scripts/harness.mjs --harnessRunner ios ContextMenu (cwd example)
+gate: code tree de72b17c1904 at HEAD 24355d55
+gate: git tree 3c9e89c41113 with a DIRTY worktree (not reusable)
+gate: log task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log
+gate:       <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios ContextMenu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree de72b17c1904, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.10/4.93 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · the menu › builds the rows Menu builds: nested, sections, destructive, disabled
+
+    expected undefined to be 'Reply,Copy,Pin~,{More:Archive,Mail},(…' // Object.is equality
+
+      [0m [90m 615 |[39m       )[33m;[39m
+       [90m 616 |[39m       console[33m.[39mlog([32m`    · drawn=${report.drawn}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 617 |[39m       expect(report[33m.[39mdrawn)[33m.[39mtoBe([33mGROUP_DRAWN[39m)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 618 |[39m       expect(report[33m.[39mrows)[33m.[39mtoBe([33mGROUP_ROWS[39m)[33m;[39m
+       [90m 619 |[39m     } [36melse[39m {
+       [90m 620 |[39m       [90m// Android has no second renderer: the popup's own composition is what counts.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 20 passed, 21 total
+Snapshots:   0 total
+Time:        47.594 s, estimated 51 s
+Ran all test suites matching ContextMenu.
+gate: harness:ios:ContextMenu FAIL in 48.8 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+
+
+gate: appended the device context to task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T11-34-41.009Z.log (4 probe(s))
+
+```

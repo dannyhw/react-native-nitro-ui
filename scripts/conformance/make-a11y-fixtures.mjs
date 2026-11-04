@@ -35,6 +35,7 @@ const TAB_LABEL = {
   checkbox: 'Checkbox',
   host: 'Host',
   textfield: 'Text',
+  contextmenu: 'Context',
 };
 
 function adb(args) {

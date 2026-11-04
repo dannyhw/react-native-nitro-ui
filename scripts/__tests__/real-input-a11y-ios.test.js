@@ -22,6 +22,8 @@
 
 import { describe, expect, it } from '@jest/globals';
 
+import { readFileSync } from 'node:fs';
+
 import {
   A11Y_CONTROLS,
   checkIosControlA11y,
@@ -97,6 +99,113 @@ describe('the iOS a11y rule', () => {
     expect(problems[0]).toContain(
       'a name on a wrapper rather than on the control'
     );
+  });
+
+  describe('a control that is the React Native view (ContextMenu)', () => {
+    const GRACE_BOX = { x: 16, y: 300, width: 361, height: 76 };
+    /** The accessible ContextMenu: one element, the wrapper itself, carrying the name. */
+    const graceWrapper = (overrides = {}) =>
+      node({
+        type: 'other',
+        id: 'ctx-accessible',
+        label: 'Message from Grace',
+        value: '',
+        frame: { ...GRACE_BOX },
+        anchor: true,
+        ...overrides,
+      });
+
+    it('passes when the wrapper itself carries the name', () => {
+      expect(
+        iosA11yProblems(control('context-menu'), [graceWrapper()])
+      ).toEqual([]);
+    });
+
+    it('goes red when the wrapper lost its name (not an accessibility element)', () => {
+      // The D37 item 2 failure: React Native asks the content view, the content view says
+      // no, and the wrapper is announced as nothing at all.
+      const problems = iosA11yProblems(control('context-menu'), [
+        graceWrapper({ label: '' }),
+      ]);
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(
+        'no element other than the React Native wrapper'
+      );
+    });
+
+    it('goes red when a child inside it is announced with the name as well', () => {
+      const problems = iosA11yProblems(control('context-menu'), [
+        graceWrapper(),
+        node({
+          type: 'staticText',
+          label: 'Message from Grace',
+          frame: { ...GRACE_BOX, height: 20 },
+        }),
+      ]);
+      expect(problems.join('\n')).toContain(
+        '2 elements under "ctx-accessible"'
+      );
+    });
+
+    it('goes red on the measured tree of a wrapper that is not one element', () => {
+      // The content view's getter forced false, on iOS 27: the wrapper is still listed
+      // with its label (XCUITest lists any view with an identifier), so the name check
+      // alone passes - what gives it away is the children reached as stops of their own.
+      const tree = parseIosA11yLog(
+        readFileSync(
+          `${__dirname}/fixtures/a11y/ios-context-menu-not-an-element.log`,
+          'utf8'
+        )
+      ).get('context-menu');
+      expect(tree).toHaveLength(6);
+      const problems = iosA11yProblems(control('context-menu'), tree);
+      expect(problems).toHaveLength(1);
+      expect(problems[0]).toContain(
+        '4 element(s) under "ctx-accessible" are stops'
+      );
+    });
+
+    it('reports the shipped tree as its recorded debt, and only that', () => {
+      // The shipped code on iOS 27: the wrapper is the element with the label, and the
+      // first Text is still listed under it. Debt, printed every run - and the regression
+      // (the wrapper not an element, four stops) is not covered by the same row.
+      const read = (name) =>
+        parseIosA11yLog(
+          readFileSync(`${__dirname}/fixtures/a11y/${name}.log`, 'utf8')
+        ).get('context-menu');
+      const shipped = checkIosControlA11y(
+        control('context-menu'),
+        read('ios-context-menu')
+      );
+      expect(shipped.failures).toEqual([]);
+      expect(shipped.known).toHaveLength(1);
+      const regressed = checkIosControlA11y(
+        control('context-menu'),
+        read('ios-context-menu-not-an-element')
+      );
+      expect(regressed.failures).toHaveLength(1);
+      expect(regressed.exempt).toBe(false);
+    });
+
+    it('excuses exactly two stops of its own, not 12 or 22', () => {
+      const [row] = exemptionsFor('context-menu', 'ios');
+      const sentence = (count) =>
+        `NitroUiContextMenu: ${String(count)} element(s) under "ctx-accessible" ` +
+        'are stops of their own (static text "Grace Hopper" at 32,400 300x20)';
+      expect(row.matches.test(sentence(2))).toBe(true);
+      expect(row.matches.test(sentence(12))).toBe(false);
+      expect(row.matches.test(sentence(22))).toBe(false);
+    });
+
+    it('is the only case that may grade its wrapper', () => {
+      // Every other control keeps the exclusion: React Native puts the label on the
+      // wrapper whatever the control does, so for them it proves nothing.
+      expect(
+        A11Y_CONTROLS.filter((entry) => entry.wrapperIsControl === true).map(
+          (entry) => entry.id
+        )
+      ).toEqual(['context-menu']);
+    });
   });
 
   it('goes red when the named element is not at the control’s box', () => {
