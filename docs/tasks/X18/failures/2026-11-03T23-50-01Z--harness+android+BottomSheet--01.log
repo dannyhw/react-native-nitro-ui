@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:BottomSheet
+
+- Ran: 2026-11-03T23:50:01.723Z on code tree `2e8838fadf1f` at HEAD `1dc866a` (branch `task/X18-current-platforms`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android BottomSheet`
+- Result: fail, exit 1, 136349 ms
+- Load: start 5.76, end 5.09, median 5.76, max 10.08
+- Device: android / device `emulator-5570` / lease `X18-c6m3f`
+- Full log: `task/X18-current-platforms/harness+android+BottomSheet-2026-11-03T23-50-01.723Z.log` (<store>/task/X18-current-platforms/harness+android+BottomSheet-2026-11-03T23-50-01.723Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet › reads a sheet just under half the screen by the anchors Material measured`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X18-current-platforms/harness+android+BottomSheet-2026-11-03T23-50-01.723Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X18-c6m3f (still live)
+  |   G17-auva6                G17          both              pair-a
+  |   X18-c6m3f                X18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.09 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android BottomSheet
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 2e8838fadf1f, 15 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.76/5.83 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X18-current-platforms/harness+android+BottomSheet-2026-11-03T23-50-01.723Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet › reads a sheet just under half the screen by the anchors Material measured
+
+    "near" never reached selected=0 at PartiallyExpanded; its report is "seq=418;presented=1;js=1;live=1;presentCount=1;sheetValue=PartiallyExpanded;detents=medium,fraction;sheetPx=1285;containerPx=2424;selected=1;boxW=411;boxH=417;contentW=411;contentH=417;hostH=417;children=2;inSheet=2;focused=1;roots=1;userDismissals=0;unasked=0;anchored=1;drops=4;recycles=4;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"; events=[]
+
+      [0m [90m 231 |[39m     }[33m,[39m
+       [90m 232 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 233 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 234 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 235 |[39m       )[33m,[39m
+       [90m 236 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 26 passed, 27 total
+Snapshots:   0 total
+Time:        134.664 s
+Ran all test suites matching BottomSheet.
+
+
+
+```

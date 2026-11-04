@@ -43,17 +43,8 @@ comments.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1724 tests / 69 suites | `7f0cf1e4aab6` | 2 m 48 s | start 14.2 / med 9.9 / max 16.1 |
-| `harness:ios` | **PASS** | 360 tests / 22 suites + isolated 2 tests / 1 suites | `7f0cf1e4aab6` (ios tree) | 8 m 40 s | start 6.9 / med 3.8 / max 7.8 |
-| `harness:android` | **PASS** | 409 tests / 22 suites + isolated 2 tests / 1 suites | `7f0cf1e4aab6` (android tree) | 12 m 31 s | start 6.3 / med 3.1 / max 6.8 |
-| `real-input:ios` | **PASS** | — | `7f0cf1e4aab6` (ios tree) | 21 m 39 s | start 3.4 / med 19.3 / max 39.8 |
-| `real-input:android` | **PASS** | — | `7f0cf1e4aab6` (android tree) | 31 m 13 s | start 2.2 / med 3.0 / max 16.2 |
-| `harness:android:BottomSheet` | stale | 1 failed of 26 tests / 1 suites | 2f30c7c014e3 (not this tree) | 2 m 11 s | start 3.4 / med 2.7 / max 3.7 |
-| `harness:android:MaterialTheme` | stale | 1 failed of 4 tests / 1 suites | 3e643ff49ed8 (not this tree) | 12.8 s | start 3.6 / med 3.6 / max 3.6 |
-| `real-input:android:--control:picker` | **PASS** | — | `7f0cf1e4aab6` (android tree) | 8 m 51 s | start 6.0 / med 3.9 / max 7.3 |
-| `real-input:android:picker` | **FAIL** | — | `7f0cf1e4aab6` (android tree) | 0.2 s | start 5.9 / med 5.9 / max 5.9 |
+Round 1 ran `check`, both `harness:*` and both `real-input:*` green on code tree `7f0cf1e4aab6`. That table is
+superseded by the fresh one under "Fix round 1", the gate ledger's current view.
 
 The stale filtered rows are the red-proof runs on mutated trees (below). `real-input:android:picker` is a run started
 with the wrong argument (`picker` instead of `--control picker`: "unknown argument"); the `--control picker` row is the
@@ -88,3 +79,36 @@ real one. The first full `real-input:android` on this tree failed once at the pi
 - A runtime theme switch recomposes each control's content fresh (state inside the composition resets); `movableContentOf` would keep it if live switching ever matters.
 - `real-input:android` picker drop cycle 3 timed out once on `real-input-drop-gone` (G7b saw the same at cycle 2); green alone and on the re-run.
 - `docs/research/setup-decisions.md` still states the 0.86 floor (not ours to edit).
+
+## Fix round 1
+
+Lease `X18-c6m3f` (pair-b: `emulator-5570`, iOS `3AE7EE8D…` / Metro `8293`).
+
+- **Theme switch rebuilt every composition.** `NitroUiTheme` is now one `MaterialExpressiveTheme` call whose motion
+  scheme the setting picks, so a switch recomposes and disposes nothing. On 1.5.0-beta02 that is exactly the baseline
+  theme: same colours, `Shapes()`, `Typography()`, and the only extra (internal `LocalUsingExpressiveTheme`) is read by
+  nothing but `MaterialThemeKt`. `NitroUiMaterialThemeLibraryTest` (JVM) scans the material3 jar and fails if that changes.
+  The theme report gains `created`.
+- **Detent convergence** now comes from the sheet surface's measured height and height constraint, the numbers Material's
+  `draggableAnchors` uses, not the detent against the screen.
+- README and changeset name material3 `1.5.0-beta02` and that it raises an app's material3. `upstream.md` drops "RN ≥ 0.86".
+
+Red proofs:
+- MaterialTheme harness -> old two-call-site `NitroUiTheme` -> `expected 4 to be +0` (`out.created`); `expected [ 'dismiss' ] to deeply equal []` (sheet); `expected [ 'blur', 'focus' ] to deeply equal []` (field).
+- BottomSheet "just under half" -> old screen heuristic -> `"near" never reached selected=0 at PartiallyExpanded; … sheetValue=PartiallyExpanded; sheetPx=1285; containerPx=2424; selected=1`.
+- `NitroUiMaterialThemeLibraryTest` -> allowed prefix `NoSuchFileKt` -> `AssertionError at NitroUiMaterialThemeLibraryTest.kt:32`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1724 tests / 69 suites | `ca401dcf7ffb` | 3 m 00 s | start 5.0 / med 11.4 / max 30.9 |
+| `harness:ios` | **PASS** | 363 tests / 22 suites + isolated 2 tests / 1 suites | `ca401dcf7ffb` (ios tree) | 8 m 34 s | start 3.8 / med 5.5 / max 10.5 |
+| `harness:android` | **PASS** | 412 tests / 22 suites + isolated 2 tests / 1 suites | `ca401dcf7ffb` (android tree) | 12 m 46 s | start 8.8 / med 4.8 / max 11.5 |
+| `real-input:ios` | **PASS** | — | `ca401dcf7ffb` (ios tree) | 21 m 12 s | start 9.7 / med 6.0 / max 33.0 |
+| `real-input:android` | **PASS** | — | `ca401dcf7ffb` (android tree) | 31 m 31 s | start 4.3 / med 5.3 / max 125.5 |
+| `harness:android:BottomSheet` | **PASS** | 27 tests / 1 suites | `ca401dcf7ffb` (android tree) | 2 m 11 s | start 5.1 / med 6.1 / max 7.4 |
+| `harness:android:MaterialTheme` | **PASS** | 6 tests / 1 suites | `ca401dcf7ffb` (android tree) | 18.6 s | start 5.2 / med 5.2 / max 5.3 |
+| `real-input:android:--control:picker` | stale | — | 7f0cf1e4aab6 (not this tree) | 8 m 51 s | start 6.0 / med 3.9 / max 7.3 |
+| `real-input:android:picker` | stale | — | 7f0cf1e4aab6 (not this tree) | 0.2 s | start 5.9 / med 5.9 / max 5.9 |
+
+`need --for review`: `need: review is satisfied on this code tree.` (The two stale rows are round 1's picker runs.)
+
