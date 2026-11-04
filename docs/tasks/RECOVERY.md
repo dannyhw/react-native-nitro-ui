@@ -1,5 +1,15 @@
 # Recovery snapshot
 
+> **Update, 01:40 UTC:**
+> - **X18:** the merge round is committed. `task/X18-merge` is at `a1c78ffc`: the merge, the pinned shapes and type, the
+>   narrowed guard, and the Checkbox/ContextMenu theme cases. It was in its merge gates (`harness:android`) under lease
+>   `X18-fjw4q`. The mid-merge note below no longer applies. On resume, run `gate.mjs status` there and re-run what's
+>   missing.
+> - **G17:** in `real-input:ios`. The iOS a11y sweep now passes.
+> - **G18** (mac-1): in `harness:ios`. Its report must state two departures from the design: iOS always owns its window,
+>   and Android closes the tooltip when it moves.
+> - **X19** (mac-1): in `real-input:ios`, with its report drafted in `/tmp` on mac-1.
+>
 > **2026-11-04 — overnight stop (both machines lose network).** In flight, nothing finished. Resume in this order:
 >
 > 1. **X18 (PR #34, maintainer-mac-2)**: fix round 1 is pushed (`8480f2c7`), and its re-review says MERGE. The merge round
