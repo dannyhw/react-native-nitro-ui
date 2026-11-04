@@ -111,7 +111,7 @@ export const States: Story = {
       <Column label="empty">
         <SearchField />
       </Column>
-      <Column label="a query, so the clear button is up">
+      <Column label="a query">
         <SearchField defaultValue="Ada Lovelace" />
       </Column>
       <Column label="maxLength 8">
@@ -127,8 +127,11 @@ export const States: Story = {
       <Note>
         Nothing behind the field: a search field brings its own container (the
         Material 3 search bar on Android, a bordered UIKit field on iOS), so the
-        rows show it bare. The clear button arrives with the text and reports an
-        empty query when tapped.
+        rows show it bare. Its clear button is per-platform: Android's bar shows
+        the clear icon as soon as the query is non-empty, while UIKit shows its
+        own button only while the field is editing — so a query carries the icon
+        on Android and nothing on iOS until you tap in. Either way a tap is one
+        edit that reports an empty query.
       </Note>
     </Showcase>
   ),

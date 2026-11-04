@@ -561,13 +561,14 @@ newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty field with UIKit's own prompt, a query with its clear button, a query capped at maxLength 8 and a field that is not editable" /></td>
-    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty field with the platform's own prompt, a query with its clear button, a query capped at maxLength 8 and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty bordered field with a search glyph and no prompt, the same field with a query, a query capped at maxLength 8 and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty search bar reading Search, the same bar with a query and its clear icon, a query capped at maxLength 8 and a field that is not editable" /></td>
   </tr>
 </table>
 
 A search field: one line, the keyboard's Search key, a leading search glyph and a
-clear button that appears with the query. UIKit's own `UISearchTextField` on iOS,
+clear button that comes with the query — on iOS while the field is editing.
+UIKit's own `UISearchTextField` on iOS,
 Material 3's search input field on Android, so each platform draws its own search
 field rather than a copy of the other's. Same React Native `TextInput` prop names
 as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()` — and no
