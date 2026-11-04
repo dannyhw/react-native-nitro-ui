@@ -43,6 +43,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiChipSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiContextMenuSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiContextMenuComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.cpp
@@ -76,6 +78,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiContextMenuSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiContextMenuStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.cpp

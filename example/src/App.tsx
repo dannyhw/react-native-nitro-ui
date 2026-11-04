@@ -23,6 +23,7 @@ import BottomSheetScreen from './BottomSheetScreen';
 import TextFieldScreen from './TextFieldScreen';
 import ChipScreen from './ChipScreen';
 import CheckboxScreen from './CheckboxScreen';
+import ContextMenuScreen from './ContextMenuScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
 // one import the registry does not write.
@@ -43,6 +44,7 @@ type Screen =
   | 'textfield'
   | 'chip'
   | 'checkbox'
+  | 'contextmenu'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
   | 'host';
@@ -94,6 +96,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'textfield', label: 'Text' },
   { id: 'chip', label: 'Chip' },
   { id: 'checkbox', label: 'Checkbox' },
+  { id: 'contextmenu', label: 'Context' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
   // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
@@ -154,6 +157,7 @@ export default function App() {
         {screen === 'textfield' ? <TextFieldScreen /> : null}
         {screen === 'chip' ? <ChipScreen /> : null}
         {screen === 'checkbox' ? <CheckboxScreen /> : null}
+        {screen === 'contextmenu' ? <ContextMenuScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}
       </View>

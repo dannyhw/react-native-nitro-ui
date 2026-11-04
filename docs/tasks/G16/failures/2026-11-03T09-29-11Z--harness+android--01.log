@@ -1,0 +1,188 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-03T09:29:11.897Z on code tree `234b0b5c2ce3` at HEAD `6142204` (branch `task/G16-contextmenu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1237595 ms
+- Load: start 3.62, end 3.15, median 4.26, max 16.24
+- Device: android / device `emulator-5574` / lease `G16-dymmb`
+- Full log: `task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log` (<store>/task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● Console`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 3)`
+- `expected 9 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `expected 20 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+- `expected 30 to be 10 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-dymmb (still live)
+  |   G16-dymmb                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.15 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 139 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 234b0b5c2ce3 at HEAD 61422040
+gate: git tree f84d1dda60b4 with a DIRTY worktree (not reusable)
+gate: log task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log
+gate:       <store>/task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 234b0b5c2ce3, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.62/5.69 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.warn
+      react-native-nitro-ui: a BottomSheet was dismissed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`, or pass `dismissible={false}` to keep the sheet up.
+
+
+    console.log
+      recycle: new view drops=14 recycles=14
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    expected 9 to be 10 // Object.is equality
+
+      [0m [90m 911 |[39m       }
+       [90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                         [31m[1m^[22m[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m 916 |[39m         [36mawait[39m waitForFreshReport([0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 20 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 30 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    expected 9 to be 10 // Object.is equality
+
+      [0m [90m 911 |[39m       }
+       [90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                         [31m[1m^[22m[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m 916 |[39m         [36mawait[39m waitForFreshReport([0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 20 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 30 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 20 passed, 21 total
+Tests:       3 failed, 3 skipped, 405 passed, 411 total
+Snapshots:   0 total
+Time:        722.555 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 234b0b5c2ce3, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.04/5.37 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        513.113 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 1237.6 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+
+
+gate: appended the device context to task/G16-contextmenu/harness+android-2026-11-03T09-29-11.183Z.log (5 probe(s))
+
+```

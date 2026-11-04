@@ -493,9 +493,10 @@ The owner: "raise the floor, we want to match and improve on expo ui, we aren't 
 possible thing, not the thing that supports all the old react native versions. You can improve anything we were
 holding back on for older RN versions."
 
-1. **Supersedes D8.** The supported floor is the current React Native and Expo SDK: **RN >= 0.88, Expo SDK 58**.
-   When a newer RN or SDK is released, the floor moves up with the next minor once our gates pass on it; we don't keep
-   older versions working at the cost of the current one.
+1. **Supersedes D8.** The floor is set high enough to use what matters now, not to support every older release:
+   today that is **RN >= 0.88, Expo SDK 58**. It is raised when a newer RN or SDK brings something worth having,
+   not automatically with each release (owner, 2026-11-03). While the library is experimental (0.x) a raise ships in
+   a minor; once it leaves the experimental phase it follows semver, so a floor raise is a major, released as needed.
 2. **Android dependencies track current:** the Compose BOM / Compose 1.12+, `material3` 1.5 (beta02 now; stable as
    soon as it ships), and whatever compileSdk/AGP they need (37 / 9.1), matching RN 0.88's template.
 3. **Material 3 Expressive is the Android design** (Android's design language since Android 16): the library theme
