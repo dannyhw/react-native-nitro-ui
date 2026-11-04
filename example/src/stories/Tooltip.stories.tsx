@@ -179,12 +179,15 @@ export const CoachMark: Story = {
     const [open, setOpen] = useState(true);
     return (
       <View style={styles.centred}>
+        {/* The wrapper's base `alignSelf: 'flex-start'` beats a parent's
+            `alignItems`, so a centred anchor says so itself. */}
         <Tooltip
           isPresented={open}
           onIsPresentedChange={setOpen}
           title="Saved searches"
           message="Tap the star to keep this search."
           actions={ACTION_LISTS.gotIt}
+          style={styles.centredAnchor}
         >
           <Star onPress={() => setOpen(true)} />
         </Tooltip>
@@ -269,6 +272,7 @@ const styles = StyleSheet.create({
   playground: { padding: 24, gap: 16, alignItems: 'flex-start' },
   anchorSpace: { paddingVertical: 80, alignSelf: 'stretch' },
   centred: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  centredAnchor: { alignSelf: 'center' },
   opener: {
     alignSelf: 'flex-start',
     paddingHorizontal: 14,

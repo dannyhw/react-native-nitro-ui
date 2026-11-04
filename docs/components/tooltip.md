@@ -52,6 +52,8 @@ closes it.
 The wrapper hugs its anchor because React Native's default `alignItems: 'stretch'` would
 otherwise widen a wrapper around an icon to the whole row, and the tooltip would point at
 the row's middle. A `style` that stretches it moves the point the tooltip aims at.
+The base style also wins over a parent's `alignItems`: inside a parent that centres its
+children, pass `style={{ alignSelf: 'center' }}` (the Storybook `CoachMark` story does).
 
 ## Presenting and dismissing
 
