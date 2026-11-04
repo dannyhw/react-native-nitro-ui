@@ -10,9 +10,9 @@
  * The reading is `nitroUiCore.materialThemeReport()`: the setting, how many theme roots
  * have composed under each Material motion scheme, and how many content subtrees were
  * created under a root (`created`). A switch must *recompose* what is on screen, never
- * rebuild it: a rebuild ends a presented sheet's presentation and drops a focused field's
- * focus (X18 fix round 1), so the live cases hold `created` still and watch a sheet and a
- * field through the switch. The count is taken inside
+ * rebuild it: a rebuild ends a presented sheet's presentation, closes an open menu and
+ * drops a focused field's focus (X18 fix round 1), so the live cases hold `created` still
+ * and watch a sheet, a context menu and a field through the switch. The count is taken inside
  * the theme from `MaterialTheme.motionScheme` - what Material hands a control's
  * content, not what the root meant to choose - so a root that ignored the setting
  * shows up as a count under the wrong scheme. Every case reads the change across
@@ -34,7 +34,10 @@ import {
 } from 'react-native-harness';
 import {
   BottomSheet,
+  Checkbox,
+  ContextMenu,
   Host,
+  type MenuGroup,
   Switch,
   TextField,
   nitroUiCore,
@@ -169,6 +172,58 @@ function SheetScreen() {
   );
 }
 
+/** The ContextMenu's handle (declared, not imported - D14). */
+type MenuHandle = {
+  nuiTestA11yLongClick(): void;
+  nuiTestSelectRow(id: string): void;
+  nuiTestContextMenuReport(): string;
+};
+let menu: MenuHandle | null = null;
+const captureMenu = (handle: MenuHandle): void => {
+  menu = handle;
+};
+function menuReport(handle: MenuHandle): SheetReport {
+  const raw = handle.nuiTestContextMenuReport();
+  const report: SheetReport = { raw };
+  for (const pair of raw.split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) report[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return report;
+}
+const MENU_GROUP: MenuGroup = {
+  actions: [
+    { id: 'first', title: 'First' },
+    { id: 'second', title: 'Second' },
+  ],
+};
+/** Everything the menu told the app after it opened. A switch must tell it nothing. */
+const menuEvents: string[] = [];
+const onMenuOpen = (): void => {
+  menuEvents.push('open');
+};
+const onMenuClose = (): void => {
+  menuEvents.push('close');
+};
+const onMenuSelect = (id: string): void => {
+  menuEvents.push(`select:${id}`);
+};
+
+function MenuScreen() {
+  return (
+    <ContextMenu
+      testID="theme-context-menu"
+      group={MENU_GROUP}
+      onOpen={onMenuOpen}
+      onClose={onMenuClose}
+      onSelect={onMenuSelect}
+      hybridRef={captureMenu}
+    >
+      <View style={{ width: 200, height: 80 }} />
+    </ContextMenu>
+  );
+}
+
 /** The TextField's handle (declared, not imported - D14). */
 type FieldHandle = {
   focus(): void;
@@ -209,11 +264,11 @@ function FieldScreen() {
 }
 
 /**
- * Three controls with a composition each, and a Host whose two Switches compose in
- * the Host's: four theme roots, so a root the setting missed would leave its count
- * under the wrong scheme.
+ * Four controls with a composition each (three Switches and a Checkbox), and a Host
+ * whose two Switches compose in the Host's: five theme roots, so a root the setting
+ * missed would leave its count under the wrong scheme.
  */
-const ROOTS = 4;
+const ROOTS = 5;
 
 function Screen() {
   return (
@@ -221,6 +276,7 @@ function Screen() {
       <Switch defaultValue testID="theme-switch-a" />
       <Switch defaultValue={false} testID="theme-switch-b" />
       <Switch defaultValue disabled testID="theme-switch-c" />
+      <Checkbox defaultChecked label="Theme checkbox" testID="theme-checkbox" />
       <Host style={{ width: 200, height: 96 }}>
         <Switch defaultValue testID="theme-hosted-a" />
         <Switch defaultValue={false} testID="theme-hosted-b" />
@@ -236,6 +292,7 @@ describe('MaterialTheme', () => {
     await cleanup();
     sheet = null;
     field = null;
+    menu = null;
     sheetSetOpen = null;
     // The setting is the process's, and the suites after this one expect the default.
     setMaterialTheme('expressive');
@@ -346,6 +403,47 @@ describe('MaterialTheme', () => {
       expect(after.selected).toBe(up.selected);
       expect(delta(before, readReport()).created).toBe(0);
     }
+  });
+
+  it('keeps an open context menu open through a switch both ways', async () => {
+    if (!android) return;
+    menuEvents.length = 0;
+    await render(<MenuScreen />);
+    const handle = await waitForHandle(() => menu, {
+      what: 'the theme context menu',
+    });
+    // TalkBack's long-click: the Android path that opens the menu without a hold.
+    handle.nuiTestA11yLongClick();
+    const opened = await waitFor(() => {
+      const report = menuReport(handle);
+      return report.open === '1' ? report : null;
+    }, 'the context menu to open');
+    await settle();
+    menuEvents.length = 0;
+    for (const theme of ['baseline', 'expressive'] as const) {
+      const before = readReport();
+      setMaterialTheme(theme);
+      await waitForReport(
+        (report) =>
+          (theme === 'baseline'
+            ? report.baseline - before.baseline
+            : report.expressive - before.expressive) >= 1,
+        `the context menu's root recomposing for '${theme}'`
+      );
+      await sleep(1000);
+      const after = menuReport(handle);
+      console.log(`[theme] menu after '${theme}': ${after.raw}`);
+      expect(menuEvents).toEqual([]);
+      expect(after.open).toBe('1');
+      expect(after.opens).toBe(opened.opens);
+      expect(after.closes).toBe(opened.closes);
+      expect(delta(before, readReport()).created).toBe(0);
+    }
+    handle.nuiTestSelectRow('first');
+    await waitFor(
+      () => (menuReport(handle).open === '0' ? true : null),
+      'the pick to close the menu'
+    );
   });
 
   it('keeps a focused field focused, with its text, through a switch both ways', async () => {

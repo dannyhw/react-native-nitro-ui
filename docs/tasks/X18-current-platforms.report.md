@@ -76,7 +76,6 @@ real one. The first full `real-input:android` on this tree failed once at the pi
 - RN 0.88 deprecations in `HybridNitroUiBottomSheet.kt` (`ReactFeatureFlags`, a deprecated `onChildStartedNativeGesture` override) show whenever its Kotlin recompiles; not from this bump.
 - No consumer smoke run covers the floor raise or the compileSdk 37 requirement yet (CONTRIBUTING says so).
 - Bench not run: Compose 1.12 / material3 1.5 and the per-root theme read are unmeasured on mount ratios (bench host).
-- A runtime theme switch recomposes each control's content fresh (state inside the composition resets); `movableContentOf` would keep it if live switching ever matters.
 - `real-input:android` picker drop cycle 3 timed out once on `real-input-drop-gone` (G7b saw the same at cycle 2); green alone and on the re-run.
 - `docs/research/setup-decisions.md` still states the 0.86 floor (not ours to edit).
 
