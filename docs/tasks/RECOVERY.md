@@ -17,7 +17,7 @@
 > 3. **G18 Tooltip and X19 example tab bar (Opus, maintainer-mac-1)**: no PRs yet. G18 has been blocked since
 >    2026-11-03 17:32 UTC on one question: how to take the README's Android screenshot (`tooltip-android.png`).
 >    Its leased emulator is on the lease's private adb server, which the T3 device tools can't see. Taking it with adb
->    needs the owner's say-so. On resume, read their T3 threads
+>    was approved by the owner on 2026-11-04 (answered in its thread); if the run died, restart it with that approval. On resume, read their T3 threads
 >    and the `task/G18-*` / `task/X19-*` branches on mac-1 (`git log`, `gate.mjs status`). Continue each as a **new**
 >    `delegate_task` with 9-minute gate waits. X19 lands before G17/G18 merge.
 > 4. **Version Packages PR #32** is open (it will be 0.7.0): merge it after X18 and the components you want in it, then
