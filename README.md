@@ -787,8 +787,9 @@ setMaterialTheme('baseline');
 
 The choice is the whole app's: every control and every `<Host>` follows it, and
 there is no per-control prop. `setMaterialTheme('expressive')` goes back to the
-default, and a later call still reaches the controls already on screen, which
-redraw under the new theme. It does nothing on iOS.
+default, and a later call still reaches the controls already on screen without
+resetting them: an open sheet or menu stays open and a focused field keeps its
+focus. It does nothing on iOS.
 
 ## Sizing
 

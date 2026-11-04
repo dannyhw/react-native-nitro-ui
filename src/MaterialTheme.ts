@@ -39,8 +39,9 @@ function materialTheme(): NitroUiMaterialTheme | null {
  * Call it once, at startup - after the imports, before the first screen renders - so
  * no control is ever drawn with the other theme. The choice is the whole app's:
  * every control and every `<Host>` follows it, and there is no per-control prop. A
- * later call still reaches the controls already on screen, which redraw under the
- * new theme.
+ * later call still reaches the controls already on screen and keeps their state: an
+ * open sheet or menu stays open, a focused field keeps its focus and its text, and
+ * only the motion they animate with changes.
  *
  * Does nothing on iOS, which has no Material theme.
  */
