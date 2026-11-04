@@ -1,5 +1,18 @@
 # Recovery snapshot
 
+> **Final state, 01:50 UTC.** X18, G18 and X19 were interrupted at 01:42. G17 (Codex) was still in `real-input:android`
+> when I stopped looking. Everything below is on origin, so nothing depends on the local worktrees surviving.
+>
+> | Task | Thread | Branch on origin | Gates on the head | Resume with |
+> | --- | --- | --- | --- | --- |
+> | X18 merge round | interrupted | `task/X18-merge` @ `a1c78ffc` (worktree `t3-d367291d`, clean) | `check` ✓ and `harness:android` ✓ on tree `b2384ce4`; still needed: `harness:ios` and both `real-input` | a new `delegate_task` (Opus): run the three missing gates, `need --for merge`, export the ledger, merge-round section. Then I verify the tree and push `main` |
+> | G17 SearchField | Codex, may have died | `task/G17-search-field` @ `fdd5d8a8` (worktree `t3-48bfab6e`, clean) | `real-input:ios` ✓ on tree `bf3a133e`; `real-input:android` was running. Re-check with `gate.mjs status` there | if the thread is dead, a new `delegate_task` (Codex Apex) to finish the missing gates and `need --for review`. Then a PR, `link_pull_request` and an Opus review |
+> | G18 Tooltip | interrupted (mac-1) | `task/G18-tooltip` @ `81004a66` (README screenshots in) | was in `harness:ios` on mac-1 | a new `delegate_task` to mac-1 (Opus, `runtimeMode: auto`, 9-minute waits): finish the gates and the report. The report must state its two design departures (iOS owns its window; Android closes the tooltip when it moves) |
+> | X19 example tab bar | interrupted (mac-1) | **not pushed**: its work lives only in mac-1's worktree `nitro-ui-worktrees/X19` (report draft in `/tmp` on mac-1) | was in its last gate, `real-input:ios` | a new `delegate_task` to mac-1: commit, run `gate.mjs status`, finish the gates, write the report from the draft (or redo it if `/tmp` was cleared), push `task/X19-example-tab-bar` |
+>
+> Leases `G17-auva6` and `X18-fjw4q` expire on their own; release them if they're still held. Send all mac-1 work through
+> `delegate_task` (not `t3_thread_launch`), so it nests under the orchestrator thread and its questions reach it.
+
 > **Update, 01:40 UTC:**
 > - **X18:** the merge round is committed. `task/X18-merge` is at `a1c78ffc`: the merge, the pinned shapes and type, the
 >   narrowed guard, and the Checkbox/ContextMenu theme cases. It was in its merge gates (`harness:android`) under lease
