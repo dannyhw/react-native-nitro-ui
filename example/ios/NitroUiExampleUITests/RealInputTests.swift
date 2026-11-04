@@ -4185,10 +4185,24 @@ final class RealInputTests: XCTestCase {
       )
       throw RealInputCheckAborted(identifier: identifier)
     }
-    XCTAssertEqual(
-      node.frame,
-      startedAt,
-      "\(identifier) should still be drawn where it started, after \(action)"
+    // To a hundredth of a point, not bit for bit. XCUITest hands a frame back through
+    // float32, so a box whose top and bottom sit either side of a power of two reads
+    // 2^-16 pt short on one read and exact on the next: X19's tab bar moved the
+    // controlled switch 10 pt down, to y 233.67 -> 261.67 (across 256), and this read
+    // 27.999984741 against 28.0 for a switch that had not moved. A hundredth of a point
+    // is a thirtieth of a pixel at @3x, and layout never moves a box by less than a pixel.
+    let now = node.frame
+    let drift = max(
+      abs(now.minX - startedAt.minX),
+      abs(now.minY - startedAt.minY),
+      abs(now.width - startedAt.width),
+      abs(now.height - startedAt.height)
+    )
+    XCTAssertLessThanOrEqual(
+      drift,
+      0.01,
+      "\(identifier) should still be drawn where it started, after \(action): it was "
+        + "\(startedAt) and is now \(now)"
     )
   }
 
