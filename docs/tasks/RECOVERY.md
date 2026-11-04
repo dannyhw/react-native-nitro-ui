@@ -1,5 +1,29 @@
 # Recovery snapshot
 
+> **2026-11-04 — overnight stop (both machines lose network).** In flight, nothing finished. Resume in this order:
+>
+> 1. **X18 (PR #34, maintainer-mac-2)**: fix round 1 is pushed (`8480f2c7`), and its re-review says MERGE. The merge round
+>    had started in its worktree (`t3-d367291d`, branch `task/X18-merge`, **mid-merge of `origin/main`, conflicts
+>    unresolved**: `HybridNitroUiMenu.kt`, `nitro.json`, `docs/tasks/FOLLOWUPS.md`). Resume by sending its implementer
+>    thread the same merge-round brief: finish the merge (regenerate `nitro.json` with registry/nitrogen/conformance,
+>    don't union it), bring Checkbox/ContextMenu up to the floor, pass `shapes = Shapes(), typography = Typography()`
+>    explicitly in the theme call, narrow `NitroUiMaterialThemeLibraryTest` (prove it red), delete the stale "runtime
+>    theme switch recomposes" follow-up in the report, then all five merge gates and `need --for merge`. If the merge
+>    state is confusing, `git merge --abort` and redo it. Then verify the code tree, push `main`, and close #34.
+> 2. **G17 SearchField (Codex Apex, maintainer-mac-2)**: worktree `t3-48bfab6e`, `task/G17-search-field`, head
+>    `fdd5d8a8` (round-1 report committed, tree clean). It was running `harness:android` under lease `G17-auva6`
+>    (pair-a). On resume: `gate.mjs status` in that worktree, re-run any gate that did not finish, release the lease,
+>    open its PR, then an independent Opus review.
+> 3. **G18 Tooltip and X19 example tab bar (Opus, maintainer-mac-1)**: no PRs yet. On resume, read their T3 threads
+>    and the `task/G18-*` / `task/X19-*` branches on mac-1 (`git log`, `gate.mjs status`). Continue each as a **new**
+>    `delegate_task` with 9-minute gate waits. X19 lands before G17/G18 merge.
+> 4. **Version Packages PR #32** is open (it will be 0.7.0): merge it after X18 and the components you want in it, then
+>    check `npm view react-native-nitro-ui dist-tags` before you call the release pending.
+> 5. After X18: Expressive pass 1 (D40), buttons and menus, run on the two machines in parallel.
+>
+> Leases older than their TTL expire on their own. Don't `reap` other tasks' devices; release only your own leases.
+
+
 > **2026-10-27 — handoff point.** Published: 0.3.0 (all seven controls hostable on Android) and 0.3.1
 > (docs), each registry shasum = CI, tags `v0.3.0` / `v0.3.1`. **Nothing in flight**: no task
 > worktrees, no leases, no open PRs. The orchestrator moves to the second Mac
