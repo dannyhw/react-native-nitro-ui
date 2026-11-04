@@ -18,6 +18,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
@@ -51,11 +52,13 @@ ios/components/Host/HybridNitroUiHost.swift
 ios/components/Menu/HybridNitroUiMenu.swift
 ios/components/Picker/HybridNitroUiPicker.swift
 ios/components/Progress/HybridNitroUiProgress.swift
+ios/components/SearchField/HybridNitroUiSearchField.swift
 ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
 ios/components/Slider/NitroUiSliderValue.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/components/TextField/HybridNitroUiTextField.swift
+ios/components/TextField/NitroUiTextEditing.swift
 ios/components/TextField/NitroUiTextLimit.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
@@ -143,6 +146,14 @@ lib/module/components/Progress/Progress.js
 lib/module/components/Progress/Progress.js.map
 lib/module/components/Progress/Progress.nitro.js
 lib/module/components/Progress/Progress.nitro.js.map
+lib/module/components/SearchField/NativeNitroUiSearchField.js
+lib/module/components/SearchField/NativeNitroUiSearchField.js.map
+lib/module/components/SearchField/NitroUiSearchFieldConfig.js
+lib/module/components/SearchField/NitroUiSearchFieldConfig.js.map
+lib/module/components/SearchField/SearchField.js
+lib/module/components/SearchField/SearchField.js.map
+lib/module/components/SearchField/SearchField.nitro.js
+lib/module/components/SearchField/SearchField.nitro.js.map
 lib/module/components/SegmentedControl/NativeNitroUiSegmentedControl.js
 lib/module/components/SegmentedControl/NativeNitroUiSegmentedControl.js.map
 lib/module/components/SegmentedControl/NitroUiSegmentedControlConfig.js
@@ -269,6 +280,14 @@ lib/typescript/src/components/Progress/Progress.d.ts
 lib/typescript/src/components/Progress/Progress.d.ts.map
 lib/typescript/src/components/Progress/Progress.nitro.d.ts
 lib/typescript/src/components/Progress/Progress.nitro.d.ts.map
+lib/typescript/src/components/SearchField/NativeNitroUiSearchField.d.ts
+lib/typescript/src/components/SearchField/NativeNitroUiSearchField.d.ts.map
+lib/typescript/src/components/SearchField/NitroUiSearchFieldConfig.d.ts
+lib/typescript/src/components/SearchField/NitroUiSearchFieldConfig.d.ts.map
+lib/typescript/src/components/SearchField/SearchField.d.ts
+lib/typescript/src/components/SearchField/SearchField.d.ts.map
+lib/typescript/src/components/SearchField/SearchField.nitro.d.ts
+lib/typescript/src/components/SearchField/SearchField.nitro.d.ts.map
 lib/typescript/src/components/SegmentedControl/NativeNitroUiSegmentedControl.d.ts
 lib/typescript/src/components/SegmentedControl/NativeNitroUiSegmentedControl.d.ts.map
 lib/typescript/src/components/SegmentedControl/NitroUiSegmentedControlConfig.d.ts
@@ -342,6 +361,8 @@ nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
@@ -357,6 +378,7 @@ nitrogen/generated/android/c++/JNitroUiDialogAction.hpp
 nitrogen/generated/android/c++/JNitroUiMenuRow.hpp
 nitrogen/generated/android/c++/JNitroUiMenuSize.hpp
 nitrogen/generated/android/c++/JNitroUiPickerSize.hpp
+nitrogen/generated/android/c++/JNitroUiSearchFieldTestState.hpp
 nitrogen/generated/android/c++/JNitroUiSegmentedControlSize.hpp
 nitrogen/generated/android/c++/JNitroUiSheetDetent.hpp
 nitrogen/generated/android/c++/JNitroUiSize.hpp
@@ -386,6 +408,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiSearchFieldStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiSearchFieldStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.cpp
@@ -410,6 +434,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpe
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPickerSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgressSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSearchFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
@@ -421,6 +446,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiDialogAction.
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuRow.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiMenuSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiPickerSize.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSearchFieldTestState.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSegmentedControlSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSheetDetent.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSize.kt
@@ -448,6 +474,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiP
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPickerStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSearchFieldManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSearchFieldStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSegmentedControlManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSegmentedControlStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSliderManager.kt
@@ -484,6 +512,8 @@ nitrogen/generated/ios/c++/HybridNitroUiPickerSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiPickerSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiSearchFieldSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiSearchFieldSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.cpp
@@ -501,6 +531,7 @@ nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiMenuComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiPickerComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiSearchFieldComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm
@@ -530,6 +561,8 @@ nitrogen/generated/ios/swift/HybridNitroUiPickerSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiPickerSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiSearchFieldSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiSearchFieldSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSliderSpec.swift
@@ -545,6 +578,7 @@ nitrogen/generated/ios/swift/NitroUiDialogAction.swift
 nitrogen/generated/ios/swift/NitroUiMenuRow.swift
 nitrogen/generated/ios/swift/NitroUiMenuSize.swift
 nitrogen/generated/ios/swift/NitroUiPickerSize.swift
+nitrogen/generated/ios/swift/NitroUiSearchFieldTestState.swift
 nitrogen/generated/ios/swift/NitroUiSegmentedControlSize.swift
 nitrogen/generated/ios/swift/NitroUiSheetDetent.swift
 nitrogen/generated/ios/swift/NitroUiSize.swift
@@ -573,6 +607,8 @@ nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
@@ -589,6 +625,7 @@ nitrogen/generated/shared/c++/NitroUiMenuRow.hpp
 nitrogen/generated/shared/c++/NitroUiMenuSize.hpp
 nitrogen/generated/shared/c++/NitroUiPerfEvent.hpp
 nitrogen/generated/shared/c++/NitroUiPickerSize.hpp
+nitrogen/generated/shared/c++/NitroUiSearchFieldTestState.hpp
 nitrogen/generated/shared/c++/NitroUiSegmentedControlSize.hpp
 nitrogen/generated/shared/c++/NitroUiSheetDetent.hpp
 nitrogen/generated/shared/c++/NitroUiSize.hpp
@@ -614,6 +651,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiSearchFieldComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiSearchFieldComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.cpp
@@ -631,6 +670,7 @@ nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiMenuConfig.json
 nitrogen/generated/shared/json/NitroUiPickerConfig.json
 nitrogen/generated/shared/json/NitroUiProgressConfig.json
+nitrogen/generated/shared/json/NitroUiSearchFieldConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
@@ -675,6 +715,10 @@ src/components/Progress/NativeNitroUiProgress.ts
 src/components/Progress/NitroUiProgressConfig.ts
 src/components/Progress/Progress.nitro.ts
 src/components/Progress/Progress.tsx
+src/components/SearchField/NativeNitroUiSearchField.ts
+src/components/SearchField/NitroUiSearchFieldConfig.ts
+src/components/SearchField/SearchField.nitro.ts
+src/components/SearchField/SearchField.tsx
 src/components/SegmentedControl/NativeNitroUiSegmentedControl.ts
 src/components/SegmentedControl/NitroUiSegmentedControlConfig.ts
 src/components/SegmentedControl/SegmentedControl.nitro.ts
