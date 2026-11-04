@@ -23,6 +23,11 @@
 > 4. **Version Packages PR #32** is open (it will be 0.7.0): merge it after X18 and the components you want in it, then
 >    check `npm view react-native-nitro-ui dist-tags` before you call the release pending.
 > 5. After X18: Expressive pass 1 (D40), buttons and menus, run on the two machines in parallel.
+> 6. **Device leasing on Simlock (owner, 2026-11-04):** our lease pool starts each emulator on a private adb server,
+>    so T3's device tools and agent-device can't see leased emulators. That's why G12, G16 and G18 had to ask before
+>    using adb for the Android README screenshot. Brief a Simlock spike (S4), with these go/no-go criteria: `device_list`
+>    shows leased devices; gates run on them; release keeps devices warm; `emulator-5560` is excluded; mac-1 works as a
+>    second worker.
 >
 > Leases older than their TTL expire on their own. Don't `reap` other tasks' devices; release only your own leases.
 
