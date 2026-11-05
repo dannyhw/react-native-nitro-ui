@@ -896,7 +896,10 @@ describe('Chip · G12', () => {
 describe('chip · a toggle round trip (E1)', () => {
   it('comes back to the width it started at across a select and a deselect', async () => {
     const LABEL = 'Round trip';
-    poison([sizingKey('filter', false, LABEL), sizingKey('filter', true, LABEL)]);
+    poison([
+      sizingKey('filter', false, LABEL),
+      sizingKey('filter', true, LABEL),
+    ]);
     await render(
       <View style={rowStyle}>
         <Chip

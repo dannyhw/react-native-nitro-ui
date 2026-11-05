@@ -1925,7 +1925,11 @@ const CHECKS = {
           node.bounds.y2 <= box.bounds.y2 + 1
       )
       .sort((a, b) => a.bounds.x1 - b.bounds.x1);
-    t.log.checkEquals('the group still has one node per option', items.length, 3);
+    t.log.checkEquals(
+      'the group still has one node per option',
+      items.length,
+      3
+    );
     items.forEach((node, index) => {
       t.log.checkEquals(
         `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
@@ -1940,8 +1944,11 @@ const CHECKS = {
     });
     t.log.checkEquals(
       'the three items are one row, not a stack',
-      new Set(items.map((node) => `${String(node.bounds.y1)}-${String(node.bounds.y2)}`))
-        .size,
+      new Set(
+        items.map(
+          (node) => `${String(node.bounds.y1)}-${String(node.bounds.y2)}`
+        )
+      ).size,
       1
     );
     const connectedGapPx = Math.round(2 * t.density()) + 1;
