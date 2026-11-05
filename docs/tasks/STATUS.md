@@ -92,5 +92,5 @@
 | G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | round 1, finishing gates and report after the overnight stop (mac-1; `task/G18-tooltip`) |
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merge gates on `task/X18-merge` (`harness:ios` + both `real-input`; PR #34) |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
-| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | round 1, `harness:ios` and report left (mac-1; `task/X19-example-tab-bar`) |
+| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merge gates on mac-1 (PR #35; review MERGE; Android gates owed on the full tree) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
