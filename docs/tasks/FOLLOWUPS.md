@@ -149,3 +149,8 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G16 (merge re-review): the anchor witness gate has no red proof of its own.
 - The example app's tab bar packs 16+ tabs at about 23x28 dp each on Android (under the 48 dp target), shrinking with every component; make it a scrolling tab bar with natural-width items, and real-input/harness navigation scroll a tab into view (G16 merge).
 - `docs/components/host.md` still says eight controls are hosted, "every control this library ships"; it now refuses Chip, TextField, Checkbox, BottomSheet and ContextMenu (G16 merge).
+- X19 review: the tolerant iOS frame check (`RealInputTests.swift`, 0.01 pt) has no red proof of its own. Shift `startedAt` by 1/3 pt to show it.
+- X19 review: Android `revealTab` assumes left-to-right order when the tab isn't in the dump. Take the direction from the visible tabs' x order (RTL).
+- X19 review: `tabTarget` (`scripts/real-input/uiautomator.mjs`) has no unit test. Add a fixture where the label is narrower than the Pressable.
+- X19 review: Android can't detect a tab drawn but missing from `TABS` (iOS enumerates by testID). A filtered `--control` run still swipes through all 15 tabs to measure them.
+- X19: iOS TextField real-input "1 edits refused" failed once on tree `21a3e2b4` and passed on re-run. Track it as a possible flake.
