@@ -95,7 +95,7 @@ Lease `X18-c6m3f` (pair-b: `emulator-5570`, iOS `3AE7EE8D…` / Metro `8293`).
 Red proofs:
 - MaterialTheme harness -> old two-call-site `NitroUiTheme` -> `expected 4 to be +0` (`out.created`); `expected [ 'dismiss' ] to deeply equal []` (sheet); `expected [ 'blur', 'focus' ] to deeply equal []` (field).
 - BottomSheet "just under half" -> old screen heuristic -> `"near" never reached selected=0 at PartiallyExpanded; … sheetValue=PartiallyExpanded; sheetPx=1285; containerPx=2424; selected=1`.
-- `NitroUiMaterialThemeLibraryTest` -> allowed prefix `NoSuchFileKt` -> `AssertionError at NitroUiMaterialThemeLibraryTest.kt:32`.
+- ~~`NitroUiMaterialThemeLibraryTest` -> allowed prefix `NoSuchFileKt` -> `AssertionError at NitroUiMaterialThemeLibraryTest.kt:32`.~~ Superseded by the merge round's proof A: the prefix check is gone.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
@@ -111,3 +111,26 @@ Red proofs:
 
 `need --for review`: `need: review is satisfied on this code tree.` (The two stale rows are round 1's picker runs.)
 
+## Merge round
+
+`origin/main` `07505e05` (Checkbox, ContextMenu) merged into `task/X18-merge`. Lease `X18-u6d8x` (`emulator-5574`).
+
+- **Merge.** Menu rows stay in main's `MenuRows.kt`; X18's import change (`ExposedDropdownMenu`, no `@OptIn`) is on the rest of `HybridNitroUiMenu.kt`. `nitro.json` and FOLLOWUPS keep both sides.
+- **Pinned shapes and type.** `NitroUiTheme` passes `Shapes()` and `Typography()`, built once, so a later Expressive default cannot reach the baseline opt-out.
+- **Narrowed guard.** The jar scan requires `MaterialThemeKt` to be the only class referring to `LocalUsingExpressiveTheme`, and inside it only `MaterialExpressiveTheme`, the getter and `<clinit>` (`javap -c -p`). The old prefix match is gone.
+- **Theme-switch cases.** A Checkbox joins the on-screen roots; an open ContextMenu stays open through a switch both ways, with no close event and no rebuilt root.
+
+Red proofs:
+- A: `NitroUiMaterialThemeLibraryTest` -> `<clinit>` dropped from `ALLOWED_METHODS` -> `NitroUiMaterialThemeLibraryTest.kt:55`: `methods of MaterialThemeKt other than [MaterialExpressiveTheme, getLocalUsingExpressiveTheme] touch LocalUsingExpressiveTheme - see NitroUiTheme expected:<[]> but was:<[<clinit>]>`
+- B: MaterialTheme harness (Android) -> two-call-site `NitroUiTheme` -> ContextMenu `expected [ 'close' ] to deeply equal []` (`:436`); its `created` check, hoisted: `expected 1 to be +0`. Also red: roots `created` `expected 5 to be +0`, sheet, field.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1733 tests / 69 suites | `b2384ce43c9f` | 3 m 16 s | start 11.9 / med 15.6 / max 26.1 |
+| `harness:ios` | **PASS** | 390 tests / 23 suites + isolated 2 tests / 1 suites | `b2384ce43c9f` (ios tree) | 9 m 23 s | start 2.4 / med 4.6 / max 6.6 |
+| `harness:android` | **PASS** | 439 tests / 23 suites + isolated 2 tests / 1 suites | `b2384ce43c9f` (android tree) | 13 m 40 s | start 9.4 / med 4.2 / max 9.4 |
+| `real-input:ios` | **PASS** | — | `b2384ce43c9f` (ios tree) | 22 m 17 s | start 4.1 / med 5.2 / max 27.4 |
+| `real-input:android` | **PASS** | — | `b2384ce43c9f` (android tree) | 35 m 12 s | start 6.7 / med 3.2 / max 11.6 |
+| `harness:android:MaterialTheme` | **PASS** | 7 tests / 1 suites | `b2384ce43c9f` (android tree) | 20.2 s | start 4.3 / med 4.3 / max 4.5 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.`
