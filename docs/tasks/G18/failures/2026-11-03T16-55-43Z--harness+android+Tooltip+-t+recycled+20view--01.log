@@ -1,0 +1,72 @@
+# Failure excerpt — harness:android:Tooltip:-t:recycled%20view
+
+- Ran: 2026-11-03T16:55:43.851Z on code tree `094a489811c0` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Tooltip -t recycled view`
+- Result: fail, exit 1, 17269 ms
+- Load: start 5.04, end 5.35, median 5.35, max 5.35
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+android+Tooltip+-t+recycled+20view-2026-11-03T16-55-43.851Z.log` (<store>/task/G18-tooltip/harness+android+Tooltip+-t+recycled+20view-2026-11-03T16-55-43.851Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+android+Tooltip+-t+recycled+20view-2026-11-03T16-55-43.851Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G18-rcjjt                G18          both              pair-b
+  |   G16-w8ewe                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 28 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Tooltip -t recycled view
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 094a489811c0, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.04/8.08 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+android+Tooltip+-t+recycled+20view-2026-11-03T16-55-43.851Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        5.379 s
+Ran all test suites matching Tooltip with tests matching "recycled view".
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.
+
+
+
+```
