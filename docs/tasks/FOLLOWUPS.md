@@ -166,3 +166,6 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G18 review: close a Tooltip when its anchor leaves the visible window. Add Tooltip to the MaterialTheme theme-switch cases. Test a real outside tap on Android's plain tooltip.
 - G18 review: iOS builds a new hosting controller per presentation rather than reusing one.
 - Component docs (`docs/components/*.md`) still carry task IDs and D-refs.
+- E2 review: the iOS menu probe can't tell a `Toggle` row from a `Button` row (both `.off` when unchecked). Make it read the source.
+- E2 review: subtitle rendering is verified only on iOS 27. Check the oldest installable runtime.
+- E2: the check glyph is defined twice (Chip and the menu rows). Share one after E1 merges.
