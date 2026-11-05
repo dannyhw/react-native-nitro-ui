@@ -1,0 +1,105 @@
+{
+  "task": "E1",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file` at 5f5c2e5f). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
+  "mutations": [
+    {
+      "test": "example/__tests__/Button.harness.tsx · shape · the corner (E1) · reaches the control",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "the wrapper sends the default corner whatever the caller asked for",
+      "before": "      shape={resolvedShape}",
+      "after": "      shape={'round'}",
+      "run": "harness:android:Button — FAIL, 2 of 14; harness:ios:Button — FAIL, 2 of 14",
+      "redTests": [
+        "reaches the control, and resolves anything else to round: expected 'round' to be 'square' (Button.harness.tsx:1178)",
+        "repaints a mounted corner without opening a new configuration: expected 'round' to be 'square' (Button.harness.tsx:1233)"
+      ]
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx · shape · the corner (E1) · repaints a mounted corner",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "the corner joins the sizing key, so repainting it opens a new configuration",
+      "before": "        title\n      )}",
+      "after": "        `${title}|${resolvedShape}`\n      )}",
+      "run": "harness:android:Button — FAIL, 1 of 14; harness:ios:Button — FAIL, 1 of 14",
+      "redTests": [
+        "repaints a mounted corner without opening a new configuration: a corner change cost 1 size correction(s): expected 1 to be +0"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt · aRecycledModelForgetsTheCornerAndEverythingElseSentWithIt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the recycle reset forgets the newest prop",
+      "before": "    shape = ButtonShape.Round\n    enabled = true",
+      "after": "    enabled = true",
+      "run": "bun run test:native:android — BUILD FAILED",
+      "redTests": ["java.lang.AssertionError at ButtonModelTest.kt:42"]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt · theBoxMaterialLaysOutNeverGoesBelowTheTouchTarget",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the box is laid out at the container token, with no touch-target floor",
+      "before": "    get() = if (height > MinTouchTargetHeight) height else MinTouchTargetHeight",
+      "after": "    get() = height",
+      "run": "bun run test:native:android — BUILD FAILED",
+      "redTests": ["java.lang.AssertionError at ButtonModelTest.kt:69"]
+    },
+    {
+      "test": "example/__tests__/Chip.harness.tsx · chip · a toggle round trip (E1)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiChip.kt",
+      "mutation": "the always-present leading slot is taken back out, on the theory that 1.5 dropped the width spring",
+      "before": "          leadingIcon = if (selected) ChipLeadingCheck else ChipLeadingSlotEmpty,",
+      "after": "          leadingIcon = if (selected) ChipLeadingCheck else null,",
+      "run": "harness:android:Chip — FAIL, 2 of 12",
+      "redTests": [
+        "chip · a toggle round trip (E1) · comes back to the width it started at across a select and a deselect: selecting left the chip at 112.38x48.00 where a chip mounted selected is 110.86x48.00",
+        "Chip · G12 · re-keys a toggle: each state keeps its own size (the older test the same workaround carries)"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs · segmented-control · the group publishes one radio node per option",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "the item is selectable without a role, so Compose publishes it as a plain view",
+      "before": "          role = Role.RadioButton,\n          interactionSource = interaction,",
+      "after": "          interactionSource = interaction,",
+      "run": "real-input:android:--control:segmented-control — FAIL",
+      "redTests": [
+        "the group publishes one radio node per option — expected 3, saw 0",
+        "segment 1/2/3 of 3 is still a radio button — expected true, saw false",
+        "the note prints `role MISSING` for all three segments"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs · segmented-control · segment 2 reports the selection the control has",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "the item is never selected, whatever the control's index",
+      "before": "          selected = checked,",
+      "after": "          selected = false,",
+      "run": "real-input:android:--control:segmented-control — FAIL",
+      "redTests": [
+        "segment 2 reports the selection the control has (index 1) — expected true, saw false",
+        "the note prints checked=false for the segment the control has selected"
+      ],
+      "note": "The same mutation was invisible to this assertion until E1 dropped the row's own `Modifier.semantics { selected = isSelected }` from the item: a second `selected` on the same node wins the merge, so the dump was reading that line and not the item's state. The assertion is only worth having because it now reads the item."
+    },
+    {
+      "test": "scripts/real-input/android.mjs · segmented-control · segment N is within the connected gap of its neighbour",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "the row is spaced by a plain 12 dp instead of the connected spacing",
+      "before": "      horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),",
+      "after": "      horizontalArrangement = Arrangement.spacedBy(12.dp),",
+      "run": "real-input:android:--control:segmented-control — FAIL",
+      "redTests": [
+        "segment 2 is within the connected gap of its neighbour (=11px, at most 6px = 2dp)",
+        "segment 3 is within the connected gap of its neighbour (=11px, at most 6px = 2dp)"
+      ]
+    },
+    {
+      "organic": true,
+      "test": "scripts/real-input/android.mjs · segmented-control · the whole E1 block, run against the row E1 replaced",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "not a mutation: the file restored to ee3197ed (`SingleChoiceSegmentedButtonRow`), with one temporary note added to the check printing every node inside the control's box",
+      "run": "real-input:android:--control:segmented-control — PASS (tree 7ba78c008a8c)",
+      "finding": "The pre-E1 row publishes the same three nodes per segment as the connected group does — one item node carrying checkable/checked at the segment's box, one `android.widget.RadioButton` for the role, one `android.widget.TextView` for the label — which is what `docs/components/segmented-control.md` now says out loud, and what the first draft of this check got wrong (it asked the label node to be the radio button, and went red on both implementations)."
+    }
+  ]
+}
