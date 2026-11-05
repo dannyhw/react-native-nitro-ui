@@ -61,16 +61,23 @@ Android 15 emulator at density 2.625:
 
 | Label        | Variant and state   | iOS (pt)    | Android (dp)  |
 | ------------ | ------------------- | ----------- | ------------- |
-| "Sized"      | filter, unselected  | 58 × 28     | 66.29 × 48    |
-| "Sized"      | filter, selected    | 58 × 28     | 84.19 × 48    |
-| "Measured"   | filter or assist    | 88 × 28     | 94.10 × 48    |
-| "Re-keyed"   | filter, unselected  | 85.33 × 28  | 89.52 × 48    |
-| "Re-keyed"   | filter, selected    | 85.33 × 28  | 107.43 × 48   |
+| "Sized"      | filter, unselected  | 58 × 28     | 62.48 × 48    |
+| "Sized"      | filter, selected    | 58 × 28     | 80.38 × 48    |
+| "Measured"   | filter              | 88 × 28     | 90.29 × 48    |
+| "Measured"   | assist              | 88 × 28     | 94.10 × 48    |
+| "Re-keyed"   | filter, unselected  | 85.33 × 28  | 85.71 × 48    |
+| "Re-keyed"   | filter, selected    | 85.33 × 28  | 103.62 × 48   |
 
 The platforms differ on selection. An iOS chip keeps its size when selected,
 since only the fill changes. A Material 3 filter chip grows by its check mark,
-17.9 dp here. So on Android the sizing key includes the selection, and each
-state of a label has its own measured size. The harness asserts both halves: a
+17.91 dp here. So on Android the sizing key includes the selection, and each
+state of a label has its own measured size.
+
+The filter rows moved in E1 and the assist row did not: the `shapes: ChipShapes`
+overload `FilterChip` now takes lays a filter chip out 3.81 dp narrower at both
+states than the `shape:` one did — a constant offset, so the growth by the check
+mark is untouched — and it shows up only on a chip with a leading slot, which an
+assist chip has none of. The harness asserts both halves: a
 toggled chip settles at the size of a reference chip mounted selected, and a
 fresh unselected one needs no correction.
 
@@ -140,6 +147,11 @@ asserted by real input (`RealInputTests.testRealInputChip` and the a11y sweep's
   passes a leading slot (an empty one when unselected), which makes Material
   skip the animation. The check mark appears at full size, and the chip
   settles at its selected width in one correction.
+  E1 re-checked this rather than inheriting it — `ChipKt` in material3
+  1.5.0-beta02 still names `expandHorizontally`/`shrinkHorizontally` for that
+  visibility, and taking the slot back out still costs a width the deselect
+  cannot land on (`chip · a toggle round trip (E1)` in
+  `example/__tests__/Chip.harness.tsx` goes red on it).
 - On Android the first toggle of a label lays out at the fallback for one
   frame if no chip with that label and state has been measured yet (D17).
 - **Not hostable.** A `<Host>` refuses a Chip with an error that names it. No

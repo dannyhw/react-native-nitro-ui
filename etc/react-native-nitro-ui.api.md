@@ -65,6 +65,7 @@ export interface ButtonProps extends ViewProps {
         readonly title: string;
         readonly variant: string;
         readonly size: string;
+        readonly shape: string;
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
@@ -77,12 +78,16 @@ export interface ButtonProps extends ViewProps {
     // @internal
     nuiPerfId?: number | null | undefined;
     onPress?: (() => void) | undefined;
+    shape?: ButtonShape | null | undefined;
     size?: ButtonSize | undefined;
     systemImage?: string | undefined;
     tintColor?: ColorValue | undefined;
     title: string;
     variant?: ButtonVariant | undefined;
 }
+
+// @public
+export type ButtonShape = 'round' | 'square';
 
 // @public
 export type ButtonSize = 'small' | 'medium' | 'large';

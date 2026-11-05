@@ -1247,5 +1247,38 @@ describe('shape · the corner (E1)', () => {
       after.cachedSizes,
       `a corner change opened ${String(after.cachedSizes)} new size configuration(s)`
     ).toBe(0);
+
+    // `null` is how a caller says "the platform's own", and it is the same paint:
+    // the corner resolves back to `round` and neither change moves the box the
+    // sizing engine was told about.
+    render(
+      <View style={rowStyle}>
+        <Button
+          title="Resize me"
+          shape={null}
+          testID="shape-flip"
+          hybridRef={captureHybrid('shape-flip')}
+        />
+      </View>
+    );
+    await settle();
+
+    expect(handles.get('shape-flip')?.shape).toBe('round');
+    const back = delta(before, stats());
+    expect(
+      sameSize(box, sizeOf('shape-flip')) &&
+        sameSize(size, measured('shape-flip')),
+      `the corner going back to null moved the box: ${describeSize(
+        box
+      )} -> ${describeSize(sizeOf('shape-flip'))}`
+    ).toBe(true);
+    expect(
+      back.corrections,
+      `two corner changes cost ${String(back.corrections)} size correction(s)`
+    ).toBe(0);
+    expect(
+      back.cachedSizes,
+      `two corner changes opened ${String(back.cachedSizes)} new size configuration(s)`
+    ).toBe(0);
   });
 });

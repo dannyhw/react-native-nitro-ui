@@ -900,6 +900,12 @@ describe('chip · a toggle round trip (E1)', () => {
       sizingKey('filter', false, LABEL),
       sizingKey('filter', true, LABEL),
     ]);
+    // Three chips, one label: the one that is toggled, and a twin for each state
+    // that is never touched. A twin is the only oracle for "the width this state
+    // really is" — a chip mounted in that state never goes through the toggle path,
+    // so nothing that path does can have moved its measurement (G12's re-key test
+    // reads it the same way, and the poisoned keys mean being right requires
+    // correcting rather than agreeing with a wrong starting number).
     await render(
       <View style={rowStyle}>
         <Chip
@@ -908,12 +914,33 @@ describe('chip · a toggle round trip (E1)', () => {
           testID="round-trip"
           hybridRef={captureHybrid('round-trip')}
         />
+        <Chip
+          label={LABEL}
+          testID="round-trip-off"
+          hybridRef={captureHybrid('round-trip-off')}
+        />
+        <Chip
+          label={LABEL}
+          selected
+          testID="round-trip-on"
+          hybridRef={captureHybrid('round-trip-on')}
+        />
       </View>,
       { timeout: 20000 }
     );
     await waitForTestId('round-trip');
     const before = await waitForMeasured('round-trip', 'before the toggle');
     await waitForBox('round-trip', before, 'before the toggle');
+    const twinOff = await waitForMeasured(
+      'round-trip-off',
+      'the chip that was never toggled, unselected'
+    );
+    const twinOn = await waitForMeasured(
+      'round-trip-on',
+      'the chip that was never toggled, selected'
+    );
+    await waitForBox('round-trip-off', twinOff, 'the unselected twin');
+    await waitForBox('round-trip-on', twinOn, 'the selected twin');
 
     await pressChip('round-trip');
     await waitForDisplayed('round-trip', '1');
@@ -929,9 +956,28 @@ describe('chip · a toggle round trip (E1)', () => {
     console.log(
       `chip round trip: before=${describeSize(before)} ` +
         `selected=${describeSize(selected)} after=${describeSize(after)} ` +
-        `box=${describeSize(afterBox)}`
+        `box=${describeSize(afterBox)} twins(off)=${describeSize(
+          twinOff
+        )} twins(on)=${describeSize(twinOn)}`
     );
 
+    // Each state of the toggled chip is the width of the twin that has always been
+    // in it. This is the half the leading slot is for: with a `null` leading icon
+    // the toggle is a width *animation*, and the frames that settle it are never
+    // reported, so the toggled chip lands off its own twin by about a dp.
+    expect(
+      sameSize(selected, twinOn),
+      `selecting left the chip at ${describeSize(
+        selected
+      )} where a chip mounted selected is ${describeSize(twinOn)}`
+    ).toBe(true);
+    expect(
+      sameSize(after, twinOff),
+      `a deselect left the chip at ${describeSize(
+        after
+      )} where a chip mounted unselected is ${describeSize(twinOff)}`
+    ).toBe(true);
+    // And the round trip itself: the same chip, back where it started, box included.
     expect(
       sameSize(before, after),
       `a deselect left the chip measuring ${describeSize(
