@@ -166,3 +166,25 @@ constant.
   runs used the harness's own scratch AVD `nitroui` and its own simulator rather than the leased
   pair. No pool device and no `emulator-5560` was touched, and both leased devices were still
   booted afterwards. A device gate should refuse to start with no `NITRO_UI_LEASE_ID`.
+
+## Fix round 1
+
+`real-input:android` died before its SearchField case ran: `no "undefined" tab in the
+accessibility tree`. The runner reached a screen through two hand-written maps in
+`goToScreen` — tab label, arrival echo — and SearchField's screen arrived after both. iOS taps a tab by its `testID`, which an Android `uiautomator` tree does not
+carry, so only Android needed the label.
+
+One row per screen now lives in `scripts/real-input/screens.mjs` as `SCREEN_TAB` (echoes moved too), `screenTab()` names a missing row rather than returning undefined, and
+`component-coverage.test.js` proves every control row resolves against the label `App.tsx`
+draws and an anchor the app renders.
+
+Reaching the case found a second, real bug: the clear button's name was on the Compose
+glyph, leaving the node TalkBack presses unnamed. It is on the button now, glyph
+decorative; iOS needed nothing, as UIKit names its own clear button.
+
+Reds, each reverted:
+
+- guard -> `SCREEN_TAB.searchfield` deleted -> `screen "searchfield" has no row in SCREEN_TAB`
+- guard -> label `'Search '` -> `Expected: "Search" / Received: "Search "`
+- guard -> echo renamed `search-typing-echoo` -> `nothing in example/src draws "search-typing-echoo"`
+- `the clear button names itself` -> red on the unmutated tree until the Kotlin fix
