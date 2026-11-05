@@ -751,7 +751,10 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
       (r) => isUpCounted(1)(r) && r.title === 'Old title',
       'the old tooltip up'
     );
-    const reuses: string[] = [];
+    // The recycle oracle: the instance's own pool-entry count, read every round. Each
+    // round drops the mount that was up and mounts the other key, so a round whose count
+    // did not grow got a fresh instance - and then nothing below tested a recycle at all.
+    const reuses: number[] = [Number(reportOf('recycled').recycles ?? NaN)];
     for (const round of [1, 2, 3]) {
       handles.clear();
       await rerender(<Swap round={round} />);
@@ -763,12 +766,23 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
         expect(report.presented).toBe('0');
         expect(report.kind).toBe('none');
         expect((report.raw ?? '').includes('Old message')).toBe(false);
-        reuses.push(report.recycles ?? '?');
+        // Never presented in this mount: a count carried over from the open tooltip
+        // the instance last served is a recycle that did not reset.
+        expect(report.presentCount).toBe('0');
       } else {
         await waitForReport(
           'recycled',
           (r) => isUpCounted(1)(r) && r.title === 'Old title',
           'reopened'
+        );
+      }
+      const recycles = Number(reportOf('recycled').recycles ?? NaN);
+      const previous = reuses[reuses.length - 1] ?? NaN;
+      reuses.push(recycles);
+      if (!(recycles > previous)) {
+        throw new Error(
+          `round ${String(round)}: the mount's recycle count did not grow ` +
+            `(${reuses.join(' -> ')}), so this round tested a fresh instance, not a recycled one`
         );
       }
     }
