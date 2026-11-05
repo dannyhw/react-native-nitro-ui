@@ -33,6 +33,7 @@ import {
   recycleNotes,
 } from '../conformance-core.mjs';
 import { SCREEN_TAB, screenTab } from '../real-input/screens.mjs';
+import { exampleTabs } from '../real-input/tab-targets.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
 const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
@@ -198,19 +199,15 @@ describe('every bench component is implemented by every arm', () => {
 });
 
 /**
- * The tabs `example/src/App.tsx` renders, as id -> label.
+ * The tabs `example/src/App.tsx` renders, in bar order.
  *
- * `renderedTabs` says which *screen* a tab branch renders; this says what the tab is
- * called on screen, which is the half the Android runner has to match exactly.
+ * X19 made the app's own `TABS` array the one source of a tab's id and label, and the
+ * Android runner looks a tab up in it by id; this is that same read, so the guard below
+ * asks the question the runner actually asks — is there a tab with this id — rather than
+ * comparing a label this file also writes out.
  */
-function appTabLabels() {
-  const labels = new Map();
-  for (const match of (readRepo('example/src/App.tsx') ?? '').matchAll(
-    /\{ id: '([a-z0-9]+)', label: '([^']+)' \}/g
-  )) {
-    labels.set(match[1], match[2]);
-  }
-  return labels;
+function appTabs() {
+  return exampleTabs(readRepo('example/src/App.tsx'));
 }
 
 /** Every string the example app draws, so an echo testID can be proved to exist. */
@@ -290,21 +287,20 @@ describe('every real-input control has a check on both platforms', () => {
       // platforms get there differently. iOS taps the tab by its `testID`, which React
       // Native writes as `accessibilityIdentifier`, so a new screen needs no new iOS
       // table row. Android's accessibility tree carries no testID (React Native stores it
-      // as a view tag), so the runner taps the tab's *label* and then polls an echo
-      // testID to learn the screen came up — both written down in `SCREEN_TAB`.
+      // as a view tag), so the runner finds the tab by *id* in the `TABS` array the app
+      // renders (X19) and then polls an echo testID to learn the screen came up — that
+      // echo is the one half `SCREEN_TAB` still owns.
       //
-      // G17's SearchField is what happens when they are not: the screen and its tab both
-      // existed, the two maps the runner used did not know the screen, and the run died
-      // 15 device-minutes in on `no "undefined" tab` — after every other control had
-      // passed. A device gate is the wrong place to discover a missing table row.
-      const label = appTabLabels().get(control.screen);
+      // G17's SearchField is what happens when the two halves are not both there: the
+      // screen and its tab both existed, the tables the runner used did not know the
+      // screen, and the run died 15 device-minutes in on `no "undefined" tab` — after
+      // every other control had passed. A device gate is the wrong place to discover a
+      // missing table row.
+      const { id } = appTabs().find((tab) => tab.id === control.screen) ?? {};
       // Named in the value rather than in a message argument, which jest ignores.
-      expect(String(label)).not.toBe('undefined');
+      expect(String(id)).not.toBe('undefined');
       const tab = screenTab(control.screen);
-      // The label has to be the string the app draws, not merely a plausible one:
-      // `findTab` matches `node.text` exactly, in the tab band, uniquely.
-      expect(tab.label).toBe(label);
-      // And the echo has to be drawn by something, or the runner waits out its timeout
+      // The echo has to be drawn by something, or the runner waits out its timeout
       // for a screen that is already up. Matched against every example source rather
       // than the one screen file, because a screen can borrow its echo from a widget it
       // renders (`dialog-log`, `sheet-log` do).
@@ -321,12 +317,10 @@ describe('every real-input control has a check on both platforms', () => {
 describe('the Android navigation table agrees with the tab bar', () => {
   it('no row names a tab the example app stopped rendering', () => {
     // The other direction: a renamed or dropped tab leaves a row nothing navigates to,
-    // and the runner would keep tapping a label nothing draws.
-    const labels = appTabLabels();
+    // and the runner would keep looking for an id the bar no longer draws.
+    const ids = new Set(appTabs().map((tab) => tab.id));
     expect(
-      Object.entries(SCREEN_TAB)
-        .filter(([screen]) => !labels.has(screen))
-        .map(([screen]) => screen)
+      Object.keys(SCREEN_TAB).filter((screen) => !ids.has(screen))
     ).toEqual([]);
   });
 

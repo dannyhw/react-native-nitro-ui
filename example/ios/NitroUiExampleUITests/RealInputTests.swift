@@ -241,6 +241,45 @@ final class RealInputTests: XCTestCase {
     }
   }
 
+  /// The example's tab bar as touch targets: every tab, scrolled wholly into the window,
+  /// with the box a finger has to hit.
+  ///
+  /// It measures and does not decide, for the reason `testRealInputA11y` gives: the rule
+  /// (44 pt both ways, every tab `example/src/App.tsx` lists, each one reachable) lives in
+  /// `scripts/real-input/tab-targets.mjs`, which the Android suite decides from too, and
+  /// which `scripts/__tests__/real-input-tab-targets.test.js` proves red with fixtures. The
+  /// tabs are found by their `testID` prefix rather than listed here, so a tab the registry
+  /// adds is measured without an edit to this file, and a tab missing from the tree is
+  /// a tab the runner finds unmeasured.
+  ///
+  /// Each box is read until two consecutive reads agree (the reason is on `measure`).
+  func testRealInputTabTargets() throws {
+    let ids = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "identifier BEGINSWITH %@", "tab-"))
+      .allElementsBoundByIndex
+      .map(\.identifier)
+    var seen = Set<String>()
+    for id in ids where seen.insert(id).inserted {
+      let tab = app.descendants(matching: .any)[id].firstMatch
+      let reached = revealTab(tab)
+      var frame = tab.frame
+      for _ in 0..<5 {
+        Thread.sleep(forTimeInterval: 0.2)
+        let again = tab.frame
+        if again == frame { break }
+        frame = again
+      }
+      print(
+        "real-input tab-target id=\(id) | frame="
+          + String(
+            format: "%.1f,%.1f,%.1f,%.1f",
+            frame.minX, frame.minY, frame.width, frame.height
+          )
+          + " | reached=\(reached)"
+      )
+    }
+  }
+
   /// One control's box, its tree, and the control's own name — as `a11y.mjs` expects.
   ///
   /// The tree is read until two consecutive reads agree (`A11yFrameStability`), not once. The
@@ -4270,8 +4309,58 @@ final class RealInputTests: XCTestCase {
     if app.descendants(matching: .any)[screenAnchor].firstMatch.exists {
       return
     }
-    try required(identifier, as: "the example's tab").fingerTap()
+    let tab = try required(identifier, as: "the example's tab")
+    if !revealTab(tab) {
+      dumpHierarchy("tab \(identifier) is still outside the window")
+      XCTFail(
+        "the example's tab \"\(identifier)\" could not be scrolled wholly into the window "
+          + "(it is at \(tab.frame)), so it cannot be tapped reliably"
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+    tab.fingerTap()
     _ = try required(screenAnchor, as: "the screen behind that tab", timeout: reactTimeout)
+  }
+
+  /// Scroll the tab bar sideways until a tab is wholly inside the window.
+  ///
+  /// The bar scrolls (X19): fifteen tabs sharing one row were each too small to tap, so
+  /// every tab keeps its natural width and the ones past the window's edge are scrolled
+  /// to. React Native keeps a scrolled-away tab in the accessibility tree with its real
+  /// frame, so the distance is known: each step drags the bar by what the tab overhangs
+  /// plus a margin, at most most of a window, slowly and with a hold before the finger
+  /// lifts, so the bar does not fling past it. The pan's own slop eats part of every
+  /// drag, which is why this loops on the frame rather than trusting one step.
+  ///
+  /// - Returns: whether the tab ended wholly inside the window and hittable.
+  @discardableResult
+  private func revealTab(_ tab: XCUIElement) -> Bool {
+    let window = app.windows.firstMatch.frame
+    let margin: CGFloat = 24
+    func inside() -> Bool {
+      let frame = tab.frame
+      return frame.minX >= window.minX && frame.maxX <= window.maxX && tab.isHittable
+    }
+    var steps = 0
+    while !inside() && steps < 8 {
+      let frame = tab.frame
+      let overhang =
+        frame.maxX > window.maxX
+        ? -(frame.maxX - window.maxX + margin)
+        : window.minX - frame.minX + margin
+      let shift = max(-window.width * 0.7, min(window.width * 0.7, overhang))
+      let startX = shift < 0 ? window.width * 0.85 : window.width * 0.15
+      let from = app.coordinate(withNormalizedOffset: .zero)
+        .withOffset(CGVector(dx: startX, dy: frame.midY))
+      from.press(
+        forDuration: 0.05,
+        thenDragTo: from.withOffset(CGVector(dx: shift, dy: 0)),
+        withVelocity: .slow,
+        thenHoldForDuration: 0.2
+      )
+      steps += 1
+    }
+    return inside()
   }
 
   /// Fail, with the hierarchy, if a control has moved out of the window since it
@@ -4297,10 +4386,24 @@ final class RealInputTests: XCTestCase {
       )
       throw RealInputCheckAborted(identifier: identifier)
     }
-    XCTAssertEqual(
-      node.frame,
-      startedAt,
-      "\(identifier) should still be drawn where it started, after \(action)"
+    // To a hundredth of a point, not bit for bit. XCUITest hands a frame back through
+    // float32, so a box whose top and bottom sit either side of a power of two reads
+    // 2^-16 pt short on one read and exact on the next: X19's tab bar moved the
+    // controlled switch 10 pt down, to y 233.67 -> 261.67 (across 256), and this read
+    // 27.999984741 against 28.0 for a switch that had not moved. A hundredth of a point
+    // is a thirtieth of a pixel at @3x, and layout never moves a box by less than a pixel.
+    let now = node.frame
+    let drift = max(
+      abs(now.minX - startedAt.minX),
+      abs(now.minY - startedAt.minY),
+      abs(now.width - startedAt.width),
+      abs(now.height - startedAt.height)
+    )
+    XCTAssertLessThanOrEqual(
+      drift,
+      0.01,
+      "\(identifier) should still be drawn where it started, after \(action): it was "
+        + "\(startedAt) and is now \(now)"
     )
   }
 
