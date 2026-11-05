@@ -200,3 +200,46 @@ Reds, each reverted:
 - guard -> label `'Search '` -> `Expected: "Search" / Received: "Search "`
 - guard -> echo renamed `search-typing-echoo` -> `nothing in example/src draws "search-typing-echoo"`
 - `the clear button names itself` -> red on the unmutated tree until the Kotlin fix
+
+## Merge round (part 1)
+
+`origin/main` (Checkbox, ContextMenu, material3 1.5.0-beta02) and X19's tab bar (`d310fc45`)
+merged; generated conflicts settled by `bun run regen`. X19 owns tab lookup, `SCREEN_TAB` holds
+arrival anchors only (plus `checkbox`, `contextmenu` and X19's `checkbox*` echoes), and the
+guard matches tab **ids**, not labels. The merged `RealInputTests.swift` compiles — nothing
+else typechecks it.
+
+`DockedSearchBar` and `SearchBarDefaults.InputField` stay under a narrow `@Suppress`: 1.5's
+`SearchBar(state, inputField)` wraps the field in `DisableSoftKeyboard`. iOS's
+`textFieldShouldReturn` refuses an empty query — a hardware Return used to submit `''`. Full
+harness runs stay owed to the merge, once G18 lands here.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1771 tests / 70 suites | `000f16e23f48` | 2 m 42 s | start 5.0 / med 6.0 / max 8.8 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | missing | — | — | — | — |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:SearchField` | **PASS** | 14 tests / 1 suites | `000f16e23f48` (android tree) | 18.6 s | start 8.0 / med 7.0 / max 8.0 |
+| `harness:android:SearchField:--background` | stale | — | 07e2e266dba4 (not this tree) | 0.8 s | start 3.0 / med 3.0 / max 3.0 |
+| `harness:ios:SearchField` | **PASS** | 14 tests / 1 suites | `000f16e23f48` (ios tree) | 20.3 s | start 7.0 / med 7.0 / max 7.0 |
+
+Lease `G17-yhpqr` (pair-b), released.
+
+### Reds, each reverted
+
+- iOS guard -> `takes no submit from a Return …` -> `expected ['submit:', 'blur'] to equal []`
+  (`SearchField.harness.tsx:514`)
+- `onExpandedRequest` stores `next` -> `expanded` red (`…:596`), heights green: a docked bar
+  keeps its height
+- taller focused minimum -> heights red (`…:597`, 33.9 dp), `expanded` green
+- both `@Suppress`es out -> 2 deprecation warnings; back in -> none
+- `SCREEN_TAB.searchfield` deleted -> `no row in SCREEN_TAB`; an `App.tsx` id renamed -> the
+  guard names it
+
+### Follow-up
+
+- `--background` past `--` becomes a filter, filed under its own gate name.
