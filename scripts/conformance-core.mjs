@@ -597,7 +597,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 351, height: 31 },
   },
   NitroUiButton: {
-    android: { width: 91, height: 48 },
+    android: { width: 75.1, height: 48 },
     ios: { width: 77, height: 35 },
   },
   NitroUiProgress: {
@@ -605,7 +605,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 320, height: 4 },
   },
   NitroUiSegmentedControl: {
-    android: { width: 256, height: 48 },
+    android: { width: 208.4, height: 48 },
     ios: { width: 165, height: 31 },
   },
   // The one row whose iOS width belongs to a *locale* as well as a control: it is

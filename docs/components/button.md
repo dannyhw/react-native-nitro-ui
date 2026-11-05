@@ -23,6 +23,7 @@ a child of a `<Host>` since 0.2.0 — `docs/components/host.md`.)
 | `onPress`            | `(() => void) \| undefined`                   | —        | SwiftUI `Button(action:)` / Compose `onClick`. One per tap.     |
 | `variant`            | `'filled' \| 'tonal' \| 'outlined' \| 'text' \| 'elevated'` | `filled` | The style per platform — see the table below.       |
 | `size`               | `'small' \| 'medium' \| 'large'`              | `medium` | SwiftUI `.controlSize` / content padding + label typography.    |
+| `shape`              | `'round' \| 'square' \| null`                  | `round`  | iOS `.buttonBorderShape` / Compose `shapes = ButtonShapes`.     |
 | `disabled`           | `boolean \| undefined`                        | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.              |
 | `tintColor`          | `ColorValue \| undefined`                     | platform | SwiftUI `.tint()` / the variant's container or label colour.    |
 | `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android** (see Limits).         |
@@ -33,8 +34,9 @@ a child of a `<Host>` since 0.2.0 — `docs/components/host.md`.)
 | `nuiPerfId`          | `number \| null \| undefined`                 | `null`   | **Internal.** Instance id for perf marks; `null` disables marks.  |
 
 `Button` is a `View`, so any other `ViewProps` (`onLayout`, …) work as usual.
-An unknown `variant` or `size` string resolves to the default rather than
-throwing, on both platforms and in JS.
+An unknown `variant`, `size` or `shape` string resolves to the default rather
+than throwing, on both platforms and in JS — and so does `null`, which is how you
+say "the platform's own" for `shape`.
 
 `hybridRef` and `nuiPerfId` are not app API (DECISIONS D14): the handle is
 read-only plus `measureContent()`, and it runs once, when the view mounts.
@@ -46,7 +48,8 @@ read-only plus `measureContent()`, and it runs once, when the view mounts.
 | Control       | `Button(action:) { Label }` + `.buttonStyle(...)`     | One of the five M3 button composables                        |
 | Host          | `UIHostingController` inside `NitroSwiftUIHost`       | `NitroComposeHost<M>: AbstractComposeView`                   |
 | Theme         | system traits, `.tint()`                             | `MaterialTheme` + dynamic color on Android 12+               |
-| Scale         | `.controlSize(.small/.regular/.large)`               | `contentPadding` + `labelMedium`/`labelLarge`/18 sp          |
+| Scale         | `.controlSize(.small/.regular/.large)`               | M3 container height 32/40/56 dp + `ButtonDefaults.*For(it)`    |
+| Corner        | `.buttonBorderShape(_:)` per variant                   | `shapes = ButtonDefaults.shapesFor(height)` / `ButtonShapes`   |
 | Disabled      | `.disabled(true)` + native dimming                   | `enabled = false` + M3 disabled colors                       |
 | Test id       | RN's `testID` → `accessibilityIdentifier`            | `host.tag` (Compose has no test id)                          |
 | Label         | `.accessibilityLabel(_:)` on the Button              | `Modifier.semantics { contentDescription }` on the button    |
@@ -71,6 +74,25 @@ a 1 pt capsule stroke in the separator colour, which is the shape an iOS user
 reads as an outline and which keeps working in dark mode. `elevated` maps to
 `.borderedProminent`, the iOS primary action; Material's shadow has no iOS
 analogue, so `filled` and `elevated` are the same control on iOS.
+
+### Corners
+
+`shape` is the corner, and the two platforms cannot draw the same one — a
+Material `squareShape` button has no corner at all, while every iOS button style
+draws a rounded one. So each side maps the two names to its own nearest shape,
+and `round` is what the control drew before the prop existed.
+
+| `shape`    | iOS                                                              | Android                                                     |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------- |
+| `round`    | each style's own corner: `.automatic`, and `.capsule` for `outlined` | `ButtonDefaults.shapesFor(height)` — the height's corner, morphing toward the square one while pressed |
+| `square`   | `.roundedRectangle(radius: 8)`; the `outlined` hairline follows it   | `squareShape` at rest, `RoundedCornerShape` while pressed      |
+| `text`     | ignored — `.borderless` draws no border                             | ignored — the variant has no container to morph               |
+
+Android gets Material 3 Expressive's shape **morph** for free (`docs/DECISIONS.md`
+D39): the `shapes:` overload takes a resting and a pressed shape, so pressing a
+round button squars it off and releasing springs it back. iOS has nothing to map
+that to — a `ButtonBorderShape` is static — so there the corner changes only
+when the prop does.
 
 | iOS light                                     | iOS dark                                      |
 | ----------------------------------------------- | ----------------------------------------------- |
@@ -117,21 +139,30 @@ an API 35 emulator at 420 dpi, in dp):
 
 | `variant`  | iOS S        | iOS M        | iOS L        | Android S   | Android M   | Android L    |
 | ---------- | -------------- | -------------- | -------------- | -------------- | -------------- | -------------- |
-| `filled`   | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 78.5 × 48.0    | 103.2 × 50.3   |
-| `tonal`    | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 78.5 × 48.0    | 103.2 × 50.3   |
-| `outlined` | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 78.5 × 48.0    | 103.2 × 50.3   |
-| `elevated` | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 78.5 × 48.0    | 103.2 × 50.3   |
-| `text`     | 33.3 × 18.0    | 37.0 × 20.3    | 37.0 × 20.3    | 57.9 × 48.0    | 57.9 × 48.0    | 87.2 × 50.3    |
+| `filled`   | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 62.5 × 48.0    | 84.2 × 56.0    |
+| `tonal`    | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 62.5 × 48.0    | 84.2 × 56.0    |
+| `outlined` | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 62.5 × 48.0    | 84.2 × 56.0    |
+| `elevated` | 53.3 × 28.0    | 61.0 × 34.3    | 77.0 × 50.3    | 57.9 × 48.0    | 62.5 × 48.0    | 84.2 × 56.0    |
+| `text`     | 33.3 × 18.0    | 37.0 × 20.3    | 37.0 × 20.3    | 57.9 × 48.0    | 57.9 × 48.0    | 60.6 × 48.0    |
 
 Nothing here is a constant: the box is what the control measured, so the
-platforms disagree by design. Material 3 keeps a 48 dp minimum interactive
-height, which is why Android `small` and `medium` are the same height and why
-Android `text` is not smaller than `filled`. iOS `.borderless` does not grow at
-`.large`, which is SwiftUI's own behaviour.
+platforms disagree by design. The Android column moved in E1 and the iOS column
+did not. `size` now names a Material 3 container token — XS 32 / S 40 / M 56 dp —
+and the padding, the label style and the corner are read from it; the *box* is
+never shorter than Material's own 48 dp minimum interactive component, which is
+why `small` and `medium` share a height and why `text` is not smaller than
+`filled`. `large` is the first rung the token lifts above that floor. What
+changed against the older hand-rolled padding is width: 16 dp off `medium`
+(8 dp per side, exactly what `contentPaddingFor(40.dp)` gives up) and 19 dp off
+`large`, which grew taller instead. iOS `.borderless` does not grow at `.large`,
+which is SwiftUI's own behaviour. Measuring `height(scale.height)` rather than
+letting Material floor the box reproduces the token exactly (a 32.0 dp `small`)
+and takes the touch target down with the picture, so the ladder is what moves
+here and the 48 dp target is what stays.
 
 Width is the title's, so the same control at the same size is a different width
-per label — measured at iOS M 61.0 / 76.7 / 92.7 and Android M 78.5 / 91.0 /
-104.0 for `Save` / `Cancel` / `Continue`. Two Buttons with different titles in
+per label — measured at iOS M 61.0 / 76.7 / 92.7 and Android M 62.5 / 75.1 /
+88.0 for `Save` / `Cancel` / `Continue`. Two Buttons with different titles in
 one row therefore get two different widths, which the harness asserts as
 cache-key correctness (dropping `title` from the key makes every Button the
 width of the first one).
@@ -139,7 +170,7 @@ width of the first one).
 **What the engine starts from.** The fallback is the one number declared before
 any measurement exists, and the engine keys fallbacks per component, so it is one
 pair: `77 × 35` pt (`ios/components/Button/HybridNitroUiButton.swift`) and
-`91 × 48` dp (`android/.../HybridNitroUiButton.kt`). Both are the middle of
+`75.1 × 48` dp (`android/.../HybridNitroUiButton.kt`). Both are the middle of
 the measured table above rather than a guess, because a fallback smaller than the
 control makes SwiftUI paint outside its box. Per D17 the first instance of a
 configuration may show that fallback for one frame and is then corrected; every
@@ -219,17 +250,27 @@ semantics node on Android.
   `null`, and on Android the composition is disposed before reuse and rebuilt on
   the next attach (`docs/architecture/core.md` §6). One batched commit per JS
   update; no hosting recreation per update.
-- **Cached, never rebuilt.** The M3 `ButtonColors` per `(scheme, variant, tint)`
-  and the derived `labelLarge` at 18 sp are served from a cache keyed on the
-  theme's identity (`ButtonColorsCache` and `ButtonLabelStyles` in
-  `android/.../HybridNitroUiButton.kt`), so a
-  recomposition does not build a colour scheme — the same rule the Switch follows.
+- **Cached, never rebuilt.** The M3 `ButtonColors` per `(scheme, variant, tint)`,
+  the label style `ButtonDefaults.textStyleFor(height)` answers with, and the
+  `ButtonShapes` pair per `(motion scheme, corner, height)` are served from caches
+  keyed on the theme's identity (`ButtonColorsCache`, `ButtonLabelStyles` and
+  `ButtonShapesCache` in `android/.../HybridNitroUiButton.kt`), so a recomposition
+  builds neither a colour scheme nor a shape — the same rule the Switch follows.
+- **The corner is a paint.** `shape` is not in the sizing key on either platform:
+  a Button that changes corner repaints, opens no new size configuration and costs
+  no correction (asserted by the `shape` suite in
+  `example/__tests__/Button.harness.tsx`).
 - **Perf marks.** With `nitroUiCore.setPerfEnabled(true)` and a `nuiPerfId`,
   native records `propsApplied` and `firstFrame` per instance; drain with
   `nitroUiCore.drainPerf()`.
 
 ## Limits
 
+- `shape='square'` is not a square on iOS. A Material `squareShape` button has no
+  corner at all and no iOS button style draws one, so iOS gets
+  `.roundedRectangle(radius: 8)` — the nearest border shape SwiftUI offers — and
+  no press morph, because a `ButtonBorderShape` is static. The `text` variant
+  ignores `shape` on both platforms (see Corners).
 - `systemImage` is iOS-only: Android ignores it and the label stays the
   `title` text. It is still in the sizing key on both platforms so the two
   cannot drift apart when it is implemented.

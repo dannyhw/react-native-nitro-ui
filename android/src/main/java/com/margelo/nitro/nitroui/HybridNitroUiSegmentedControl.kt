@@ -449,7 +449,12 @@ private class SegmentedControlHost(
             },
           labelStyle = labelStyle,
           contentPadding = contentPadding,
-          modifier = Modifier.weight(1f).semantics { selected = isSelected },
+          // Weight only: the selected state and the role are published by the
+          // item's own `selectable` below, so the row does not also assert them
+          // (a second `selected` here wins the merge, and the a11y checks in
+          // `scripts/real-input/android.mjs` would then read this line instead of
+          // the selection the item actually has).
+          modifier = Modifier.weight(1f),
           onClick = {
             // A tap on the segment that is already selected reports nothing.
             // Foundation's `selectable` fires for a press on a selected node only
@@ -517,7 +522,7 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
   Box(
     modifier =
       modifier
-        .height(ButtonDefaults.MinHeight)
+        .height(MinTouchTargetHeight)
         // Clip first, so the ripple and the container both take the connected
         // corner instead of painting a square one over it.
         .clip(shape)
@@ -545,10 +550,16 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
 /**
  * The group's shared resting corner, its label style and its padding.
  *
- * All three come from the height the group is 40 dp tall at - the same M3 small
- * button height a `medium` Button rests at - which is the point Q8 Appendix A row 2
- * made: once the size is a height, the padding, the type and the corner all follow
- * from it instead of being three tables. Built once per `Component` call, not per
+ * All three come from the *medium* rung, the one `Button` maps `size='medium'` to:
+ * the M3 small container height (40 dp) decides the padding and the label style, and
+ * the box is the 48 dp touch target a `medium` Button is laid out at - so a row of
+ * segments and a row of buttons sit on the same line, and a segment is no harder to
+ * hit with a thumb than a button is. Q8 Appendix A row 2 read the group as 40 dp
+ * tall; `SegmentedButton`, what this replaces, measured 48, so the target is what
+ * stays here and the tokens are what arrives.
+ *
+ * The rest of Q8's point stands: once the size is a height, the padding, the type and
+ * the corner all follow from it instead of being three tables. Built once per `Component` call, not per
  * item, and the corner is [buttonShapes]' cached value rather than a fresh one.
  */
 @Composable
@@ -604,26 +615,23 @@ class HybridNitroUiSegmentedControl(
      * option list is a first instance of *its own* configuration and gets corrected
      * the turn it measures (`docs/architecture/sizing.md` section 9).
      *
-     * Measured on the AVD this library's tests run on (`nitroui_t02`, 420 dpi,
-     * API 35) with `options = ["One", "Two", "Three"]`: 256.0 x 48.0 dp. The
-     * height is the half that belongs here: Material 3 makes every segment of a
-     * segmented button row the same height whatever it says, measured 48 dp for
-     * one option and for four long ones alike. (Not the 40 dp of
-     * `ContainerHeight` the token names - the row is laid out inside a 48 dp
-     * touch target, and it is the box Yoga is told that has to be right.)
+     * Measured on the AVD this library's tests run on (the lease's `nitroui_a`,
+     * pixel_9 profile at 420 dpi, API 35) with `options = ["One", "Two", "Three"]`:
+     * 208.38 x 48.0 dp on E1's connected group, against 256.0 x 48.0 for the
+     * `SingleChoiceSegmentedButtonRow` it replaces. The height did not move: the
+     * group is laid out on the same 48 dp touch target a `medium` Button is, which
+     * is also why it is not the 40 dp `ContainerHeight` the token names.
      *
-     * The width moves with the labels - 75.05 dp for one short segment (a segment
-     * never shrinks below `ButtonDefaults.MinWidth`), and four long labels want
-     * more than this AVD's 411.43 dp window: that number is the box Yoga clamped
-     * the row to, not a measured row width (the row reports what it wants and is
-     * laid out at the box - `NitroUiMeasuredRoot`, and
-     * `docs/components/segmented-control.md`, Limits). A
+     * The width moved because the row no longer reserves a leading icon slot per
+     * item (`SegmentedButton`'s `icon = {}` still took the space) - 49.90 dp for one
+     * short segment, 281.52 dp for four labels that used to be clamped to the
+     * window. A
      * wrong fallback costs a cold configuration a single frame's horizontal gap.
      * Rounded *up* rather than to nearest: a box smaller than the control is the
      * dead-touch story in `core.md` section 7.
      * `docs/components/segmented-control.md` has the measured table.
      */
-    private const val FALLBACK_WIDTH_DP = 256.0
+    private const val FALLBACK_WIDTH_DP = 208.4
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)

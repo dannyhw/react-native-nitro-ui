@@ -1,8 +1,9 @@
 # SegmentedControl
 
 The platform segmented control: SwiftUI `Picker` with `.pickerStyle(.segmented)`
-on iOS, Material 3 `SingleChoiceSegmentedButtonRow` + `SegmentedButton` on
-Android. Both are hosted by the core runtime (`docs/architecture/core.md`), so
+on iOS, a Material 3 Expressive **connected button group** on Android — one `Row`
+spaced by `ButtonGroupDefaults.ConnectedSpaceBetween`, its items carrying the
+connected leading/middle/trailing corners. Both are hosted by the core runtime (`docs/architecture/core.md`), so
 segment shapes, press feedback, haptics, a11y behaviour and dynamic type belong
 to the control, not to us.
 
@@ -45,7 +46,7 @@ read-only plus `measureContent()`, and it runs once, when the view mounts.
 
 | Concept         | iOS                                              | Android                                                   |
 | --------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| Control         | `Picker(selection:) { … }.pickerStyle(.segmented)`  | `SingleChoiceSegmentedButtonRow` + one `SegmentedButton` each |
+| Control         | `Picker(selection:) { … }.pickerStyle(.segmented)`  | a `Row` of connected items on `ButtonGroupDefaults` shapes      |
 | Host            | `UIHostingController` inside `NitroSwiftUIHost`     | `NitroComposeHost<M>: AbstractComposeView`                    |
 | Theme           | system traits                                       | `MaterialTheme` + dynamic color on Android 12+                |
 | Selected segment| the scheme's accent fill; `tintColor` does nothing  | `activeContainerColor` + `activeBorderColor`, both from `tintColor` (default: transparent) |
@@ -126,22 +127,31 @@ API 35 at 420 dpi, in dp):
 
 | `options`                          | iOS             | Android         |
 | ---------------------------------- | ----------------- | ----------------- |
-| `['Go']`                           | 36.00 × 31.00     | 67.81 × 48.00     |
-| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 256.00 × 48.00    |
-| `['North','South','East','West']`  | 220.00 × 31.00    | 344.00 × 48.00    |
+| `['Go']`                           | 36.00 × 31.00     | 49.90 × 48.00     |
+| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 208.38 × 48.00    |
+| `['North','South','East','West']`  | 220.00 × 31.00    | 281.52 × 48.00    |
 
 The height is the platform's control height and does not move with the labels —
 iOS draws a segmented `Picker` 31 pt tall for one option or for four long ones
-alike, and Material 3 lays every segment in a 48 dp row. The width is the labels'.
-Android's one-option row is wider than its label because Material 3 keeps a
-minimum interactive width per segment, and Android's row gives each segment an
-equal share of the track, so with equal labels the segments are equal — which is
-what the real-input taps assume.
+alike, and the group lays every segment on the 48 dp touch target a `medium`
+Button is laid out at. The width is the labels'. The Android column is E1's
+connected group, and it is ~18% narrower than the
+`SingleChoiceSegmentedButtonRow` these rows were measured on: that row reserved a
+leading icon slot per segment (`icon = {}` hides the check, not the space), and
+the group has no icon slot to reserve. The four-label row also fits the window
+now — the 344.00 above it was the box Yoga clamped the row to, not the row's own
+measurement.
+
+Android's one-option row is wider than its label because each segment carries
+Material's own content padding for the height (and never less than
+`ButtonDefaults.MinWidth`), and the row gives each segment an equal share of the
+track (`Modifier.weight(1f)`), so with equal labels the segments are equal —
+which is what the real-input taps assume.
 
 **What the engine starts from.** The engine keys fallbacks per component, so this
 component has one declared pair however many option lists exist: `165 × 31` pt
 (`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`) and
-`256 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
+`208.4 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
 three-short-labels row above, measured rather than guessed, because a fallback
 smaller than the control is the dead-touch story in `core.md` §7. Every other
 option list is a first instance of *its own* configuration: it is laid out at the
@@ -188,10 +198,15 @@ drops the now-wrong cached sizes.
 ## Accessibility
 
 - Each segment is its own accessibility element with its own label, and the
-  selected one is announced as selected — a uiautomator dump shows each segment as
-  a `RadioButton`-class node inside the row's group, and the chosen one reports
-  `checked=true`. On iOS the segmented `Picker` is the platform element VoiceOver
-  already knows.
+  selected one is announced as selected. E1 re-dumped it, because the row changed
+  shape: a segment is one item node at the segment's box carrying `checkable` and
+  `checked` — Compose's mapping of the toggleable state, and what a screen reader
+  reads as "selected" — with a `RadioButton`-class node for its role at the same box
+  and its label as a child `TextView`, all inside the row's own group. The three live
+  on three nodes, so `scripts/real-input/android.mjs` reads each of them where the
+  tree puts it — the state off the item, the class off the role node, the label off
+  the text — rather than asking one node for all three. On iOS the segmented
+  `Picker` is the platform element VoiceOver already knows.
 - `accessibilityLabel` describes the **group**: on Android it goes on the row
   (`android/.../HybridNitroUiSegmentedControl.kt`), on iOS on the `Picker`, and
   on both it is applied only when set — an empty label would silence the segments.
@@ -221,8 +236,19 @@ drops the now-wrong cached sizes.
   are served from a bounded process-wide cache keyed on the theme's identity
   (`android/.../HybridNitroUiSegmentedControl.kt`) — `SegmentedButtonDefaults.colors()`
   allocates, and building it per recomposition per mounted control is the cost the
-  "Shared objects" rule in `core.md` is about. `itemShape` is *not* cached: it is
-  derived from the index and count, not from the theme.
+  "Shared objects" rule in `core.md` is about. The corners are cached too: the
+  resting corner is `Button`'s own cached `buttonShapes(Round, Medium)`, and the
+  three connected variants are derived from it per recomposition — cheap arithmetic
+  on one cached value, not a second cache.
+- **Radio semantics win over `ToggleButton`.** Material's own
+  `ToggleButton` publishes `Role.Checkbox` from inside its own semantics lambda,
+  which an outer modifier cannot outvote, and Compose keeps the innermost
+  semantics — so a row built from it announces "checkbox", not the "1 of 3,
+  selected" this control promises. Each item is therefore a `Box` this file draws:
+  `Modifier.selectable(role = Role.RadioButton)` plus `semantics { selected = … }`,
+  with Material's connected corners, border stroke, `ButtonDefaults.MinHeight` and
+  the shared `Button` label style and padding laid on top. Same API, same look,
+  radio announcement (`docs/tasks/E1-expressive-buttons.md`).
 - **No check icon.** Material 3's default `icon` renders a check on the selected
   segment only, which would make the measured width change with the selection and
   force the selection into the sizing key. Labels only, matching iOS.

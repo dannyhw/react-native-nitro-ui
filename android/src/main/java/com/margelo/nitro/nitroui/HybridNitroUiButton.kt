@@ -3,7 +3,6 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -28,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -64,7 +64,10 @@ internal enum class ButtonVariant(val wireName: String) {
   }
 }
 
-/** `small` / `medium` / `large`: content padding, label typography, and a floor for large. */
+/**
+ * `small` / `medium` / `large`: which Material 3 container height the control's
+ * padding, label style and corner are read from.
+ */
 internal enum class ButtonScale(val wireName: String) {
   Small("small"),
   Medium("medium"),
@@ -85,9 +88,13 @@ internal enum class ButtonScale(val wireName: String) {
    * connected button group all take a height, which is why the ladder is
    * expressible at all (Q8 Appendix A row 2).
    *
-   * The measured box is not necessarily this tall: Material 3 still pads a button
-   * to its 48 dp minimum interactive height, so `small` measures 48 dp tall while
-   * its container is 32 (`docs/components/button.md`, "Sizing").
+   * This is the height the *tokens* are indexed by, not the height the box is
+   * given: nothing here sets a height on the composable, because Material 3 lays
+   * a button out at [MinTouchTargetHeight] or taller whatever its container token
+   * says. Requesting `height(32.dp)` instead would measure what Q8 predicted
+   * (57.9x32.0 for `small`) and take the touch target down with it, so the
+   * Expressive ladder is what moves here and the 48 dp target is what stays
+   * (`docs/components/button.md`, "Sizing").
    */
   val height: Dp
     get() =
@@ -96,7 +103,26 @@ internal enum class ButtonScale(val wireName: String) {
         Medium -> ButtonDefaults.MinHeight
         Large -> ButtonDefaults.MediumContainerHeight
       }
+
+  /**
+   * The height the box is actually laid out at: the container token, never below
+   * the touch target. Measured on the API 35 emulator: 48.0 / 48.0 / 56.0 dp.
+   *
+   * The corner is read from *this*, not from [height] - a radius belongs to the
+   * box that is drawn, and a 48 dp pill with a 32 dp corner is two designs.
+   */
+  val layoutHeight: Dp
+    get() = if (height > MinTouchTargetHeight) height else MinTouchTargetHeight
 }
+
+/**
+ * Material 3's own minimum interactive component size, in dp.
+ *
+ * Material applies it inside `Button`, which is why no height on our side is
+ * needed to keep a `small` Button hittable at 48 dp; it is named here so the
+ * corner and the JVM test can say the same number as the framework does.
+ */
+internal val MinTouchTargetHeight = 48.dp
 
 /**
  * The `shape` prop: which pair of corners the button draws, and which pair it
@@ -432,10 +458,14 @@ internal fun contentPaddingFor(
  * other way, onto the rounded shape, because a press that does not change
  * anything is not the morph the design language asks for.
  *
- * The result is cached per (motion scheme, height, corner): `shapesFor` is a
+ * The result is cached per (motion scheme, scale, corner): `shapesFor` is a
  * composable read of the theme, and a hosted control is its own composition, so
  * without a cache every recomposition of every Button builds two `Shape` objects
  * to draw the same corner ([ButtonColorsCache] is the same rule for colours).
+ *
+ * The cache is keyed by [ButtonScale], not by the height it reads: two rungs share
+ * a layout height once the touch target floors them (`small` and `medium` are both
+ * 48 dp of box), and a height-keyed slot would put them in the same entry.
  */
 @Composable
 internal fun buttonShapes(
@@ -443,16 +473,15 @@ internal fun buttonShapes(
   scale: ButtonScale,
 ): ButtonShapes {
   val motion = MaterialTheme.motionScheme
-  val height = scale.height
-  ButtonShapesCache.get(motion, shape, height)?.let { cached -> return cached }
-  val rounded = ButtonDefaults.shapesFor(height)
+  ButtonShapesCache.get(motion, scale, shape)?.let { cached -> return cached }
+  val rounded = ButtonDefaults.shapesFor(scale.layoutHeight)
   val built =
     if (shape == ButtonShape.Round) {
       rounded
     } else {
       ButtonShapes(shape = ButtonDefaults.squareShape, pressedShape = rounded.shape)
     }
-  ButtonShapesCache.put(motion, shape, height, built)
+  ButtonShapesCache.put(motion, scale, shape, built)
   return built
 }
 
@@ -464,41 +493,29 @@ private object ButtonShapesCache {
   @Synchronized
   fun get(
     motion: MotionScheme,
+    scale: ButtonScale,
     shape: ButtonShape,
-    height: Dp,
-  ): ButtonShapes? {
-    if (this.motion !== motion) {
-      return null
-    }
-    val slot = index(shape, height)
-    return if (slot >= 0) entries[slot] else null
-  }
+  ): ButtonShapes? = if (this.motion === motion) entries[index(scale, shape)] else null
 
   @Synchronized
   fun put(
     motion: MotionScheme,
+    scale: ButtonScale,
     shape: ButtonShape,
-    height: Dp,
     shapes: ButtonShapes,
   ) {
     if (this.motion !== motion) {
       this.motion = motion
       entries.fill(null)
     }
-    val slot = index(shape, height)
-    if (slot >= 0) {
-      entries[slot] = shapes
-    }
+    entries[index(scale, shape)] = shapes
   }
 
-  /** The slot for a corner at a height; -1 if the height is not one of the ladder's. */
+  /** The slot for a corner at a rung of the ladder - both are fixed-size enums. */
   private fun index(
+    scale: ButtonScale,
     shape: ButtonShape,
-    height: Dp,
-  ): Int {
-    val scale = ButtonScale.entries.firstOrNull { it.height == height } ?: return -1
-    return scale.ordinal * ButtonShape.entries.size + shape.ordinal
-  }
+  ): Int = scale.ordinal * ButtonShape.entries.size + shape.ordinal
 }
 
 /**
@@ -573,11 +590,10 @@ internal fun NitroUiM3Button(
   modifier: Modifier,
   onClick: () -> Unit,
 ) {
-  // The box is the scale's height token. Material 3 still pads a button to its
-  // 48 dp minimum interactive height, so this is the container height and the
-  // touch target stays at least 48 dp at every size - which is what lets the
-  // ladder reach down to XS (32 dp) without shipping a control a thumb cannot hit,
-  // and why `small` still measures 48 dp tall (`docs/components/button.md`).
+  // No height is set: the scale picks Material's padding, label style and corner,
+  // and Material itself lays the box out at no less than MinTouchTargetHeight, so
+  // the ladder reaches down to the XS token (32 dp of padding and type) without
+  // shipping a control a thumb cannot hit. Measured box: 48 / 48 / 56 dp.
   val colors = buttonColors(variant, tint)
   val padding = contentPaddingFor(variant, scale)
   val labelStyle = buttonLabelStyle(scale)
@@ -594,7 +610,7 @@ internal fun NitroUiM3Button(
       overflow = TextOverflow.Ellipsis,
     )
   }
-  val target: Modifier = modifier.height(scale.height)
+  val target: Modifier = modifier
   when (variant) {
       ButtonVariant.Filled ->
         Button(
@@ -686,15 +702,17 @@ class HybridNitroUiButton(
      * Every other configuration is a first instance of its own configuration and
      * gets corrected the turn it measures (`docs/sizing.md` §9).
      *
-     * Measured on the AVD this library's tests run on (`nitroui_t02`, 420 dpi,
-     * API 35), rounded up to the point: medium + filled + "Cancel" is
-     * 91.0 x 48.0 dp, and the height is 48 for every variant at small and medium
-     * because Material 3 puts a 48 dp minimum interactive size under a 36 dp
-     * track - the same reason stock `Switch` boxes are 48 tall. Guessing 40 here
-     * would make the first frame of every Button ~8 dp too short and shift the row
-     * it sits in. `docs/components/button.md` has the whole table.
+     * Measured on the AVD this library's tests run on (the lease's `nitroui_a`,
+     * pixel_9 profile at 420 dpi, API 35), rounded up to the point: with E1's
+     * ladder, medium + filled + "Cancel" is 75.05 x 48.0 dp. Sixteen dp of that
+     * width is Material's own `contentPaddingFor(40.dp)` replacing this file's
+     * older, wider hand-rolled padding; the height stays 48 because Material lays
+     * a button out no shorter than its 48 dp minimum interactive component at every
+     * size but `large` (56). Guessing 40 wide here would make the first frame of
+     * every Button too short and shift the row it sits in.
+     * `docs/components/button.md` has the whole table.
      */
-    private const val FALLBACK_WIDTH_DP = 91.0
+    private const val FALLBACK_WIDTH_DP = 75.1
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)

@@ -57,6 +57,21 @@ class ButtonModelTest {
     assertEquals(56f, ButtonScale.Large.height.value)
   }
 
+  /**
+   * The other half of the ladder: the token is what the padding and the corner are
+   * read *from*, and the touch target is what the box is laid out *at*. Reaching
+   * for `Modifier.height(scale.height)` draws exactly what Q8 predicted (a 32 dp
+   * `small`) and takes the finger target down with the picture, so the floor is
+   * asserted next to the tokens it sits under.
+   */
+  @Test
+  fun theBoxMaterialLaysOutNeverGoesBelowTheTouchTarget() {
+    assertEquals(48f, ButtonScale.Small.layoutHeight.value)
+    assertEquals(48f, ButtonScale.Medium.layoutHeight.value)
+    assertEquals(56f, ButtonScale.Large.layoutHeight.value)
+    assertEquals(48f, MinTouchTargetHeight.value)
+  }
+
   @Test
   fun anUnknownCornerNameIsRoundLikeEveryOtherUnrecognisedButtonName() {
     assertEquals(ButtonShape.Square, ButtonShape.from("square"))

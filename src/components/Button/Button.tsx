@@ -26,11 +26,12 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 /**
  * The button's corner.
  *
- * `'round'` is each platform's own default, so leaving the prop out and passing
- * `'round'` draw the same control. `'square'` is Material 3's `squareShape` on
- * Android, and iOS's nearest border shape - `.roundedRectangle(radius: 8)` -
- * there, because iOS has no cornerless button. Both morph on press on Android;
- * iOS's border shape is static (`docs/components/button.md`).
+ * `'round'` is each platform's own default, so leaving the prop out, passing
+ * `null` and passing `'round'` all draw the same control. `'square'` is Material
+ * 3's `squareShape` on Android, and iOS's nearest border shape -
+ * `.roundedRectangle(radius: 8)` - there, because iOS has no cornerless button.
+ * Both morph on press on Android; iOS's border shape is static
+ * (`docs/components/button.md`).
  */
 export type ButtonShape = 'round' | 'square';
 
@@ -63,10 +64,11 @@ export interface ButtonProps extends ViewProps {
   /** Control size. Default: `'medium'`. */
   size?: ButtonSize | undefined;
   /**
-   * Corner shape: `'round'` (default) or `'square'`. It repaints the control and
-   * does not resize it, so it is not part of the size configuration.
+   * Corner shape: `'round'` (the default), `'square'`, or `null` for the default.
+   * It repaints the control and does not resize it, so it is not part of the size
+   * configuration.
    */
-  shape?: ButtonShape | undefined;
+  shape?: ButtonShape | null | undefined;
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
@@ -196,8 +198,8 @@ function resolveSize(size: ButtonSize | undefined): ButtonSize {
   return size != null && SIZES.includes(size) ? size : 'medium';
 }
 
-/** Resolve a caller's corner, defaulting anything unrecognised to `'round'`. */
-function resolveShape(shape: ButtonShape | undefined): ButtonShape {
+/** Resolve a caller's corner: `null`/`undefined` and anything unrecognised are `'round'`. */
+function resolveShape(shape: ButtonShape | null | undefined): ButtonShape {
   return shape != null && SHAPES.includes(shape) ? shape : 'round';
 }
 

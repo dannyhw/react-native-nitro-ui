@@ -1901,44 +1901,95 @@ const CHECKS = {
     // `ToggleButton` publishes `Role.Checkbox` from its own semantics lambda, which
     // an outer modifier cannot outvote - so the item is a node this file draws, with
     // `selectable(role = Role.RadioButton)` on it (`HybridNitroUiSegmentedControl.kt`
-    // explains the trade). What TalkBack is told is therefore still
+    // explains the trade). What a screen reader is offered is still
     // `docs/components/segmented-control.md`'s sentence: one radio-class node per
-    // option, inside one group, and the chosen one reports `selected`. The position
-    // half of that announcement comes from the group, so the left-to-right order is
-    // read from the same dump.
+    // option, inside one group, each with its own label and the selection.
+    //
+    // Each of those three lives on a different entry, and that is Compose's doing,
+    // not this control's: a selectable item is published to `uiautomator` as the
+    // item itself - a node at the segment's box carrying `checkable`/`checked`, which
+    // is Compose's mapping of the toggleable state and what TalkBack reads as
+    // "selected" - with the `Role` on its own `RadioButton` node at that same box and
+    // the label as a child `TextView`. So an assertion that one node carries all
+    // three ("the node whose text is the label is the radio button") describes a tree
+    // this row does not have; each claim is read where it actually is, and the note
+    // below prints all three boxes so a red line can be read without re-running.
     //
     // **The geometry.** A connected group is one row whose items sit
     // `ButtonGroupDefaults.ConnectedSpaceBetween` (2 dp) apart. The library cannot see
     // Compose's item bounds from JS - the control is one Fabric node - so the bounds
     // in the accessibility tree are the only place a run can measure the gap, and a
     // group that had silently turned into three separate buttons (or a stretch row
-    // with a hole in it) shows up here and nowhere else.
+    // with a hole in it) shows up here and nowhere else. The item nodes are the
+    // segment boxes, which is what that measurement wants.
     const box = await t.requireControl('Real-input segmented control');
-    const items = t
-      .dump()
+    const tree = t.dump();
+    const insideBox = (node) =>
+      node.bounds.x1 >= box.bounds.x1 - 1 &&
+      node.bounds.x2 <= box.bounds.x2 + 1 &&
+      node.bounds.y1 >= box.bounds.y1 - 1 &&
+      node.bounds.y2 <= box.bounds.y2 + 1;
+    const centreInside = (node, box2) =>
+      (node.bounds.x1 + node.bounds.x2) / 2 >= box2.bounds.x1 - 1 &&
+      (node.bounds.x1 + node.bounds.x2) / 2 <= box2.bounds.x2 + 1 &&
+      (node.bounds.y1 + node.bounds.y2) / 2 >= box2.bounds.y1 - 1 &&
+      (node.bounds.y1 + node.bounds.y2) / 2 <= box2.bounds.y2 + 1;
+    const boundsText = (node) =>
+      `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
+      `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
+    // The item node is the one that answers for the selection.
+    const items = tree
+      .filter((node) => node.checkable === 'true' && insideBox(node))
+      .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+    const radios = tree
       .filter(
         (node) =>
-          ['1', '2', '3'].includes(node.text) &&
-          node.bounds.x1 >= box.bounds.x1 - 1 &&
-          node.bounds.x2 <= box.bounds.x2 + 1 &&
-          node.bounds.y1 >= box.bounds.y1 - 1 &&
-          node.bounds.y2 <= box.bounds.y2 + 1
+          node.className === 'android.widget.RadioButton' && insideBox(node)
       )
       .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+    // Where the tree actually put each of the three parts of a segment, so a red
+    // line below can be read without re-running the run.
+    items.forEach((node, index) => {
+      const radio = radios.find((candidate) => centreInside(candidate, node));
+      const label = tree.find(
+        (candidate) =>
+          candidate.text === String(index + 1) && insideBox(candidate)
+      );
+      t.log.note(
+        `segment ${String(index + 1)}: item ${node.className.split('.').pop()} ` +
+          `[${boundsText(node)}] checked=${node.checked}; role ` +
+          `${radio == null ? 'MISSING' : `[${boundsText(radio)}]`}; label ` +
+          `${label == null ? 'MISSING' : `[${boundsText(label)}]`}`
+      );
+    });
     t.log.checkEquals(
       'the group still has one node per option',
       items.length,
       3
     );
+    t.log.checkEquals(
+      'the group publishes one radio node per option',
+      radios.length,
+      3
+    );
     items.forEach((node, index) => {
       t.log.checkEquals(
         `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
-        node.className,
-        'android.widget.RadioButton'
+        radios.some((candidate) => centreInside(candidate, node)),
+        true
+      );
+      t.log.checkEquals(
+        `segment ${String(index + 1)} is announced with its own label`,
+        tree.some(
+          (candidate) =>
+            candidate.text === String(index + 1) &&
+            centreInside(candidate, node)
+        ),
+        true
       );
       t.log.checkEquals(
         `segment ${String(index + 1)} reports the selection the control has (index 1)`,
-        node.selected,
+        node.checked,
         index === 1 ? 'true' : 'false'
       );
     });
