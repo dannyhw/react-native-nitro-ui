@@ -1147,6 +1147,20 @@ describe('shape · the corner (E1)', () => {
           testID="shape-junk"
           hybridRef={captureHybrid('shape-junk')}
         />
+        <Button
+          title="Save"
+          size="small"
+          shape="square"
+          testID="shape-small"
+          hybridRef={captureHybrid('shape-small')}
+        />
+        <Button
+          title="Save"
+          size="large"
+          shape="square"
+          testID="shape-large"
+          hybridRef={captureHybrid('shape-large')}
+        />
       </View>
     );
 
@@ -1157,12 +1171,23 @@ describe('shape · the corner (E1)', () => {
       sizeOf('shape-default')!,
       'the square Button'
     );
+    await waitForMeasured('shape-small', 'the small Button to measure');
+    await waitForMeasured('shape-large', 'the large Button to measure');
 
     expect(handles.get('shape-default')?.shape).toBe('round');
     expect(handles.get('shape-square')?.shape).toBe('square');
     // The same rule `variant` and `size` follow: an unknown name is the default,
     // not a crash and not an empty corner.
     expect(handles.get('shape-junk')?.shape).toBe('round');
+
+    // The heights the new size ladder actually draws, for the table in
+    // `docs/components/button.md` - the small/large rungs are the two that moved.
+    console.log(
+      `shape ladder (square corners): small=${describeSize(
+        measured('shape-small')
+      )} medium=${describeSize(measured('shape-default'))} ` +
+        `large=${describeSize(measured('shape-large'))}`
+    );
 
     // And the corner is a paint: two buttons that differ only in it are the same
     // box, which is what lets `shape` stay out of the size configuration.
