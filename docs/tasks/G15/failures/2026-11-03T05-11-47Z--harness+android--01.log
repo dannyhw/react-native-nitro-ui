@@ -1,0 +1,207 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-03T05:11:47.174Z on code tree `4ca21d507382` at HEAD `3afdf5d` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 770282 ms
+- Load: start 4.44, end 3.15, median 2.83, max 5.64
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/harness+android-2026-11-03T05-11-46.848Z.log` (<store>/task/G15-checkbox/harness+android-2026-11-03T05-11-46.848Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Console`
+- `● Checkbox · G15 › follows a controlled checked in both directions`
+- `expected events ["controlled:true"], saw []`
+- `● Checkbox · G15 › reverts a toggle JS refused`
+- `expected events ["refused:true"], saw []`
+- `● Checkbox · G15 › applies a value written from JS, and keeps its own when uncontrolled`
+- `expected events ["free:false"], saw []`
+- `● Checkbox · G15 › draws the third state on Android, and off on iOS`
+- `expected events ["mixed:true"], saw []`
+- `● Checkbox · G15 › takes no toggle while disabled`
+- `expected events ["barrier:true"], saw []`
+- `● Checkbox · G15 › is one node with the label as its name when a label is shown`
+- `expected events ["a11y-labelled:true"], saw []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android-2026-11-03T05-11-46.848Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-69l63 (still live)
+  |   G15-69l63                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.15 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 211 — the rest is in the full log above)
+
+```
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › draws the third state on Android, and off on iOS
+
+    expected events ["mixed:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › takes no toggle while disabled
+
+    expected events ["barrier:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › is one node with the label as its name when a label is shown
+
+    expected events ["a11y-labelled:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › follows a controlled checked in both directions
+
+    expected events ["controlled:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › reverts a toggle JS refused
+
+    expected events ["refused:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › applies a value written from JS, and keeps its own when uncontrolled
+
+    expected events ["free:false"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › draws the third state on Android, and off on iOS
+
+    expected events ["mixed:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › takes no toggle while disabled
+
+    expected events ["barrier:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+  ● Checkbox · G15 › is one node with the label as its name when a label is shown
+
+    expected events ["a11y-labelled:true"], saw []
+
+      [0m [90m 229 |[39m     }[33m,[39m
+       [90m 230 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 231 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 232 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 233 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 234 |[39m       )[0m
+
+
+Test Suites: 1 failed, 20 passed, 21 total
+Tests:       6 failed, 3 skipped, 394 passed, 403 total
+Snapshots:   0 total
+Time:        753.095 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 4ca21d507382, 14 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.58/3.06 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G15-checkbox/harness+android-2026-11-03T05-11-46.848Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        15.005 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 770.3 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+
+gate: appended the device context to task/G15-checkbox/harness+android-2026-11-03T05-11-46.848Z.log (5 probe(s))
+
+```

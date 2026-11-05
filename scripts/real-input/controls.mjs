@@ -114,6 +114,18 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     screen: 'chip',
   },
   {
+    id: 'checkbox',
+    title:
+      'real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing',
+    screen: 'checkbox',
+  },
+  {
+    id: 'context-menu',
+    title:
+      'a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing',
+    screen: 'contextmenu',
+  },
+  {
     id: 'search-field',
     title:
       'real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard',

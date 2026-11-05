@@ -12,8 +12,12 @@
 namespace margelo::nitro::nitroui { class HybridNitroUiBottomSheetSpec; }
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
+// Forward declaration of `HybridNitroUiCheckboxSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiCheckboxSpec; }
 // Forward declaration of `HybridNitroUiChipSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiChipSpec; }
+// Forward declaration of `HybridNitroUiContextMenuSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiContextMenuSpec; }
 // Forward declaration of `HybridNitroUiDatePickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
 // Forward declaration of `HybridNitroUiDialogSpec` to properly resolve imports.
@@ -38,6 +42,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiTextFieldSpec; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
+// Forward declaration of `NitroUiCheckboxSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiCheckboxSize; }
 // Forward declaration of `NitroUiChipSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiChipSize; }
 // Forward declaration of `NitroUiDatePickerSize` to properly resolve imports.
@@ -66,7 +72,9 @@ namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 // Include C++ defined types
 #include "HybridNitroUiBottomSheetSpec.hpp"
 #include "HybridNitroUiButtonSpec.hpp"
+#include "HybridNitroUiCheckboxSpec.hpp"
 #include "HybridNitroUiChipSpec.hpp"
+#include "HybridNitroUiContextMenuSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiDialogSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
@@ -79,6 +87,7 @@ namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "HybridNitroUiTextFieldSpec.hpp"
 #include "NitroUiButtonSize.hpp"
+#include "NitroUiCheckboxSize.hpp"
 #include "NitroUiChipSize.hpp"
 #include "NitroUiDatePickerSize.hpp"
 #include "NitroUiDialogAction.hpp"
@@ -115,8 +124,12 @@ namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 namespace NitroUi { class HybridNitroUiBottomSheetSpec_cxx; }
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
+// Forward declaration of `HybridNitroUiCheckboxSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiCheckboxSpec_cxx; }
 // Forward declaration of `HybridNitroUiChipSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiChipSpec_cxx; }
+// Forward declaration of `HybridNitroUiContextMenuSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiContextMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiDatePickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiDialogSpec_cxx` to properly resolve imports.

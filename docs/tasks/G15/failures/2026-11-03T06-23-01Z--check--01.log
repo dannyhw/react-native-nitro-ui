@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-03T06:23:01.067Z on code tree `a495d58a9ec4` at HEAD `9aee69e` (branch `task/G15-checkbox`)
+- Command: `bun run check`
+- Result: fail, exit 1, 165157 ms
+- Load: start 5.87, end 8.73, median 5.98, max 8.73
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/check-2026-11-03T06-23-00.739Z.log` (<store>/task/G15-checkbox/check-2026-11-03T06-23-00.739Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "api-extractor:check" exited with code 1`
+- `error: script "manifest:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2991 — the rest is in the full log above)
+
+```
+🔧  Loading nitro.json config...
+🎉  Generated 15/15 HybridObjects in 0.8s!
+💡  Your code is in <tmp>/nitrogen-check-13T1ul/nitrogen/generated
+‼️   Added 491 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: no drift (340 generated files match, 48 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (13 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.3s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        2.2s
+──────── prepare — pass, 2.2s ────────────────────────────────────────────────────
+$ bob build
+ℹ [custom] Cleaning up nitrogen
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [custom] Running bun run nitrogen
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+ℹ [typescript] Generating type definitions with tsc
+ℹ [module] Compiling 87 files in src with babel
+✔ [module] Wrote files to lib/module
+✔ [custom] Ran the nitrogen script succesfully
+✔ [typescript] Wrote definition files to lib/typescript
+check: ✓ publint             pass        1.0s
+check: ✗ api-extractor:check fail        1.3s - exit 1
+──────── api-extractor:check — fail, 1.3s ────────────────────────────────────────
+──────── publint — pass, 1.0s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✗ manifest:check      fail        1.5s - exit 1
+──────── manifest:check — fail, 1.5s ─────────────────────────────────────────────
+──────── readme:check — pass, 0.0s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 14 blocks match example/src/readme-examples.tsx
+check: 15 passed, 2 failed in 165.0s
+check: failed step(s): api-extractor:check, manifest:check
+──────── full log: api-extractor:check ───────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+[33mWarning: You have changed the API signature for this project. Please copy the file ".turbo/api-extractor-temp/react-native-nitro-ui.api.md" to "etc/react-native-nitro-ui.api.md", or perform a local build (which does this automatically). See the Git repo documentation for more info.[39m
+
+[33mAPI Extractor completed with warnings[39m
+error: script "api-extractor:check" exited with code 1
+──────── full log: manifest:check ────────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiCheckbox.kt would be published (not in the manifest).
+package-files: +ios/components/Checkbox/HybridNitroUiCheckbox.swift would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/Checkbox.js would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/Checkbox.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/Checkbox.nitro.js would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/Checkbox.nitro.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/NativeNitroUiCheckbox.js would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/NativeNitroUiCheckbox.js.map would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/NitroUiCheckboxConfig.js would be published (not in the manifest).
+package-files: +lib/module/components/Checkbox/NitroUiCheckboxConfig.js.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/Checkbox.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/Checkbox.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/Checkbox.nitro.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/Checkbox.nitro.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/NativeNitroUiCheckbox.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/NativeNitroUiCheckbox.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/NitroUiCheckboxConfig.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/Checkbox/NitroUiCheckboxConfig.d.ts.map would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiCheckboxSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiCheckboxSpec.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiCheckboxSize.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiCheckboxManager.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiCheckboxStateUpdater.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiCheckboxSpecSwift.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiCheckboxSpecSwift.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/views/HybridNitroUiCheckboxComponent.mm would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiCheckboxSpec.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiCheckboxSpec_cxx.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiCheckboxSize.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiCheckboxSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/json/NitroUiCheckboxConfig.json would be published (not in the manifest).
+package-files: +src/components/Checkbox/Checkbox.nitro.ts would be published (not in the manifest).
+package-files: +src/components/Checkbox/Checkbox.tsx would be published (not in the manifest).
+package-files: +src/components/Checkbox/NativeNitroUiCheckbox.ts would be published (not in the manifest).
+package-files: +src/components/Checkbox/NitroUiCheckboxConfig.ts would be published (not in the manifest).
+package-files: tarball differs from <repo>/etc/package-files.txt (43 added, 0 removed). If intended, run `bun run manifest:update`.
+error: script "manifest:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 165.2 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+```

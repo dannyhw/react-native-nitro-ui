@@ -204,8 +204,8 @@ an empty `accessibilityLabel` would silence the control's own.
   spoken result (wording, rotor, whether the value is re-read after a step) has not
   been verified with VoiceOver running.
 - **Android**: the control's semantics node is `clearAndSetSemantics`-owned: it
-  publishes `progressBarRangeInfo` (the real range and current value — M3 1.4's
-  `Slider` does not) and a `setProgress` action that steps by this Slider's own grid
+  publishes `progressBarRangeInfo` (the real range and current value — M3's
+  `Slider`, 1.4 and 1.5 alike, does not) and a `setProgress` action that steps by this Slider's own grid
   rather than by Compose's stride; `accessibilityLabel` becomes that node's
   `contentDescription`.
 

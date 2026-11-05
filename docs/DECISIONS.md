@@ -13,7 +13,7 @@ Running log of orchestrator decisions that tasks must follow. Newest last.
 - **D6** Single npm package `react-native-nitro-ui`; core lives inside it (no `@nitro-ui/core`).
 - **D7** No optional (`?:`) Hybrid View props (nitro#1184); native specs use `T | null` and the JS
   wrapper always passes every prop.
-- **D8 (T03)** Supported floor stays **RN >= 0.86** (Expo SDK 57+). Android deps (Compose BOM etc.)
+- **D8 (T03) — superseded by D39.** Supported floor stays **RN >= 0.86** (Expo SDK 57+). Android deps (Compose BOM etc.)
   must be pinned to versions whose AAR metadata works with RN 0.86's default compileSdk/AGP, so
   0.86 consumers need zero changes. RN 0.86 iOS can't be verified on this machine's iOS 27 runtime;
   verify it in CI on an older runtime later.
@@ -486,3 +486,54 @@ override any of them.
 4. **Picker `variant="radio"`** falls back to the menu on iOS.
 5. **Order:** SearchField (G17) and Tooltip (G18) build now in parallel; Picker radio next; Stepper after; the Popover
    spike after Tooltip merges.
+
+## D39 — Current platforms only; Material 3 Expressive on Android (owner, 2026-11-03)
+
+The owner: "raise the floor, we want to match and improve on expo ui, we aren't here to be outdated. Do the best
+possible thing, not the thing that supports all the old react native versions. You can improve anything we were
+holding back on for older RN versions."
+
+1. **Supersedes D8.** The floor is set high enough to use what matters now, not to support every older release:
+   today that is **RN >= 0.88, Expo SDK 58**. It is raised when a newer RN or SDK brings something worth having,
+   not automatically with each release (owner, 2026-11-03). While the library is experimental (0.x) a raise ships in
+   a minor; once it leaves the experimental phase it follows semver, so a floor raise is a major, released as needed.
+2. **Android dependencies track current:** the Compose BOM / Compose 1.12+, `material3` 1.5 (beta02 now; stable as
+   soon as it ships), and whatever compileSdk/AGP they need (37 / 9.1), matching RN 0.88's template.
+3. **Material 3 Expressive is the Android design** (Android's design language since Android 16): the library theme
+   becomes `MaterialExpressiveTheme`, by default, with an app-level opt-out to the baseline M3 theme. Every Android
+   component adopts its Expressive counterpart where one exists (menus, buttons and button groups, loading
+   indicator, …), aiming to match `@expo/ui` and go past it.
+4. **Anything held back for an older RN or SDK is lifted:** workarounds, pinned versions, smoke rows, docs. iOS's
+   floor stays RN's own `min_ios_version_supported`; a SwiftUI fallback for an older iOS that the current RN still
+   supports is not "held back", but one for an iOS RN no longer supports is removed.
+
+## D40 — Expressive per component: build order and Android icons (2026-11-03)
+
+Q8 (`docs/tasks/Q8-expressive-and-holdbacks.report.md`) mapped every Android control to its Material 3 Expressive
+counterpart in material3 1.5.0-beta02 (mostly stable APIs; the theme switch alone changes motion only). The
+orchestrator adopted its recommendations; the owner may override any of them.
+
+1. **Order:** pass 0 alongside X18 (G17, G18, and lifting the RN 0.84–0.86 branch of `cpp/NitroUiPropsCompat.hpp`
+   inside X18); pass 1 after X18 — buttons (Button shapes/sizes, SegmentedControl as connected toggle buttons with
+   radio semantics, Chip) and menus (Menu/ContextMenu on `DropdownMenuPopup` with groups, `subtitle`, `checked`;
+   Picker rows) on the two machines in parallel; pass 2 — ButtonGroup (Android `ButtonGroup`, iOS `ControlGroup`),
+   SplitButton (Menu's `primaryAction` on Android), Progress `variant="loading"`/`appearance="wavy"`, the
+   state-based Slider; pass 3 — real Android wheels (Picker `wheel`, DatePicker time), Picker `radio`, Dialog rows,
+   SearchField v2 (keyboard props via the new `InputField`), Stepper.
+2. **Android icons (Q8 question A):** an `androidIcon` prop naming a drawable resource the app ships (e.g. a Material
+   Symbols vector), alongside iOS's `systemImage`; the library bundles no icon set. IconButton and icon-only group
+   items build on it.
+3. Q8's other calls (SegmentedControl's new look, the Button size remap, LoadingIndicator as a Progress variant) stand.
+
+## D41 — Tooltip presents from its own window on iOS (2026-11-05)
+
+G18's review accepted both of Tooltip's departures from Q7's design:
+
+1. **iOS presents a Tooltip from its own window, not through D35's presentation chain.** UIKit lets a view
+   controller present only one thing at a time. A popover sitting in the app's chain made UIKit refuse the next React
+   Native `Modal`, and G18's red proof shows that. So D35 does not apply to Tooltip. BottomSheet carries the same
+   hazard under D35; it is in FOLLOWUPS.
+2. **On Android the tooltip follows its anchor when the anchor moves, as on iOS, instead of closing.** Any touch
+   outside closes it first, so following only matters for moves nobody touched for, such as the keyboard or data
+   loading.
+

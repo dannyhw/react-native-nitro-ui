@@ -1,0 +1,87 @@
+# Failure excerpt — harness:android:Checkbox
+
+- Ran: 2026-11-03T09:41:16.104Z on code tree `95870d3f091f` at HEAD `6409138` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Checkbox`
+- Result: fail, exit 1, 14087 ms
+- Load: start 1.79, end 1.92, median 1.85, max 1.92
+- Device: android / device `emulator-5574` / lease `G15-h2yzp`
+- Full log: `task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log` (<store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › centres its label against the box`
+- `expected 12 to be less than or equal to 1`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-h2yzp (still live)
+  |   G15-h2yzp                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 1.92 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Checkbox
+gate: node ../scripts/harness.mjs --harnessRunner android Checkbox (cwd example)
+gate: code tree 95870d3f091f at HEAD 6409138c
+gate: git tree 13ee7d5f4252 with a DIRTY worktree (not reusable)
+gate: log task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log
+gate:       <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Checkbox
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 95870d3f091f, 14 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 1.79/2.02 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › centres its label against the box
+
+    expected 12 to be less than or equal to 1
+
+      [0m [90m 723 |[39m       [90m// Within a rounding step of the middle. A row aligned to the top of 48 dp with a[39m
+       [90m 724 |[39m       [90m// ~24 dp line is roughly -12 dp, and aligned to the bottom the same amount plus.[39m
+      [31m[1m>[22m[39m[90m 725 |[39m       expect([33mMath[39m[33m.[39mabs(off))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m     |[39m                                                [31m[1m^[22m[39m
+       [90m 726 |[39m     } [36melse[39m {
+       [90m 727 |[39m       [90m// Nothing to read on iOS, and that is the honest answer rather than a skip: the[39m
+       [90m 728 |[39m       [90m// platform's `Toggle` lays out its own label, so there is no row of ours to align[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        12.945 s
+Ran all test suites matching Checkbox.
+gate: harness:android:Checkbox FAIL in 14.1 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+
+gate: appended the device context to task/G15-checkbox/harness+android+Checkbox-2026-11-03T09-41-15.784Z.log (5 probe(s))
+
+```

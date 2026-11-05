@@ -22,7 +22,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -273,6 +274,10 @@ private const val DISABLED_ALPHA_CEILING = 0.5f
 /** Material 3's alpha for disabled content (`ButtonDefaults`' disabled text, say). */
 private const val DISABLED_CONTENT_ALPHA = 0.38f
 
+/** A confirmation sheet opens fully or not at all: it has no half-height rest. */
+@OptIn(ExperimentalMaterial3Api::class)
+private val CONFIRMATION_SHEET_VALUES = setOf(SheetValue.Hidden, SheetValue.Expanded)
+
 /**
  * The button colours a dialog needs, shared across instances (`core.md` section 3,
  * "Shared objects"): `ButtonDefaults.textButtonColors(contentColor = ...)` builds a
@@ -457,7 +462,13 @@ private class DialogHost(
   @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
   @Composable
   private fun ConfirmationSheet(model: DialogModel) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // material3 1.5's sheet state, with the two values the old
+    // `rememberModalBottomSheetState(skipPartiallyExpanded = true)` allowed.
+    val sheetState =
+      rememberBottomSheetState(
+        initialValue = SheetValue.Hidden,
+        enabledValues = CONFIRMATION_SHEET_VALUES,
+      )
     val dismissible = model.dismissible
     val presented = model.presented
     // A programmatic close (an action, a JS `false`) animates the sheet out before the
@@ -505,9 +516,10 @@ private class DialogHost(
         }
         val tint = model.tintColor
         for (action in ordered) {
-          // M3 1.4's `ListItem` has no `enabled` (the BOM's version has only the
-          // non-interactive overload), so it always draws `headlineColor`: a disabled
-          // row gets Material's disabled colour here, or it looks tappable and is not.
+          // A disabled row gets Material's disabled colour here, or it looks tappable
+          // and is not. Written when M3 1.4's `ListItem` had no `enabled`; 1.5's has
+          // one, and moving the row onto it (with `onClick`) is the Dialog's Expressive
+          // pass, not the platform bump that only replaced the deprecated overload.
           val content =
             when {
               action.disabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_CONTENT_ALPHA)
@@ -516,13 +528,14 @@ private class DialogHost(
               else -> MaterialTheme.colorScheme.onSurface
             }
           ListItem(
-            headlineContent = { ActionLabel(model, action) },
-            colors = ListItemDefaults.colors(headlineColor = content),
             modifier =
               Modifier
                 .fillMaxWidth()
                 .clickable(enabled = !action.disabled) { model.performAction(action.id) },
-          )
+            colors = ListItemDefaults.colors(contentColor = content),
+          ) {
+            ActionLabel(model, action)
+          }
         }
       }
     }

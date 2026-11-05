@@ -99,7 +99,9 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
+  ContextMenu,
   DatePicker,
   Menu,
   Picker,
@@ -239,6 +241,16 @@ const SHARED = {
         "width": 80,
         "height": 28
       }
+    },
+    "NitroUiCheckbox": {
+      "android": {
+        "width": 48,
+        "height": 48
+      },
+      "ios": {
+        "width": 61,
+        "height": 28
+      }
     }
   },
   "poisonSizes": {
@@ -263,7 +275,8 @@ const SHARED = {
     "NitroUiPicker": "both",
     "NitroUiTextField": "height",
     "NitroUiSearchField": "height",
-    "NitroUiChip": "none"
+    "NitroUiChip": "none",
+    "NitroUiCheckbox": "height"
   },
   "exemptions": [
     {
@@ -387,6 +400,49 @@ type Handle = {
    * Chip there (`Chip.harness.tsx` measured it).
    */
   nuiTestPress?(): void;
+  /**
+   * Checkbox's value, the props half of its recycle rule. `Chip`'s `label` and `Switch`'s
+   * `value` have the same job: `useControlled` echoes it back, so it is what React last
+   * sent rather than what the view shows — which is why each of the two recycle probes
+   * below is an interaction and not a read of this field.
+   */
+  readonly checked?: boolean | null;
+  /**
+   * Checkbox's toggle, through the tap's own path (`CheckboxModel.press()`). On iOS the
+   * harness's HID-less touch reaches no SwiftUI gesture and a `.switch` `Toggle` is one,
+   * so this is how a probe toggles a Checkbox there (`Checkbox.harness.tsx`'s
+   * `toggleCheckbox` says why). Both platforms end in `press()`, which is where the
+   * residue a reset has to clear is written.
+   */
+  nuiTestToggle?(): void;
+  /**
+   * ContextMenu's report (`ContextMenu.nitro.ts`): `open`, `opens`/`closes`/`selects`,
+   * `title` and the rest, `;`-separated, from a snapshot the UI thread publishes.
+   */
+  nuiTestContextMenuReport?(): string;
+  /** ContextMenu's pick, through the path a row press takes. */
+  nuiTestSelectRow?(id: string): void;
+};
+
+/**
+ * Toggle a Checkbox: a real harness tap on Android, the control's own press path on iOS,
+ * where the harness's HID-less touch reaches no SwiftUI gesture (`Checkbox.harness.tsx`'s
+ * `toggleCheckbox` and `Chip.harness.tsx`'s `pressChip` measure the same thing). Both go
+ * through `press()`, so a probe and a finger cannot disagree about what a press means.
+ */
+const pressCheckbox = async (testId: string): Promise<void> => {
+  if (PLATFORM === 'ios') {
+    await screen.findByTestId(testId);
+    const handle = handleFor(testId);
+    if (handle.nuiTestToggle == null) {
+      throw new Error(
+        `"${testId}" is not a Checkbox - it has no nuiTestToggle()`
+      );
+    }
+    handle.nuiTestToggle();
+    return;
+  }
+  await pressControl(testId);
 };
 
 /**
@@ -1402,6 +1458,15 @@ type Fixture = {
    * directions, so a self-sizing control cannot opt out of its sizing rules here.
    */
   selfSizing?: false;
+  /**
+   * `true` for a component that **is** a React Native `View` - ContextMenu, whose box is
+   * Yoga's and whose accessibility props are React Native's own, landing on the view the
+   * `testID` names (D36 item 1). The a11y rule then holds the labelled box to that box on
+   * both platforms (an RN view's `contentDescription` is what the Android harness query
+   * walks, unlike a Compose control's semantics) and skips the handle's label, which a
+   * `View` does not have.
+   */
+  isView?: true;
 };
 
 const SECOND = 'second owner';
@@ -1436,6 +1501,34 @@ const MENU_GROUP: MenuGroup = {
  */
 const MENU_TITLE = 'Conformance actions';
 const MENU_TITLE_SECOND = 'Second owner’s actions';
+
+/** The ContextMenu fixture's name, and the header its menu draws for the first owner. */
+const CONTEXT_LABEL = 'Conformance context menu';
+const CONTEXT_TITLE = 'Conformance rows';
+
+/** ContextMenu's report, as `key -> value`. */
+function contextMenuReportOf(handle: Handle): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const pair of (handle.nuiTestContextMenuReport?.() ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return fields;
+}
+
+/**
+ * `captureFor` for a ContextMenu, whose handle is its own type (no `accessibilityLabel`,
+ * no `measureContent()`: it is a `View`), filed under the shared one as Dialog's is.
+ */
+const captureContextMenu =
+  (testId: string) =>
+  (view: object): void => {
+    const handle = view as unknown as Handle;
+    handles.set(testId, handle);
+    // A ContextMenu builds its report only once a harness asks (an app never does), and
+    // a recycle clears that: ask now, so the single reads below find one built.
+    handle.nuiTestContextMenuReport?.();
+  };
 
 const DIALOG_TITLE = 'Conformance dialog';
 const DIALOG_TITLE_SECOND = 'Second owner’s dialog';
@@ -3040,7 +3133,251 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
   },
+  {
+    name: 'Checkbox',
+    component: 'NitroUiCheckbox',
+    label: 'Conformance checkbox',
+    testId: 'conformance-checkbox',
+    owner: (second) => (
+      <Checkbox
+        checked={second}
+        testID="conformance-checkbox"
+        accessibilityLabel={
+          second ? `Conformance checkbox, ${SECOND}` : 'Conformance checkbox'
+        }
+        hybridRef={captureFor('conformance-checkbox')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Checkbox
+        checked={variant}
+        testID={testId}
+        accessibilityLabel={`Leak checkbox ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      { label: 'checked', expected: second, actual: handle.checked },
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance checkbox, ${SECOND}`
+          : 'Conformance checkbox',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // Switch's pair, for Switch's reason (`Fixture.controlledProbe`): a reset has two
+    // lines, `didApplyDefault = false` and a fresh `NitroUiControlledValue`, and an
+    // uncontrolled owner can only read the first. The residue here is `false` because
+    // that is what `prepareForRecycle` writes (`HybridNitroUiCheckbox.swift`'s
+    // `NitroUiControlledValue<Bool>(displayed: false)`, `CheckboxModel.reset()` on
+    // Android), so the display alone can never be the evidence and the first press after
+    // the second mount is.
+    probe: {
+      leaveBehind:
+        'an uncontrolled Checkbox that started ON and was pressed off, then a second ' +
+        'owner whose own default is ON - a number the control can only be standing on ' +
+        'because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <Checkbox
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      act: async () => {
+        await pressCheckbox('conformance-checkbox');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-checkbox:false'])
+        );
+      },
+      second: () => (
+        <Checkbox
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressCheckbox('conformance-checkbox');
+        // A second owner whose default was applied shows ON, so its first press reports
+        // `false`. One still believing it applied its default shows the `false` its
+        // previous owner pressed, and its first press reports `true`.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-checkbox:false',
+            actual: await eventsSettled(from, 'conformance-checkbox:false'),
+          },
+        ];
+      },
+    },
+    // A press asks for the opposite of what is showing on both platforms, which is what
+    // makes this probe read the way Switch's does rather than the way Chip's does: a
+    // checkbox that asked for `true` whatever it showed would report `true` here whether
+    // or not the counters were reset, and the line it is testing would be unmeasured.
+    controlledProbe: {
+      leaveBehind:
+        'a press that turns an uncontrolled Checkbox on, then a second owner that is ' +
+        '*controlled* at `false` - the only shape that reads the handshake\u2019s ' +
+        'counters, which is what `model.state = NitroUiControlledValue(\u2026)` uniquely owns',
+      first: () => (
+        <Checkbox
+          defaultChecked={false}
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      act: async () => {
+        await pressCheckbox('conformance-checkbox');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-checkbox:true'])
+        );
+      },
+      // Controlled at `false` while the residue is `true`, so the app's own value is the
+      // opposite of what the first owner left. `useControlled.ts` sends
+      // `mostRecentEventCount` 0 with it; only `nativeEvents` back at 0 can accept the
+      // write. Leave the counters alone and `reconcile()` sees `jsEvents 0 <
+      // nativeEvents 1`, refuses it as stale, and the control keeps showing the previous
+      // app's `true` - so its first press asks for `false`, the app's own value coming
+      // back out of a control with somebody else's counters.
+      second: () => (
+        <Checkbox
+          checked={false}
+          onCheckedChange={recordRecycle('conformance-checkbox')}
+          testID="conformance-checkbox"
+          accessibilityLabel="Conformance checkbox"
+          hybridRef={captureFor('conformance-checkbox')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressCheckbox('conformance-checkbox');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-checkbox:true',
+            actual: await eventsSettled(from, 'conformance-checkbox:true'),
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'ContextMenu',
+    component: 'NitroUiContextMenu',
+    label: CONTEXT_LABEL,
+    testId: 'conformance-context-menu',
+    selfSizing: false,
+    isView: true,
+    owner: (second) => (
+      <ContextMenu
+        group={MENU_GROUP}
+        title={second ? undefined : CONTEXT_TITLE}
+        accessible
+        accessibilityLabel={
+          second ? `${CONTEXT_LABEL}, ${SECOND}` : CONTEXT_LABEL
+        }
+        testID="conformance-context-menu"
+        hybridRef={captureContextMenu('conformance-context-menu')}
+        style={{ padding: 8 }}
+      >
+        <View style={{ height: 40 }} />
+      </ContextMenu>
+    ),
+    control: (testId, variant) => (
+      <ContextMenu group={MENU_GROUP} disabled={variant} testID={testId}>
+        <View style={{ height: variant ? 40 : 20 }} />
+      </ContextMenu>
+    ),
+    // Read from the view's own report, never from React's props: a `null` title the
+    // second owner sends has to arrive as `-`, and the menu must not come back open.
+    state: (handle, second) => {
+      const report = contextMenuReportOf(handle);
+      return [
+        {
+          label: 'title',
+          expected: second ? '-' : CONTEXT_TITLE,
+          actual: report.title,
+        },
+        { label: 'open', expected: '0', actual: report.open },
+      ];
+    },
+    // The residue is the menu's own history: a pick counts into `selects` (and an open
+    // menu into `opens`), state no prop writes. A recycled view that kept it would report
+    // a pick its owner never made - and on Android the same reset is what closes a menu
+    // the previous owner left open (`ContextMenuModel.reset`, "a recycled view must never
+    // come back open").
+    probe: {
+      leaveBehind:
+        'a pick the first owner made through the row path (selects=1) - the second ' +
+        'owner made none, so a count left over is the reset missing',
+      first: () => (
+        <ContextMenu
+          group={MENU_GROUP}
+          title={CONTEXT_TITLE}
+          onSelect={recordRecycle('conformance-context-menu')}
+          testID="conformance-context-menu"
+          hybridRef={captureContextMenu('conformance-context-menu')}
+        >
+          <View style={{ height: 40 }} />
+        </ContextMenu>
+      ),
+      act: async () => {
+        const handle = await ensureHandle('conformance-context-menu');
+        const from = recycleEvents.length;
+        handle.nuiTestSelectRow?.('two');
+        const seen = await eventsSettled(from, 'conformance-context-menu:two');
+        if (seen !== 'conformance-context-menu:two') {
+          throw new Error(
+            `the pick reported "${seen}", so the first owner has no pick for a reset ` +
+              'to clear'
+          );
+        }
+        const deadline = Date.now() + 2000;
+        while (contextMenuReportOf(handle).selects !== '1') {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner reported its pick but its own counter never moved: ' +
+                (handle.nuiTestContextMenuReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(50);
+        }
+      },
+      second: () => (
+        <ContextMenu
+          group={MENU_GROUP}
+          onSelect={recordRecycle('conformance-context-menu')}
+          testID="conformance-context-menu"
+          hybridRef={captureContextMenu('conformance-context-menu')}
+        >
+          <View style={{ height: 40 }} />
+        </ContextMenu>
+      ),
+      read: async () => {
+        const report = contextMenuReportOf(
+          handleFor('conformance-context-menu')
+        );
+        return [
+          {
+            label: 'picks this mount reports',
+            expected: '0',
+            actual: report.selects,
+          },
+          { label: 'the menu is open', expected: '0', actual: report.open },
+        ];
+      },
+    },
+  },
 ];
+
 /** Mounts per control in the leak fixture. */
 const CHURN = 50;
 
@@ -3464,6 +3801,21 @@ describe('conformance · every control, four rules', () => {
         await ensureHandle(fixture.testId);
         const box = harnessUi.queryByTestId(fixture.testId);
         const labelled = harnessUi.queryByAccessibilityLabel(fixture.label);
+        if (fixture.isView === true) {
+          // A `View`'s own accessibility props (D36 item 1): the box the testID names is
+          // the element, on both platforms - the harness query walks an RN view's
+          // `contentDescription` on Android, which it cannot do for a Compose control. The
+          // platform tree (VoiceOver's element, TalkBack's node) is asserted by real input.
+          console.log(
+            `    · a View: box=${describeBox(box)} labelBox=${describeBox(labelled)}`
+          );
+          expect(box).not.toBeNull();
+          expect(labelled).not.toBeNull();
+          expect(Math.abs(labelled!.width - box!.width)).toBeLessThan(2);
+          expect(Math.abs(labelled!.height - box!.height)).toBeLessThan(2);
+          mounted.unmount();
+          return;
+        }
         if (fixture.selfSizing === false) {
           // The presentation-aware half (Q5 Appendix B5): a closed dialog's anchor is
           // hidden from accessibility, so nothing on screen may carry its title - a
