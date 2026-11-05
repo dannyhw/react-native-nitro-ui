@@ -7,7 +7,11 @@ import android.view.View
 import android.widget.FrameLayout
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -16,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.IntState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.unit.Constraints
@@ -1437,18 +1442,65 @@ abstract class NitroComposeHost<M : NitroUiModel>(
 }
 
 /**
- * The library's Material theme: dynamic colour on Android 12+, the default M3
- * schemes below, both following the system dark mode.
+ * The library's Material theme: Material 3 Expressive - its motion scheme, and its
+ * shapes and type as Material defines them - over dynamic colour on Android 12+ and
+ * the default M3 schemes below, both following the system dark mode (D39).
+ *
+ * The app can opt out to the baseline Material 3 theme, process-wide
+ * ([NitroUiMaterialTheme], `setMaterialTheme('baseline')` in JS).
+ *
+ * **One call site, whatever the setting.** The setting only chooses the motion scheme
+ * handed to the one `MaterialExpressiveTheme` below. Two call sites - one theme
+ * composable per setting - would be two different groups. Switching would then dispose
+ * every control's composition and build it again: a presented sheet ends its
+ * presentation, a focused field loses its focus and its IME, an open menu closes and a
+ * drag loses its end (X18 fix round 1). With one call site a switch changes values and
+ * recomposes; nothing is disposed.
+ *
+ * That this is still exactly the baseline theme when the setting says so is a fact
+ * about material3 1.5.0-beta02, checked rather than assumed:
+ * - `MaterialExpressiveTheme(colorScheme, motionScheme, shapes, typography)` at the root
+ *   is `MaterialTheme` with the same four values, plus the internal
+ *   `LocalUsingExpressiveTheme = true`;
+ * - a root `MaterialTheme(colorScheme)` resolves to `Shapes()`, `Typography()` and
+ *   `MotionScheme.standard()`, and those shapes and type are passed explicitly here;
+ * - the internal flag is read by nothing but `MaterialExpressiveTheme` itself, and this
+ *   library never nests one.
+ *
+ * So the motion scheme is the whole difference. `NitroUiMaterialThemeLibraryTest` fails
+ * the day another material3 class, or another method of `MaterialTheme.kt`, reads that
+ * flag.
  *
  * A Hybrid View is its own composition, so it cannot inherit the app's theme;
- * this is the closest equivalent to what the surrounding app sees.
+ * this is the closest equivalent to what the surrounding app sees. Every composition
+ * this library owns starts here - each control's own, and each `<Host>`'s, whose
+ * children compose inside it - so this is the one place the theme is chosen.
  */
 @Composable
 fun NitroUiTheme(content: @Composable () -> Unit) {
   val dark = isSystemInDarkTheme()
   val context = LocalContext.current
-  MaterialTheme(colorScheme = NitroUiColorSchemes.forContext(context, dark), content = content)
+  MaterialExpressiveTheme(
+    colorScheme = NitroUiColorSchemes.forContext(context, dark),
+    motionScheme = if (NitroUiMaterialTheme.expressive) MotionScheme.expressive() else MotionScheme.standard(),
+    // Passed rather than left to `MaterialExpressiveTheme`'s null defaults: a later
+    // material3 that gave the Expressive theme its own shapes or type by default would
+    // otherwise carry them into the baseline opt-out too. These are what a root
+    // `MaterialTheme` resolves to.
+    shapes = NitroUiBaselineShapes,
+    typography = NitroUiBaselineTypography,
+  ) {
+    // The harness's readings: a content subtree created (once per root, unless a theme
+    // switch rebuilt it), and the motion scheme Material handed it.
+    remember { NitroUiMaterialTheme.noteContentCreated() }
+    NitroUiMaterialTheme.noteComposed(MaterialTheme.motionScheme)
+    content()
+  }
 }
+
+/** `Shapes()` and `Typography()`, built once for the process rather than per root composition. */
+private val NitroUiBaselineShapes = Shapes()
+private val NitroUiBaselineTypography = Typography()
 
 /**
  * The key of [NitroUiColorSchemes], held weakly.

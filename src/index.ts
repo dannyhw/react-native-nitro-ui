@@ -19,6 +19,11 @@
  * diagnostics.
  */
 export { nitroUiCore, prewarm } from './NitroUiCore';
+
+// The one app-level theme choice (D39): Android draws with Material 3 Expressive unless
+// the app opts out to the baseline theme. No per-control prop - the setting is the
+// process's, and every composition the library owns reads it at its root.
+export { setMaterialTheme, type MaterialTheme } from './MaterialTheme';
 export type {
   NitroUiCore,
   NitroUiPerfEvent,

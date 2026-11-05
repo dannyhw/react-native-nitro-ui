@@ -3,7 +3,7 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.os.Looper
 import android.view.View
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.runtime.Composable
@@ -466,7 +466,6 @@ private class MenuHost(
     model.applyPick(id)
   }
 
-  @OptIn(ExperimentalMaterial3Api::class)
   @Composable
   override fun Component(model: MenuModel) {
     val entries = model.entries

@@ -417,7 +417,7 @@ private class CheckboxHost(
    * carries the toggle, the name and the state (see [Component]), so `Checkbox` is
    * handed a `null` `onCheckedChange` - which is M3's own way to say "draw it, do not
    * make it actionable" - and `TriStateCheckbox` is handed the same `null` for the same
-   * answer. Its `onClick` has been nullable since Material 3 1.2 and this repo ships 1.4.0,
+   * answer. Its `onClick` has been nullable since Material 3 1.2 and this repo ships 1.5,
    * so neither box publishes a click of its own once the row owns the tap. Round 1's comment
    * claimed it insists on a non-null `onClick`, which is why it kept one - and an `onClick`
    * installs the box's own interaction handling, whose ripple is bounded by the 48 dp box,

@@ -554,11 +554,11 @@ release we take, drop its row and its mitigation note.
 
 This repo builds against `nitrogen ^0.37.1` and peers on
 `react-native-nitro-modules ^0.37.1` (`package.json` and peerDependencies),
-with RN floor 0.86 (D8).
+with RN floor 0.88 (D39; 0.86 under D8 when this was written).
 
 ### N1 — Android base `ViewProps` dropped for Hybrid Views (nitro#1655 → #1656)
 
-**Observed.** On RN ≥ 0.86 Android, a Hybrid View ignores RN's base props —
+**Observed.** On Android, a Hybrid View ignores RN's base props —
 `backgroundColor`, `opacity`, `transform`, `testID`, accessibility
 (`docs/research/nitro-patterns.md:35-37`). Measured before/after in the spike:
 on an Android emulator with RN 0.88 the Nitro view ignored `backgroundColor` and
@@ -582,8 +582,9 @@ consumer smoke apps (`docs/research/setup-decisions.md:241`). Cause: nitrogen
 - Nightly codegen emits a call into the runtime helper
   `cpp/views/RawPropsCompat.cpp`, version-gated (RN ≥ 0.87 always; RN 0.84–0.86
   behind `enableExclusivePropsUpdateAndroid`), so codegen produced by nightly
-  nitrogen **does not build** for consumers on 0.37.1 (`:226-231`). With our peer
-  range and RN floor, shipping nightly codegen is not an option.
+  nitrogen **does not build** for consumers on 0.37.1 (`:226-231`). With our
+  `^0.37.1` peer range, shipping nightly codegen is not an option. (The RN half of
+  that gate is moot since D39: at RN ≥ 0.88 only the unconditional branch applies.)
 
 **Evidence — what ships.** `bun run nitrogen` is `nitrogen src &&
 node scripts/patch-nitrogen.mjs` (`package.json`), and bob's `custom` target
@@ -601,7 +602,10 @@ ship patched code. The script rewrites the empty ctor and adds the include
 
 `cpp/NitroUiPropsCompat.hpp` is a header-only copy of the upstream helper under
 `::nitroui::compat` (not `nitroui::`, which would collide with the generated
-`margelo::nitro::nitroui`). Guards, in this order: skip files already containing
+`margelo::nitro::nitroui`), reduced to the branch the RN floor (0.88, D39) takes: the
+call is unconditional on Android, and the header refuses to compile against an RN
+older than 0.88 rather than call it where RN 0.84–0.86 gated it behind
+`enableExclusivePropsUpdateAndroid`. Guards, in this order: skip files already containing
 upstream's `RawPropsCompat::initializeDynamicProps` (`scripts/patch-nitrogen.mjs`);
 idempotent via `PATCH_MARKER`; **exit 1** if a generated
 `*Component.cpp` has neither the upstream call nor our anchor, so a
@@ -624,7 +628,7 @@ Body
 in 0.37.2-nightly.* (nightly = 0.37.2-nightly.62.gfb894f673ff0) and 1.0.0-alpha.nightly.*.
 
 Downstream effect: libraries generated with stable nitrogen 0.37.1 must keep dropping RN's
-base ViewProps on Android >= 0.86 (backgroundColor, opacity, transform, testID, a11y) or
+base ViewProps on Android (backgroundColor, opacity, transform, testID, a11y) or
 post-process their own codegen, because codegen from nightly nitrogen calls
 nitro::RawPropsCompat::initializeDynamicProps, which does not exist in 0.37.1 — so we
 cannot ship the fixed codegen either. react-native-nitro-ui does exactly that
