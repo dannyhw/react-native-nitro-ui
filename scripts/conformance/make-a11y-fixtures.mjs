@@ -32,8 +32,10 @@ const TAB_LABEL = {
   picker: 'Picker',
   menu: 'Menu',
   chip: 'Chip',
+  checkbox: 'Checkbox',
   host: 'Host',
   textfield: 'Text',
+  contextmenu: 'Context',
 };
 
 function adb(args) {

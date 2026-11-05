@@ -114,6 +114,18 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     screen: 'chip',
   },
   {
+    id: 'checkbox',
+    title:
+      'real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing',
+    screen: 'checkbox',
+  },
+  {
+    id: 'context-menu',
+    title:
+      'a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing',
+    screen: 'contextmenu',
+  },
+  {
     id: 'tooltip',
     title:
       'a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone',

@@ -1,0 +1,331 @@
+diff --git a/android/src/main/java/com/harnessui/HarnessUIModule.kt b/android/src/main/java/com/harnessui/HarnessUIModule.kt
+index 80a258f2ff8f6f73b781157fffd1e957295f4205..4f3e69d95b6f3e544d5abb229afd42de3ae713ef 100644
+--- a/android/src/main/java/com/harnessui/HarnessUIModule.kt
++++ b/android/src/main/java/com/harnessui/HarnessUIModule.kt
+@@ -32,6 +32,17 @@ class HarnessUIModule(
+         helper.simulatePress(nativeId, x, y, promise)
+     }
+ 
++    // nitro-ui patch: a held press (docs/upstream.md H11).
++    override fun simulateLongPress(
++        nativeId: String,
++        x: Double,
++        y: Double,
++        durationMs: Double,
++        promise: Promise,
++    ) {
++        helper.simulateLongPress(nativeId, x, y, durationMs, promise)
++    }
++
+     override fun queryByTestId(testId: String): WritableMap? = helper.queryByTestId(testId)
+ 
+     override fun queryByAccessibilityLabel(label: String): WritableMap? = helper.queryByAccessibilityLabel(label)
+diff --git a/android/src/main/java/com/harnessui/UIHelperImpl.kt b/android/src/main/java/com/harnessui/UIHelperImpl.kt
+index 44b32c7c00a763d1729e4ecdefa858355096df0b..01dab40f192f40b1b56631b7631702ba08da9064 100644
+--- a/android/src/main/java/com/harnessui/UIHelperImpl.kt
++++ b/android/src/main/java/com/harnessui/UIHelperImpl.kt
+@@ -118,6 +118,62 @@ class UIHelperImpl(
+         }
+     }
+ 
++    // =========================================================================
++    // Long press (nitro-ui patch, docs/upstream.md H11)
++    // =========================================================================
++
++    /**
++     * [simulatePress] with the touch held for [durationMs]: one DOWN, then the UP after the
++     * real delay, at the same point. No MOVE in between, so nothing reads it as a drag.
++     */
++    fun simulateLongPress(
++        nativeId: String,
++        x: Double,
++        y: Double,
++        durationMs: Double,
++        promise: Promise,
++    ) {
++        UiThreadUtil.runOnUiThread {
++            val activity =
++                context.currentActivity ?: run {
++                    promise.resolve(null)
++                    return@runOnUiThread
++                }
++            val root = activity.window.decorView
++            val density = root.resources.displayMetrics.density
++            var targetX = x
++            var targetY = y
++            if (nativeId.isNotEmpty()) {
++                val targetView = ViewRegistry.get(nativeId)
++                if (targetView != null) {
++                    val location = IntArray(2)
++                    targetView.getLocationOnScreen(location)
++                    targetX = location[0] / density + targetView.width / density / 2.0
++                    targetY = location[1] / density + targetView.height / density / 2.0
++                }
++            }
++            val pxX = (targetX * density).toFloat()
++            val pxY = (targetY * density).toFloat()
++            val downTime = SystemClock.uptimeMillis()
++            val downEvent = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, pxX, pxY, 0)
++            try {
++                root.dispatchTouchEvent(downEvent)
++            } finally {
++                downEvent.recycle()
++            }
++            mainHandler.postDelayed({
++                val upEvent =
++                    MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, pxX, pxY, 0)
++                try {
++                    root.dispatchTouchEvent(upEvent)
++                } finally {
++                    upEvent.recycle()
++                }
++                mainHandler.postDelayed({ promise.resolve(null) }, EVENT_PROCESSING_DELAY_MS)
++            }, durationMs.toLong().coerceAtLeast(0L))
++        }
++    }
++
+     // =========================================================================
+     // Query API
+     // =========================================================================
+diff --git a/dist/types.d.ts b/dist/types.d.ts
+index fd32b25d6af602b8c9726c304badf083c63ebb49..da368a0bcdaa36036002256fce34b65de3c2c660 100644
+--- a/dist/types.d.ts
++++ b/dist/types.d.ts
+@@ -6,6 +6,12 @@ export interface HarnessUIModule {
+      * Returns a promise that resolves when the press action is complete.
+      */
+     simulatePress(nativeId: string, x: number, y: number): Promise<void>;
++    /**
++     * nitro-ui patch: a press held for `durationMs` at the centre of `nativeId`'s view, or
++     * at `x`, `y` (points/dp) when `nativeId` is empty. Real timing: the touch goes down,
++     * stays down for the whole duration, then comes up at the same point.
++     */
++    simulateLongPress(nativeId: string, x: number, y: number, durationMs: number): Promise<void>;
+     /**
+      * Finds a view by its testID (accessibilityIdentifier on iOS, tag on Android).
+      * Returns null if no view is found.
+diff --git a/dist/userEvent.d.ts b/dist/userEvent.d.ts
+index 67b6d3487f94c0aaab76174538964ddf1796ce5f..4c328a15eeb5cb76e3693fe82a88ed034f0d1045 100644
+--- a/dist/userEvent.d.ts
++++ b/dist/userEvent.d.ts
+@@ -11,6 +11,10 @@ export type UserEvent = {
+      * Returns a promise that resolves when the press is complete.
+      */
+     pressAt: (x: number, y: number) => Promise<void>;
++    /** nitro-ui patch: a press held for `durationMs` (default 1000) at the element's centre. */
++    longPress: (element: ElementReference, durationMs?: number) => Promise<void>;
++    /** nitro-ui patch: a press held for `durationMs` (default 1000) at screen coordinates. */
++    longPressAt: (x: number, y: number, durationMs?: number) => Promise<void>;
+     /**
+      * Simulates typing text into a text input element.
+      * This helper focuses the element by tapping it, types text one character at a time,
+diff --git a/dist/userEvent.js b/dist/userEvent.js
+index 1743a60e177f8e7b98f21da45c8f8c50f2343605..26e6a8978a580ebb52dfb09cf4e5269c7b355ab1 100644
+--- a/dist/userEvent.js
++++ b/dist/userEvent.js
+@@ -34,6 +34,15 @@ const createUserEvent = () => {
+             // Flush pending events to ensure onPress and other callbacks are processed
+             await flushEvents();
+         },
++        // nitro-ui patch: a held press (docs/upstream.md, H11).
++        longPress: async (element, durationMs = 1000) => {
++            await HarnessUI.simulateLongPress(element.nativeId, 0, 0, durationMs);
++            await flushEvents();
++        },
++        longPressAt: async (x, y, durationMs = 1000) => {
++            await HarnessUI.simulateLongPress('', x, y, durationMs);
++            await flushEvents();
++        },
+         type: async (element, text, options) => {
+             // Press to focus the element (triggers pressIn/pressOut unless skipPress is true)
+             if (!options?.skipPress) {
+diff --git a/ios/HarnessUI.mm b/ios/HarnessUI.mm
+index f323c3b3af18179db26909f2cc674857b5d6875e..1c9be4bd973aaf4e27c01762694b77993ed59fe1 100644
+--- a/ios/HarnessUI.mm
++++ b/ios/HarnessUI.mm
+@@ -300,6 +300,103 @@ - (void)simulatePress:(NSString *)nativeId
+   });
+ }
+ 
++#pragma mark - Long press (nitro-ui patch, docs/upstream.md H11)
++
++// A held press: `executeTapAtPoint:`'s private `UITouch` path, step for step, with the
++// touch kept down for `duration` instead of a tap's 50 ms and `isTap` off. UIKit's own
++// long-press recognizers (a `UIContextMenuInteraction`'s among them) run on timers, so
++// a touch that stays in `began` for the duration is a real hold to them.
++- (void)executeHoldAtPoint:(CGPoint)point
++                  duration:(NSTimeInterval)duration
++                completion:(void (^)(void))completion {
++  UIWindow *window = [self getActiveWindow];
++  if (!window) {
++    if (completion)
++      completion();
++    return;
++  }
++  UIView *targetView = [window hitTest:point withEvent:nil];
++  if (!targetView) {
++    if (completion)
++      completion();
++    return;
++  }
++  UIEvent *event = [[UIApplication sharedApplication] _touchesEvent];
++  [event _clearTouches];
++  if ([event respondsToSelector:@selector(_setHIDEvent:)]) {
++    [event _setHIDEvent:NULL];
++  }
++  dispatch_after(
++      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kSettleDelay * NSEC_PER_SEC)),
++      dispatch_get_main_queue(), ^{
++        UITouch *touch = [[UITouch alloc] init];
++        _touchIdCounter =
++            (_touchIdCounter >= UINT_MAX - 1) ? 100 : _touchIdCounter + 1;
++        if ([touch respondsToSelector:@selector(_setTouchIdentifier:)]) {
++          [touch _setTouchIdentifier:_touchIdCounter];
++        }
++        [touch setWindow:window];
++        [touch setView:targetView];
++        [touch setTapCount:1];
++        if ([touch respondsToSelector:@selector(_setIsFirstTouchForView:)]) {
++          [touch _setIsFirstTouchForView:YES];
++        }
++        if ([touch respondsToSelector:@selector(setIsTap:)]) {
++          [touch setIsTap:NO];
++        }
++        UIEvent *freshEvent = [[UIApplication sharedApplication] _touchesEvent];
++        [freshEvent _clearTouches];
++        [self sendTouchEvent:touch
++                       event:freshEvent
++                       phase:UITouchPhaseBegan
++                       point:point];
++        dispatch_after(
++            dispatch_time(DISPATCH_TIME_NOW, (int64_t)(duration * NSEC_PER_SEC)),
++            dispatch_get_main_queue(), ^{
++              UIEvent *endEvent =
++                  [[UIApplication sharedApplication] _touchesEvent];
++              [self sendTouchEvent:touch
++                             event:endEvent
++                             phase:UITouchPhaseEnded
++                             point:point];
++              [endEvent _clearTouches];
++              dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
++                                           (int64_t)(kEventProcessingDelay *
++                                                     NSEC_PER_SEC)),
++                             dispatch_get_main_queue(), ^{
++                               if (completion)
++                                 completion();
++                             });
++            });
++      });
++}
++
++- (void)simulateLongPress:(NSString *)nativeId
++                        x:(double)x
++                        y:(double)y
++               durationMs:(double)durationMs
++                  resolve:(RCTPromiseResolveBlock)resolve
++                   reject:(RCTPromiseRejectBlock)reject {
++  dispatch_async(dispatch_get_main_queue(), ^{
++    CGPoint point = CGPointMake(x, y);
++    if (nativeId && nativeId.length > 0) {
++      UIView *view = [ViewRegistry getView:nativeId];
++      UIWindow *window = [self getActiveWindow];
++      if (view && !window) window = view.window;
++      if (view && window) {
++        CGRect frameInWindow = [view convertRect:view.bounds toView:window];
++        point = CGPointMake(CGRectGetMidX(frameInWindow), CGRectGetMidY(frameInWindow));
++      }
++    }
++    _lastTapTime = CACurrentMediaTime();
++    [self executeHoldAtPoint:point
++                    duration:MAX(durationMs, 0) / 1000.0
++                  completion:^{
++                    resolve(nil);
++                  }];
++  });
++}
++
+ #pragma mark - Query API
+ 
+ - (NSDictionary *)queryByTestId:(NSString *)testId {
+diff --git a/src/NativeHarnessUI.ts b/src/NativeHarnessUI.ts
+index 6c21a17e7c4501f3d63698a39292cc347c4e7201..97d011d2e28f76715e6836b33cba6529eb393a33 100644
+--- a/src/NativeHarnessUI.ts
++++ b/src/NativeHarnessUI.ts
+@@ -20,6 +20,13 @@ export interface ViewInfo extends BoundingBox {
+ 
+ interface Spec extends TurboModule {
+   simulatePress(nativeId: string, x: number, y: number): Promise<void>;
++  // nitro-ui patch: a held press (see patches/ and docs/upstream.md, H11).
++  simulateLongPress(
++    nativeId: string,
++    x: number,
++    y: number,
++    durationMs: number
++  ): Promise<void>;
+   queryByTestId(testId: string): ViewInfo | null;
+   queryAllByTestId(testId: string): ViewInfo[];
+   queryByAccessibilityLabel(label: string): ViewInfo | null;
+diff --git a/src/types.ts b/src/types.ts
+index dad6bb245a1a330b9d227a79c05432b7e5086b45..d93d8a2dd14a33228c87661fba194ea55caa6ccc 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -8,6 +8,12 @@ export interface HarnessUIModule {
+    * Returns a promise that resolves when the press action is complete.
+    */
+   simulatePress(nativeId: string, x: number, y: number): Promise<void>;
++  /**
++   * nitro-ui patch: a press held for `durationMs` at the centre of `nativeId`'s view, or
++   * at `x`, `y` (points/dp) when `nativeId` is empty. Real timing: the touch goes down,
++   * stays down for the whole duration, then comes up at the same point.
++   */
++  simulateLongPress(nativeId: string, x: number, y: number, durationMs: number): Promise<void>;
+ 
+   /**
+    * Finds a view by its testID (accessibilityIdentifier on iOS, tag on Android).
+diff --git a/src/userEvent.ts b/src/userEvent.ts
+index 267ba3de3720a1f9dd51ab573e0b6c3be1187af3..f67ce70981efa61f714b0b1b3e5b998742dfcdce 100644
+--- a/src/userEvent.ts
++++ b/src/userEvent.ts
+@@ -37,6 +37,18 @@ export type UserEvent = {
+    */
+   pressAt: (x: number, y: number) => Promise<void>;
+ 
++  /**
++   * nitro-ui patch: a press held for `durationMs` (default 1000) at the centre of the
++   * element - a long press with real timing, which is what a context menu needs.
++   */
++  longPress: (element: ElementReference, durationMs?: number) => Promise<void>;
++
++  /**
++   * nitro-ui patch: a press held for `durationMs` (default 1000) at screen coordinates
++   * (points/dp), so a test can hold at an off-centre point.
++   */
++  longPressAt: (x: number, y: number, durationMs?: number) => Promise<void>;
++
+   /**
+    * Simulates typing text into a text input element.
+    * This helper focuses the element by tapping it, types text one character at a time,
+@@ -76,6 +88,23 @@ const createUserEvent = (): UserEvent => {
+       await flushEvents();
+     },
+ 
++    longPress: async (
++      element: ElementReference,
++      durationMs = 1000
++    ): Promise<void> => {
++      await HarnessUI.simulateLongPress(element.nativeId, 0, 0, durationMs);
++      await flushEvents();
++    },
++
++    longPressAt: async (
++      x: number,
++      y: number,
++      durationMs = 1000
++    ): Promise<void> => {
++      await HarnessUI.simulateLongPress('', x, y, durationMs);
++      await flushEvents();
++    },
++
+     type: async (
+       element: ElementReference,
+       text: string,

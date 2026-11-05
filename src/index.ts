@@ -19,6 +19,11 @@
  * diagnostics.
  */
 export { nitroUiCore, prewarm } from './NitroUiCore';
+
+// The one app-level theme choice (D39): Android draws with Material 3 Expressive unless
+// the app opts out to the baseline theme. No per-control prop - the setting is the
+// process's, and every composition the library owns reads it at its root.
+export { setMaterialTheme, type MaterialTheme } from './MaterialTheme';
 export type {
   NitroUiCore,
   NitroUiPerfEvent,
@@ -136,3 +141,18 @@ export {
   type TooltipPlacement,
   type TooltipProps,
 } from './components/Tooltip/Tooltip';
+
+// A checkbox (G15): Material 3 `Checkbox`, or `TriStateCheckbox` while
+// `indeterminate`, on Android - and SwiftUI `Toggle(isOn:)` with the switch style on
+// iOS, which has no checkbox (`CheckboxToggleStyle` is unavailable there), as Expo's
+// universal Checkbox renders. `checked` is controlled through the event-count
+// handshake; `indeterminate` is a display and is Android-only.
+export { Checkbox, type CheckboxProps } from './components/Checkbox/Checkbox';
+// A `View` that opens Menu's `group` on a long press (G16, DECISIONS D36/D37):
+// `UIContextMenuInteraction` on iOS, a Material 3 `DropdownMenu` at the finger on
+// Android. The children stay in place, a hold cancels their touch, and `onOpen`/
+// `onClose` fire on both platforms - unlike Menu's, which are Android-only (D32).
+export {
+  ContextMenu,
+  type ContextMenuProps,
+} from './components/ContextMenu/ContextMenu';

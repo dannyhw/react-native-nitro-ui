@@ -91,6 +91,38 @@ export type ButtonSize = 'small' | 'medium' | 'large';
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
 
 // @public
+export function Checkbox(input: CheckboxProps): JSX.Element;
+
+// @public
+export interface CheckboxProps extends ViewProps {
+    checked?: boolean | undefined;
+    defaultChecked?: boolean | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly checked: boolean | null;
+        readonly mostRecentEventCount: number;
+        readonly label: string | null;
+        readonly disabled: boolean;
+        readonly indeterminate: boolean | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestToggle(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    indeterminate?: boolean | undefined;
+    label?: string | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onCheckedChange?: ((checked: boolean) => void) | undefined;
+    tintColor?: ColorValue | undefined;
+}
+
+// @public
 export function Chip(input: ChipProps): JSX.Element;
 
 // @public
@@ -133,6 +165,32 @@ export function ConfirmationDialog(props: ConfirmationDialogProps): JSX.Element;
 // @public
 export interface ConfirmationDialogProps extends DialogProps {
     titleVisibility?: 'automatic' | 'visible' | 'hidden' | undefined;
+}
+
+// @public
+export function ContextMenu(input: ContextMenuProps): JSX.Element;
+
+// @public
+export interface ContextMenuProps extends ViewProps {
+    children?: ReactNode;
+    disabled?: boolean | undefined;
+    group: MenuGroup;
+    // @internal
+    hybridRef?: ((view: {
+        readonly disabled: boolean;
+        readonly title: string | null;
+        readonly previewCornerRadius: number | null;
+        nuiTestSelectRow(id: string): void;
+        nuiTestMenuProbe(): void;
+        nuiTestContextMenuReport(): string;
+        nuiTestA11yLongClick(): void;
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onClose?: (() => void) | undefined;
+    onOpen?: (() => void) | undefined;
+    onSelect?: ((id: string) => void) | undefined;
+    title?: string | undefined;
 }
 
 // @public
@@ -221,6 +279,9 @@ export interface HostProps extends ViewProps {
     // (undocumented)
     children?: ReactNode;
 }
+
+// @public
+export type MaterialTheme = 'expressive' | 'baseline';
 
 // @public
 export function Menu(input: MenuProps): JSX.Element;
@@ -318,6 +379,7 @@ export const nitroUiCore: {
     prewarmSizing(componentNames: readonly string[]): number;
     setSizingTraceEnabled(enabled: boolean): void;
     drainSizingTrace(): NitroUiSizingTraceEvent[];
+    materialThemeReport(): string;
 };
 
 // @public
@@ -474,6 +536,9 @@ export interface SegmentedControlProps extends ViewProps {
     selectedIndex?: number | undefined;
     tintColor?: ColorValue | undefined;
 }
+
+// @public
+export function setMaterialTheme(theme: MaterialTheme): void;
 
 // @public
 export function Slider(input: SliderProps): JSX.Element;

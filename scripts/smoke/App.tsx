@@ -1,5 +1,6 @@
 import {
   Button,
+  Checkbox,
   Chip,
   DatePicker,
   Host,
@@ -99,6 +100,7 @@ const SMOKE_CONTROLS = [
   'menu',
   'text-field',
   'chip',
+  'checkbox',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -299,6 +301,11 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('chip')}
           label="Filter"
           testID="SMOKE-chip"
+        />
+        <Checkbox
+          onLayout={measureFor('checkbox')}
+          label="Accept"
+          testID="SMOKE-checkbox"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a

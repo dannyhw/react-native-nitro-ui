@@ -1,0 +1,77 @@
+# Failure excerpt — harness:android:ContextMenu
+
+- Ran: 2026-11-03T11:39:53.020Z on code tree `92e32fb23174` at HEAD `24355d5` (branch `task/G16-contextmenu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ContextMenu`
+- Result: fail, exit 1, 58844 ms
+- Load: start 3.82, end 3.95, median 3.82, max 3.95
+- Device: android / device `emulator-5574` / lease `G16-lq26x`
+- Full log: `task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T11-39-53.020Z.log` (<store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T11-39-53.020Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● ContextMenu · drop and recycle › leaves no layout listener behind a pick, a drop, or a drop while open (Android)`
+- `expected 10 to be 3 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T11-39-53.020Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-lq26x (still live)
+  |   G16-lq26x                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.95 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ContextMenu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 92e32fb23174, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.82/4.24 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+android+ContextMenu-2026-11-03T11-39-53.020Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · drop and recycle › leaves no layout listener behind a pick, a drop, or a drop while open (Android)
+
+    expected 10 to be 3 // Object.is equality
+
+      [0m [90m 974 |[39m         [32m`afterDrops=${String(after)}`[39m
+       [90m 975 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 976 |[39m     expect(afterPick)[33m.[39mtoBe(before)[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 977 |[39m     expect(after)[33m.[39mtoBe(before)[33m;[39m
+       [90m 978 |[39m   })[33m;[39m
+       [90m 979 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 20 passed, 21 total
+Snapshots:   0 total
+Time:        57.941 s
+Ran all test suites matching ContextMenu.
+
+
+
+```

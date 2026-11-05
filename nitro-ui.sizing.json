@@ -8,5 +8,6 @@
   "HybridNitroUiPicker": "intrinsic",
   "HybridNitroUiMenu": "intrinsic",
   "HybridNitroUiTextField": "fillWidth",
-  "HybridNitroUiChip": "intrinsic"
+  "HybridNitroUiChip": "intrinsic",
+  "HybridNitroUiCheckbox": "intrinsic"
 }

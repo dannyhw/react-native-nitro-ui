@@ -34,12 +34,17 @@ target_sources(
   ../nitrogen/generated/android/nitrouiOnLoad.cpp
   # Shared Nitrogen C++ sources
   ../nitrogen/generated/shared/c++/HybridNitroUiCoreSpec.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiMaterialThemeSpec.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiBottomSheetSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiCheckboxSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiCheckboxComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiChipSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiChipComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiContextMenuSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiContextMenuComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.cpp
@@ -63,15 +68,20 @@ target_sources(
   ../nitrogen/generated/shared/c++/HybridNitroUiTooltipSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiTooltipComponent.cpp
   # Android-specific Nitrogen C++ sources
+  ../nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
   ../nitrogen/generated/android/c++/JVariant_NullType_String.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiBottomSheetStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiButtonSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiButtonStateUpdater.cpp
-  ../nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiCheckboxSpec.cpp
   ../nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiCheckboxStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiChipSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiChipStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiContextMenuSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiContextMenuStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDatePickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.cpp

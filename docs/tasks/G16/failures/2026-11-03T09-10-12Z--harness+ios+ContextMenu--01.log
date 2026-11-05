@@ -1,0 +1,156 @@
+# Failure excerpt — harness:ios:ContextMenu
+
+- Ran: 2026-11-03T09:10:12.722Z on code tree `8c7ab9549fb5` at HEAD `ee78536` (branch `task/G16-contextmenu`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios ContextMenu`
+- Result: fail, exit 1, 47777 ms
+- Load: start 10.74, end 7.11, median 8.20, max 10.74
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `G16-dymmb`
+- Full log: `task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log` (<store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once`
+- `timed out waiting for the open`
+- `● ContextMenu · the gesture › opens the inner of two nested ContextMenus only`
+- `timed out waiting for the inner open`
+- `● ContextMenu · the menu › refuses a disabled row and an unknown id, and still closes`
+- `timed out waiting for "refuse-target" to open`
+- `● ContextMenu · the menu › closes an open menu when it becomes disabled, and applies a group change live`
+- `timed out waiting for "live-target" to open`
+- `● ContextMenu · drop and recycle › reports the close of a menu dropped while open, and leaves no popup`
+- `timed out waiting for "drop-target" to open`
+- `● ContextMenu · drop and recycle › comes back from the recycle pool with no previous owner and its interaction`
+- `timed out waiting for "first-target" to open`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G16-dymmb (still live)
+  |   G16-dymmb                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.11 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 104 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:ContextMenu
+gate: node ../scripts/harness.mjs --harnessRunner ios ContextMenu (cwd example)
+gate: code tree 8c7ab9549fb5 at HEAD ee785363
+gate: git tree 93d35feecf8f with a DIRTY worktree (not reusable)
+gate: log task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log
+gate:       <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios ContextMenu
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 8c7ab9549fb5, 14 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.74/8.82 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once
+
+    timed out waiting for the open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the gesture › opens the inner of two nested ContextMenus only
+
+    timed out waiting for the inner open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › refuses a disabled row and an unknown id, and still closes
+
+    timed out waiting for "refuse-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · the menu › closes an open menu when it becomes disabled, and applies a group change live
+
+    timed out waiting for "live-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · drop and recycle › reports the close of a menu dropped while open, and leaves no popup
+
+    timed out waiting for "drop-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+  ● ContextMenu · drop and recycle › comes back from the recycle pool with no previous owner and its interaction
+
+    timed out waiting for "first-target" to open
+
+      [0m [90m 103 |[39m   [36mconst[39m deadline [33m=[39m [33mDate[39m[33m.[39mnow() [33m+[39m timeoutMs[33m;[39m
+       [90m 104 |[39m   [36mwhile[39m ([33m![39mok()) {
+      [31m[1m>[22m[39m[90m 105 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) [36mthrow[39m [36mnew[39m [33mError[39m([32m`timed out waiting for ${what}`[39m)[33m;[39m
+       [90m     |[39m                                               [31m[1m^[22m[39m
+       [90m 106 |[39m     [36mawait[39m sleep([35m50[39m)[33m;[39m
+       [90m 107 |[39m   }
+       [90m 108 |[39m }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 11 passed, 17 total
+Snapshots:   0 total
+Time:        46.707 s, estimated 62 s
+Ran all test suites matching ContextMenu.
+gate: harness:ios:ContextMenu FAIL in 47.8 s
+gate: recorded in .gates/task/G16-contextmenu.jsonl
+
+
+gate: appended the device context to task/G16-contextmenu/harness+ios+ContextMenu-2026-11-03T09-10-12.319Z.log (4 probe(s))
+
+```

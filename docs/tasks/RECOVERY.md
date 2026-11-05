@@ -1,5 +1,65 @@
 # Recovery snapshot
 
+> **Final state, 01:50 UTC.** X18, G18 and X19 were interrupted at 01:42. G17 (Codex) was still in `real-input:android`
+> when I stopped looking. Everything below is on origin, so nothing depends on the local worktrees surviving.
+>
+> | Task | Thread | Branch on origin | Gates on the head | Resume with |
+> | --- | --- | --- | --- | --- |
+> | X18 merge round | interrupted | `task/X18-merge` @ `a1c78ffc` (worktree `t3-d367291d`, clean) | `check` ✓ and `harness:android` ✓ on tree `b2384ce4`; still needed: `harness:ios` and both `real-input` | a new `delegate_task` (Opus): run the three missing gates, `need --for merge`, export the ledger, merge-round section. Then I verify the tree and push `main` |
+> | G17 SearchField | Codex, may have died | `task/G17-search-field` @ `fdd5d8a8` (worktree `t3-48bfab6e`, clean) | `real-input:ios` ✓ on tree `bf3a133e`; `real-input:android` was running. Re-check with `gate.mjs status` there | if the thread is dead, a new `delegate_task` (Codex Apex) to finish the missing gates and `need --for review`. Then a PR, `link_pull_request` and an Opus review |
+> | G18 Tooltip | interrupted (mac-1) | `task/G18-tooltip` @ `81004a66` (README screenshots in) | was in `harness:ios` on mac-1 | a new `delegate_task` to mac-1 (Opus, `runtimeMode: auto`, 9-minute waits): finish the gates and the report. The report must state its two design departures (iOS owns its window; Android closes the tooltip when it moves) |
+> | X19 example tab bar | interrupted (mac-1) | `task/X19-example-tab-bar` @ `dc4165e7` (pushed 01:55; no report draft was found) | `check`, `harness:android` and both `real-input` ✓ on tree `21a3e2b4`; missing `harness:ios` | a new `delegate_task` to mac-1: run `harness:ios`, write the report, export the ledger, then a PR and review |
+>
+> Leases `G17-auva6` and `X18-fjw4q` expire on their own; release them if they're still held. Send all mac-1 work through
+> `delegate_task` (not `t3_thread_launch`), so it nests under the orchestrator thread and its questions reach it.
+
+> **Update, 01:40 UTC:**
+> - **X18:** the merge round is committed. `task/X18-merge` is at `a1c78ffc`: the merge, the pinned shapes and type, the
+>   narrowed guard, and the Checkbox/ContextMenu theme cases. It was in its merge gates (`harness:android`) under lease
+>   `X18-fjw4q`. The mid-merge note below no longer applies. On resume, run `gate.mjs status` there and re-run what's
+>   missing.
+> - **G17:** in `real-input:ios`. The iOS a11y sweep now passes.
+> - **G18** (mac-1): in `harness:ios`. Its report must state two departures from the design: iOS always owns its window,
+>   and Android closes the tooltip when it moves.
+> - **X19** (mac-1): in `real-input:ios`, with its report drafted in `/tmp` on mac-1.
+>
+> **2026-11-04 — overnight stop (both machines lose network).** In flight, nothing finished. Resume in this order:
+>
+> 1. **X18 (PR #34, maintainer-mac-2)**: fix round 1 is pushed (`8480f2c7`), and its re-review says MERGE. The merge round
+>    had started in its worktree (`t3-d367291d`, branch `task/X18-merge`, **mid-merge of `origin/main`, conflicts
+>    unresolved**: `HybridNitroUiMenu.kt`, `nitro.json`, `docs/tasks/FOLLOWUPS.md`). Resume by sending its implementer
+>    thread the same merge-round brief: finish the merge (regenerate `nitro.json` with registry/nitrogen/conformance,
+>    don't union it), bring Checkbox/ContextMenu up to the floor, pass `shapes = Shapes(), typography = Typography()`
+>    explicitly in the theme call, narrow `NitroUiMaterialThemeLibraryTest` (prove it red), delete the stale "runtime
+>    theme switch recomposes" follow-up in the report, then all five merge gates and `need --for merge`. If the merge
+>    state is confusing, `git merge --abort` and redo it. Then verify the code tree, push `main`, and close #34.
+> 2. **G17 SearchField (Codex Apex, maintainer-mac-2)**: worktree `t3-48bfab6e`, `task/G17-search-field`, head
+>    `fdd5d8a8` (round-1 report committed, tree clean). It was running `harness:android` under lease `G17-auva6`
+>    (pair-a). On resume: `gate.mjs status` in that worktree, re-run any gate that did not finish, release the lease,
+>    open its PR, then an independent Opus review.
+> 3. **G18 Tooltip and X19 example tab bar (Opus, maintainer-mac-1)**: no PRs yet. G18 has been blocked since
+>    2026-11-03 17:32 UTC on one question: how to take the README's Android screenshot (`tooltip-android.png`).
+>    Its leased emulator is on the lease's private adb server, which the T3 device tools can't see. Taking it with adb
+>    was approved by the owner on 2026-11-04 (answered in its thread); if the run died, restart it with that approval. On resume, read their T3 threads
+>    and the `task/G18-*` / `task/X19-*` branches on mac-1 (`git log`, `gate.mjs status`). Continue each as a **new**
+>    `delegate_task` with 9-minute gate waits. X19 lands before G17/G18 merge.
+> 4. **Version Packages PR #32** is open (it will be 0.7.0): merge it after X18 and the components you want in it, then
+>    check `npm view react-native-nitro-ui dist-tags` before you call the release pending.
+> 5. After X18: Expressive pass 1 (D40), buttons and menus, run on the two machines in parallel.
+> 6. **Simlock, evaluation only (owner, 2026-11-04):** prove Simlock works for our setup before changing how we work.
+>    The current lease flow stays as it is. Why look at all: our pool starts emulators on private adb servers, so T3's
+>    device tools can't see leased devices (G12, G16 and G18 asked about adb). Run a read-and-try spike (S4) on a
+>    side install that changes nothing in the repo's tooling:
+>    - can T3's Simlock source lease a device that `device_list` shows and agent-device drives;
+>    - can our harness and real-input gates run on that device;
+>    - can a released device stay warm instead of being wiped;
+>    - is `emulator-5560` left alone;
+>    - can mac-1 serve as a second worker.
+>    Report go/no-go with evidence. Any switch is a separate decision for the owner.
+>
+> Leases older than their TTL expire on their own. Don't `reap` other tasks' devices; release only your own leases.
+
+
 > **2026-10-27 — handoff point.** Published: 0.3.0 (all seven controls hostable on Android) and 0.3.1
 > (docs), each registry shasum = CI, tags `v0.3.0` / `v0.3.1`. **Nothing in flight**: no task
 > worktrees, no leases, no open PRs. The orchestrator moves to the second Mac

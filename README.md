@@ -24,7 +24,9 @@ the layout engine, and React never sees a native node.
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 `DropdownMenu` opened at the finger                       | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
+| `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
@@ -34,9 +36,12 @@ the layout engine, and React never sees a native node.
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField`, `BottomSheet` and `Tooltip`, and refuses those four with an
-error that names them. See [Performance](#performance) for what it buys and what
-it costs.
+except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
+`Tooltip`, and refuses those six with an error that names them. The first three
+wait for a round that measures them inside a Host; the last three are refused by
+design, because each is a `View` around React Native children, not a control a
+composition could draw.
+See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
 monotonic clock, `CLOCK_UPTIME_RAW` / `CLOCK_MONOTONIC`, plus sizing
@@ -47,8 +52,10 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
   ConfirmationDialog,
+  ContextMenu,
   DatePicker,
   Host,
   Menu,
@@ -64,16 +71,27 @@ import {
 
 ## Requirements
 
-| Platform | Minimum                                                                     |
-| -------- | --------------------------------------------------------------------------- |
-| iOS      | `min_ios_version_supported` (RN's floor — 15.1 on RN 0.86 / 0.88)           |
-| Android  | `minSdkVersion` 24, `compileSdkVersion` 36 (inherited from the RN template) |
-| RN       | `>= 0.86` with the new architecture                                         |
-| Nitro    | `react-native-nitro-modules ^0.37.1`                                        |
+| Platform | Minimum                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| RN       | `>= 0.88` with the new architecture, or Expo SDK 58                                                     |
+| iOS      | `min_ios_version_supported` (React Native's own floor — 15.1 on RN 0.88)                                |
+| Android  | `minSdkVersion` 24; the app compiles with `compileSdkVersion` 37 and Android Gradle Plugin 9.1 or newer |
+| Nitro    | `react-native-nitro-modules ^0.37.1`                                                                    |
 
-Jetpack Compose (compiler plugin + Material 3 BOM) is configured inside this
-package's `android/build.gradle`, so your app does not have to opt in to Compose
-to use one slider, and no Podfile or Gradle edits are needed either way.
+A new RN 0.88 or Expo SDK 58 app already meets the Android line: both templates
+compile against SDK 37 with AGP 9.2. An app upgraded from an older template may
+still say `compileSdkVersion = 36` in `android/build.gradle`; raise it to 37, or
+the build stops with an AAR metadata error that names Material 3.
+
+Jetpack Compose (the compiler plugin, Compose 1.12 and Material 3 1.5) is
+configured inside this package's `android/build.gradle`, so your app does not
+have to opt in to Compose to use one slider, and no Podfile or Gradle edits are
+needed either way.
+
+Material 3 1.5 is still a beta (`androidx.compose.material3:material3:1.5.0-beta02`),
+and it is the version this library needs for the Expressive theme. Gradle picks
+the newest version any library asks for, so if your app uses Material 3 itself,
+installing this library raises your app's Material 3 to that beta as well.
 
 A dev build is required: Expo Go is not supported, because Nitro Modules needs
 native code.
@@ -394,6 +412,63 @@ expansion binding, so iOS never reports either one — and a pick fires
 submenu nests on iOS and appears inline under a divider on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
+### ContextMenu
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/context-menu-ios.png" width="300" alt="A message held open with its context menu on iOS" /></td>
+    <td><img src="docs/images/components/context-menu-android.png" width="300" alt="A message held open with its context menu on Android, at the finger" /></td>
+  </tr>
+</table>
+
+A `View` that opens a menu on a long press. Its children stay where they are and
+keep their own gestures: a tap is theirs, a scroll is the scroll view's, and a
+hold that opens the menu cancels their touch, so a `Pressable` inside never
+fires `onPress` for it. The rows are `Menu`'s `group`.
+
+```tsx name=context-menu
+const MESSAGE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+    { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+  ],
+  sections: [
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function MessageRow() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <ContextMenu
+      group={MESSAGE_ACTIONS}
+      onSelect={setLast}
+      style={messageStyles.bubble}
+    >
+      <Text>Hold this message for its menu.</Text>
+      <Text>Last action: {last}</Text>
+    </ContextMenu>
+  );
+}
+
+const messageStyles = StyleSheet.create({
+  bubble: { padding: 12, borderRadius: 16, backgroundColor: '#f2f2f7' },
+});
+```
+
+iOS lifts the view itself as the preview (its corners follow `borderRadius`);
+Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
+both platforms, `onSelect` before the `onClose` that follows it. Set
+`accessible` and an `accessibilityLabel` to make it one screen-reader element
+with the menu on it. Without `accessible`, Android screen readers can't open the
+menu. [context-menu.md](docs/components/context-menu.md) has the gesture rules
+and the limits.
+
 ### Chip
 
 <table>
@@ -431,6 +506,49 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
 `systemImage` is iOS-only. On Android a selected filter chip shows Material's
 check mark and is wider by it; on iOS selection only changes the fill.
 [chip.md](docs/components/chip.md) has the sizes and the limits.
+
+### Checkbox
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/checkbox-ios.png" width="300" alt="Checkbox on iOS: three switches (off, checked, and one with no label), a third-state column the switch reads as off and then on, and two disabled switches" /></td>
+    <td><img src="docs/images/components/checkbox-android.png" width="300" alt="Checkbox on Android: three Material 3 boxes (off, checked, and one with no label), a third-state column showing a dash and then a checked box, and two disabled boxes" /></td>
+  </tr>
+</table>
+
+A checkbox: `checked` is controlled the way a Switch's `value` is, and
+`defaultChecked` starts an uncontrolled one. `label` is part of the control and
+of its size, and the whole row is tappable. `indeterminate` is Material's third
+state and Android-only: iOS has no checkbox — `CheckboxToggleStyle` is
+unavailable there — so a Checkbox is a `Toggle` with the switch style, which is
+what Expo's universal `Checkbox` renders too.
+
+```tsx name=checkbox
+export function CheckoutOptions({
+  onEmailMe,
+}: {
+  onEmailMe: (email: boolean) => void;
+}) {
+  const [gift, setGift] = useState(false);
+
+  return (
+    <>
+      <Checkbox label="Gift wrap" checked={gift} onCheckedChange={setGift} />
+      <Checkbox label="Email me the receipt" onCheckedChange={onEmailMe} />
+    </>
+  );
+}
+```
+
+`indeterminate` asks for a third glyph, not a third value, and iOS has nowhere to put it.
+A press reports the opposite of what the box shows — empty box → `true`, check mark →
+`false`, dash → `true` — and since Android draws a check mark for a _checked_
+`indeterminate` box, the press that empties that one reports `false`. Nothing clears
+`indeterminate` for you, so an Android caller resolves it in `onCheckedChange`
+(`setIndeterminate(false)` beside `setChecked(next)`). On iOS every press reports
+`!checked` and the third state reads as off.
+[checkbox.md](docs/components/checkbox.md) has the sizes and the limits.
 
 ### AlertDialog and ConfirmationDialog
 
@@ -666,8 +784,8 @@ actions; a title or an action makes Android's tooltip the rich one.
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField`, `BottomSheet` and `Tooltip`; one of those four, an RN view,
-plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and `Tooltip`; one
+of those six, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -696,6 +814,29 @@ const styles = StyleSheet.create({
   settings: { height: 96 },
 });
 ```
+
+## Android theme
+
+Android controls are drawn with **Material 3 Expressive**, Android's design
+since Android 16, over the device's dynamic colours (Android 12+) or the default
+Material 3 colours, light or dark with the system. Today what the Expressive
+theme changes is motion: a Switch's thumb, a Checkbox's mark, a menu or a sheet
+opening move with Material's expressive springs, and Material ties more to the
+theme with each release. It comes from Material 3 1.5, currently a beta, which
+this library brings into your app (see [Requirements](#requirements)).
+
+To keep the baseline Material 3 theme instead, call `setMaterialTheme` once:
+
+```tsx name=material-theme
+// Once, at startup — before the first screen renders.
+setMaterialTheme('baseline');
+```
+
+The choice is the whole app's: every control and every `<Host>` follows it, and
+there is no per-control prop. `setMaterialTheme('expressive')` goes back to the
+default, and a later call still reaches the controls already on screen without
+resetting them: an open sheet or menu stays open and a focused field keeps its
+focus. It does nothing on iOS.
 
 ## Sizing
 
@@ -818,15 +959,13 @@ The full list per control is in its doc; these are the ones that bite.
   Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
   changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField`, `BottomSheet` and `Tooltip`. Any other child —
-  one of those four, an RN view, text, another `<Host>` — throws in development. Give
+  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
+  `Tooltip`. Any other child — one of those six, an RN view, text, another
+  `<Host>` — throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
-- **RN 0.86 on iOS is not verified** — UIKit terminates a fresh 0.86 app at
-  launch on the iOS 27 simulator even without this library, and no older runtime
-  has been tried.
 - **`testID` lands on the host** on Android (`View.tag`), because Compose has no
   test id; a test that looks a control up by `testID` finds that view. Inside a `<Host>` the view
   that carries a Switch's `testID` is not where the Switch is drawn — it reads

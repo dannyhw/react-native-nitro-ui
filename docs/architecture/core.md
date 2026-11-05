@@ -280,10 +280,10 @@ What its name does not say is that it is a **registration, not a property**. `Ab
 installs the strategy immediately, and the strategy it installs is a `LifecycleEventObserver` added to the owner's
 `LifecycleRegistry`; `LifecycleRegistry` holds its observers strongly, and the only code that ever removes one is the
 uninstaller `setViewCompositionStrategy` runs when the **next** strategy is installed. Neither `disposeComposition()` nor
-a detach nor a drop touches it, identically in the two Compose versions this repo resolves: **1.11.4**, which the library
-and the example/harness app get from `compose-bom:2026.06.01` (`android/build.gradle`), and **1.12.1**, which the bench
-app ends up on after Expo raises it (`ViewCompositionStrategy.installForLifecycle`, and
-`AbstractComposeView.disposeComposition`/`setViewCompositionStrategy` — verified against the bytecode of both). So the
+a detach nor a drop touches it, identically in the two Compose versions this was verified against: **1.11.4**, which the
+library got from `compose-bom:2026.06.01` until D39, and **1.12.1**, which the bench app resolved then and which the
+library's `compose-bom:2026.09.00` resolves now (`android/build.gradle`; `ViewCompositionStrategy.installForLifecycle`,
+and `AbstractComposeView.disposeComposition`/`setViewCompositionStrategy` — verified against the bytecode of both). So the
 activity keeps a strong path `mLifecycleRegistry → observer → ComposeView` for every control that was ever mounted, which
 is not "the composition is bounded by the activity" — it is **one leak per mount**. Measured at 8.18 MiB retained per
 cycle of 200 Switches, 3 `View`s and ~42 KiB per control, and it is what ran the bench's
@@ -742,7 +742,7 @@ is actually in force before it measures.
 
 **Consumer defaults - nothing to add.** The merge needs no configuration, and the runtime piece
 arrives on its own: `androidx.profileinstaller` is a *runtime* dependency of Compose
-(`ui-android-1.11.4.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
+(`ui-android-1.12.1.pom` -> `profileinstaller:1.4.0`), which this library requires, so any app that can
 mount a nitro-ui control already ships it. On API 29+ ART also consumes the profile in its own
 background dex-opt pass; API 24-28 are covered by profileinstaller writing it at first launch. The
 library therefore does not declare the dependency itself - it would be a second path to the same

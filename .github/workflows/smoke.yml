@@ -162,16 +162,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rn: ['0.88.0', '0.86.3']
+        # The supported floor only (DECISIONS D39): RN 0.88, which is also what
+        # Expo SDK 58 runs. A newer RN replaces this row once the gates pass on it.
+        rn: ['0.88.0']
         platform: ${{ fromJSON(needs.plan.outputs.platforms) }}
-        # D8 keeps RN 0.86 supported: its Android row is the guard for the
-        # pinned Compose BOM in android/build.gradle. The 0.86 iOS row is
-        # skipped: RN 0.86's prebuilt core hangs at launch on an iOS 27
-        # simulator runtime (reproduced with a library-free control app), so it
-        # needs a macOS image with an iOS 26.x runtime to be verifiable.
-        exclude:
-          - rn: '0.86.3'
-            platform: ios
     runs-on: ${{ matrix.platform == 'ios' && 'xcode-27' || 'ubuntu-latest' }}
     timeout-minutes: 75
     steps:
