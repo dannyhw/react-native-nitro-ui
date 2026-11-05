@@ -726,21 +726,23 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
   });
 
   it('gives a recycled view none of the open tooltip it came from', async () => {
-    function Swap({ round }: { round: number }) {
-      const old = round % 2 === 0;
+    function Swap({ round }: { round: number | null }) {
+      const old = round != null && round % 2 === 0;
       return (
         <View style={{ paddingTop: 200, paddingLeft: 40 }}>
-          <Tooltip
-            key={old ? 'a' : 'b'}
-            testID="recycled"
-            hybridRef={captureHybrid('recycled')}
-            isPresented={old}
-            title={old ? 'Old title' : 'New title'}
-            message={old ? 'Old message' : 'New message'}
-            actions={old ? ACTIONS : []}
-          >
-            <View style={{ width: 40, height: 40 }} />
-          </Tooltip>
+          {round == null ? null : (
+            <Tooltip
+              key={old ? 'a' : 'b'}
+              testID="recycled"
+              hybridRef={captureHybrid('recycled')}
+              isPresented={old}
+              title={old ? 'Old title' : 'New title'}
+              message={old ? 'Old message' : 'New message'}
+              actions={old ? ACTIONS : []}
+            >
+              <View style={{ width: 40, height: 40 }} />
+            </Tooltip>
+          )}
         </View>
       );
     }
@@ -751,13 +753,29 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
       (r) => isUpCounted(1)(r) && r.title === 'Old title',
       'the old tooltip up'
     );
-    // The recycle oracle: the pool-entry count of the instance each round's mount got.
-    // A count of 0 is a fresh instance, and then nothing below tested a recycle at all.
-    // Per instance, so it is read against the round's own mount: the pool need not hand
-    // back the instance the round before dropped (Android handed one with fewer
-    // recycles, 10 -> 7, measured in the G18 merge round), only one that has been in it.
-    const reuses: number[] = [];
+    // Each round drops the mount, waits until the dropped instance is in the pool, and
+    // only then mounts the other key - so the new mount can be handed the very instance
+    // that was just up. Swapping keys in one commit does not do that on Android: the new
+    // view is created before the old one is recycled, so in a run of this case alone the
+    // closed mount got a fresh instance every time (recycles=0, measured in the G18 merge
+    // round) and the check below never met a recycled open tooltip.
+    //
+    // The recycle oracle: the pool-entry count of the instance each round's mount got,
+    // which grows by one a round while the pool keeps handing back the instance just
+    // dropped. A round whose count did not grow got some other instance, and then this
+    // case did not test what it says.
+    const reuses: number[] = [Number(reportOf('recycled').recycles ?? NaN)];
     for (const round of [1, 2, 3]) {
+      const before = Number(reportOf('recycled').recycles ?? NaN);
+      const dropped = handles.get('recycled');
+      handles.clear();
+      if (dropped != null) handles.set('recycled-dropped', dropped);
+      await rerender(<Swap round={null} />);
+      await waitForReport(
+        'recycled-dropped',
+        (r) => Number(r.recycles ?? NaN) > before,
+        `round ${String(round)}: the dropped mount in the pool`
+      );
       handles.clear();
       await rerender(<Swap round={round} />);
       await waitForHandle('recycled');
@@ -779,11 +797,12 @@ describe('Tooltip · behaviour (Q7 C7)', () => {
         );
       }
       const recycles = Number(reportOf('recycled').recycles ?? NaN);
+      const previous = reuses[reuses.length - 1] ?? NaN;
       reuses.push(recycles);
-      if (!(recycles >= 1)) {
+      if (!(recycles > previous)) {
         throw new Error(
-          `round ${String(round)}: the mount's instance was never recycled ` +
-            `(recycles per round ${reuses.join(',')}), so this round tested a fresh instance`
+          `round ${String(round)}: the mount's recycle count did not grow ` +
+            `(${reuses.join(' -> ')}), so this round was not handed the instance just dropped`
         );
       }
     }
