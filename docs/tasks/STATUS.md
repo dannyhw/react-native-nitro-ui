@@ -88,9 +88,9 @@
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
 | G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
-| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | running |
-| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | running |
-| X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merge round (PR #34; fix round 1 re-review MERGE: single theme call site, measured sheet geometry; merging main with Checkbox and ContextMenu) |
+| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | fix round 1 (Android real-input: the SearchField case has no tab to reach its screen; `task/G17-search-field`) |
+| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | round 1, finishing gates and report after the overnight stop (mac-1; `task/G18-tooltip`) |
+| X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merge gates on `task/X18-merge` (`harness:ios` + both `real-input`; PR #34) |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
-| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | running |
+| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | round 1, `harness:ios` and report left (mac-1; `task/X19-example-tab-bar`) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
