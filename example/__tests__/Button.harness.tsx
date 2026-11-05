@@ -1152,7 +1152,11 @@ describe('shape · the corner (E1)', () => {
 
     await waitForTestId('shape-default');
     await waitForMeasured('shape-default', 'the default Button to measure');
-    await waitForBox('shape-square', sizeOf('shape-default')!, 'the square Button');
+    await waitForBox(
+      'shape-square',
+      sizeOf('shape-default')!,
+      'the square Button'
+    );
 
     expect(handles.get('shape-default')?.shape).toBe('round');
     expect(handles.get('shape-square')?.shape).toBe('square');
@@ -1203,7 +1207,9 @@ describe('shape · the corner (E1)', () => {
 
     expect(handles.get('shape-flip')?.shape).toBe('square');
     const after = delta(before, stats());
-    const still = sameSize(box, sizeOf('shape-flip')) && sameSize(size, measured('shape-flip'));
+    const still =
+      sameSize(box, sizeOf('shape-flip')) &&
+      sameSize(size, measured('shape-flip'));
     expect(
       still,
       `the corner moved the box: ${describeSize(box)} -> ${describeSize(sizeOf('shape-flip'))}`
