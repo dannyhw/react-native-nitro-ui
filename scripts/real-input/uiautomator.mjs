@@ -29,6 +29,7 @@
  * @property {string} checkable
  * @property {string} checked
  * @property {string} selected
+ * @property {string} scrollable
  * @property {{ x1: number, y1: number, x2: number, y2: number, cx: number, cy: number, width: number, height: number }} bounds
  */
 
@@ -188,4 +189,48 @@ export function findTab(nodes, label, bandY) {
     (node) => node.text === label && node.bounds.y1 < bandY
   );
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+/**
+ * The box a finger has to hit for one of the example's tabs: the tab's `Pressable`, not
+ * the label inside it.
+ *
+ * {@link findTab} answers with the node that renders the label, which may be the inner
+ * `Text` and is then narrower than the target by the tab's padding. The target is the
+ * smallest clickable, non-scrolling node in the band that encloses the label (the
+ * `Pressable`), then the node carrying the tab's `testID` (`tab-<id>`, as
+ * `resource-id`; G16 measured `tab-picker` that way), then the label's own box. The
+ * last fallback errs small: a rule that reads the label as the target can only report
+ * a tab as too small, never as big enough.
+ *
+ * @param {UiautomatorNode[]} nodes
+ * @param {{ id: string, label: string }} tab
+ * @param {number} bandY only nodes starting above this y are tabs
+ * @returns {UiautomatorNode | undefined}
+ */
+export function tabTarget(nodes, tab, bandY) {
+  const label = findTab(nodes, tab.label, bandY);
+  if (label == null) return undefined;
+  const encloses = (node) =>
+    node.bounds.y1 < bandY &&
+    node.bounds.x1 <= label.bounds.cx &&
+    node.bounds.x2 >= label.bounds.cx &&
+    node.bounds.y1 <= label.bounds.cy &&
+    node.bounds.y2 >= label.bounds.cy;
+  const area = (node) => node.bounds.width * node.bounds.height;
+  const clickable = nodes
+    .filter(
+      (node) =>
+        node.clickable === 'true' &&
+        node.scrollable !== 'true' &&
+        encloses(node)
+    )
+    .sort((left, right) => area(left) - area(right));
+  return (
+    clickable[0] ??
+    nodes.find(
+      (node) => node.resourceId === `tab-${tab.id}` && encloses(node)
+    ) ??
+    label
+  );
 }
