@@ -144,12 +144,17 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
     model.editable && super.canBecomeFirstResponder
   }
 
-  /// Whether the keyboard's Search key would do anything: with
-  /// `enablesReturnKeyAutomatically` on, UIKit disables the key on an empty field, so
-  /// the key's own guard is "not empty". `nuiTestSubmit` runs this guard, which is what
-  /// makes the rule assertable on iOS instead of invisible inside UIKit.
-  var nuiAcceptsReturnKey: Bool {
-    !(enablesReturnKeyAutomatically && nuiText.isEmpty)
+  /// The Search key's route, run by hand the way `nuiRunClear` runs the clear button's:
+  /// the field's own `textFieldShouldReturn`, which is the method both the keyboard's
+  /// Search key and a hardware Return reach.
+  ///
+  /// This used to read `enablesReturnKeyAutomatically` (UIKit disables the key on an
+  /// empty field, so the *key* is inert) and then call `nuiSubmitFromReturn` straight
+  /// past the delegate. That made the harness assert UIKit's disabled key rather than
+  /// this control's own rule, and a hardware Return - which ignores the disabled key and
+  /// lands in `textFieldShouldReturn` anyway - submitted an empty query unnoticed.
+  func nuiRunReturnKey() {
+    _ = textFieldShouldReturn(self)
   }
 
   /// The clear button's route, run by hand: UIKit asks the delegate, empties the field,
@@ -196,6 +201,10 @@ final class NitroUiSearchTextField: UISearchTextField, UITextFieldDelegate, Nitr
   }
 
   func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+    // The real Return-key path. `enablesReturnKeyAutomatically` disables the key on an
+    // empty field, but a hardware Return reaches this delegate anyway, and an empty query
+    // never submits - the same rule Android's `onSearch` guard states.
+    guard !nuiText.isEmpty else { return false }
     nuiSubmitFromReturn()
     return false
   }
@@ -597,9 +606,9 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   func nuiTestSubmit() throws {
     DispatchQueue.main.async { [weak self] in
       guard let self, let field = self.model.control as? NitroUiSearchTextField else { return }
-      // The key's own guard, so an empty field reports nothing here either.
-      guard field.nuiAcceptsReturnKey else { return }
-      field.nuiSubmitFromReturn()
+      // The delegate method itself, guard included, so an empty field reports nothing
+      // here either - and reports it for the same reason a real Return would.
+      field.nuiRunReturnKey()
       self.publishState()
     }
   }

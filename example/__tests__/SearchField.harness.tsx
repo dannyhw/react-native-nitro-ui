@@ -490,6 +490,31 @@ describe('SearchField', () => {
     expect(eventsOf('unsubmitted')).toEqual(['focus']);
   });
 
+  it('takes no submit from a Return pressed on a query it has just cleared', async () => {
+    // The route the keyboard's Search key and a **hardware Return** share: `nuiTestSubmit`
+    // runs the field's own `textFieldShouldReturn` (iOS) and its own `onSearch` handler
+    // (Android), guard included. It used to run a mirror of the rule instead - iOS read
+    // `enablesReturnKeyAutomatically` and then submitted past the delegate - which is why
+    // an empty query slipped through a hardware Return unnoticed: UIKit greys out the
+    // software key on an empty field and ignores that distinction for a real key.
+    //
+    // A field that has *had* a query and lost it is the state this catches: the clear
+    // button has just run, the field is still focused, and somebody presses Return.
+    render(<Controlled id="recleared" initial="" />);
+    await waitForTestId('recleared');
+    await focusField('recleared');
+    await typeText('ru');
+    (await handleOf('recleared')).nuiTestClear();
+    await stateWhen('recleared', (current) => current.text === '', 'the clear');
+    const before = eventsOf('recleared').length;
+    (await handleOf('recleared')).nuiTestSubmit();
+    await sleep(150);
+    // The clear is the last thing this field is told: no `submit:` carrying an empty
+    // query, and no `blur` either - refusing a submit does not send the field away.
+    expect(eventsOf('recleared').slice(before)).toEqual([]);
+    expect((await handleOf('recleared')).nuiTestState().focused).toBe(true);
+  });
+
   it('sizes itself to its parent width and its own height, whatever its text', async () => {
     render(
       <>
@@ -564,6 +589,10 @@ describe('SearchField', () => {
     const handle = await handleOf('steady');
     const after = handle.measureContent();
     const boxAfter = harnessUi.queryByTestId('steady');
+    // Not a constant: on Android this is the `mutableStateOf` the bar itself is drawn
+    // from, and `onExpandedRequest` is the one place a results view would ever write it.
+    // The height checks below are the real oracle - they are what say the box did not
+    // move - and both were shown red together by making that request store `next`.
     expect(handle.nuiTestState().expanded).toBe(false);
     expect(Math.abs(after.height - before.height)).toBeLessThan(1);
     expect(
