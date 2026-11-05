@@ -43,7 +43,7 @@
       },
       "peerDependencies": {
         "react": "*",
-        "react-native": ">=0.86.0",
+        "react-native": ">=0.88.0",
         "react-native-nitro-modules": "^0.37.1",
       },
     },
@@ -121,6 +121,7 @@
   ],
   "patchedDependencies": {
     "@react-native-harness/platform-android@1.6.0": "patches/@react-native-harness%2Fplatform-android@1.6.0.patch",
+    "@react-native-harness/ui@1.6.0": "patches/@react-native-harness%2Fui@1.6.0.patch",
     "@react-native-harness/platform-apple@1.6.0": "patches/@react-native-harness%2Fplatform-apple@1.6.0.patch",
   },
   "packages": {

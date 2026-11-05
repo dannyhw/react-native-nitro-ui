@@ -267,7 +267,7 @@ function popupPlacement(report: Report) {
   return { side: above ? 'above' : 'below', gap, centred, popup, anchor };
 }
 
-/** Material's `SpacingBetweenTooltipAndAnchor` (material3 1.4.0, `TooltipKt`). */
+/** Material's `SpacingBetweenTooltipAndAnchor` (material3 1.5, `TooltipKt`; the same 4 dp as 1.4.0). */
 const M3_SPACING_DP = 4;
 /** The most an iOS popover's arrow and its gap put between the content and the anchor. */
 const IOS_ARROW_MAX_PT = 30;

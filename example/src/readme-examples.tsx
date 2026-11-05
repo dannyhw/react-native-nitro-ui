@@ -15,7 +15,9 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  Checkbox,
   Chip,
+  ContextMenu,
   DatePicker,
   type DialogAction,
   Host,
@@ -29,6 +31,7 @@ import {
   TextField,
   type TextFieldHandle,
   Tooltip,
+  setMaterialTheme,
 } from 'react-native-nitro-ui';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -163,6 +166,40 @@ export function FileActions() {
 }
 // #endregion
 
+// #region context-menu
+const MESSAGE_ACTIONS: MenuGroup = {
+  actions: [
+    { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+    { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+  ],
+  sections: [
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+export function MessageRow() {
+  const [last, setLast] = useState('nothing yet');
+
+  return (
+    <ContextMenu
+      group={MESSAGE_ACTIONS}
+      onSelect={setLast}
+      style={messageStyles.bubble}
+    >
+      <Text>Hold this message for its menu.</Text>
+      <Text>Last action: {last}</Text>
+    </ContextMenu>
+  );
+}
+
+const messageStyles = StyleSheet.create({
+  bubble: { padding: 12, borderRadius: 16, backgroundColor: '#f2f2f7' },
+});
+// #endregion
+
 // #region chip
 export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
   const [openNow, setOpenNow] = useState(false);
@@ -177,6 +214,23 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
         systemImage="map"
         onPress={onDirections}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region checkbox
+export function CheckoutOptions({
+  onEmailMe,
+}: {
+  onEmailMe: (email: boolean) => void;
+}) {
+  const [gift, setGift] = useState(false);
+
+  return (
+    <>
+      <Checkbox label="Gift wrap" checked={gift} onCheckedChange={setGift} />
+      <Checkbox label="Email me the receipt" onCheckedChange={onEmailMe} />
     </>
   );
 }
@@ -332,4 +386,9 @@ const styles = StyleSheet.create({
   // Say how tall a Host is: it draws its children into this box.
   settings: { height: 96 },
 });
+// #endregion
+
+// #region material-theme
+// Once, at startup — before the first screen renders.
+setMaterialTheme('baseline');
 // #endregion

@@ -83,11 +83,16 @@
 | G12 | Chip (filter + assist; M3 chips on Android, button-style Toggle / capsule Button on iOS), run on maintainer-mac-1 | Opus (on mac-1) | Opus | merged with G14 (PR #27; 1 impl + 1 fix round, re-review MERGE; landed through G14's merge of `239c370`, gated on the combined tree; mac-1's own merge gates also green, `b5cfb7c`) |
 | G13 | TextField (Q2 + T19 + D34; `UITextField` on iOS, `BasicTextField` on Android) | Opus | Opus | merged (PR #26; 1 impl + 2 fix rounds, merge fixes applied by the orchestrator; device gates on maintainer-mac-1, check on mac-2) |
 | G14 | BottomSheet (Q5 Appendix C, S2, D35) | Opus | Opus | merged (PR #28; 1 impl + 2 fix rounds, re-review MERGE; all five merge gates green on mac-2 on the main + D4 + Chip + BottomSheet tree `87d4b2ab0814`) |
-| G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | fix round 1 (PR #31; review: Android label alignment, false conformance fallback, Android fallback height, iOS glyph tap test). Incident: `pkill -P 1` powered off every device on mac-2 (AGENTS rule tightened) |
+| G15 | Checkbox (M3 `Checkbox`/`TriStateCheckbox` on Android, `Toggle` on iOS; Q5 Appendix D) | Apex | Opus | merged (PR #31; 1 impl + 1 fix round, re-review MERGE WITH FIXES applied at merge; all five merge gates green on mac-2). Incident: `pkill -P 1` powered off every device on mac-2 (AGENTS rule tightened) |
 | Q6 | ContextMenu design (Q1 depth; children in place, gesture arbitration, spike questions) | Opus (on mac-1) | Opus | done (report merged; D36 adopts its recommendations; spike S3 next) |
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
-| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | reviewed MERGE (PR #33); merging with Checkbox on mac-1, then gates |
+| G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
-| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | running |
-| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | running |
+| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | fix round 1 (Android real-input: the SearchField case has no tab to reach its screen; `task/G17-search-field`) |
+| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | round 1, finishing gates and report after the overnight stop (mac-1; `task/G18-tooltip`) |
+| X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
+| Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
+| X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merge gates on mac-1 (PR #35; review MERGE; Android gates owed on the full tree) |
+| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | running |
+| E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |

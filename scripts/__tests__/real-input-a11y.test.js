@@ -106,6 +106,13 @@ describe('the a11y rule, on measured trees', () => {
       // G12's Chip, measured on pair-a: the name sits inside the FilterChip's own
       // checkable, clickable 48 dp node - the Switch's shape - so no debt row.
       'chip',
+      // G15's Checkbox, measured on pair-a: one `View` carries the name at the whole
+      // control's box (345x126 px: the box *and* its label, because the label is part of
+      // the control), and its parent — the row Compose merged them into — is
+      // `clickable|checkable|focusable` at that same box. Measured before that merge was
+      // written, this case had two named nodes and the actionable one was not the
+      // control; see the mutation below.
+      'checkbox',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
@@ -115,6 +122,7 @@ describe('the a11y rule, on measured trees', () => {
       // node with the same box (Compose's own shape for a text field's label), and the
       // rule's box test finds the actionable `EditText` there.
       'text-field',
+      'context-menu',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
@@ -172,6 +180,40 @@ describe('the a11y rule, on measured trees', () => {
     const problems = a11yProblems(control('switch'), mutated);
     expect(problems.join('\n')).toContain('2 nodes carry the name');
     expect(problems.join('\n')).toContain('announces twice');
+  });
+
+  it('goes red when a labelled checkbox splits its name across two nodes', () => {
+    // Not a hypothetical: this is the shape `Checkbox` shipped with before its labelled
+    // branch was merged, dumped off the emulator on the run that found it — the row's
+    // `View` (the label) and the `CheckBox` both read "Real-input checkbox", and only the
+    // `CheckBox` could be pressed. The fixture is the fixed tree (one named node), so the
+    // regression is written back into it here: the same name on a second, wider node that
+    // answers to nothing.
+    const home = named('checkbox');
+    const labelBox = {
+      ...home.bounds,
+      // The measured label node started where the box ended and ran to the row's edge.
+      x1: home.bounds.x2 - 20,
+      width: home.bounds.width,
+      cx: home.bounds.cx + 100,
+    };
+    const split = {
+      ...home,
+      className: 'android.view.View',
+      bounds: labelBox,
+      clickable: 'false',
+      checkable: 'false',
+      focusable: 'false',
+    };
+    const problems = a11yProblems(control('checkbox'), [
+      ...tree('checkbox'),
+      split,
+    ]);
+    expect(problems.join('\n')).toContain('2 nodes carry the name');
+    expect(problems.join('\n')).toContain('announces twice');
+    // And the tree it was measured from does not have the problem: without this, the
+    // mutation above proves only that the rule has a length test.
+    expect(a11yProblems(control('checkbox'), tree('checkbox'))).toEqual([]);
   });
 
   it('goes red when the name has no box', () => {
@@ -338,6 +380,7 @@ describe('the debt list', () => {
       'ios:slider',
       'ios:hosted-slider',
       'ios:hosted-picker',
+      'ios:context-menu',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.

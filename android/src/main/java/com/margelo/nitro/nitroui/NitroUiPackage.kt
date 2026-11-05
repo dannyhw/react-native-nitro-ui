@@ -18,6 +18,7 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiTextFieldManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiChipManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
 
 /**
  * The React package of `react-native-nitro-ui`.
@@ -61,6 +62,7 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiTextFieldManager(),
     HybridNitroUiChipManager(),
     HybridNitroUiTooltipManager(),
+    HybridNitroUiCheckboxManager(),
     // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the
     // `IViewGroupManager` half. See `NitroUiHostViewManager`.
@@ -70,6 +72,10 @@ class NitroUiPackage : BaseReactPackage() {
     // (`androidViewManager`), and the registry checks it is registered here instead of
     // the generated manager. See `NitroUiBottomSheetViewManager`.
     NitroUiBottomSheetViewManager(),
+    // A ContextMenu is a `View` around React Native children, styled like one: its
+    // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
+    // Fabric's child indices. See `NitroUiContextMenuViewManager`.
+    NitroUiContextMenuViewManager(),
   )
 
   companion object {

@@ -148,6 +148,32 @@
         "implementationClassName": "HybridNitroUiChip"
       }
     },
+    "NitroUiCheckbox": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiCheckbox"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiCheckbox"
+      }
+    },
+    "NitroUiMaterialTheme": {
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiMaterialTheme"
+      }
+    },
+    "NitroUiContextMenu": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiContextMenu"
+      }
+    },
     "NitroUiTooltip": {
       "ios": {
         "language": "swift",

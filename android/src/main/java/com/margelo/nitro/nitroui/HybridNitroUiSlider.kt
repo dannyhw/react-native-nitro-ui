@@ -12,9 +12,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
@@ -548,7 +550,7 @@ private fun SliderTrack(
   // quantises back to where it started (`SliderModel.accessibilityStepToward`).
   // Clearing the subtree leaves exactly one node, publishing exactly one rule.
   //
-  // It has to *say* what it is, too. M3 1.4's Slider publishes a `setProgress`,
+  // It has to *say* what it is, too. M3's Slider (1.4 and 1.5) publishes a `setProgress`,
   // a `contentDescription` and a percentage `stateDescription`, but no progress
   // range - so clearing takes away the action and leaves the range to be stated
   // here. The range is what the accessibility delegate reads to decide where a
@@ -572,12 +574,18 @@ private fun SliderTrack(
         }
       },
   ) {
+    // The state-based overload (material3 1.5 deprecates the value-based one), set up
+    // exactly as that deprecated overload did internally, so nothing a user can see or
+    // a test can read moves: one `SliderState` per (steps, range) - not
+    // `rememberSliderState`, which never re-keys, so a new `step` or range prop would
+    // keep the old track - and the displayed value written into it on every
+    // composition, which is what makes the Slider follow the model.
+    val sliderState = remember(ticks, range) { SliderState(displayed.toFloat(), ticks, range) }
+    sliderState.value = displayed.toFloat()
     Slider(
-      value = displayed.toFloat(),
+      state = sliderState,
       onValueChange = { position -> model.dragTo(position.toDouble()) },
       enabled = enabled,
-      valueRange = range,
-      steps = ticks,
       // Compose has no drag-start callback, so the first value change is the start
       // (`docs/architecture/core.md` §11) - `SliderModel.dragTo` opens the drag.
       onValueChangeFinished = { model.endDrag() },

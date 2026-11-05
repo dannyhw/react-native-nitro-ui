@@ -34,6 +34,8 @@ import { BottomSheet } from '../BottomSheet/BottomSheet';
 import { TextField } from '../TextField/TextField';
 import { Chip } from '../Chip/Chip';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { Checkbox } from '../Checkbox/Checkbox';
+import { ContextMenu } from '../ContextMenu/ContextMenu';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -90,9 +92,10 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  *   that yet (G13 report, follow-ups); and the Chip (G12), built without that round
  *   (`docs/components/chip.md`, "Limits"). The next unmeasured control starts here too.
  * - **refused by design** - the BottomSheet (G14): its content is React Native views, and a
- *   Host has no place for an RN view (`docs/components/host.md`, "What a Host cannot hold");
- *   and the Tooltip (G18), whose anchor is the app's own React Native views, wrapped in a
- *   React Native `View`.
+ *   Host has no place for an RN view (`docs/components/host.md`, "What a Host cannot hold").
+ *   The ContextMenu (G16) is refused for the same reason: it *is* a `View` around React
+ *   Native children (Q6 Appendix A, "Manifest"); and so is the Tooltip (G18), whose anchor
+ *   is the app's own React Native views, wrapped in a React Native `View`.
  *
  * The rows are hand-written rather than generated: the registry writes the imports and
  * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
@@ -101,7 +104,9 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
 export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [TextField, 'TextField'],
   [Chip, 'Chip'],
+  [Checkbox, 'Checkbox'],
   [BottomSheet, 'BottomSheet'],
+  [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
 ]);
 

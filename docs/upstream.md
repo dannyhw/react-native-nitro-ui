@@ -25,6 +25,7 @@ patch hunk they mean rather than a line, because those files keep changing.
 | H4   | `@react-native-harness/ui` 1.6.0               | `screen.screenshot(element)` reports 0×0                           | no upstream issue yet    | worked around in the test suite        |
 | H9   | `react-native-harness` 1.6.0                   | no press reaches a control inside an RN `Modal` (second window)     | no upstream issue yet    | documented limitation, no Modal press    |
 | H10  | `react-native-harness` 1.6.0                   | iOS `queryByTestId` throws `No active window found` with a Modal     | no upstream issue yet    | noted; only one test queries in a Modal  |
+| H11  | `@react-native-harness/ui` 1.6.0               | `userEvent` can only tap: no held press (a long press) at all       | no upstream issue yet    | patched in `patches/` (D36 item 2)     |
 | H5–H8| `react-native-harness` 1.6.0                   | four issues we avoid by policy                                     | reported upstream        | policy (pin, committed baselines, …)   |
 | N1   | `nitrogen` / `react-native-nitro-modules` 0.37.1 | Android base `ViewProps` dropped for Hybrid Views                | fixed upstream, unreleased (`#1749`, nightlies only) | post-nitrogen patch + shipped header |
 | N2   | `react-native-nitro-modules` 0.37.1            | removed props arrive as `null`, which crashes optional props       | open (`nitro#1184`)      | lint rule + spec/wrapper rule (D7)     |
@@ -486,6 +487,52 @@ is unreachable, include which window and what was searched.
 drop the "the query itself throws" note in
 `example/__tests__/Switch.harness.tsx`.
 
+### H11 — `userEvent` has no held press
+
+**Observed.** A ContextMenu opens on a long press, and the only touch the harness can
+inject is a tap: `simulatePress` sends a DOWN and, 50 ms later, an UP on Android
+(`UIHelperImpl.kt`, `TAP_DURATION_MS = 50L`) and a `UITouch` that begins and ends 50 ms
+apart on iOS (`HarnessUI.mm`, `kTapDuration = 0.05`). Neither is long enough for any
+long-press recognizer, so a test of what a hold does - opens the menu, cancels the child's
+touch, never presses it - could only be real input. Q6's question B and DECISIONS D36
+item 2 chose to patch the module rather than ship a touch injector in the library.
+
+**Evidence.** `@react-native-harness/ui` 1.6.0's TurboModule spec has `simulatePress`,
+the four queries, `captureScreenshot`, `typeChar` and `blur`, and nothing that holds
+(`src/NativeHarnessUI.ts`). The S3 spike measured that the iOS private `UITouch` path,
+held for a second, does open a `UIContextMenuInteraction` with no `onPress`
+(`docs/tasks/S3-contextmenu-spike.report.md`, question 8), and that a DOWN, a real
+1 s wait and an UP through the decor view do the same on Android.
+
+**Today.** Patched in `patches/@react-native-harness%2Fui@1.6.0.patch` (bun
+`patchedDependencies`, dev-only by D5): a `simulateLongPress(nativeId, x, y, durationMs)`
+TurboModule method on both platforms - the tap's own path with the touch held for
+`durationMs` (and `isTap` off on iOS) - plus `userEvent.longPress(element, ms)` and
+`userEvent.longPressAt(x, y, ms)` in `src/` and `dist/`. Codegen reads `src/`, so the
+next app build regenerates the spec. `example/__tests__/ContextMenu.harness.tsx` is the
+user: with `longPressAt` replaced by `pressAt`, its hold cases go red (no `open`).
+
+**Issue draft** (repo `callstackincubator/react-native-harness`):
+
+```text
+Title: userEvent has no long press
+
+userEvent.press / pressAt send a 50 ms tap (Android TAP_DURATION_MS, iOS kTapDuration),
+so nothing that reacts to a held touch - a Pressable's onLongPress, a
+UIContextMenuInteraction, a Compose combinedClickable - can be tested in-app.
+
+Suggested API
+  userEvent.longPress(element, durationMs = 1000)
+  userEvent.longPressAt(x, y, durationMs = 1000)
+backed by a simulateLongPress(nativeId, x, y, durationMs) native method that is
+simulatePress with the touch held for durationMs (iOS: setIsTap:NO). We have run this
+as a local patch against 1.6.0 on iOS 27 and Android API 35.
+```
+
+**Removal.** When `userEvent` ships a held press, switch `ContextMenu.harness.tsx` to it,
+then delete this entry, the patch file and its `patchedDependencies` line (in
+`package.json` and `bun.lock`).
+
 ### H5–H8 — harness issues we avoid by policy (already reported upstream)
 
 Not ours to file; recorded so a reader does not rediscover them. All from
@@ -507,11 +554,11 @@ release we take, drop its row and its mitigation note.
 
 This repo builds against `nitrogen ^0.37.1` and peers on
 `react-native-nitro-modules ^0.37.1` (`package.json` and peerDependencies),
-with RN floor 0.86 (D8).
+with RN floor 0.88 (D39; 0.86 under D8 when this was written).
 
 ### N1 — Android base `ViewProps` dropped for Hybrid Views (nitro#1655 → #1656)
 
-**Observed.** On RN ≥ 0.86 Android, a Hybrid View ignores RN's base props —
+**Observed.** On Android, a Hybrid View ignores RN's base props —
 `backgroundColor`, `opacity`, `transform`, `testID`, accessibility
 (`docs/research/nitro-patterns.md:35-37`). Measured before/after in the spike:
 on an Android emulator with RN 0.88 the Nitro view ignored `backgroundColor` and
@@ -535,8 +582,9 @@ consumer smoke apps (`docs/research/setup-decisions.md:241`). Cause: nitrogen
 - Nightly codegen emits a call into the runtime helper
   `cpp/views/RawPropsCompat.cpp`, version-gated (RN ≥ 0.87 always; RN 0.84–0.86
   behind `enableExclusivePropsUpdateAndroid`), so codegen produced by nightly
-  nitrogen **does not build** for consumers on 0.37.1 (`:226-231`). With our peer
-  range and RN floor, shipping nightly codegen is not an option.
+  nitrogen **does not build** for consumers on 0.37.1 (`:226-231`). With our
+  `^0.37.1` peer range, shipping nightly codegen is not an option. (The RN half of
+  that gate is moot since D39: at RN ≥ 0.88 only the unconditional branch applies.)
 
 **Evidence — what ships.** `bun run nitrogen` is `nitrogen src &&
 node scripts/patch-nitrogen.mjs` (`package.json`), and bob's `custom` target
@@ -554,7 +602,10 @@ ship patched code. The script rewrites the empty ctor and adds the include
 
 `cpp/NitroUiPropsCompat.hpp` is a header-only copy of the upstream helper under
 `::nitroui::compat` (not `nitroui::`, which would collide with the generated
-`margelo::nitro::nitroui`). Guards, in this order: skip files already containing
+`margelo::nitro::nitroui`), reduced to the branch the RN floor (0.88, D39) takes: the
+call is unconditional on Android, and the header refuses to compile against an RN
+older than 0.88 rather than call it where RN 0.84–0.86 gated it behind
+`enableExclusivePropsUpdateAndroid`. Guards, in this order: skip files already containing
 upstream's `RawPropsCompat::initializeDynamicProps` (`scripts/patch-nitrogen.mjs`);
 idempotent via `PATCH_MARKER`; **exit 1** if a generated
 `*Component.cpp` has neither the upstream call nor our anchor, so a
@@ -577,7 +628,7 @@ Body
 in 0.37.2-nightly.* (nightly = 0.37.2-nightly.62.gfb894f673ff0) and 1.0.0-alpha.nightly.*.
 
 Downstream effect: libraries generated with stable nitrogen 0.37.1 must keep dropping RN's
-base ViewProps on Android >= 0.86 (backgroundColor, opacity, transform, testID, a11y) or
+base ViewProps on Android (backgroundColor, opacity, transform, testID, a11y) or
 post-process their own codegen, because codegen from nightly nitrogen calls
 nitro::RawPropsCompat::initializeDynamicProps, which does not exist in 0.37.1 — so we
 cannot ship the fixed codegen either. react-native-nitro-ui does exactly that
