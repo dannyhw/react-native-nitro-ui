@@ -1,0 +1,205 @@
+# Failure excerpt — real-input:ios:--control:switch
+
+- Ran: 2026-11-03T23:30:23.555Z on code tree `de02c4f439ca` at HEAD `55ab93d` (branch `task/X19-example-tab-bar`)
+- Command: `node scripts/real-input/ios.mjs --control switch`
+- Result: fail, exit 1, 439930 ms
+- Load: start 6.47, end 7.06, median 17.68, max 123.63
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `X19-b247f`
+- Full log: `task/X19-example-tab-bar/real-input+ios+--control+switch-2026-11-03T23-30-23.024Z.log` (<store>/task/X19-example-tab-bar/real-input+ios+--control+switch-2026-11-03T23-30-23.024Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ tab "Switch" (tab-switch) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Slider" (tab-slider) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Button" (tab-button) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Progress" (tab-progress) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Segments" (tab-segmented) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Dates" (tab-datepicker) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Picker" (tab-picker) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Menu" (tab-menu) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Dialogs" (tab-dialog) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Sheet" (tab-sheet) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Text" (tab-textfield) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Chip" (tab-chip) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Checkbox" (tab-checkbox) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Context" (tab-contextmenu) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+- `✗ tab "Host" (tab-host) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X19-example-tab-bar/real-input+ios+--control+switch-2026-11-03T23-30-23.024Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X19-b247f (still live)
+  |   X19-b247f                X19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.06 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 232 — the rest is in the full log above)
+
+```
+    ✓ NitroUiSegmentedControl is named on one element, at the control's own box, as the segmented control it claims to be
+
+  a11y:date-picker: DatePicker a11y (XCUITest)
+    · other id="real-input-date" label="Real-input date picker" value="" box (16, 249, 103x36.333343505859375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 249, 103x36.333343505859375)
+    · other id="" label="" value="" box (16, 249, 103x36.333343505859375)
+    · other id="" label="" value="" box (16, 249, 103x36.333343505859375)
+    · button id="" label="Real-input date picker" value="3 Nov 2026" box (16, 249, 103x36.333333333333314)
+    ✓ NitroUiDatePicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:picker: Picker a11y (XCUITest)
+    · other id="real-input-picker" label="Real-input picker" value="" box (16, 192.66666412353516, 80x34.666656494140625) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 192.66666412353516, 80x34.666656494140625)
+    · other id="" label="" value="" box (16, 192.66666412353516, 80x34.666656494140625)
+    · other id="" label="" value="" box (16, 192.66666412353516, 80x34.666656494140625)
+    · button id="" label="Real-input picker" value="" box (16, 192.66666412353516, 80x34.33333333333334)
+    · static text id="" label="Onyx" value="" box (28, 199.66666412353516, 39.33333333333334x20.333333333333343)
+    ✓ NitroUiPicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:menu: Menu a11y (XCUITest)
+    · other id="real-input-menu" label="Real-input menu" value="" box (16, 302.6666717529297, 81x34.333343505859375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 302.6666717529297, 81x34.333343505859375)
+    · other id="" label="" value="" box (16, 302.6666717529297, 81x34.333343505859375)
+    · other id="" label="" value="" box (16, 302.6666717529297, 81x34.333343505859375)
+    · button id="" label="Real-input menu" value="" box (16, 302.6666717529297, 81x34.333333333333314)
+    · button id="" label="" value="" box (16, 302.6666717529297, 81x34.333333333333314)
+    · static text id="" label="Actions" value="" box (16, 302.6666717529297, 81x34.333333333333314)
+    ✓ NitroUiMenu is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:chip: Chip a11y (XCUITest)
+    · other id="real-input-chip" label="Real-input chip" value="" box (16, 215.66666412353516, 88x28) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 215.66666412353516, 88x28)
+    · other id="" label="" value="" box (16, 215.66666412353516, 88x28)
+    · other id="" label="" value="" box (16, 215.66666412353516, 88x28)
+    · switch id="" label="Real-input chip" value="0" box (16, 215.66666412353516, 88x28)
+    ✓ NitroUiChip is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:checkbox: Checkbox a11y (XCUITest)
+    · other id="real-input-checkbox" label="Real-input checkbox" value="" box (16, 232.3333282470703, 144.3333282470703x28.000015258789062) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 232.3333282470703, 144.3333282470703x28.000015258789062)
+    · other id="" label="" value="" box (16, 232.3333282470703, 144.3333282470703x28.000015258789062)
+    · other id="" label="" value="" box (16, 232.3333282470703, 144.3333282470703x28.000015258789062)
+    · switch id="" label="Real-input checkbox" value="0" box (15.99999713897705, 232.3333282470703, 144.3333282470703x27.999984741210938)
+    · other id="" label="" value="" box (16, 232.3333282470703, 144.33333333333331x28)
+    · static text id="" label="Real input" value="" box (15.999997456868499, 236.1666692097982, 75.33333333333333x20.333333333333343)
+    · switch id="" label="" value="0" box (99.33333333333333, 232.3333282470703, 62.999999999999986x28)
+    ✓ NitroUiCheckbox is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:hosted-switch: Switch a11y (XCUITest)
+    · other id="host-switch-0" label="Hosted switch 0" value="" box (16, 269.6666717529297, 61x28) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 269.6666717529297, 61x28)
+    · other id="" label="" value="" box (16, 269.6666717529297, 61x28)
+    · other id="" label="" value="" box (16, 269.6666717529297, 61x28)
+    · switch id="" label="Hosted switch 0" value="0" box (16, 269.6666717529297, 61x28)
+    · switch id="" label="" value="0" box (16, 269.6666717529297, 63x28)
+    ✓ NitroUiSwitch is named on one element, at the control's own box, as the switch it claims to be
+
+  a11y:hosted-slider: Slider a11y (XCUITest)
+    · other id="host-slider" label="Hosted slider" value="" box (16, 711.3333129882812, 370x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 711.3333129882812, 370x31)
+    · other id="" label="Hosted slider" value="0.4" box (16, 711.3333129882812, 370x31)
+    · known failing (X4 a11y: the Slider is announced as other and not as a slider): NitroUiSlider: "Hosted slider" is announced as an other and not as a slider — the announcement lost the kind of control this is, so a person hears a name with no idea what can be done with it
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:hosted-button: Button a11y (XCUITest)
+    · other id="host-button" label="Hosted button" value="" box (16, 742.3333129882812, 130.3333282470703x34.3333740234375) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 742.3333129882812, 130.3333282470703x34.3333740234375)
+    · other id="" label="" value="" box (16, 742.3333129882812, 130.3333282470703x34.3333740234375)
+    · other id="" label="" value="" box (16, 742.3333129882812, 130.3333282470703x34.3333740234375)
+    · button id="" label="Hosted button" value="" box (16, 742.3333129882812, 130.33333333333331x34.33333333333337)
+    ✓ NitroUiButton is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:hosted-segmented: SegmentedControl a11y (XCUITest)
+    · other id="host-segmented" label="Hosted segmented" value="" box (16, 515.6666666666667, 165x31) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 515.6666666666667, 165x31)
+    · other id="" label="" value="" box (16, 515.6666666666667, 165x31)
+    · other id="" label="" value="" box (16, 515.6666666666667, 165x31)
+    · segmented control id="" label="Hosted segmented" value="" box (16, 515.6666666666667, 165x31)
+    · button id="" label="One" value="" box (16, 515.6666666666667, 55x32)
+    · button id="" label="Two" value="" box (71, 515.6666666666667, 55x32)
+    · button id="" label="Three" value="" box (126, 515.6666666666667, 55x32)
+    ✓ NitroUiSegmentedControl is named on one element, at the control's own box, as the segmented control it claims to be
+
+  a11y:hosted-picker: Picker a11y (XCUITest)
+    · other id="host-picker" label="Hosted picker" value="" box (16, 546.6666666666667, 75.33333587646484x34.6666259765625) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 546.6666666666667, 75.33333587646484x34.6666259765625)
+    · other id="" label="" value="" box (16, 546.6666666666667, 75.33333587646484x34.6666259765625)
+    · other id="" label="" value="" box (16, 546.6666666666667, 75.33333587646484x34.6666259765625)
+    · button id="" label="Hosted picker, Hosted picker" value="" box (16, 546.6666666666667, 75.33333333333333x34.33333333333337)
+    · static text id="" label="Beta" value="" box (27.666666666666668, 553.6666666666667, 35x20.33333333333337)
+    · known failing (X4 a11y: a hosted Picker announces its label twice): NitroUiPicker: the element under "host-picker" announces the control's name twice (button "Hosted picker, Hosted picker" at (16, 546.67, 75.33, 34.33)): the label reaches one element along with the control's own name, so a person hears it stutter, and no element carries the label alone — which is also why this case cannot grade the name, box or trait
+    ✓ NitroUiPicker has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+  a11y:hosted-date-picker: DatePicker a11y (XCUITest)
+    · other id="host-datepicker" label="Hosted date picker" value="" box (16, 616.0000025431316, 103x36.333251953125) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 616.0000025431316, 103x36.333251953125)
+    · other id="" label="" value="" box (16, 616.0000025431316, 103x36.333251953125)
+    · other id="" label="" value="" box (16, 616.0000025431316, 103x36.333251953125)
+    · button id="" label="Hosted date picker" value="17 May 2026" box (16, 616.0000025431316, 103x36.33333333333337)
+    ✓ NitroUiDatePicker is named on one element, at the control's own box, as the button it claims to be
+
+  a11y:hosted-progress: Progress a11y (XCUITest)
+    · other id="host-mixed-progress-linear" label="Mixed linear progress" value="" box (16, 290.0000203450521, 370x4) [the React Native wrapper]
+    · other id="" label="" value="" box (16, 290.0000203450521, 370x4)
+    · other id="" label="" value="" box (16, 290.0000203450521, 370x4)
+    · other id="" label="" value="" box (16, 290.0000203450521, 370x4)
+    · progress indicator id="" label="Mixed linear progress" value="35%" box (16, 290.0000203450521, 370x4)
+    · progress indicator id="" label="" value="35%" box (16, 280.0000203450521, 370x24)
+    ✓ NitroUiProgress is named on one element, at the control's own box, as the progress indicator it claims to be
+
+  a11y:text-field: TextField a11y (XCUITest)
+    · other id="text-typing" label="Typing field" value="" box (28, 319.6666660308838, 346x22) [the React Native wrapper]
+    · other id="" label="" value="" box (28, 319.6666660308838, 346x22)
+    · other id="" label="" value="" box (28, 319.6666660308838, 346x22)
+    · other id="" label="" value="" box (28, 319.6666660308838, 346x22)
+    · text field id="" label="Typing field" value="Type here" box (28, 319.6666660308838, 346x22)
+    ✓ NitroUiTextField is named on one element, at the control's own box, as the text field it claims to be
+
+  a11y:context-menu: ContextMenu a11y (XCUITest)
+    · other id="ctx-accessible" label="Message from Grace" value="" box (12, 428.6666717529297, 378x68) [the React Native wrapper]
+    · static text id="" label="Grace Hopper" value="" box (25, 441.6666717529297, 352x17)
+    · static text id="" label="Grace Hopper" value="" box (25, 441.6666717529297, 352x17)
+    · known failing (G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS): NitroUiContextMenu: 2 element(s) under "ctx-accessible" are stops of their own (static text "Grace Hopper" at (25, 441.67, 352, 17); static text "Grace Hopper" at (25, 441.67, 352, 17)) — the wrapper is not one accessibility element, so a screen reader reaches its children and never the menu on it
+    ✓ NitroUiContextMenu has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the tree
+
+switch: PASS (no retries)
+tab-targets: failed: tab "Switch" (tab-switch) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Slider" (tab-slider) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Button" (tab-button) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Progress" (tab-progress) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Segments" (tab-segmented) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Dates" (tab-datepicker) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Picker" (tab-picker) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Menu" (tab-menu) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Dialogs" (tab-dialog) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Sheet" (tab-sheet) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Text" (tab-textfield) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Chip" (tab-chip) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Checkbox" (tab-checkbox) is 23.3 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Context" (tab-contextmenu) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+tab-targets: failed: tab "Host" (tab-host) is 23 × 26 pt — too narrow and too short for the 44 pt minimum touch target
+
+real-input (ios): 1/1 controls passed · 0 press sequence(s) needed a retry · 18/19 auxiliary checks passed
+gate: real-input:ios:--control:switch FAIL in 439.9 s
+gate: recorded in .gates/task/X19-example-tab-bar.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X19-example-tab-bar/real-input+ios+--control+switch-2026-11-03T23-30-23.024Z.log (4 probe(s))
+
+```

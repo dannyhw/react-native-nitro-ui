@@ -45,7 +45,9 @@ import {
   findAllByText,
   findTab,
   parseHierarchy,
+  tabTarget,
 } from './uiautomator.mjs';
+import { checkTabTargets, exampleTabs } from './tab-targets.mjs';
 import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
@@ -3525,8 +3527,9 @@ async function tapBackToTheDisplayedDay(t) {
   const VALUE = 'controlled-value';
   // The tab bar is pinned to the top of the window and draws over whatever the page
   // scrolls under it: a "cell" up there is a tab as far as `adb shell input` is
-  // concerned, so the band a tap may aim at starts below it.
-  const bandTop = 250;
+  // concerned, so the band a tap may aim at starts below it - measured, because the
+  // bar's height is the tabs' touch target plus the status bar, not a constant.
+  const bandTop = t.tabBarBottom() + 16;
 
   // The echoes that say what a tap did sit under a calendar taller than the screen,
   // so scroll until they are readable at all...
@@ -4096,6 +4099,21 @@ async function main() {
     harness.launch();
     await harness.waitForReady(READY_TIMEOUT);
 
+    // Before the controls, because every one of them gets to its screen through a tab:
+    // a tab too small to tap is the first thing that would make a control's check
+    // flaky, and it is cheapest to read while the app is fresh on its first screen.
+    // Auxiliary, like the a11y sweep, so the control totals keep meaning "every control
+    // answered a real touch", and on every run, filtered or not.
+    reportTabTargets(
+      suite.beginAuxiliary(
+        'tab-targets',
+        'every example tab is a 48 dp touch target (uiautomator)'
+      ),
+      await harness.measureTabs(),
+      harness.tabs,
+      1 / harness.density()
+    );
+
     for (const control of toRun) {
       const log = suite.begin(control);
       await harness.goToScreen(control.screen);
@@ -4142,6 +4160,25 @@ async function main() {
 }
 
 /**
+ * The tab-target rule's verdicts, one line per tab.
+ *
+ * @param {import('./support.mjs').CheckLog} check
+ * @param {Map<string, import('./tab-targets.mjs').TabMeasurement>} measured
+ * @param {{ id: string, label: string }[]} tabs
+ * @param {number} pixel one device pixel in dp
+ */
+function reportTabTargets(check, measured, tabs, pixel) {
+  for (const verdict of checkTabTargets({
+    platform: 'android',
+    tabs,
+    measured,
+    pixel,
+  })) {
+    check.check(verdict.line, verdict.ok);
+  }
+}
+
+/**
  * @returns {string}
  */
 function repoRoot() {
@@ -4169,6 +4206,11 @@ class DeviceHarness {
     // The tab bar is the top of the screen; 12% of its height covers the tabs on
     // any density without ever reaching the content below them.
     this.tabBandY = Math.round(this.displayHeight() * 0.12);
+    // The tabs, in bar order, from the array the registry writes: the order is what
+    // tells `revealTab` which way to scroll for a tab that is not on screen.
+    this.tabs = exampleTabs(
+      fs.readFileSync(path.join(repoRoot(), 'example/src/App.tsx'), 'utf8')
+    );
   }
 
   /**
@@ -4383,26 +4425,13 @@ class DeviceHarness {
   /**
    * The example's tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'dialog' | 'sheet' | 'host'} screen
+   * The tab is found by the label `example/src/App.tsx` gives it, so a tab the registry
+   * adds is reachable without an edit here; the anchor is the echo that says its screen
+   * is up, which only the check that reads it can name.
+   *
+   * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet' | 'checkbox'} screen
    */
   async goToScreen(screen) {
-    const label = {
-      switch: 'Switch',
-      slider: 'Slider',
-      button: 'Button',
-      segmented: 'Segments',
-      datepicker: 'Dates',
-      picker: 'Picker',
-      menu: 'Menu',
-      chip: 'Chip',
-      checkbox: 'Checkbox',
-      dialog: 'Dialogs',
-      sheet: 'Sheet',
-      host: 'Host',
-      textfield: 'Text',
-      contextmenu: 'Context',
-    }[screen];
     const anchor = {
       switch: ECHO.switchValue,
       slider: ECHO.sliderStart,
@@ -4419,6 +4448,16 @@ class DeviceHarness {
       textfield: ECHO.textTyping,
       contextmenu: 'ctx-echo',
     }[screen];
+    const tab = this.tabs.find((entry) => entry.id === screen);
+    if (tab == null || anchor == null) {
+      throw new Error(
+        `real-input: no example tab "${screen}"` +
+          (tab == null
+            ? " in example/src/App.tsx's TABS"
+            : ", or no echo that says its screen is up (goToScreen's anchor map)") +
+          ', so the screen this check needs cannot be reached.'
+      );
+    }
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
     // tap while standing on it. So ask from the top.
@@ -4426,14 +4465,14 @@ class DeviceHarness {
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
-    const tab = findTab(this.hierarchy(), label, this.tabBandY);
-    if (tab == null) {
+    const target = await this.revealTab(tab);
+    if (target == null) {
       throw new Error(
-        `real-input: no "${label}" tab in the accessibility tree, so the ` +
-          'screen this check needs cannot be reached.'
+        `real-input: the "${tab.label}" tab could not be scrolled wholly onto the ` +
+          'screen, so the screen this check needs cannot be reached reliably.'
       );
     }
-    this.tap(tab);
+    this.tap(target);
     const deadline = Date.now() + REACT_TIMEOUT;
     for (;;) {
       if (findByTestId(this.hierarchy(), anchor) != null) {
@@ -4441,11 +4480,104 @@ class DeviceHarness {
       }
       if (Date.now() > deadline) {
         throw new Error(
-          `real-input: tapping the "${label}" tab did not bring up its screen.`
+          `real-input: tapping the "${tab.label}" tab did not bring up its screen.`
         );
       }
       await sleep(300);
     }
+  }
+
+  /**
+   * Scroll the tab bar until one tab is wholly on screen, and answer with its target.
+   *
+   * The bar scrolls sideways (X19), and `uiautomator` leaves a node that is scrolled out
+   * of sight out of the dump - and reports one that is half out at its *clipped* box.
+   * So "wholly on screen" is the target's box clear of both window edges, which the
+   * bar's own 4 dp end padding makes true of a tab scrolled fully into view. A tab not
+   * in the dump at all is placed by bar order against the tabs that are.
+   *
+   * Swipes are half a window and slow, so the bar barely flings; a swipe that
+   * overshoots is corrected by the next look, which is why this loops on the dump
+   * rather than computing one distance.
+   *
+   * @param {{ id: string, label: string }} tab
+   * @returns {Promise<import('./uiautomator.mjs').UiautomatorNode | null>} the tab's
+   *   target, or null if 10 swipes did not bring it wholly on screen
+   */
+  async revealTab(tab) {
+    const width = this.displayWidth();
+    const order = this.tabs.findIndex((entry) => entry.id === tab.id);
+    for (let attempt = 0; ; attempt += 1) {
+      const nodes = this.hierarchy();
+      const target = tabTarget(nodes, tab, this.tabBandY);
+      if (target != null && target.bounds.x1 > 0 && target.bounds.x2 < width) {
+        return target;
+      }
+      if (attempt === 10) return null;
+      const visible = this.tabs
+        .map((entry, index) => ({
+          index,
+          node: tabTarget(nodes, entry, this.tabBandY),
+        }))
+        .filter((entry) => entry.node != null);
+      if (visible.length === 0) {
+        throw new Error(
+          'real-input: no tab of the example is in the accessibility tree, so ' +
+            `the "${tab.label}" tab cannot be scrolled to.`
+        );
+      }
+      // +1: the tab is to the right of the window, so the content moves left.
+      const towards =
+        target != null
+          ? target.bounds.x2 >= width
+            ? 1
+            : -1
+          : order > visible[visible.length - 1].index
+            ? 1
+            : -1;
+      const y = visible[0].node.bounds.cy;
+      const from = Math.round(width * (towards > 0 ? 0.75 : 0.25));
+      this.swipe(from, y, from - towards * Math.round(width * 0.5), y, 600);
+      await sleep(500);
+    }
+  }
+
+  /**
+   * The bottom of the tab bar, in pixels: the lowest tab target on screen. Falls back
+   * to the band the tabs are looked for in, which is never above the bar.
+   *
+   * @returns {number}
+   */
+  tabBarBottom() {
+    const nodes = this.hierarchy();
+    const bottoms = this.tabs
+      .map((tab) => tabTarget(nodes, tab, this.tabBandY))
+      .filter((node) => node != null)
+      .map((node) => node.bounds.y2);
+    return bottoms.length > 0 ? Math.max(...bottoms) : this.tabBandY;
+  }
+
+  /**
+   * Every tab, scrolled wholly on screen and measured: the boxes `checkTabTargets`
+   * decides from, in dp, by tab id.
+   *
+   * @returns {Promise<Map<string, import('./tab-targets.mjs').TabMeasurement>>}
+   */
+  async measureTabs() {
+    const density = this.density();
+    /** @type {Map<string, import('./tab-targets.mjs').TabMeasurement>} */
+    const measured = new Map();
+    for (const tab of this.tabs) {
+      const target = await this.revealTab(tab);
+      const last = target ?? tabTarget(this.hierarchy(), tab, this.tabBandY);
+      if (last == null) continue;
+      measured.set(tab.id, {
+        width: last.bounds.width / density,
+        height: last.bounds.height / density,
+        reached: target != null,
+      });
+    }
+    return measured;
   }
 
   /**
@@ -4690,6 +4822,9 @@ function makeContext(harness, log) {
 
   return {
     log,
+
+    /** The bottom of the example's tab bar, in pixels ([DeviceHarness.tabBarBottom]). */
+    tabBarBottom: () => harness.tabBarBottom(),
 
     /**
      * @param {string} testID
