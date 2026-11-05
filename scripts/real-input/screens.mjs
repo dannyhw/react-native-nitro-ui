@@ -104,63 +104,64 @@ export const ECHO = Object.freeze({
 });
 
 /**
- * How a host-side runner reaches each example screen, and what proves it arrived.
+ * The echo that proves each example screen came up.
  *
  * The tab bar is the example's only navigation, and the two platforms cannot read it the
  * same way. iOS taps a tab by its `testID` (`tab-<screen>`, which React Native writes as
  * `accessibilityIdentifier`), so a new screen needs nothing on that side beyond the
- * screen itself. Android has to tap the *label* the tab renders: React Native stores
- * `testID` as a view tag, which never appears in a `uiautomator` dump (see
- * `uiautomator.mjs`). So the label is data this side carries, and a control whose screen
- * has no row here is a control the Android runner cannot get to at all.
+ * screen itself. Android's accessibility tree carries no testID (React Native stores it
+ * as a view tag, which never appears in a `uiautomator` dump — see `uiautomator.mjs`), so
+ * X19 reads the tab's **label** and order straight out of the `TABS` array
+ * `example/src/App.tsx` renders ({@link exampleTabs} in `tab-targets.mjs`), and scrolls
+ * the bar until that tab is wholly on screen. A label duplicated here would be a label
+ * that drifts from the app's, so this table carries only the other half: the echo the
+ * runner polls to learn the tap landed, which is a testID the screen renders and no
+ * other screen does — data only this library's checks know.
  *
- * That is exactly how G17's SearchField failed its first Android run: the screen existed,
+ * That split is what G17's SearchField cost to learn the hard way: the screen existed,
  * the tab rendered, and the runner asked the tree for a tab named `undefined` — the row
  * below had not been written when the screen was. `progress` has no row because no check
  * navigates there.
  *
- * @typedef {object} ScreenTab
- * @property {string} label The tab's text, exactly as `example/src/App.tsx` renders it —
- *   `findTab` matches `node.text` and needs exactly one node to match.
+ * @typedef {object} ScreenAnchor
  * @property {string} anchor A testID that is on that screen and nowhere else, which the
  *   runner polls to learn the tap landed.
  */
 export const SCREEN_TAB = Object.freeze({
-  switch: { label: 'Switch', anchor: ECHO.switchValue },
-  slider: { label: 'Slider', anchor: ECHO.sliderStart },
-  button: { label: 'Button', anchor: ECHO.buttonCount },
-  segmented: { label: 'Segments', anchor: ECHO.segmentedIndex },
-  datepicker: { label: 'Dates', anchor: ECHO.dateValue },
-  picker: { label: 'Picker', anchor: ECHO.pickerIndex },
-  menu: { label: 'Menu', anchor: ECHO.menuPick },
-  chip: { label: 'Chip', anchor: ECHO.chipValue },
-  checkbox: { label: 'Checkbox', anchor: ECHO.checkboxValue },
-  contextmenu: { label: 'Context', anchor: ECHO.ctxEcho },
-  dialog: { label: 'Dialogs', anchor: ECHO.dialogLog },
-  sheet: { label: 'Sheet', anchor: ECHO.sheetLog },
-  textfield: { label: 'Text', anchor: ECHO.textTyping },
-  searchfield: { label: 'Search', anchor: ECHO.searchTyping },
-  host: { label: 'Host', anchor: ECHO.hostValue },
+  switch: { anchor: ECHO.switchValue },
+  slider: { anchor: ECHO.sliderStart },
+  button: { anchor: ECHO.buttonCount },
+  segmented: { anchor: ECHO.segmentedIndex },
+  datepicker: { anchor: ECHO.dateValue },
+  picker: { anchor: ECHO.pickerIndex },
+  menu: { anchor: ECHO.menuPick },
+  chip: { anchor: ECHO.chipValue },
+  checkbox: { anchor: ECHO.checkboxValue },
+  contextmenu: { anchor: ECHO.ctxEcho },
+  dialog: { anchor: ECHO.dialogLog },
+  sheet: { anchor: ECHO.sheetLog },
+  textfield: { anchor: ECHO.textTyping },
+  searchfield: { anchor: ECHO.searchTyping },
+  host: { anchor: ECHO.hostValue },
 });
 
 /**
- * The tab that has to be pressed to reach `screen`.
+ * The arrival echo for `screen`.
  *
  * Throws rather than returning `undefined`, and names the file to fix: a caller is
  * always mid-device-run by now, and the useful failure is the one that says which row is
- * missing instead of sending the runner off to tap a tab called `undefined`.
+ * missing instead of sending the runner off to poll an echo called `undefined`.
  *
  * @param {string} screen
- * @returns {ScreenTab}
+ * @returns {ScreenAnchor}
  */
 export function screenTab(screen) {
   const entry = SCREEN_TAB[screen];
   if (entry == null) {
     throw new Error(
       `real-input: screen "${screen}" has no row in SCREEN_TAB ` +
-        '(scripts/real-input/screens.mjs), so its screen cannot be reached on ' +
-        'Android. Add the label example/src/App.tsx renders for that tab and the ' +
-        'echo testID that proves the screen came up.'
+        '(scripts/real-input/screens.mjs), so the runner cannot tell that its ' +
+        'screen came up. Add the echo testID that screen renders and nothing else.'
     );
   }
   return entry;
