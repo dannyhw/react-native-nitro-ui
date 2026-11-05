@@ -158,6 +158,12 @@
         "implementationClassName": "HybridNitroUiCheckbox"
       }
     },
+    "NitroUiMaterialTheme": {
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiMaterialTheme"
+      }
+    },
     "NitroUiContextMenu": {
       "ios": {
         "language": "swift",

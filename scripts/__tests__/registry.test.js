@@ -618,13 +618,13 @@ describe('the generated tables cover what they claim', () => {
     // nothing in the registry knows about. Half of that is a report (this), half is
     // that `--write` must not silently eat someone's config (the `keep` rule, and the
     // `--check` test below) - but an entry that is neither a manifest's nor one of the
-    // two named non-controls is drift: `--write` refuses it and keeps the entry.
+    // named non-controls is drift: `--write` refuses it and keeps the entry.
     const disk = JSON.parse(readRepo('nitro.json'));
     disk.autolinking.NitroUiDeleted = disk.autolinking.NitroUiSwitch;
     expect(checkAutolinking(manifests, disk, disk).join('\n')).toMatch(
       /autolinking has NitroUiDeleted and no manifest declares it/
     );
-    // The named non-controls are the two that are allowed to be there without one.
+    // The named non-controls are the ones allowed to be there without one.
     for (const name of NON_CONTROL_AUTOLINKING) {
       expect(readRepo('nitro.json')).toContain(`"${name}": {`);
     }

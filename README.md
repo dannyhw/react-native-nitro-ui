@@ -69,16 +69,27 @@ import {
 
 ## Requirements
 
-| Platform | Minimum                                                                     |
-| -------- | --------------------------------------------------------------------------- |
-| iOS      | `min_ios_version_supported` (RN's floor — 15.1 on RN 0.86 / 0.88)           |
-| Android  | `minSdkVersion` 24, `compileSdkVersion` 36 (inherited from the RN template) |
-| RN       | `>= 0.86` with the new architecture                                         |
-| Nitro    | `react-native-nitro-modules ^0.37.1`                                        |
+| Platform | Minimum                                                                                                 |
+| -------- | ------------------------------------------------------------------------------------------------------- |
+| RN       | `>= 0.88` with the new architecture, or Expo SDK 58                                                     |
+| iOS      | `min_ios_version_supported` (React Native's own floor — 15.1 on RN 0.88)                                |
+| Android  | `minSdkVersion` 24; the app compiles with `compileSdkVersion` 37 and Android Gradle Plugin 9.1 or newer |
+| Nitro    | `react-native-nitro-modules ^0.37.1`                                                                    |
 
-Jetpack Compose (compiler plugin + Material 3 BOM) is configured inside this
-package's `android/build.gradle`, so your app does not have to opt in to Compose
-to use one slider, and no Podfile or Gradle edits are needed either way.
+A new RN 0.88 or Expo SDK 58 app already meets the Android line: both templates
+compile against SDK 37 with AGP 9.2. An app upgraded from an older template may
+still say `compileSdkVersion = 36` in `android/build.gradle`; raise it to 37, or
+the build stops with an AAR metadata error that names Material 3.
+
+Jetpack Compose (the compiler plugin, Compose 1.12 and Material 3 1.5) is
+configured inside this package's `android/build.gradle`, so your app does not
+have to opt in to Compose to use one slider, and no Podfile or Gradle edits are
+needed either way.
+
+Material 3 1.5 is still a beta (`androidx.compose.material3:material3:1.5.0-beta02`),
+and it is the version this library needs for the Expressive theme. Gradle picks
+the newest version any library asks for, so if your app uses Material 3 itself,
+installing this library raises your app's Material 3 to that beta as well.
 
 A dev build is required: Expo Go is not supported, because Nitro Modules needs
 native code.
@@ -757,6 +768,29 @@ const styles = StyleSheet.create({
 });
 ```
 
+## Android theme
+
+Android controls are drawn with **Material 3 Expressive**, Android's design
+since Android 16, over the device's dynamic colours (Android 12+) or the default
+Material 3 colours, light or dark with the system. Today what the Expressive
+theme changes is motion: a Switch's thumb, a Checkbox's mark, a menu or a sheet
+opening move with Material's expressive springs, and Material ties more to the
+theme with each release. It comes from Material 3 1.5, currently a beta, which
+this library brings into your app (see [Requirements](#requirements)).
+
+To keep the baseline Material 3 theme instead, call `setMaterialTheme` once:
+
+```tsx name=material-theme
+// Once, at startup — before the first screen renders.
+setMaterialTheme('baseline');
+```
+
+The choice is the whole app's: every control and every `<Host>` follows it, and
+there is no per-control prop. `setMaterialTheme('expressive')` goes back to the
+default, and a later call still reaches the controls already on screen without
+resetting them: an open sheet or menu stays open and a focused field keeps its
+focus. It does nothing on iOS.
+
 ## Sizing
 
 A control's box is **its own measurement**, taken at runtime on the device your
@@ -885,9 +919,6 @@ The full list per control is in its doc; these are the ones that bite.
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules
   needs native code.
-- **RN 0.86 on iOS is not verified** — UIKit terminates a fresh 0.86 app at
-  launch on the iOS 27 simulator even without this library, and no older runtime
-  has been tried.
 - **`testID` lands on the host** on Android (`View.tag`), because Compose has no
   test id; a test that looks a control up by `testID` finds that view. Inside a `<Host>` the view
   that carries a Switch's `testID` is not where the Switch is drawn — it reads

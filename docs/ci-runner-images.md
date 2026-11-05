@@ -70,11 +70,9 @@ workflow row; a maintainer Mac with a downloaded iOS 18 runtime answers the same
 question without any CI change. Option-for-option, that is what
 `docs/tasks/FOLLOWUPS.md` asks for.
 
-## The related hole this does *not* close
+## The related hole, closed by D39
 
-`smoke.yml` skips the RN 0.86 **iOS** row because "RN 0.86's prebuilt core hangs
-at launch on an iOS 27 simulator runtime", and says it needs an image with an iOS
-26.x runtime. `macos-26` has iOS 26.2/26.4/26.5, so that row is testable on a
-label this repo already schedules on. That is a different question from an
-iOS < 26 fallback check, and it is the cheaper of the two; it belongs to F5/the
-smoke work rather than here.
+`smoke.yml` used to skip an RN 0.86 **iOS** row because RN 0.86's prebuilt core
+hung at launch on an iOS 27 simulator runtime. D39 raised the floor to RN 0.88 /
+Expo SDK 58 and X18 removed the 0.86 rows, so there is no older-RN row left to
+schedule; the iOS < 26 fallback question above is unaffected.

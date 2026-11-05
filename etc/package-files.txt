@@ -17,6 +17,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiContextMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiHost.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
@@ -34,6 +35,7 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
@@ -71,10 +73,14 @@ ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
 ios/core/NitroUiPresentation.swift
 ios/core/UIColor+NitroUiColor.swift
+lib/module/MaterialTheme.js
+lib/module/MaterialTheme.js.map
 lib/module/NitroUiCore.js
 lib/module/NitroUiCore.js.map
 lib/module/NitroUiCore.nitro.js
 lib/module/NitroUiCore.nitro.js.map
+lib/module/NitroUiMaterialTheme.nitro.js
+lib/module/NitroUiMaterialTheme.nitro.js.map
 lib/module/components/BottomSheet/BottomSheet.js
 lib/module/components/BottomSheet/BottomSheet.js.map
 lib/module/components/BottomSheet/BottomSheet.nitro.js
@@ -215,10 +221,14 @@ lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
 lib/typescript/package.json
+lib/typescript/src/MaterialTheme.d.ts
+lib/typescript/src/MaterialTheme.d.ts.map
 lib/typescript/src/NitroUiCore.d.ts
 lib/typescript/src/NitroUiCore.d.ts.map
 lib/typescript/src/NitroUiCore.nitro.d.ts
 lib/typescript/src/NitroUiCore.nitro.d.ts.map
+lib/typescript/src/NitroUiMaterialTheme.nitro.d.ts
+lib/typescript/src/NitroUiMaterialTheme.nitro.d.ts.map
 lib/typescript/src/components/BottomSheet/BottomSheet.d.ts
 lib/typescript/src/components/BottomSheet/BottomSheet.d.ts.map
 lib/typescript/src/components/BottomSheet/BottomSheet.nitro.d.ts
@@ -382,6 +392,8 @@ nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiHostSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
@@ -460,6 +472,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiContext
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDatePickerSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiDialogSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiHostSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMaterialThemeSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPickerSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgressSpec.kt
@@ -640,6 +653,8 @@ nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiHostSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiMaterialThemeSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiMaterialThemeSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
@@ -716,8 +731,10 @@ nitrogen/generated/shared/json/NitroUiSliderConfig.json
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
 nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
 package.json
+src/MaterialTheme.ts
 src/NitroUiCore.nitro.ts
 src/NitroUiCore.ts
+src/NitroUiMaterialTheme.nitro.ts
 src/components/BottomSheet/BottomSheet.nitro.ts
 src/components/BottomSheet/BottomSheet.tsx
 src/components/BottomSheet/NativeNitroUiBottomSheet.ts

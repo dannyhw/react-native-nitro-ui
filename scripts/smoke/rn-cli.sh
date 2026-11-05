@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Consumer smoke test: fresh React Native CLI app (RN=$RN, default 0.88.0;
-# also tested: 0.86.3), installed with npm from the packed tarball, Release
-# build, launched, ready line + screenshot. PLATFORM=ios|android|both.
+# Consumer smoke test: fresh React Native CLI app (RN=$RN, default 0.88.0, the
+# supported floor - DECISIONS D39), installed with npm from the packed tarball,
+# Release build, launched, ready line + screenshot. PLATFORM=ios|android|both.
 SCRIPT_NAME=rn-cli.sh
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

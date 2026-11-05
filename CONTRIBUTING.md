@@ -1082,8 +1082,8 @@ without being the machine channel. Never launch with `simctl launch
 
 ```sh
 IOS_SIM_UDID=<udid> ANDROID_AVD=<avd> \
-  bun run smoke:expo            # Expo SDK 58 by default (SDK=57 to switch)
-PLATFORM=android RN=0.86.3 bun run smoke:rn-cli
+  bun run smoke:expo            # Expo SDK 58, the supported floor
+PLATFORM=android bun run smoke:rn-cli   # RN 0.88.0, the supported floor
 ```
 
 | Env                | Default                  | Meaning                                          |
@@ -1134,14 +1134,13 @@ run has printed a `menu=WxH`, `text-field=WxH` or `chip=WxH` box:
 | --------------------- | --- | ------- |
 | Expo SDK 58 (RN 0.88) | ✅  | ✅      |
 | RN CLI 0.88.0         | ✅  | ✅      |
-| RN CLI 0.86.3         | n/a | ✅      |
 
-RN 0.86.3 is the supported floor, and its iOS cell could not be ticked on the
-machine that ran these: UIKit terminates a freshly generated 0.86.3 app at
-launch on the iOS 27 simulator runtime for not adopting the scene lifecycle,
-before any JavaScript runs, and the crash names UIKit's scene check with no
-library frames in it. The same launch failure was measured earlier with this
-library absent. The row needs a run on an older iOS runtime.
+RN 0.88 and Expo SDK 58 are the supported floor (DECISIONS D39): the floor
+moves up with the next minor once the gates pass on a newer release, and no
+older consumer row is kept. Both cells above predate the Compose 1.12 /
+Material 3 1.5 bump, which needs the consumer to compile with SDK 37 and AGP
+9.1+ - what both templates already ship - so the next consumer run is the
+first to cover it.
 
 ### Keeping `scripts/smoke/App.tsx` current
 
