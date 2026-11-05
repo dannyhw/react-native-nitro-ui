@@ -40,11 +40,28 @@ enum ButtonScale: String {
   }
 }
 
+/// The `shape` prop: the button's corner.
+///
+/// The mapping is deliberately not "the same corner on both platforms", because
+/// iOS cannot have one: a Material `squareShape` button has no corner at all,
+/// and every iOS button style draws a rounded one. So `square` is the *nearest*
+/// border shape iOS offers, and `round` is left exactly as it was before the
+/// prop existed - `docs/components/button.md` carries the table.
+enum ButtonShape: String {
+  case round
+  case square
+
+  /// iOS's own default corner for `.roundedRectangle`, in points.
+  static let squareCornerRadius: CGFloat = 8
+}
+
 /// State of one Button. See ``NitroUiModel`` for why this is not `@Published`.
 final class ButtonModel: NitroUiModel {
   var title: String = ""
   var variant: ButtonVariant = .filled
   var scale: ButtonScale = .medium
+  /// The corner the caller asked for; `.round` is what the platform draws by default.
+  var shape: ButtonShape = .round
   var disabled = false
   var tint: UIColor?
   /// A symbol name that resolved to an actual SF Symbol. `nuiSystemImage` may
@@ -89,29 +106,55 @@ struct ButtonContent: NitroUIContent {
   @ViewBuilder private var styledControl: some View {
     switch model.variant {
     case .filled:
-      control.buttonStyle(.borderedProminent)
+      control.buttonStyle(.borderedProminent).buttonBorderShape(borderShape)
     case .tonal:
-      control.buttonStyle(.bordered)
+      control.buttonStyle(.bordered).buttonBorderShape(borderShape)
     case .outlined:
       // iOS has no outlined button style. `.bordered` plus a hairline stroke is
-      // the idiomatic shape (a 1 pt stroke around a capsule); the stroke uses the
-      // system separator colour so it reads as an outline in both appearances,
-      // and `.tint()` still colours the label - documented, not faked in.
+      // the idiomatic shape (a 1 pt stroke around the button's own corner); the
+      // stroke uses the system separator colour so it reads as an outline in both
+      // appearances, and `.tint()` still colours the label - documented, not
+      // faked in. The overlay follows `shape` rather than being a fixed `Capsule`,
+      // because a capsule stroke around a square-cornered button shows two corners.
       control
         .buttonStyle(.bordered)
-        .buttonBorderShape(.capsule)
-        .overlay(
-          Capsule()
-            .strokeBorder(Color(UIColor.separator), lineWidth: 1)
-        )
+        .buttonBorderShape(borderShape)
+        .overlay(outline)
     case .text:
+      // `.borderless` draws no border, so there is no corner for `shape` to act
+      // on and the prop is ignored here - the same reading as Android, where a
+      // `text` button has no container to morph either.
       control.buttonStyle(.borderless)
     case .elevated:
       // iOS has no elevated button style either. `.borderedProminent` is what the
       // brief maps it to and what an iOS user reads as "the primary action",
       // which is what `elevated` means in Material. Same control as `filled`
       // here; the platforms differ, and that is the documented mapping.
-      control.buttonStyle(.borderedProminent)
+      control.buttonStyle(.borderedProminent).buttonBorderShape(borderShape)
+    }
+  }
+
+  /// The border shape for the current ``NitroUiButton/ButtonModel/shape``.
+  ///
+  /// `.round` keeps each variant's own corner: `.automatic` for the bordered
+  /// styles and the capsule the outline has always used, so a Button that does
+  /// not pass `shape` draws the pixels it drew before the prop existed.
+  private var borderShape: ButtonBorderShape {
+    switch (model.shape, model.variant) {
+    case (.round, .outlined): return .capsule
+    case (.round, _): return .automatic
+    case (.square, _): return .roundedRectangle(radius: ButtonShape.squareCornerRadius)
+    }
+  }
+
+  /// The hairline the `outlined` variant strokes, on the corner it is drawn with.
+  @ViewBuilder private var outline: some View {
+    let stroke = AnyShapeStyle(Color(UIColor.separator))
+    if model.shape == .square {
+      RoundedRectangle(cornerRadius: ButtonShape.squareCornerRadius)
+        .strokeBorder(stroke, lineWidth: 1)
+    } else {
+      Capsule().strokeBorder(stroke, lineWidth: 1)
     }
   }
 
@@ -282,6 +325,19 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     }
   }
 
+  var shape: String {
+    get { model.shape.rawValue }
+    set {
+      let next = ButtonShape(rawValue: newValue) ?? .round
+      guard next != model.shape else { return }
+      model.shape = next
+      // Repaints only. A border shape is not a layout input on either platform,
+      // which is also why it is not in `nuiSizingKey` - asking for a re-measure
+      // per corner change would cost a measure pass for no new number.
+      host.markDirty()
+    }
+  }
+
   var disabled: Bool {
     get { model.disabled }
     set {
@@ -389,6 +445,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     model.title = ""
     model.variant = .filled
     model.scale = .medium
+    model.shape = .round
     model.disabled = false
     model.tint = nil
     model.systemImage = nil

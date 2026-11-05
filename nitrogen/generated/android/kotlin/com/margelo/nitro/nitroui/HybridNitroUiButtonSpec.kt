@@ -50,6 +50,12 @@ abstract class HybridNitroUiButtonSpec: HybridView() {
   @get:Keep
   @set:DoNotStrip
   @set:Keep
+  abstract var shape: String
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
   abstract var disabled: Boolean
   
   @get:DoNotStrip

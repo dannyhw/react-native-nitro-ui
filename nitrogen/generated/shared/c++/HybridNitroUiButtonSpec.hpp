@@ -56,6 +56,8 @@ namespace margelo::nitro::nitroui {
       virtual void setVariant(const std::string& variant) = 0;
       virtual std::string getSize() = 0;
       virtual void setSize(const std::string& size) = 0;
+      virtual std::string getShape() = 0;
+      virtual void setShape(const std::string& shape) = 0;
       virtual bool getDisabled() = 0;
       virtual void setDisabled(bool disabled) = 0;
       virtual std::variant<nitro::NullType, double> getTintColor() = 0;

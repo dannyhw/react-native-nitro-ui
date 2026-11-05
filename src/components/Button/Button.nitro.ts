@@ -39,6 +39,18 @@ export interface NitroUiButtonProps
    * `.controlSize` / Android content padding + label typography.
    */
   size: string;
+  /**
+   * The button's corner: `'round'` (the platform default) or `'square'`.
+   *
+   * Android passes Material 3's own shapes - `round` is the height's shape,
+   * which morphs to the square one while pressed, `square` starts square and
+   * morphs to the rounded one. iOS has no cornerless button, so `square` is
+   * `.buttonBorderShape(.roundedRectangle(radius: 8))`, the nearest border
+   * shape it has (`docs/components/button.md` has the mapping).
+   *
+   * It is not in `nuiSizingKey`: a corner repaints, it does not resize.
+   */
+  shape: string;
   /** Disable interaction (and show the disabled style). No `onPress` fires. */
   disabled: boolean;
   /**

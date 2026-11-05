@@ -154,6 +154,17 @@ open class HybridNitroUiButtonSpec_cxx {
     }
   }
   
+  public final var shape: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.shape)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.shape = String(newValue)
+    }
+  }
+  
   public final var disabled: Bool {
     @inline(__always)
     get {

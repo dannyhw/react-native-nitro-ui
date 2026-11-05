@@ -69,6 +69,11 @@ void JHybridNitroUiButtonStateUpdater::updateViewProps(jni::alias_ref<jni::JClas
     hybridView->setSize(newProps->size.get());
   }
   if (oldProps == nullptr
+        ? newProps->shape.isProvided()
+        : !newProps->shape.hasSameValue(oldProps->shape)) {
+    hybridView->setShape(newProps->shape.get());
+  }
+  if (oldProps == nullptr
         ? newProps->disabled.isProvided()
         : !newProps->disabled.hasSameValue(oldProps->disabled)) {
     hybridView->setDisabled(newProps->disabled.get());

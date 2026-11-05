@@ -3,14 +3,16 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,8 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -73,6 +74,50 @@ internal enum class ButtonScale(val wireName: String) {
     /** The scale for a wire string; anything unrecognised is `medium`. */
     fun from(value: String): ButtonScale = entries.firstOrNull { it.wireName == value } ?: Medium
   }
+
+  /**
+   * The control's height: Material 3's own XS / S / M container-height tokens.
+   *
+   * The three public names stay `small` / `medium` / `large` and now *mean* M3's
+   * three smallest button heights (32 / 40 / 56 dp) rather than three sets of
+   * hand-rolled padding. Every other number in this file hangs off this one -
+   * `ButtonDefaults.contentPaddingFor`, `textStyleFor`, `shapesFor` and the
+   * connected button group all take a height, which is why the ladder is
+   * expressible at all (Q8 Appendix A row 2).
+   *
+   * The measured box is not necessarily this tall: Material 3 still pads a button
+   * to its 48 dp minimum interactive height, so `small` measures 48 dp tall while
+   * its container is 32 (`docs/components/button.md`, "Sizing").
+   */
+  val height: Dp
+    get() =
+      when (this) {
+        Small -> ButtonDefaults.ExtraSmallContainerHeight
+        Medium -> ButtonDefaults.MinHeight
+        Large -> ButtonDefaults.MediumContainerHeight
+      }
+}
+
+/**
+ * The `shape` prop: which pair of corners the button draws, and which pair it
+ * morphs *from* while pressed.
+ *
+ * Material 3 Expressive morphs a button's shape as it is pressed, so the prop
+ * picks the resting shape and Material supplies the other end of the morph:
+ * `round` rests on the height's own shape and presses toward
+ * [ButtonDefaults.squareShape], `square` rests square and presses toward the
+ * rounded one. iOS has no cornerless button, so there the same value maps to
+ * `.roundedRectangle(radius: 8)` and does not morph
+ * (`docs/components/button.md`).
+ */
+internal enum class ButtonShape(val wireName: String) {
+  Round("round"),
+  Square("square");
+
+  companion object {
+    /** The shape for a wire string; anything unrecognised is `round`. */
+    fun from(value: String): ButtonShape = entries.firstOrNull { it.wireName == value } ?: Round
+  }
 }
 
 /** Which colour `tintColor` recolors for a variant, and why (`docs/components/button.md`). */
@@ -104,6 +149,9 @@ internal class ButtonModel : NitroUiModel() {
 
   /** Padding / typography scale. */
   var scale by mutableStateOf(ButtonScale.Medium)
+
+  /** The resting corner, and therefore the direction of the press morph. */
+  var shape by mutableStateOf(ButtonShape.Round)
 
   /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
@@ -143,6 +191,7 @@ internal class ButtonModel : NitroUiModel() {
     title = ""
     variant = ButtonVariant.Filled
     scale = ButtonScale.Medium
+    shape = ButtonShape.Round
     enabled = true
     tintColor = null
     accessibilityLabel = null
@@ -299,51 +348,158 @@ internal fun buttonColors(
  * as [ButtonColorsCache]: an object derived from the theme is shared, not built
  * inline in the composable.
  */
+/**
+ * The label style of one scale, served per `Typography` identity.
+ *
+ * The style is Material 3's own for the scale's height - `textStyleFor` is a
+ * composable read of the theme, so the *miss* has to be computed in the
+ * composable and stored here, exactly as [ButtonColorsCache] does for colours.
+ * Building it inline instead would be one `TextStyle` per recomposition per
+ * mounted Button, on the path the `update` bench scenario exercises.
+ */
 internal object ButtonLabelStyles {
   private var typography: Typography? = null
-  private var small: TextStyle? = null
-  private var medium: TextStyle? = null
-  private var large: TextStyle? = null
+  private val styles = arrayOfNulls<TextStyle>(ButtonScale.entries.size)
 
   @Synchronized
   fun get(
     typography: Typography,
     scale: ButtonScale,
-  ): TextStyle {
-    adopt(typography)
-    return when (scale) {
-      ButtonScale.Small -> small!!
-      ButtonScale.Medium -> medium!!
-      ButtonScale.Large -> large!!
-    }
-  }
-
-  private fun adopt(typography: Typography) {
+  ): TextStyle? =
     if (this.typography === typography) {
-      return
+      styles[scale.ordinal]
+    } else {
+      null
     }
-    this.typography = typography
-    small = typography.labelMedium
-    medium = typography.labelLarge
-    large = typography.labelLarge.copy(fontSize = 18.sp, lineHeight = 22.sp)
+
+  @Synchronized
+  fun put(
+    typography: Typography,
+    scale: ButtonScale,
+    style: TextStyle,
+  ) {
+    if (this.typography !== typography) {
+      this.typography = typography
+      styles.fill(null)
+    }
+    styles[scale.ordinal] = style
   }
 }
 
-/** The label's own padding. `medium` is `null`, which means "keep the M3 default". */
+/**
+ * The label style for [scale]: Material's `textStyleFor` for that height,
+ * cached per [Typography] by [ButtonLabelStyles].
+ *
+ * `internal` for the same reason as the three other shared helpers: a Menu's
+ * trigger is this Button's box.
+ */
+@Composable
+internal fun buttonLabelStyle(scale: ButtonScale): TextStyle {
+  val typography = MaterialTheme.typography
+  ButtonLabelStyles.get(typography, scale)?.let { cached -> return cached }
+  val built = ButtonDefaults.textStyleFor(scale.height)
+  ButtonLabelStyles.put(typography, scale, built)
+  return built
+}
+
+/**
+ * The label's own padding for a variant at [scale].
+ *
+ * The four contained variants take Material's padding for the scale's height, so
+ * padding follows the box instead of being a second, hand-rolled table of the
+ * same numbers. `text` does not: material3 1.5.0-beta02 has no height ladder for
+ * text buttons (there is no `TextButtonDefaults` in it), and its
+ * `TextButtonContentPadding` is 12 dp against the ladder's 24, which is the
+ * difference between a text button and a filled one. So `text` keeps Material's
+ * own padding at every scale, and its measured width keeps its own shape.
+ */
 internal fun contentPaddingFor(
   variant: ButtonVariant,
   scale: ButtonScale,
-): PaddingValues? =
-  when (scale) {
-    ButtonScale.Medium -> null
-    ButtonScale.Small -> PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-    ButtonScale.Large ->
-      if (variant == ButtonVariant.Text) {
-        PaddingValues(horizontal = 24.dp, vertical = 14.dp)
-      } else {
-        PaddingValues(horizontal = 32.dp, vertical = 14.dp)
-      }
+): PaddingValues =
+  if (variant == ButtonVariant.Text) {
+    ButtonDefaults.TextButtonContentPadding
+  } else {
+    ButtonDefaults.contentPaddingFor(scale.height)
   }
+
+/**
+ * The resting + pressed shapes for a corner at [scale].
+ *
+ * [ButtonShape.Round] is Material's own answer for the height - which is already
+ * a pair: Expressive morphs it toward [ButtonDefaults.squareShape] while the
+ * button is held. [ButtonShape.Square] rests on `squareShape` and morphs the
+ * other way, onto the rounded shape, because a press that does not change
+ * anything is not the morph the design language asks for.
+ *
+ * The result is cached per (motion scheme, height, corner): `shapesFor` is a
+ * composable read of the theme, and a hosted control is its own composition, so
+ * without a cache every recomposition of every Button builds two `Shape` objects
+ * to draw the same corner ([ButtonColorsCache] is the same rule for colours).
+ */
+@Composable
+internal fun buttonShapes(
+  shape: ButtonShape,
+  scale: ButtonScale,
+): ButtonShapes {
+  val motion = MaterialTheme.motionScheme
+  val height = scale.height
+  ButtonShapesCache.get(motion, shape, height)?.let { cached -> return cached }
+  val rounded = ButtonDefaults.shapesFor(height)
+  val built =
+    if (shape == ButtonShape.Round) {
+      rounded
+    } else {
+      ButtonShapes(shape = ButtonDefaults.squareShape, pressedShape = rounded.shape)
+    }
+  ButtonShapesCache.put(motion, shape, height, built)
+  return built
+}
+
+/** The [buttonShapes] store: one motion scheme at a time, [ButtonScale] x [ButtonShape] entries. */
+private object ButtonShapesCache {
+  private var motion: MotionScheme? = null
+  private val entries = arrayOfNulls<ButtonShapes>(ButtonScale.entries.size * ButtonShape.entries.size)
+
+  @Synchronized
+  fun get(
+    motion: MotionScheme,
+    shape: ButtonShape,
+    height: Dp,
+  ): ButtonShapes? {
+    if (this.motion !== motion) {
+      return null
+    }
+    val slot = index(shape, height)
+    return if (slot >= 0) entries[slot] else null
+  }
+
+  @Synchronized
+  fun put(
+    motion: MotionScheme,
+    shape: ButtonShape,
+    height: Dp,
+    shapes: ButtonShapes,
+  ) {
+    if (this.motion !== motion) {
+      this.motion = motion
+      entries.fill(null)
+    }
+    val slot = index(shape, height)
+    if (slot >= 0) {
+      entries[slot] = shapes
+    }
+  }
+
+  /** The slot for a corner at a height; -1 if the height is not one of the ladder's. */
+  private fun index(
+    shape: ButtonShape,
+    height: Dp,
+  ): Int {
+    val scale = ButtonScale.entries.firstOrNull { it.height == height } ?: return -1
+    return scale.ordinal * ButtonShape.entries.size + shape.ordinal
+  }
+}
 
 /**
  * The Button's host: [NitroComposeHost] plus this component's composable.
@@ -384,6 +540,7 @@ private class ButtonHost(
       title = model.title,
       variant = model.variant,
       scale = model.scale,
+      shape = model.shape,
       enabled = model.enabled,
       tint = model.tintColor,
       modifier = labelModifier,
@@ -397,28 +554,34 @@ private class ButtonHost(
  *
  * `internal`, not `private`, because `HybridNitroUiMenu.kt` draws its trigger with
  * this: `docs/components/menu.md` says a Menu's box *is* a Button's box, and one
- * composition is what keeps that sentence true as the numbers move. The three
- * helpers it is built from ([buttonColors], [ButtonLabelStyles],
- * [contentPaddingFor]) are `internal` for the same reason.
+ * composition is what keeps that sentence true as the numbers move. The helpers it
+ * is built from ([buttonColors], [buttonLabelStyle], [contentPaddingFor],
+ * [buttonShapes]) are `internal` for the same reason.
+ *
+ * `shape` defaults to [ButtonShape.Round] because a Menu's trigger has no corner of
+ * its own to ask for in this pass: it inherits the button's resting shape, and gets
+ * the same press morph for free.
  */
 @Composable
 internal fun NitroUiM3Button(
   title: String,
   variant: ButtonVariant,
   scale: ButtonScale,
+  shape: ButtonShape = ButtonShape.Round,
   enabled: Boolean,
   tint: Int?,
   modifier: Modifier,
   onClick: () -> Unit,
 ) {
-  // `medium` keeps Material's own minimum, which for a Button is 40 dp and is
-  // applied inside the control where a caller's modifier cannot shrink it -
-  // documented rather than fought. `large` raises the floor.
-  val scaleModifier =
-    if (scale == ButtonScale.Large) Modifier.heightIn(min = 48.dp) else Modifier
+  // The box is the scale's height token. Material 3 still pads a button to its
+  // 48 dp minimum interactive height, so this is the container height and the
+  // touch target stays at least 48 dp at every size - which is what lets the
+  // ladder reach down to XS (32 dp) without shipping a control a thumb cannot hit,
+  // and why `small` still measures 48 dp tall (`docs/components/button.md`).
   val colors = buttonColors(variant, tint)
   val padding = contentPaddingFor(variant, scale)
-  val labelStyle = ButtonLabelStyles.get(MaterialTheme.typography, scale)
+  val labelStyle = buttonLabelStyle(scale)
+  val shapes = buttonShapes(shape, scale)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
@@ -431,51 +594,56 @@ internal fun NitroUiM3Button(
       overflow = TextOverflow.Ellipsis,
     )
   }
-  val target: Modifier = modifier.then(scaleModifier)
+  val target: Modifier = modifier.height(scale.height)
   when (variant) {
       ButtonVariant.Filled ->
         Button(
           onClick = onClick,
+          shapes = shapes,
           modifier = target,
           enabled = enabled,
           colors = colors,
-          contentPadding = padding ?: ButtonDefaults.ContentPadding,
+          contentPadding = padding,
           content = content,
         )
       ButtonVariant.Tonal ->
         FilledTonalButton(
           onClick = onClick,
+          shapes = shapes,
           modifier = target,
           enabled = enabled,
           colors = colors,
-          contentPadding = padding ?: ButtonDefaults.ContentPadding,
+          contentPadding = padding,
           content = content,
         )
       ButtonVariant.Outlined ->
         OutlinedButton(
           onClick = onClick,
+          shapes = shapes,
           modifier = target,
           enabled = enabled,
           colors = colors,
-          contentPadding = padding ?: ButtonDefaults.ContentPadding,
+          contentPadding = padding,
           content = content,
         )
       ButtonVariant.Text ->
         TextButton(
           onClick = onClick,
+          shapes = shapes,
           modifier = target,
           enabled = enabled,
           colors = colors,
-          contentPadding = padding ?: ButtonDefaults.TextButtonContentPadding,
+          contentPadding = padding,
           content = content,
         )
       ButtonVariant.Elevated ->
         ElevatedButton(
           onClick = onClick,
+          shapes = shapes,
           modifier = target,
           enabled = enabled,
           colors = colors,
-          contentPadding = padding ?: ButtonDefaults.ContentPadding,
+          contentPadding = padding,
           content = content,
         )
     }
@@ -586,6 +754,20 @@ class HybridNitroUiButton(
         return
       }
       model.scale = resolved
+      host.markDirty()
+    }
+
+  override var shape: String
+    get() = model.shape.wireName
+    set(next) {
+      val resolved = ButtonShape.from(next)
+      if (resolved == model.shape) {
+        return
+      }
+      model.shape = resolved
+      // A corner is not a layout input, so this repaints without asking for a new
+      // measure - the same call `disabled` makes, and the reason `shape` is not in
+      // `nuiSizingKey`.
       host.markDirty()
     }
 

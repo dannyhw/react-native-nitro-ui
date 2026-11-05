@@ -22,6 +22,7 @@ export const NitroUiButtonConfig: ViewConfig<NativeNitroUiButtonProps> = {
     title: true,
     variant: true,
     size: true,
+    shape: true,
     disabled: true,
     tintColor: true,
     systemImage: true,
