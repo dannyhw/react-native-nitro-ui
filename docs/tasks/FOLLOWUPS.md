@@ -134,3 +134,10 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G14 (merge re-review): `BottomSheet.harness.tsx`'s comment at the 50-cycle block (~881-883) says the probe is never the cycling view handed back by the recycle pool; a probe mounted at the start of a round can still be a pooled view from an earlier round - say "never the view dropped in this round".
 - G14 (merge re-review): the Android root's `onInterceptHoverEvent` super fix (`super.onInterceptHoverEvent`) has no test; `adb shell input` sends no hover events and the JVM unit tests have no Android context.
 - G14 (merge re-review): `waitForFreshReport` (the `seq`-gated read) was never shown red on its own; break the `seq` gate (accept any read) with the iOS drop teardown removed and see the drop test go green.
+- G18: Tooltip has no bench arm (Q7 C8): a `present.tooltip` scenario needs the exclusive bench lease and a present/dismiss timing helper the bench does not have; `component.json` says `bench: false` until then.
+- G18: a popover in the app's chain made UIKit refuse the next RN `Modal` (Tooltip, measured); BottomSheet presents in the chain by D35 and was not measured for the same refusal.
+- G18: `scripts/__tests__/device-ops.test.js` "leaves the server alone when the pair names none" reads `ANDROID_ADB_SERVER_PORT` from the environment, so `check` run from a shell with the lease env sourced goes red.
+- G18: harness `console.log` output reaches no gate log, so numbers tests print (tooltip heights, recycle counts) are lost unless the test fails.
+- G18: Tooltip's Android real-input Back step was not shown red on its own: it shares `onDismissRequest` with the outside tap, whose mutation aborts the check first.
+- G18: a page-sheet `Modal` opened over an open iOS tooltip is unmeasured (expected: the tooltip stays above the sheet).
+- G18: `scripts/__tests__/conformance.test.js` "is complete for the ten controls today" now lists thirteen.
