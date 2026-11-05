@@ -2,7 +2,7 @@
 
 **Branch:** `task/G18-tooltip` (from `main` at `6f84bebf`) · **Round:** 1 of up to 3 (D19) ·
 **Lease:** `G18-rcjjt` (build, red proofs, `harness:ios`), then `G18-rmhr8` (`iPhone Air` /
-`emulator-5570` / Metro `8293`) for the remaining gates
+`emulator-5570` / Metro `8293`) and `G18-uswhw` (same pair) for the remaining gates
 
 ## Summary
 
@@ -45,21 +45,20 @@ its anchor when a layout move carries it away" and "… a scroll carries it away
 the popup moved, still points at the anchor, no event).
 
 **Gates.** `real-input:ios` first went red on Picker (untouched here); the re-run passed.
-`harness:android` is red on one isolated BottomSheet test (`BottomSheetModalHazard`,
-`expected [] to deeply equal ['dismiss']`): 4 of 4 runs here. The branch changes no BottomSheet
-Android or JS code, and the base `6f84bebf` failed it 2 of 3 runs: a race in G14's test. See
-Questions.
+`BottomSheetModalHazard` (Android) read `onDismiss` straight after `live=0`: red 4 of 4 here and
+2 of 3 on the base `6f84bebf`. Approved: it now waits for the event (3 s cap).
+Real input passed on `0b4960556a26`, which differs from HEAD only by that harness file.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1713 tests / 67 suites | `0b4960556a26` | 2 m 05 s | start 11.9 / med 14.6 / max 19.4 |
-| `harness:ios` | **PASS** | 367 tests / 21 suites + isolated 4 tests / 2 suites | `0b4960556a26` (ios tree) | 11 m 10 s | start 17.0 / med 7.3 / max 19.7 |
-| `harness:android` | **FAIL** | 416 tests / 21 suites + isolated 1 failed of 4 tests / 2 suites | `0b4960556a26` (android tree) | 11 m 23 s | start 4.3 / med 5.8 / max 9.0 |
-| `real-input:ios` | **PASS** | — | `0b4960556a26` (ios tree) | 16 m 28 s | start 5.2 / med 5.2 / max 10.0 |
-| `real-input:android` | **PASS** | — | `0b4960556a26` (android tree) | 30 m 03 s | start 5.9 / med 3.4 / max 5.9 |
-| `harness:android:BottomSheetModalHazard` | **FAIL** | 1 failed of 2 tests / 1 suites | `0b4960556a26` (android tree) | 13.9 s | start 3.3 / med 4.1 / max 4.8 |
+| `check` | **PASS** | 1713 tests / 67 suites | `5456b4919ea7` | 1 m 59 s | start 5.8 / med 7.1 / max 10.0 |
+| `harness:ios` | **PASS** | 367 tests / 21 suites + isolated 4 tests / 2 suites | `5456b4919ea7` (ios tree) | 9 m 26 s | start 16.1 / med 7.5 / max 26.0 |
+| `harness:android` | **PASS** | 416 tests / 21 suites + isolated 4 tests / 2 suites | `5456b4919ea7` (android tree) | 11 m 33 s | start 7.6 / med 9.7 / max 52.9 |
+| `real-input:ios` | stale | — | 0b4960556a26 (not this tree) | 16 m 28 s | start 5.2 / med 5.2 / max 10.0 |
+| `real-input:android` | stale | — | 0b4960556a26 (not this tree) | 30 m 03 s | start 5.9 / med 3.4 / max 5.9 |
+| `harness:android:BottomSheetModalHazard` | stale | 2 tests / 1 suites | 0de90f7e9371 (not this tree) | 12.8 s | start 3.1 / med 3.1 / max 3.1 |
 | `harness:android:Tooltip` | stale | 6 failed of 22 tests / 1 suites | 9cd2af8d319b (not this tree) | 40.8 s | start 9.8 / med 7.7 / max 9.8 |
 | `harness:android:Tooltip:-t:dropped` | stale | 22 tests / 1 suites | 768538d47e5b (not this tree) | 10.9 s | start 4.4 / med 5.5 / max 6.5 |
 | `harness:android:Tooltip:-t:dropped%20while%20open` | stale | 0 tests / 1 suites | ef4da26ba078 (not this tree) | 7.2 s | start 6.2 / med 6.4 / max 6.6 |
@@ -78,7 +77,7 @@ Questions.
 | `real-input:android:--control:tooltip` | stale | — | 9cd2af8d319b (not this tree) | 1 m 10 s | start 6.5 / med 4.6 / max 6.5 |
 | `real-input:ios:--control:tooltip` | stale | — | 18f1afff6126 (not this tree) | 8 m 13 s | start 4.7 / med 27.4 / max 108.3 |
 
-`need --for review`: `need: 1 gate(s) missing for review: harness:android` — red only on the existing `BottomSheetModalHazard` race (Summary, Questions)
+`need --for review`: `need: review is satisfied on this code tree.`
 
 ## Red proofs
 
@@ -102,6 +101,7 @@ Rounds J, N, D, C, S; the lines are from the gate log store.
 - full-screen Modal (Android) -> C6: close on window-focus loss -> `expected '0' to be '1'`
 - never closes (both) -> S1 (iOS, hide after 2 s) / S2 (Material's timeout on) -> `expected 'presented=1;js=1;live=0;…' to be 'up'` (Android); iOS `never closes itself (plain)` red
 - hazard event log (Android) -> S3: a dropped mount reports its window-loss close -> `TooltipModalHazard` both cases red
+- `BottomSheetModalHazard` wait (Android) -> `onDismiss` never called (`BottomSheet.tsx`) -> `expected [] to deeply equal [ 'dismiss' ]` after the wait; reverted, 3 of 3 green
 - Android Back -> not shown red on its own (shares `onDismissRequest` with the outside tap, whose mutation aborts first; FOLLOWUPS)
 
 ## Files changed
@@ -112,7 +112,8 @@ Rounds J, N, D, C, S; the lines are from the gate log store.
   `HybridNitroUiBottomSheet.swift` uses it), `src/components/Host/HostChildren.ts` (refused)
 - Tests: `example/__tests__/Tooltip.harness.tsx`, `example/__tests__/isolated/TooltipModalHazard.harness.tsx`,
   `example/__tests__/Conformance.harness.tsx`, `example/ios/NitroUiExampleUITests/RealInputTests.swift`, `scripts/real-input/{android,a11y,controls}.mjs`,
-  `scripts/__tests__/conformance.test.js`, `src/__tests__/viewConfigs.test.ts`
+  `scripts/__tests__/conformance.test.js`, `src/__tests__/viewConfigs.test.ts`,
+  `example/__tests__/isolated/BottomSheetModalHazard.harness.tsx` (waits for `onDismiss`)
 - Example and docs: `TooltipScreen.tsx`, `Tooltip.stories.tsx`, `App.tsx`, `readme-examples.tsx`,
   `docs/components/tooltip.md`, `README.md`, `docs/images/components/tooltip-{ios,android}.png`,
   `.changeset/tooltip.md`, `etc/*`
@@ -124,18 +125,5 @@ Rounds J, N, D, C, S; the lines are from the gate log store.
 - Android: Tooltip drop/recycle teardown not shown red by an assertion (the mutation crashed the app).
 - Android: the Back step of real input not shown red on its own.
 - iOS: a page-sheet `Modal` over an open tooltip is unmeasured.
-- `BottomSheetModalHazard` (Android) reads `onDismiss` straight after `live=0`: 4 of 4 red on this branch, 2 of 3 red on the base `6f84bebf`.
 - `real-input:ios` Picker cycle 2 ("drop button raised no echo") failed once here, passed on re-run.
 - Remaining lines are in `docs/tasks/FOLLOWUPS.md` under G18.
-
-## Questions for orchestrator
-
-1. **`harness:android` is red on an existing BottomSheet test race, so `need --for review` fails.**
-   `example/__tests__/isolated/BottomSheetModalHazard.harness.tsx:162-163` waits for `live === '0'`
-   and then reads `eventLog` at once, but `onDismiss` can arrive after that report. Options:
-   (a) a G14 follow-up task fixes the test, and G18 is reviewed with this one red row;
-   (b) G18 changes the test to wait for the `dismiss` event, with a timeout, then re-runs both
-   harness platforms (a harness file change, AGENTS.md);
-   (c) keep re-running until it passes by chance (base: 1 pass in 3).
-   **Recommendation: (b)**. It is a two-line test-only change, and it unblocks this branch.
-   (a) is the cleaner split if the D19 scope matters more.
