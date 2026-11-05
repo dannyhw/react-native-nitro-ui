@@ -1,0 +1,198 @@
+# Failure excerpt — harness:ios:Menu%7CContextMenu
+
+- Ran: 2026-11-05T18:30:24.208Z on code tree `d59a02449626` at HEAD `ee3197e` (branch `task/E2-expressive-menus`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Menu|ContextMenu`
+- Result: fail, exit 1, 61847 ms
+- Load: start 16.07, end 7.38, median 9.90, max 16.07
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `E2-urxpj`
+- Full log: `task/E2-expressive-menus/harness+ios+Menu+7CContextMenu-2026-11-05T18-30-23.654Z.log` (<store>/task/E2-expressive-menus/harness+ios+Menu+7CContextMenu-2026-11-05T18-30-23.654Z.log)
+- Scrubbed: 3 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● Console`
+- `● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)`
+- `expected 'Pin,Mute,(Tools:Flag)' to be 'Pin@Keep on top+,Mute,(Tools:[scrubbed]@For…' // Object.is equality`
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · Expressive rows (E2) › draws groups, subtitles and checks in the platform’s own menu`
+- `expected 'Grid,List,Rename,(Sort:Name,Date~),(:…' to be 'Grid@Tiles+,List,Rename@Edit the name…' // Object.is equality`
+- `● Menu · Expressive rows (E2) › takes subtitle and checked away in place, and a remount starts with neither`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-expressive-menus/harness+ios+Menu+7CContextMenu-2026-11-05T18-30-23.654Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2-urxpj (still live)
+  |   E2-urxpj                 E2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.38 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 335 — the rest is in the full log above)
+
+```
+
+
+    console.log
+          · iOS: the menu is UIKit’s, not a window of ours, so there is no count
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.log
+          · second owner: open=0;opens=0;closes=0;selects=0;configs=0;cancels=0;rows=1;drawn=-1;title=-;box=370.0x120.0;contentIndex=1/2;interaction=1;ax=0;a11yAction=-1;radius=-1;press=-1;menu=-1;live=-1;arms=-1;armed=-1;copies=-1;watchStray=-1;seq=2;kids=second-target@12.0,12.0,346.0,96.0
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.warn
+      Inconsistency between local and UIKit touch registries
+
+
+    console.log
+          · second owner ax=0 stale label box=none
+
+  ● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)
+
+    expected 'Pin,Mute,(Tools:Flag)' to be 'Pin@Keep on top+,Mute,(Tools:[scrubbed]@For…' // Object.is equality
+
+      [0m [90m 670 |[39m       console[33m.[39mlog([32m`    · drawn=${report.drawn}`[39m)[33m;[39m
+       [90m 671 |[39m       [90m// `UIAction.subtitle` and `.on`; an unchecked toggle is `.off`, like a plain row.[39m
+      [31m[1m>[22m[39m[90m 672 |[39m       expect(report[33m.[39mdrawn)[33m.[39mtoBe([32m'Pin@Keep on top+,Mute,(Tools:[scrubbed]@For later)'[39m)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 673 |[39m     } [36melse[39m {
+       [90m 674 |[39m       handle[33m.[39mnuiTestA11yLongClick()[33m;[39m
+       [90m 675 |[39m       [36mconst[39m report [33m=[39m [36mawait[39m reportWhen([0m
+
+FAIL __tests__/Menu.harness.tsx
+  ● Console
+
+    console.log
+      menu sizes (declared fallback 74.00x38.00): cfg-filled=77.33x34.33 cfg-tonal=77.33x34.33 cfg-outlined=77.33x34.33 cfg-text=53.33x20.33 cfg-elevated=77.33x34.33 cfg-size-small=58.00x28.00 cfg-size-large=82.00x50.33 corrections=7 measurements=14
+
+
+    console.log
+      trigger parity: menu=59.33x34.33 button=59.33x34.33 corrections=2
+
+
+    console.log
+      group is not in the key: 51.33x34.33 -> 51.33x34.33 rows=11 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=65.67x34.33 long=144.33x34.33
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      iOS: onOpen/onClose unobservable (system presentation) - asserted as unanswerable, not as zero
+
+
+    console.log
+      iOS: disabled-while-open is unobservable; the flag round-trips
+
+
+    console.log
+      submenu: android=composed rows (inline), ios=model rows (nested); rows=6
+
+
+    console.log
+      wide/floor lists on iOS: no popup window to measure (D23); rows 2/2
+
+
+    console.log
+      untitled group: ios drawn=Open,(Share:AirDrop,Mail),(:Delete!,Archive~),(More:Get Info)
+
+
+    console.log
+      iOS: no live-menu count exists to drop back to zero
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: ios drawn=Grid,List,Rename,(Sort:Name,Date~),(:Delete!)
+
+
+    console.log
+      iOS hosted box: 79.33x34.33 measured 79.33x34.33
+
+
+    console.log
+      read back: variant=outlined size=large tint=4291311531 label=Open the actions
+
+
+    console.log
+      a11y tree: named=127.00x50.33 fallback=null plain=null
+
+  ● Menu · Expressive rows (E2) › draws groups, subtitles and checks in the platform’s own menu
+
+    expected 'Grid,List,Rename,(Sort:Name,Date~),(:…' to be 'Grid@Tiles+,List,Rename@Edit the name…' // Object.is equality
+
+      [0m [90m 2078 |[39m     [90m// and on Android three Material groups - each section a surface of its own, where[39m
+       [90m 2079 |[39m     [90m// before E2 a bare divider split one surface and the tree held no group at all.[39m
+      [31m[1m>[22m[39m[90m 2080 |[39m     expect(drawn)[33m.[39mtoBe([33mE2_DRAWN[39m)[33m;[39m
+       [90m      |[39m                       [31m[1m^[22m[39m
+       [90m 2081 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+       [90m 2082 |[39m       expect(drawn[33m.[39msplit([32m'),('[39m))[33m.[39mtoHaveLength([35m3[39m)[33m;[39m
+       [90m 2083 |[39m     }[0m
+
+  ● Menu · Expressive rows (E2) › takes subtitle and checked away in place, and a remount starts with neither
+
+    expected 'Grid,List,Rename,(Sort:Name,Date~),(:…' to be 'Grid@Tiles+,List,Rename@Edit the name…' // Object.is equality
+
+      [0m [90m 2107 |[39m     [36mawait[39m waitForHandle([32m'e2-reset'[39m[33m,[39m [32m'the E2 menu'[39m)[33m;[39m
+       [90m 2108 |[39m     [36mconst[39m full [33m=[39m [36mawait[39m readDrawn([32m'e2-reset'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2109 |[39m     expect(full)[33m.[39mtoBe([33mE2_DRAWN[39m)[33m;[39m
+       [90m      |[39m                      [31m[1m^[22m[39m
+       [90m 2110 |[39m     [36mawait[39m closeQuietly([32m'e2-reset'[39m)[33m;[39m
+       [90m 2111 |[39m
+       [90m 2112 |[39m     [90m// In place: the same mount, new props. Both fields are part of what makes one[39m[0m
+
+Test Suites: 2 failed, 2 total
+Tests:       3 failed, 40 passed, 43 total
+Snapshots:   0 total
+Time:        60.326 s, estimated 62 s
+Ran all test suites matching Menu|ContextMenu.
+gate: harness:ios:Menu%7CContextMenu FAIL in 61.8 s
+gate: recorded in .gates/task/E2-expressive-menus.jsonl
+
+
+gate: appended the device context to task/E2-expressive-menus/harness+ios+Menu+7CContextMenu-2026-11-05T18-30-23.654Z.log (4 probe(s))
+
+```
