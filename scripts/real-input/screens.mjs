@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -35,6 +35,8 @@ export const SCREEN_FILE = Object.freeze({
   host: 'example/src/HostScreen.tsx',
   textfield: 'example/src/TextFieldScreen.tsx',
   searchfield: 'example/src/SearchFieldScreen.tsx',
+  checkbox: 'example/src/CheckboxScreen.tsx',
+  contextmenu: 'example/src/ContextMenuScreen.tsx',
 });
 
 /**
@@ -71,6 +73,11 @@ export const ECHO = Object.freeze({
   chipRefusedLast: 'real-input-chip-refused-last',
   chipRefusedEvents: 'real-input-chip-refused-events',
   chipPresses: 'real-input-chip-presses',
+  checkboxValue: 'real-input-checkbox-value',
+  checkboxEvents: 'real-input-checkbox-events',
+  checkboxRefusedLast: 'real-input-checkbox-refused-last',
+  checkboxRefusedEvents: 'real-input-checkbox-refused-events',
+  checkboxDisabledEvents: 'real-input-checkbox-disabled-events',
   dialogLog: 'dialog-log',
   sheetLog: 'sheet-log',
   hostValue: 'host-controlled-value',
@@ -93,6 +100,7 @@ export const ECHO = Object.freeze({
   searchFrozen: 'search-frozen-echo',
   searchCapped: 'search-capped-echo',
   searchFocus: 'search-focus-echo',
+  ctxEcho: 'ctx-echo',
 });
 
 /**
@@ -126,6 +134,8 @@ export const SCREEN_TAB = Object.freeze({
   picker: { label: 'Picker', anchor: ECHO.pickerIndex },
   menu: { label: 'Menu', anchor: ECHO.menuPick },
   chip: { label: 'Chip', anchor: ECHO.chipValue },
+  checkbox: { label: 'Checkbox', anchor: ECHO.checkboxValue },
+  contextmenu: { label: 'Context', anchor: ECHO.ctxEcho },
   dialog: { label: 'Dialogs', anchor: ECHO.dialogLog },
   sheet: { label: 'Sheet', anchor: ECHO.sheetLog },
   textfield: { label: 'Text', anchor: ECHO.textTyping },

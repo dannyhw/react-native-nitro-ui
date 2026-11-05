@@ -660,6 +660,34 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 96, height: 48 },
     ios: { width: 80, height: 28 },
   },
+  // `HybridNitroUiCheckbox.kt` (`FALLBACK_*_DP`) and `HybridNitroUiCheckbox.swift`
+  // (`declaresFallback`), both read off those sources and nowhere else: the Material 3
+  // box's 48 dp touch target, which is also a bare box's measured width, and the `.switch` Toggle's box.
+  //
+  // The iOS row is the Switch's number, and says so: on iOS a Checkbox renders the same
+  // `Toggle(.switch)`, so it declares the same box per OS (the same Swift-version split
+  // as the row above). That is the one pair `SHARED_FALLBACK_ROWS` exists for - an
+  // earlier draft of this row read 56x28, a number no source declares, chosen to sit
+  // beside the Switch without tripping the shared-row rule. It dodged the rule and bought
+  // nothing: the harness never learns the engine's number (see
+  // `DECLARED_FALLBACK_EXCEPTIONS`), so a made-up width is a comment with a number in it,
+  // while the one axis worth comparing was the one being skipped.
+  //
+  // The Android height is 48 because `minimumInteractiveComponentSize` will not publish a
+  // smaller touch target: bare, labelled, checked and indeterminate all measure 48 dp
+  // tall, and the conformance fixture - a bare box, 48.00x48.00 - is compared against
+  // exactly that.
+  //
+  // The width is not compared, because it is the label's: 48 dp is a bare box's width on
+  // Android and 61 pt a bare box's on iOS, while `docs/components/checkbox.md` measures
+  // 131.05 dp / 145 pt with one mounted (`Checkbox.harness.tsx`, which is where a label's
+  // effect on width is pinned). A fixture that is labelled would make the width
+  // assertable too, and the conformance fixture is deliberately bare - the same node the
+  // recycle and naming rules probe - so the axis this table can promise is the height.
+  NitroUiCheckbox: {
+    android: { width: 48, height: 48 },
+    ios: { width: 61, height: 28 },
+  },
 });
 
 /**
@@ -693,6 +721,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
  */
 export function boxRuleFor(hybridView, sizingTable) {
   if (CONTENT_SIZED_BOX.includes(hybridView)) return 'none';
+  if (HEIGHT_ONLY_FALLBACK.includes(hybridView)) return 'height';
   const policy = sizingTable[`Hybrid${hybridView}`];
   return policy === 'fillWidth' ? 'height' : 'both';
 }
@@ -722,6 +751,58 @@ export const CONTENT_SIZED_BOX = Object.freeze([
 ]);
 
 /**
+ * Controls whose declaration describes one axis of their box: their height.
+ *
+ * A Checkbox is a fixed box *plus its label* (`docs/components/checkbox.md` measures
+ * 48.00x48.00 dp bare and 131.05x48.00 dp labelled on Android, 61.00x28.00 and
+ * 145.00x28.00 pt on iOS): its height is its own and its width is its label's. So the
+ * comparison is narrowed to the axis that means something rather than exempted the way
+ * {@link CONTENT_SIZED_BOX} exempts a Button or a Chip - and the difference is the point.
+ * Content-sized membership skips the whole box, which is how a `Checkbox` declaration 8 dp
+ * shorter than every measured configuration of the control survived a green run; `height`
+ * keeps the assertion that can see that and gives up only the width no number describes.
+ *
+ * What this narrowing is *not*: a claim that the control's width never equals its
+ * declared width. The conformance fixture is a bare box, whose width is the bare width the
+ * declaration carries, so on iOS the measured box and the declared one are the same number
+ * on both axes - and an "earned by measuring wider" test would have gone red on the truth.
+ * Where a Checkbox does grow wider is under a label, and `Checkbox.harness.tsx` measures
+ * that pair (48 bare against 131.05 labelled on Android, 61 against 145 on iOS), which is
+ * the assertion the sizing key is written for.
+ */
+export const HEIGHT_ONLY_FALLBACK = Object.freeze(['NitroUiCheckbox']);
+
+/**
+ * Rows two components are allowed to share, because they are the same control.
+ *
+ * `checkFallbackTable` refuses any shared number otherwise, and that refusal is the
+ * rule worth having: one number on two rows is the shape of a paste, and the suite can
+ * no longer say which control a fallback belongs to. This is the one pair where sharing
+ * is the truth rather than a copy — on iOS a Checkbox renders the same
+ * `Toggle(isOn:).toggleStyle(.switch)` as a Switch (`docs/components/checkbox.md`,
+ * Q5 Appendix D), so the two declare the same OS-dependent box and both read 61x28.
+ *
+ * The exception is narrow on purpose, and read by the check rather than only written
+ * down (the difference between this and {@link DECLARED_FALLBACK_EXCEPTIONS}): it names
+ * the platform, the size and exactly this set of owners. A third control arriving with
+ * 61x28, or either of these two moving to another number while a third keeps this pair,
+ * still goes red — `scripts/__tests__/conformance.test.js` holds it to that.
+ *
+ * @type {ReadonlyArray<{ platform: 'ios' | 'android', size: string, owners:
+ *   ReadonlyArray<string>, reason: string }>}
+ */
+export const SHARED_FALLBACK_ROWS = Object.freeze([
+  {
+    platform: 'ios',
+    size: '61x28',
+    owners: ['NitroUiCheckbox', 'NitroUiSwitch'],
+    reason:
+      'the same SwiftUI `Toggle(.switch)` box, declared twice because the two ' +
+      'components are the same control on this platform',
+  },
+]);
+
+/**
  * The one entry that is a real exception rather than a number, recorded so the report
  * can say it out loud.
  *
@@ -741,6 +822,10 @@ export const CONTENT_SIZED_BOX = Object.freeze([
  */
 export const DECLARED_FALLBACK_EXCEPTIONS = Object.freeze([
   'NitroUiSwitch ios: 51x31 under Swift <6.2 (UINavigationBar API changed)',
+  // The Checkbox's iOS row is the Switch's number for the same reason: on iOS a
+  // Checkbox renders the same `.switch` Toggle, so it declares the same
+  // OS-dependent box and pays the same older-compiler false red.
+  'NitroUiCheckbox ios: 51x31 under Swift <6.2 (the same Toggle as NitroUiSwitch)',
 ]);
 
 /**
@@ -939,6 +1024,16 @@ export function checkFallbackTable(
     }
     for (const [size, owners] of bySize) {
       if (owners.length < 2) continue;
+      const shared = SHARED_FALLBACK_ROWS.find(
+        (row) =>
+          row.platform === platform &&
+          row.size === size &&
+          row.owners.length === owners.length &&
+          row.owners.every((owner) => owners.includes(owner))
+      );
+      // Exactly the named pair, on exactly the named size — and nothing else. See
+      // `SHARED_FALLBACK_ROWS` for why this sharing is the truth and not a paste.
+      if (shared != null) continue;
       problems.push(
         'scripts/conformance-core.mjs: DECLARED_FALLBACKS has ' +
           `${size} on ${platform} for ${owners.join(' and ')} — two components do ` +

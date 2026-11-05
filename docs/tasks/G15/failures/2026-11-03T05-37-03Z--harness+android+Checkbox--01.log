@@ -1,0 +1,92 @@
+# Failure excerpt — harness:android:Checkbox
+
+- Ran: 2026-11-03T05:37:03.085Z on code tree `e0d1d4538b76` at HEAD `3afdf5d` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Checkbox`
+- Result: fail, exit 1, 22583 ms
+- Load: start 2.82, end 3.47, median 3.47, max 3.57
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/harness+android+Checkbox-2026-11-03T05-37-03.085Z.log` (<store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T05-37-03.085Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Checkbox.harness.tsx`
+- `● Checkbox · G15 › lays out bare and labelled at the size the control measured`
+- `expected 24 to be less than 0.6`
+- `● Checkbox · G15 › draws the third state on Android, and off on iOS`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T05-37-03.085Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-69l63 (still live)
+  |   G15-69l63                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.47 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Checkbox
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree e0d1d4538b76, 14 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.82/2.77 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G15-checkbox/harness+android+Checkbox-2026-11-03T05-37-03.085Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Checkbox.harness.tsx
+  ● Checkbox · G15 › lays out bare and labelled at the size the control measured
+
+    expected 24 to be less than 0.6
+
+      [0m [90m 348 |[39m     [36mconst[39m labelledSize [33m=[39m [36mawait[39m waitForMeasured([32m'labelled'[39m[33m,[39m [32m'the labelled one'[39m)[33m;[39m
+       [90m 349 |[39m     expect(labelledSize[33m.[39mwidth)[33m.[39mtoBeGreaterThan(bareSize[33m.[39mwidth [33m+[39m [35m10[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 350 |[39m     expect([33mMath[39m[33m.[39mabs(labelledSize[33m.[39mheight [33m-[39m bareSize[33m.[39mheight))[33m.[39mtoBeLessThan([35m0.6[39m)[33m;[39m
+       [90m     |[39m                                                                         [31m[1m^[22m[39m
+       [90m 351 |[39m   })[33m;[39m
+       [90m 352 |[39m
+       [90m 353 |[39m   it([32m're-measures when the label changes'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● Checkbox · G15 › draws the third state on Android, and off on iOS
+
+    "mixed" never drew displayed=1 - it reports "displayed=mixed;probes=0;merged=none;a11y=none".
+
+      [0m [90m 214 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 215 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 216 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 217 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 218 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 219 |[39m       )[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 7 passed, 9 total
+Snapshots:   0 total
+Time:        21.105 s, estimated 51 s
+Ran all test suites matching Checkbox.
+
+
+
+```

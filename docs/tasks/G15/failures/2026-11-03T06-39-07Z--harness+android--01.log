@@ -1,0 +1,195 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-03T06:39:07.430Z on code tree `67237032bddc` at HEAD `8e2672f` (branch `task/G15-checkbox`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 719827 ms
+- Load: start 3.75, end 2.29, median 2.44, max 5.77
+- Device: android / device `emulator-5574` / lease `G15-69l63`
+- Full log: `task/G15-checkbox/harness+android-2026-11-03T06-39-07.125Z.log` (<store>/task/G15-checkbox/harness+android-2026-11-03T06-39-07.125Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected 3 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G15-checkbox/harness+android-2026-11-03T06-39-07.125Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G15-69l63 (still live)
+  |   G15-69l63                G15          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.29 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 207 — the rest is in the full log above)
+
+```
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #37681 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #37688 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #2 performed SetProgress(9.0) on #37695 range=0.0..12.0@12.0 12.0->9.0 disabled=false
+
+
+    console.log
+      a11y walk: starts=7 complete=7
+
+
+    console.log
+      step in drag: #3 performed SetProgress(3.0) on #37702 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: starts=[0] change=[3,3,6,9] complete=[9]
+
+
+    console.log
+      inverted range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 78.1ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 78.1ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 1.55/load5 2.61 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected 3 to be +0 // Object.is equality
+
+      [0m [90m 1634 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1635 |[39m     [36mawait[39m drag(alignedHandle[33m,[39m aligned[33m,[39m [35m6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1636 |[39m     expect(aligned[33m.[39mstart[aligned[33m.[39mstart[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1637 |[39m     expect(aligned[33m.[39mcomplete[aligned[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m6[39m)[33m;[39m
+       [90m 1638 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1639 |[39m     expect(alignedHandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected 3 to be +0 // Object.is equality
+
+      [0m [90m 1634 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1635 |[39m     [36mawait[39m drag(alignedHandle[33m,[39m aligned[33m,[39m [35m6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1636 |[39m     expect(aligned[33m.[39mstart[aligned[33m.[39mstart[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 1637 |[39m     expect(aligned[33m.[39mcomplete[aligned[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m6[39m)[33m;[39m
+       [90m 1638 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 1639 |[39m     expect(alignedHandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 20 passed, 21 total
+Tests:       1 failed, 3 skipped, 399 passed, 403 total
+Snapshots:   0 total
+Time:        703.604 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 67237032bddc, 14 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.30/2.73 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G15-checkbox/harness+android-2026-11-03T06-39-07.125Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        14.356 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 719.8 s
+gate: recorded in .gates/task/G15-checkbox.jsonl
+
+
+gate: appended the device context to task/G15-checkbox/harness+android-2026-11-03T06-39-07.125Z.log (5 probe(s))
+
+```

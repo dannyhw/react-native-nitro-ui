@@ -1,5 +1,7 @@
 import { NitroModules } from 'react-native-nitro-modules';
 
+import { materialThemeReport } from './MaterialTheme';
+
 import type {
   NitroUiCore,
   NitroUiPerfEvent,
@@ -39,6 +41,11 @@ function getCore(): NitroUiCore {
  * cache, and `prewarmSizing` adopts a component's declared size as this
  * environment's cached answer. None of them is app API except pre-warming, which
  * an app may want at startup: that is `prewarm`, exported on its own.
+ *
+ * `materialThemeReport()` is the Android theme's reading for tests: the setting
+ * `setMaterialTheme` chose and how many theme roots composed under each Material
+ * motion scheme (`'setting=expressive;expressive=3;baseline=0;other=0'`), or `''`
+ * on iOS.
  */
 export const nitroUiCore: {
   now(): number;
@@ -56,6 +63,7 @@ export const nitroUiCore: {
   prewarmSizing(componentNames: readonly string[]): number;
   setSizingTraceEnabled(enabled: boolean): void;
   drainSizingTrace(): NitroUiSizingTraceEvent[];
+  materialThemeReport(): string;
 } = {
   now(): number {
     return getCore().now();
@@ -92,6 +100,9 @@ export const nitroUiCore: {
   },
   drainSizingTrace(): NitroUiSizingTraceEvent[] {
     return getCore().drainSizingTrace();
+  },
+  materialThemeReport(): string {
+    return materialThemeReport();
   },
 };
 

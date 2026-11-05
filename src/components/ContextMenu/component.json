@@ -1,0 +1,16 @@
+{
+  "name": "ContextMenu",
+  "hybridView": "NitroUiContextMenu",
+  "implementation": "HybridNitroUiContextMenu",
+  "id": "context-menu",
+  "sizing": null,
+  "hostable": false,
+  "exampleTab": "contextmenu",
+  "exampleLabel": "Context",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing",
+  "androidViewManager": "NitroUiContextMenuViewManager"
+}

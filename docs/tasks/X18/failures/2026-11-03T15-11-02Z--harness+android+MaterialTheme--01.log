@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:MaterialTheme
+
+- Ran: 2026-11-03T15:11:02.011Z on code tree `3e643ff49ed8` at HEAD `e05cbad` (branch `task/X18-current-platforms`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android MaterialTheme`
+- Result: fail, exit 1, 12800 ms
+- Load: start 3.56, end 3.64, median 3.60, max 3.64
+- Device: android / device `emulator-5574` / lease `X18-st68s`
+- Full log: `task/X18-current-platforms/harness+android+MaterialTheme-2026-11-03T15-11-02.011Z.log` (<store>/task/X18-current-platforms/harness+android+MaterialTheme-2026-11-03T15-11-02.011Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/MaterialTheme.harness.tsx`
+- `● MaterialTheme › moves the controls already on screen, both ways`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X18-current-platforms/harness+android+MaterialTheme-2026-11-03T15-11-02.011Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X18-st68s (still live)
+  |   G17-rc316                G17          both              pair-b
+  |   X18-st68s                X18          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.64 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android MaterialTheme
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 3e643ff49ed8, 15 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.56/3.89 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X18-current-platforms/harness+android+MaterialTheme-2026-11-03T15-11-02.011Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/MaterialTheme.harness.tsx
+  ● MaterialTheme › moves the controls already on screen, both ways
+
+    4 mounted roots recomposing under the standard motion scheme: never happened within 5000ms; last report setting=baseline;expressive=8;baseline=4;other=0
+
+      [0m [90m 77 |[39m     [36mif[39m (done(report)) [36mreturn[39m report[33m;[39m
+       [90m 78 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 79 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 80 |[39m         [32m`${what}: never happened within ${String(timeoutMs)}ms; last report `[39m [33m+[39m
+       [90m 81 |[39m           nitroUiCore[33m.[39mmaterialThemeReport()
+       [90m 82 |[39m       )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        11.927 s, estimated 13 s
+Ran all test suites matching MaterialTheme.
+
+
+
+```

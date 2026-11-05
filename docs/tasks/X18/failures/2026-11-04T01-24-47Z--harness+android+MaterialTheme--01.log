@@ -1,0 +1,121 @@
+# Failure excerpt — harness:android:MaterialTheme
+
+- Ran: 2026-11-04T01:24:47.142Z on code tree `075e57767be6` at HEAD `a1c78ff` (branch `task/X18-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android MaterialTheme`
+- Result: fail, exit 1, 17293 ms
+- Load: start 8.28, end 12.33, median 12.33, max 12.33
+- Device: android / device `emulator-5570` / lease `X18-fjw4q`
+- Full log: `task/X18-merge/harness+android+MaterialTheme-2026-11-04T01-24-47.142Z.log` (<store>/task/X18-merge/harness+android+MaterialTheme-2026-11-04T01-24-47.142Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/MaterialTheme.harness.tsx`
+- `● MaterialTheme › moves the controls already on screen, both ways`
+- `expected 5 to be +0 // Object.is equality`
+- `● MaterialTheme › keeps a presented sheet up, at its detent, through a switch both ways`
+- `expected [ 'dismiss' ] to deeply equal []`
+- `● MaterialTheme › keeps an open context menu open through a switch both ways`
+- `expected [ 'close' ] to deeply equal []`
+- `● MaterialTheme › keeps a focused field focused, with its text, through a switch both ways`
+- `expected [ 'blur', 'focus' ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X18-merge/harness+android+MaterialTheme-2026-11-04T01-24-47.142Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X18-fjw4q (still live)
+  |   G17-auva6                G17          both              pair-a
+  |   X18-fjw4q                X18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 11.90 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 69 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android MaterialTheme
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 075e57767be6, 16 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.28/9.64 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X18-merge/harness+android+MaterialTheme-2026-11-04T01-24-47.142Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/MaterialTheme.harness.tsx
+  ● MaterialTheme › moves the controls already on screen, both ways
+
+    expected 5 to be +0 // Object.is equality
+
+      [0m [90m 354 |[39m     expect(out[33m.[39mexpressive)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 355 |[39m     [90m// Recomposed, not rebuilt: no root created its content again.[39m
+      [31m[1m>[22m[39m[90m 356 |[39m     expect(out[33m.[39mcreated)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 357 |[39m
+       [90m 358 |[39m     [90m// And back: the same roots return to Expressive.[39m
+       [90m 359 |[39m     [36mconst[39m beforeBack [33m=[39m readReport()[33m;[39m[0m
+
+  ● MaterialTheme › keeps a presented sheet up, at its detent, through a switch both ways
+
+    expected [ 'dismiss' ] to deeply equal []
+
+      [0m [90m 397 |[39m       [36mconst[39m after [33m=[39m sheetReport()[33m;[39m
+       [90m 398 |[39m       console[33m.[39mlog([32m`[theme] sheet after '${theme}': ${after.raw}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 399 |[39m       expect(sheetEvents)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                  [31m[1m^[22m[39m
+       [90m 400 |[39m       expect(after[33m.[39mpresented)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 401 |[39m       expect(after[33m.[39mpresentCount)[33m.[39mtoBe(up[33m.[39mpresentCount)[33m;[39m
+       [90m 402 |[39m       expect(after[33m.[39msheetValue)[33m.[39mtoBe(up[33m.[39msheetValue)[33m;[39m[0m
+
+  ● MaterialTheme › keeps an open context menu open through a switch both ways
+
+    expected [ 'close' ] to deeply equal []
+
+      [0m [90m 434 |[39m       [36mconst[39m after [33m=[39m menuReport(handle)[33m;[39m
+       [90m 435 |[39m       console[33m.[39mlog([32m`[theme] menu after '${theme}': ${after.raw}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 436 |[39m       expect(menuEvents)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 437 |[39m       expect(after[33m.[39mopen)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 438 |[39m       expect(after[33m.[39mopens)[33m.[39mtoBe(opened[33m.[39mopens)[33m;[39m
+       [90m 439 |[39m       expect(after[33m.[39mcloses)[33m.[39mtoBe(opened[33m.[39mcloses)[33m;[39m[0m
+
+  ● MaterialTheme › keeps a focused field focused, with its text, through a switch both ways
+
+    expected [ 'blur', 'focus' ] to deeply equal []
+
+      [0m [90m 474 |[39m       [36mconst[39m state [33m=[39m handle[33m.[39mnuiTestState()[33m;[39m
+       [90m 475 |[39m       console[33m.[39mlog([32m`[theme] field after '${theme}': ${JSON.stringify(state)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 476 |[39m       expect(fieldEvents)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                  [31m[1m^[22m[39m
+       [90m 477 |[39m       expect(state[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 478 |[39m       expect(state[33m.[39mtext)[33m.[39mtoBe([33mFIELD_TEXT[39m)[33m;[39m
+       [90m 479 |[39m       expect(delta(before[33m,[39m readReport())[33m.[39mcreated)[33m.[39mtoBe([35m0[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 3 passed, 7 total
+Snapshots:   0 total
+Time:        15.666 s
+Ran all test suites matching MaterialTheme.
+
+
+
+```

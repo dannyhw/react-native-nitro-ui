@@ -55,6 +55,7 @@ export const SMOKE_CONTROLS = Object.freeze([
   'menu',
   'text-field',
   'chip',
+  'checkbox',
   'search-field',
   // @end-generated
   // `host` is the shared `<Host>` container, which is not a control and has no
