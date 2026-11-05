@@ -52,13 +52,18 @@ const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
  * None of the three titles appears anywhere else on this screen, which is what lets
  * a text match name one popup row rather than some other text on screen (the same
  * rule `PickerScreen`'s `REAL_INPUT_OPTIONS` follows). `Locked row` is disabled, so
- * it is the row a check proves takes no pick.
+ * it is the row a check proves takes no pick. `Checked row` is a checkable row (an iOS
+ * `Toggle`, an Android `CheckableDropdownMenuItem`): its pick travels the toggle's
+ * change handler rather than a button's action, and the harness's `nuiTestSelectRow`
+ * never reaches that handler, so the real-input suites tap it. It stays checked
+ * whatever is picked - the menu has no value, and the echo is what the checks read.
  */
 const REAL_INPUT_GROUP: MenuGroup = {
   actions: [
     { id: 'alpha', title: 'Alpha' },
     { id: 'bravo', title: 'Bravo' },
     { id: 'locked', title: 'Locked row', disabled: true },
+    { id: 'checked', title: 'Checked row', checked: true },
   ],
 };
 

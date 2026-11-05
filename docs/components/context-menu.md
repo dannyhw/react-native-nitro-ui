@@ -75,12 +75,16 @@ Material 3 Expressive `DropdownMenuPopup` (E2) placed against a zero-size box **
 press point** by `MenuDefaults.rememberDropdownMenuPopupPositionProvider(Below)` (S3
 measured the earlier `DropdownMenu`'s top-start at the press, 0 px off; the harness's "at
 the finger" case holds the new popup to the same rule). Near the bottom edge Material opens
-it above the finger, and keeps it 48 dp from the window edge. The popup, groups, rows and
+it above the finger. The popup, groups, rows and
 the popup witness are Menu's own (`MenuRows.kt`, D36 item 4): each section and each run
 of top-level actions is a Material group, a submenu draws inline as a group of its own,
 as Menu's does (D29), and a row's `subtitle` and `checked` draw as they do in Menu
 ([menu.md](menu.md#the-group)). On iOS a row's `subtitle` is `UIAction.subtitle` and
-`checked` its `state`.
+`checked` its `state`. Because a ContextMenu row is a `UIAction`, which carries a
+`.destructive` attribute and a `state` together, a row on iOS can be both destructive and
+checked: the action keeps both. Menu draws a checked row as a SwiftUI `Toggle`,
+which takes no role, so Menu drops `destructive` on a checked row
+([menu.md](menu.md#limits)).
 
 ## The gesture
 
