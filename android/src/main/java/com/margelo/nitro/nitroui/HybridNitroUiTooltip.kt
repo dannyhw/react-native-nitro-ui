@@ -110,7 +110,12 @@ internal class TooltipModel : NitroUiModel() {
   val hasActions: Boolean
     get() = actions.isNotEmpty()
 
-  /** How many times this mount's tooltip content entered the composition. */
+  /**
+   * How many times this mount's popup went up: counted where Material composes the
+   * popup (`state.isVisible`), not in the tooltip content, which material3 1.5 composes
+   * again inside the same popup once it knows the anchor's position
+   * (`TooltipHost.TooltipPresentation`).
+   */
   private val composedPresentations = AtomicInteger(0)
 
   /** What the composed tooltip showed, for [readReport]. Written on the UI thread. */
@@ -197,11 +202,13 @@ internal class TooltipModel : NitroUiModel() {
       ";hostRect=$host;density=$density;placements=$placements"
   }
 
-  fun noteContentEntered() {
+  /** The popup went up: see [composedPresentations]. */
+  fun notePopupShown() {
     composedPresentations.incrementAndGet()
   }
 
-  fun noteContentLeft() {
+  /** The popup came down, so nothing it showed or where it sat is on screen any more. */
+  fun notePopupGone() {
     composedFacts = "kind=none"
     geometry = "popupRect=-;anchorRect=-;hostRect=-"
     placements = 0
@@ -328,6 +335,19 @@ private class TooltipHost(
     if (!presented && transition.isIdle && !transition.currentState) {
       SideEffect { model.composing = false }
     }
+    // The popup's own lifetime, on the condition Material composes the popup on
+    // (`BasicTooltipBox`: `if (state.isVisible) TooltipPopup(...)`). Not inside the
+    // tooltip content: material3 1.5's `TooltipBox` wraps that content in a `key` of the
+    // anchor's position against the popup's, which changes once the first layout has
+    // both, so the content is disposed and composed again inside a popup that stayed up
+    // and was not placed again. Counted there, one presentation read as two and its
+    // placement was wiped (measured on 1.5.0-beta02, G18 merge).
+    if (tooltipState.isVisible) {
+      DisposableEffect(Unit) {
+        model.notePopupShown()
+        onDispose { model.notePopupGone() }
+      }
+    }
     val density = LocalDensity.current
     val hasActions = model.hasActions
     val material = TooltipDefaults.rememberTooltipPositionProvider(anchorPositionOf(model.placement))
@@ -357,7 +377,7 @@ private class TooltipHost(
   @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
   @Composable
   private fun TooltipScope.TooltipContent(model: TooltipModel) {
-    TooltipWitness(model)
+    TooltipWitness()
     val title = model.title
     val message = model.message
     val actions = model.actions
@@ -409,16 +429,16 @@ private class TooltipHost(
   /**
    * Count this popup for as long as its content is composed - the Dialog witness
    * (`HybridNitroUiDialog.kt`, `DialogWitness`), placed inside the popup so it counts
-   * the window, not the presentation's intent.
+   * the window, not the presentation's intent. Material may compose the content again
+   * inside the same popup (see [TooltipPresentation]); the count stays balanced through
+   * that, which is all `live` claims. The per-mount readings are the popup's own.
    */
   @Composable
-  private fun TooltipWitness(model: TooltipModel) {
+  private fun TooltipWitness() {
     DisposableEffect(Unit) {
       TooltipModel.livePresentations.incrementAndGet()
-      model.noteContentEntered()
       onDispose {
         TooltipModel.livePresentations.decrementAndGet()
-        model.noteContentLeft()
       }
     }
   }
