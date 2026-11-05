@@ -589,10 +589,14 @@ describe('SearchField', () => {
     const handle = await handleOf('steady');
     const after = handle.measureContent();
     const boxAfter = harnessUi.queryByTestId('steady');
-    // Not a constant: on Android this is the `mutableStateOf` the bar itself is drawn
-    // from, and `onExpandedRequest` is the one place a results view would ever write it.
-    // The height checks below are the real oracle - they are what say the box did not
-    // move - and both were shown red together by making that request store `next`.
+    // Two oracles, proved apart. This line is not a constant on Android: it is the
+    // `mutableStateOf` the bar is drawn from, `onExpandedRequest` is the one place a
+    // results view would ever write it, and letting that request store `next` reddens
+    // this line alone - a docked bar keeps its height whatever the flag says. The height
+    // checks below are the oracle iOS has, whose field reports no expanded state to
+    // write, and they are reddened by the thing they actually watch for: give a focused
+    // field a taller minimum and the box moves under the keyboard while this line,
+    // correctly, stays green.
     expect(handle.nuiTestState().expanded).toBe(false);
     expect(Math.abs(after.height - before.height)).toBeLessThan(1);
     expect(
