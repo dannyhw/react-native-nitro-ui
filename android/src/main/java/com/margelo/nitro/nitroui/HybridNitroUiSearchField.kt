@@ -341,8 +341,19 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
   val trailing: (@Composable () -> Unit)? =
     if (hasText && model.editable) {
       {
-        IconButton(onClick = { state.clearText() }) {
-          Icon(imageVector = CloseGlyph, contentDescription = SearchFieldStrings.clear)
+        IconButton(
+          onClick = { state.clearText() },
+          // The name goes on the button, not on the glyph inside it. Compose publishes the
+          // clickable box and the icon as two accessibility nodes and does not merge the
+          // glyph's name into the box, so naming the glyph leaves the node TalkBack can act
+          // on silent - measured in a dump of this screen: the clickable box reads
+          // `content-desc=""` around a child reading `content-desc="Clear query"`. The glyph
+          // is decorative (`null`) so the name is stated once, on the node that answers the
+          // tap. iOS needs no equivalent line: UIKit's own clear button already carries the
+          // system's localized "Clear text".
+          modifier = Modifier.semantics { contentDescription = SearchFieldStrings.clear },
+        ) {
+          Icon(imageVector = CloseGlyph, contentDescription = null)
         }
       }
     } else {
