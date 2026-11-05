@@ -32,6 +32,7 @@ import {
   followupsResolver,
   recycleNotes,
 } from '../conformance-core.mjs';
+import { SCREEN_TAB, screenTab } from '../real-input/screens.mjs';
 
 /** Where the conformance suite keeps its per-control fixtures, and its tables. */
 const HARNESS_FILE = 'example/__tests__/Conformance.harness.tsx';
@@ -196,6 +197,30 @@ describe('every bench component is implemented by every arm', () => {
   });
 });
 
+/**
+ * The tabs `example/src/App.tsx` renders, as id -> label.
+ *
+ * `renderedTabs` says which *screen* a tab branch renders; this says what the tab is
+ * called on screen, which is the half the Android runner has to match exactly.
+ */
+function appTabLabels() {
+  const labels = new Map();
+  for (const match of (readRepo('example/src/App.tsx') ?? '').matchAll(
+    /\{ id: '([a-z0-9]+)', label: '([^']+)' \}/g
+  )) {
+    labels.set(match[1], match[2]);
+  }
+  return labels;
+}
+
+/** Every string the example app draws, so an echo testID can be proved to exist. */
+function exampleSourceText() {
+  return readdirSync(join(repoRoot, 'example/src'))
+    .filter((name) => name.endsWith('.tsx'))
+    .map((name) => readRepo(`example/src/${name}`) ?? '')
+    .join('\n');
+}
+
 describe('every real-input control has a check on both platforms', () => {
   const controls = () => {
     const text = readRepo('scripts/real-input/controls.mjs') ?? '';
@@ -259,7 +284,67 @@ describe('every real-input control has a check on both platforms', () => {
         ).includes(`func testRealInput${pascal}(`)
       ).toBe(true);
     });
+
+    it(`${control.id}'s screen can be reached on Android`, () => {
+      // A check is only run if the runner can get to the screen behind it, and the two
+      // platforms get there differently. iOS taps the tab by its `testID`, which React
+      // Native writes as `accessibilityIdentifier`, so a new screen needs no new iOS
+      // table row. Android's accessibility tree carries no testID (React Native stores it
+      // as a view tag), so the runner taps the tab's *label* and then polls an echo
+      // testID to learn the screen came up — both written down in `SCREEN_TAB`.
+      //
+      // G17's SearchField is what happens when they are not: the screen and its tab both
+      // existed, the two maps the runner used did not know the screen, and the run died
+      // 15 device-minutes in on `no "undefined" tab` — after every other control had
+      // passed. A device gate is the wrong place to discover a missing table row.
+      const label = appTabLabels().get(control.screen);
+      // Named in the value rather than in a message argument, which jest ignores.
+      expect(String(label)).not.toBe('undefined');
+      const tab = screenTab(control.screen);
+      // The label has to be the string the app draws, not merely a plausible one:
+      // `findTab` matches `node.text` exactly, in the tab band, uniquely.
+      expect(tab.label).toBe(label);
+      // And the echo has to be drawn by something, or the runner waits out its timeout
+      // for a screen that is already up. Matched against every example source rather
+      // than the one screen file, because a screen can borrow its echo from a widget it
+      // renders (`dialog-log`, `sheet-log` do).
+      const drawn = new RegExp(`["'\`]${tab.anchor}["'\`]`).test(
+        exampleSourceText()
+      );
+      expect(
+        drawn ? 'drawn' : `nothing in example/src draws "${tab.anchor}"`
+      ).toBe('drawn');
+    });
   }
+});
+
+describe('the Android navigation table agrees with the tab bar', () => {
+  it('no row names a tab the example app stopped rendering', () => {
+    // The other direction: a renamed or dropped tab leaves a row nothing navigates to,
+    // and the runner would keep tapping a label nothing draws.
+    const labels = appTabLabels();
+    expect(
+      Object.entries(SCREEN_TAB)
+        .filter(([screen]) => !labels.has(screen))
+        .map(([screen]) => screen)
+    ).toEqual([]);
+  });
+
+  it('an unknown screen is named in the failure, not tapped as "undefined"', () => {
+    // The bug this guards is invisible without it: `undefined` is a perfectly good value
+    // to look up in the accessibility tree, so the runner just fails to find a tab. The
+    // message has to say which table lost the row, because the fix is not in the file
+    // that throws.
+    let message = '<did not throw>';
+    try {
+      screenTab('searchfield-typo');
+    } catch (error) {
+      message = String(error.message);
+    }
+    expect(message).toContain('searchfield-typo');
+    expect(message).toContain('SCREEN_TAB');
+    expect(message).toContain('scripts/real-input/screens.mjs');
+  });
 });
 
 describe('every component is covered by the conformance suite', () => {

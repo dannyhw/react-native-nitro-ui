@@ -38,6 +38,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
+import { ECHO, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
   findByDescription,
@@ -70,55 +71,6 @@ assertSupportedNodeOrReexec({
 
 const BUNDLE_ID = 'nitroui.example';
 const ACTIVITY = `${BUNDLE_ID}/.MainActivity`;
-
-/** The on-screen echoes the checks read (testIDs from `example/src`). */
-const ECHO = {
-  switchValue: 'switch-controlled-value',
-  buttonCount: 'real-input-count',
-  sliderStart: 'slider-start-count',
-  sliderChange: 'slider-change-count',
-  sliderComplete: 'slider-complete-count',
-  sliderValue: 'slider-phase-value',
-  sliderControlledValue: 'slider-controlled-value',
-  segmentedIndex: 'real-input-segmented-index',
-  segmentedEvents: 'real-input-segmented-events',
-  rejectEvents: 'real-input-reject-events',
-  rejectValue: 'real-input-reject-value',
-  dateValue: 'real-input-date-value',
-  dateEvents: 'real-input-date-events',
-  pickerIndex: 'real-input-picker-index',
-  pickerEvents: 'real-input-picker-events',
-  pickerGone: 'real-input-drop-gone',
-  menuPick: 'real-input-menu-pick',
-  menuEvents: 'real-input-menu-events',
-  chipValue: 'real-input-chip-value',
-  chipEvents: 'real-input-chip-events',
-  chipRefusedLast: 'real-input-chip-refused-last',
-  chipRefusedEvents: 'real-input-chip-refused-events',
-  chipPresses: 'real-input-chip-presses',
-  dialogLog: 'dialog-log',
-  sheetLog: 'sheet-log',
-  hostValue: 'host-controlled-value',
-  hostEvents: 'host-events-count',
-  hostSliderValue: 'host-slider-value',
-  hostButtonPresses: 'host-button-presses',
-  hostMixedState: 'host-mixed-state',
-  hostSegmentedIndex: 'host-segmented-index',
-  hostPickerIndex: 'host-picker-index',
-  hostDateValue: 'host-datepicker-value',
-  hostDateDropArmed: 'host-datepicker-drop-armed',
-  hostDateDropButton: 'host-datepicker-drop',
-  hostDateGone: 'host-datepicker-drop-gone',
-  hostDateRemount: 'host-datepicker-drop-remount',
-  textTyping: 'text-typing-echo',
-  textFrozen: 'text-frozen-echo',
-  textCapped: 'text-capped-echo',
-  textFocus: 'text-focus-echo',
-  searchTyping: 'search-typing-echo',
-  searchFrozen: 'search-frozen-echo',
-  searchCapped: 'search-capped-echo',
-  searchFocus: 'search-focus-echo',
-};
 
 /** The Enter key, which a single-line field takes as its editor action (submit). */
 const KEY_ENTER = 66;
@@ -3980,38 +3932,17 @@ class DeviceHarness {
   /**
    * The example's tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'dialog' | 'sheet' | 'host'} screen
+   * The tab and the arrival echo come out of the shared {@link screenTab} table rather
+   * than from two maps written out here. They were maps, and a new screen needs a row in
+   * both: G17's SearchField screen arrived after both were written, so every other
+   * control reached its screen and this one was sent off to tap a tab called `undefined`.
+   * iOS never noticed because it taps a tab by its `testID`, which Android's
+   * accessibility tree does not carry (see `screens.mjs`).
+   *
+   * @param {string} screen The `screen` of a row in `controls.mjs`.
    */
   async goToScreen(screen) {
-    const label = {
-      switch: 'Switch',
-      slider: 'Slider',
-      button: 'Button',
-      segmented: 'Segments',
-      datepicker: 'Dates',
-      picker: 'Picker',
-      menu: 'Menu',
-      chip: 'Chip',
-      dialog: 'Dialogs',
-      sheet: 'Sheet',
-      host: 'Host',
-      textfield: 'Text',
-    }[screen];
-    const anchor = {
-      switch: ECHO.switchValue,
-      slider: ECHO.sliderStart,
-      button: ECHO.buttonCount,
-      segmented: ECHO.segmentedIndex,
-      datepicker: ECHO.dateValue,
-      picker: ECHO.pickerIndex,
-      menu: ECHO.menuPick,
-      chip: ECHO.chipValue,
-      dialog: ECHO.dialogLog,
-      sheet: ECHO.sheetLog,
-      host: ECHO.hostValue,
-      textfield: ECHO.textTyping,
-    }[screen];
+    const { label, anchor } = screenTab(screen);
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
     // tap while standing on it. So ask from the top.
