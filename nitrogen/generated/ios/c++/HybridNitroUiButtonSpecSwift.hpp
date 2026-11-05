@@ -89,6 +89,13 @@ namespace margelo::nitro::nitroui {
     inline void setSize(const std::string& size) noexcept override {
       _swiftPart.setSize(size);
     }
+    inline std::string getShape() noexcept override {
+      auto __result = _swiftPart.getShape();
+      return __result;
+    }
+    inline void setShape(const std::string& shape) noexcept override {
+      _swiftPart.setShape(shape);
+    }
     inline bool getDisabled() noexcept override {
       return _swiftPart.getDisabled();
     }

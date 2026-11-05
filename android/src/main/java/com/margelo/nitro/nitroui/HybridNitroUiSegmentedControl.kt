@@ -5,22 +5,45 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonColors
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
@@ -384,6 +407,10 @@ private class SegmentedControlHost(
     val tint = model.tintColor
     val label = model.accessibilityLabel
     val colors = segmentedColors(tint)
+    val group = segmentGroupValues()
+    val resting = group.resting
+    val labelStyle = group.labelStyle
+    val contentPadding = group.contentPadding
     // The label goes on the row, because for this control the group is what a
     // label describes: the segments are its children, each announced with M3's
     // `Role.RadioButton` inside the row's own `selectableGroup()`. Putting it on
@@ -391,24 +418,50 @@ private class SegmentedControlHost(
     // group (`docs/architecture/core.md` section 3).
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
-    SingleChoiceSegmentedButtonRow(modifier = labelModifier) {
+    // Material 3 Expressive replaced the segmented track with a connected button
+    // group: the same row of choices, drawn with `ButtonGroupDefaults`' 2 dp gap and
+    // its connected leading / middle / trailing corners.
+    Row(
+      modifier =
+        labelModifier
+          // The row is measured from its contents, as the segmented row was: the
+          // labels are the width, and a stretched row would be a 420 dp control with
+          // three boxes in it (see `SELF_SIZING_BASE_STYLE` on the JS side).
+          .width(IntrinsicSize.Max)
+          // One group, so an announcements reads "1 of 3" - the position comes from
+          // here, the role and the selected state from each item below.
+          .selectableGroup(),
+      horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    ) {
       options.forEachIndexed { index, text ->
         val isSelected = index == selectedIndex
-        SegmentedButton(
-          selected = isSelected,
+        ConnectedSegment(
+          text = text,
+          checked = isSelected,
+          enabled = enabled,
+          colors = colors,
+          shapes =
+            when {
+              options.size == 1 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)
+              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)
+              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes(resting)
+              else -> ButtonGroupDefaults.connectedMiddleButtonShapes(resting)
+            },
+          labelStyle = labelStyle,
+          contentPadding = contentPadding,
+          modifier = Modifier.weight(1f).semantics { selected = isSelected },
           onClick = {
             // A tap on the segment that is already selected reports nothing.
-            // Material 3 hands `onClick` to a plain clickable Box, so it fires for
-            // every press - including one on the selected segment - while a
-            // SwiftUI `Picker` binding only writes when the selection moves.
-            // Suppressing it here is what makes the two platforms report the same
-            // events (`docs/components/segmented-control.md`), and it is the only
-            // thing that makes a real-input snap-back observable: the second tap
-            // of `scripts/real-input` lands on the segment a rejected change is
-            // supposed to have returned to, and it must report nothing until the
-            // revert has landed.
+            // Foundation's `selectable` fires for a press on a selected node only
+            // when it is not already in its group's selection, but the group is
+            // ours and a rebuild can re-present the same index - so the guard is
+            // explicit, exactly as it was on `SegmentedButton`. It is also the only
+            // thing that makes a real-input snap-back observable: the second tap of
+            // `scripts/real-input` lands on the segment a rejected change is supposed
+            // to have returned to, and it must report nothing until the revert has
+            // landed.
             if (index == model.displayed) {
-              return@SegmentedButton
+              return@ConnectedSegment
             }
             // Native is optimistic: paint the new segment now, before React has
             // seen the event, so there is no visual latency (core.md section 4).
@@ -416,33 +469,102 @@ private class SegmentedControlHost(
             model.displayed = index
             model.onChange?.invoke(index.toDouble(), eventCount.toDouble())
           },
-          modifier = Modifier.semantics { selected = isSelected },
-          enabled = enabled,
-          // Required, with no default: Material 3 gives each segment the corners
-          // its position earns - only the ends of the row are rounded; it is one
-          // track. Recomposing this is a shape transform on the index and count,
-          // which is what `itemShape` is, and unlike the colours it is not derived
-          // from the theme, so there is nothing to cache.
-          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-          colors = colors,
-          // Spelled out to choose the overload: Material 3 1.4 has a 12-parameter
-          // `SegmentedButton` and a deprecated 11-parameter one without
-          // `contentPadding`. Naming a default only the longer signature has forces
-          // the compiler to it; leaving it out, resolution prefers the shorter one.
-          contentPadding = SegmentedButtonDefaults.ContentPadding,
-          // Label only, deliberately: Material 3's default `icon` renders a check
-          // mark *on the selected segment only*, so the row's measured width would
-          // change with the selection - and a size that moves when the selection
-          // moves would have to put the selection in `nuiSizingKey`, which is both
-          // a cache fragmenter and a re-measure per tap. iOS's segmented `Picker`
-          // has no such icon, so label-only is also the cross-platform match.
-          icon = {},
-          label = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         )
       }
     }
   }
 }
+
+/**
+ * One item of the connected group.
+ *
+ * Its own node, drawn by this file, rather than Material's `ToggleButton`:
+ * `ToggleButton` publishes `Role.Checkbox` from its own semantics lambda, and a
+ * nested node cannot have that overridden from the outside - the semantics closer
+ * to the content win. This control is a radio group in its API and in
+ * `docs/components/segmented-control.md` ("each segment as a `RadioButton`-class
+ * node ... the chosen one reports selected"), and a TalkBack announcement that
+ * called every segment a checkbox would make that sentence false. So the item
+ * takes Material's *geometry* - the connected corners, the 2 dp gap, the height's
+ * padding and label style - and puts them on `Modifier.selectable(role =
+ * Role.RadioButton)`, which is the same semantics Material's own segmented button
+ * published. The press morph survives: the connected pressed shape replaces the
+ * resting one while the item is held.
+ */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
+  text: String,
+  checked: Boolean,
+  enabled: Boolean,
+  colors: SegmentedButtonColors,
+  shapes: ToggleButtonShapes,
+  labelStyle: TextStyle,
+  contentPadding: PaddingValues,
+  modifier: Modifier,
+  onClick: () -> Unit,
+) {
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  val shape =
+    when {
+      pressed -> shapes.pressedShape
+      checked -> shapes.checkedShape
+      else -> shapes.shape
+    }
+  val container = if (checked) colors.activeContainerColor else colors.inactiveContainerColor
+  val content = if (checked) colors.activeContentColor else colors.inactiveContentColor
+  val borderColor = if (checked) colors.activeBorderColor else colors.inactiveBorderColor
+  Box(
+    modifier =
+      modifier
+        .height(ButtonDefaults.MinHeight)
+        // Clip first, so the ripple and the container both take the connected
+        // corner instead of painting a square one over it.
+        .clip(shape)
+        .selectable(
+          selected = checked,
+          onClick = onClick,
+          enabled = enabled,
+          role = Role.RadioButton,
+          interactionSource = interaction,
+        )
+        .background(container)
+        .border(SegmentedButtonDefaults.borderStroke(borderColor), shape)
+        .padding(contentPadding),
+    contentAlignment = Alignment.Center,
+  ) {
+    Text(
+      text = text,
+      style = labelStyle.copy(color = content),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+/**
+ * The group's shared resting corner, its label style and its padding.
+ *
+ * All three come from the height the group is 40 dp tall at - the same M3 small
+ * button height a `medium` Button rests at - which is the point Q8 Appendix A row 2
+ * made: once the size is a height, the padding, the type and the corner all follow
+ * from it instead of being three tables. Built once per `Component` call, not per
+ * item, and the corner is [buttonShapes]' cached value rather than a fresh one.
+ */
+@Composable
+private fun segmentGroupValues(): SegmentGroupValues =
+  SegmentGroupValues(
+    resting = buttonShapes(ButtonShape.Round, ButtonScale.Medium).shape,
+    labelStyle = buttonLabelStyle(ButtonScale.Medium),
+    contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight),
+  )
+
+/** The three values [segmentGroupValues] answers with. */
+private class SegmentGroupValues(
+  val resting: Shape,
+  val labelStyle: TextStyle,
+  val contentPadding: PaddingValues,
+)
 
 /** The Hybrid View React renders as `NitroUiSegmentedControl`. */
 class HybridNitroUiSegmentedControl(

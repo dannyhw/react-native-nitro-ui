@@ -1895,6 +1895,65 @@ const CHECKS = {
       '1'
     );
 
+    // E1: the Expressive redraw kept the two things the API promises.
+    //
+    // **The semantics.** The row is now a connected button group, and Material's
+    // `ToggleButton` publishes `Role.Checkbox` from its own semantics lambda, which
+    // an outer modifier cannot outvote - so the item is a node this file draws, with
+    // `selectable(role = Role.RadioButton)` on it (`HybridNitroUiSegmentedControl.kt`
+    // explains the trade). What TalkBack is told is therefore still
+    // `docs/components/segmented-control.md`'s sentence: one radio-class node per
+    // option, inside one group, and the chosen one reports `selected`. The position
+    // half of that announcement comes from the group, so the left-to-right order is
+    // read from the same dump.
+    //
+    // **The geometry.** A connected group is one row whose items sit
+    // `ButtonGroupDefaults.ConnectedSpaceBetween` (2 dp) apart. The library cannot see
+    // Compose's item bounds from JS - the control is one Fabric node - so the bounds
+    // in the accessibility tree are the only place a run can measure the gap, and a
+    // group that had silently turned into three separate buttons (or a stretch row
+    // with a hole in it) shows up here and nowhere else.
+    const box = await t.requireControl('Real-input segmented control');
+    const items = t
+      .dump()
+      .filter(
+        (node) =>
+          ['1', '2', '3'].includes(node.text) &&
+          node.bounds.x1 >= box.bounds.x1 - 1 &&
+          node.bounds.x2 <= box.bounds.x2 + 1 &&
+          node.bounds.y1 >= box.bounds.y1 - 1 &&
+          node.bounds.y2 <= box.bounds.y2 + 1
+      )
+      .sort((a, b) => a.bounds.x1 - b.bounds.x1);
+    t.log.checkEquals('the group still has one node per option', items.length, 3);
+    items.forEach((node, index) => {
+      t.log.checkEquals(
+        `segment ${String(index + 1)} of ${String(items.length)} is still a radio button`,
+        node.className,
+        'android.widget.RadioButton'
+      );
+      t.log.checkEquals(
+        `segment ${String(index + 1)} reports the selection the control has (index 1)`,
+        node.selected,
+        index === 1 ? 'true' : 'false'
+      );
+    });
+    t.log.checkEquals(
+      'the three items are one row, not a stack',
+      new Set(items.map((node) => `${String(node.bounds.y1)}-${String(node.bounds.y2)}`))
+        .size,
+      1
+    );
+    const connectedGapPx = Math.round(2 * t.density()) + 1;
+    for (let index = 1; index < items.length; index += 1) {
+      const gap = items[index].bounds.x1 - items[index - 1].bounds.x2;
+      t.log.check(
+        `segment ${String(index + 1)} is within the connected gap of its neighbour ` +
+          `(=${String(gap)}px, at most ${String(connectedGapPx)}px = 2dp)`,
+        gap >= 0 && gap <= connectedGapPx
+      );
+    }
+
     const moved = await t.requireControl('Real-input segmented control');
     t.log.checkEquals(
       'the control did not move out from under the finger',

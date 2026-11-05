@@ -880,3 +880,66 @@ describe('Chip · G12', () => {
     }
   });
 });
+
+/**
+ * A select and a deselect come back to the width the chip started at (E1).
+ *
+ * What the always-present leading slot buys (`ChipLeadingSlotEmpty`) is exactly this
+ * sentence, and E1 re-earns it rather than trusting it: Material 3 1.5.0-beta02 still
+ * draws a selectable chip's leading icon through an `AnimatedVisibility` with an
+ * `expandHorizontally`/`shrinkHorizontally` spring, so a `null` icon is still a width
+ * animation the host cannot follow - the original measurement settled 1.1 dp narrower
+ * than a chip mounted selected, with its label ellipsised. If the spring ever goes,
+ * the slot can go with it, and the first thing this test would notice is a deselect
+ * that no longer lands on the width it left.
+ */
+describe('chip · a toggle round trip (E1)', () => {
+  it('comes back to the width it started at across a select and a deselect', async () => {
+    const LABEL = 'Round trip';
+    poison([sizingKey('filter', false, LABEL), sizingKey('filter', true, LABEL)]);
+    await render(
+      <View style={rowStyle}>
+        <Chip
+          label={LABEL}
+          onSelectedChange={recordSelected('round-trip')}
+          testID="round-trip"
+          hybridRef={captureHybrid('round-trip')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('round-trip');
+    const before = await waitForMeasured('round-trip', 'before the toggle');
+    await waitForBox('round-trip', before, 'before the toggle');
+
+    await pressChip('round-trip');
+    await waitForDisplayed('round-trip', '1');
+    await sleep(600);
+    const selected = await waitForMeasured('round-trip', 'the selected state');
+    await waitForBox('round-trip', selected, 'the selected state');
+
+    await pressChip('round-trip');
+    await waitForDisplayed('round-trip', '0');
+    await sleep(600);
+    const after = measured('round-trip');
+    const afterBox = sizeOf('round-trip');
+    console.log(
+      `chip round trip: before=${describeSize(before)} ` +
+        `selected=${describeSize(selected)} after=${describeSize(after)} ` +
+        `box=${describeSize(afterBox)}`
+    );
+
+    expect(
+      sameSize(before, after),
+      `a deselect left the chip measuring ${describeSize(
+        after
+      )} where it started at ${describeSize(before)}`
+    ).toBe(true);
+    expect(
+      sameSize(before, afterBox),
+      `a deselect left the chip laid out at ${describeSize(
+        afterBox
+      )} where it started at ${describeSize(before)}`
+    ).toBe(true);
+  });
+});

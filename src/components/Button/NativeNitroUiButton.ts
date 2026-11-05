@@ -33,6 +33,8 @@ export interface NitroUiButtonHandle {
   readonly variant: string;
   /** The resolved size. */
   readonly size: string;
+  /** The resolved corner shape (`'round'` for anything unrecognised). */
+  readonly shape: string;
   /** Whether interaction is disabled. */
   readonly disabled: boolean;
   /** The tint as this platform's `processColor` produces it, or `null`. */
@@ -65,6 +67,7 @@ export interface NativeNitroUiButtonProps
   title: string;
   variant: string;
   size: string;
+  shape: string;
   disabled: boolean;
   tintColor: number | null;
   systemImage: string | null;

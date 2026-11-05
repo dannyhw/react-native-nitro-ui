@@ -13,6 +13,7 @@ public protocol HybridNitroUiButtonSpec_protocol: HybridObject, HybridView {
   var title: String { get set }
   var variant: String { get set }
   var size: String { get set }
+  var shape: String { get set }
   var disabled: Bool { get set }
   var tintColor: Variant_NullType_Double { get set }
   var systemImage: Variant_NullType_String { get set }

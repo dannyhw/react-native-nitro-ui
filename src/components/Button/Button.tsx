@@ -23,6 +23,17 @@ export type ButtonVariant =
  */
 export type ButtonSize = 'small' | 'medium' | 'large';
 
+/**
+ * The button's corner.
+ *
+ * `'round'` is each platform's own default, so leaving the prop out and passing
+ * `'round'` draw the same control. `'square'` is Material 3's `squareShape` on
+ * Android, and iOS's nearest border shape - `.roundedRectangle(radius: 8)` -
+ * there, because iOS has no cornerless button. Both morph on press on Android;
+ * iOS's border shape is static (`docs/components/button.md`).
+ */
+export type ButtonShape = 'round' | 'square';
+
 const VARIANTS: readonly ButtonVariant[] = [
   'filled',
   'tonal',
@@ -31,6 +42,7 @@ const VARIANTS: readonly ButtonVariant[] = [
   'elevated',
 ];
 const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
+const SHAPES: readonly ButtonShape[] = ['round', 'square'];
 
 /**
  * Props of {@link Button}.
@@ -50,6 +62,11 @@ export interface ButtonProps extends ViewProps {
   variant?: ButtonVariant | undefined;
   /** Control size. Default: `'medium'`. */
   size?: ButtonSize | undefined;
+  /**
+   * Corner shape: `'round'` (default) or `'square'`. It repaints the control and
+   * does not resize it, so it is not part of the size configuration.
+   */
+  shape?: ButtonShape | undefined;
   /** Disable interaction. Default: `false`. */
   disabled?: boolean | undefined;
   /**
@@ -80,6 +97,7 @@ export interface ButtonProps extends ViewProps {
         readonly title: string;
         readonly variant: string;
         readonly size: string;
+        readonly shape: string;
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
@@ -178,6 +196,11 @@ function resolveSize(size: ButtonSize | undefined): ButtonSize {
   return size != null && SIZES.includes(size) ? size : 'medium';
 }
 
+/** Resolve a caller's corner, defaulting anything unrecognised to `'round'`. */
+function resolveShape(shape: ButtonShape | undefined): ButtonShape {
+  return shape != null && SHAPES.includes(shape) ? shape : 'round';
+}
+
 /**
  * The platform button: SwiftUI `Button` with `.buttonStyle(...)` on iOS,
  * Material 3 `Button` / `FilledTonalButton` / `OutlinedButton` / `TextButton` /
@@ -197,6 +220,7 @@ export function Button({
   onPress,
   variant = 'filled',
   size = 'medium',
+  shape = 'round',
   disabled = false,
   tintColor,
   systemImage,
@@ -209,6 +233,7 @@ export function Button({
 }: ButtonProps) {
   const resolvedVariant = resolveVariant(variant);
   const resolvedSize = resolveSize(size);
+  const resolvedShape = resolveShape(shape);
   const processedTint = useProcessedColor(tintColor);
   // Always a function, so the callback prop is always sent - see
   // `onPressNotProvided`. `useStableCallback` keeps one wrapper per mounted view.
@@ -228,6 +253,7 @@ export function Button({
       title={title}
       variant={resolvedVariant}
       size={resolvedSize}
+      shape={resolvedShape}
       disabled={disabled}
       tintColor={processedTint}
       systemImage={systemImage ?? null}
