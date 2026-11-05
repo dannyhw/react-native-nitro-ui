@@ -61,9 +61,11 @@ describe('exampleTabs', () => {
   });
 
   it('picks up tabs the registry adds, so the next components need no edit here', () => {
-    // SearchField and Tooltip are the next two components (X19 brief). Their tabs are
+    // SearchField and Tooltip were the next two components (X19 brief). Their tabs are
     // written into App.tsx by the same region `bun run regen` rewrites; the rule has to
-    // see them from that output alone.
+    // see them from that output alone. A component that has landed since (Tooltip, G18)
+    // is read from its own manifest rather than invented a second time, which the
+    // registry would refuse as a duplicate.
     const dirs = readdirSync(join(repoRoot, 'src/components'), {
       withFileTypes: true,
     })
@@ -95,11 +97,11 @@ describe('exampleTabs', () => {
       delete manifest.exports;
       return { directory: name, text: JSON.stringify(manifest) };
     };
-    const manifests = manifestsFromEntries([
-      ...entries,
+    const invented = [
       fresh('SearchField', 'searchfield', 'Search'),
       fresh('Tooltip', 'tooltip', 'Tooltip'),
-    ]);
+    ].filter((entry) => !dirs.includes(entry.directory));
+    const manifests = manifestsFromEntries([...entries, ...invented]);
     const region = regionsFor(manifests).find(
       (spec) => spec.path === APP && spec.describe === 'TABS'
     );
