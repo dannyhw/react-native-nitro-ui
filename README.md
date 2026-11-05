@@ -679,8 +679,8 @@ newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty bordered field with a search glyph and no prompt, the same field with a query, the field again with maxLength set to 8 and a longer query in it, and a field that is not editable" /></td>
-    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty search bar reading Search, the same bar with a query and its clear icon, the bar again with maxLength set to 8 and a longer query in it, and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty bordered field with a search glyph and no prompt, the same field with a query, the field again with maxLength set to 8 and an eleven-character default the cap does not trim, and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty search bar reading Search, the same bar with a query and its clear icon, the bar again with maxLength set to 8 and an eleven-character default the cap does not trim, and a field that is not editable" /></td>
   </tr>
 </table>
 
