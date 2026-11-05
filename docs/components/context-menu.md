@@ -6,7 +6,7 @@ A `View` that opens a menu on a long press (G16, DECISIONS D36 and D37; design
 | Platform | Native                                                                                           |
 | -------- | ------------------------------------------------------------------------------------------------ |
 | iOS      | `UIContextMenuInteraction` on the view itself, with the system's lifted preview and a `UIMenu`   |
-| Android  | Material 3 `DropdownMenu`, opened at the finger, in a `View` styled by React Native's own manager |
+| Android  | Material 3 Expressive's menu (`DropdownMenuPopup` and Menu's groups), opened at the finger, in a `View` styled by React Native's own manager |
 
 ```tsx
 import { ContextMenu } from 'react-native-nitro-ui';
@@ -40,7 +40,7 @@ is the scroll view's, and a hold that opens the menu **cancels** their touch, so
 | -------------------- | ---------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
 | `group`              | `MenuGroup`                              | required | Menu's type, unchanged: see [Menu, "The group"](menu.md#the-group).                          |
 | `children`           | `ReactNode`                              | —        | The content the long press is made on, laid out in place.                                    |
-| `title`              | `string \| undefined`                    | —        | A header over the rows: the `UIMenu`'s title on iOS, a header row on Android.                |
+| `title`              | `string \| undefined`                    | —        | A header over the rows: the `UIMenu`'s title on iOS, the first group's label on Android.                |
 | `disabled`           | `boolean \| undefined`                   | `false`  | No menu; the children keep every gesture. An open menu closes, on **both** platforms.         |
 | `onSelect`           | `((id: string) => void) \| undefined`    | —        | The picked row's `id`. Fires **before** `onClose` (D32).                                     |
 | `onOpen`             | `(() => void) \| undefined`              | —        | The menu opened. **Both platforms** — unlike Menu's, which is Android-only.                  |
@@ -71,11 +71,16 @@ lifted preview is the view itself, its corners rounded to the style's `borderRad
 by `androidViewManager`), so the wrapper takes every prop RN's `View` takes — borders,
 radius, `overflow`, `pointerEvents`, `hitSlop`. The menu is a 0 × 0 `NitroComposeHost`
 kept as the wrapper's last child and hidden from Fabric's indices, composing a
-`DropdownMenu` anchored to a zero-size box **at the press point** (S3 measured the
-popup's top-start at the press, 0 px off). Near the bottom edge Material opens it above
-the finger, and keeps it 48 dp from the window edge. The rows, headers and the popup
-witness are Menu's own (`MenuRows.kt`, D36 item 4): a submenu draws inline under a
-divider, as Menu's does (D29).
+Material 3 Expressive `DropdownMenuPopup` (E2) placed against a zero-size box **at the
+press point** by `MenuDefaults.rememberDropdownMenuPopupPositionProvider(Below)` (S3
+measured the earlier `DropdownMenu`'s top-start at the press, 0 px off; the harness's "at
+the finger" case holds the new popup to the same rule). Near the bottom edge Material opens
+it above the finger, and keeps it 48 dp from the window edge. The popup, groups, rows and
+the popup witness are Menu's own (`MenuRows.kt`, D36 item 4): each section and each run
+of top-level actions is a Material group, a submenu draws inline as a group of its own,
+as Menu's does (D29), and a row's `subtitle` and `checked` draw as they do in Menu
+([menu.md](menu.md#the-group)). On iOS a row's `subtitle` is `UIAction.subtitle` and
+`checked` its `state`.
 
 ## The gesture
 

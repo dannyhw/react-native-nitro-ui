@@ -132,22 +132,29 @@ export function DueDate() {
 // #endregion
 
 // #region menu
-const FILE_ACTIONS: MenuGroup = {
-  actions: [
-    { id: 'rename', title: 'Rename' },
-    { id: 'duplicate', title: 'Duplicate' },
-  ],
-  sections: [
-    {
-      id: 'dangerous',
-      title: 'Dangerous',
-      items: [{ id: 'delete', title: 'Delete', destructive: true }],
-    },
-  ],
-};
-
 export function FileActions() {
   const [last, setLast] = useState('nothing yet');
+  const [pinned, setPinned] = useState(false);
+
+  const group: MenuGroup = {
+    actions: [
+      { id: 'rename', title: 'Rename' },
+      { id: 'duplicate', title: 'Duplicate', subtitle: 'Keeps the original' },
+      { id: 'pin', title: 'Pinned', checked: pinned },
+    ],
+    sections: [
+      {
+        id: 'dangerous',
+        title: 'Dangerous',
+        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+      },
+    ],
+  };
+
+  const handleSelect = (id: string) => {
+    setLast(id);
+    if (id === 'pin') setPinned((current) => !current);
+  };
 
   return (
     <>
@@ -155,10 +162,10 @@ export function FileActions() {
       <Menu
         accessibilityLabel="File"
         title="File"
-        group={FILE_ACTIONS}
+        group={group}
         variant="tonal"
         size="medium"
-        onSelect={setLast}
+        onSelect={handleSelect}
       />
     </>
   );

@@ -51,7 +51,7 @@ so such a prop would be answerable on Android and not on iOS.
 
 | Concept        | iOS                                                     | Android                                                |
 | -------------- | --------------------------------------------------------- | -------------------------------------------------------- |
-| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `DropdownMenuItem` |
+| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `ExposedDropdownMenu` (Expressive standalone-group shape and colour) of `SelectableDropdownMenuItem` rows |
 | Host           | `UIHostingController` inside `NitroSwiftUIHost`            | `NitroComposeHost<M>: AbstractComposeView`                |
 | Containment    | **required** (`needsContainment`) — the first control here that presents a view controller | n/a — the popup is a Compose `Popup`              |
 | Theme          | system traits                                              | `MaterialTheme` + dynamic colour on Android 12+           |
@@ -256,12 +256,14 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   (`clearAndSetSemantics` on the anchor modifier, `menuAnchor` kept for pointer input),
   because the anchor is the thing the label describes — the rows are in a popup of
   their own.
-- **The selected option is announced.** On iOS that is SwiftUI's own menu (it draws
-  the check mark too, visible in
-  `docs/tasks/G6-picker/ios-light-menu-open.png`). On Android Material 1.4's
-  `DropdownMenuItem` has no `selected` argument and a check mark would be an
-  affordance iOS does not have, so it is semantics only: `selected = isSelected` on
-  the row.
+- **The selected option is drawn and announced.** On iOS that is SwiftUI's own menu (it
+  draws the check mark too, visible in
+  `docs/tasks/G6-picker/ios-light-menu-open.png`). On Android, since E2, the row is
+  Material 3 Expressive's `SelectableDropdownMenuItem`: the selected row draws the
+  selected container and shape with a leading check — the same affordance iOS's check
+  is — and says `Role.RadioButton` plus `selected` in the semantics tree, which
+  `Picker.harness.tsx` reads out of the open popup ("draws the selected row as a
+  selected row"). Before E2 it was a `selected` flag on a plain row, with nothing drawn.
 - **Disabled is exposed on the node a screen reader lands on.** Read out of
   `uiautomator dump` on an API 35 emulator: the control used to appear as two nodes — the
   focusable `android.widget.EditText` showing the title with `content-desc=""`, and a
