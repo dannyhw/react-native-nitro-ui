@@ -46,6 +46,11 @@ import {
   reportIosStability,
   staleExemptions,
 } from './a11y.mjs';
+import {
+  checkTabTargets,
+  exampleTabs,
+  parseIosTabTargets,
+} from './tab-targets.mjs';
 import { assertSupportedNodeOrReexec } from '../node-version.mjs';
 import { currentCodeTree, recordBuild } from '../app-stamp.mjs';
 import { iosModuleCacheArgs } from '../build-speed-lib.mjs';
@@ -77,6 +82,15 @@ const A11Y_METHOD = 'testRealInputA11y';
 const A11Y_ID = 'a11y';
 
 /**
+ * The tab-bar pass (X19): it measures every example tab as a touch target, and the rule
+ * in `tab-targets.mjs` decides. Not a control for the same reason as {@link A11Y_METHOD},
+ * so it is exempt from the coverage guard and reported as an auxiliary check, and it
+ * rides every run for the same reason too: it needs no gesture beyond the scroll that
+ * every navigation now depends on.
+ */
+const TAB_METHOD = 'testRealInputTabTargets';
+
+/**
  * Guard that the Swift file and the shared table describe one suite, then pick
  * out the selected controls that actually have a check.
  *
@@ -96,7 +110,7 @@ function checkCoverage(swiftSource, controls) {
     [...swiftSource.matchAll(/func (testRealInput\w+)\s*\(/g)].map((m) => m[1])
   );
   for (const name of declared) {
-    if (name === A11Y_METHOD) continue;
+    if (name === A11Y_METHOD || name === TAB_METHOD) continue;
     if (
       !REAL_INPUT_CONTROLS.some((control) => iosCheckName(control.id) === name)
     ) {
@@ -416,7 +430,8 @@ async function main() {
       // iterates on one control, and the accessibility rule is the one thing on this
       // platform that needs no gesture to be worth re-checking — excluding it would mean
       // the mutation that proves it red had to be run as a full suite.
-      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`);
+      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${A11Y_METHOD}`)
+      .concat(`-only-testing:${SCHEME}/${TEST_CLASS}/${TAB_METHOD}`);
     status = await xcodebuild(
       [
         'test-without-building',
@@ -472,6 +487,7 @@ async function main() {
       );
     }
 
+    reportTabTargets({ log, suite, status, testLog });
     reportA11yPass({ log, suite, status, testLog });
   } finally {
     clearJsLocation(device.udid);
@@ -603,6 +619,45 @@ function reportA11yPass({ log, suite, status, testLog }) {
       'the iOS a11y debt list still describes this code'
     );
     for (const line of stale) check.check(line, false);
+  }
+}
+
+/**
+ * The tab-bar pass's section of the report: one line per tab, decided by
+ * `checkTabTargets` from the boxes the Swift pass printed.
+ *
+ * A pass that printed nothing is a failure, never a quiet pass: every tab then reads
+ * "never measured", and the method's own outcome is noted so the reader knows why.
+ *
+ * @param {object} args
+ * @param {string} args.log the xcodebuild test log
+ * @param {import('./support.mjs').Suite} args.suite
+ * @param {number} args.status xcodebuild's exit status
+ * @param {string} args.testLog
+ */
+function reportTabTargets({ log, suite, status, testLog }) {
+  const check = suite.beginAuxiliary(
+    'tab-targets',
+    'every example tab is a 44 pt touch target (XCUITest)'
+  );
+  const outcome = parseTestResults(log).get(TAB_METHOD);
+  if (outcome?.outcome !== 'passed') {
+    check.note(
+      `${TAB_METHOD} reported "${String(outcome?.outcome ?? 'nothing')}" ` +
+        `(exit ${String(status)}); see ${testLog}`
+    );
+  }
+  const tabs = exampleTabs(
+    fs.readFileSync(path.resolve(iosDir(), '..', 'src', 'App.tsx'), 'utf8')
+  );
+  // One device pixel of slack, at the lease's @3x simulators.
+  for (const verdict of checkTabTargets({
+    platform: 'ios',
+    tabs,
+    measured: parseIosTabTargets(log),
+    pixel: 1 / 3,
+  })) {
+    check.check(verdict.line, verdict.ok);
   }
 }
 

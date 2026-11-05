@@ -1,0 +1,205 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-05T16:49:50.845Z on code tree `21a3e2b44639` at HEAD `cadf954` (branch `task/X19-example-tab-bar`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 770424 ms
+- Load: start 4.18, end 3.92, median 3.42, max 5.28
+- Device: android / device `emulator-5574` / lease `X19merge-s6fdb`
+- Full log: `task/X19-example-tab-bar/harness+android-2026-11-05T16-49-50.342Z.log` (<store>/task/X19-example-tab-bar/harness+android-2026-11-05T16-49-50.342Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● Console`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 1)`
+- `expected 9 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 2)`
+- `expected 20 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 3)`
+- `expected 30 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `expected 40 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+- `expected 50 to be 10 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X19-example-tab-bar/harness+android-2026-11-05T16-49-50.342Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X19merge-s6fdb (still live)
+  |   G18-rmhr8                G18          both              pair-b
+  |   X19merge-s6fdb           X19merge     both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.92 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 187 — the rest is in the full log above)
+
+```
+      [0m [90m 911 |[39m       }
+       [90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                         [31m[1m^[22m[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m 916 |[39m         [36mawait[39m waitForFreshReport([0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    expected 20 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    expected 30 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 40 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 50 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 1)
+
+    expected 9 to be 10 // Object.is equality
+
+      [0m [90m 911 |[39m       }
+       [90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                         [31m[1m^[22m[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m
+       [90m 916 |[39m         [36mawait[39m waitForFreshReport([0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    expected 20 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    expected 30 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 40 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 50 to be 10 // Object.is equality
+
+      [0m [90m 910 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 911 |[39m       }
+      [31m[1m>[22m[39m[90m 912 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 913 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 914 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 915 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 21 passed, 22 total
+Tests:       5 failed, 3 skipped, 422 passed, 430 total
+Snapshots:   0 total
+Time:        756.017 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 21a3e2b44639, 15 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.93/3.50 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X19-example-tab-bar/harness+android-2026-11-05T16-49-50.342Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        12.379 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 770.4 s
+gate: recorded in .gates/task/X19-example-tab-bar.jsonl
+
+
+gate: appended the device context to task/X19-example-tab-bar/harness+android-2026-11-05T16-49-50.342Z.log (5 probe(s))
+
+```
