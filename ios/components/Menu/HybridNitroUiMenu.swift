@@ -881,11 +881,10 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   }
 
   /// The spec's `drawn` notation for one level of a `UIMenu`.
-  /// `@<subtitle>` for an action that has one. The getter is iOS 15+, which is the
-  /// library's floor (15.1), so it needs no `#available` guard: one there would be a
-  /// check the compiler flags as always true.
+  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before it there
+  /// is nothing to read, and the mark is left off.
   private static func subtitleMark(_ action: UIAction) -> String {
-    guard let subtitle = action.subtitle, !subtitle.isEmpty
+    guard #available(iOS 16.0, *), let subtitle = action.subtitle, !subtitle.isEmpty
     else { return "" }
     return "@\(subtitle)"
   }
