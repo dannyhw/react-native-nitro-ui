@@ -175,6 +175,9 @@ constant.
   runs used the harness's own scratch AVD `nitroui` and its own simulator rather than the leased
   pair. No pool device and no `emulator-5560` was touched, and both leased devices were still
   booted afterwards. A device gate should refuse to start with no `NITRO_UI_LEASE_ID`.
+- `scripts/conformance/make-a11y-fixtures.mjs` keeps its own tab-label table; it could read
+  `SCREEN_TAB` now, and `SCREEN_TAB` is unmapped in `gate-core.mjs`, so any change to it owes
+  both platforms' device runs.
 
 ## Fix round 1
 
