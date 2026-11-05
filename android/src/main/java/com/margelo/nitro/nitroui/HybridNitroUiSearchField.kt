@@ -360,8 +360,18 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
       null
     }
 
+  // material3 1.5 deprecates both of these in favour of `SearchBar(state, inputField)`,
+  // which is not a drop-in for a field: that overload routes the field through
+  // `SearchBarImpl`, and `SearchBarImpl` wraps it in `DisableSoftKeyboard`, so the soft
+  // keyboard never opens; its stateful `InputField` also blurs the field when its state
+  // collapses. Both stay on the 1.4 calls until the Expressive pass (D40) can take the
+  // keyboard back as its own work.
+  @Suppress("DEPRECATION")
   DockedSearchBar(
     inputField = {
+      // Deprecated with the bar above: the `SearchBarState` overload is the one that
+      // blurs the field when its state collapses.
+      @Suppress("DEPRECATION")
       SearchBarDefaults.InputField(
         state = state,
         onSearch = onSearch,
