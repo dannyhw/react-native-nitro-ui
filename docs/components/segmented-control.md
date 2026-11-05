@@ -202,10 +202,13 @@ drops the now-wrong cached sizes.
   shape: a segment is one item node at the segment's box carrying `checkable` and
   `checked` — Compose's mapping of the toggleable state, and what a screen reader
   reads as "selected" — with a `RadioButton`-class node for its role at the same box
-  and its label as a child `TextView`, all inside the row's own group. The three live
-  on three nodes, so `scripts/real-input/android.mjs` reads each of them where the
-  tree puts it — the state off the item, the class off the role node, the label off
-  the text — rather than asking one node for all three. On iOS the segmented
+  and its label as a child `TextView`, all inside the row's own group. Both halves of
+  that were dumped on the same emulator, before and after the redraw: the connected
+  group and the `SingleChoiceSegmentedButtonRow` it replaces publish the same three
+  nodes per segment, so the pixels moved and the announcement did not. The three
+  live on three nodes in both, so `scripts/real-input/android.mjs` reads each of
+  them where the tree puts it — the state off the item, the class off the role node,
+  the label off the text — rather than asking one node for all three. On iOS the segmented
   `Picker` is the platform element VoiceOver already knows.
 - `accessibilityLabel` describes the **group**: on Android it goes on the row
   (`android/.../HybridNitroUiSegmentedControl.kt`), on iOS on the `Picker`, and
