@@ -74,6 +74,20 @@ which were deliberately run on older trees.
 
 ## Follow-ups
 
-- Branch: 10 commits behind `origin/main`. It needs a rebase or merge before landing, and `need --for merge` will then re-owe the full device set.
+- Branch: 10 commits behind `origin/main`, all docs-only, so the merged code tree equals this head's (`21a3e2b4`). `need --for merge` owed only `harness:android` and `real-input:android`, last run on `51096cd0`; both ran in the merge round.
 - TextField real-input (iOS): one run on the final tree (`21a3e2b4`, 01:00 Nov 4) read `frozen: 1 edits refused` instead of 2 (`RealInputTests.swift:3541`). The next run on the same tree passed 20/20, so it looks like a flake; the excerpt is in `docs/tasks/X19/failures/`.
 - Example app: the active tab is not scrolled into view on launch or on a programmatic screen change. That is harmless today (the default tab is first), but a deep link to a later tab would leave it off screen.
+
+## Merge round
+
+Lease `X19merge-s6fdb` (maintainer-mac-1). `main` gained only docs commits, so the merged code tree is `21a3e2b4`; `need --for merge` owed `harness:android` and `real-input:android`, both now green. `harness:android` needed its one re-run: the first run failed on the known `BottomSheet · 50 cycles` flake (round 1 read `unmounts` 9 of 10, rounds 2–5 failed on the carried-over counts, as in G16), excerpt `docs/tasks/X19/failures/2026-11-05T16-49-50Z--harness+android--01.log`. `need --for merge`: satisfied.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1742 tests / 69 suites | `21a3e2b44639` | 2 m 18 s | start 5.3 / med 15.2 / max 23.6 |
+| `harness:ios` | **PASS** | 381 tests / 22 suites + isolated 2 tests / 1 suites | `21a3e2b44639` (ios tree) | 9 m 14 s | start 3.5 / med 6.0 / max 10.0 |
+| `harness:android` | **PASS** | 430 tests / 22 suites + isolated 2 tests / 1 suites | `21a3e2b44639` (android tree) | 12 m 47 s | start 3.9 / med 4.1 / max 8.7 |
+| `real-input:ios` | **PASS** | — | `21a3e2b44639` (ios tree) | 21 m 20 s | start 8.2 / med 10.8 / max 67.5 |
+| `real-input:android` | **PASS** | — | `21a3e2b44639` (android tree) | 35 m 36 s | start 3.3 / med 3.5 / max 5.9 |
+| `real-input:android:--control:switch` | stale | — | de02c4f439ca (not this tree) | 6 m 54 s | start 25.2 / med 7.0 / max 25.2 |
+| `real-input:ios:--control:switch` | stale | — | 8bd815cbe829 (not this tree) | 5 m 08 s | start 4.1 / med 6.0 / max 7.4 |
