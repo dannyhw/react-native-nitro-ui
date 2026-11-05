@@ -1,0 +1,197 @@
+# Failure excerpt — harness:android:SearchField
+
+- Ran: 2026-11-04T00:44:40.478Z on code tree `4ff334b44287` at HEAD `f205a5a` (branch `task/G17-search-field`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SearchField`
+- Result: fail, exit 1, 48923 ms
+- Load: start 92.63, end 41.64, median 57.66, max 92.63
+- Device: android
+- Full log: `task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log` (<store>/task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › round-trips typed text to JS, one event per keystroke`
+- `expected +0 to be 3 // Object.is equality`
+- `● SearchField › reverts an edit JS refuses, and the next edit starts from the refused text`
+- `● SearchField › holds maxLength in UTF-16 units and never splits an emoji`
+- `expected 'abcxa' to be 'ab👍c' // Object.is equality`
+- `● SearchField › cuts an insertion at a grapheme boundary rather than leaving half an emoji`
+- `expected 'abcxa' to be '' // Object.is equality`
+- `● SearchField › reports the clear button as one empty edit and keeps the focus`
+- `● SearchField › refuses to clear a field that is not editable`
+- `expected 'abcxahi' to be 'shown' // Object.is equality`
+- `● SearchField › submits on the Search key, then blurs - and never on an empty field`
+- `expected [ 'focus', 'change:abcxahit', …(4) ] to deeply equal [ 'focus', 'change:t', …(4) ]`
+- `● SearchField › focuses from its parent’s mount effect`
+- `● SearchField › comes back from the pool with none of its previous owner`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G17-auva6                G17          both              pair-a
+  |   X18-c6m3f                X18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 41.64 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 139 log line(s)
+
+```
+gate: harness:android:SearchField
+gate: node ../scripts/harness.mjs --harnessRunner android SearchField (cwd example)
+gate: code tree 4ff334b44287 at HEAD f205a5a7
+gate: git tree 5024a5e2044b with a DIRTY worktree (not reusable)
+gate: log task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log
+gate:       <store>/task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SearchField
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 4ff334b44287, 14 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 85.53/46.87 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Using existing Android emulator nitroui...
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › round-trips typed text to JS, one event per keystroke
+
+    expected +0 to be 3 // Object.is equality
+
+      [0m [90m 337 |[39m     [90m// One native event per keystroke, and the echo the wrapper sent back for each.[39m
+      [90m 338 |[39m     expect(state[33m.[39mnativeEvents)[33m.[39mtoBe([35m3[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 339 |[39m     expect(state[33m.[39mjsEvents)[33m.[39mtoBe([35m3[39m)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 340 |[39m     expect(jsValues[33m.[39m[36mget[39m([32m'typed'[39m))[33m.[39mtoBe([32m'abc'[39m)[33m;[39m
+       [90m 341 |[39m   })[33m;[39m
+       [90m 342 |[39m[0m
+
+  ● SearchField › reverts an edit JS refuses, and the next edit starts from the refused text
+
+    SearchField frozen: the revert never happened; last report {"text":"abcx","focused":true,"composing":false,"nativeEvents":4,"jsEvents":0,"lastWrite":"stale","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"Field frozen","returnKeyType":"search","expanded":false,"canClear":true}
+
+      [0m [90m 156 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 157 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 158 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 159 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 160 |[39m       )[33m;[39m
+       [90m 161 |[39m     }[0m
+
+  ● SearchField › holds maxLength in UTF-16 units and never splits an emoji
+
+    expected 'abcxa' to be 'ab👍c' // Object.is equality
+
+      [0m [90m 381 |[39m       [32m'the cut to 5 code units'[39m
+       [90m 382 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 383 |[39m     expect(state[33m.[39mtext)[33m.[39mtoBe([32m'ab👍c'[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 384 |[39m     expect(state[33m.[39mtext[33m.[39mlength)[33m.[39mtoBe([35m5[39m)[33m;[39m
+       [90m 385 |[39m     expect(eventsOf([32m'capped'[39m)[33m.[39mat([33m-[39m[35m1[39m))[33m.[39mtoBe([32m'change:ab👍c'[39m)[33m;[39m
+       [90m 386 |[39m     [90m// One more key does not fit: nothing is inserted and nothing is reported.[39m[0m
+
+  ● SearchField › cuts an insertion at a grapheme boundary rather than leaving half an emoji
+
+    expected 'abcxa' to be '' // Object.is equality
+
+      [0m [90m 401 |[39m     [36mawait[39m sleep([35m150[39m)[33m;[39m
+       [90m 402 |[39m     [36mconst[39m state [33m=[39m handles[33m.[39m[36mget[39m([32m'family'[39m)[33m?[39m[33m.[39mnuiTestState()[33m;[39m
+      [31m[1m>[22m[39m[90m 403 |[39m     expect(state[33m?[39m[33m.[39mtext)[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 404 |[39m     expect(
+       [90m 405 |[39m       eventsOf([32m'family'[39m)[33m.[39mfilter((entry) [33m=>[39m entry[33m.[39mstartsWith([32m'change:'[39m))
+       [90m 406 |[39m     )[33m.[39mtoEqual([])[33m;[39m[0m
+
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    SearchField cleared: the text to clear never happened; last report {"text":"abcxahi","focused":true,"composing":false,"nativeEvents":7,"jsEvents":0,"lastWrite":"stale","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"Field cleared","returnKeyType":"search","expanded":false,"canClear":true}
+
+      [0m [90m 156 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 157 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 158 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 159 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 160 |[39m       )[33m;[39m
+       [90m 161 |[39m     }[0m
+
+  ● SearchField › refuses to clear a field that is not editable
+
+    expected 'abcxahi' to be 'shown' // Object.is equality
+
+      [0m [90m 450 |[39m     before[33m.[39mnuiTestClear()[33m;[39m
+       [90m 451 |[39m     [36mawait[39m sleep([35m150[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 452 |[39m     expect(handles[33m.[39m[36mget[39m([32m'uncleared'[39m)[33m?[39m[33m.[39mnuiTestState()[33m.[39mtext)[33m.[39mtoBe([32m'shown'[39m)[33m;[39m
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 453 |[39m     expect(eventsOf([32m'uncleared'[39m))[33m.[39mtoEqual([])[33m;[39m
+       [90m 454 |[39m   })[33m;[39m
+       [90m 455 |[39m[0m
+
+  ● SearchField › submits on the Search key, then blurs - and never on an empty field
+
+    expected [ 'focus', 'change:abcxahit', …(4) ] to deeply equal [ 'focus', 'change:t', …(4) ]
+
+      [0m [90m 465 |[39m       [32m'the blur after the submit'[39m
+       [90m 466 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 467 |[39m     expect(eventsOf([32m'submitted'[39m))[33m.[39mtoEqual([
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 468 |[39m       [32m'focus'[39m[33m,[39m
+       [90m 469 |[39m       [32m'change:t'[39m[33m,[39m
+       [90m 470 |[39m       [32m'change:te'[39m[33m,[39m[0m
+
+  ● SearchField › focuses from its parent’s mount effect
+
+    SearchField focus-on-mount: the focus asked for in a mount effect never happened; last report {"text":"","focused":false,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"applied","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"","returnKeyType":"search","expanded":false,"canClear":false}
+
+      [0m [90m 156 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 157 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 158 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 159 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 160 |[39m       )[33m;[39m
+       [90m 161 |[39m     }[0m
+
+  ● SearchField › comes back from the pool with none of its previous owner
+
+    SearchField pooled: the second owner’s default never happened; last report {"text":"firstdue","focused":true,"composing":false,"nativeEvents":13,"jsEvents":0,"lastWrite":"stale","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"","returnKeyType":"search","expanded":false,"canClear":true}
+
+      [0m [90m 156 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 157 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 158 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 159 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 160 |[39m       )[33m;[39m
+       [90m 161 |[39m     }[0m
+
+HARNESS Shutting down Android emulator nitroui...
+Test Suites: 1 failed, 1 total
+Tests:       9 failed, 4 passed, 13 total
+Snapshots:   0 total
+Time:        47.96 s
+Ran all test suites matching SearchField.
+gate: harness:android:SearchField FAIL in 48.9 s
+gate: recorded in .gates/task/G17-search-field.jsonl
+
+
+gate: appended the device context to task/G17-search-field/harness+android+SearchField-2026-11-04T00-44-40.203Z.log (5 probe(s))
+
+```

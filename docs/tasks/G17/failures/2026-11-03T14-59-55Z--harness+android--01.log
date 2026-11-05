@@ -1,0 +1,182 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-03T14:59:55.953Z on code tree `c82d914dffc9` at HEAD `e883af4` (branch `task/G17-search-field`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 739698 ms
+- Load: start 5.72, end 3.78, median 3.34, max 6.62
+- Device: android / device `emulator-5570` / lease `G17-rc316`
+- Full log: `task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log` (<store>/task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● Console`
+- `● SearchField › submits on the Search key, then blurs - and never on an empty field`
+- `expected [ 'submit:tea' ] to deeply equal []`
+- `● SearchField › sizes itself to its parent width and its own height, whatever its text`
+- `● SearchField › comes back from the pool with none of its previous owner`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G17-rc316 (still live)
+  |   G17-rc316                G17          both              pair-b
+  |   X18-st68s                X18          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.78 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 133 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree c82d914dffc9 at HEAD e883af44
+gate: git tree 21ade0d4adba
+gate: log task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log
+gate:       <store>/task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c82d914dffc9, 14 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.72/8.49 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      poisoned search field: laidOut 111.0x13.0, corrected 111.0x56.0, drew 280.0x56.0; measured 56.00
+
+  ● SearchField › submits on the Search key, then blurs - and never on an empty field
+
+    expected [ 'submit:tea' ] to deeply equal []
+
+      [0m [90m 460 |[39m     ([36mawait[39m handleOf([32m'submitted'[39m))[33m.[39mnuiTestSubmit()[33m;[39m
+       [90m 461 |[39m     [36mawait[39m sleep([35m150[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 462 |[39m     expect(eventsOf([32m'submitted'[39m))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 463 |[39m   })[33m;[39m
+       [90m 464 |[39m
+       [90m 465 |[39m   it([32m'sizes itself to its parent width and its own height, whatever its text'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● SearchField › sizes itself to its parent width and its own height, whatever its text
+
+    no hybridRef handle for SearchField plain-field within 5000ms. A box can exist before its ref callback has run — the callback lands on a commit after the view is created — so this is the handle being late, not the control being broken; if it never arrives at all, the control has stopped handing back its state.
+
+      [0m [90m 53 |[39m     [36mif[39m (handle [33m!=[39m [36mnull[39m) [36mreturn[39m handle[33m;[39m
+       [90m 54 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 55 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 56 |[39m         [32m`no hybridRef handle for ${options.what} within ${String(timeoutMs)}ms. `[39m [33m+[39m
+       [90m 57 |[39m           [32m'A box can exist before its ref callback has run — the callback lands on '[39m [33m+[39m
+       [90m 58 |[39m           [32m'a commit after the view is created — so this is the handle being late, '[39m [33m+[39m[0m
+
+  ● SearchField › comes back from the pool with none of its previous owner
+
+    SearchField pooled: the residue never happened; last report {"text":"firstresi","focused":true,"composing":false,"nativeEvents":4,"jsEvents":0,"lastWrite":"none","editable":true,"maxLength":9,"placeholder":"first owner","accessibilityLabel":"First owner","returnKeyType":"search","expanded":false,"canClear":true}
+
+      [0m [90m 148 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 149 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 150 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 151 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 152 |[39m       )[33m;[39m
+       [90m 153 |[39m     }[0m
+
+
+Summary of all failing tests
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › submits on the Search key, then blurs - and never on an empty field
+
+    expected [ 'submit:tea' ] to deeply equal []
+
+      [0m [90m 460 |[39m     ([36mawait[39m handleOf([32m'submitted'[39m))[33m.[39mnuiTestSubmit()[33m;[39m
+       [90m 461 |[39m     [36mawait[39m sleep([35m150[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 462 |[39m     expect(eventsOf([32m'submitted'[39m))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 463 |[39m   })[33m;[39m
+       [90m 464 |[39m
+       [90m 465 |[39m   it([32m'sizes itself to its parent width and its own height, whatever its text'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● SearchField › sizes itself to its parent width and its own height, whatever its text
+
+    no hybridRef handle for SearchField plain-field within 5000ms. A box can exist before its ref callback has run — the callback lands on a commit after the view is created — so this is the handle being late, not the control being broken; if it never arrives at all, the control has stopped handing back its state.
+
+      [0m [90m 53 |[39m     [36mif[39m (handle [33m!=[39m [36mnull[39m) [36mreturn[39m handle[33m;[39m
+       [90m 54 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 55 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 56 |[39m         [32m`no hybridRef handle for ${options.what} within ${String(timeoutMs)}ms. `[39m [33m+[39m
+       [90m 57 |[39m           [32m'A box can exist before its ref callback has run — the callback lands on '[39m [33m+[39m
+       [90m 58 |[39m           [32m'a commit after the view is created — so this is the handle being late, '[39m [33m+[39m[0m
+
+  ● SearchField › comes back from the pool with none of its previous owner
+
+    SearchField pooled: the residue never happened; last report {"text":"firstresi","focused":true,"composing":false,"nativeEvents":4,"jsEvents":0,"lastWrite":"none","editable":true,"maxLength":9,"placeholder":"first owner","accessibilityLabel":"First owner","returnKeyType":"search","expanded":false,"canClear":true}
+
+      [0m [90m 148 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 149 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 150 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 151 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 152 |[39m       )[33m;[39m
+       [90m 153 |[39m     }[0m
+
+
+Test Suites: 1 failed, 20 passed, 21 total
+Tests:       3 failed, 3 skipped, 401 passed, 407 total
+Snapshots:   0 total
+Time:        721.934 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c82d914dffc9, 14 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.24/3.75 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        15.033 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 739.7 s
+gate: recorded in .gates/task/G17-search-field.jsonl
+
+
+gate: appended the device context to task/G17-search-field/harness+android-2026-11-03T14-59-55.568Z.log (5 probe(s))
+
+```
