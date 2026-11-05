@@ -870,6 +870,9 @@ const CHECKS = {
     const PICK = 'Bravo';
     const TWIN = 'Alpha';
     const LOCKED = 'Locked row';
+    // The checkable row: a `CheckableDropdownMenuItem`, whose pick goes through
+    // `onCheckedChange` rather than `onClick` - the wiring step 6 exists for.
+    const CHECKED = 'Checked row';
 
     // 1. Before any touch: the echoes, the window table, and what a screen reader is
     //    offered. The trigger's node is read here rather than later because a popup
@@ -1098,6 +1101,55 @@ const CHECKS = {
       'the whole echo pairs every open with a close, in the order the gestures happened',
       t.requireEcho(ECHO.menuEvents),
       'open > close > open > select bravo > close > open > close > open > select alpha > close'
+    );
+
+    // 6. The checked row. Its pick is a different handler from every row above
+    //    (`onCheckedChange`, `MenuRows.kt`), and the harness never reaches it:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that reopens the menu for the checked row',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    const checkedRow = t.waitForOption(
+      CHECKED,
+      'the menu to show the checked row'
+    );
+    t.log.note(
+      `row "${CHECKED}": enabled=${checkedRow.enabled} clickable=${checkedRow.clickable} ` +
+        `checkable=${checkedRow.checkable} checked=${checkedRow.checked} ` +
+        `class=${checkedRow.className}`
+    );
+    t.log.checkEquals(
+      `a real tap on the checked row "${CHECKED}" reaches JS as its id`,
+      await t.tapOptionUntilValue(
+        CHECKED,
+        ECHO.menuPick,
+        'checked',
+        'a pick of the checked row to reach JS'
+      ),
+      'checked'
+    );
+    t.log.checkEquals(
+      'a pick of the checked row closes its own popup',
+      t.waitForPopupCount(0, 'the checked-row pick to take its popup down'),
+      0
+    );
+    const finalEvents = t.requireEcho(ECHO.menuEvents);
+    t.log.checkEquals(
+      'the checked row reported exactly one select',
+      finalEvents.split(' > ').filter((said) => said === 'select checked')
+        .length,
+      1
+    );
+    t.log.checkEquals(
+      'and the whole echo ends with one more open > select checked > close',
+      finalEvents,
+      'open > close > open > select bravo > close > open > close > open > select alpha > close' +
+        ' > open > select checked > close'
     );
   },
 
