@@ -88,7 +88,7 @@
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
 | G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
-| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | fix round 1 (Android real-input: the SearchField case has no tab to reach its screen; `task/G17-search-field`) |
+| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | merge round part 1 (PR #37; review MERGE WITH FOLLOW-UPS; keep the 1.4 search bar under 1.5, since `SearchBar` suppresses the keyboard; merges main + X19, then G18) |
 | G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | merge round on mac-1 (PR #36; review MERGE WITH FOLLOW-UPS; merges main + X19, two red proofs owed) |
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
