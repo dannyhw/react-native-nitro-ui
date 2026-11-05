@@ -127,7 +127,7 @@ export default function MenuScreen() {
   const noteRealOpen = useCallback(() => appendEvent('open'), [appendEvent]);
   const noteRealClose = useCallback(() => appendEvent('close'), [appendEvent]);
 
-  // A menu with a header group, a divider-only group, a destructive row and a
+  // A menu with a titled group, an untitled group, a destructive row and a
   // disabled one — the whole row vocabulary in one control.
   const sectioned = useMemo<MenuGroup>(
     () => ({
@@ -153,8 +153,8 @@ export default function MenuScreen() {
     []
   );
 
-  // One submenu level (DECISIONS D29): nested on iOS, inline under a divider on
-  // Android.
+  // One submenu level (DECISIONS D29): nested on iOS, inline as a group of its own
+  // on Android.
   const withSubmenu = useMemo<MenuGroup>(
     () => ({
       actions: [

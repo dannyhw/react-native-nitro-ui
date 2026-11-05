@@ -23,8 +23,8 @@ the layout engine, and React never sees a native node.
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | `SingleChoiceSegmentedButtonRow`                             | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0 | [menu.md](docs/components/menu.md)                           |
-| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 `DropdownMenu` opened at the finger                       | next  | [context-menu.md](docs/components/context-menu.md)           |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup` (M3 Expressive)    | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 Expressive `DropdownMenuPopup` opened at the finger       | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
 | `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
@@ -307,7 +307,7 @@ export function ViewToggle() {
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
     <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
-    <td><img src="docs/images/components/picker-android.png" width="300" alt="Picker menu and wheel variants on Android" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker's open menu with its selected row checked on Android" /></td>
   </tr>
 </table>
 
@@ -359,33 +359,42 @@ export function DueDate() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with a disabled row on iOS" /></td>
-    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with a disabled row on Android" /></td>
+    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on iOS" /></td>
+    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on Android" /></td>
   </tr>
 </table>
 
 A trigger that opens a list of actions. It has no value, so there is nothing to
 keep in sync: `onSelect` reports the `id` of the row that was picked, and the
 items are data — never child views. The trigger is drawn like a `Button`, with
-`Button`'s variants and sizes.
+`Button`'s variants and sizes. A row can carry a `subtitle` (a second line) and
+a `checked` (a check); a checked row is still just a row, so flip your own state
+when it is picked.
 
 ```tsx name=menu
-const FILE_ACTIONS: MenuGroup = {
-  actions: [
-    { id: 'rename', title: 'Rename' },
-    { id: 'duplicate', title: 'Duplicate' },
-  ],
-  sections: [
-    {
-      id: 'dangerous',
-      title: 'Dangerous',
-      items: [{ id: 'delete', title: 'Delete', destructive: true }],
-    },
-  ],
-};
-
 export function FileActions() {
   const [last, setLast] = useState('nothing yet');
+  const [pinned, setPinned] = useState(false);
+
+  const group: MenuGroup = {
+    actions: [
+      { id: 'rename', title: 'Rename' },
+      { id: 'duplicate', title: 'Duplicate', subtitle: 'Keeps the original' },
+      { id: 'pin', title: 'Pinned', checked: pinned },
+    ],
+    sections: [
+      {
+        id: 'dangerous',
+        title: 'Dangerous',
+        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+      },
+    ],
+  };
+
+  const handleSelect = (id: string) => {
+    setLast(id);
+    if (id === 'pin') setPinned((current) => !current);
+  };
 
   return (
     <>
@@ -393,10 +402,10 @@ export function FileActions() {
       <Menu
         accessibilityLabel="File"
         title="File"
-        group={FILE_ACTIONS}
+        group={group}
         variant="tonal"
         size="medium"
-        onSelect={setLast}
+        onSelect={handleSelect}
       />
     </>
   );
@@ -407,7 +416,7 @@ export function FileActions() {
 expansion binding, so iOS never reports either one — and a pick fires
 `onSelect` before the `onClose` that follows it. `systemImage` and
 `primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
-submenu nests on iOS and appears inline under a divider on Android.
+submenu nests on iOS and appears inline as a group of its own on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
 ### ContextMenu
