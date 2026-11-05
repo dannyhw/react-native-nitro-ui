@@ -83,7 +83,16 @@ Android-only. That is a decision for the orchestrator, recorded in `FOLLOWUPS.md
 
 ## Gates
 
-GATE_TABLE
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1734 tests / 67 suites | `ced91e96df1e` | 2 m 42 s | start 2.7 / med 6.3 / max 12.1 |
+| `harness:ios` | **PASS** | 358 tests / 21 suites + isolated 2 tests / 1 suites | `ced91e96df1e` (ios tree) | 8 m 45 s | start 3.1 / med 7.8 / max 40.9 |
+| `harness:android` | **PASS** | 407 tests / 21 suites + isolated 2 tests / 1 suites | `ced91e96df1e` (android tree) | 12 m 03 s | start 22.1 / med 4.3 / max 22.1 |
+| `real-input:ios` | **PASS** | — | `ced91e96df1e` (ios tree) | 22 m 01 s | start 2.1 / med 7.3 / max 64.2 |
+| `real-input:android` | **PASS** | — | `ced91e96df1e` (android tree) | 31 m 06 s | start 11.6 / med 3.2 / max 11.6 |
+| `harness:android:SearchField` | stale | 9 failed of 13 tests / 1 suites | 4ff334b44287 (not this tree) | 48.9 s | start 92.6 / med 57.7 / max 92.6 |
+| `harness:ios:SearchField` | stale | 4 failed of 13 tests / 1 suites | 4ff334b44287 (not this tree) | 59.2 s | start 10.1 / med 95.2 / max 108.7 |
+| `harness:ios:SearchField:--background` | stale | — | 4aa9b2927e43 (not this tree) | 1.0 s | start 4.7 / med 4.7 / max 4.7 |
 
 ## Red proofs
 

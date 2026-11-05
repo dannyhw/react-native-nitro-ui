@@ -1,0 +1,197 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-03T16:12:02.456Z on code tree `3a35f9ce6c51` at HEAD `16ab6ab` (branch `task/G17-search-field`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 523896 ms
+- Load: start 3.15, end 5.84, median 4.38, max 7.45
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G17-rc316`
+- Full log: `task/G17-search-field/harness+ios-2026-11-03T16-12-02.142Z.log` (<store>/task/G17-search-field/harness+ios-2026-11-03T16-12-02.142Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · SearchField › has its own declared fallback, and still corrects a wrong guess`
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › shows the placeholder it was given, and the platform’s own when given none`
+- `expected '' not to be '' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G17-search-field/harness+ios-2026-11-03T16-12-02.142Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G17-rc316 (still live)
+  |   G17-rc316                G17          both              pair-b
+  |   X18-st68s                X18          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.84 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 620 — the rest is in the full log above)
+
+```
+          · conformance-sheet after the uncontrolled second owner: the sheet the second owner asked for is presented=1 (expected 1)
+
+
+    console.log
+          · conformance-sheet after the uncontrolled second owner: the content height its sheet holds (the second owner's)=260 (expected 260)
+
+
+    console.log
+          · presentation: box=0.0x0.0 labelBox=null - the window's name is asserted by real input
+
+
+    console.log
+          · poisoned measured=182.3x28.0 box=182.3x28.0 corrections=1 poison=97.0x11.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=182.3x28.0 declared=80.0x28.0 boxRule=none locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 3→4 across 50 mounts
+
+
+    console.log
+          · conformance-chip props after the second owner: label=Second owner chip accessibilityLabel=Conformance chip, second owner
+
+
+    console.log
+          · conformance-chip residue probe (uncontrolled second owner): an uncontrolled filter chip that started selected and was pressed off, then a second owner whose own default is selected - which the control can only be showing because `didApplyDefault` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-chip after the uncontrolled second owner: the first press after the second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · conformance-chip residue probe (controlled second owner): a press that turns an uncontrolled filter chip off, then a second owner that is *controlled* at `true` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-chip after the controlled second owner: the first press on the controlled second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · box=182.3x28.0 labelBox=182.3x28.0
+
+  ● conformance · every control, four rules › · SearchField › has its own declared fallback, and still corrects a wrong guess
+
+    1 conformance finding(s):
+
+        - SearchField × declared-fallback: the fallback 200x37 is not the measured 420x28 for a control whose own axis is its height (its width is its parent’s) — a mismatch means the declaration drifted from the component
+      [0m [90m 1173 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1174 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1175 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1176 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1177 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1178 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/SearchField.harness.tsx
+  ● Console
+
+    console.log
+      search field height 28.00 vs text field 22.00
+
+
+    console.log
+      search field recycle round 0: drops=12 recycles=12
+
+
+    console.log
+      poisoned search field: laidOut 97.0x11.0, drew 280.0x11.0, corrected 97.0x28.0; measured 28.00
+
+  ● SearchField › shows the placeholder it was given, and the platform’s own when given none
+
+    expected '' not to be '' // Object.is equality
+
+      [0m [90m 591 |[39m     [90m// which the report shows as what the control is drawing.[39m
+       [90m 592 |[39m     [36mconst[39m unprompted [33m=[39m handles[33m.[39m[36mget[39m([32m'unprompted'[39m)[33m?[39m[33m.[39mnuiTestState()[33m;[39m
+      [31m[1m>[22m[39m[90m 593 |[39m     expect(unprompted[33m?[39m[33m.[39mplaceholder [33m?[39m[33m?[39m [32m''[39m)[33m.[39mnot[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m     |[39m                                                   [31m[1m^[22m[39m
+       [90m 594 |[39m     expect(unprompted[33m?[39m[33m.[39mplaceholder)[33m.[39mnot[33m.[39mtoBe([32m'Search recipes'[39m)[33m;[39m
+       [90m 595 |[39m   })[33m;[39m
+       [90m 596 |[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · SearchField › has its own declared fallback, and still corrects a wrong guess
+
+    1 conformance finding(s):
+
+        - SearchField × declared-fallback: the fallback 200x37 is not the measured 420x28 for a control whose own axis is its height (its width is its parent’s) — a mismatch means the declaration drifted from the component
+      [0m [90m 1173 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1174 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1175 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1176 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1177 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1178 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › shows the placeholder it was given, and the platform’s own when given none
+
+    expected '' not to be '' // Object.is equality
+
+      [0m [90m 591 |[39m     [90m// which the report shows as what the control is drawing.[39m
+       [90m 592 |[39m     [36mconst[39m unprompted [33m=[39m handles[33m.[39m[36mget[39m([32m'unprompted'[39m)[33m?[39m[33m.[39mnuiTestState()[33m;[39m
+      [31m[1m>[22m[39m[90m 593 |[39m     expect(unprompted[33m?[39m[33m.[39mplaceholder [33m?[39m[33m?[39m [32m''[39m)[33m.[39mnot[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m     |[39m                                                   [31m[1m^[22m[39m
+       [90m 594 |[39m     expect(unprompted[33m?[39m[33m.[39mplaceholder)[33m.[39mnot[33m.[39mtoBe([32m'Search recipes'[39m)[33m;[39m
+       [90m 595 |[39m   })[33m;[39m
+       [90m 596 |[39m[0m
+
+
+Test Suites: 2 failed, 1 skipped, 18 passed, 20 of 21 total
+Tests:       2 failed, 2 skipped, 354 passed, 358 total
+Snapshots:   0 total
+Time:        505.504 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 3a35f9ce6c51, 14 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.28/4.74 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G17-search-field/harness+ios-2026-11-03T16-12-02.142Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+Test Suites: 1 passed, 1 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        15.899 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 523.9 s
+gate: recorded in .gates/task/G17-search-field.jsonl
+
+
+gate: appended the device context to task/G17-search-field/harness+ios-2026-11-03T16-12-02.142Z.log (4 probe(s))
+
+```
