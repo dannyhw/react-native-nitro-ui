@@ -96,4 +96,6 @@
 | E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | merged (PR #39; 2 fix rounds; merge gates green on code tree `3bb39629`; Menu re-measured, fallback 75.1 × 52) |
 | E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merged `9044521` (PR #38; merge gates green on code tree `5c6f2b0b`; the iOS 15 subtitle guard stays at 16: `UIAction.subtitle` is iOS 16+) |
 | S5 | Popover spike (React Native content; Q7 Appendix F, D38; GO = questions 1, 2, 5 on both platforms) | Opus (on mac-1) | Opus | running |
+| E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | running |
+| Q9 | ButtonGroup and IconButton (`androidIcon`) design, with the iOS ControlGroup check (D40) | Opus | orchestrator | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
