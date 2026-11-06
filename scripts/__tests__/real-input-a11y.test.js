@@ -122,6 +122,10 @@ describe('the a11y rule, on measured trees', () => {
       // node with the same box (Compose's own shape for a text field's label), and the
       // rule's box test finds the actionable `EditText` there.
       'text-field',
+      // G17's field, measured on pair-b: Material 3's search input publishes the same
+      // shape as TextField's — a named `View` inside the clickable `EditText`, both at
+      // the field's box — so the rule's box test finds the actionable node too.
+      'search-field',
       'context-menu',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.

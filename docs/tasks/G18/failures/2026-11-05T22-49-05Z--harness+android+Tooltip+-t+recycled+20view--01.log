@@ -1,0 +1,78 @@
+# Failure excerpt — harness:android:Tooltip:-t:recycled%20view
+
+- Ran: 2026-11-05T22:49:05.815Z on code tree `a0bd605ebc6a` at HEAD `3b97a2f` (branch `task/G18-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Tooltip -t recycled view`
+- Result: fail, exit 1, 7388 ms
+- Load: start 12.43, end 11.84, median 12.14, max 12.43
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/harness+android+Tooltip+-t+recycled+20view-2026-11-05T22-49-05.815Z.log` (<store>/task/G18-merge/harness+android+Tooltip+-t+recycled+20view-2026-11-05T22-49-05.815Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from`
+- `expected '1' to be '0' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/harness+android+Tooltip+-t+recycled+20view-2026-11-05T22-49-05.815Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (no longer live)
+  |   E2merge-1kxry            E2merge      both              pair-a
+gate: load
+  |   load1 at the moment of failure: 11.84 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Tooltip -t recycled view
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a0bd605ebc6a, 17 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.43/12.49 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-merge/harness+android+Tooltip+-t+recycled+20view-2026-11-05T22-49-05.815Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from
+
+    expected '1' to be '0' // Object.is equality
+
+      [0m [90m 789 |[39m         [90m// Never presented in this mount: a count carried over from the open tooltip[39m
+       [90m 790 |[39m         [90m// the instance last served is a recycle that did not reset.[39m
+      [31m[1m>[22m[39m[90m 791 |[39m         expect(report[33m.[39mpresentCount)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m     |[39m                                         [31m[1m^[22m[39m
+       [90m 792 |[39m       } [36melse[39m {
+       [90m 793 |[39m         [36mawait[39m waitForReport(
+       [90m 794 |[39m           [32m'recycled'[39m[33m,[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 21 skipped, 22 total
+Snapshots:   0 total
+Time:        6.188 s
+Ran all test suites matching Tooltip with tests matching "recycled view".
+
+
+
+```

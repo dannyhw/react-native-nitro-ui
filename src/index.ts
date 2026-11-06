@@ -131,6 +131,17 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+// A tooltip the app opens next to a view (G18, DECISIONS D38): Material 3's
+// `PlainTooltip` / `RichTooltip` on Android, a UIKit popover with SwiftUI content on
+// iOS, which has no tooltip. `isPresented` is controlled through the event-count
+// handshake, an action reports `onAction` before `onIsPresentedChange(false)` (D32),
+// and it stays up until it is dismissed. The children are the anchor (`sizing: null`).
+export {
+  Tooltip,
+  type TooltipAction,
+  type TooltipPlacement,
+  type TooltipProps,
+} from './components/Tooltip/Tooltip';
 
 // A checkbox (G15): Material 3 `Checkbox`, or `TriStateCheckbox` while
 // `indeterminate`, on Android - and SwiftUI `Toggle(isOn:)` with the switch style on
@@ -146,3 +157,14 @@ export {
   ContextMenu,
   type ContextMenuProps,
 } from './components/ContextMenu/ContextMenu';
+
+// A search field (G17, DECISIONS D38 item 2): UIKit's `UISearchTextField` on iOS and Material
+// 3's search-bar input field on Android, sharing TextField's model, handshake, IME guard and
+// `maxLength`. It has no keyboard props - the Search key is always the Return key, and an empty
+// query never submits - and it is its own native view rather than a TextField variant because
+// a declared fallback is keyed by component, so it needs its own first-frame height.
+export {
+  SearchField,
+  type SearchFieldHandle,
+  type SearchFieldProps,
+} from './components/SearchField/SearchField';

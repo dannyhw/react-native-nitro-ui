@@ -18,7 +18,7 @@ public extension NitroUiMenuRow {
   /**
    * Create a new instance of `NitroUiMenuRow`.
    */
-  init(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Bool, destructive: Bool, systemImage: Variant_NullType_String?) {
+  init(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Bool, destructive: Bool, systemImage: Variant_NullType_String?, subtitle: Variant_NullType_String?, checked: Variant_Bool_NullType?) {
     self.init(std.string(id), std.string(kind), std.string(title), { () -> bridge.std__optional_std__variant_nitro__NullType__std__string__ in
       if let __unwrappedValue = parentId {
         return bridge.create_std__optional_std__variant_nitro__NullType__std__string__({ () -> bridge.std__variant_nitro__NullType__std__string_ in
@@ -40,6 +40,32 @@ public extension NitroUiMenuRow {
               return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
             case .second(let __value):
               return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
+          }
+        }().variant)
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_std__variant_nitro__NullType__std__string__ in
+      if let __unwrappedValue = subtitle {
+        return bridge.create_std__optional_std__variant_nitro__NullType__std__string__({ () -> bridge.std__variant_nitro__NullType__std__string_ in
+          switch __unwrappedValue {
+            case .first(let __value):
+              return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
+            case .second(let __value):
+              return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
+          }
+        }().variant)
+      } else {
+        return .init()
+      }
+    }(), { () -> bridge.std__optional_std__variant_bool__nitro__NullType__ in
+      if let __unwrappedValue = checked {
+        return bridge.create_std__optional_std__variant_bool__nitro__NullType__({ () -> bridge.std__variant_bool__nitro__NullType_ in
+          switch __unwrappedValue {
+            case .first(let __value):
+              return bridge.create_std__variant_bool__nitro__NullType_(__value)
+            case .second(let __value):
+              return bridge.create_std__variant_bool__nitro__NullType_(margelo.nitro.NullType.null)
           }
         }().variant)
       } else {
@@ -111,6 +137,54 @@ public extension NitroUiMenuRow {
             case 1:
               let __actual = __variant.get_1()
               return .second(String(__actual))
+            default:
+              fatalError("Variant can never have index \(__variant.index())!")
+          }
+        }()
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var subtitle: Variant_NullType_String? {
+    return { () -> Variant_NullType_String? in
+      if bridge.has_value_std__optional_std__variant_nitro__NullType__std__string__(self.__subtitle) {
+        let __unwrapped = bridge.get_std__optional_std__variant_nitro__NullType__std__string__(self.__subtitle)
+        return { () -> Variant_NullType_String in
+          let __variant = bridge.std__variant_nitro__NullType__std__string_(__unwrapped)
+          switch __variant.index() {
+            case 0:
+              let __actual = __variant.get_0()
+              return .first(NullType.null)
+            case 1:
+              let __actual = __variant.get_1()
+              return .second(String(__actual))
+            default:
+              fatalError("Variant can never have index \(__variant.index())!")
+          }
+        }()
+      } else {
+        return nil
+      }
+    }()
+  }
+  
+  @inline(__always)
+  var checked: Variant_Bool_NullType? {
+    return { () -> Variant_Bool_NullType? in
+      if bridge.has_value_std__optional_std__variant_bool__nitro__NullType__(self.__checked) {
+        let __unwrapped = bridge.get_std__optional_std__variant_bool__nitro__NullType__(self.__checked)
+        return { () -> Variant_Bool_NullType in
+          let __variant = bridge.std__variant_bool__nitro__NullType_(__unwrapped)
+          switch __variant.index() {
+            case 0:
+              let __actual = __variant.get_0()
+              return .first(__actual)
+            case 1:
+              let __actual = __variant.get_1()
+              return .second(NullType.null)
             default:
               fatalError("Variant can never have index \(__variant.index())!")
           }

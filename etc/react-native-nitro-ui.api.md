@@ -293,9 +293,11 @@ export function Menu(input: MenuProps): JSX.Element;
 
 // @public
 export interface MenuAction {
+    checked?: boolean | null | undefined;
     destructive?: boolean | undefined;
     disabled?: boolean | undefined;
     id: string;
+    subtitle?: string | null | undefined;
     systemImage?: string | undefined;
     title: string;
 }
@@ -506,6 +508,61 @@ export interface ProgressProps extends ViewProps {
 export type ProgressVariant = 'linear' | 'circular';
 
 // @public
+export function SearchField(input: SearchFieldProps): JSX.Element;
+
+// @public
+export interface SearchFieldHandle {
+    blur(): void;
+    focus(): void;
+}
+
+// @public
+export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
+    defaultValue?: string | undefined;
+    editable?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: string | null;
+        readonly mostRecentEventCount: number;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        focus(): void;
+        blur(): void;
+        nuiTestState(): {
+            text: string;
+            focused: boolean;
+            composing: boolean;
+            nativeEvents: number;
+            jsEvents: number;
+            lastWrite: string;
+            editable: boolean;
+            maxLength: number;
+            placeholder: string;
+            accessibilityLabel: string;
+            returnKeyType: string;
+            expanded: boolean;
+            canClear: boolean;
+        };
+        nuiTestClear(): void;
+        nuiTestSubmit(): void;
+        nuiTestLifetimeReport(): string;
+    }) => void) | undefined;
+    maxLength?: number | null | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onBlur?: (() => void) | undefined;
+    onChangeText?: ((text: string) => void) | undefined;
+    onFocus?: (() => void) | undefined;
+    onSubmitEditing?: ((text: string) => void) | undefined;
+    placeholder?: string | undefined;
+    ref?: Ref<SearchFieldHandle> | undefined;
+    value?: string | undefined;
+}
+
+// @public
 export function SegmentedControl(input: SegmentedControlProps): JSX.Element;
 
 // @public
@@ -683,6 +740,43 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
 
 // @public
 export type TextFieldReturnKeyType = 'default' | 'done' | 'go' | 'next' | 'search' | 'send';
+
+// @public
+export function Tooltip(input: TooltipProps): JSX.Element;
+
+// @public
+export interface TooltipAction {
+    id: string;
+    title: string;
+}
+
+// @public
+export type TooltipPlacement = 'auto' | 'above' | 'below';
+
+// @public
+export interface TooltipProps extends ViewProps {
+    actions?: readonly TooltipAction[] | undefined;
+    children?: ReactNode;
+    // @internal
+    hybridRef?: ((view: {
+        readonly presented: boolean;
+        readonly mostRecentEventCount: number;
+        readonly message: string;
+        readonly title: string | null;
+        readonly placement: string;
+        nuiTestStateReport(): string;
+        nuiTestPerformAction(id: string): void;
+        nuiTestDismiss(): void;
+    }) => void) | undefined;
+    isPresented: boolean;
+    message: string;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onAction?: ((id: string) => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    placement?: TooltipPlacement | undefined;
+    title?: string | undefined;
+}
 
 // (No @packageDocumentation comment for this package)
 

@@ -876,8 +876,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       // at mount opens once its place in the app is on screen.
       return
     }
-    let top = Self.appTopController(in: window)
-    if let top, Self.isBusy(top) {
+    let top = NitroUiPresenterChain.appTopController(in: window)
+    if let top, NitroUiPresenterChain.isBusy(top) {
       // UIKit refuses a presentation from a chain that is mid-transition, silently: no
       // error and no completion (S2's `presentQueued`). Bounded, so a stuck chain ends
       // as a sheet that never came rather than a retry loop.
@@ -899,7 +899,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     controller.adopt(container)
     sheet = controller
     presentCount += 1
-    appTopClass = Self.topPresentedClass(in: window)
+    appTopClass = NitroUiPresenterChain.topPresentedClass(in: window)
     // D35: the app's chain, unless an RN `Modal` is on top - RN closes a `Modal` by
     // dismissing its controller, which with a sheet on it would take the sheet and
     // strand the Modal (G11, S2).
@@ -908,7 +908,7 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
       controller.invalidateFit()
       self.publishReport()
     }
-    if let top, Self.isModalHost(top) {
+    if let top, NitroUiPresenterChain.isModalHost(top) {
       lastOwnWindow = presentation.presentInOwnWindow(
         controller, over: anchor, animated: true, onShown: onShown)
       if !lastOwnWindow {
@@ -1120,8 +1120,8 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     }
     fields.append("ownWindow=\(lastOwnWindow ? 1 : 0)")
     fields.append("appTop=\(appTopClass)")
-    fields.append("topPresented=\(Self.topPresentedClass(in: anchor.window))")
-    fields.append("modalHosts=\(Self.modalHostCount(near: anchor.window))")
+    fields.append("topPresented=\(NitroUiPresenterChain.topPresentedClass(in: anchor.window))")
+    fields.append("modalHosts=\(NitroUiPresenterChain.modalHostCount(near: anchor.window))")
     fields.append("windows=\(HybridNitroUiDialog.visibleWindowCount(near: anchor.window))")
     fields.append("controllers=\(NitroUiSheetController.alive.value)")
     fields.append("touchRoots=\(NitroUiTouchRoot.attached)")
@@ -1138,41 +1138,6 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     reportLock.unlock()
   }
 
-  /// The top-most controller in `window`: the last one presented there, or its root.
-  static func appTopController(in window: UIWindow?) -> UIViewController? {
-    guard var top = window?.rootViewController else { return nil }
-    while let next = top.presentedViewController {
-      top = next
-    }
-    return top
-  }
-
-  /// The class of the top-most controller presented in the app's window, or `-`.
-  static func topPresentedClass(in window: UIWindow?) -> String {
-    guard let top = appTopController(in: window), top.presentingViewController != nil else {
-      return "-"
-    }
-    return String(describing: type(of: top))
-  }
-
-  /// Whether `controller` is an RN `Modal`'s host - by class name, so this file does
-  /// not link against React (`RCTFabricModalHostViewController`).
-  static func isModalHost(_ controller: UIViewController) -> Bool {
-    String(describing: type(of: controller)).contains("ModalHostViewController")
-  }
-
-  /// How many RN `Modal` hosts are presented in the app's window: one left after its
-  /// `Modal` closed is the strand D35's rule exists to prevent.
-  static func modalHostCount(near window: UIWindow?) -> Int {
-    var count = 0
-    var current = window?.rootViewController
-    while let controller = current {
-      if isModalHost(controller) { count += 1 }
-      current = controller.presentedViewController
-    }
-    return count
-  }
-
   /// Whether a touch at the centre of the content would be routed into it: UIKit's
   /// own `hitTest`, asked of the window the content is in - the structural half of "a
   /// finger reaches it" (the real finger is `real-input:ios`).
@@ -1185,12 +1150,6 @@ final class HybridNitroUiBottomSheet: HybridNitroUiBottomSheetSpec, RecyclableVi
     // A React Native child, not the content view itself: an empty content view in the
     // sheet takes the hit as well, and would say nothing about where the children are.
     return hit !== content && hit.isDescendant(of: content)
-  }
-
-  /// Whether UIKit would drop a presentation asked of `controller` right now.
-  static func isBusy(_ controller: UIViewController) -> Bool {
-    controller.isBeingDismissed || controller.isBeingPresented
-      || controller.presentingViewController?.isBeingDismissed == true
   }
 
   private func mark(_ kind: NitroUiPerfKind) {

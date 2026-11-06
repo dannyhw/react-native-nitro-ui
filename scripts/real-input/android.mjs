@@ -39,6 +39,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
+import { ECHO, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
   findByDescription,
@@ -46,7 +47,9 @@ import {
   findAllByText,
   findTab,
   parseHierarchy,
+  tabTarget,
 } from './uiautomator.mjs';
+import { checkTabTargets, exampleTabs } from './tab-targets.mjs';
 import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import { decodePng, pixelAt } from './png-pixel.mjs';
 import {
@@ -72,56 +75,6 @@ assertSupportedNodeOrReexec({
 
 const BUNDLE_ID = 'nitroui.example';
 const ACTIVITY = `${BUNDLE_ID}/.MainActivity`;
-
-/** The on-screen echoes the checks read (testIDs from `example/src`). */
-const ECHO = {
-  switchValue: 'switch-controlled-value',
-  buttonCount: 'real-input-count',
-  sliderStart: 'slider-start-count',
-  sliderChange: 'slider-change-count',
-  sliderComplete: 'slider-complete-count',
-  sliderValue: 'slider-phase-value',
-  sliderControlledValue: 'slider-controlled-value',
-  segmentedIndex: 'real-input-segmented-index',
-  segmentedEvents: 'real-input-segmented-events',
-  rejectEvents: 'real-input-reject-events',
-  rejectValue: 'real-input-reject-value',
-  dateValue: 'real-input-date-value',
-  dateEvents: 'real-input-date-events',
-  pickerIndex: 'real-input-picker-index',
-  pickerEvents: 'real-input-picker-events',
-  pickerGone: 'real-input-drop-gone',
-  menuPick: 'real-input-menu-pick',
-  menuEvents: 'real-input-menu-events',
-  chipValue: 'real-input-chip-value',
-  chipEvents: 'real-input-chip-events',
-  chipRefusedLast: 'real-input-chip-refused-last',
-  chipRefusedEvents: 'real-input-chip-refused-events',
-  chipPresses: 'real-input-chip-presses',
-  checkboxValue: 'real-input-checkbox-value',
-  checkboxEvents: 'real-input-checkbox-events',
-  checkboxRefusedLast: 'real-input-checkbox-refused-last',
-  checkboxRefusedEvents: 'real-input-checkbox-refused-events',
-  checkboxDisabledEvents: 'real-input-checkbox-disabled-events',
-  dialogLog: 'dialog-log',
-  sheetLog: 'sheet-log',
-  hostValue: 'host-controlled-value',
-  hostEvents: 'host-events-count',
-  hostSliderValue: 'host-slider-value',
-  hostButtonPresses: 'host-button-presses',
-  hostMixedState: 'host-mixed-state',
-  hostSegmentedIndex: 'host-segmented-index',
-  hostPickerIndex: 'host-picker-index',
-  hostDateValue: 'host-datepicker-value',
-  hostDateDropArmed: 'host-datepicker-drop-armed',
-  hostDateDropButton: 'host-datepicker-drop',
-  hostDateGone: 'host-datepicker-drop-gone',
-  hostDateRemount: 'host-datepicker-drop-remount',
-  textTyping: 'text-typing-echo',
-  textFrozen: 'text-frozen-echo',
-  textCapped: 'text-capped-echo',
-  textFocus: 'text-focus-echo',
-};
 
 /** The Enter key, which a single-line field takes as its editor action (submit). */
 const KEY_ENTER = 66;
@@ -888,6 +841,9 @@ const CHECKS = {
     const PICK = 'Bravo';
     const TWIN = 'Alpha';
     const LOCKED = 'Locked row';
+    // The checkable row: a `CheckableDropdownMenuItem`, whose pick goes through
+    // `onCheckedChange` rather than `onClick` - the wiring step 6 exists for.
+    const CHECKED = 'Checked row';
 
     // 1. Before any touch: the echoes, the window table, and what a screen reader is
     //    offered. The trigger's node is read here rather than later because a popup
@@ -1116,6 +1072,55 @@ const CHECKS = {
       'the whole echo pairs every open with a close, in the order the gestures happened',
       t.requireEcho(ECHO.menuEvents),
       'open > close > open > select bravo > close > open > close > open > select alpha > close'
+    );
+
+    // 6. The checked row. Its pick is a different handler from every row above
+    //    (`onCheckedChange`, `MenuRows.kt`), and the harness never reaches it:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that reopens the menu for the checked row',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    const checkedRow = t.waitForOption(
+      CHECKED,
+      'the menu to show the checked row'
+    );
+    t.log.note(
+      `row "${CHECKED}": enabled=${checkedRow.enabled} clickable=${checkedRow.clickable} ` +
+        `checkable=${checkedRow.checkable} checked=${checkedRow.checked} ` +
+        `class=${checkedRow.className}`
+    );
+    t.log.checkEquals(
+      `a real tap on the checked row "${CHECKED}" reaches JS as its id`,
+      await t.tapOptionUntilValue(
+        CHECKED,
+        ECHO.menuPick,
+        'checked',
+        'a pick of the checked row to reach JS'
+      ),
+      'checked'
+    );
+    t.log.checkEquals(
+      'a pick of the checked row closes its own popup',
+      t.waitForPopupCount(0, 'the checked-row pick to take its popup down'),
+      0
+    );
+    const finalEvents = t.requireEcho(ECHO.menuEvents);
+    t.log.checkEquals(
+      'the checked row reported exactly one select',
+      finalEvents.split(' > ').filter((said) => said === 'select checked')
+        .length,
+      1
+    );
+    t.log.checkEquals(
+      'and the whole echo ends with one more open > select checked > close',
+      finalEvents,
+      'open > close > open > select bravo > close > open > close > open > select alpha > close' +
+        ' > open > select checked > close'
     );
   },
 
@@ -2423,6 +2428,151 @@ const CHECKS = {
     await waitGone(SHEET_ROW, 'the row to take the sheet down');
   },
 
+  'tooltip': async (t) => {
+    // The rich tooltip `TooltipScreen` opens around its star. Its message and its
+    // action's title appear nowhere else on the screen, so a text match names the
+    // popup. Material's popup is a window of its own, and while it is up the dump can
+    // be that window's tree rather than the app's - so the log is read only with the
+    // tooltip down, and "up" is read as the tooltip's own message.
+    const MESSAGE = 'Tap the star to keep this search.';
+    const TITLE = 'Saved searches';
+    const ACTION = 'Got it';
+    const upCount = () =>
+      t.dump().filter((node) => node.text === MESSAGE).length;
+    const opener = () => {
+      const node = t.nodeByTestId('tooltip-open-rich');
+      if (node == null) {
+        t.log.abort('no "tooltip-open-rich" opener on the Tooltip screen');
+      }
+      return node;
+    };
+    const open = async (description) => {
+      await t.tapUntilUp(opener, description, upCount, {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(MESSAGE, description);
+    };
+    const waitGone = async (description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    // One real tap on the star, confirmed by its own count. The anchor is the app's
+    // `Pressable`; the tooltip's overlay is behind it and takes no touch.
+    const pressAnchor = async (expected, description) => {
+      const { delivered, shown } = await t.pressUntil({
+        what: 'the star the tooltip points at (tooltip-anchor)',
+        waitingFor: description,
+        attempts: 1,
+        press: async () => {
+          await t.tapTestId('tooltip-anchor');
+        },
+        reading: () => t.echo(ECHO.tooltipPresses),
+        raised: (current) => current === expected,
+      });
+      if (!delivered) {
+        t.log.abort(
+          `${description}: the star's count says "${String(shown)}", not "${expected}"`
+        );
+      }
+      return shown;
+    };
+    // Outside: the log line, a `Text` with no press of its own, well above the popup
+    // that hangs over the star. Found while the tooltip is down (an open popup's window
+    // can be all the dump holds), and tapped where it was. A fixed fraction of the
+    // screen could land on a tab, or on a button a passed-through touch would press.
+    const logNode = t.nodeByTestId(ECHO.tooltipLog);
+    if (logNode == null) {
+      t.log.abort('no "tooltip-log" on the Tooltip screen to tap outside on');
+    }
+    const tapOutside = async () => {
+      await t.tapNode(logNode);
+      await t.settle(400);
+    };
+
+    // 1. Before a touch: nothing reported, nothing up, and a closed tooltip leaves a
+    //    real tap on its anchor to the anchor - once.
+    t.log.checkEquals(
+      'no tooltip has reported anything before a touch',
+      t.requireEcho(ECHO.tooltipLog),
+      'none'
+    );
+    t.log.checkEquals('no tooltip is up before a touch', upCount(), 0);
+    t.log.checkEquals(
+      'a real tap on the anchor of a closed tooltip presses the anchor once',
+      await pressAnchor('star presses: 1', 'the real tap on the star'),
+      'star presses: 1'
+    );
+    await t.settle(800);
+    t.log.checkEquals(
+      'and opens nothing, reports nothing',
+      `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+      '0 up, log none'
+    );
+
+    // 2. A real tap on a plain RN button opens it, with its title and its action. JS
+    //    opened it, so it reports nothing (read once it is down, in step 3).
+    await open('the real tap that opens the rich tooltip');
+    t.log.checkEquals(
+      'the tooltip shows its title and its action',
+      `${String(t.dump().filter((n) => n.text === TITLE).length)} title, ` +
+        `${String(t.dump().filter((n) => n.text === ACTION).length)} action`,
+      '1 title, 1 action'
+    );
+
+    // 3. A tap outside closes it, and reports the close alone.
+    await tapOutside();
+    await waitGone('a tap outside to take the tooltip down');
+    t.log.checkEquals(
+      'a tap outside closes the tooltip and reports the close alone',
+      t.requireEcho(ECHO.tooltipLog),
+      'presented:false'
+    );
+
+    // 4. Back closes a tooltip with an action - Material makes that one focusable.
+    await open('the real tap that reopens the rich tooltip');
+    await t.pressBack();
+    await waitGone('Back to take the tooltip down');
+    t.log.checkEquals(
+      'Back closes it and reports the close alone',
+      t.requireEcho(ECHO.tooltipLog),
+      'presented:false > presented:false'
+    );
+
+    // 5. Its action reports, before the close it causes (D32).
+    await open('the real tap that opens it again');
+    const afterAction =
+      'presented:false > presented:false > action:ok > presented:false';
+    t.log.checkEquals(
+      'a real tap on its action reports the id, then the close - once each, in order',
+      await t.tapOptionUntilValue(
+        ACTION,
+        ECHO.tooltipLog,
+        afterAction,
+        `the real tap on "${ACTION}"`
+      ),
+      afterAction
+    );
+    await waitGone('the action to take the tooltip down');
+
+    // 6. Closed again, the anchor's taps are its own.
+    t.log.checkEquals(
+      'once it is closed, a real tap on the anchor presses it once more',
+      await pressAnchor('star presses: 2', 'the second real tap on the star'),
+      'star presses: 2'
+    );
+    await t.settle(800);
+    t.log.checkEquals(
+      'and opens nothing, reports nothing',
+      `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+      `0 up, log ${afterAction}`
+    );
+  },
+
   'bottom-sheet': async (t) => {
     // The texts `BottomSheetScreen` gives its sheets' content. Each appears nowhere
     // else, so a text match names one sheet. A Material sheet is a `Dialog` window of
@@ -2877,6 +3027,258 @@ const CHECKS = {
       'and one that calls ref.blur() blurs it',
       t.waitForEcho(
         ECHO.textFocus,
+        'focus: 2 blur: 2 submitted: go',
+        'blur from JS'
+      ),
+      'focus: 2 blur: 2 submitted: go'
+    );
+    // Leave no keyboard up for the next check.
+    await t.hideKeyboard();
+  },
+
+  /**
+   * Real keystrokes into Material 3's search input, plus the two things a *search*
+   * field does that a text field does not: the Search key refuses an empty query, and
+   * the field grows a clear button that takes the query out without losing focus.
+   *
+   * Four assertions here are not in `CHECKS['text-field']`, and each is the out-of-app
+   * half of a claim the component makes:
+   *
+   * - **the Search key with nothing in the field reports nothing**: the rule
+   *   `HybridNitroUiSearchField.kt`'s `onSearch` enforces, driven by a real key rather
+   *   than by a call. iOS states the same rule with `enablesReturnKeyAutomatically`.
+   * - **the Search key submits the query and then blurs**, as a single-line field does.
+   * - **the clear button empties the field** — aimed at from the tree, so a clear that
+   *   only *looks* tappable goes red.
+   * - **clearing keeps focus**: the blur counter does not move, so a clear that also
+   *   dismissed the keyboard — what `clearFocus()` beside `clearText()` would do — is
+   *   caught.
+   *
+   * The clear button is found by geometry, not by name: its label is the framework's own
+   * localized "clear query" string (`SearchFieldStrings`), which this script has no
+   * business spelling out in English. What *is* asserted is that the node it taps is
+   * named, because an unnamed button is one TalkBack cannot describe.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'search-field': async (t) => {
+    /**
+     * The editable node inside the named field's box.
+     *
+     * `fieldText` requires the *same* box, which is how `HybridNitroUiTextField`
+     * publishes its name; a search bar names the whole input row and holds the text in
+     * a node inset by its own leading icon, so containment is the right relation here.
+     *
+     * @param {string} description
+     */
+    const queryText = (description) => {
+      const nodes = t.dump();
+      const named = nodes.find(
+        (node) => node.contentDesc === description && node.bounds.width > 0
+      );
+      if (named == null) {
+        t.log.abort(`no search field named "${description}" on screen`);
+      }
+      const held = nodes.filter(
+        (node) =>
+          node.className === 'android.widget.EditText' &&
+          node.bounds.x1 >= named.bounds.x1 &&
+          node.bounds.y1 >= named.bounds.y1 &&
+          node.bounds.x2 <= named.bounds.x2 &&
+          node.bounds.y2 <= named.bounds.y2
+      );
+      if (held.length !== 1) {
+        t.log.abort(
+          `"${description}" holds ${String(held.length)} editable nodes in its box - ` +
+            'a check cannot say which one a keystroke reached'
+        );
+      }
+      return held[0].text;
+    };
+
+    /**
+     * The clear affordance of a focused field: the clickable node the field owns inside
+     * its own box, on the side away from the search glyph.
+     *
+     * @param {import('./uiautomator.mjs').UiautomatorNode} field
+     */
+    const clearButtonIn = (field) => {
+      const candidates = t
+        .dump()
+        .filter(
+          (node) =>
+            node.clickable === 'true' &&
+            node.bounds.cx > field.bounds.cx &&
+            node.bounds.cx < field.bounds.x2 &&
+            node.bounds.cy > field.bounds.y1 &&
+            node.bounds.cy < field.bounds.y2 &&
+            node.bounds.width > 0 &&
+            node.bounds.width < field.bounds.width * 0.6 &&
+            !(
+              node.bounds.x1 === field.bounds.x1 &&
+              node.bounds.x2 === field.bounds.x2
+            )
+        );
+      if (candidates.length !== 1) {
+        t.log.abort(
+          `the focused search field offers ${String(candidates.length)} ` +
+            'clickable nodes on its trailing side — expected exactly the clear ' +
+            'button, so a tap cannot be aimed at it'
+        );
+      }
+      const clear = candidates[0];
+      t.log.note(
+        `the clear button is "${clear.contentDesc}" at ` +
+          `${String(clear.bounds.x1)},${String(clear.bounds.y1)} → ` +
+          `${String(clear.bounds.x2)},${String(clear.bounds.y2)}`
+      );
+      return clear;
+    };
+
+    t.log.checkEquals(
+      'the search field starts empty',
+      t.requireEcho(ECHO.searchTyping),
+      'query:  (0)'
+    );
+    t.log.checkEquals(
+      'and nothing has been focused, blurred or submitted yet',
+      t.requireEcho(ECHO.searchFocus),
+      'focus: 0 blur: 0 submitted: -'
+    );
+    t.log.check(
+      'a placeholder nobody chose still draws a word for search',
+      t
+        .dump()
+        .some((node) => node.text.includes('earch') && node.text.length > 0)
+    );
+    t.log.check(
+      'and a placeholder that was chosen is drawn too',
+      t.dump().some((node) => node.text === 'Search recipes')
+    );
+
+    // Lowest field first: once a keyboard is up it covers the lower half of the
+    // screen, and every later tap is aimed higher than the one before it.
+    await t.tapNode(await t.requireControlOnScreen('Capped search field'));
+    await t.type('abcdefg');
+    t.log.checkEquals(
+      'maxLength 5 keeps five of seven keys',
+      t.waitForEcho(ECHO.searchCapped, 'capped: abcde (5)', 'the capped query'),
+      'capped: abcde (5)'
+    );
+    t.log.checkEquals(
+      'and the field holds the same five',
+      queryText('Capped search field'),
+      'abcde'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Frozen search field'));
+    await t.type('xy');
+    t.log.checkEquals(
+      'every key into the frozen field is reported to JS',
+      t.waitForEcho(
+        ECHO.searchFrozen,
+        'frozen: 2 edits refused',
+        'two refused edits'
+      ),
+      'frozen: 2 edits refused'
+    );
+    t.log.checkEquals(
+      'and each one is reverted: the field still shows what JS kept',
+      queryText('Frozen search field'),
+      'frozen'
+    );
+
+    await t.tapNode(await t.requireControlOnScreen('Typing search field'));
+    await t.type('latte');
+    t.log.checkEquals(
+      'real keystrokes reach the field, and React sees the query',
+      t.waitForEcho(ECHO.searchTyping, 'query: latte (5)', 'the typed query'),
+      'query: latte (5)'
+    );
+    t.log.checkEquals(
+      'the field shows what React was told',
+      queryText('Typing search field'),
+      'latte'
+    );
+
+    // 1. Focus, and the key that must not answer.
+    await t.tapNode(await t.requireControlOnScreen('Focus search field'));
+    t.log.checkEquals(
+      'a real tap focuses the field (onFocus)',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'the focus'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+    t.key(KEY_ENTER);
+    t.log.checkEquals(
+      'the Search key with an empty query submits nothing and blurs nobody',
+      t.requireEchoToStay(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'an empty Search key to stay silent'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+
+    // 2. The clear button: one edit, focus kept.
+    await t.type('go');
+    t.log.checkEquals(
+      'the field holds the query before anything clears it',
+      queryText('Focus search field'),
+      'go'
+    );
+    const focused = await t.requireControlOnScreen('Focus search field');
+    const clear = clearButtonIn(focused);
+    t.log.check(
+      'the clear button names itself, so TalkBack can say what it does',
+      clear.contentDesc.length > 0
+    );
+    await t.tapNode(clear);
+    t.log.checkEquals(
+      'a real tap on the clear button empties the field',
+      queryText('Focus search field'),
+      ''
+    );
+    t.log.checkEquals(
+      'and clearing keeps focus: no blur, no submit',
+      t.requireEchoToStay(
+        ECHO.searchFocus,
+        'focus: 1 blur: 0 submitted: -',
+        'the clear button to hold focus'
+      ),
+      'focus: 1 blur: 0 submitted: -'
+    );
+
+    // 3. The key that must answer, and the two imperative handles.
+    await t.type('go');
+    t.key(KEY_ENTER);
+    t.log.checkEquals(
+      'the Search key submits the query and then blurs the field',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 1 blur: 1 submitted: go',
+        'the submit and blur'
+      ),
+      'focus: 1 blur: 1 submitted: go'
+    );
+    await t.tapTestId('search-focus-js');
+    t.log.checkEquals(
+      'a real tap on a button that calls ref.focus() focuses it',
+      t.waitForEcho(
+        ECHO.searchFocus,
+        'focus: 2 blur: 1 submitted: go',
+        'focus from JS'
+      ),
+      'focus: 2 blur: 1 submitted: go'
+    );
+    await t.tapTestId('search-blur-js');
+    t.log.checkEquals(
+      'and one that calls ref.blur() blurs it',
+      t.waitForEcho(
+        ECHO.searchFocus,
         'focus: 2 blur: 2 submitted: go',
         'blur from JS'
       ),
@@ -3769,8 +4171,9 @@ async function tapBackToTheDisplayedDay(t) {
   const VALUE = 'controlled-value';
   // The tab bar is pinned to the top of the window and draws over whatever the page
   // scrolls under it: a "cell" up there is a tab as far as `adb shell input` is
-  // concerned, so the band a tap may aim at starts below it.
-  const bandTop = 250;
+  // concerned, so the band a tap may aim at starts below it - measured, because the
+  // bar's height is the tabs' touch target plus the status bar, not a constant.
+  const bandTop = t.tabBarBottom() + 16;
 
   // The echoes that say what a tap did sit under a calendar taller than the screen,
   // so scroll until they are readable at all...
@@ -4340,6 +4743,21 @@ async function main() {
     harness.launch();
     await harness.waitForReady(READY_TIMEOUT);
 
+    // Before the controls, because every one of them gets to its screen through a tab:
+    // a tab too small to tap is the first thing that would make a control's check
+    // flaky, and it is cheapest to read while the app is fresh on its first screen.
+    // Auxiliary, like the a11y sweep, so the control totals keep meaning "every control
+    // answered a real touch", and on every run, filtered or not.
+    reportTabTargets(
+      suite.beginAuxiliary(
+        'tab-targets',
+        'every example tab is a 48 dp touch target (uiautomator)'
+      ),
+      await harness.measureTabs(),
+      harness.tabs,
+      1 / harness.density()
+    );
+
     for (const control of toRun) {
       const log = suite.begin(control);
       await harness.goToScreen(control.screen);
@@ -4386,6 +4804,25 @@ async function main() {
 }
 
 /**
+ * The tab-target rule's verdicts, one line per tab.
+ *
+ * @param {import('./support.mjs').CheckLog} check
+ * @param {Map<string, import('./tab-targets.mjs').TabMeasurement>} measured
+ * @param {{ id: string, label: string }[]} tabs
+ * @param {number} pixel one device pixel in dp
+ */
+function reportTabTargets(check, measured, tabs, pixel) {
+  for (const verdict of checkTabTargets({
+    platform: 'android',
+    tabs,
+    measured,
+    pixel,
+  })) {
+    check.check(verdict.line, verdict.ok);
+  }
+}
+
+/**
  * @returns {string}
  */
 function repoRoot() {
@@ -4413,6 +4850,11 @@ class DeviceHarness {
     // The tab bar is the top of the screen; 12% of its height covers the tabs on
     // any density without ever reaching the content below them.
     this.tabBandY = Math.round(this.displayHeight() * 0.12);
+    // The tabs, in bar order, from the array the registry writes: the order is what
+    // tells `revealTab` which way to scroll for a tab that is not on screen.
+    this.tabs = exampleTabs(
+      fs.readFileSync(path.join(repoRoot(), 'example/src/App.tsx'), 'utf8')
+    );
   }
 
   /**
@@ -4665,42 +5107,29 @@ class DeviceHarness {
   /**
    * The example's tabs are its only navigation.
    *
-   * @param {'switch' | 'slider' | 'button' | 'segmented' | 'datepicker'
-   *   | 'picker' | 'menu' | 'dialog' | 'sheet' | 'host'} screen
+   * The two halves of that sentence come from two places, which is the point. The **tab**
+   * is looked up by id in {@link exampleTabs} — the label and order `example/src/App.tsx`
+   * renders, read from the array the registry writes — so a tab the registry adds is
+   * reachable without an edit here, and {@link DeviceHarness.revealTab} scrolls the
+   * scrolling bar (X19) until that tab is wholly on screen before tapping it. The
+   * **arrival echo** is `screenTab(screen).anchor`: a testID only this repo's checks
+   * know, kept with every other echo in `screens.mjs` rather than in a map here, because
+   * a control whose screen has no row there is a control whose screen this runner cannot
+   * tell it has reached. G17's SearchField arrived after both maps existed and was sent
+   * off to poll an echo called `undefined`; iOS never noticed, because it taps a tab by
+   * its `testID`, which Android's accessibility tree does not carry.
+   *
+   * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet' | 'tooltip'} screen
    */
   async goToScreen(screen) {
-    const label = {
-      switch: 'Switch',
-      slider: 'Slider',
-      button: 'Button',
-      segmented: 'Segments',
-      datepicker: 'Dates',
-      picker: 'Picker',
-      menu: 'Menu',
-      chip: 'Chip',
-      checkbox: 'Checkbox',
-      dialog: 'Dialogs',
-      sheet: 'Sheet',
-      host: 'Host',
-      textfield: 'Text',
-      contextmenu: 'Context',
-    }[screen];
-    const anchor = {
-      switch: ECHO.switchValue,
-      slider: ECHO.sliderStart,
-      button: ECHO.buttonCount,
-      segmented: ECHO.segmentedIndex,
-      datepicker: ECHO.dateValue,
-      picker: ECHO.pickerIndex,
-      menu: ECHO.menuPick,
-      chip: ECHO.chipValue,
-      checkbox: ECHO.checkboxValue,
-      dialog: ECHO.dialogLog,
-      sheet: ECHO.sheetLog,
-      host: ECHO.hostValue,
-      textfield: ECHO.textTyping,
-      contextmenu: 'ctx-echo',
-    }[screen];
+    const { anchor } = screenTab(screen);
+    const tab = this.tabs.find((entry) => entry.id === screen);
+    if (tab == null) {
+      throw new Error(
+        `real-input: no example tab "${screen}" in example/src/App.tsx's TABS, ` +
+          'so the screen this check needs cannot be reached.'
+      );
+    }
     // Asked from wherever the last control left the scroll, an echo that is scrolled
     // out of sight is simply not in the tree, and this would go looking for a tab to
     // tap while standing on it. So ask from the top.
@@ -4708,14 +5137,14 @@ class DeviceHarness {
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
-    const tab = findTab(this.hierarchy(), label, this.tabBandY);
-    if (tab == null) {
+    const target = await this.revealTab(tab);
+    if (target == null) {
       throw new Error(
-        `real-input: no "${label}" tab in the accessibility tree, so the ` +
-          'screen this check needs cannot be reached.'
+        `real-input: the "${tab.label}" tab could not be scrolled wholly onto the ` +
+          'screen, so the screen this check needs cannot be reached reliably.'
       );
     }
-    this.tap(tab);
+    this.tap(target);
     const deadline = Date.now() + REACT_TIMEOUT;
     for (;;) {
       if (findByTestId(this.hierarchy(), anchor) != null) {
@@ -4723,11 +5152,104 @@ class DeviceHarness {
       }
       if (Date.now() > deadline) {
         throw new Error(
-          `real-input: tapping the "${label}" tab did not bring up its screen.`
+          `real-input: tapping the "${tab.label}" tab did not bring up its screen.`
         );
       }
       await sleep(300);
     }
+  }
+
+  /**
+   * Scroll the tab bar until one tab is wholly on screen, and answer with its target.
+   *
+   * The bar scrolls sideways (X19), and `uiautomator` leaves a node that is scrolled out
+   * of sight out of the dump - and reports one that is half out at its *clipped* box.
+   * So "wholly on screen" is the target's box clear of both window edges, which the
+   * bar's own 4 dp end padding makes true of a tab scrolled fully into view. A tab not
+   * in the dump at all is placed by bar order against the tabs that are.
+   *
+   * Swipes are half a window and slow, so the bar barely flings; a swipe that
+   * overshoots is corrected by the next look, which is why this loops on the dump
+   * rather than computing one distance.
+   *
+   * @param {{ id: string, label: string }} tab
+   * @returns {Promise<import('./uiautomator.mjs').UiautomatorNode | null>} the tab's
+   *   target, or null if 10 swipes did not bring it wholly on screen
+   */
+  async revealTab(tab) {
+    const width = this.displayWidth();
+    const order = this.tabs.findIndex((entry) => entry.id === tab.id);
+    for (let attempt = 0; ; attempt += 1) {
+      const nodes = this.hierarchy();
+      const target = tabTarget(nodes, tab, this.tabBandY);
+      if (target != null && target.bounds.x1 > 0 && target.bounds.x2 < width) {
+        return target;
+      }
+      if (attempt === 10) return null;
+      const visible = this.tabs
+        .map((entry, index) => ({
+          index,
+          node: tabTarget(nodes, entry, this.tabBandY),
+        }))
+        .filter((entry) => entry.node != null);
+      if (visible.length === 0) {
+        throw new Error(
+          'real-input: no tab of the example is in the accessibility tree, so ' +
+            `the "${tab.label}" tab cannot be scrolled to.`
+        );
+      }
+      // +1: the tab is to the right of the window, so the content moves left.
+      const towards =
+        target != null
+          ? target.bounds.x2 >= width
+            ? 1
+            : -1
+          : order > visible[visible.length - 1].index
+            ? 1
+            : -1;
+      const y = visible[0].node.bounds.cy;
+      const from = Math.round(width * (towards > 0 ? 0.75 : 0.25));
+      this.swipe(from, y, from - towards * Math.round(width * 0.5), y, 600);
+      await sleep(500);
+    }
+  }
+
+  /**
+   * The bottom of the tab bar, in pixels: the lowest tab target on screen. Falls back
+   * to the band the tabs are looked for in, which is never above the bar.
+   *
+   * @returns {number}
+   */
+  tabBarBottom() {
+    const nodes = this.hierarchy();
+    const bottoms = this.tabs
+      .map((tab) => tabTarget(nodes, tab, this.tabBandY))
+      .filter((node) => node != null)
+      .map((node) => node.bounds.y2);
+    return bottoms.length > 0 ? Math.max(...bottoms) : this.tabBandY;
+  }
+
+  /**
+   * Every tab, scrolled wholly on screen and measured: the boxes `checkTabTargets`
+   * decides from, in dp, by tab id.
+   *
+   * @returns {Promise<Map<string, import('./tab-targets.mjs').TabMeasurement>>}
+   */
+  async measureTabs() {
+    const density = this.density();
+    /** @type {Map<string, import('./tab-targets.mjs').TabMeasurement>} */
+    const measured = new Map();
+    for (const tab of this.tabs) {
+      const target = await this.revealTab(tab);
+      const last = target ?? tabTarget(this.hierarchy(), tab, this.tabBandY);
+      if (last == null) continue;
+      measured.set(tab.id, {
+        width: last.bounds.width / density,
+        height: last.bounds.height / density,
+        reached: target != null,
+      });
+    }
+    return measured;
   }
 
   /**
@@ -4972,6 +5494,9 @@ function makeContext(harness, log) {
 
   return {
     log,
+
+    /** The bottom of the example's tab bar, in pixels ([DeviceHarness.tabBarBottom]). */
+    tabBarBottom: () => harness.tabBarBottom(),
 
     /**
      * @param {string} testID

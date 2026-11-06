@@ -57,6 +57,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiSearchFieldComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
@@ -65,6 +67,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiTooltipSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiTooltipComponent.cpp
   # Android-specific Nitrogen C++ sources
   ../nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.cpp
@@ -92,6 +96,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiSearchFieldStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
@@ -100,6 +106,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiTooltipSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiTooltipStateUpdater.cpp
 )
 
 # From node_modules/react-native/ReactAndroid/cmake-utils/folly-flags.cmake

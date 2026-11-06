@@ -24,8 +24,10 @@
 #include "HybridNitroUiTextFieldSpecSwift.hpp"
 #include "HybridNitroUiBottomSheetSpecSwift.hpp"
 #include "HybridNitroUiChipSpecSwift.hpp"
+#include "HybridNitroUiSearchFieldSpecSwift.hpp"
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
+#include "HybridNitroUiTooltipSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -137,6 +139,13 @@
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSearchField",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiSearchFieldSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiSearchField();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
     "NitroUiCheckbox",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiCheckboxSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiCheckbox();
@@ -147,6 +156,13 @@
     "NitroUiContextMenu",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiContextMenuSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiContextMenu();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiTooltip",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiTooltipSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTooltip();
       return hybridObject;
     }
   );

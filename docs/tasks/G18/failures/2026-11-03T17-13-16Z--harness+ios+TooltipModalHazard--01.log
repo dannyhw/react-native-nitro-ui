@@ -1,0 +1,90 @@
+# Failure excerpt — harness:ios:TooltipModalHazard
+
+- Ran: 2026-11-03T17:13:16.501Z on code tree `9cd2af8d319b` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios TooltipModalHazard`
+- Result: fail, exit 1, 26490 ms
+- Load: start 13.90, end 10.64, median 12.52, max 13.90
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+ios+TooltipModalHazard-2026-11-03T17-13-16.501Z.log` (<store>/task/G18-tooltip/harness+ios+TooltipModalHazard-2026-11-03T17-13-16.501Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/TooltipModalHazard.harness.tsx`
+- `● Tooltip · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a fullScreen Modal closes with its tooltip up`
+- `expected 'chain' to be 'ownWindow' // Object.is equality`
+- `● Tooltip · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a pageSheet Modal closes with its tooltip up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+ios+TooltipModalHazard-2026-11-03T17-13-16.501Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G18-rcjjt                G18          both              pair-b
+  |   G16-w8ewe                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 10.64 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios TooltipModalHazard
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9cd2af8d319b, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 13.34/21.42 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+ios+TooltipModalHazard-2026-11-03T17-13-16.501Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone Air...
+HARNESS Runner ios ready
+
+FAIL __tests__/isolated/TooltipModalHazard.harness.tsx
+  ● Tooltip · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a fullScreen Modal closes with its tooltip up
+
+    expected 'chain' to be 'ownWindow' // Object.is equality
+
+      [0m [90m 173 |[39m         [90m// Why, asserted after the strand itself so a regression reads as the strand: a[39m
+       [90m 174 |[39m         [90m// window of its own, so RN's dismissal of the Modal reaches the Modal.[39m
+      [31m[1m>[22m[39m[90m 175 |[39m         expect(shown[33m.[39mpresenter)[33m.[39mtoBe([32m'ownWindow'[39m)[33m;[39m
+       [90m     |[39m                                     [31m[1m^[22m[39m
+       [90m 176 |[39m         expect(shown[33m.[39mappTop)[33m.[39mtoContain([32m'ModalHostViewController'[39m)[33m;[39m
+       [90m 177 |[39m       }
+       [90m 178 |[39m       console[33m.[39mlog([0m
+
+  ● Tooltip · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a pageSheet Modal closes with its tooltip up
+
+    "tip" never reached up inside the Modal; its report is "presented=1;js=1;live=0;presentCount=0;onScreen=0;anchorW=120.0;anchorH=44.0;touchable=0;kind=none;appTop=-;topPresented=-;modalHosts=0;windows=0;drops=2;recycles=2"; events=[]
+
+      [0m [90m 70 |[39m     [36mif[39m (check(report)) [36mreturn[39m report[33m;[39m
+       [90m 71 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 72 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 73 |[39m         [32m`"${testId}" never reached ${what}; its report is "${report.raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 74 |[39m       )[33m;[39m
+       [90m 75 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 2 total
+Snapshots:   0 total
+Time:        24.708 s
+Ran all test suites matching TooltipModalHazard.
+
+
+
+```

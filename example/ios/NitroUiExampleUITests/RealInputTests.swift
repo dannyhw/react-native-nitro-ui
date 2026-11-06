@@ -51,8 +51,10 @@ final class RealInputTests: XCTestCase {
     static let checkboxTab = "tab-checkbox"
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
+    static let tooltipTab = "tab-tooltip"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
+    static let searchFieldTab = "tab-searchfield"
     static let contextMenuTab = "tab-contextmenu"
   }
 
@@ -90,6 +92,8 @@ final class RealInputTests: XCTestCase {
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
+    static let tooltipLog = "tooltip-log"
+    static let tooltipPresses = "tooltip-anchor-presses"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -106,6 +110,10 @@ final class RealInputTests: XCTestCase {
     static let textFrozen = "text-frozen-echo"
     static let textCapped = "text-capped-echo"
     static let textFocus = "text-focus-echo"
+    static let searchTyping = "search-typing-echo"
+    static let searchFrozen = "search-frozen-echo"
+    static let searchCapped = "search-capped-echo"
+    static let searchFocus = "search-focus-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -233,6 +241,45 @@ final class RealInputTests: XCTestCase {
       } catch {
         print("real-input a11y case=\(one.id) | error | \(error)")
       }
+    }
+  }
+
+  /// The example's tab bar as touch targets: every tab, scrolled wholly into the window,
+  /// with the box a finger has to hit.
+  ///
+  /// It measures and does not decide, for the reason `testRealInputA11y` gives: the rule
+  /// (44 pt both ways, every tab `example/src/App.tsx` lists, each one reachable) lives in
+  /// `scripts/real-input/tab-targets.mjs`, which the Android suite decides from too, and
+  /// which `scripts/__tests__/real-input-tab-targets.test.js` proves red with fixtures. The
+  /// tabs are found by their `testID` prefix rather than listed here, so a tab the registry
+  /// adds is measured without an edit to this file, and a tab missing from the tree is
+  /// a tab the runner finds unmeasured.
+  ///
+  /// Each box is read until two consecutive reads agree (the reason is on `measure`).
+  func testRealInputTabTargets() throws {
+    let ids = app.descendants(matching: .any)
+      .matching(NSPredicate(format: "identifier BEGINSWITH %@", "tab-"))
+      .allElementsBoundByIndex
+      .map(\.identifier)
+    var seen = Set<String>()
+    for id in ids where seen.insert(id).inserted {
+      let tab = app.descendants(matching: .any)[id].firstMatch
+      let reached = revealTab(tab)
+      var frame = tab.frame
+      for _ in 0..<5 {
+        Thread.sleep(forTimeInterval: 0.2)
+        let again = tab.frame
+        if again == frame { break }
+        frame = again
+      }
+      print(
+        "real-input tab-target id=\(id) | frame="
+          + String(
+            format: "%.1f,%.1f,%.1f,%.1f",
+            frame.minX, frame.minY, frame.width, frame.height
+          )
+          + " | reached=\(reached)"
+      )
     }
   }
 
@@ -404,6 +451,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
       A11yCase(id: "text-field", testId: "text-typing", label: "Typing field",
                tab: Tab.textFieldTab, screenAnchor: Echo.textTyping),
+      A11yCase(id: "search-field", testId: "search-typing", label: "Typing search field",
+               tab: Tab.searchFieldTab, screenAnchor: Echo.searchTyping),
       A11yCase(id: "context-menu", testId: "ctx-accessible", label: "Message from Grace",
                tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
     ]
@@ -481,6 +530,11 @@ final class RealInputTests: XCTestCase {
     // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
+    // SearchField (G17): the first control in the table that is not one of the types
+    // this file was written for. Without the case the sweep printed the raw value —
+    // `announced as a type-45` — for a field XCUITest had already put in
+    // `app.searchFields`, so the failure was this table's, not the control's.
+    case .searchField: return "search field"
     case .textField: return "text field"
     case .secureTextField: return "secure text field"
     case .textView: return "text view"
@@ -2342,6 +2396,9 @@ final class RealInputTests: XCTestCase {
     let alpha = "Alpha"
     let bravo = "Bravo"
     let locked = "Locked row"
+    // The checkable row: a SwiftUI `Toggle` whose binding's setter is the pick, a
+    // different path from every `Button` row above (step 7 is for it).
+    let checkedRow = "Checked row"
 
     // 1. The announcement, before anything is presented: the popup is another
     //    window's tree once it is up, and the trigger is the only node worth reading.
@@ -2525,6 +2582,51 @@ final class RealInputTests: XCTestCase {
       try read(Echo.menuEvents),
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
+    )
+
+    // 7. The checked row. Its pick goes through the `Toggle` binding's setter
+    //    (`HybridNitroUiMenu.rowButton`), which the harness never reaches:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: checkedRow,
+      waitingFor: "the real tap that reopens the menu for the checked row"
+    )
+    let toggle = optionRow(checkedRow)
+    print(
+      "real-input (ios): menu: checked row type=\(toggle.elementType.rawValue) "
+        + "value=\(String(describing: toggle.value)) selected=\(toggle.isSelected)"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: checkedRow,
+        echo: Echo.menuPick,
+        expected: "checked",
+        waitingFor: "the real tap on the row \"\(checkedRow)\""
+      ),
+      "checked",
+      "a real tap on a checked row should reach JS as that row's id - the Toggle's setter "
+        + "is the pick, and a setter that does nothing leaves the echo where it was"
+    )
+    let events = try read(Echo.menuEvents)
+    XCTAssertEqual(
+      events.components(separatedBy: " > ").filter { $0 == "select checked" }.count,
+      1,
+      "the checked row should report exactly one select, read \"\(events)\""
+    )
+    XCTAssertEqual(
+      events,
+      "select bravo > select alpha > select checked",
+      "and nothing else: no open/close on iOS (D32), no second pick from one tap"
+    )
+    waitUntilOptionGone(checkedRow, "the checked-row pick to take its menu down")
+    XCTAssertEqual(
+      optionLabels(containing: checkedRow),
+      0,
+      "a pick of the checked row should take its own menu down"
     )
   }
 
@@ -3273,6 +3375,123 @@ final class RealInputTests: XCTestCase {
     waitUntilOptionGone("Copy link", "the action to take the sheet down")
   }
 
+  /// A real finger on a Tooltip (G18): a closed tooltip leaves a real tap on its anchor
+  /// to the anchor, a tap on a plain RN button opens it, a tap outside closes it and
+  /// reports the close alone, and a tap on its action reports the action before the
+  /// close it causes (D32).
+  ///
+  /// The tooltip is a UIKit popover in a window of its own, so "up" is read as its own
+  /// message on screen and the screen's log only with the tooltip down - the same reads
+  /// the dialog check makes, for the same reason.
+  func testRealInputTooltip() throws {
+    try goToTab(Tab.tooltipTab, showing: Echo.tooltipLog)
+    let message = "Tap the star to keep this search."
+    let title = "Saved searches"
+    let action = "Got it"
+
+    // One real tap on the star, confirmed by its own count: the tooltip's overlay is
+    // behind the app's `Pressable` and takes no touch.
+    func pressAnchor(_ expected: String, _ waitingFor: String) throws -> String {
+      return try pressUntil(
+        named: "the star the tooltip points at (tooltip-anchor)",
+        waitingFor: waitingFor,
+        attempts: 1,
+        press: { _ in try required("tooltip-anchor", as: "the tooltip's anchor").fingerTap() },
+        reading: { self.echoText(Echo.tooltipPresses) }
+      ) { shown in
+        shown == expected
+      }
+    }
+
+    // 1. Before a touch: nothing reported, nothing up, and a closed tooltip's anchor
+    //    takes a real tap as its own - once.
+    XCTAssertEqual(try read(Echo.tooltipLog), "none", "no tooltip has reported anything before a touch")
+    XCTAssertEqual(optionLabels(containing: message), 0, "no tooltip is up before a touch")
+    XCTAssertEqual(
+      try pressAnchor("star presses: 1", "the real tap on the star"),
+      "star presses: 1",
+      "a real tap on the anchor of a closed tooltip presses the anchor once"
+    )
+    Thread.sleep(forTimeInterval: 0.8)
+    XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
+    XCTAssertEqual(try read(Echo.tooltipLog), "none", "and reports nothing")
+    // Outside: the log line, a `Text` with no press of its own and well above the
+    // popover that hangs over the star. Found while the tooltip is down, tapped where it
+    // was. A fixed point on the screen could be a tab, or a button the tap would press.
+    let logFrame = try required(Echo.tooltipLog, as: "the log line").frame
+    let outside = app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.midY))
+
+    // 2. A real tap on a plain RN button opens it, with its title and its action. JS
+    //    opened it, so it reports nothing (read once it is down, in step 3).
+    try tapUntilOption(
+      "tooltip-open-rich",
+      as: "the rich tooltip's opener",
+      option: message,
+      waitingFor: "the real tap that opens the rich tooltip"
+    )
+    XCTAssertGreaterThan(optionLabels(containing: title), 0, "the tooltip shows its title")
+    XCTAssertGreaterThan(optionLabels(containing: action), 0, "and its action")
+    XCTAssertEqual(app.descendants(matching: .popover).count, 1, "the tooltip is one UIKit popover")
+    XCTAssertTrue(
+      app.descendants(matching: .any)["tooltip-rich-tooltip"].exists,
+      "the presented content carries <testID>-tooltip, for a test or an a11y tool to find"
+    )
+
+    // 3. A tap outside closes it, and reports the close alone. A later attempt taps
+    //    only while it is still up: once it is down, the log is merely slow.
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the log line outside the tooltip",
+        waitingFor: "the tap outside the tooltip to close it",
+        press: { attempt in
+          if attempt > 1 && optionLabels(containing: message) == 0 {
+            return
+          }
+          outside.tap()
+        },
+        reading: { self.echoText(Echo.tooltipLog) }
+      ) { shown in
+        shown == "presented:false"
+      },
+      "presented:false",
+      "a tap outside closes the tooltip and reports the close alone"
+    )
+    waitUntilOptionGone(message, "the tap outside to take the tooltip down")
+    XCTAssertEqual(optionLabels(containing: message), 0, "and the tooltip is gone")
+
+    // 4. Its action reports, before the close it causes.
+    try tapUntilOption(
+      "tooltip-open-rich",
+      as: "the rich tooltip's opener",
+      option: message,
+      waitingFor: "the real tap that reopens the rich tooltip"
+    )
+    let afterAction = "presented:false > action:ok > presented:false"
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: action,
+        echo: Echo.tooltipLog,
+        expected: afterAction,
+        waitingFor: "the real tap on \"\(action)\""
+      ),
+      afterAction,
+      "a real tap on its action reports the id, then the close - once each, in that order"
+    )
+    waitUntilOptionGone(message, "the action to take the tooltip down")
+    XCTAssertEqual(optionLabels(containing: message), 0, "an action closes its tooltip")
+
+    // 5. Closed again, the anchor's taps are its own.
+    XCTAssertEqual(
+      try pressAnchor("star presses: 2", "the second real tap on the star"),
+      "star presses: 2",
+      "once it is closed, a real tap on the anchor presses it once more"
+    )
+    Thread.sleep(forTimeInterval: 0.8)
+    XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
+    XCTAssertEqual(try read(Echo.tooltipLog), afterAction, "and reports nothing")
+  }
+
   /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN
   /// button, a tap on a `Pressable` *inside* the sheet reaches JS through the sheet's own
   /// touch root, and a drag down and a tap outside each close a dismissible sheet -
@@ -3557,6 +3776,195 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: label)
     }
     return node
+  }
+
+  /// The search field element carrying `label`, asked for as the element type a screen
+  /// reader is told about (`app.searchFields`, not `app.textFields`).
+  ///
+  /// The query *is* an assertion: `HybridNitroUiSearchField.swift` adds `.searchField`
+  /// to the traits, and a field that lost it would be an ordinary text field to
+  /// VoiceOver while still typing perfectly - which no behavioural check would see.
+  private func searchField(labelled label: String) throws -> XCUIElement {
+    let node = app.searchFields.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    if !node.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no search field labelled \"\(label)\"")
+      XCTFail("no search field labelled \"\(label)\" appeared within \(reactTimeout)s")
+      throw RealInputCheckAborted(identifier: label)
+    }
+    return node
+  }
+
+  /// The clear button of a field that is editing, by its own element rather than by
+  /// UIKit's localized "Clear text" - the label is UIKit's to translate, and a check
+  /// that spells it in English stops working in another language.
+  ///
+  /// `clearButtonMode = .whileEditing` means this exists only while the field edits with
+  /// text in it, which is the same condition a person sees the button under.
+  private func clearButton(of field: XCUIElement) throws -> XCUIElement {
+    let buttons = field.buttons
+    XCTAssertEqual(
+      buttons.count,
+      1,
+      "a focused search field with text should offer exactly one clear button, not \(buttons.count)"
+    )
+    let clear = buttons.firstMatch
+    if !clear.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no clear button inside the editing search field")
+      XCTFail("no clear button appeared inside the editing search field")
+      throw RealInputCheckAborted(identifier: "clear button")
+    }
+    XCTAssertFalse(
+      clear.label.isEmpty,
+      "and the clear button names itself, so VoiceOver can say what it does"
+    )
+    return clear
+  }
+
+  /// Real keystrokes into UIKit's own `UISearchTextField`, plus the two things a *search*
+  /// field does that a text field does not: the Search key refuses an empty query, and
+  /// the field grows a clear button that takes the query out without losing focus.
+  ///
+  /// Four assertions here are not in `testRealInputTextField`, and each is the out-of-app
+  /// half of a claim the component makes:
+  ///
+  /// - **the field is a search field to a screen reader** - by the query this check goes
+  ///   through (`searchField(labelled:)`), not by a trait read.
+  /// - **Return with nothing in the field reports nothing**: `enablesReturnKeyAutomatically`
+  ///   is on, so UIKit disables the key, and Android states the same rule in `onSearch`.
+  ///   This is the iOS half of the assertion Android makes with a real Enter key.
+  /// - **the clear button empties the field and keeps focus**: the blur counter does not
+  ///   move, so a clear that also dismissed the keyboard is caught.
+  /// - **Return submits the query and then blurs**, as a single-line field does.
+  ///
+  /// The emoji half of `maxLength` and the composition guard are the harness's, as they
+  /// are for TextField: XCUITest's keyboard types neither marked text nor emoji reliably.
+  func testRealInputSearchField() throws {
+    try goToTab(Tab.searchFieldTab, showing: Echo.searchTyping)
+    XCTAssertEqual(
+      try read(Echo.searchTyping),
+      "query:  (0)",
+      "the typing field should start empty"
+    )
+    XCTAssertEqual(
+      try read(Echo.searchFocus),
+      "focus: 0 blur: 0 submitted: -",
+      "nothing should have been focused, blurred or submitted yet"
+    )
+
+    // Lowest field first: once a keyboard is up it covers the lower half of the screen,
+    // and every later tap is aimed higher than the one before it.
+    let capped = try searchField(labelled: "Capped search field")
+    try focusByTap(capped, echo: nil, as: "the capped field")
+    capped.typeText("abcdefg")
+    XCTAssertEqual(
+      readUntil(Echo.searchCapped) { $0 == "capped: abcde (5)" },
+      "capped: abcde (5)",
+      "maxLength 5 should keep five of seven keys"
+    )
+    XCTAssertEqual(
+      capped.value as? String,
+      "abcde",
+      "and the field should hold the same five"
+    )
+
+    let frozen = try searchField(labelled: "Frozen search field")
+    try focusByTap(frozen, echo: nil, as: "the frozen field")
+    frozen.typeText("xy")
+    XCTAssertEqual(
+      readUntil(Echo.searchFrozen) { $0 == "frozen: 2 edits refused" },
+      "frozen: 2 edits refused",
+      "every key into the frozen field should be reported to JS"
+    )
+    XCTAssertEqual(
+      frozen.value as? String,
+      "frozen",
+      "and each one reverted: the field should still show what JS kept"
+    )
+
+    let typing = try searchField(labelled: "Typing search field")
+    try focusByTap(typing, echo: nil, as: "the typing field")
+    typing.typeText("latte")
+    XCTAssertEqual(
+      readUntil(Echo.searchTyping) { $0 == "query: latte (5)" },
+      "query: latte (5)",
+      "real keystrokes should reach the field, and React should see the query"
+    )
+    XCTAssertEqual(
+      typing.value as? String,
+      "latte",
+      "the field should show what React was told"
+    )
+
+    // 1. Focus, and the key that must not answer an empty query.
+    let focus = try searchField(labelled: "Focus search field")
+    try focusByTap(focus, echo: Echo.searchFocus, as: "the focus field")
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 1 blur: 0 submitted: -" },
+      "focus: 1 blur: 0 submitted: -",
+      "a real tap should focus the field (onFocus)"
+    )
+    focus.typeText("\n")
+    XCTAssertEqual(
+      readFor(1.5, Echo.searchFocus),
+      "focus: 1 blur: 0 submitted: -",
+      "Return with an empty query should submit nothing and blur nobody"
+    )
+
+    // 2. The clear button: one edit, focus kept.
+    focus.typeText("go")
+    XCTAssertEqual(
+      focus.value as? String,
+      "go",
+      "the field should hold the query before anything clears it"
+    )
+    try clearButton(of: focus).fingerTap()
+    XCTAssertEqual(
+      readFor(1.5, Echo.searchFocus),
+      "focus: 1 blur: 0 submitted: -",
+      "a real tap on the clear button should empty the query without a blur or a submit"
+    )
+    XCTAssertEqual(
+      focus.value as? String,
+      "",
+      "and the field should hold nothing"
+    )
+
+    // 3. The key that must answer, and the two imperative handles.
+    focus.typeText("go")
+    focus.typeText("\n")
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 1 blur: 1 submitted: go" },
+      "focus: 1 blur: 1 submitted: go",
+      "Return should submit the query, then blur the field"
+    )
+    try required("search-focus-js", as: "the Focus from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 2 blur: 1 submitted: go" },
+      "focus: 2 blur: 1 submitted: go",
+      "a real tap on a button that calls ref.focus() should focus the field"
+    )
+    try required("search-blur-js", as: "the Blur from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 2 blur: 2 submitted: go" },
+      "focus: 2 blur: 2 submitted: go",
+      "and one that calls ref.blur() should blur it"
+    )
+  }
+
+  /// Read an echo for `seconds` and hand back what it said at the end. The negative
+  /// assertions above need the period: one read taken before the keypress was processed
+  /// would say "nothing happened" about a submit that had not arrived yet.
+  private func readFor(_ seconds: TimeInterval, _ identifier: String) -> String {
+    let deadline = Date().addingTimeInterval(seconds)
+    var shown = ""
+    repeat {
+      let node = app.descendants(matching: .any)[identifier].firstMatch
+      if node.exists {
+        shown = node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
+      }
+      Thread.sleep(forTimeInterval: 0.2)
+    } while Date() < deadline
+    return shown
   }
 
   /// Tap a field until it has the keyboard focus, retrying a dropped delivery the way
@@ -4069,8 +4477,58 @@ final class RealInputTests: XCTestCase {
     if app.descendants(matching: .any)[screenAnchor].firstMatch.exists {
       return
     }
-    try required(identifier, as: "the example's tab").fingerTap()
+    let tab = try required(identifier, as: "the example's tab")
+    if !revealTab(tab) {
+      dumpHierarchy("tab \(identifier) is still outside the window")
+      XCTFail(
+        "the example's tab \"\(identifier)\" could not be scrolled wholly into the window "
+          + "(it is at \(tab.frame)), so it cannot be tapped reliably"
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+    tab.fingerTap()
     _ = try required(screenAnchor, as: "the screen behind that tab", timeout: reactTimeout)
+  }
+
+  /// Scroll the tab bar sideways until a tab is wholly inside the window.
+  ///
+  /// The bar scrolls (X19): fifteen tabs sharing one row were each too small to tap, so
+  /// every tab keeps its natural width and the ones past the window's edge are scrolled
+  /// to. React Native keeps a scrolled-away tab in the accessibility tree with its real
+  /// frame, so the distance is known: each step drags the bar by what the tab overhangs
+  /// plus a margin, at most most of a window, slowly and with a hold before the finger
+  /// lifts, so the bar does not fling past it. The pan's own slop eats part of every
+  /// drag, which is why this loops on the frame rather than trusting one step.
+  ///
+  /// - Returns: whether the tab ended wholly inside the window and hittable.
+  @discardableResult
+  private func revealTab(_ tab: XCUIElement) -> Bool {
+    let window = app.windows.firstMatch.frame
+    let margin: CGFloat = 24
+    func inside() -> Bool {
+      let frame = tab.frame
+      return frame.minX >= window.minX && frame.maxX <= window.maxX && tab.isHittable
+    }
+    var steps = 0
+    while !inside() && steps < 8 {
+      let frame = tab.frame
+      let overhang =
+        frame.maxX > window.maxX
+        ? -(frame.maxX - window.maxX + margin)
+        : window.minX - frame.minX + margin
+      let shift = max(-window.width * 0.7, min(window.width * 0.7, overhang))
+      let startX = shift < 0 ? window.width * 0.85 : window.width * 0.15
+      let from = app.coordinate(withNormalizedOffset: .zero)
+        .withOffset(CGVector(dx: startX, dy: frame.midY))
+      from.press(
+        forDuration: 0.05,
+        thenDragTo: from.withOffset(CGVector(dx: shift, dy: 0)),
+        withVelocity: .slow,
+        thenHoldForDuration: 0.2
+      )
+      steps += 1
+    }
+    return inside()
   }
 
   /// Fail, with the hierarchy, if a control has moved out of the window since it
@@ -4096,10 +4554,24 @@ final class RealInputTests: XCTestCase {
       )
       throw RealInputCheckAborted(identifier: identifier)
     }
-    XCTAssertEqual(
-      node.frame,
-      startedAt,
-      "\(identifier) should still be drawn where it started, after \(action)"
+    // To a hundredth of a point, not bit for bit. XCUITest hands a frame back through
+    // float32, so a box whose top and bottom sit either side of a power of two reads
+    // 2^-16 pt short on one read and exact on the next: X19's tab bar moved the
+    // controlled switch 10 pt down, to y 233.67 -> 261.67 (across 256), and this read
+    // 27.999984741 against 28.0 for a switch that had not moved. A hundredth of a point
+    // is a thirtieth of a pixel at @3x, and layout never moves a box by less than a pixel.
+    let now = node.frame
+    let drift = max(
+      abs(now.minX - startedAt.minX),
+      abs(now.minY - startedAt.minY),
+      abs(now.width - startedAt.width),
+      abs(now.height - startedAt.height)
+    )
+    XCTAssertLessThanOrEqual(
+      drift,
+      0.01,
+      "\(identifier) should still be drawn where it started, after \(action): it was "
+        + "\(startedAt) and is now \(now)"
     )
   }
 
