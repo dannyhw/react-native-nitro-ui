@@ -139,8 +139,9 @@ mutation expected to go red that did not, and the claim it then forced.
   suites have no long-press primitive; the harness covers the action tap.
 - `scripts/real-input/android.mjs`: `tapOptionUntilValue` matches the echoed value
   exactly, so a fixture whose echo carries *every* event has to expect the whole history
-  including the trailing `close`; E2 tripped on the same trap. A prefix comparison in the
-  helper would remove it, and that is a shared-runner change.
+  including the trailing `close`; E2 tripped on the same trap in the same round and has
+  reworked `pressUntil`/`tapOptionUntilValue` on its own branch. The trap is in the
+  shared helper, not in either case, so whoever merges the two should land that rework.
 - Shared conformance: `recycle: Menu` proves little for Menu (Q9's round-2 follow-up).
   E3's reset proof is `aRecycleClearsTheSplitTriggerAndItsHalves` plus the harness's
   "starts a new mount..." case, neither of which goes through that case.
