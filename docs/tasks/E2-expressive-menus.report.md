@@ -99,3 +99,24 @@ Screenshots: Android `menu` (`RowDetails`), `context-menu` (`Conversation`) and 
 - Chip/Menu: the Material check glyph is now written out twice (`HybridNitroUiChip.kt`, `MenuRows.kt`); share it once E1 has merged.
 - Menu (iOS): a `checked` row is a `Toggle`, which takes no role, so `destructive` is dropped on a checkable row (documented in Limits).
 - Menu (Android): the `drawn` witness reads on popup layout; a check flipped while the popup stays open is only seen through `nuiTestMenuProbe`.
+
+## Merge round
+
+Branch `task/E2-merge`, lease `E2merge-1kxry` (maintainer-mac-1). Merged `origin/main` at `4266abe4` with no conflicts, then the docs-only `8a2e2cd0`. Code tree `5c6f2b0b2b32`; `need --for merge` is satisfied.
+
+- **Checked row under a real tap:** `Checked row` (`checked: true`) in `real-input-menu`. Both suites tap it and assert one `select checked`, the popup closing, and the whole echo.
+- **Docs:** iOS ContextMenu keeps destructive with checked, while Menu drops it. The "48 dp" claim is removed.
+- **Guard: not changed.** With `#available(iOS 16)` removed, Xcode 27 failed: `'subtitle' is only available in iOS 16.0 or newer` on both files. The iOS 16 guard is correct, so the review's iOS 15 premise is wrong.
+- **Re-runs, one each:** `check` (bench-baseline-merge child killed, `status: null`, load 136); `harness:android` (known `BottomSheet · 50 cycles`); `real-input:ios` (known `frozen: 1 edits refused`). Excerpts are in `E2/failures/`.
+
+Red proofs:
+- `real-input:android -- --control menu` -> `onCheckedChange = { }` -> `✗ a pick of the checked row to reach JS: 3 real taps … rather than "checked"`
+- `real-input:ios -- --control menu` -> `set: { _ in }` -> `the real tap on the row "Checked row": 3 real presses … left it at "alpha"`
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1746 tests / 70 suites | `5c6f2b0b2b32` | 2 m 22 s | start 7.5 / med 14.6 / max 21.6 |
+| `harness:ios` | **PASS** | 394 tests / 23 suites + isolated 2 tests / 1 suites | `5c6f2b0b2b32` (ios tree) | 9 m 23 s | start 11.0 / med 7.7 / max 17.7 |
+| `harness:android` | **PASS** | 443 tests / 23 suites + isolated 2 tests / 1 suites | `5c6f2b0b2b32` (android tree) | 14 m 12 s | start 19.0 / med 13.8 / max 26.3 |
+| `real-input:ios` | **PASS** | — | `5c6f2b0b2b32` (ios tree) | 21 m 18 s | start 7.7 / med 7.2 / max 14.2 |
+| `real-input:android` | **PASS** | — | `5c6f2b0b2b32` (android tree) | 36 m 14 s | start 8.4 / med 8.6 / max 75.0 |
