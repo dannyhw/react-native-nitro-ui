@@ -24,6 +24,7 @@ namespace margelo::nitro::nitroui::views {
     title(nitro::ReactProp<std::string>::fromRawValue("NitroUiButton", "title", rawProps, sourceProps.title)),
     variant(nitro::ReactProp<std::string>::fromRawValue("NitroUiButton", "variant", rawProps, sourceProps.variant)),
     size(nitro::ReactProp<std::string>::fromRawValue("NitroUiButton", "size", rawProps, sourceProps.size)),
+    shape(nitro::ReactProp<std::string>::fromRawValue("NitroUiButton", "shape", rawProps, sourceProps.shape)),
     disabled(nitro::ReactProp<bool>::fromRawValue("NitroUiButton", "disabled", rawProps, sourceProps.disabled)),
     tintColor(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiButton", "tintColor", rawProps, sourceProps.tintColor)),
     systemImage(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiButton", "systemImage", rawProps, sourceProps.systemImage)),
@@ -43,6 +44,7 @@ namespace margelo::nitro::nitroui::views {
       case hashString("title"): return true;
       case hashString("variant"): return true;
       case hashString("size"): return true;
+      case hashString("shape"): return true;
       case hashString("disabled"): return true;
       case hashString("tintColor"): return true;
       case hashString("systemImage"): return true;

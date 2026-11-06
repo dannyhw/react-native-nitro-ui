@@ -20,7 +20,7 @@ the layout engine, and React never sees a native node.
 | `Slider`             | `Slider(value:in:step:onEditingChanged:)`                      | `androidx.compose.material3.Slider`                          | 0.1.0 | [slider.md](docs/components/slider.md)                       |
 | `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3) | 0.1.0 | [progress.md](docs/components/progress.md)                   |
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                       | 0.1.0 | [button.md](docs/components/button.md)                       |
-| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | `SingleChoiceSegmentedButtonRow`                             | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
+| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)      | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
 | `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup` (M3 Expressive)    | 0.4.0 | [menu.md](docs/components/menu.md)                           |
@@ -261,6 +261,9 @@ export function UploadProgress({ fraction }: { fraction: number | null }) {
 
 `variant` and `size` map to the closest idiomatic style on each platform, so the
 two columns deliberately do not look alike — neither one fakes the other.
+`shape="square"` swaps the corner: Material's `squareShape` on Android, morphing
+back to rounded while pressed, and `.roundedRectangle(radius: 8)` on iOS, whose
+button styles have no cornerless option.
 
 ```tsx name=button
 export function SaveButton() {

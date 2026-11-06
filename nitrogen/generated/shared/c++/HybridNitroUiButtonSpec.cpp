@@ -20,6 +20,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("variant", &HybridNitroUiButtonSpec::setVariant);
       prototype.registerHybridGetter("size", &HybridNitroUiButtonSpec::getSize);
       prototype.registerHybridSetter("size", &HybridNitroUiButtonSpec::setSize);
+      prototype.registerHybridGetter("shape", &HybridNitroUiButtonSpec::getShape);
+      prototype.registerHybridSetter("shape", &HybridNitroUiButtonSpec::setShape);
       prototype.registerHybridGetter("disabled", &HybridNitroUiButtonSpec::getDisabled);
       prototype.registerHybridSetter("disabled", &HybridNitroUiButtonSpec::setDisabled);
       prototype.registerHybridGetter("tintColor", &HybridNitroUiButtonSpec::getTintColor);

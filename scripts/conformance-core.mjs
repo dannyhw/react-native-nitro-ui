@@ -584,12 +584,16 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 61, height: 28 },
   },
   // Read off the component's own source, which is the only place the number is decided:
-  // `HybridNitroUiMenu.swift:458` (`fallbackSize`) and `HybridNitroUiMenu.kt:844-845`
-  // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`). Button-sized on iOS, and a Material 3
-  // trigger's box on Android. Menu is a `CONTENT_SIZED_BOX` control, so the suite never
-  // asks a measured Menu to equal these — see `boxRuleFor`.
+  // `HybridNitroUiMenu.swift` (`fallbackSize`) and `HybridNitroUiMenu.kt`
+  // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`) — named, not line-numbered, because a
+  // merge round moves a file's lines and a stale line number reads as a stale row.
+  // Button-sized on iOS, and Button's own medium estimate on Android: the trigger is the
+  // shared `NitroUiM3Button`, so E1's size ladder moved this row with Button's (75.1 is
+  // Button's width), and the 52 height stays deliberately off every measured 48/56.
+  // Menu is a `CONTENT_SIZED_BOX` control, so the suite never asks a measured Menu to
+  // equal these — see `boxRuleFor`.
   NitroUiMenu: {
-    android: { width: 118, height: 52 },
+    android: { width: 75.1, height: 52 },
     ios: { width: 74, height: 38 },
   },
   NitroUiSlider: {
@@ -597,7 +601,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 351, height: 31 },
   },
   NitroUiButton: {
-    android: { width: 91, height: 48 },
+    android: { width: 75.1, height: 48 },
     ios: { width: 77, height: 35 },
   },
   NitroUiProgress: {
@@ -605,7 +609,10 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 320, height: 4 },
   },
   NitroUiSegmentedControl: {
-    android: { width: 256, height: 48 },
+    // Re-measured on E1 fix round 2: the connected group's row is the sum of its
+    // segments, not n x the widest one, so the three-short-labels row the constant
+    // describes is narrower than round 1 recorded. 187.81 measured, rounded up.
+    android: { width: 187.9, height: 48 },
     ios: { width: 165, height: 31 },
   },
   // The one row whose iOS width belongs to a *locale* as well as a control: it is

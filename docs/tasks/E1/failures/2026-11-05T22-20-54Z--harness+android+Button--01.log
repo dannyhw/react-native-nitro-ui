@@ -1,0 +1,101 @@
+# Failure excerpt — harness:android:Button
+
+- Ran: 2026-11-05T22:20:54.572Z on code tree `0c8c67fad495` at HEAD `5f5c2e5` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Button`
+- Result: fail, exit 1, 18443 ms
+- Load: start 4.61, end 5.17, median 5.17, max 5.17
+- Device: android / device `emulator-5574` / lease `E1-uivzs`
+- Full log: `task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log` (<store>/task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● shape · the corner (E1) › reaches the control, and resolves anything else to round`
+- `expected 'round' to be 'square' // Object.is equality`
+- `● shape · the corner (E1) › repaints a mounted corner without opening a new configuration`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-uivzs (still live)
+  |   E1-uivzs                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.00 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 55 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Button
+gate: node ../scripts/harness.mjs --harnessRunner android Button (cwd example)
+gate: code tree 0c8c67fad495 at HEAD 5f5c2e5f
+gate: git tree 009bb147019f with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log
+gate:       <store>/task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Button
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0c8c67fad495, 16 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.61/4.05 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● shape · the corner (E1) › reaches the control, and resolves anything else to round
+
+    expected 'round' to be 'square' // Object.is equality
+
+      [0m [90m 1176 |[39m
+       [90m 1177 |[39m     expect(handles[33m.[39m[36mget[39m([32m'shape-default'[39m)[33m?[39m[33m.[39mshape)[33m.[39mtoBe([32m'round'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1178 |[39m     expect(handles[33m.[39m[36mget[39m([32m'shape-square'[39m)[33m?[39m[33m.[39mshape)[33m.[39mtoBe([32m'square'[39m)[33m;[39m
+       [90m      |[39m                                                    [31m[1m^[22m[39m
+       [90m 1179 |[39m     [90m// The same rule `variant` and `size` follow: an unknown name is the default,[39m
+       [90m 1180 |[39m     [90m// not a crash and not an empty corner.[39m
+       [90m 1181 |[39m     expect(handles[33m.[39m[36mget[39m([32m'shape-junk'[39m)[33m?[39m[33m.[39mshape)[33m.[39mtoBe([32m'round'[39m)[33m;[39m[0m
+
+  ● shape · the corner (E1) › repaints a mounted corner without opening a new configuration
+
+    expected 'round' to be 'square' // Object.is equality
+
+      [0m [90m 1231 |[39m     [36mawait[39m settle()[33m;[39m
+       [90m 1232 |[39m
+      [31m[1m>[22m[39m[90m 1233 |[39m     expect(handles[33m.[39m[36mget[39m([32m'shape-flip'[39m)[33m?[39m[33m.[39mshape)[33m.[39mtoBe([32m'square'[39m)[33m;[39m
+       [90m      |[39m                                                  [31m[1m^[22m[39m
+       [90m 1234 |[39m     [36mconst[39m after [33m=[39m delta(before[33m,[39m stats())[33m;[39m
+       [90m 1235 |[39m     [36mconst[39m still [33m=[39m
+       [90m 1236 |[39m       sameSize(box[33m,[39m sizeOf([32m'shape-flip'[39m)) [33m&&[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 12 passed, 14 total
+Snapshots:   0 total
+Time:        17.141 s
+Ran all test suites matching Button.
+gate: harness:android:Button FAIL in 18.4 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+
+gate: appended the device context to task/E1-expressive-buttons/harness+android+Button-2026-11-05T22-20-54.237Z.log (5 probe(s))
+
+```

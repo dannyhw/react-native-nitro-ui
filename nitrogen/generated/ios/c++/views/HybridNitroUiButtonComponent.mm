@@ -116,6 +116,12 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.size.hasSameValue(oldViewProps->size)) {
       swiftPart.setSize(newViewProps.size.get());
     }
+    // shape: string
+    if (oldViewProps == nullptr
+          ? newViewProps.shape.isProvided()
+          : !newViewProps.shape.hasSameValue(oldViewProps->shape)) {
+      swiftPart.setShape(newViewProps.shape.get());
+    }
     // disabled: boolean
     if (oldViewProps == nullptr
           ? newViewProps.disabled.isProvided()

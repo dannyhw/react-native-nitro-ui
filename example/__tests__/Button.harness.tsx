@@ -45,6 +45,7 @@ import {
 import { screen, userEvent } from '@react-native-harness/ui';
 import {
   Button,
+  type ButtonShape,
   nitroUiCore,
   type NitroUiSizingStats,
   type NitroUiSizingTraceEvent,
@@ -69,6 +70,8 @@ type ButtonHandle = {
   readonly title: string;
   readonly variant: string;
   readonly size: string;
+  /** The resolved corner (`'round'` for anything the wrapper does not recognise). */
+  readonly shape: string;
   readonly disabled: boolean;
   /**
    * The callback the wrapper installed on the native side. Declared optional:
@@ -1106,5 +1109,176 @@ describe('Button · G2', () => {
       `trace: drawn=${JSON.stringify(drawn.map((e) => `${e.width.toFixed(1)}x${e.height.toFixed(1)}`))} real=${describeSize(content)}`
     );
     expect(explained).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------------------
+ */
+
+/**
+ * The `shape` prop (E1).
+ *
+ * Two claims, and they are different ones. That the corner *arrives* is a plumbing
+ * claim, and the handle answers it on both platforms. That the corner is **not a
+ * size** is the claim the sizing engine cares about: `shape` is deliberately absent
+ * from `nuiSizingKey`, so a Button that changes corner must not open a new
+ * configuration, must not be corrected, and must not move the box Yoga was told -
+ * the R3 failure mode in the other direction (a prop in the key that does not
+ * resize anything, which fragments the cache and spends a correction per repaint).
+ */
+describe('shape · the corner (E1)', () => {
+  it('reaches the control, and resolves anything else to round', async () => {
+    render(
+      <View style={rowStyle}>
+        <Button
+          title="Save"
+          testID="shape-default"
+          hybridRef={captureHybrid('shape-default')}
+        />
+        <Button
+          title="Save"
+          shape="square"
+          testID="shape-square"
+          hybridRef={captureHybrid('shape-square')}
+        />
+        <Button
+          title="Save"
+          shape={'pill' as ButtonShape}
+          testID="shape-junk"
+          hybridRef={captureHybrid('shape-junk')}
+        />
+        <Button
+          title="Save"
+          size="small"
+          shape="square"
+          testID="shape-small"
+          hybridRef={captureHybrid('shape-small')}
+        />
+        <Button
+          title="Save"
+          size="large"
+          shape="square"
+          testID="shape-large"
+          hybridRef={captureHybrid('shape-large')}
+        />
+      </View>
+    );
+
+    await waitForTestId('shape-default');
+    await waitForMeasured('shape-default', 'the default Button to measure');
+    await waitForBox(
+      'shape-square',
+      sizeOf('shape-default')!,
+      'the square Button'
+    );
+    await waitForMeasured('shape-small', 'the small Button to measure');
+    await waitForMeasured('shape-large', 'the large Button to measure');
+
+    expect(handles.get('shape-default')?.shape).toBe('round');
+    expect(handles.get('shape-square')?.shape).toBe('square');
+    // The same rule `variant` and `size` follow: an unknown name is the default,
+    // not a crash and not an empty corner.
+    expect(handles.get('shape-junk')?.shape).toBe('round');
+
+    // The heights the new size ladder actually draws, for the table in
+    // `docs/components/button.md` - the small/large rungs are the two that moved.
+    console.log(
+      `shape ladder (square corners): small=${describeSize(
+        measured('shape-small')
+      )} medium=${describeSize(measured('shape-default'))} ` +
+        `large=${describeSize(measured('shape-large'))}`
+    );
+
+    // And the corner is a paint: two buttons that differ only in it are the same
+    // box, which is what lets `shape` stay out of the size configuration.
+    const round = measured('shape-default');
+    const square = measured('shape-square');
+    expect(
+      sameSize(round, square),
+      `a square corner resized the control: ${describeSize(round)} -> ${describeSize(
+        square
+      )}`
+    ).toBe(true);
+  });
+
+  it('repaints a mounted corner without opening a new configuration', async () => {
+    render(
+      <View style={rowStyle}>
+        <Button
+          title="Resize me"
+          testID="shape-flip"
+          hybridRef={captureHybrid('shape-flip')}
+        />
+      </View>
+    );
+    await waitForMeasured('shape-flip', 'the Button to measure');
+    const box = sizeOf('shape-flip');
+    const size = measured('shape-flip');
+    expect(box).not.toBeNull();
+    expect(size).not.toBeNull();
+
+    const before = stats();
+    render(
+      <View style={rowStyle}>
+        <Button
+          title="Resize me"
+          shape="square"
+          testID="shape-flip"
+          hybridRef={captureHybrid('shape-flip')}
+        />
+      </View>
+    );
+    await settle();
+
+    expect(handles.get('shape-flip')?.shape).toBe('square');
+    const after = delta(before, stats());
+    const still =
+      sameSize(box, sizeOf('shape-flip')) &&
+      sameSize(size, measured('shape-flip'));
+    expect(
+      still,
+      `the corner moved the box: ${describeSize(box)} -> ${describeSize(sizeOf('shape-flip'))}`
+    ).toBe(true);
+    expect(
+      after.corrections,
+      `a corner change cost ${String(after.corrections)} size correction(s)`
+    ).toBe(0);
+    expect(
+      after.cachedSizes,
+      `a corner change opened ${String(after.cachedSizes)} new size configuration(s)`
+    ).toBe(0);
+
+    // `null` is how a caller says "the platform's own", and it is the same paint:
+    // the corner resolves back to `round` and neither change moves the box the
+    // sizing engine was told about.
+    render(
+      <View style={rowStyle}>
+        <Button
+          title="Resize me"
+          shape={null}
+          testID="shape-flip"
+          hybridRef={captureHybrid('shape-flip')}
+        />
+      </View>
+    );
+    await settle();
+
+    expect(handles.get('shape-flip')?.shape).toBe('round');
+    const back = delta(before, stats());
+    expect(
+      sameSize(box, sizeOf('shape-flip')) &&
+        sameSize(size, measured('shape-flip')),
+      `the corner going back to null moved the box: ${describeSize(
+        box
+      )} -> ${describeSize(sizeOf('shape-flip'))}`
+    ).toBe(true);
+    expect(
+      back.corrections,
+      `two corner changes cost ${String(back.corrections)} size correction(s)`
+    ).toBe(0);
+    expect(
+      back.cachedSizes,
+      `two corner changes opened ${String(back.cachedSizes)} new size configuration(s)`
+    ).toBe(0);
   });
 });

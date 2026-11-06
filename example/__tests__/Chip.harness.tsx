@@ -880,3 +880,115 @@ describe('Chip · G12', () => {
     }
   });
 });
+
+/**
+ * A select and a deselect come back to the width the chip started at (E1).
+ *
+ * What the always-present leading slot buys (`ChipLeadingSlotEmpty`) is exactly this
+ * sentence, and E1 re-earns it rather than trusting it: Material 3 1.5.0-beta02 still
+ * draws a selectable chip's leading icon through an `AnimatedVisibility` with an
+ * `expandHorizontally`/`shrinkHorizontally` spring, so a `null` icon is still a width
+ * animation the host cannot follow - the original measurement settled 1.1 dp narrower
+ * than a chip mounted selected, with its label ellipsised. If the spring ever goes,
+ * the slot can go with it, and the first thing this test would notice is a deselect
+ * that no longer lands on the width it left.
+ */
+describe('chip · a toggle round trip (E1)', () => {
+  it('comes back to the width it started at across a select and a deselect', async () => {
+    const LABEL = 'Round trip';
+    poison([
+      sizingKey('filter', false, LABEL),
+      sizingKey('filter', true, LABEL),
+    ]);
+    // Three chips, one label: the one that is toggled, and a twin for each state
+    // that is never touched. A twin is the only oracle for "the width this state
+    // really is" — a chip mounted in that state never goes through the toggle path,
+    // so nothing that path does can have moved its measurement (G12's re-key test
+    // reads it the same way, and the poisoned keys mean being right requires
+    // correcting rather than agreeing with a wrong starting number).
+    await render(
+      <View style={rowStyle}>
+        <Chip
+          label={LABEL}
+          onSelectedChange={recordSelected('round-trip')}
+          testID="round-trip"
+          hybridRef={captureHybrid('round-trip')}
+        />
+        <Chip
+          label={LABEL}
+          testID="round-trip-off"
+          hybridRef={captureHybrid('round-trip-off')}
+        />
+        <Chip
+          label={LABEL}
+          selected
+          testID="round-trip-on"
+          hybridRef={captureHybrid('round-trip-on')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('round-trip');
+    const before = await waitForMeasured('round-trip', 'before the toggle');
+    await waitForBox('round-trip', before, 'before the toggle');
+    const twinOff = await waitForMeasured(
+      'round-trip-off',
+      'the chip that was never toggled, unselected'
+    );
+    const twinOn = await waitForMeasured(
+      'round-trip-on',
+      'the chip that was never toggled, selected'
+    );
+    await waitForBox('round-trip-off', twinOff, 'the unselected twin');
+    await waitForBox('round-trip-on', twinOn, 'the selected twin');
+
+    await pressChip('round-trip');
+    await waitForDisplayed('round-trip', '1');
+    await sleep(600);
+    const selected = await waitForMeasured('round-trip', 'the selected state');
+    await waitForBox('round-trip', selected, 'the selected state');
+
+    await pressChip('round-trip');
+    await waitForDisplayed('round-trip', '0');
+    await sleep(600);
+    const after = measured('round-trip');
+    const afterBox = sizeOf('round-trip');
+    console.log(
+      `chip round trip: before=${describeSize(before)} ` +
+        `selected=${describeSize(selected)} after=${describeSize(after)} ` +
+        `box=${describeSize(afterBox)} twins(off)=${describeSize(
+          twinOff
+        )} twins(on)=${describeSize(twinOn)}`
+    );
+
+    // Each state of the toggled chip is the width of the twin that has always been
+    // in it. This is the half the leading slot is for: with a `null` leading icon
+    // the toggle is a width *animation*, and the frames that settle it are never
+    // reported, so the toggled chip lands off its own twin by about a dp.
+    expect(
+      sameSize(selected, twinOn),
+      `selecting left the chip at ${describeSize(
+        selected
+      )} where a chip mounted selected is ${describeSize(twinOn)}`
+    ).toBe(true);
+    expect(
+      sameSize(after, twinOff),
+      `a deselect left the chip at ${describeSize(
+        after
+      )} where a chip mounted unselected is ${describeSize(twinOff)}`
+    ).toBe(true);
+    // And the round trip itself: the same chip, back where it started, box included.
+    expect(
+      sameSize(before, after),
+      `a deselect left the chip measuring ${describeSize(
+        after
+      )} where it started at ${describeSize(before)}`
+    ).toBe(true);
+    expect(
+      sameSize(before, afterBox),
+      `a deselect left the chip laid out at ${describeSize(
+        afterBox
+      )} where it started at ${describeSize(before)}`
+    ).toBe(true);
+  });
+});

@@ -144,7 +144,7 @@ const SHARED = {
     },
     "NitroUiMenu": {
       "android": {
-        "width": 118,
+        "width": 75.1,
         "height": 52
       },
       "ios": {
@@ -164,7 +164,7 @@ const SHARED = {
     },
     "NitroUiButton": {
       "android": {
-        "width": 91,
+        "width": 75.1,
         "height": 48
       },
       "ios": {
@@ -184,7 +184,7 @@ const SHARED = {
     },
     "NitroUiSegmentedControl": {
       "android": {
-        "width": 256,
+        "width": 187.9,
         "height": 48
       },
       "ios": {
@@ -1495,7 +1495,7 @@ const MENU_GROUP: MenuGroup = {
  *
  * Deliberately long and deliberately not the fixture's `accessibilityLabel`: the fallback
  * rule's `boxRule: 'none'` branch goes red if a content-sized control measures *exactly* its
- * declared number, and Menu declares a Button-sized 74×38 pt / 118×52 dp, so a two-syllable
+ * declared number, and Menu declares a Button-sized 74×38 pt / 75.1×52 dp, so a two-syllable
  * title would be a coin flip on whether that guard had anything to say. A distinct label is
  * for the same reason one way and one name in two places is how round 1's Picker stutter got
  * missed.
@@ -2260,12 +2260,14 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     ],
     probe: {
       noProbe:
-        'a Button owns no state a reset can clear. `title`, `accessibilityLabel` and ' +
-        '`onPress` are all re-sent by the wrapper on every mount - and the callback ' +
-        'is deliberately always sent, as a stable no-op when the app passed none, ' +
-        'which is what stops a recycled view keeping a dead owner’s handler ' +
-        '(Button.tsx:99-110). Its `prepareForRecycle` is the belt, and nothing on ' +
-        'either platform can show it missing.',
+        'a Button owns no state a reset can clear. `title`, `variant`, `size`, ' +
+        '`shape`, `accessibilityLabel` and `onPress` are all re-sent by the wrapper ' +
+        'on every mount - and the callback is deliberately always sent, as a stable ' +
+        'no-op when the app passed none, which is what stops a recycled view keeping ' +
+        'a dead owner’s handler (Button.tsx:117-126). Its `prepareForRecycle` is the ' +
+        'belt, and nothing on either platform can show it missing: `shape` is the ' +
+        'newest of those props, and the wrapper sends it on every mount too, so a ' +
+        'recycled view cannot keep the previous mount’s corner.',
     },
   },
   {

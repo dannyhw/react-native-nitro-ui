@@ -565,7 +565,7 @@ function poisonConfigurations(
 const DECLARED_FALLBACK =
   Platform.OS === 'ios'
     ? { width: 74, height: 38 }
-    : { width: 118, height: 52 };
+    : { width: 75.1, height: 52 };
 
 // MARK: - Menu content fixtures
 
