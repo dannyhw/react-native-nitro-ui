@@ -89,7 +89,7 @@
 | G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
 | G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | merge round part 1 done (`task/G17-merge` @ `1886a0b`: main + X19 merged, review fixes, `check` green); part 2 merges G18, then runs the device gates (PR #37) |
-| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | merge round on mac-1 (PR #36; review MERGE WITH FOLLOW-UPS; merges main + X19, two red proofs owed) |
+| G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | merged (PR #36; merge gates green on code tree `d651692a` with E2 and X19 in; recycle and Back red proofs; display-link rate item left in FOLLOWUPS) |
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
 | X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merged (`a87271c`, PR #35) |
