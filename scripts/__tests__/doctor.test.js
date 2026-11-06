@@ -11,7 +11,10 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   DEFAULT_PAIRS,
+  addRuntimeSims,
   applyAvdConfig,
+  otherIosRuntimes,
+  planRuntimeSims,
   bunStatus,
   cocoapodsProblem,
   compareVersions,
@@ -466,5 +469,172 @@ describe('where --prime must build', () => {
       // The main checkout's own tree, not the worktree `--prime` was called from.
       expect(command.cwd).toBe('/Users/me/nitro-ui');
     }
+  });
+});
+
+/**
+ * X20 item 3 (D42 item 1): `--setup` makes one look-check simulator per *other* installed iOS
+ * runtime and records it under `iosRuntimes`. The rules worth pinning are the ones that keep it
+ * additive: never the pairs' runtime, never a second entry for a runtime already listed, reuse what
+ * an earlier `--setup` made, and leave every other key of the file as it was.
+ */
+describe('iOS-runtime simulators (--setup)', () => {
+  const iphones = (...names) =>
+    names.map((name) => ({
+      name,
+      identifier: `com.apple.CoreSimulator.SimDeviceType.${name.replaceAll(' ', '-')}`,
+    }));
+  const RUNTIMES = {
+    runtimes: [
+      {
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-1',
+        version: '27.1',
+        isAvailable: true,
+        supportedDeviceTypes: iphones('iPhone Duo'),
+      },
+      {
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
+        version: '27.0',
+        isAvailable: true,
+        supportedDeviceTypes: iphones('iPhone Air', 'iPhone 17'),
+      },
+      {
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-26-5',
+        version: '26.5',
+        isAvailable: true,
+        supportedDeviceTypes: iphones('iPhone Air', 'iPhone 17'),
+      },
+      {
+        identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-26-0',
+        version: '26.0',
+        isAvailable: false,
+        supportedDeviceTypes: iphones('iPhone 17'),
+      },
+      {
+        identifier: 'com.apple.CoreSimulator.SimRuntime.watchOS-26-0',
+        version: '26.0',
+        isAvailable: true,
+      },
+    ],
+  };
+  const created = DEFAULT_PAIRS.map((pair, index) => ({
+    ...pair,
+    udid: `UDID-${index}`,
+  }));
+  const config = renderDevicesConfig(created, '27.0');
+
+  it('picks the installed iOS runtimes the pairs do not use, oldest first', () => {
+    expect(
+      otherIosRuntimes(RUNTIMES, ['27.0', '27.0']).map((r) => r.version)
+    ).toEqual(['26.5', '27.1']);
+  });
+
+  it('creates on iPhone 17 where the runtime has it, and on its own iPhone where it does not', () => {
+    const plan = planRuntimeSims({
+      runtimes: otherIosRuntimes(RUNTIMES, ['27.0']),
+      config,
+      simulators: [],
+      types: {},
+    });
+    expect(
+      plan.map((step) => [step.version, step.action, step.typeName])
+    ).toEqual([
+      ['26.5', 'create', 'iPhone 17'],
+      ['27.1', 'create', 'iPhone Duo'],
+    ]);
+    expect(plan[0].name).toBe('nitro-ui iOS 26.5');
+  });
+
+  it('reuses its own simulator and leaves a runtime already listed alone', () => {
+    const listed = addRuntimeSims(config, [
+      { version: '27.1', udid: 'OLD-271', name: 'nitro-ui iOS 27.1' },
+    ]);
+    const plan = planRuntimeSims({
+      runtimes: otherIosRuntimes(RUNTIMES, ['27.0']),
+      config: listed,
+      simulators: [
+        {
+          udid: 'MINE-265',
+          name: 'nitro-ui iOS 26.5',
+          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-5',
+        },
+        // Same name on another runtime is not it.
+        {
+          udid: 'OTHER',
+          name: 'nitro-ui iOS 26.5',
+          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
+        },
+      ],
+      types: {},
+    });
+    expect(
+      plan.map((step) => [step.version, step.action, step.udid ?? null])
+    ).toEqual([
+      ['26.5', 'reuse', 'MINE-265'],
+      ['27.1', 'configured', null],
+    ]);
+  });
+
+  it('only appends, on Metro ports nothing else uses, and the lease script accepts the result', () => {
+    const next = addRuntimeSims(config, [
+      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
+      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
+    ]);
+    expect(next.pairs).toEqual(config.pairs);
+    expect(next.maxDeviceLeases).toBe(config.maxDeviceLeases);
+    expect(next.iosRuntimes).toEqual([
+      {
+        id: 'ios-26.5',
+        ios: { name: 'nitro-ui iOS 26.5', udid: 'R265', system: '26.5' },
+        metroPort: 8297,
+      },
+      {
+        id: 'ios-27.1',
+        ios: { name: 'nitro-ui iOS 27.1', udid: 'R271', system: '27.1' },
+        metroPort: 8298,
+      },
+    ]);
+    const pool = normalizeDevices(next);
+    expect(pool.pairs.filter((pair) => pair.iosRuntime != null)).toHaveLength(
+      2
+    );
+    // And a second round never renumbers or repeats what the first one wrote.
+    const again = addRuntimeSims(next, [
+      { version: '18.0', udid: 'R18', name: 'nitro-ui iOS 18.0' },
+    ]);
+    expect(again.iosRuntimes.slice(0, 2)).toEqual(next.iosRuntimes);
+    expect(again.iosRuntimes[2].metroPort).toBe(8299);
+  });
+
+  it('names a listed simulator that is missing, or is not on the runtime it claims', () => {
+    const next = addRuntimeSims(config, [
+      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
+      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
+    ]);
+    const simulators = new Map(
+      created.map((pair) => [
+        pair.udid,
+        {
+          udid: pair.udid,
+          name: pair.simulatorName,
+          runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
+        },
+      ])
+    );
+    simulators.set('R265', {
+      udid: 'R265',
+      name: 'nitro-ui iOS 26.5',
+      runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-27-0',
+    });
+    expect(
+      devicesConfigProblems(next, {
+        simulators,
+        avds: new Set(created.map((pair) => pair.avd)),
+        iosRuntimeMajor: 27,
+      })
+    ).toEqual([
+      'ios-26.5: simulator R265 is not on iOS 26.5',
+      'ios-27.1: simulator R271 does not exist',
+    ]);
   });
 });

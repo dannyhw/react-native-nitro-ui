@@ -51,6 +51,7 @@ import {
   renderGateTable,
   requiredGatesFor,
   resolveGate,
+  lookLeaseRefusal,
   summarizeGates,
   summarizeLoad,
   codeTreeDigest,
@@ -2738,3 +2739,52 @@ describeCli(
     }
   }
 );
+
+/**
+ * X20 item 3: a look-check simulator never runs the merge gates. Its lease exports
+ * `NITRO_UI_LEASE_IOS_RUNTIME`, and every gate that drives a device is refused on it, while the
+ * two that touch no device still run from that shell. Checked over every gate name `resolveGate`
+ * knows, so a gate added later is refused by default rather than by remembering this list.
+ */
+describe('a lease on an older iOS runtime', () => {
+  const LOOK = {
+    NITRO_UI_LEASE_ID: 'G20-ab12',
+    NITRO_UI_LEASE_IOS_RUNTIME: '26.5',
+  };
+  const DEVICE_GATES = [
+    'harness:ios',
+    'harness:android',
+    'harness:ios:ColdSizing',
+    'real-input:ios',
+    'real-input:android',
+    'smoke:expo',
+    'smoke:rn-cli',
+    'bench',
+  ];
+
+  it('refuses every gate that drives a device, naming the runtime and the way out', () => {
+    for (const name of DEVICE_GATES) {
+      const why = lookLeaseRefusal(LOOK, resolveGate(name));
+      expect(why).toContain('iOS 26.5 look-check simulator');
+      expect(why).toContain('G20-ab12');
+      expect(why).toContain('without --ios-runtime');
+    }
+  });
+
+  it('still runs check and smoke:pack, which touch no device', () => {
+    expect(lookLeaseRefusal(LOOK, resolveGate('check'))).toBeNull();
+    expect(lookLeaseRefusal(LOOK, resolveGate('smoke:pack'))).toBeNull();
+  });
+
+  it('refuses nothing on a default lease, or with no lease at all', () => {
+    for (const name of DEVICE_GATES) {
+      expect(
+        lookLeaseRefusal({ NITRO_UI_LEASE_ID: 'G6-1' }, resolveGate(name))
+      ).toBeNull();
+      expect(lookLeaseRefusal({}, resolveGate(name))).toBeNull();
+      expect(
+        lookLeaseRefusal({ NITRO_UI_LEASE_IOS_RUNTIME: ' ' }, resolveGate(name))
+      ).toBeNull();
+    }
+  });
+});

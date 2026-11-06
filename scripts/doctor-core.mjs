@@ -9,7 +9,7 @@
 
 import path from 'node:path';
 
-import { RESERVED_EMULATOR_PORTS } from './lease-core.mjs';
+import { RESERVED_EMULATOR_PORTS, iosRuntimeKey } from './lease-core.mjs';
 
 /** Local alias so `mainCheckoutPath` stays a pure string function. */
 const nodePath = path;
@@ -260,6 +260,25 @@ export function devicesConfigProblems(config, machine) {
     }
     claim(pair.metroPort, `${id} Metro`);
   }
+  // The look-check simulators (X20 item 3): each must exist and be on the runtime it names, or a
+  // lease for "iOS 26.5" would hand out a simulator that is not on 26.5.
+  for (const entry of Array.isArray(config.iosRuntimes)
+    ? config.iosRuntimes
+    : []) {
+    const id = entry?.id ?? '(no id)';
+    const udid = entry?.ios?.udid;
+    const version = iosRuntimeKey(entry?.ios?.system);
+    const sim = machine.simulators.get(udid);
+    if (sim == null) {
+      problems.push(`${id}: simulator ${udid} does not exist`);
+    } else if (
+      version != null &&
+      !String(sim.runtime).endsWith(`iOS-${version.replace('.', '-')}`)
+    ) {
+      problems.push(`${id}: simulator ${udid} is not on iOS ${version}`);
+    }
+    claim(entry?.metroPort, `${id} Metro`);
+  }
   return problems;
 }
 
@@ -287,6 +306,124 @@ export function renderDevicesConfig(created, iosSystem) {
       metroPort: pair.metroPort,
     })),
   };
+}
+
+/**
+ * The simulator type a look-check simulator is made with (X20 item 3): the same phone as pair A
+ * where the runtime has it, so a screenshot on an older iOS is the same width as the README's,
+ * and otherwise the first iPhone the runtime lists - 27.1 shipped for one new device only, and a
+ * runtime with no `iPhone 17` must still get its simulator.
+ */
+export const RUNTIME_SIM_TYPE = 'iPhone 17';
+
+/** The name `--setup` gives a look-check simulator, so a second `--setup` finds it again. */
+export function runtimeSimName(version) {
+  return `nitro-ui iOS ${version}`;
+}
+
+/**
+ * The installed iOS runtimes the default pairs do *not* run on: the ones `--setup` makes a
+ * look-check simulator for (X20 item 3, D42 item 1). Oldest first.
+ *
+ * @param {{ runtimes?: Array<{ identifier: string, version: string, isAvailable?: boolean }> }} listing
+ *   `xcrun simctl list runtimes -j`
+ * @param {string[]} pairSystems the pairs' `ios.system` values (e.g. `["27.0"]`)
+ */
+export function otherIosRuntimes(listing, pairSystems) {
+  const taken = new Set(pairSystems.map(iosRuntimeKey).filter(Boolean));
+  return (listing.runtimes ?? [])
+    .filter((runtime) => runtime.isAvailable !== false)
+    .filter((runtime) => String(runtime.identifier).includes('iOS'))
+    .filter((runtime) => {
+      const key = iosRuntimeKey(runtime.version);
+      return key != null && !taken.has(key);
+    })
+    .sort((a, b) =>
+      compareVersions(
+        parseVersion(a.version) ?? [],
+        parseVersion(b.version) ?? []
+      )
+    );
+}
+
+/**
+ * What `--setup` does for each other runtime: nothing when `devices.json` already lists a simulator
+ * on it, reuse a `nitro-ui iOS <v>` it made before, or create one. Pure, so the "never touches a
+ * device it did not make, never adds a second entry" rules are tests.
+ *
+ * @param {object} options
+ * @param {ReturnType<typeof otherIosRuntimes>} options.runtimes
+ * @param {any} options.config the parsed `devices.json`
+ * @param {Array<{ udid: string, name: string, runtime: string }>} options.simulators existing simulators
+ * @param {{ devicetypes?: Array<{ identifier: string, name: string }> }} options.types `simctl list devicetypes -j`
+ * @returns {Array<{ runtime: object, version: string, name: string, action: 'configured' | 'reuse' | 'create' | 'no-type', udid?: string, type?: string, typeName?: string }>}
+ */
+export function planRuntimeSims({ runtimes, config, simulators, types }) {
+  const configured = new Set(
+    (Array.isArray(config?.iosRuntimes) ? config.iosRuntimes : [])
+      .map((entry) => iosRuntimeKey(entry?.ios?.system))
+      .filter(Boolean)
+  );
+  return runtimes.map((runtime) => {
+    const version = iosRuntimeKey(runtime.version);
+    const name = runtimeSimName(version);
+    if (configured.has(version)) {
+      return { runtime, version, name, action: 'configured' };
+    }
+    const existing = simulators.find(
+      (sim) => sim.name === name && sim.runtime === runtime.identifier
+    );
+    if (existing != null) {
+      return { runtime, version, name, action: 'reuse', udid: existing.udid };
+    }
+    const typeName =
+      deviceTypeId(types, RUNTIME_SIM_TYPE, runtime) != null
+        ? RUNTIME_SIM_TYPE
+        : (supportedIphones(runtime)[0] ?? null);
+    const type =
+      typeName == null ? null : deviceTypeId(types, typeName, runtime);
+    if (type == null) {
+      return { runtime, version, name, action: 'no-type' };
+    }
+    return { runtime, version, name, action: 'create', type, typeName };
+  });
+}
+
+/**
+ * `devices.json` with these look-check simulators appended to `iosRuntimes`, each on a Metro port
+ * no other entry uses. Everything else in the file is returned as it was: `--setup` only adds.
+ *
+ * @param {any} config the parsed `devices.json`
+ * @param {Array<{ version: string, udid: string, typeName?: string, name: string }>} added
+ */
+export function addRuntimeSims(config, added) {
+  const existing = Array.isArray(config?.iosRuntimes) ? config.iosRuntimes : [];
+  const used = new Set();
+  for (const pair of [...(config?.pairs ?? []), ...existing]) {
+    for (const port of [
+      pair?.metroPort,
+      pair?.android?.emulatorPort,
+      pair?.android?.emulatorPort == null
+        ? null
+        : pair.android.emulatorPort + 1,
+      pair?.android?.adbPort,
+    ]) {
+      if (Number.isInteger(port)) used.add(port);
+    }
+  }
+  const metroPorts = [...used].filter((port) => port >= 8000 && port < 9000);
+  let next = Math.max(8296, ...metroPorts) + 1;
+  const entries = added.map((sim) => {
+    while (used.has(next)) next += 1;
+    const port = next;
+    used.add(port);
+    return {
+      id: `ios-${sim.version}`,
+      ios: { name: sim.name, udid: sim.udid, system: sim.version },
+      metroPort: port,
+    };
+  });
+  return { ...config, iosRuntimes: [...existing, ...entries] };
 }
 
 /**
