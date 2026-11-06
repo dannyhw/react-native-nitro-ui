@@ -93,6 +93,6 @@
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
 | X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merged (`a87271c`, PR #35) |
-| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | running |
+| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | in review (PR #39, head `cb93df91`; all gates green on `0e1f2105`) |
 | E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merge round on mac-1 (PR #38; review MERGE WITH FOLLOW-UPS; a real tap on a checked row owed) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
