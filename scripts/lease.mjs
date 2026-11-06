@@ -861,8 +861,14 @@ function poolHandoff({ pool, result, options, log }) {
   // exclusive acquire's power-off, and that one runs in `acquire`, before this function is reached.
   // Warm reuse: every lease wants its own two devices back if they are still up, and an exclusive
   // lease wants them warm too once the pool has been powered off underneath it.
+  // The half this hand-off may touch: what the lease is for, narrowed by what this command asked
+  // for. Equal on a new lease. On a re-acquire they can differ, and the lease's answer is the one
+  // the env file prints, so a task that leased iOS and re-runs `acquire --boot` without
+  // `--platform` (which defaults to `both`) is still not handed - or booted, or reset - the
+  // emulator it never leased (X20 item 2).
+  const platform = handoffPlatform(lease.platform, options.platform);
   const booted = pool.ensureBooted(pair, lease, {
-    platform: options.platform,
+    platform,
     timeoutMs: (options.bootTimeoutMinutes ?? 7) * 60_000,
   });
   for (const key of booted.booted) log(`lease: booted ${key}`);
@@ -904,7 +910,9 @@ function poolHandoff({ pool, result, options, log }) {
         'so the storage there is its own'
     );
   } else if (options.reset) {
-    for (const row of pool.resetPair(pair)) {
+    // Only the half this lease is for (X20 item 2): an iOS-only lease used to `pm clear` the pair's
+    // emulator too, which is a device it never asked for and another task may be using.
+    for (const row of pool.resetPair(pair, { platform })) {
       // The device's own answer, and how many tries it took: a reset that failed after four
       // attempts is a different problem from one that failed once and settled, and the reader
       // cannot tell the two apart without it.
@@ -918,6 +926,21 @@ function poolHandoff({ pool, result, options, log }) {
       log(`lease: reset ${row.key}: ${row.action}${detail}`);
     }
   }
+}
+
+/**
+ * The platform a hand-off acts on: the lease's, narrowed by the command's. `both` narrows to the
+ * other side; two different single platforms keep the lease's, because the lease is what the task
+ * holds and what its env file names.
+ *
+ * @param {'ios'|'android'|'both'|undefined} leased
+ * @param {'ios'|'android'|'both'} asked
+ * @returns {'ios'|'android'|'both'}
+ */
+function handoffPlatform(leased, asked) {
+  const held = leased ?? 'both';
+  if (held === 'both') return asked;
+  return held;
 }
 
 /* --------------------------- the warm device pool --------------------------- */

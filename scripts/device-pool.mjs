@@ -1226,8 +1226,14 @@ export class DevicePool {
    * the fresh-AVD case used to retry four times and then claim "the next run inherits its data" when
    * there was no data to inherit.
    *
+   * And it resets only the half the lease was taken for (X20 item 2). An iOS-only lease is handed
+   * the whole pair object, and this used to reset both halves of it: Q9 took `--platform ios` and
+   * the acquire printed `pm clear` on the pair's emulator - a device the task never asked for, which
+   * another task may hold for Android at that moment. `platform` is the lease's, and `both` keeps the
+   * old behaviour for a lease that really is for both.
+   *
    * @param {object} pair
-   * @param {{appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null}} [options]
+   * @param {{appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null, platform?: 'ios' | 'android' | 'both'}} [options]
    */
   resetPair(
     pair,
@@ -1235,10 +1241,11 @@ export class DevicePool {
       appId = EXAMPLE_APP_ID,
       attempts = 4,
       reinstallApp = process.env.HARNESS_APP_PATH ?? null,
+      platform = 'both',
     } = {}
   ) {
     const devices = [
-      pair?.android?.avd
+      platform !== 'ios' && pair?.android?.avd
         ? {
             kind: 'android',
             key: `avd:${pair.android.avd}`,
@@ -1251,7 +1258,7 @@ export class DevicePool {
             appId: appId.android,
           }
         : null,
-      pair?.ios?.udid
+      platform !== 'android' && pair?.ios?.udid
         ? {
             kind: 'ios',
             key: `ios:${pair.ios.udid}`,
