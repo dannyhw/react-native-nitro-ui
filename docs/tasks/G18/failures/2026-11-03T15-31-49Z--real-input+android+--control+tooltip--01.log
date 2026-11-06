@@ -1,0 +1,66 @@
+# Failure excerpt — real-input:android:--control:tooltip
+
+- Ran: 2026-11-03T15:31:49.274Z on code tree `fb6ffdc6ef65` at HEAD `e0fe717` (branch `task/G18-tooltip`)
+- Command: `node scripts/real-input/android.mjs --control tooltip`
+- Result: fail, exit 1, 1092 ms
+- Load: start 21.43, end 21.43, median 21.43, max 21.43
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log` (<store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 21.43 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: real-input:android:--control:tooltip
+gate: node scripts/real-input/android.mjs --control tooltip (cwd .)
+gate: code tree fb6ffdc6ef65 at HEAD e0fe717f
+gate: git tree cb9c91547d7e with a DIRTY worktree (not reusable)
+gate: log task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log
+gate:       <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 2dad1bc1 at e0fe717fd2e0c9923e4b42054a7c20f0497600e4, now fb6ffdc6 at e0fe717fd2e0c9923e4b42054a7c20f0497600e4)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 2dad1bc1 at e0fe717fd2e0c9923e4b42054a7c20f0497600e4, now fb6ffdc6 at e0fe717fd2e0c9923e4b42054a7c20f0497600e4)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:tooltip FAIL in 1.1 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-31-48.116Z.log (5 probe(s))
+
+```

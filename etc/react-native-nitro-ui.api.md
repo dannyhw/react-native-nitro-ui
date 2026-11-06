@@ -681,6 +681,43 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
 // @public
 export type TextFieldReturnKeyType = 'default' | 'done' | 'go' | 'next' | 'search' | 'send';
 
+// @public
+export function Tooltip(input: TooltipProps): JSX.Element;
+
+// @public
+export interface TooltipAction {
+    id: string;
+    title: string;
+}
+
+// @public
+export type TooltipPlacement = 'auto' | 'above' | 'below';
+
+// @public
+export interface TooltipProps extends ViewProps {
+    actions?: readonly TooltipAction[] | undefined;
+    children?: ReactNode;
+    // @internal
+    hybridRef?: ((view: {
+        readonly presented: boolean;
+        readonly mostRecentEventCount: number;
+        readonly message: string;
+        readonly title: string | null;
+        readonly placement: string;
+        nuiTestStateReport(): string;
+        nuiTestPerformAction(id: string): void;
+        nuiTestDismiss(): void;
+    }) => void) | undefined;
+    isPresented: boolean;
+    message: string;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onAction?: ((id: string) => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    placement?: TooltipPlacement | undefined;
+    title?: string | undefined;
+}
+
 // (No @packageDocumentation comment for this package)
 
 ```

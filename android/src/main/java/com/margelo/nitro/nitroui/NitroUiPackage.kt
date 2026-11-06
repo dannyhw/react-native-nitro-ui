@@ -17,6 +17,7 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiMenuManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiTextFieldManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiChipManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
 
 /**
@@ -60,6 +61,7 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiDialogManager(),
     HybridNitroUiTextFieldManager(),
     HybridNitroUiChipManager(),
+    HybridNitroUiTooltipManager(),
     HybridNitroUiCheckboxManager(),
     // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the

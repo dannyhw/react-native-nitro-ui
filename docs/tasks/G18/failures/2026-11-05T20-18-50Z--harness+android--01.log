@@ -1,0 +1,162 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-05T20:18:50.127Z on code tree `1926cbe365ba` at HEAD `3b97a2f` (branch `task/G18-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 953597 ms
+- Load: start 40.71, end 8.22, median 18.75, max 279.10
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log` (<store>/task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNDateTimePickerCGen", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rngesturehandler_codegen", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnsvg", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnreanimated", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/safeareacontext", skipping. Add this directory to your ignore list to exclude it.`
+- `Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNCSlider", skipping. Add this directory to your ignore list to exclude it.`
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Console`
+- `● Tooltip · early checks (Q7 C9) › leaves a tap on its anchor to the anchor (check 1)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18merge-wc3ty           G18merge     both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.22 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 110 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 1926cbe365ba at HEAD 3b97a2f3
+gate: git tree 55b6421d80bf
+gate: log task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log
+gate:       <store>/task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1926cbe365ba, 17 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 51.63/19.31 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNDateTimePickerCGen", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rngesturehandler_codegen", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnsvg", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/rnreanimated", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/safeareacontext", skipping. Add this directory to your ignore list to exclude it.
+Error "ENOENT" reading contents of "<repo>/example/ios/build/generated/ios/ReactCodegen/react/renderer/components/RNCSlider", skipping. Add this directory to your ignore list to exclude it.
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      tooltip above: {"side":"above","gap":4.190476190476191,"centred":true,"popup":{"x":60,"y":318,"width":616,"height":354},"anchor":{"x":315,"y":683,"width":105,"height":105}} (report presented=1;js=1;live=1;presentCount=1;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=60,318,616,354;anchorRect=315,683,105,105;hostRect=315,683,105,105;density=2.625;placements=1;closes=-;drops=1;recycles=1;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0)
+
+
+    console.log
+      tooltip below: {"side":"below","gap":4.190476190476191,"centred":true,"popup":{"x":60,"y":799,"width":616,"height":354},"anchor":{"x":315,"y":683,"width":105,"height":105}} (report presented=1;js=1;live=1;presentCount=1;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=60,799,616,354;anchorRect=315,683,105,105;hostRect=315,683,105,105;density=2.625;placements=1;closes=-;drops=2;recycles=2;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0)
+
+
+    console.log
+      tooltip in a Modal: {"side":"above","gap":4.190476190476191,"centred":true,"popup":{"x":60,"y":423,"width":616,"height":354},"anchor":{"x":210,"y":788,"width":315,"height":105}} (report presented=1;js=1;live=1;presentCount=1;composing=1;anchorW=315;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=60,423,616,354;anchorRect=210,788,315,105;hostRect=210,788,315,105;density=2.625;placements=1;closes=-;drops=5;recycles=5;measuresAfterDrop=1;layoutsAfterDrop=1;giveUps=0;floatingFlushes=0)
+
+
+    console.log
+      tooltip height before/after: 207 / 313
+
+
+    console.log
+      recycled-tooltip recycles per round: 7,11,8
+
+  ● Tooltip · early checks (Q7 C9) › leaves a tap on its anchor to the anchor (check 1)
+
+    Render timeout: Element did not mount within 1000ms
+
+      [0m [90m 21 |[39m         [36mconst[39m timeoutId [33m=[39m setTimeout(() [33m=>[39m {
+       [90m 22 |[39m             store[33m.[39mgetState()[33m.[39msetOnRenderCallback([36mnull[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 23 |[39m             reject([36mnew[39m [33mError[39m([32m`Render timeout: Element did not mount within ${timeout}ms`[39m))[33m;[39m
+       [90m    |[39m                             [31m[1m^[22m[39m
+       [90m 24 |[39m         }[33m,[39m timeout)[33m;[39m
+       [90m 25 |[39m         store[33m.[39mgetState()[33m.[39msetOnRenderCallback(() [33m=>[39m {
+       [90m 26 |[39m             clearTimeout(timeoutId)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · early checks (Q7 C9) › leaves a tap on its anchor to the anchor (check 1)
+
+    Render timeout: Element did not mount within 1000ms
+
+      [0m [90m 21 |[39m         [36mconst[39m timeoutId [33m=[39m setTimeout(() [33m=>[39m {
+       [90m 22 |[39m             store[33m.[39mgetState()[33m.[39msetOnRenderCallback([36mnull[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 23 |[39m             reject([36mnew[39m [33mError[39m([32m`Render timeout: Element did not mount within ${timeout}ms`[39m))[33m;[39m
+       [90m    |[39m                             [31m[1m^[22m[39m
+       [90m 24 |[39m         }[33m,[39m timeout)[33m;[39m
+       [90m 25 |[39m         store[33m.[39mgetState()[33m.[39msetOnRenderCallback(() [33m=>[39m {
+       [90m 26 |[39m             clearTimeout(timeoutId)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 23 passed, 24 total
+Tests:       1 failed, 3 skipped, 462 passed, 466 total
+Snapshots:   0 total
+Time:        909.953 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1926cbe365ba, 17 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.41/23.59 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        27.763 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 953.6 s
+gate: recorded in .gates/task/G18-merge.jsonl
+
+
+gate: appended the device context to task/G18-merge/harness+android-2026-11-05T20-18-43.864Z.log (5 probe(s))
+
+```
