@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from '@jest/globals';
-import { render } from '@testing-library/react-native';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { render, type RenderResult } from '@testing-library/react-native';
 
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 import { Button } from '../components/Button/Button';
@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 function nativeProps(
-  view: ReturnType<typeof render>,
+  view: RenderResult,
   testId: string
 ): Record<string, unknown> {
   return view.getByTestId(testId).props as unknown as Record<string, unknown>;
@@ -72,7 +72,7 @@ describe('androidIcon name rules', () => {
       warnAndroidIconName('Button', 'androidIcon', 'Share Icon');
       warnAndroidIconName('Button', 'androidIcon', 'Share Icon');
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toMatch(
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(
         /is not a valid Android resource name/
       );
       warnAndroidIconName('Button', 'androidIcon', 'share');
@@ -136,7 +136,7 @@ describe('Button · androidIcon', () => {
         <Button title="Share" androidIcon="Share Icon" testID="c" />
       );
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(String(warn.mock.calls[0][0])).toMatch(
+      expect(String(warn.mock.calls[0]?.[0])).toMatch(
         /is not a valid Android resource name/
       );
     } finally {
