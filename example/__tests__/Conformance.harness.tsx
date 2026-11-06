@@ -144,7 +144,7 @@ const SHARED = {
     },
     "NitroUiMenu": {
       "android": {
-        "width": 118,
+        "width": 75.1,
         "height": 52
       },
       "ios": {
@@ -1495,7 +1495,7 @@ const MENU_GROUP: MenuGroup = {
  *
  * Deliberately long and deliberately not the fixture's `accessibilityLabel`: the fallback
  * rule's `boxRule: 'none'` branch goes red if a content-sized control measures *exactly* its
- * declared number, and Menu declares a Button-sized 74×38 pt / 118×52 dp, so a two-syllable
+ * declared number, and Menu declares a Button-sized 74×38 pt / 75.1×52 dp, so a two-syllable
  * title would be a coin flip on whether that guard had anything to say. A distinct label is
  * for the same reason one way and one name in two places is how round 1's Picker stutter got
  * missed.

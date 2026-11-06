@@ -214,21 +214,33 @@ for the sizes. iPhone 17 / iOS 27 in pt, an API 35 emulator at 420 dpi in dp:
 
 | Configuration |           iOS |     Android |
 | ------------- | --------------- | --------------- |
-| `filled`      | 77.33 × 34.33 | 92.57 × 48.00 |
-| `tonal`       | 77.33 × 34.33 | 92.57 × 48.00 |
-| `outlined`    | 77.33 × 34.33 | 92.57 × 48.00 |
-| `elevated`    | 77.33 × 34.33 | 92.57 × 48.00 |
+| `filled`      | 77.33 × 34.33 | 76.57 × 48.00 |
+| `tonal`       | 77.33 × 34.33 | 76.57 × 48.00 |
+| `outlined`    | 77.33 × 34.33 | 76.57 × 48.00 |
+| `elevated`    | 77.33 × 34.33 | 76.57 × 48.00 |
 | `text`        | 53.33 × 20.33 | 68.95 × 48.00 |
-| `small`       | 58.00 × 28.00 | 57.90 × 48.00 |
-| `large`       | 82.00 × 50.33 | 108.57 × 50.29 |
+| `small`       | 58.00 × 28.00 | 58.67 × 48.00 |
+| `large`       | 82.00 × 50.33 | 88.76 × 56.00 |
 
 The heights are Button's three heights — iOS 28.0 / 34.3 / 50.3 and Android 48.0 / 48.0 /
-50.3 (`docs/components/button.md`) — which is the claim being checked: the trigger is
+56.0 (`docs/components/button.md`) — which is the claim being checked: the trigger is
 Button's label with Button's chrome, and the widths differ only because these fixtures
 carry other titles. Android's `text` is narrower than the other four because Material's
 text button carries less horizontal padding, which is what Button does there too. On iOS
 the four boxed variants collapse to one pair because SwiftUI's `.bordered` and
 `.borderedProminent` give the same box; `text` is `.borderless`, so it is a text box.
+
+Only the Android column moved since this table was first taken, and it moved with
+`docs/components/button.md`: the trigger *is* the shared `NitroUiM3Button`, so E1's size
+ladder — Material's own `contentPaddingFor`/`textStyleFor`/`shapesFor` per rung instead
+of hand-rolled padding — took 16 dp off the four boxed variants (92.57 → 76.57), took
+19.8 off `large` and gave it the M token's 56 dp instead of 50.29, and left `text` at
+68.95 because that rung's padding was already Material's. `small` gained 0.77
+(57.90 → 58.67) from the XS rung's label style. The iOS column was not re-measured and
+does not need it: the only iOS file that pass touched is
+`ios/components/Button/HybridNitroUiButton.swift`, and this trigger is E2's own SwiftUI,
+which applies `.buttonStyle(.bordered)`/`.borderedProminent`/`.borderless` directly and
+never reaches that file.
 
 Getting those numbers needed one fix: `.menuStyle(.button)` makes the label a button but
 leaves that button's *style* the automatic one, and the trigger measured 53.33 × 20.33 —
@@ -238,7 +250,7 @@ the title's text box — for every variant. iOS now applies the same per-variant
 **The fallback.** One pair per component, Button-sized and deliberately not any fixture's
 measured size, because a fallback equal to the answer hides a correction that never
 arrived (`docs/tasks/X4-conformance.md`): `74 × 38` pt
-(`ios/components/Menu/HybridNitroUiMenu.swift`) and `118 × 52` dp
+(`ios/components/Menu/HybridNitroUiMenu.swift`) and `75.1 × 52` dp
 (`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt`). Each sizing row
 above is poisoned first, so the test asserts the box is neither the planted size nor this
 pair.
