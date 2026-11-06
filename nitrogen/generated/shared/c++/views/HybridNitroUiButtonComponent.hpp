@@ -49,6 +49,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::string> title;
     nitro::ReactProp<std::string> variant;
     nitro::ReactProp<std::string> size;
+    nitro::ReactProp<std::string> shape;
     nitro::ReactProp<bool> disabled;
     nitro::ReactProp<std::variant<nitro::NullType, double>> tintColor;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> systemImage;
@@ -65,6 +66,7 @@ namespace margelo::nitro::nitroui::views {
       return title.hasSameValue(other.title) &&
              variant.hasSameValue(other.variant) &&
              size.hasSameValue(other.size) &&
+             shape.hasSameValue(other.shape) &&
              disabled.hasSameValue(other.disabled) &&
              tintColor.hasSameValue(other.tintColor) &&
              systemImage.hasSameValue(other.systemImage) &&
@@ -82,6 +84,7 @@ namespace margelo::nitro::nitroui::views {
       return title.isProvided() ||
              variant.isProvided() ||
              size.isProvided() ||
+             shape.isProvided() ||
              disabled.isProvided() ||
              tintColor.isProvided() ||
              systemImage.isProvided() ||

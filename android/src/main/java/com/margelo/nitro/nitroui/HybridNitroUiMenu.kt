@@ -615,16 +615,20 @@ class HybridNitroUiMenu(
      * The size to lay a Menu out with before anything has been measured, in dp.
      *
      * One pair for the component, which is all the engine can hold, and the trigger
-     * is a Button's box - so the same shape of guess applies: this is a medium
-     * filled trigger with a five-letter title. `docs/components/menu.md` has the
-     * measured table.
+     * is [NitroUiM3Button]'s box - so the guess is Button's own, and this is literally
+     * it: the width [HybridNitroUiButton] declares for a medium button with a
+     * six-letter title. E1's size ladder is why it moved: that ladder cut 16 dp off a
+     * medium trigger, so a measured `filled` `Variant` is 76.57 dp wide here where it
+     * measured 92.57 before, and the old 118 was no longer even the right order of
+     * guess. `docs/components/menu.md` has the measured table.
      *
-     * Deliberately *not* the fixture's measured size: a fallback that equals the
-     * answer makes a failed correction invisible (AGENTS.md, quality bar). The
-     * harness's sizing test measures a `Short` trigger and asserts the box is not
-     * these numbers as well as that it is the measured ones.
+     * The height stays 52 rather than taking Button's 48, and that gap is the point:
+     * a fallback that equals a measured answer makes a failed correction invisible
+     * (AGENTS.md, quality bar), and every box this control measures is 48 or 56 tall.
+     * `Menu.harness.tsx`'s sizing test poisons all seven configurations and asserts
+     * each box is neither the planted size nor these numbers.
      */
-    private const val FALLBACK_WIDTH_DP = 118.0
+    private const val FALLBACK_WIDTH_DP = 75.1
     private const val FALLBACK_HEIGHT_DP = 52.0
 
     private val fallbackDeclared = AtomicBoolean(false)

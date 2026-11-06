@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-05T18:46:50.038Z on code tree `a11ebf4c5c67` at HEAD `6ae2612` (branch `task/E1-expressive-buttons`)
+- Command: `bun run check`
+- Result: fail, exit 1, 169085 ms
+- Load: start 5.29, end 6.26, median 9.55, max 18.19
+- Device: android / device `emulator-5574` / lease `E1-uivzs`
+- Full log: `task/E1-expressive-buttons/check-2026-11-05T18-46-49.414Z.log` (<store>/task/E1-expressive-buttons/check-2026-11-05T18-46-49.414Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "api-extractor:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2949 — the rest is in the full log above)
+
+```
+  src/components/Progress/Progress.perf-test.tsx
+  src/components/SegmentedControl/SegmentedControl.perf-test.tsx
+  src/components/Slider/Slider.perf-test.tsx
+  src/components/Switch/Switch.perf-test.tsx
+  src/components/TextField/TextField.perf-test.tsx
+
+❇️  Running performance tests:
+ - Current: task/E1-expressive-buttons (6ae2612e861c368931ae5df280502df9dcf54bf6) - 2026-11-05 18:49:22Z
+
+PASS src/components/DatePicker/DatePicker.perf-test.tsx
+PASS src/components/Progress/Progress.perf-test.tsx
+PASS src/components/Slider/Slider.perf-test.tsx
+PASS src/components/Picker/Picker.perf-test.tsx
+PASS src/components/SegmentedControl/SegmentedControl.perf-test.tsx
+PASS src/components/Button/Button.perf-test.tsx
+PASS src/components/Switch/Switch.perf-test.tsx
+PASS src/components/TextField/TextField.perf-test.tsx
+
+Test Suites: 8 passed, 8 total
+Tests:       8 passed, 8 total
+Snapshots:   0 total
+Time:        8.919 s
+Ran all test suites.
+
+✅  Written Current performance measurements to .reassure/current.perf
+🔗 <repo>/.reassure/current.perf
+
+(node:94165) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+| Test                                                                            | Baseline | Current | Issues              | Status |
+| --- | --- | --- | --- | --- |
+| Button: mount, 3 title changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| DatePicker: mount, 3 value changes, 2 bound changes, 2 unrelated parent renders | 8        | 8       | mount+0 redundant[] | ok     |
+| Picker: mount, 3 selection changes, 2 unrelated parent renders                  | 6        | 6       | mount+0 redundant[] | ok     |
+| Progress: mount, 3 value changes, 2 unrelated parent renders, 1 variant change  | 7        | 7       | mount+0 redundant[] | ok     |
+| SegmentedControl: mount, 3 selection changes, 2 unrelated parent renders        | 6        | 6       | mount+0 redundant[] | ok     |
+| Slider: mount, 3 value changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| Switch: mount, 3 flips, 2 unrelated parent renders                              | 6        | 6       | mount+0 redundant[] | ok     |
+| TextField: mount, 3 keystrokes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+
+PASS - 8 wrapper(s) render exactly as many times as the baseline says, with no redundant renders.
+──────── nitrogen:check — pass, 1.7s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 17/17 HybridObjects in 1.0s!
+💡  Your code is in <tmp>/nitrogen-check-hhHJmq/nitrogen/generated
+‼️   Added 531 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: no drift (362 generated files match, 49 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (14 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.4s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        2.4s
+──────── prepare — pass, 2.4s ────────────────────────────────────────────────────
+$ bob build
+ℹ [custom] Cleaning up nitrogen
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [custom] Running bun run nitrogen
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+ℹ [typescript] Generating type definitions with tsc
+ℹ [module] Compiling 95 files in src with babel
+✔ [module] Wrote files to lib/module
+✔ [custom] Ran the nitrogen script succesfully
+✔ [typescript] Wrote definition files to lib/typescript
+check: ✓ publint             pass        0.9s
+check: ✗ api-extractor:check fail        1.3s - exit 1
+──────── api-extractor:check — fail, 1.3s ────────────────────────────────────────
+──────── publint — pass, 0.9s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✓ manifest:check      pass        1.5s
+──────── manifest:check — pass, 1.5s ─────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: tarball matches <repo>/etc/package-files.txt (806 files).
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 16 blocks match example/src/readme-examples.tsx
+check: 16 passed, 1 failed in 168.9s
+check: failed step(s): api-extractor:check
+──────── full log: api-extractor:check ───────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+[33mWarning: You have changed the API signature for this project. Please copy the file ".turbo/api-extractor-temp/react-native-nitro-ui.api.md" to "etc/react-native-nitro-ui.api.md", or perform a local build (which does this automatically). See the Git repo documentation for more info.[39m
+
+[33mAPI Extractor completed with warnings[39m
+error: script "api-extractor:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 169.1 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+```

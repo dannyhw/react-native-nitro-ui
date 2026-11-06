@@ -1,0 +1,87 @@
+# Failure excerpt — harness:ios:Button
+
+- Ran: 2026-11-05T18:22:23.071Z on code tree `94e3edeb6dae` at HEAD `6ae2612` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Button`
+- Result: fail, exit 1, 17860 ms
+- Load: start 4.93, end 9.33, median 9.33, max 9.33
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `E1-uivzs`
+- Full log: `task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log` (<store>/task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● shape · the corner (E1) › repaints a mounted corner without opening a new configuration`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-uivzs (still live)
+  |   G17-rpba7                G17          both              pair-b
+  |   E1-uivzs                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.33 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Button
+gate: node ../scripts/harness.mjs --harnessRunner ios Button (cwd example)
+gate: code tree 94e3edeb6dae at HEAD 6ae2612e
+gate: git tree e239aecc9c3d with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log
+gate:       <store>/task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Button
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 94e3edeb6dae, 15 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.93/8.15 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Button.harness.tsx
+  ● shape · the corner (E1) › repaints a mounted corner without opening a new configuration
+
+    a corner change cost 1 size correction(s): expected 1 to be +0 // Object.is equality
+
+      [0m [90m 1243 |[39m       after[33m.[39mcorrections[33m,[39m
+       [90m 1244 |[39m       [32m`a corner change cost ${String(after.corrections)} size correction(s)`[39m
+      [31m[1m>[22m[39m[90m 1245 |[39m     )[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m           [31m[1m^[22m[39m
+       [90m 1246 |[39m     expect(
+       [90m 1247 |[39m       after[33m.[39mcachedSizes[33m,[39m
+       [90m 1248 |[39m       [32m`a corner change opened ${String(after.cachedSizes)} new size configuration(s)`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 13 passed, 14 total
+Snapshots:   0 total
+Time:        16.412 s
+Ran all test suites matching Button.
+gate: harness:ios:Button FAIL in 17.9 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+
+gate: appended the device context to task/E1-expressive-buttons/harness+ios+Button-2026-11-05T18-22-22.487Z.log (4 probe(s))
+
+```

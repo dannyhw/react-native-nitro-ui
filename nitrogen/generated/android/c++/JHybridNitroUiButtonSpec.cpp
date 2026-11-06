@@ -80,6 +80,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* size */)>("setSize");
     method(_javaPart, jni::make_jstring(size));
   }
+  std::string JHybridNitroUiButtonSpec::getShape() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getShape");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiButtonSpec::setShape(const std::string& shape) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* shape */)>("setShape");
+    method(_javaPart, jni::make_jstring(shape));
+  }
   bool JHybridNitroUiButtonSpec::getDisabled() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("getDisabled");
     auto __result = method(_javaPart);

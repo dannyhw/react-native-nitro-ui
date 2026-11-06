@@ -1,8 +1,9 @@
 # SegmentedControl
 
 The platform segmented control: SwiftUI `Picker` with `.pickerStyle(.segmented)`
-on iOS, Material 3 `SingleChoiceSegmentedButtonRow` + `SegmentedButton` on
-Android. Both are hosted by the core runtime (`docs/architecture/core.md`), so
+on iOS, a Material 3 Expressive **connected button group** on Android — one `Row`
+spaced by `ButtonGroupDefaults.ConnectedSpaceBetween`, its items carrying the
+connected leading/middle/trailing corners. Both are hosted by the core runtime (`docs/architecture/core.md`), so
 segment shapes, press feedback, haptics, a11y behaviour and dynamic type belong
 to the control, not to us.
 
@@ -45,7 +46,7 @@ read-only plus `measureContent()`, and it runs once, when the view mounts.
 
 | Concept         | iOS                                              | Android                                                   |
 | --------------- | -------------------------------------------------- | ------------------------------------------------------------ |
-| Control         | `Picker(selection:) { … }.pickerStyle(.segmented)`  | `SingleChoiceSegmentedButtonRow` + one `SegmentedButton` each |
+| Control         | `Picker(selection:) { … }.pickerStyle(.segmented)`  | a `Row` of connected items on `ButtonGroupDefaults` shapes      |
 | Host            | `UIHostingController` inside `NitroSwiftUIHost`     | `NitroComposeHost<M>: AbstractComposeView`                    |
 | Theme           | system traits                                       | `MaterialTheme` + dynamic color on Android 12+                |
 | Selected segment| the scheme's accent fill; `tintColor` does nothing  | `activeContainerColor` + `activeBorderColor`, both from `tintColor` (default: transparent) |
@@ -126,22 +127,61 @@ API 35 at 420 dpi, in dp):
 
 | `options`                          | iOS             | Android         |
 | ---------------------------------- | ----------------- | ----------------- |
-| `['Go']`                           | 36.00 × 31.00     | 67.81 × 48.00     |
-| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 256.00 × 48.00    |
-| `['North','South','East','West']`  | 220.00 × 31.00    | 344.00 × 48.00    |
+| `['Go']`                           | 36.00 × 31.00     | 49.90 × 48.00     |
+| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 187.81 × 48.00    |
+| `['North','South','East','West']`  | 220.00 × 31.00    | 265.90 × 48.00    |
 
 The height is the platform's control height and does not move with the labels —
 iOS draws a segmented `Picker` 31 pt tall for one option or for four long ones
-alike, and Material 3 lays every segment in a 48 dp row. The width is the labels'.
-Android's one-option row is wider than its label because Material 3 keeps a
-minimum interactive width per segment, and Android's row gives each segment an
-equal share of the track, so with equal labels the segments are equal — which is
-what the real-input taps assume.
+alike, and the group lays every segment on the 48 dp touch target a `medium`
+Button is laid out at. The width is the labels'. The Android column is the
+connected group, and it is ~27% narrower than the
+`SingleChoiceSegmentedButtonRow` these rows were measured on: that row reserved a
+leading icon slot per segment (`icon = {}` hides the check, not the space), and
+the group has no icon slot to reserve. The four-label row also fits the window
+now — the 344.00 the older table carried above it was the box Yoga clamped the row
+to, not the row's own measurement.
+
+A segment is its label plus Material's own content padding for the height — 32 dp
+of it — and the row is the sum of its segments plus the 2 dp the group leaves
+between neighbours. A row of unequal labels is therefore unequal by exactly as
+much as its labels are, every one of them is spelled out, and the box the control
+reports is the row it draws. Dumped on the `OptionSets` story,
+`['Hour', 'Day', 'Week', 'Month', 'Year']` is 62.86 + 56.00 + 66.67 + 72.38 +
+60.19 plus 4 × 2 = 326.10 dp of segments, and the control measures 325.71 × 48.00
+with its box equal to its own measurement (the 0.39 dp between them is px↔dp
+rounding). `example/__tests__/SegmentedControl.harness.tsx` asserts that sum
+against the same control measured one label at a time, so a font, density or
+padding change moves both sides of the comparison together.
+
+That sum is why the row is a hand-written `Layout` (`ConnectedRow`, in
+`android/.../HybridNitroUiSegmentedControl.kt`) and not a `Row` with a weight on
+each item. For a weighted child the equal share is not only what the child *gets*
+— it is the most the child may be: `fill = false` lowers the minimum, not the
+maximum. And the row's own demand at `width(IntrinsicSize.Max)` is n × the widest
+item, not the sum. Run that way these five labels demand 5 × 188 + 20 = 960 px,
+get clamped to the 954 px column, and are handed a 186.8 px share each while
+`Month` wants 188 px: the widest label is measured against the *mean* of its own
+row and ellipsizes to `Mon…`, inside a box 43 dp wider than the row drawn in it
+(369.52 dp against 326.10 dp, measured in the harness where nothing clamps it).
+The space beside such a row is not spare room — it is unpainted, it off-centres a
+centred control, and it ignores taps. Equal labels hide the whole thing, because
+for them the share *is* the content.
+
+The equal share was not simply wrong, though: it was also the reason an over-wide
+row worked. With no weight, a `Row` serves its children in order, each taking what
+it wants out of what is left, so a row laid out narrower than its labels hands its
+whole box to the first segment and nothing to the last. That box is not
+hypothetical — it is the placement measure `NitroUiMeasuredRoot` asks for once a
+row reports wider than its box, and the harness presses both ends of it in
+`overwide`, `clamped` and `narrowing`. `ConnectedRow` shares the box equally
+*only* when the labels do not fit, which is the pass the share was always right
+for, and lays the row at its own sum every other time.
 
 **What the engine starts from.** The engine keys fallbacks per component, so this
 component has one declared pair however many option lists exist: `165 × 31` pt
 (`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`) and
-`256 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
+`187.9 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
 three-short-labels row above, measured rather than guessed, because a fallback
 smaller than the control is the dead-touch story in `core.md` §7. Every other
 option list is a first instance of *its own* configuration: it is laid out at the
@@ -188,10 +228,19 @@ drops the now-wrong cached sizes.
 ## Accessibility
 
 - Each segment is its own accessibility element with its own label, and the
-  selected one is announced as selected — a uiautomator dump shows each segment as
-  a `RadioButton`-class node inside the row's group, and the chosen one reports
-  `checked=true`. On iOS the segmented `Picker` is the platform element VoiceOver
-  already knows.
+  selected one is announced as selected. The tree was dumped again for this row,
+  because the row changed shape: a segment is one item node at the segment's box
+  carrying `checkable` and `checked` — Compose's mapping of the toggleable state,
+  and what a screen reader
+  reads as "selected" — with a `RadioButton`-class node for its role at the same box
+  and its label as a child `TextView`, all inside the row's own group. Both halves of
+  that were dumped on the same emulator, before and after the redraw: the connected
+  group and the `SingleChoiceSegmentedButtonRow` it replaces publish the same three
+  nodes per segment, so the pixels moved and the announcement did not. The three
+  live on three nodes in both, so `scripts/real-input/android.mjs` reads each of
+  them where the tree puts it — the state off the item, the class off the role node,
+  the label off the text — rather than asking one node for all three. On iOS the segmented
+  `Picker` is the platform element VoiceOver already knows.
 - `accessibilityLabel` describes the **group**: on Android it goes on the row
   (`android/.../HybridNitroUiSegmentedControl.kt`), on iOS on the `Picker`, and
   on both it is applied only when set — an empty label would silence the segments.
@@ -221,8 +270,24 @@ drops the now-wrong cached sizes.
   are served from a bounded process-wide cache keyed on the theme's identity
   (`android/.../HybridNitroUiSegmentedControl.kt`) — `SegmentedButtonDefaults.colors()`
   allocates, and building it per recomposition per mounted control is the cost the
-  "Shared objects" rule in `core.md` is about. `itemShape` is *not* cached: it is
-  derived from the index and count, not from the theme.
+  "Shared objects" rule in `core.md` is about. The corners need no cache: a group
+  of two or more takes the connected shapes `ButtonGroupDefaults` already holds,
+  and only a one-option row asks `Button`'s cached `buttonShapes(Round, Medium)`
+  for a corner.
+- **Radio semantics win over `ToggleButton`.** Material's own
+  `ToggleButton` publishes `Role.Checkbox` from inside its own semantics lambda,
+  which an outer modifier cannot outvote, and Compose keeps the innermost
+  semantics — so a row built from it announces "checkbox", not the "1 of 3,
+  selected" this control promises. Each item is therefore a `Box` this file draws:
+  `Modifier.selectable(selected = …, role = Role.RadioButton)` — the state and the
+  role from one call — with Material's connected corners, border stroke,
+  `ButtonDefaults.MinHeight` and the shared `Button` label style and padding laid
+  on top. Same API and the same radio announcement; the *look* is the group's, and
+  it is not the track that was there: an unselected segment is an outlined item on
+  the connected corner (round outside, 8 dp where it faces its neighbour) and the
+  selected one is Material's own stadium (`connectedButtonCheckedShape`), drawn
+  solid. The three states swap rather than morph: material3's shape animator is
+  `internal`, so the corner changes when the state does and not between them.
 - **No check icon.** Material 3's default `icon` renders a check on the selected
   segment only, which would make the measured width change with the selection and
   force the selection into the sizing key. Labels only, matching iOS.

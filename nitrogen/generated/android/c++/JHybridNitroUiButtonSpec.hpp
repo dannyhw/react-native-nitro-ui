@@ -56,6 +56,8 @@ namespace margelo::nitro::nitroui {
     void setVariant(const std::string& variant) override;
     std::string getSize() override;
     void setSize(const std::string& size) override;
+    std::string getShape() override;
+    void setShape(const std::string& shape) override;
     bool getDisabled() override;
     void setDisabled(bool disabled) override;
     std::variant<nitro::NullType, double> getTintColor() override;

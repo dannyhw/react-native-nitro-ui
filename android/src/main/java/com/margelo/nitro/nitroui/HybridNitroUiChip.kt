@@ -10,9 +10,13 @@ import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ChipShapes
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -196,6 +200,43 @@ private val ChipCheckIcon: ImageVector by lazy {
   }.build()
 }
 
+/**
+ * The chip's corners, on Material 3 1.5's `ChipShapes` overload.
+ *
+ * A *selected* filter chip gets a corner of its own - the pill Material draws for
+ * the chosen one - while the resting corner and the press morph stay Material's:
+ * `pressedShape` is read from the defaults so the morph to the square corner on
+ * press is still the theme's motion scheme's business, not this file's. The
+ * corner is a paint, not a layout input, so no measured size moves here.
+ */
+@Composable
+private fun chipShapes(): ChipShapes {
+  val motion = MaterialTheme.motionScheme
+  ChipShapesCache.get(motion)?.let { cached -> return cached }
+  val base = FilterChipDefaults.shapes()
+  val built = ChipShapes(shape = base.shape, selectedShape = CircleShape, pressedShape = base.pressedShape)
+  ChipShapesCache.put(motion, built)
+  return built
+}
+
+/** [chipShapes]' store: one motion scheme at a time, because the corner is its to build. */
+private object ChipShapesCache {
+  private var motion: MotionScheme? = null
+  private var shapes: ChipShapes? = null
+
+  @Synchronized
+  fun get(motion: MotionScheme): ChipShapes? = if (this.motion === motion) shapes else null
+
+  @Synchronized
+  fun put(
+    motion: MotionScheme,
+    shapes: ChipShapes,
+  ) {
+    this.motion = motion
+    this.shapes = shapes
+  }
+}
+
 /** The check, at the chip's own icon size. One lambda for the process. */
 private val ChipLeadingCheck: @Composable () -> Unit = {
   Icon(
@@ -208,9 +249,10 @@ private val ChipLeadingCheck: @Composable () -> Unit = {
 /**
  * The leading slot of an *unselected* filter chip: present, and zero wide.
  *
- * Material 3 1.4 draws every selectable chip through `AnimatingChipContent`, which
- * wraps the leading icon in `AnimatedVisibility(leadingIcon != null)` with an
- * `expandHorizontally`/`shrinkHorizontally` spring. Passing `null` when unselected is
+ * Material 3 draws every selectable chip through an `AnimatedVisibility` of the
+ * leading icon with an `expandHorizontally`/`shrinkHorizontally` spring - still true
+ * of the 1.5.0-beta02 chip this builds on, re-checked for E1 rather than assumed:
+ * `ChipKt` in that artifact still names both visibility transformers. Passing `null` when unselected is
  * therefore a *width animation* on every toggle, and the host cannot follow one:
  * measured on `nitroui_t03`, a toggle reported seven widths frame by frame
  * (89.5 -> 91.8 -> 96 -> ... -> 106.3 dp), each one a layout correction, and the last
@@ -319,6 +361,7 @@ private class ChipHost(
           label = content,
           modifier = labelModifier,
           enabled = model.enabled,
+          shapes = chipShapes(),
           leadingIcon = if (selected) ChipLeadingCheck else ChipLeadingSlotEmpty,
         )
       ChipVariant.Assist ->

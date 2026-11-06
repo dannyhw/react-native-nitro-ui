@@ -5,22 +5,45 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonColors
 import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.ToggleButtonShapes
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
@@ -384,6 +407,9 @@ private class SegmentedControlHost(
     val tint = model.tintColor
     val label = model.accessibilityLabel
     val colors = segmentedColors(tint)
+    val group = segmentGroupValues()
+    val labelStyle = group.labelStyle
+    val contentPadding = group.contentPadding
     // The label goes on the row, because for this control the group is what a
     // label describes: the segments are its children, each announced with M3's
     // `Role.RadioButton` inside the row's own `selectableGroup()`. Putting it on
@@ -391,24 +417,64 @@ private class SegmentedControlHost(
     // group (`docs/architecture/core.md` section 3).
     val labelModifier =
       if (label != null) Modifier.semantics { contentDescription = label } else Modifier
-    SingleChoiceSegmentedButtonRow(modifier = labelModifier) {
+    // Material 3 Expressive replaced the segmented track with a connected button
+    // group: the same row of choices, drawn with `ButtonGroupDefaults`' 2 dp gap and
+    // its connected leading / middle / trailing corners.
+    //
+    // Those three helpers are called with *no arguments*, which is the whole point of
+    // the group. Their first parameter is the complete resting shape, not the corner
+    // the item shares with its neighbours, so handing them the control's own stadium
+    // (`ButtonDefaults.shapesFor`'s answer for the height) keeps the connected pressed
+    // and checked shapes but rests every item on a full pill: a row of separate pills
+    // 2 dp apart, which is the track-less look the group replaced and - at 48 dp -
+    // wide enough to cost the longest label in a five-option row its last letter.
+    // The row is measured from its contents, as the segmented row was: the labels are
+    // the width, and a stretched row would be a 420 dp control with three boxes in it
+    // (see `SELF_SIZING_BASE_STYLE` on the JS side). [ConnectedRow] is why the geometry
+    // is written here instead of in a `Row`: for this control an item's share of the
+    // row must not also be the most it is allowed to be.
+    ConnectedRow(
+      modifier =
+        labelModifier
+        // One group, so an announcement reads "1 of 3" - the position comes from
+        // here, the role and the selected state from each item below.
+        .selectableGroup(),
+    ) {
       options.forEachIndexed { index, text ->
         val isSelected = index == selectedIndex
-        SegmentedButton(
-          selected = isSelected,
+        ConnectedSegment(
+          text = text,
+          checked = isSelected,
+          enabled = enabled,
+          colors = colors,
+          shapes =
+            when {
+              // One option is not a group: there is no neighbour to be connected to,
+              // so the item is the full resting corner - what a lone round Button draws.
+              options.size == 1 -> group.lone
+              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+              else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+            },
+          labelStyle = labelStyle,
+          contentPadding = contentPadding,
+          // No `modifier` at all: the width is [ConnectedRow]'s decision, and the
+          // selected state and the role are published by the item's own `selectable`
+          // below, so the row does not also assert them (a second `selected` there
+          // wins the merge, and the a11y checks in `scripts/real-input/android.mjs`
+          // would then read this line instead of the selection the item has).
           onClick = {
             // A tap on the segment that is already selected reports nothing.
-            // Material 3 hands `onClick` to a plain clickable Box, so it fires for
-            // every press - including one on the selected segment - while a
-            // SwiftUI `Picker` binding only writes when the selection moves.
-            // Suppressing it here is what makes the two platforms report the same
-            // events (`docs/components/segmented-control.md`), and it is the only
-            // thing that makes a real-input snap-back observable: the second tap
-            // of `scripts/real-input` lands on the segment a rejected change is
-            // supposed to have returned to, and it must report nothing until the
-            // revert has landed.
+            // Foundation's `selectable` fires for a press on a selected node only
+            // when it is not already in its group's selection, but the group is
+            // ours and a rebuild can re-present the same index - so the guard is
+            // explicit, exactly as it was on `SegmentedButton`. It is also the only
+            // thing that makes a real-input snap-back observable: the second tap of
+            // `scripts/real-input` lands on the segment a rejected change is supposed
+            // to have returned to, and it must report nothing until the revert has
+            // landed.
             if (index == model.displayed) {
-              return@SegmentedButton
+              return@ConnectedSegment
             }
             // Native is optimistic: paint the new segment now, before React has
             // seen the event, so there is no visual latency (core.md section 4).
@@ -416,32 +482,208 @@ private class SegmentedControlHost(
             model.displayed = index
             model.onChange?.invoke(index.toDouble(), eventCount.toDouble())
           },
-          modifier = Modifier.semantics { selected = isSelected },
-          enabled = enabled,
-          // Required, with no default: Material 3 gives each segment the corners
-          // its position earns - only the ends of the row are rounded; it is one
-          // track. Recomposing this is a shape transform on the index and count,
-          // which is what `itemShape` is, and unlike the colours it is not derived
-          // from the theme, so there is nothing to cache.
-          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-          colors = colors,
-          // Spelled out to choose the overload: Material 3 1.4 has a 12-parameter
-          // `SegmentedButton` and a deprecated 11-parameter one without
-          // `contentPadding`. Naming a default only the longer signature has forces
-          // the compiler to it; leaving it out, resolution prefers the shorter one.
-          contentPadding = SegmentedButtonDefaults.ContentPadding,
-          // Label only, deliberately: Material 3's default `icon` renders a check
-          // mark *on the selected segment only*, so the row's measured width would
-          // change with the selection - and a size that moves when the selection
-          // moves would have to put the selection in `nuiSizingKey`, which is both
-          // a cache fragmenter and a re-measure per tap. iOS's segmented `Picker`
-          // has no such icon, so label-only is also the cross-platform match.
-          icon = {},
-          label = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         )
       }
     }
   }
+}
+
+/**
+ * The connected group's row: the geometry `Row` cannot give this control.
+ *
+ * Two things have to be true at once, and `Modifier.weight` cannot hold both.
+ *
+ * - **The labels are the width.** The control reports its own size and Yoga lays it
+ *   out at what it reported (D17), so a row of unequal labels has to be the *sum* of
+ *   its items. A weighted item's equal share is also its ceiling, and the row's own
+ *   demand is what the share is taken from: at `Modifier.width(IntrinsicSize.Max)` a
+ *   weighted `Row` asks for n x the widest label plus the gaps, so the widest label
+ *   is measured against the *mean* of its own row and the tail of that row paints
+ *   nothing. Dumped on the `OptionSets` story, the five-option row asked for 960 px,
+ *   was clamped to the 954 px column, handed each segment 186.8 px, and `Month` -
+ *   which wants 188 px - ellipsized to `Mon...` inside a box 38.9 dp wider than what
+ *   it drew. Equal labels hid all of this: for them the share *is* the content.
+ * - **A row that is given less than its labels want must share it.** Take the weight
+ *   away and a `Row` serves its children in order, each taking what it wants out of
+ *   what is left, so an over-wide row hands its whole box to the first segment and
+ *   nothing to the last. That box is not hypothetical: it is the placement measure
+ *   `NitroUiMeasuredRoot` asks for once a row reports wider than its box, and
+ *   `example/__tests__/SegmentedControl.harness.tsx` presses both ends of it in
+ *   `overwide`, `clamped` and `narrowing` - a segment with no width is a segment no
+ *   finger can reach.
+ *
+ * So the row asks each item what it wants - through the intrinsic API, never a second
+ * `measure()` on the same `Measurable` (`NitroUiMeasuredRoot`), and lays the answer
+ * out at the sum. Only a row that does *not* fit shares, and then equally, exactly as
+ * the weighted row did: the share was always right for the pass it was made for.
+ */
+@Composable
+private fun ConnectedRow(
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  val gap = with(LocalDensity.current) { ButtonGroupDefaults.ConnectedSpaceBetween.roundToPx() }
+  Layout(modifier = modifier, content = content) { measurables, constraints ->
+    if (measurables.isEmpty()) {
+      return@Layout layout(constraints.minWidth, constraints.minHeight) {}
+    }
+    val count = measurables.size
+    val gaps = gap * (count - 1)
+    // What each item asks for. The intrinsic API answers this without consuming the
+    // `Measurable`: one `measure()` per item per pass is a hard rule here.
+    val natural = measurables.sumOf { it.maxIntrinsicWidth(0) } + gaps
+    // The row is its labels, clamped into the box the caller actually has.
+    val rowWidth = natural.coerceIn(constraints.minWidth, constraints.maxWidth)
+    // Negative means "nothing is shared out" - every row whose labels fit.
+    val share =
+      if (natural > rowWidth) ((rowWidth - gaps) / count).coerceAtLeast(0) else -1
+    val placeables = ArrayList<Placeable>(count)
+    var used = 0
+    measurables.forEachIndexed { index, measurable ->
+      val trailing = if (index < count - 1) gap else 0
+      val room = (rowWidth - used - trailing).coerceAtLeast(0)
+      val maxWidth = if (share < 0) room else minOf(share, room)
+      val placeable = measurable.measure(Constraints(minWidth = 0, maxWidth = maxWidth))
+      placeables += placeable
+      used += placeable.width + gap
+    }
+    val rowHeight =
+      placeables.maxOf { it.height }.coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(rowWidth, rowHeight) {
+      var x = 0
+      for (placeable in placeables) {
+        placeable.placeRelative(x, 0)
+        x += placeable.width + gap
+      }
+    }
+  }
+}
+
+/**
+ * One item of the connected group.
+ *
+ * Its own node, drawn by this file, rather than Material's `ToggleButton`:
+ * `ToggleButton` publishes `Role.Checkbox` from its own semantics lambda, and a
+ * nested node cannot have that overridden from the outside - the semantics closer
+ * to the content win. This control is a radio group in its API and in
+ * `docs/components/segmented-control.md` ("each segment as a `RadioButton`-class
+ * node ... the chosen one reports selected"), and a TalkBack announcement that
+ * called every segment a checkbox would make that sentence false. So the item
+ * takes Material's *geometry* - the connected corners, the 2 dp gap, the height's
+ * padding and label style - and puts them on `Modifier.selectable(role =
+ * Role.RadioButton)`, which is the same semantics Material's own segmented button
+ * published. The states keep their own corner - the connected pressed shape while
+ * the item is held, `connectedButtonCheckedShape` (Material's full stadium) when it
+ * is the selection - but they *swap*: material3's shape animator
+ * (`AnimatedShapeState`) is `internal`, so nothing here interpolates between the
+ * corner the item rests on and the corner it takes. Material's own toggle buttons
+ * morph across the same three shapes; this row changes instantly instead, and the
+ * only press feedback a segment owes is the ripple the `selectable` draws under it.
+ */
+@Composable
+private fun ConnectedSegment(
+  text: String,
+  checked: Boolean,
+  enabled: Boolean,
+  colors: SegmentedButtonColors,
+  shapes: ToggleButtonShapes,
+  labelStyle: TextStyle,
+  contentPadding: PaddingValues,
+  onClick: () -> Unit,
+) {
+  val interaction = remember { MutableInteractionSource() }
+  val pressed by interaction.collectIsPressedAsState()
+  // Chosen, not animated: see the note on the swap in the doc comment above.
+  val shape =
+    when {
+      pressed -> shapes.pressedShape
+      checked -> shapes.checkedShape
+      else -> shapes.shape
+    }
+  val container = if (checked) colors.activeContainerColor else colors.inactiveContainerColor
+  val content = if (checked) colors.activeContentColor else colors.inactiveContentColor
+  val borderColor = if (checked) colors.activeBorderColor else colors.inactiveBorderColor
+  Box(
+    modifier =
+      Modifier
+        .height(MinTouchTargetHeight)
+        // Clip first, so the ripple and the container both take the connected
+        // corner instead of painting a square one over it.
+        .clip(shape)
+        .selectable(
+          selected = checked,
+          onClick = onClick,
+          enabled = enabled,
+          role = Role.RadioButton,
+          interactionSource = interaction,
+        )
+        .background(container)
+        .border(SegmentedButtonDefaults.borderStroke(borderColor), shape)
+        .padding(contentPadding),
+    contentAlignment = Alignment.Center,
+  ) {
+    Text(
+      text = text,
+      style = labelStyle.copy(color = content),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
+
+/**
+ * The group's label style, its padding, and the shapes for a group of one.
+ *
+ * The corners for two or more options are not here: they are the connected defaults
+ * `ButtonGroupDefaults.connectedLeadingButtonShapes()` and friends answer with, and
+ * this file does not touch them.
+ *
+ * The rest comes from the *medium* rung, the one `Button` maps `size='medium'` to:
+ * the M3 small container height (40 dp) decides the padding and the label style, and
+ * the box is the 48 dp touch target a `medium` Button is laid out at - so a row of
+ * segments and a row of buttons sit on the same line, and a segment is no harder to
+ * hit with a thumb than a button is. Q8 Appendix A row 2 read the group as 40 dp
+ * tall; `SegmentedButton`, what this replaces, measured 48, so the target is what
+ * stays here and the tokens are what arrives.
+ *
+ * The rest of Q8's point stands: once the size is a height, the padding, the type and
+ * the corner all follow from it instead of being three tables. Built once per `Component` call, not per
+ * item, and a lone option's corner is [buttonShapes]' cached value rather than a
+ * fresh one.
+ */
+@Composable
+private fun segmentGroupValues(): SegmentGroupValues =
+  SegmentGroupValues(
+    lone = loneSegmentShapes(),
+    labelStyle = buttonLabelStyle(ButtonScale.Medium),
+    contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight),
+  )
+
+/** The three values [segmentGroupValues] answers with. */
+private class SegmentGroupValues(
+  val lone: ToggleButtonShapes,
+  val labelStyle: TextStyle,
+  val contentPadding: PaddingValues,
+)
+
+/**
+ * The shapes for a group of one: the control's own corner, which for the medium rung
+ * is a stadium, drawn on both ends because there is nothing to connect to.
+ *
+ * Built from [buttonShapes] rather than from `ButtonGroupDefaults`: what a lone
+ * option looks like is a round Button's question, and this is the same answer the
+ * Button gives at the same height - resting on the height's own shape, pressing
+ * toward Material's square one, and selected as the same stadium the group's checked
+ * shape already is (`connectedButtonCheckedShape`).
+ */
+@Composable
+private fun loneSegmentShapes(): ToggleButtonShapes {
+  val rounded = buttonShapes(ButtonShape.Round, ButtonScale.Medium)
+  return ToggleButtonShapes(
+    shape = rounded.shape,
+    pressedShape = rounded.pressedShape,
+    checkedShape = rounded.shape,
+  )
 }
 
 /** The Hybrid View React renders as `NitroUiSegmentedControl`. */
@@ -482,26 +724,25 @@ class HybridNitroUiSegmentedControl(
      * option list is a first instance of *its own* configuration and gets corrected
      * the turn it measures (`docs/architecture/sizing.md` section 9).
      *
-     * Measured on the AVD this library's tests run on (`nitroui_t02`, 420 dpi,
-     * API 35) with `options = ["One", "Two", "Three"]`: 256.0 x 48.0 dp. The
-     * height is the half that belongs here: Material 3 makes every segment of a
-     * segmented button row the same height whatever it says, measured 48 dp for
-     * one option and for four long ones alike. (Not the 40 dp of
-     * `ContainerHeight` the token names - the row is laid out inside a 48 dp
-     * touch target, and it is the box Yoga is told that has to be right.)
+     * Measured on the AVD this library's tests run on (the lease's `nitroui_a`,
+     * pixel_9 profile at 420 dpi, API 35) with `options = ["One", "Two", "Three"]`:
+     * 187.81 x 48.0 dp on E1's connected group, against 256.0 x 48.0 for the
+     * `SingleChoiceSegmentedButtonRow` it replaces. The height did not move: the
+     * group is laid out on the same 48 dp touch target a `medium` Button is, which
+     * is also why it is not the 40 dp `ContainerHeight` the token names.
      *
-     * The width moves with the labels - 75.05 dp for one short segment (a segment
-     * never shrinks below `ButtonDefaults.MinWidth`), and four long labels want
-     * more than this AVD's 411.43 dp window: that number is the box Yoga clamped
-     * the row to, not a measured row width (the row reports what it wants and is
-     * laid out at the box - `NitroUiMeasuredRoot`, and
-     * `docs/components/segmented-control.md`, Limits). A
-     * wrong fallback costs a cold configuration a single frame's horizontal gap.
+     * The width moved twice, and both moves are the row being its own segments: the
+     * group reserves no leading icon slot per item (`SegmentedButton`'s `icon = {}`
+     * still took the space), and it lays the row out at the sum of its labels rather
+     * than n x the widest one - see [ConnectedRow] for why that is not a `Row`.
+     * 49.90 dp for one short segment, 265.90 dp for four labels that used to be
+     * clamped to the window. A wrong fallback costs a cold configuration a single
+     * frame's horizontal gap.
      * Rounded *up* rather than to nearest: a box smaller than the control is the
      * dead-touch story in `core.md` section 7.
      * `docs/components/segmented-control.md` has the measured table.
      */
-    private const val FALLBACK_WIDTH_DP = 256.0
+    private const val FALLBACK_WIDTH_DP = 187.9
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)

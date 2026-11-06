@@ -1,0 +1,100 @@
+# Failure excerpt — harness:android:Chip
+
+- Ran: 2026-11-05T22:23:36.272Z on code tree `8f9c2aafabc2` at HEAD `5f5c2e5` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Chip`
+- Result: fail, exit 1, 28870 ms
+- Load: start 3.29, end 3.05, median 3.29, max 3.34
+- Device: android / device `emulator-5574` / lease `E1-uivzs`
+- Full log: `task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log` (<store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · G12 › re-keys a toggle: each state keeps its own size`
+- `● chip · a toggle round trip (E1) › comes back to the width it started at across a select and a deselect`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-uivzs (still live)
+  |   E1-uivzs                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 55 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Chip
+gate: node ../scripts/harness.mjs --harnessRunner android Chip (cwd example)
+gate: code tree 8f9c2aafabc2 at HEAD 5f5c2e5f
+gate: git tree 009bb147019f with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log
+gate:       <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Chip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 8f9c2aafabc2, 16 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.29/4.02 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · G12 › re-keys a toggle: each state keeps its own size
+
+    testID "toggled" (the toggled chip, selected) never reached 103.62x48.00 - last box 104.76x48.00, control measured 105.14x48.00.
+
+      [0m [90m 191 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 192 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 193 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 194 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 195 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 196 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● chip · a toggle round trip (E1) › comes back to the width it started at across a select and a deselect
+
+    selecting left the chip at 112.38x48.00 where a chip mounted selected is 110.86x48.00: expected false to be true // Object.is equality
+
+      [0m [90m 971 |[39m [32m        selected[39m
+       [90m 972 |[39m [32m      )} where a chip mounted selected is ${describeSize(twinOn)}`[39m
+      [31m[1m>[22m[39m[90m 973 |[39m     )[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 974 |[39m     expect(
+       [90m 975 |[39m       sameSize(after[33m,[39m twinOff)[33m,[39m
+       [90m 976 |[39m       [32m`a deselect left the chip at ${describeSize([39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 10 passed, 12 total
+Snapshots:   0 total
+Time:        27.686 s
+Ran all test suites matching Chip.
+gate: harness:android:Chip FAIL in 28.9 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+
+gate: appended the device context to task/E1-expressive-buttons/harness+android+Chip-2026-11-05T22-23-35.909Z.log (5 probe(s))
+
+```

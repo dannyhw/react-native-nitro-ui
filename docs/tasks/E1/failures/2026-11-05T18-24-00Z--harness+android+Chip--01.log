@@ -1,0 +1,117 @@
+# Failure excerpt — harness:android:Chip
+
+- Ran: 2026-11-05T18:24:00.683Z on code tree `c1d20608f83e` at HEAD `6ae2612` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Chip`
+- Result: fail, exit 1, 20834 ms
+- Load: start 21.96, end 16.60, median 17.61, max 21.96
+- Device: android / device `emulator-5574` / lease `E1-uivzs`
+- Full log: `task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log` (<store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android`
+- `expected 80.38095238095238 to be greater than 88.38095238095238`
+- `● Chip · G12 › re-keys a toggle: each state keeps its own size`
+- `expected 103.61904761904762 to be greater than 111.61904761904762`
+- `● Chip · G12 › files nothing under a key two quick toggles have already left`
+- `expected 83.42857142857143 to be greater than 91.42857142857143`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-uivzs (still live)
+  |   G17-rpba7                G17          both              pair-b
+  |   E1-uivzs                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 15.59 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 67 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Chip
+gate: node ../scripts/harness.mjs --harnessRunner android Chip (cwd example)
+gate: code tree c1d20608f83e at HEAD 6ae2612e
+gate: git tree e239aecc9c3d with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log
+gate:       <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Chip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c1d20608f83e, 16 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 21.96/12.12 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · G12 › keeps its size when selected on iOS, and grows by the check on Android
+
+    expected 80.38095238095238 to be greater than 88.38095238095238
+
+      [0m [90m 384 |[39m       [90m// The leading check (18 dp plus its padding): the reason `selected` is in the[39m
+       [90m 385 |[39m       [90m// Android sizing key at all.[39m
+      [31m[1m>[22m[39m[90m 386 |[39m       expect(on[33m.[39mwidth)[33m.[39mtoBeGreaterThan(off[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 387 |[39m       expect(on[33m.[39mheight)[33m.[39mtoBeCloseTo(off[33m.[39mheight[33m,[39m [35m0[39m)[33m;[39m
+       [90m 388 |[39m     } [36melse[39m {
+       [90m 389 |[39m       [90m// The reason it is *not* in the iOS key: `Toggle(.button)` fills the same[39m[0m
+
+  ● Chip · G12 › re-keys a toggle: each state keeps its own size
+
+    expected 103.61904761904762 to be greater than 111.61904761904762
+
+      [0m [90m 477 |[39m     expect(sameSize(measured([32m'toggled'[39m)[33m,[39m reference))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 478 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+      [31m[1m>[22m[39m[90m 479 |[39m       expect(reference[33m.[39mwidth)[33m.[39mtoBeGreaterThan(unselected[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m
+       [90m     |[39m                                              [31m[1m^[22m[39m
+       [90m 480 |[39m     }
+       [90m 481 |[39m   })[33m;[39m
+       [90m 482 |[39m[0m
+
+  ● Chip · G12 › files nothing under a key two quick toggles have already left
+
+    expected 83.42857142857143 to be greater than 91.42857142857143
+
+      [0m [90m 612 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+       [90m 613 |[39m       [90m// Otherwise the two keys would hold the same width and the case could not fail.[39m
+      [31m[1m>[22m[39m[90m 614 |[39m       expect(reference[33m.[39mwidth)[33m.[39mtoBeGreaterThan(unselected[33m.[39mwidth [33m+[39m [35m8[39m)[33m;[39m
+       [90m     |[39m                                              [31m[1m^[22m[39m
+       [90m 615 |[39m     }
+       [90m 616 |[39m   })[33m;[39m
+       [90m 617 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 9 passed, 12 total
+Snapshots:   0 total
+Time:        19.443 s, estimated 23 s
+Ran all test suites matching Chip.
+gate: harness:android:Chip FAIL in 20.8 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+
+gate: appended the device context to task/E1-expressive-buttons/harness+android+Chip-2026-11-05T18-24-00.327Z.log (5 probe(s))
+
+```
