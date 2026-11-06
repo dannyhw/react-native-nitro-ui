@@ -200,3 +200,5 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - X20 review: the text guard against other `AbortedCheck` catches is easy to dodge (`catch {}`, `e.name`, subdirectories); `runCheck` is the real protection.
 - X20 review: a default lease's env file never unsets `NITRO_UI_LEASE_IOS_RUNTIME`; `gate.mjs --background` under a look-check lease detaches before refusing; `portWait` spans both kinds of pair.
 - Gate ledgers commit simulator UDIDs in their `device` field (about 50 on main). Decide whether D25's scrub should cover them.
+- X20: `gate.mjs export --task <ID>` on a merge branch overwrites `docs/tasks/<ID>/gates.jsonl` with that branch's lines only; it should append across the task's branches.
+- X20: `task-ready` on `task/<ID>-merge` looks only for `<ID>-merge.report.md` or `<ID>.report.md`, not the task's real report name.
