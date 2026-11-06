@@ -2077,6 +2077,33 @@ const CHECKS = {
         'the corner probe has no first segment to probe (the tree line above is the reason)'
       );
     }
+    // Refuse to read a selected segment, rather than read it wrongly.
+    //
+    // The whole probe rests on the reference pixel being the page: an *unselected*
+    // segment's container is transparent, so a pixel inside it is the page whatever
+    // the corner is. A selected segment paints Material's filled container there, so
+    // the reference would be ink, the two probe pixels would be ink too, and a row of
+    // pills would pass - the exact thing this line exists to catch. The tree line
+    // above does assert segment 1 is unselected, but `t.log.checkEquals` records a
+    // failure and carries on, and a probe that reads a wrong reference reports a pass.
+    // So the precondition is checked, not assumed - and it is "says unchecked", not
+    // "does not say checked", because a node that publishes no checkable state at all
+    // tells the probe nothing about what is painted under its own corners.
+    //
+    // It goes through `t.log.abort`, not a bare `throw new AbortedCheck`: the runner
+    // swallows that error to move on to the next control, so a bare throw would
+    // silence this line and still report the run green. A probe that stopped reading
+    // has to be as loud as a probe that read wrong, or the day the fixture starts on
+    // segment 1 nobody notices the guard swallowed the only corner check there is.
+    if (segmentOne.checked !== 'false') {
+      t.log.abort(
+        `the corner probe will not read segment 1 while it is not plainly unselected ` +
+          `(checked=${segmentOne.checked}) - a selected segment's interior is the fill, ` +
+          `not the page, so the reference pixel would be ink and the two probe pixels ` +
+          `would read as stroke against it: this line passes for a pill. The segment ` +
+          `lines above name the selection.`
+      );
+    }
     const probeX = segmentOne.bounds.x2 - Math.round(10 * density);
     const probeTop = segmentOne.bounds.y1;
     const probeInk = [probeTop, probeTop + 1].map((y) =>
