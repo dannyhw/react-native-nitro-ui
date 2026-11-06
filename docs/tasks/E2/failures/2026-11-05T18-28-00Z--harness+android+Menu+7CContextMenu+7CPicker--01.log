@@ -1,0 +1,213 @@
+# Failure excerpt — harness:android:Menu%7CContextMenu%7CPicker
+
+- Ran: 2026-11-05T18:28:00.425Z on code tree `d59a02449626` at HEAD `ee3197e` (branch `task/E2-expressive-menus`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu|ContextMenu|Picker`
+- Result: fail, exit 1, 120799 ms
+- Load: start 12.12, end 19.86, median 19.86, max 25.99
+- Device: android / device `emulator-5574` / lease `E2-urxpj`
+- Full log: `task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-27-59.563Z.log` (<store>/task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-27-59.563Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · G7a › opens once, closes once, and pairs every open with a close`
+- `expected [ 'events:open', 'events:close', …(2) ] to deeply equal [ 'events:open', 'events:close' ]`
+- `● Menu · G7a › closes when it is disabled while the menu is open`
+- `expected [ 'disable:open', …(3) ] to deeply equal [ 'disable:open', 'disable:close' ]`
+- `● Menu · G7a › draws every row of an untitled group, with its role (G9)`
+- `expected null to deeply equal [ 'AirDrop', 'Mail' ]`
+- `● Menu · G7a › carries no old state across a remount`
+- `expected [ 'recycle:close' ] to deeply equal []`
+- `● Menu · Expressive rows (E2) › draws groups, subtitles and checks in the platform’s own menu`
+- `expected '(:Grid,List,Rename,Name,Date~,Delete)' to be '(:Grid@Tiles+,List=,Rename@Edit the n…' // Object.is equality`
+- `● Menu · Expressive rows (E2) › takes subtitle and checked away in place, and a remount starts with neither`
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● ContextMenu · the menu › builds the rows Menu builds: nested, sections, destructive, disabled`
+- `expected '(:Reply,Copy,Pin~,Archive,Mail,Flag,D…' to be '(:Reply,Copy,Pin~),(More:Archive,Mail…' // Object.is equality`
+- `● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)`
+- `expected '(:Pin,Mute,Flag)' to be '(:Pin@Keep on top+,Mute=),(Tools:Flag…' // Object.is equality`
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Picker · G6 › draws the selected row as a selected row (E2)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-27-59.563Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2-urxpj (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18-uswhw                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 19.86 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 384 — the rest is in the full log above)
+
+```
+
+  ● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)
+
+    expected '(:Pin,Mute,Flag)' to be '(:Pin@Keep on top+,Mute=),(Tools:Flag…' // Object.is equality
+
+      [0m [90m 679 |[39m       )[33m;[39m
+       [90m 680 |[39m       console[33m.[39mlog([32m`    · drawn=${report.drawn}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 681 |[39m       expect(report[33m.[39mdrawn)[33m.[39mtoBe(
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 682 |[39m         [32m'(:Pin@Keep on top+,Mute=),(Tools:[scrubbed]@For later)'[39m
+       [90m 683 |[39m       )[33m;[39m
+       [90m 684 |[39m     }[0m
+
+FAIL __tests__/Picker.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      three lists: short=280.00x56.00 middle(REFERENCE)=280.00x56.00 long=384.76x56.00 cold={"corrections":3,"immediate":1,"flushes":1,"measurements":6,"epoch":0,"cachedSizes":3} (load: menu, uncontrolled, no label)
+
+
+    console.log
+      same options, other title: first=280.00x56.00 last=384.76x56.00 cold={"corrections":2,"immediate":1,"flushes":1,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      policies (android): menu=280.00x56.00 box=280.00x56.00 | wheel=330.29x56.00 box=330.29x56.00
+
+
+    console.log
+      options change: short=280.00x56.00 long=384.76x56.00 cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} warm={"corrections":2,"immediate":2,"flushes":2,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      same-size key change (android): box=280.00x56.00 measured=280.00x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      selection change: first=280.00x56.00 widest=329.90x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      planted-equal-to-box (android): box=384.76x56.00 measured=384.76x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      clamps: 99=384.76x56.00 2=384.76x56.00 NaN=280.00x56.00 -4=280.00x56.00
+
+
+    console.log
+      shrink: wide=384.76x56.00 narrow=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      read back: variant=menu/wheel selected=1 eventCount=0 label=Size tint=-3655765 disabled=false/true
+
+
+    console.log
+      caller width: box=240 measured=280.00x56.00 then no width: box=280.00x56.00
+
+
+    console.log
+      over-wide: box=180.19x56.00 measured=384.76x56.00
+
+
+    console.log
+      refit: measured=384.76x56.00 boxes=200/168/140 final=140.19x56.00
+
+
+    console.log
+      remount 0: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      remount 1: 1 options seed=1 measured=280.00x56.00
+
+
+    console.log
+      remount 2: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      pick re-keys: short=280.00x56.00 long=384.76x56.00 box=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":3,"epoch":0,"cachedSizes":1} events=["pick-key:2"]
+
+
+    console.log
+      cache after a pick: startedAt=280.00x56.00 picked=384.76x56.00 freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      uncontrolled pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} events=["unc:2"]
+
+
+    console.log
+      uncontrolled cache: freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      busy-echo pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      unpoisoned pick: short=280.00x56.00 long=338.29x56.00 box=338.29x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      re-tap then resize: short=280.00x56.00 long=384.76x56.00 box=384.76x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      variant menu->wheel: menu=280.00x56.00 wheel=330.29x56.00 box=330.29x60.19
+
+
+    console.log
+      variant wheel->menu: wheel=330.29x56.00 menu=384.76x56.00 box=330.29x60.19
+
+
+    console.log
+      selected row: drawn=Small,Medium,Large
+
+
+    console.log
+      open-then-drop: menu=280.00x56.00 after=280.00x56.00 events=[]
+
+  ● Picker · G6 › draws the selected row as a selected row (E2)
+
+    expected 'Small,Medium,Large' to be 'Small,Medium+,Large' // Object.is equality
+
+      [0m [90m 1865 |[39m     )[33m;[39m
+       [90m 1866 |[39m     console[33m.[39mlog([32m`selected row: drawn=${opened}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1867 |[39m     expect(opened)[33m.[39mtoBe([32m'Small,Medium+,Large'[39m)[33m;[39m
+       [90m      |[39m                        [31m[1m^[22m[39m
+       [90m 1868 |[39m     [90m// A pick moves it: reopened, the new row is the selected one.[39m
+       [90m 1869 |[39m     [36mawait[39m pickRow([32m'selected-row'[39m[33m,[39m [35m2[39m)[33m;[39m
+       [90m 1870 |[39m     [36mawait[39m waitForMeasured([32m'selected-row'[39m[33m,[39m [32m'after the pick'[39m)[33m;[39m[0m
+
+Test Suites: 3 failed, 1 passed, 4 total
+Tests:       9 failed, 73 passed, 82 total
+Snapshots:   0 total
+Time:        119.256 s
+Ran all test suites matching Menu|ContextMenu|Picker.
+gate: harness:android:Menu%7CContextMenu%7CPicker FAIL in 120.8 s
+gate: recorded in .gates/task/E2-expressive-menus.jsonl
+
+
+gate: appended the device context to task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-27-59.563Z.log (5 probe(s))
+
+```

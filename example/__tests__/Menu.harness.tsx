@@ -1636,7 +1636,8 @@ describe('Menu · G7a', () => {
       );
     } else {
       const liveBefore = before.live ?? 0;
-      // Android has no second renderer, so the probe must leave the report alone.
+      // With no popup open there is nothing to read, so the probe leaves the report
+      // alone.
       handle.nuiTestMenuProbe();
       await settle(150);
       expect(report('untitled').drawn).toBeNull();
@@ -1645,10 +1646,20 @@ describe('Menu · G7a', () => {
       // untitled group drawn - the parity iOS is held to above.
       const open = await waitForMenu(
         'untitled',
-        (r) => r.expanded === true && r.live === liveBefore + 1
+        (r) =>
+          r.expanded === true && r.live === liveBefore + 1 && r.drawn != null
       );
       expect(open.rows).toBe(UNTITLED_PICKABLE);
-      expect(open.drawn).toBeNull();
+      // And the popup's own semantics tree (E2): every Material group, the untitled
+      // one with both of its rows. Destructive is a colour there, so no `!`.
+      console.log(`untitled group: android drawn=${open.drawn ?? ''}`);
+      expect(drawnGroup(open.drawn ?? '', 'Share')).toEqual([
+        'AirDrop',
+        'Mail',
+      ]);
+      expect(open.drawn).toBe(
+        '(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)'
+      );
     }
 
     // The destructive row of the untitled group is a row like any other: picked, it
@@ -1924,6 +1935,214 @@ describe('Menu · G7a', () => {
   });
 });
 
+// MARK: - Expressive rows (E2)
+
+/**
+ * Every new row shape at once (E2): a checked row with a subtitle, an unchecked
+ * checkable row, a plain row with a subtitle, a titled group holding a checked row and
+ * a disabled row with a subtitle, and an untitled group with a destructive row - the
+ * last one is the barrier that the probe read a real menu.
+ */
+const E2_GROUP: MenuGroup = {
+  actions: [
+    { id: 'grid', title: 'Grid', subtitle: 'Tiles', checked: true },
+    { id: 'list', title: 'List', checked: false },
+    { id: 'rename', title: 'Rename', subtitle: 'Edit the name' },
+  ],
+  sections: [
+    {
+      id: 'sort',
+      title: 'Sort',
+      items: [
+        { id: 'name', title: 'Name', checked: true },
+        {
+          id: 'date',
+          title: 'Date',
+          subtitle: 'Newest first',
+          disabled: true,
+        },
+      ],
+    },
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+/** {@link E2_GROUP} with every `subtitle` and `checked` taken away. */
+const E2_PLAIN: MenuGroup = {
+  actions: [
+    { id: 'grid', title: 'Grid' },
+    { id: 'list', title: 'List' },
+    { id: 'rename', title: 'Rename' },
+  ],
+  sections: [
+    {
+      id: 'sort',
+      title: 'Sort',
+      items: [
+        { id: 'name', title: 'Name' },
+        { id: 'date', title: 'Date', disabled: true },
+      ],
+    },
+    {
+      id: 'danger',
+      items: [{ id: 'delete', title: 'Delete', destructive: true }],
+    },
+  ],
+};
+
+/**
+ * What each platform's own menu holds for {@link E2_GROUP} and {@link E2_PLAIN}, in
+ * `drawn` notation (`Menu.nitro.ts`). iOS reads UIKit's `UIMenu`: a subtitle is
+ * `UIAction.subtitle` and a check is `.on`, and an unchecked toggle is `.off` like a
+ * plain row, so `List` has no mark. Android reads the popup's semantics tree: every
+ * Material group is `( )` - the top-level actions too - an unchecked checkable row is
+ * `=`, and destructive is a colour the tree does not carry.
+ */
+const E2_DRAWN =
+  Platform.OS === 'ios'
+    ? 'Grid@Tiles+,List,Rename@Edit the name,(Sort:Name+,Date@Newest first~),(:Delete!)'
+    : '(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:Name+,Date@Newest first~),(:Delete)';
+const E2_PLAIN_DRAWN =
+  Platform.OS === 'ios'
+    ? 'Grid,List,Rename,(Sort:Name,Date~),(:Delete!)'
+    : '(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)';
+
+/**
+ * Read what the platform drew for `testId` and hand back the first answer that is not
+ * `previous`: iOS opens and closes the menu through the probe, Android opens the popup
+ * with a real press on the trigger (its witness reads the popup's semantics tree on
+ * layout) and leaves it open.
+ */
+async function readDrawn(
+  testId: string,
+  previous: string | null = null
+): Promise<string> {
+  if (Platform.OS === 'ios') {
+    const handle = await waitForHandle(testId, 'the probed menu');
+    handle.nuiTestMenuProbe();
+  } else {
+    await pressTrigger(testId);
+  }
+  const seen = await waitForMenu(
+    testId,
+    (r) =>
+      r.drawn != null &&
+      r.drawn !== previous &&
+      (Platform.OS === 'ios' || r.expanded === true)
+  );
+  return seen.drawn ?? '';
+}
+
+/** Close an open Android popup through a row that reports nothing (`date` is disabled). */
+async function closeQuietly(testId: string): Promise<void> {
+  if (Platform.OS === 'android') {
+    await pickRow(testId, 'date');
+    await waitForMenu(testId, (r) => r.expanded === false);
+  }
+}
+
+/** Mount-time state for {@link E2Menu}: the setter a test uses to change `group`. */
+const e2Control: { setGroup?: (group: MenuGroup) => void } = {};
+
+function E2Menu({ testId, initial }: { testId: string; initial: MenuGroup }) {
+  const [group, setGroup] = useState(initial);
+  e2Control.setGroup = setGroup;
+  return (
+    <Menu
+      title="View"
+      group={group}
+      testID={testId}
+      hybridRef={captureHybrid(testId)}
+      onSelect={recordSelect(testId)}
+      onOpen={recordOpen(testId)}
+      onClose={recordClose(testId)}
+    />
+  );
+}
+
+describe('Menu · Expressive rows (E2)', () => {
+  it('draws groups, subtitles and checks in the platform’s own menu', async () => {
+    await render(<E2Menu testId="e2-rows" initial={E2_GROUP} />, {
+      timeout: 20000,
+    });
+    await waitForTestId('e2-rows');
+    await waitForHandle('e2-rows', 'the E2 menu');
+    // Nothing has asked yet, so nothing may be claimed.
+    expect(report('e2-rows').drawn).toBeNull();
+    const drawn = await readDrawn('e2-rows');
+    console.log(`e2 rows: ${Platform.OS} drawn=${drawn}`);
+    // The whole menu, in order: every subtitle and check where the platform puts it,
+    // and on Android three Material groups - each section a surface of its own, where
+    // before E2 a bare divider split one surface and the tree held no group at all.
+    expect(drawn).toBe(E2_DRAWN);
+    if (Platform.OS === 'android') {
+      expect(drawn.split('),(')).toHaveLength(3);
+    }
+
+    // A checked row is still a row: its pick reports the id once, and nothing flips
+    // locally - the check is whatever the app sends next.
+    await pickRow('e2-rows', 'grid');
+    await waitForLog(selectLog, 1, 'the checked row');
+    expect(selectLog).toEqual(['e2-rows:grid']);
+    if (Platform.OS === 'android') {
+      await waitForMenu('e2-rows', (r) => r.expanded === false);
+      // D32 is unchanged on the new popup: one open, one close, pick before close.
+      expect(orderLog).toEqual([
+        'open:e2-rows',
+        'select:e2-rows:grid',
+        'close:e2-rows',
+      ]);
+    }
+  });
+
+  it('takes subtitle and checked away in place, and a remount starts with neither', async () => {
+    const { unmount } = await render(
+      <E2Menu testId="e2-reset" initial={E2_GROUP} />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('e2-reset');
+    await waitForHandle('e2-reset', 'the E2 menu');
+    const full = await readDrawn('e2-reset');
+    expect(full).toBe(E2_DRAWN);
+    await closeQuietly('e2-reset');
+
+    // In place: the same mount, new props. Both fields are part of what makes one
+    // menu a different menu, so the wrapper's cached row array has to change with them.
+    e2Control.setGroup?.(E2_PLAIN);
+    await settle(200);
+    const plain = await readDrawn('e2-reset', full);
+    console.log(`e2 in place: ${Platform.OS} drawn=${plain}`);
+    expect(plain).toBe(E2_PLAIN_DRAWN);
+    await closeQuietly('e2-reset');
+    // And back, so the rows really follow the prop rather than having lost it.
+    e2Control.setGroup?.(E2_GROUP);
+    await settle(200);
+    expect(await readDrawn('e2-reset', plain)).toBe(E2_DRAWN);
+    await closeQuietly('e2-reset');
+
+    // Across a remount - Fabric may hand back the same native view from its recycle
+    // pool: nothing the last owner drew may answer for the new one before it draws.
+    unmount();
+    await settle(400);
+    handles.delete('e2-reset');
+    const { unmount: unmountAgain } = await render(
+      <E2Menu testId="e2-reset" initial={E2_PLAIN} />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('e2-reset');
+    await waitForHandle('e2-reset', 'the remounted E2 menu');
+    expect(report('e2-reset').drawn).toBeNull();
+    const fresh = await readDrawn('e2-reset');
+    console.log(`e2 remount: ${Platform.OS} drawn=${fresh}`);
+    expect(fresh).toBe(E2_PLAIN_DRAWN);
+    await closeQuietly('e2-reset');
+    unmountAgain();
+  });
+});
+
 // MARK: - Inside a <Host> (Android)
 
 /** What the hosted fixture hands back to the test that mounts it. */
@@ -2144,7 +2363,12 @@ describe('Menu · inside a Host', () => {
     }
     await waitForTestId('hosted-removal');
     const liveBefore = report('hosted-survivor').live ?? 0;
-    await pressTrigger('hosted-removal');
+    // Pressed where the Host drew it, as the other hosted cases are: a hosted child's
+    // React Native frame is `0 × 0` at the Host's origin (`docs/components/host.md`,
+    // "Finding a hosted control"), so its centre is the trigger's corner pixel - which
+    // `menuAnchor`'s whole-box pointer input caught before E2, and a Button's own touch
+    // target does not.
+    await pressWitnessed('hosted-removal');
     await waitForMenu(
       'hosted-removal',
       (r) => r.expanded === true && r.live === liveBefore + 1
@@ -2159,7 +2383,7 @@ describe('Menu · inside a Host', () => {
     expect(gone.live).toBe(liveBefore);
     // The rest of the composition is alive: the sibling still opens, in the same
     // composition the removed child just left.
-    await pressTrigger('hosted-survivor');
+    await pressWitnessed('hosted-survivor');
     await waitForMenu(
       'hosted-survivor',
       (r) => r.expanded === true && r.live === liveBefore + 1
