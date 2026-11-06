@@ -41,6 +41,7 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
@@ -816,6 +817,7 @@ nitrogen/generated/shared/json/NitroUiSwitchConfig.json
 nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
 nitrogen/generated/shared/json/NitroUiTooltipConfig.json
 package.json
+plugin/index.js
 src/MaterialTheme.ts
 src/NitroUiCore.nitro.ts
 src/NitroUiCore.ts
