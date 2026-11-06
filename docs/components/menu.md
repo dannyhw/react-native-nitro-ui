@@ -292,15 +292,18 @@ for the sizes. iPhone 17 / iOS 27 in pt, an API 35 emulator at 420 dpi in dp:
 | `text`        | 53.33 × 20.33 | 68.95 × 48.00 |
 | `small`       | 58.00 × 28.00 | 58.67 × 48.00 |
 | `large`       | 82.00 × 50.33 | 88.76 × 56.00 |
-| `filled` + `primaryAction` | 77.33 × 34.33 | SPLIT_ANDROID_SIZE |
+| `filled` + `primaryAction` | 79.67 × 34.33 | 124.95 × 48.00 |
 
 The last row is E3's configuration: `title="Publish"` is its own fixture, so it is not
-comparable with the rows above, and the claim in it is the *pair* of columns. iOS answers
-the same box as `filled` with no `primaryAction`, because the prop is a gesture there and
-no layout; Android is wider than the plain trigger of the same title, which is the whole
-reason `action` is a field of the sizing key. `Menu.harness.tsx` ("earns its own box,
-which is not the plain trigger's") poisons both entries and compares the two boxes, so a
-key that lost the field goes red on whichever configuration mounted second.
+comparable with the rows above, and the claim in it is the *pair* of columns — the same
+fixture with the prop taken away measures 79.67 × 34.33 on iOS and 78.86 × 48.00 on
+Android. iOS answers one box either way, because there the prop is a gesture and no
+layout; Android's is 46.09 dp wider — a second container, Material's gap and the chevron —
+which is the whole reason `action` is a field of the sizing key. Both pairs came off a
+poisoned cache (declared fallback 74.00 × 38.00 on iOS, 75.10 × 52.00 on Android) and both
+configurations corrected twice. `Menu.harness.tsx` ("earns its own box, which is not the
+plain trigger's") poisons both entries and compares the two boxes, so a key that lost the
+field goes red on whichever configuration mounted second.
 
 The heights are Button's three heights — iOS 28.0 / 34.3 / 50.3 and Android 48.0 / 48.0 /
 56.0 (`docs/components/button.md`) — which is the claim being checked: the trigger is
@@ -317,7 +320,8 @@ of hand-rolled padding — took 16 dp off the four boxed variants (92.57 → 76.
 19.8 off `large` and gave it the M token's 56 dp instead of 50.29, and left `text` at
 68.95 because that rung's padding was already Material's. `small` gained 0.77
 (57.90 → 58.67) from the XS rung's label style. The iOS column was not re-measured and
-does not need it: the only iOS file that pass touched is
+does not need it (E3's run took the iOS column again and every row above is unchanged):
+the only iOS file that pass touched is
 `ios/components/Button/HybridNitroUiButton.swift`, and this trigger is E2's own SwiftUI,
 which applies `.buttonStyle(.bordered)`/`.borderedProminent`/`.borderless` directly and
 never reaches that file.
