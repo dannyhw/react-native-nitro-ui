@@ -1,10 +1,12 @@
 # E3 — SplitButton: Menu's `primaryAction` on Android
 
-**Branch:** `task/E3-split-button` (from `main` at `8a8f005c`) · **Round:** 1 of up to 3 (D19) ·
+**Branch:** `task/E3-split-button` (from `main` at `8a8f005c`), carried onto `task/E3-merge` for the merge round ·
+**Rounds:** impl + fix round 1 (D19 cap 2) + merge round ·
 **Leases:** `E3-o7x7a` (`pair-b` — `emulator-5570` / iPhone 17 simulator `3AE7EE8D…` /
 Metro `8293`) for the real-input runs and every mutation; its TTL lapsed mid-round, so the
 two harness runs are on `E3-xiu98` (`pair-a` — `emulator-5574` / `49D5024D…` / Metro
-`8295`), which the gate itself claimed. Every device row carries its lease id.
+`8295`), which the gate itself claimed. The merge round ran on `E3-d03xi` (`pair-a` again,
+same simulator and Metro port). Every device row carries its lease id.
 
 ## API
 
@@ -84,21 +86,13 @@ G2 measured that a `Button`'s gesture environment refuses it. Both are recorded 
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1777 tests / 71 suites | `3db3f1315eae` | 3 m 23 s | start 104.0 / med 49.5 / max 104.0 |
-| `harness:ios` | **PASS** | 449 tests / 25 suites + isolated 4 tests / 2 suites | `3db3f1315eae` (ios tree) | 10 m 50 s | start 4.3 / med 11.6 / max 215.0 |
-| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `3db3f1315eae` (android tree) | 15 m 14 s | start 5.3 / med 4.7 / max 13.6 |
-| `real-input:ios` | stale | — | 37f052865161 (not this tree) | 27 m 52 s | start 1.9 / med 5.2 / max 50.3 |
-| `real-input:android` | stale | — | 37f052865161 (not this tree) | 41 m 59 s | start 2.5 / med 3.0 / max 5.4 |
-| `harness:android:earns%20its%20own%20box` | stale | — | e955bdb1b9f9 (not this tree) | 1.5 s | start 6.3 / med 6.5 / max 6.8 |
-| `harness:android:Menu` | stale | 1 failed of 48 tests / 2 suites | e5ddec035f0c (not this tree) | 1 m 38 s | start 62.2 / med 33.2 / max 62.2 |
-| `harness:android:Menu:--background` | stale | — | c5e18881c939 (not this tree) | 0.6 s | start 3.1 / med 3.1 / max 3.1 |
-| `harness:android:Slider` | stale | 24 tests / 1 suites | 37f052865161 (not this tree) | 20.5 s | start 3.8 / med 5.2 / max 5.4 |
-| `real-input:android:--control:menu` | stale | — | 37f052865161 (not this tree) | 9 m 44 s | start 3.2 / med 2.8 / max 4.9 |
+| `check` | **PASS** | 1815 tests / 71 suites | `4451c922c0f3` | 2 m 52 s | start 4.5 / med 9.5 / max 14.3 |
+| `harness:ios` | **PASS** | 449 tests / 25 suites + isolated 4 tests / 2 suites | `4451c922c0f3` (ios tree) | 10 m 50 s | start 6.8 / med 5.6 / max 12.8 |
+| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `4451c922c0f3` (android tree) | 15 m 02 s | start 3.4 / med 4.4 / max 12.8 |
+| `real-input:ios` | **PASS** | — | `4451c922c0f3` (ios tree) | 26 m 18 s | start 6.5 / med 5.5 / max 22.8 |
+| `real-input:android` | **PASS** | — | `4451c922c0f3` (android tree) | 41 m 20 s | start 3.8 / med 3.4 / max 7.4 |
 
-`need --for review`: `need: review is satisfied on this code tree.` (exit 0). The two
-`real-input:*` rows are stale by construction rather than regressed: fix round 1 touched both
-platform halves, and real input belongs to the merge bar, which runs the full harness plus
-real input once.
+`need --for review`: `need: review is satisfied on this code tree.` (exit 0). `need --for merge`: `need: merge is satisfied on this code tree.` (exit 0) — every merge gate green on this tree: `check`, both harnesses and both real-input runs.
 
 ## Red proofs
 
@@ -188,6 +182,9 @@ Fix round 1 (E3 review):
   too-long Kotlin line; the two in `MenuSplitButton.kt` were found by hand and wrapped here.
 - Docs: a Menu screenshot pair showing the split trigger would be nice, and the `SplitTrigger`
   story is the fixture for it — not taken, because the README pair shows the *list*.
+- Tooling: `scripts/task-ready.mjs` on a `task/<ID>-merge` branch still cannot find the task's
+  real report name (filed by X20); all six checks pass when it is run against a copy named
+  `E3.report.md`.
 - Tooling: a new Android source is missing from `etc/package-files.txt` until `manifest:check`
   runs, late in `check`; `bun run task-ready` deliberately runs no gates, so nothing is earlier.
 
@@ -280,3 +277,23 @@ Verdict FIX ROUND on `a4d20e4c`; five items, the split button itself untouched.
 5. JSDoc backslashes dropped; row 7's `after` now matches its own `run` and `redTests`.
 6. `harness:android` went red once here on a `ContextMenu` mount timeout under load1 128; the
    quiet re-run is green, 495 of 498.
+
+## Merge round
+
+`origin/main` at `2051f62` (X20 merged) merged into `task/E3-merge` cleanly: X20 is gate, lease
+and real-input tooling, E3 is Menu, and both sides of `scripts/real-input/android.mjs` survive
+— X20's `runCheck` at the call site, E3's band-pairing of the two halves and its `CHECKS.menu`
+step. `bun run regen` (registry + nitrogen) produced no diff, so nothing generated had drifted;
+the chevron is untouched, since D43's glyph pass is a later task.
+
+Both apps built from the merged tree (`4451c922c0f3`), one lease (`E3-d03xi`, pair-a), all five
+merge gates green: `check` 1815 tests, `harness:ios` 449, `harness:android` 498, and both
+`real-input:*` runs. `need --for merge` is satisfied.
+
+`real-input:ios` went red once, on the documented iOS flake: `testRealInputTextField` read
+`frozen: 1 edits refused` for `typeText("xy")` (`RealInputTests.swift:3721`), the same line G16,
+X19 and E2 each re-ran once. This re-run is green; nothing else was.
+
+`export --task E3` still writes the merge branch's lines only, so the task branch's 48 lines went
+back ahead of the 6 new ones — 54 lines, no drop, every `failureLogPath` resolving. Lease
+released, devices left booted, `adb reverse` cleared, no Metro left running.
