@@ -243,3 +243,39 @@ Lease `G17-yhpqr` (pair-b), released.
 ### Follow-up
 
 - `--background` past `--` becomes a filter, filed under its own gate name.
+
+## Merge round (part 2)
+
+`origin/main` (E2 menus, G18 Tooltip) merged at `b6d7ba8f` (lease `G17-bqluz`). Six conflicts,
+five keep-both: FOLLOWUPS, `App.tsx`'s generated regions, the control rows,
+`viewConfigs.test.ts`, and main's tab-target test, which invents only components lacking a
+manifest, so it stops inventing SearchField. The sixth, `android.mjs`, had main re-extend the
+anchor maps this branch had moved to `screens.mjs`: its `ECHO` stayed deleted, and `SCREEN_TAB`
+gained `tooltip` — the merge's one fix: without it the Tooltip check dies a device-run late.
+Part 1 held (`@Suppress("DEPRECATION")`, the iOS empty-Return guard, README alt text); regen, the
+Conformance table, api-extractor and `manifest:update` needed no hand edits. No gate was red;
+`real-input:android` refused to start once — `real-input:ios` still held Metro 8293: the port
+guard, not a flake.
+
+### Reds, each reverted
+
+- `SCREEN_TAB.tooltip` out -> `tooltip's screen can be reached on Android` -> `no row in SCREEN_TAB`
+- `tooltip-log` -> `tooltip-logg` -> `nothing in example/src draws "tooltip-logg"`
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1774 tests / 70 suites | `ce2f7aabe967` | 2 m 43 s | start 17.1 / med 12.8 / max 17.5 |
+| `harness:ios` | **PASS** | 440 tests / 25 suites + isolated 4 tests / 2 suites | `ce2f7aabe967` (ios tree) | 10 m 48 s | start 7.6 / med 4.9 / max 10.4 |
+| `harness:android` | **PASS** | 489 tests / 25 suites + isolated 4 tests / 2 suites | `ce2f7aabe967` (android tree) | 14 m 57 s | start 9.8 / med 3.5 / max 15.5 |
+| `real-input:ios` | **PASS** | — | `ce2f7aabe967` (ios tree) | 28 m 09 s | start 3.2 / med 5.7 / max 31.3 |
+| `real-input:android` | **PASS** | — | `ce2f7aabe967` (android tree) | 40 m 38 s | start 4.3 / med 3.0 / max 7.4 |
+
+`need --for merge`: satisfied on this code tree.
+
+### Follow-up
+
+- The tab-target test invents nothing now both its names landed; its registry-adds-a-tab
+  case reads real manifests until a fresh name joins.
+- `gate.mjs wait`'s `passed (Ns)` is its own elapsed, not the run's — `634 s` for a 40 m run.
