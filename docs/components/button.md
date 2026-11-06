@@ -86,13 +86,13 @@ and `round` is what the control drew before the prop existed.
 | ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------- |
 | `round`    | each style's own corner: `.automatic`, and `.capsule` for `outlined` | `ButtonDefaults.shapesFor(height)` — the height's corner, morphing toward the square one while pressed |
 | `square`   | `.roundedRectangle(radius: 8)`; the `outlined` hairline follows it   | `squareShape` at rest, `RoundedCornerShape` while pressed      |
-| `text`     | ignored — `.borderless` draws no border                             | ignored — the variant has no container to morph               |
+| `text`     | ignored — `.borderless` draws no border                             | ignored — the variant rests on `round` whatever the prop says  |
 
-Android gets Material 3 Expressive's shape **morph** for free (`docs/DECISIONS.md`
-D39): the `shapes:` overload takes a resting and a pressed shape, so pressing a
-round button squars it off and releasing springs it back. iOS has nothing to map
-that to — a `ButtonBorderShape` is static — so there the corner changes only
-when the prop does.
+Android gets Material 3 Expressive's shape **morph** for free: the `shapes:`
+overload takes a resting and a pressed shape, so pressing a round button squares
+it off and releasing springs it back. iOS has nothing to map that to — a
+`ButtonBorderShape` is static — so there the corner changes only when the prop
+does.
 
 | iOS light                                     | iOS dark                                      |
 | ----------------------------------------------- | ----------------------------------------------- |
@@ -146,11 +146,13 @@ an API 35 emulator at 420 dpi, in dp):
 | `text`     | 33.3 × 18.0    | 37.0 × 20.3    | 37.0 × 20.3    | 57.9 × 48.0    | 57.9 × 48.0    | 60.6 × 48.0    |
 
 Nothing here is a constant: the box is what the control measured, so the
-platforms disagree by design. The Android column moved in E1 and the iOS column
-did not. `size` now names a Material 3 container token — XS 32 / S 40 / M 56 dp —
-and the padding, the label style and the corner are read from it; the *box* is
-never shorter than Material's own 48 dp minimum interactive component, which is
-why `small` and `medium` share a height and why `text` is not smaller than
+platforms disagree by design. The Android column moved with the new size ladder
+and the iOS column did not. `size` now *selects* a Material 3 container token —
+XS 32 / S 40 / M 56 dp — and the padding, the label style and the corner are read
+from that token. It does not set the height: Material floors the container at its
+own `ButtonDefaults.MinHeight` (40 dp) and the box at its 48 dp interactive
+minimum, so `small` is the XS token's padding, type and corner rather than a
+32 dp control, `small` and `medium` share a height, and `text` is not smaller than
 `filled`. `large` is the first rung the token lifts above that floor. What
 changed against the older hand-rolled padding is width: 16 dp off `medium`
 (8 dp per side, exactly what `contentPaddingFor(40.dp)` gives up) and 19 dp off
