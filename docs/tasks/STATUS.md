@@ -96,7 +96,7 @@
 | E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | merged (PR #39; 2 fix rounds; merge gates green on code tree `3bb39629`; Menu re-measured, fallback 75.1 × 52) |
 | E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merged `9044521` (PR #38; merge gates green on code tree `5c6f2b0b`; the iOS 15 subtitle guard stays at 16: `UIAction.subtitle` is iOS 16+) |
 | S5 | Popover spike (React Native content; Q7 Appendix F, D38; GO = questions 1, 2, 5 on both platforms) | Opus (on mac-1) | Opus | running |
-| E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | merge round (PR #41 @ `e25daa20`; branch `task/E3-merge` on `main` with X20) |
+| E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, one known iOS real-input flake re-run) |
 | Q9 | ButtonGroup and IconButton (`androidIcon`) design, with the iOS ControlGroup check (D40) | Opus | orchestrator | done (report merged; D42 adopts it, owner decided C and D) |
 | G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | round 1 done (PR #43 @ `5b7f4330`, 5/5 gates): `androidIcon` + `xlarge`/`xxlarge` + plugin; IconButton not built (own task). Review held for the D43 icon-source decision |
 | X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merged (1 impl + 1 fix round; merge gates 5/5 first run) |
