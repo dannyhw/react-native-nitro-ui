@@ -1,6 +1,6 @@
 {
   "task": "E1",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file` at 5f5c2e5f). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file` at 5f5c2e5f). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The two rows added in fix round 1 follow the same convention against the fix round's own tree, and ran on lease `E1-7ojmj` (the same pair-a devices) on 2026-11-06. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
   "mutations": [
     {
       "test": "example/__tests__/Button.harness.tsx · shape · the corner (E1) · reaches the control",
@@ -100,6 +100,31 @@
       "mutation": "not a mutation: the file restored to ee3197ed (`SingleChoiceSegmentedButtonRow`), with one temporary note added to the check printing every node inside the control's box",
       "run": "real-input:android:--control:segmented-control — PASS (tree 7ba78c008a8c)",
       "finding": "The pre-E1 row publishes the same three nodes per segment as the connected group does — one item node carrying checkable/checked at the segment's box, one `android.widget.RadioButton` for the role, one `android.widget.TextView` for the label — which is what `docs/components/segmented-control.md` now says out loud, and what the first draft of this check got wrong (it asked the label node to be the radio button, and went red on both implementations)."
+    }
+,
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt · onlyTheTextVariantIgnoresTheCornerItWasSent",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the corner comes from the prop whatever the variant is, so the `text` variant clips its ripple and morphs to the corner it was sent",
+      "before": "): ButtonShape = if (variant == ButtonVariant.Text) ButtonShape.Round else shape",
+      "after": "): ButtonShape = shape",
+      "run": "bun run test:native:android — BUILD FAILED (84 tests completed, 1 failed)",
+      "redTests": [
+        "java.lang.AssertionError at ButtonModelTest.kt:93"
+      ],
+      "note": "Fix round 1, on the `text` row of `docs/components/button.md`'s Corners table. A `text` Button paints no container, so `shape` there is invisible to a screenshot at rest and to every harness measurement: the JVM table is the only witness that the prop is being ignored. Line 93 is the `text` + `square` case."
+    },
+    {
+      "test": "scripts/real-input/android.mjs · segmented-control · segment 1 is drawn with its connected corner",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "the connected helpers are handed the control's own stadium again — the round-1 call — which keeps the 2 dp gap and the tree and rests every item on a full pill",
+      "before": "              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()\n              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()\n              else -> ButtonGroupDefaults.connectedMiddleButtonShapes()",
+      "after": "              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)\n              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes(resting)\n              else -> ButtonGroupDefaults.connectedMiddleButtonShapes(resting)",
+      "run": "real-input:android:--control:segmented-control — FAIL",
+      "redTests": [
+        "segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)"
+      ],
+      "note": "Fix round 1. Green, the same two pixels read the segment's own 1 dp border — rgb(93,95,103) against rgb(255,255,255) from the same segment's transparent interior — and the note prints both. This probe is the line that guards the corners: pills 2 dp apart and a connected group have the same boxes, the same 2 dp gap and the same three nodes per segment, so every other line in the block passes for both. The tree's gap between two items is 0 px (the 2 dp is Compose padding the item node does not carry), which is why the page reference is sampled inside segment 1 rather than in the gap."
     }
   ]
 }
