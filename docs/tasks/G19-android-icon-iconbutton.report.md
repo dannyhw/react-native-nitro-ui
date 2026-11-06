@@ -114,3 +114,36 @@ Questions.
 - `Button`'s iOS column in the measured-size table has no `xlarge`/`xxlarge` rows; nor does Android's. Both need the device run, not a guess.
 - Q9 C2 item 3 (`androidIcon` on Menu/ContextMenu rows, SplitButton, Chip) is untouched, as the brief said.
 - `test:native:android` skips itself when `CI` is set unless `NITRO_UI_ANDROID_JVM_TESTS=1`, which is correct and documented — but it means a green `check` row on a hosted job says nothing about the Kotlin tests, and only the `build-android` job proves them.
+
+## Questions for orchestrator
+
+**1. IconButton did not get built. Do you want it next round, or do you want the
+device gates re-run here first?** Every round cap and gate in the brief assumes a
+runnable device, and this machine gave me none: `lease.mjs` refused on the
+two-lease cap for the whole round, with E3 and X20 holding both pairs. I chose to
+spend the round making a smaller surface fully proven rather than a larger surface
+unproven, because IconButton's own test plan (per size × width boxes, the 48 dp
+target at XS, the toggle handshake, the recycle reset, real-input taps on both
+platforms) is almost entirely device evidence, and I could have produced none of
+it. My recommendation: re-run this round's `harness:*`/`real-input:*` as soon as a
+pair is free — the `androidIcon` glyph, its tint and its width delta are all still
+unverified — and take IconButton as its own round afterwards rather than folding
+it into a fix round. The alternative, building IconButton now and reporting it
+ungated, is the thing D4 exists to prevent.
+
+**2. Is the config plugin's absence acceptable for one round, and should the docs
+say what I wrote or something firmer?** D42 item 3 is unambiguous that the plugin
+ships with `androidIcon`. It is not in this build, so
+`docs/components/button.md` currently tells Expo users to copy the files by hand
+and names that as not-yet-a-plugin, rather than documenting a `plugin` entry no one
+can install. I would rather ship a true sentence and add the plugin in the round
+that can also test it on a fixture project. If you would rather the plugin block
+the merge, say so and I will build it in the fix round instead of the docs work.
+
+**3. Should `check` depend on a stamped app?** Not a question about my diff, but
+the failure mode I hit is worth knowing: `bun install` in this worktree completed
+only on the second attempt (the first left three packages and no
+`node_modules/.bin`), and the resulting red `format` step named 35 files of an
+untouched `main`. It read like my diff had broken formatting. Anything that makes
+a half-installed workspace louder than a red prettier run would have saved part of
+this round.
