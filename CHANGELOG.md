@@ -8,6 +8,30 @@ out of the release notes contributors record with `bun run changeset`, grouped
 under the bump each change asked for: `### Major Changes`, `### Minor Changes`,
 `### Patch Changes`.
 
+## 0.7.0
+
+### Minor Changes
+
+- ee359d0: Add `ContextMenu`: a `View` that opens a menu on a long press, with Menu's `group` as its items. On iOS it is a `UIContextMenuInteraction` with the system's lifted preview; on Android a Material 3 `DropdownMenu` opened at the finger. The children stay in place and keep their own gestures, a hold that opens the menu cancels their touch, and `onOpen`/`onClose` fire on both platforms.
+- 333e761: Menus on Material 3 Expressive, and two new row props. On Android, `Menu` and `ContextMenu` open Expressive's menu: each section, each submenu and each run of top-level actions is its own rounded group instead of being split by dividers, and `Picker`'s dropdown takes the same container and draws its selected row as selected, with a check. Every menu row (`MenuAction`) gains `subtitle` (a second line: `UIAction.subtitle` on iOS, supporting text on Android) and `checked` (a check: a menu toggle on iOS, a selected row with a leading check on Android). A checked row still reports a pick through `onSelect`; the app flips its own state.
+- ee1199c: Add `Checkbox`: Material 3 `Checkbox`, and `TriStateCheckbox` while `indeterminate`, on Android, and SwiftUI `Toggle(isOn:)` with the switch style on iOS — which has no checkbox, so this is what Expo's universal `Checkbox` renders there too. `checked` is a controlled value on Switch's event-count handshake, `defaultChecked` starts an uncontrolled one, and `label` is part of the control and of its size on both platforms, with the whole row tappable. `indeterminate` is a display and Android-only: a press reports the opposite of what the box shows, so a _checked_ third-state box reports `false` and Android callers clear `indeterminate` in `onCheckedChange`, while iOS reads the third state as off and reports `!checked`.
+- e883af4: `SearchField`: a search field that is the platform's own — `UISearchTextField` on iOS, Material 3's search input field on Android. One line, the keyboard's Search key, a clear button that appears with the query and takes it out without losing focus, and React Native `TextInput`'s prop names.
+- e3d664a: Add `Tooltip`: a tooltip the app opens next to its own views, with a message, an
+  optional title and up to two actions. Material 3's `PlainTooltip` / `RichTooltip`
+  on Android and a popover with SwiftUI content on iOS. It is controlled
+  (`isPresented` / `onIsPresentedChange`), never times out, reports an action
+  before the close it causes, and follows its anchor through layout changes and
+  scrolls.
+- 58fa2b5: Require React Native 0.88 or newer (Expo SDK 58), and draw Android controls with Material 3 Expressive by default.
+
+  - **New floor.** The peer range is now `react-native >= 0.88.0`. On Android the library builds against Compose 1.12 and Material 3 1.5 - `material3:1.5.0-beta02`, a beta - which need your app to compile with `compileSdkVersion` 37 and Android Gradle Plugin 9.1 or newer. New RN 0.88 and Expo SDK 58 apps already compile that way; an app upgraded from an older template that still says `compileSdkVersion = 36` has to raise it to 37. If your app uses Material 3 itself, Gradle resolves it to that beta too.
+  - **Material 3 Expressive on Android.** Every Android control and `<Host>` now uses `MaterialExpressiveTheme`, over the same dynamic or default colours as before. Today the visible change is motion: a Switch's thumb, a Checkbox's mark, a menu or a sheet opening move with Material's expressive springs.
+  - **`setMaterialTheme('baseline')`** keeps the baseline Material 3 theme instead. Call it once at startup, before the first screen renders; it applies to the whole app, there is no per-control prop, and it does nothing on iOS.
+
+### Patch Changes
+
+- f69a97d: The README is written for app developers: the full benchmark write-up moved to `docs/performance.md`, the consumer smoke-test results to CONTRIBUTING, and the component table now says which release each component shipped in.
+
 ## 0.6.0
 
 ### Minor Changes
