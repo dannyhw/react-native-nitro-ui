@@ -1477,10 +1477,17 @@ describe('androidIcon · the drawable the app ships (G19)', () => {
     // "the icon is painted" rather than "something of this colour is somewhere".
     const tint = processColor('#FF00A0') as number;
     const TINT_CSS = '#FF00A0';
+    // Android gets the empty title; iOS cannot. A `.borderless` label with nothing
+    // in it measures zero wide on iOS, so there is no box to sample and the probe
+    // never gets an answer to read — the harness would time out waiting for a
+    // measured size, which is a broken test rather than a finding. The iOS branch
+    // only ever asserts that iOS *refuses* to sample, and a titled control refuses
+    // the same way, so the label costs the assertion nothing there.
+    const PROBE_TITLE = Platform.OS === 'android' ? '' : 'Share';
     await render(
       <View style={rowStyle}>
         <Button
-          title=""
+          title={PROBE_TITLE}
           variant="text"
           tintColor={TINT_CSS}
           androidIcon={SHIPPED}
@@ -1488,7 +1495,7 @@ describe('androidIcon · the drawable the app ships (G19)', () => {
           hybridRef={captureHybrid('probe-icon')}
         />
         <Button
-          title=""
+          title={PROBE_TITLE}
           variant="text"
           tintColor={TINT_CSS}
           androidIcon={NOT_SHIPPED}
@@ -1496,7 +1503,7 @@ describe('androidIcon · the drawable the app ships (G19)', () => {
           hybridRef={captureHybrid('probe-missing')}
         />
         <Button
-          title=""
+          title={PROBE_TITLE}
           variant="text"
           tintColor={TINT_CSS}
           androidIcon={NO_ICON_SIZE}
@@ -1504,14 +1511,14 @@ describe('androidIcon · the drawable the app ships (G19)', () => {
           hybridRef={captureHybrid('probe-shape')}
         />
         <Button
-          title=""
+          title={PROBE_TITLE}
           variant="text"
           tintColor={TINT_CSS}
           testID="probe-bare"
           hybridRef={captureHybrid('probe-bare')}
         />
         <Button
-          title=""
+          title={PROBE_TITLE}
           variant="text"
           disabled
           tintColor={TINT_CSS}
