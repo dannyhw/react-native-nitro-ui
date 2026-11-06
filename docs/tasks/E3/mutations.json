@@ -3,92 +3,92 @@
   "how": "One source mutation in the working tree, the named suite run against it, then the file restored from a byte-identical copy and `git status` re-checked empty before the next row (X14/X15/G8/G15's convention: `before` is the shipped source the row ran against, `after` the text that replaced it). JVM rows are `example/android $ ./gradlew :react-native-nitro-ui:testDebugUnitTest --tests <class>`, off-device. Device rows ran on lease E3-o7x7a (pair-b: emulator-5570, iPhone 17 simulator, Metro 8293) through `node scripts/gate.mjs`, and every one of them is a *filtered* run (`harness:android:Menu`, `real-input:android:--control:menu`), so it satisfies nothing but its own name; the code tree is in each row because it moves with every mutation. Rows marked `organic` are not mutations: they are a new test going red against the shipped component before the test itself was fixed, which is the stronger evidence. Rows marked `negative control` are mutations that were expected to go red and did not; they are kept because each one is the reason a claim in a comment or a doc says what it now says.",
   "mutations": [
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuSplitButtonTest.kt · everyTriggerVariantHasASplitButtonSet, aTextTriggerDrawsTheOutlinedSplitButton",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuSplitButtonTest.kt \u00b7 everyTriggerVariantHasASplitButtonSet, aTextTriggerDrawsTheOutlinedSplitButton",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "variant=text draws a filled split button instead of the outlined one",
       "before": "  ButtonVariant.Text -> MenuSplitVariant.Outlined",
       "after": "  ButtonVariant.Text -> MenuSplitVariant.Filled",
-      "run": "testDebugUnitTest --tests MenuSplitButtonTest — FAIL, 2 of 3",
+      "run": "testDebugUnitTest --tests MenuSplitButtonTest \u2014 FAIL, 2 of 3",
       "redTests": [
         "aTextTriggerDrawsTheOutlinedSplitButton: AssertionError (MenuSplitButtonTest.kt:43)",
         "everyTriggerVariantHasASplitButtonSet: AssertionError (MenuSplitButtonTest.kt:30)"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuSplitButtonTest.kt · theSplitButtonHasAMoreOptionsLabel",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuSplitButtonTest.kt \u00b7 theSplitButtonHasAMoreOptionsLabel",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the trailing half has no spoken name",
       "before": "internal const val MENU_MORE_OPTIONS_LABEL = \"More options\"",
       "after": "internal const val MENU_MORE_OPTIONS_LABEL = \"\"",
-      "run": "testDebugUnitTest --tests MenuSplitButtonTest — FAIL, 1 of 3",
+      "run": "testDebugUnitTest --tests MenuSplitButtonTest \u2014 FAIL, 1 of 3",
       "redTests": [
         "theSplitButtonHasAMoreOptionsLabel: AssertionError"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt · aDisabledControlRefusesThePrimaryAction",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 aDisabledControlRefusesThePrimaryAction",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "the model runs the primary action even while the control is disabled",
       "before": "    if (enabled) {\n      primaryAction?.invoke()\n    }",
       "after": "    primaryAction?.invoke()",
-      "run": "testDebugUnitTest --tests MenuModelTest — FAIL",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL",
       "redTests": [
         "aDisabledControlRefusesThePrimaryAction (MenuModelTest.kt:189)"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt · aPrimaryActionPressRunsTheActionAndOpensNothing",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 aPrimaryActionPressRunsTheActionAndOpensNothing",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "the leading half opens the list as well as acting",
       "before": "    if (enabled) {\n      primaryAction?.invoke()\n    }",
       "after": "    if (enabled) {\n      primaryAction?.invoke()\n      setOpen(true)\n    }",
-      "run": "testDebugUnitTest --tests MenuModelTest — FAIL",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL",
       "redTests": [
         "aPrimaryActionPressRunsTheActionAndOpensNothing (MenuModelTest.kt:173)"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt · aDrawnSplitTriggerReportsItsTwoHalvesOnScreen, aRecycleClearsTheSplitTriggerAndItsHalves",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 aDrawnSplitTriggerReportsItsTwoHalvesOnScreen, aRecycleClearsTheSplitTriggerAndItsHalves",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "the report hardcodes \"the split trigger was not drawn\" instead of reading the witness",
       "before": "\";split=${if (splitDrawn) 1 else 0}\" +",
       "after": "\";split=0\" +",
-      "run": "testDebugUnitTest --tests MenuModelTest — FAIL, 2",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL, 2",
       "redTests": [
         "aDrawnSplitTriggerReportsItsTwoHalvesOnScreen (MenuModelTest.kt:226)",
         "aRecycleClearsTheSplitTriggerAndItsHalves (MenuModelTest.kt:246)"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt · aDrawnSplitTriggerReportsItsTwoHalvesOnScreen",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 aDrawnSplitTriggerReportsItsTwoHalvesOnScreen",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "a half's rect stops adding the composition's own origin, so it is in the wrong space",
       "before": "\"${(left + compositionLeft).toInt()},${(top + compositionTop).toInt()},\"",
       "after": "\"${left.toInt()},${top.toInt()},\"",
-      "run": "testDebugUnitTest --tests MenuModelTest — FAIL",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL",
       "redTests": [
         "aDrawnSplitTriggerReportsItsTwoHalvesOnScreen (MenuModelTest.kt:227)"
       ]
     },
     {
-      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt · aRecycleClearsTheSplitTriggerAndItsHalves",
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 aRecycleClearsTheSplitTriggerAndItsHalves",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "reset() forgets the layout witness / reset() forgets the two half rects",
       "before": "    splitDrawn = false\n    clearSplitBoxes()",
-      "after": "    (both lines deleted)",
-      "run": "testDebugUnitTest --tests MenuModelTest — FAIL, twice, one line at a time",
+      "after": "    (two runs, one line deleted in each: run 1 keeps `clearSplitBoxes()`, run 2 keeps `splitDrawn = false`)",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL, twice, one line at a time",
       "redTests": [
         "deleting `splitDrawn = false` only: aRecycleClearsTheSplitTriggerAndItsHalves (MenuModelTest.kt:251)",
         "deleting `clearSplitBoxes()` only: aRecycleClearsTheSplitTriggerAndItsHalves (MenuModelTest.kt:258) - the fixture needed a post-reset noteCompositionOrigin(20, 40) before this was visible at all, because without it a kept box answers the same numbers as a cleared one"
       ]
     },
     {
-      "test": "example/__tests__/Menu.harness.tsx · Menu · Split trigger (E3) · all five",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 Menu \u00b7 Split trigger (E3) \u00b7 all five",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "the flag stops choosing the layout: every Menu draws the plain trigger",
       "before": "    if (model.hasPrimaryAction) {",
       "after": "    if (false && model.hasPrimaryAction) {",
-      "run": "harness:android:Menu — FAIL, 5 of 48 (code tree 638252adff9a); the other 21 Menu tests stayed green",
+      "run": "harness:android:Menu \u2014 FAIL, 5 of 48 (code tree 638252adff9a); the other 21 Menu tests stayed green",
       "redTests": [
         "is two halves...: Menu report for \"split\" never matched within 12000ms; last read \"split\":false,\"leading\":[-1,-1,-1,-1]",
         "takes the second half away...: same, for \"split-inplace\"",
@@ -98,101 +98,162 @@
       ]
     },
     {
-      "test": "example/__tests__/Menu.harness.tsx · takes the second half away with the action, and gives it back",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 takes the second half away with the action, and gives it back",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the split composition's dispose stops clearing its own layout witness",
       "before": "    onDispose {\n      model.noteSplitDrawn(false)\n      model.clearSplitBoxes()\n    }",
       "after": "    onDispose {\n    }",
-      "run": "harness:android:Menu — FAIL, 1 of 48 (code tree bb3943038c1b)",
+      "run": "harness:android:Menu \u2014 FAIL, 1 of 48 (code tree bb3943038c1b)",
       "redTests": [
         "Menu report for \"split-inplace\" never matched within 12000ms; last read \"split\":true,\"trailing\":[58,33,184,159] - the second half is still reported, at a stale rect, for a control whose prop was taken away"
       ]
     },
     {
       "negative control": true,
-      "test": "example/__tests__/Menu.harness.tsx · starts a new mount with one trigger, whatever the last one drew",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 starts a new mount with one trigger, whatever the last one drew",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
       "mutation": "MenuModel.reset() stops clearing the split witness and the two half rects",
       "before": "    splitDrawn = false\n    clearSplitBoxes()",
       "after": "    (both lines deleted)",
-      "run": "harness:android:Menu — PASS, 48 of 48 (code tree c5e18881c939)",
+      "run": "harness:android:Menu \u2014 PASS, 48 of 48 (code tree c5e18881c939)",
       "finding": "Invisible from a device on its own: the split composition's own `onDispose` clears the same two fields when the previous mount goes away, so the recycle gate cannot see the model's reset line while that path is intact. That is why the next row mutates both, and why `aRecycleClearsTheSplitTriggerAndItsHalves` (row 7) is the test that guards `reset()` itself."
     },
     {
-      "test": "example/__tests__/Menu.harness.tsx · starts a new mount with one trigger, whatever the last one drew",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 starts a new mount with one trigger, whatever the last one drew",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt + HybridNitroUiMenu.kt",
       "mutation": "both clearing paths removed: neither `reset()` nor the composition's dispose clears the layout witness",
       "before": "    splitDrawn = false\n    clearSplitBoxes()\n  ...  onDispose { model.noteSplitDrawn(false); model.clearSplitBoxes() }",
       "after": "    (all four calls deleted)",
-      "run": "harness:android:Menu — FAIL, 2 of 48 (code tree adeff70e0743)",
+      "run": "harness:android:Menu \u2014 FAIL, 2 of 48 (code tree adeff70e0743)",
       "redTests": [
         "starts a new mount with one trigger, whatever the last one drew: expected true to be false (Menu.harness.tsx:2480) - the remounted plain Menu reports a split trigger",
         "takes the second half away...: as row 9"
       ]
     },
     {
-      "test": "example/__tests__/Menu.harness.tsx · is two halves, and each one does only its own job (the list's anchor)",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 is two halves, and each one does only its own job (the list's anchor)",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the list is composed in the wrong half - it hangs off the action instead of off the chevron",
       "before": "        popup()\n      }\n    },",
       "after": "      }\n      popup()\n    }, (moved into the leadingButton slot)",
-      "run": "harness:android:Menu — FAIL, 1 of 48 (code tree 923ba6ea0fcf)",
+      "run": "harness:android:Menu \u2014 FAIL, 1 of 48 (code tree 923ba6ea0fcf)",
       "redTests": [
         "expected 21 to be greater than or equal to 200 (Menu.harness.tsx:2357) - the popup window came up at the leading half's edge, 181 px left of the trailing half it is supposed to hang off"
       ]
     },
     {
       "negative control": true,
-      "test": "example/__tests__/Menu.harness.tsx · is two halves, and each one does only its own job (the list's anchor)",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 is two halves, and each one does only its own job (the list's anchor)",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the list moves out of the trailing half's own wrapper Box, but stays in the trailing half's slot",
       "before": "        popup()\n      }",
       "after": "      }\n      popup()",
-      "run": "harness:android:Menu — PASS, 48 of 48 (code tree 1c4b93ade8df)",
+      "run": "harness:android:Menu \u2014 PASS, 48 of 48 (code tree 1c4b93ade8df)",
       "finding": "The wrapper `Box` is not what anchors the window - the half's *slot* is. The test's comment claimed removing that Box would move the list by the leading half's width; measured here, it does not move at all, so the comment and `MenuSplitButton.kt`'s now say the slot is the anchor and the Box is `propagateMinConstraints` plumbing."
     },
     {
-      "test": "example/__tests__/Menu.harness.tsx · is two halves, and each one does only its own job (the leading half)",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 is two halves, and each one does only its own job (the leading half)",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the leading half opens the list instead of running the action, in all four variant branches",
       "before": "            onClick = { model.applyPrimaryAction() },",
       "after": "            onClick = { model.setOpen(true) },",
-      "run": "harness:android:Menu — FAIL, 1 of 48 (code tree c5113ff8e40b)",
+      "run": "harness:android:Menu \u2014 FAIL, 1 of 48 (code tree c5113ff8e40b)",
       "redTests": [
         "\"the action half\" reported 0 of 1 expected events within 8000ms: nothing (the waitForLog at Menu.harness.tsx:2328)"
       ]
     },
     {
       "organic": true,
-      "test": "example/__tests__/Menu.harness.tsx · is two halves, and each one does only its own job",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 is two halves, and each one does only its own job",
       "file": "example/__tests__/Menu.harness.tsx",
       "mutation": "none - the test as first written pressed only the action half and then waited for the list to open",
-      "run": "harness:android — FAIL, 1 of 498 (code tree d1e7262c1780; every other test in the suite passed)",
+      "run": "harness:android \u2014 FAIL, 1 of 498 (code tree d1e7262c1780; every other test in the suite passed)",
       "redTests": [
         "Menu report for \"split\" never matched within 12000ms; last read \"expanded\":false,\"split\":true,\"trailing\":[202,0,328,126] - nothing had asked for the open; the press on the trailing half was missing from the test"
       ]
     },
     {
       "organic": true,
-      "test": "example/__tests__/Menu.harness.tsx · is two halves... / starts a new mount... (the iOS branches)",
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 is two halves... / starts a new mount... (the iOS branches)",
       "file": "example/__tests__/Menu.harness.tsx",
       "mutation": "none - both branches asserted Android's answers on iOS",
-      "run": "harness:ios — FAIL, 2 of 449 (code tree d1e7262c1780)",
+      "run": "harness:ios \u2014 FAIL, 2 of 449 (code tree d1e7262c1780)",
       "redTests": [
         "expected [ 'split:action' ] to deeply equal [] - a SwiftUI Menu built with primaryAction does take the harness's synthesised tap, so the action log moves on iOS",
         "expected null to be false - iOS answers `split` as -1 (\"no such measurement\"), which must not be read as `false`"
       ]
     },
     {
-      "test": "scripts/real-input/android.mjs · CHECKS.menu step 7 (the split trigger)",
+      "test": "scripts/real-input/android.mjs \u00b7 CHECKS.menu step 7 (the split trigger)",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt",
       "mutation": "the trailing half is named something else than the label the gate reads",
       "before": "internal const val MENU_MORE_OPTIONS_LABEL = \"More options\"",
       "after": "internal const val MENU_MORE_OPTIONS_LABEL = \"Show the list\"",
-      "run": "real-input:android:--control:menu — FAIL in 170.2 s (code tree a5acf666717b, lease E3-o7x7a)",
+      "run": "real-input:android:--control:menu \u2014 FAIL in 170.2 s (code tree a5acf666717b, lease E3-o7x7a)",
       "redTests": [
-        "✗ the list half is one node too, named for the options it opens — expected 1, saw 0 (the action half, named by `accessibilityLabel`, was still found: \"Real-input split menu\" occupies 42,1986 → 239,2112)"
+        "\u2717 the list half is one node too, named for the options it opens \u2014 expected 1, saw 0 (the action half, named by `accessibilityLabel`, was still found: \"Real-input split menu\" occupies 42,1986 \u2192 239,2112)"
       ]
+    },
+    {
+      "test": "src/__tests__/menuSizingKey.test.tsx \u00b7 all three",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the sizing key drops the `action` field, so a split trigger and the plain trigger it replaces build one and the same key",
+      "before": "    hasPrimaryAction ? 'action' : 'plain',",
+      "after": "    (the element deleted from the array, leaving a four-field key)",
+      "run": "jest src/__tests__/menuSizingKey.test.tsx \u2014 FAIL, 3 of 3",
+      "redTests": [
+        "tells a split trigger from the plain one it replaces \u2014 expected \"filled|medium|action||Publish\", received \"filled|medium||Publish\" (menuSizingKey.test.tsx:88)",
+        "is Button's key with the action field after the scale \u2014 expected \"tonal|small|plain|square.and.arrow.down|Publish\", received \"tonal|small|square.and.arrow.down|Publish\" (menuSizingKey.test.tsx:66)",
+        "takes the field back when the action is taken away \u2014 expected \"filled|medium|action||Publish\", received \"filled|medium||Publish\" (menuSizingKey.test.tsx:105)"
+      ]
+    },
+    {
+      "test": "src/__tests__/menuSizingKey.test.tsx \u00b7 tells a split trigger from the plain one it replaces",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the quieter form of the same bug: the field stays in the key and can never say `action`",
+      "before": "    hasPrimaryAction ? 'action' : 'plain',",
+      "after": "    'plain',",
+      "run": "jest src/__tests__/menuSizingKey.test.tsx \u2014 FAIL, 2 of 3 (the first test spells the plain key, which this mutation leaves right)",
+      "redTests": [
+        "tells a split trigger from the plain one it replaces \u2014 expected \"filled|medium|action||Publish\", received \"filled|medium|plain||Publish\" (menuSizingKey.test.tsx:88)",
+        "takes the field back when the action is taken away \u2014 expected \"filled|medium|action||Publish\", received \"filled|medium|plain||Publish\" (menuSizingKey.test.tsx:105)"
+      ]
+    },
+    {
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 Menu \u00b7 Split trigger (E3) \u00b7 earns its own box, which is not the plain trigger's",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the unit row above, run on a device: both Menus now ask for one cache entry",
+      "before": "    hasPrimaryAction ? 'action' : 'plain',",
+      "after": "    'plain',",
+      "run": "harness:android:Menu \u2014 FAIL, 1 failed of 48 (code tree e955bdb1b9f9, lease E3-5z5a2; the other 47 passed, ContextMenu's 22 with them)",
+      "redTests": [
+        "earns its own box, which is not the plain trigger's \u2014 `testID \"split-size\" (split-size) never reached 124.95x48.00 - last box 78.86x48.00, control measured 124.95x48.00` (Menu.harness.tsx:401)"
+      ],
+      "finding": "The claim the review doubted holds. The harness poisons keys it computes itself, and this mutation still sends the *plain* key, which is poisoned - and shared. A correction to a shared entry is the answer every holder of it gets, so the split control is laid out at the plain trigger's width and the case goes red on the control that measured first. `corrections >= 2` does still hold on its own, which is why the assertion that catches it is the box, not the count."
+    },
+    {
+      "test": "example/__tests__/Menu.harness.tsx \u00b7 Menu \u00b7 Split trigger (E3) \u00b7 earns its own box, which is not the plain trigger's",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the key drops the field outright - the first unit row, run on a device, where the harness poisons keys nobody asks for",
+      "before": "    hasPrimaryAction ? 'action' : 'plain',",
+      "after": "    (the element deleted from the array, leaving a four-field key)",
+      "run": "harness:android:Menu \u2014 FAIL, 1 failed of 48 (code tree e5ddec035f0c, lease E3-5z5a2)",
+      "redTests": [
+        "earns its own box, which is not the plain trigger's \u2014 the same line as the row above: `never reached 124.95x48.00 - last box 78.86x48.00, control measured 124.95x48.00`"
+      ],
+      "finding": "Red even with nothing poisoned, which is the stronger half of the same claim: the collision is visible on the boxes alone, so the case does guard the split configuration's width whatever the poison list says."
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/MenuModelTest.kt \u00b7 theListActionTogglesLikeAPressDoes",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "mutation": "the trailing half's accessibility action opens only - what TalkBack had before the fix",
+      "before": "  fun applyListAction() {\n    if (enabled) {\n      setOpen(!expanded)",
+      "after": "  fun applyListAction() {\n    if (enabled) {\n      setOpen(true)",
+      "run": "testDebugUnitTest --tests MenuModelTest \u2014 FAIL, 1 of 12",
+      "redTests": [
+        "theListActionTogglesLikeAPressDoes \u2014 \"an open list goes down\" (MenuModelTest.kt:211)"
+      ],
+      "finding": "Guards the model's entry point, not the call site: `halfModifier`'s `onClick { model.applyListAction() }` is inside a semantics scope, and neither the harness nor the real-input gate can invoke an accessibility action (both inject pointer events), so `a4d20e4c`'s bug is caught here by the transition and not by the wiring."
     }
   ]
 }
