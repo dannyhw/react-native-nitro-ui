@@ -127,3 +127,29 @@ Rounds J, N, D, C, S; the lines are from the gate log store.
 - iOS: a page-sheet `Modal` over an open tooltip is unmeasured.
 - `real-input:ios` Picker cycle 2 ("drop button raised no echo") failed once here, passed on re-run.
 - Remaining lines are in `docs/tasks/FOLLOWUPS.md` under G18.
+
+## Merge round
+
+`task/G18-merge` from `7d7040a9`, lease `G18merge-6veff` (`G18merge-wc3ty` expired mid-run). Merged `origin/main` (Checkbox, ContextMenu, X18), X19 (`d310fc45`), then E2's main (`0081b2ad`). Conflicts kept both sides; generated files regenerated. Tooltip's tab follows X19's `TABS` navigation. X19's tab-target test now invents only components not yet landed.
+
+The merged tree failed 11 Android Tooltip cases: material3 1.5's `TooltipBox` re-keys its content once the anchor is placed, so it composed twice (`presentCount=2`, placement wiped). Readings now follow the popup (`state.isVisible`). The recycle case now waits for the drop's pool entry before the next mount; run alone it got a fresh instance (`recycles=0`).
+
+Item 4 not done (FOLLOWUPS). One re-run each, on earlier trees: `harness:android` (render timeout, load 51), `real-input:ios` (X19's TextField flake).
+
+Red proofs:
+- recycle reset -> `model.reset()` removed -> `expected '1' to be '0'` (`presentCount`, no crash)
+- recycle oracle -> `lifetime.onRecycle()` removed -> `"recycled-dropped" never reached round 1: the dropped mount in the pool`
+- Android Back -> second dismiss ignored -> `✗ timed out waiting for Back to take the tooltip down` (`focusable = false` hides the popup from the dump; the check aborts at opening)
+
+Gates on the merged tree (main + X19 + E2 + G18); the filtered rows are the red-proof runs:
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1748 tests / 70 suites | `d651692a9c89` | 2 m 46 s | start 8.7 / med 24.9 / max 33.5 |
+| `harness:ios` | **PASS** | 421 tests / 24 suites + isolated 4 tests / 2 suites | `d651692a9c89` (ios tree) | 10 m 16 s | start 4.9 / med 5.6 / max 9.0 |
+| `harness:android` | **PASS** | 470 tests / 24 suites + isolated 4 tests / 2 suites | `d651692a9c89` (android tree) | 12 m 56 s | start 20.6 / med 5.6 / max 20.6 |
+| `real-input:ios` | **PASS** | — | `d651692a9c89` (ios tree) | 23 m 11 s | start 4.9 / med 6.0 / max 48.1 |
+| `real-input:android` | **PASS** | — | `d651692a9c89` (android tree) | 36 m 11 s | start 3.5 / med 3.4 / max 7.3 |
+| `harness:android:Tooltip:-t:presents%20once%20when%20mounted` | stale | 1 failed of 22 tests / 1 suites | 0e8a0f655e2a (not this tree) | 15.6 s | start 9.5 / med 11.2 / max 12.2 |
+| `harness:android:Tooltip:-t:recycled%20view` | stale | 1 failed of 22 tests / 1 suites | a14b5747a9a7 (not this tree) | 15.8 s | start 9.7 / med 9.8 / max 9.8 |
+| `real-input:android:--control:tooltip` | stale | — | b9f8b3800a0a (not this tree) | 2 m 13 s | start 5.5 / med 5.6 / max 6.2 |
