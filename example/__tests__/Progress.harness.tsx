@@ -1042,10 +1042,15 @@ describe('Progress', () => {
     // through `onDropView`, the path a screen transition takes - and Progress adds
     // the animation gate to what has to be reset each time.
     for (let cycle = 0; cycle < 20; cycle += 1) {
+      // Every configuration cycles through, not just the two the component shipped
+      // with: `onDropView`/`prepareForRecycle` is per-shape code now, and the
+      // loading indicator and the wave are the shapes whose reset is new.
+      const configuration =
+        CONFIGURATIONS[cycle % CONFIGURATIONS.length]!;
       const { unmount } = await render(
         <Progress
+          {...configurationProps(configuration)}
           value={cycle % 2 === 0 ? null : cycle / 40}
-          variant={cycle % 3 === 0 ? 'circular' : 'linear'}
           testID={`cycle-${cycle}`}
         />
       );
@@ -1068,6 +1073,15 @@ describe('Progress', () => {
     expect(Math.abs(box.height - LINEAR_HEIGHT)).toBeLessThan(1);
     expect(Math.abs(measured.height - LINEAR_HEIGHT)).toBeLessThan(1);
     expect(handle.nuiTestIsAnimating()).toBe(false);
+    // The configuration the last cycle left behind is none of this control's. The
+    // wrapper re-sends every prop on every mount, so this reads as a formality on a
+    // view the pool handed back - and it is one: `docs/components/progress.md` says
+    // the reset is the belt, and `ProgressModelTest` is where forgetting it is proved
+    // to matter. It is asserted anyway because the day a prop stops being re-sent is
+    // the day this becomes the only witness.
+    expect(handle.variant).toBe('linear');
+    expect(handle.appearance).toBe('flat');
+    expect(handle.contained).toBe(false);
     unmount();
   });
 

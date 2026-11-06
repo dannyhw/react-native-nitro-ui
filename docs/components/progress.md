@@ -1,17 +1,25 @@
 # Progress
 
 The platform progress indicator: SwiftUI `ProgressView` (`.linear` / `.circular`)
-on iOS, Material 3 `LinearProgressIndicator` / `CircularProgressIndicator` on
-Android, both hosted by the core runtime (`docs/architecture/core.md`) — so the
-drawing, the indeterminate animation, the a11y behaviour and the dynamic-type
-and RTL handling are the platform's.
+on iOS, Material 3 `LinearProgressIndicator` / `CircularProgressIndicator` plus
+the Expressive `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator` and
+`LoadingIndicator` on Android, all hosted by the core runtime
+(`docs/architecture/core.md`) — so the drawing, the indeterminate animation, the
+a11y behaviour and the dynamic-type and RTL handling are the platform's.
 
 ```tsx
 import { Progress } from 'react-native-nitro-ui';
 
-<Progress value={uploaded / total} />;      // a bar that fills
-<Progress variant="circular" />;            // a ring that spins
+<Progress value={uploaded / total} />;          // a bar that fills
+<Progress variant="circular" />;                // a ring that spins
+<Progress variant="circular" appearance="wavy" />; // Material's wavy ring
+<Progress variant="loading" contained />;       // Material's morphing shape
 ```
+
+The last two are Material 3 Expressive shapes. Android draws them; iOS has
+neither a wavy indicator nor a morphing one, so it draws the closest
+`ProgressView` it has and says so in **Platform mapping** and **Limits** rather
+than faking a wave.
 
 It is the library's first **non-interactive** component: nothing on a Progress
 can be changed by the user, so there are no callbacks, no `onValueChange`, and no
@@ -30,7 +38,9 @@ second component to add:
 
 | Prop                 | Type                          | Default  | Maps to                                                        |
 | -------------------- | ----------------------------- | -------- | -------------------------------------------------------------- |
-| `variant`            | `'linear' \| 'circular'`      | `'linear'` | SwiftUI `.progressViewStyle()` / which M3 composable is built.  |
+| `variant`            | `'linear' \| 'circular' \| 'loading'` | `'linear'` | SwiftUI `.progressViewStyle()` / which M3 composable is built.  |
+| `appearance`         | `'flat' \| 'wavy'`            | `'flat'` | M3 `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`. **Android only** — iOS draws flat. |
+| `contained`          | `boolean`                     | `false`  | `ContainedLoadingIndicator` instead of `LoadingIndicator`. **Android only**, and only with `variant="loading"`. |
 | `value`              | `number \| null \| undefined` | `null`   | The fraction shown, `0…1`. `null`/`undefined` = **indeterminate**. On iOS a **circular** indicator does not draw it — see Limits. |
 | `tintColor`          | `ColorValue \| undefined`     | platform | SwiftUI `.tint()` / M3 `color`.                                 |
 | `trackColor`         | `ColorValue \| undefined`     | platform | M3 `trackColor`. **Android only today** — see Limits.            |
@@ -63,6 +73,9 @@ notes), so a flag would have nothing to switch.
 | Determinate value | the `Double`, clamped at the draw site — **drawn by the bar only**; a ring keeps spinning (Limits) | `progress = { Float }` lambda, read by M3's own composition        |
 | Indicator colour  | `.tint(_:)`                                                     | `color:` (`ProgressIndicatorDefaults.*Color` when untinted)        |
 | Track colour      | **nothing addresses the track**                                 | `trackColor:` (`…linearTrackColor` / `…circular*TrackColor`)       |
+| `appearance="wavy"` | **no such control** — the flat bar/ring is drawn (Limits)       | `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator`, determinate and indeterminate, at Material's own amplitude, wavelength and speed |
+| `variant="loading"` | a **circular `ProgressView`** — the closest native control (Limits) | `LoadingIndicator` / `ContainedLoadingIndicator`, determinate with a `value`, indeterminate without |
+| `contained`       | **nothing to contain** — stored and painted nothing             | the tonal container behind the morphing shape (`containerColor`)   |
 | Value animation   | the toolkit's; ours is "draw what arrived"                      | M3 draws the lambda's value; it does not interpolate               |
 | Indeterminate     | the toolkit's own animation                                     | the toolkit's own animation (Compose-driven)                       |
 | Test id           | RN's `testID` → `accessibilityIdentifier`                       | `host.tag` (Compose has no test id)                                |
@@ -81,21 +94,50 @@ different policies — the only component so far to need both:
   measures its own square, and the wrapper adds `alignSelf: 'flex-start'` so a
   `stretch`ing parent cannot widen the ring into an ellipse.
 
-`nuiSizingKey` is the variant, which is the only prop that changes the control's
-size: `''` for `'linear'` (the configuration `prewarm(['NitroUiProgress'])` seeds)
-and `'circular'` for the ring.
+`nuiSizingKey` names the **configuration**, which is what decides the box: the
+shape, and on Android the two props that change a shape's size.
+
+| Props sent                                   | Key                    |
+| -------------------------------------------- | ---------------------- |
+| `linear`                                     | `''`                   |
+| `linear appearance="wavy"`                    | `'wavy'`               |
+| `circular`                                    | `'circular'`           |
+| `circular appearance="wavy"`                  | `'circular\|wavy'`     |
+| `loading`                                     | `'loading'`            |
+| `loading contained`                           | `'loading\|contained'` |
+
+`''` is the configuration `prewarm(['NitroUiProgress'])` seeds. The two props are
+normalised before they reach the key: `appearance` means nothing for `'loading'`
+(no wavy form exists on either platform) and `contained` means nothing for a bar
+or a ring (no container exists), so a prop that cannot change the drawing never
+mints a cache entry for a configuration that does not exist.
+
+Dropping any of the three from the key is the R3 bug class — every later mount of
+the other configuration inherits the first one's size, and reads as a correct
+measurement rather than a bug. `src/__tests__/progressSizingKey.test.tsx` guards
+the function and `lays every configuration out at the size it measures` guards
+what the wrapper builds from it.
 
 ### Measured sizes
 
-Both numbers below are what `measureContent()` and the Yoga box reported in the
-same harness run on two devices (an iPhone 17 simulator on iOS 27, and an
-API 35 emulator at 420 dpi), and they are the same fixture the harness
+Every number below is what `measureContent()` and the Yoga box reported in the
+same harness run on two devices (an iPhone Air simulator on iOS 27, and the
+`nitroui_b` API 35 emulator at 420 dpi), and they are the same fixture the harness
 asserts (`example/__tests__/Progress.harness.tsx`).
 
-| Variant  | iOS                                  | Android                                            |
-| -------- | ------------------------------------ | -------------------------------------------------- |
-| `linear` | **4 pt** tall; width = the box        | **4.19 dp** tall (M3's 4 dp track = 11 whole px at 420 dpi); width = the box |
-| `circular` | **20 × 20 pt**                       | **40 × 40 dp**                                     |
+| Configuration                       | iOS                                  | Android                                            |
+| ----------------------------------- | ------------------------------------ | -------------------------------------------------- |
+| `linear`                             | **4 pt** tall; width = the box        | **4.19 dp** tall (M3's 4 dp track = 11 whole px at 420 dpi); width = the box |
+| `linear appearance="wavy"`            | **4 pt** — the flat bar               | **9.90 dp** tall (Material's 10 dp wave = 26 whole px; the px round-down is why this reads 9.90, like the flat bar's 4.19) |
+| `circular`                            | **20 × 20 pt**                        | **40 × 40 dp**                                     |
+| `circular appearance="wavy"`          | **20 × 20 pt** — the flat ring        | **48 × 48 dp** (Material's `WaveSize`)              |
+| `loading`                             | **20 × 20 pt** — a circular `ProgressView` | **48 × 48 dp**, the morphing shape 38 dp inside it |
+| `loading contained`                   | **20 × 20 pt** — the same             | **48 × 48 dp** — the container *is* the box         |
+
+So `contained` changes nothing that a box can see on either platform — it is in
+the key because the two must not share a cache entry, and
+`gives a contained loading indicator its own cache entry` is the row that proves
+it, by poisoning one entry and watching the other still be corrected.
 
 The component declares `320 × 4` with the `fillWidth` policy as its fallback on
 both platforms (`NitroUiDeclaredFallbacks`, registered at startup — a Fabric measure can happen
@@ -121,10 +163,21 @@ before any view exists). Two things follow:
   equalled the declared fallback could not tell a correction from a control that
   never corrected.
 
-A `variant` change **remounts** the native view (the wrapper keys it): the two
-shapes are two controls, and Android asks its toolkit a different sizing question
-per shape at the moment the composition is built and never re-asks it. Nothing is
-lost — a Progress has no native state to carry over.
+A `variant` change **remounts** the native view (the wrapper keys it on the shape
+alone): the shapes are different controls, and Android asks its toolkit a
+different sizing question per shape at the moment the composition is built and
+never re-asks it. Nothing is lost — a Progress has no native state to carry over.
+
+An `appearance` or `contained` change deliberately does **not** remount: neither
+changes the sizing *policy*, so both re-measure in place the way a `variant`
+change does, through `nuiSizingKey` (`re-measures an appearance change on the same
+view`, `gives a contained loading indicator its own cache entry`). Keeping the
+remount keyed on the shape alone is what makes a mid-download switch to
+`appearance="wavy"` cheap; widening the key would pass the same tests for the
+wrong reason.
+
+The reset clears `appearance` and `contained` with the rest of the model, which
+is the belt behind the fact that the wrapper re-sends every prop on every mount.
 
 ## Behaviour notes
 
@@ -205,9 +258,23 @@ that says so.
   is then exactly this node, so a screen reader hears one rule from one place
   (the Slider's reasoning).
 
+The four new configurations read the same way, because the node is built once,
+above the `when` that picks the composable: TalkBack says **In progress** plus the
+label, and the percentage too when there is a value, for a wavy bar, a wavy ring,
+a loading indicator and a contained one alike. It has to be that way on purpose:
+the wavy indicators call `progressSemantics()` and `LoadingIndicator` publishes a
+`ProgressBarRangeInfo` of its own, and `clearAndSetSemantics` clears both in favour
+of the one this file publishes — with the value React sent rather than the one the
+composable guessed. On iOS `loading` is a circular `ProgressView` and `wavy` is
+the flat control, so VoiceOver reads exactly what the matching `variant` reads: a
+labelled progress bar, with `accessibilityValue("42%")` when there is a value and
+without one when indeterminate. There is no new a11y surface to describe, which is
+the point of drawing the platform's own control rather than a copy.
+
 ## Limits
 
-- **`trackColor` is Android-only today.** Material 3 gives every indicator a
+- **`trackColor` is Android-only today** (with one exception: on a *contained*
+  loading indicator it paints the container — see the `contained` bullet). Material 3 gives every indicator a
   `trackColor`; SwiftUI's `ProgressView` has no API that addresses its track, so
   on iOS the prop is accepted, stored, round-trips through the handle and paints
   nothing. It is a prop on both platforms anyway so the JS API means one thing
@@ -240,6 +307,42 @@ that says so.
   `ProgressView` on iOS has no animation to show and paints the track it would
   have filled. Use a ring (or a `linear` bar on Android) where indeterminate
   motion carries meaning.
+- **`appearance="wavy"` is Android-only.** SwiftUI has no wavy progress
+  indicator, so iOS stores the prop, answers it back through the handle, and draws
+  the flat bar or ring — the same treatment `trackColor` gets, for the same reason.
+  Faking a wave would mean drawing our own control, which is the one thing this
+  component's existence argues against.
+- **`variant="loading"` is a circular `ProgressView` on iOS.** Material's
+  morphing polygon shape has no iOS counterpart; the spinner-shaped ring is the
+  closest control the platform has, and iOS answers it at the ring's 20 pt, which
+  is also why `loading` is `intrinsic` there rather than a third size.
+- **`appearance` does not apply to `variant="loading"`, on either platform.**
+  Material has no wavy form of the loading indicator, so the wrapper resolves
+  `wavy` + `loading` to `flat` before it reaches native — the combination paints
+  the plain loading indicator and its sizing key says `'loading'`, not
+  `'loading|wavy'`. Same for `contained` on a bar or a ring: it is resolved to
+  `false`, because there is no container to draw.
+- **`contained` is Android-only, and it is where `trackColor` paints.**
+  `ContainedLoadingIndicator`'s tonal container is the thing behind the shape, so
+  on that one configuration `trackColor` addresses the container rather than a
+  track. Everywhere else `trackColor` is the indicator's own track (or, on iOS,
+  painted nothing).
+- **The Material 3 Expressive call sites are `@OptIn`.** `LoadingIndicator` and
+  `ContainedLoadingIndicator` are `@ExperimentalMaterial3ExpressiveApi` in material3
+  1.5.0-beta02, so `HybridNitroUiProgress.kt` opts in at one private composable —
+  the only `@OptIn` in the library. The risk is the one the annotation is for:
+  an experimental member can change shape or vanish at a *minor* version without a
+  deprecation cycle, and this library pins material3. When that happens it will
+  compile red in that one file, with the four call sites, rather than misbehave at
+  runtime. The two wavy indicators are **not** experimental: they carry no opt-in
+  marker anywhere in the 1.5.0-beta02 artifact, which is why only the loading shape
+  needs the annotation.
+- **A wavy ring keeps its track while indeterminate; a flat ring does not.**
+  Material's wavy indicators take one track default for both states
+  (`ProgressIndicatorTokens.TrackColor`, visible), while the flat
+  `CircularProgressIndicator` has separate defaults per state and its
+  indeterminate one is transparent. It is Material's decision, passed through
+  rather than evened out.
 - **No size or thickness control.** Neither toolkit lets us set a
   `ProgressView`'s thickness or ring diameter through an API we consider stable
   (`controlSize` and `frame()` fight the control's own measurement here), so the
@@ -248,4 +351,6 @@ that says so.
 - **No label / formatted value.** SwiftUI's `ProgressView` label and M3's
   semantics for a text value have no equivalent on the other platform, so
   labelling is the plain `accessibilityLabel` route on both.
-- **`variant` changes remount** (Sizing). Cheap here, but it is a remount.
+- **`variant` changes remount; `appearance` and `contained` changes do not**
+  (Sizing). Cheap here, but a shape change is a remount, and it drops the
+  `hybridRef` handle the way any remount does.
