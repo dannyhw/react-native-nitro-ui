@@ -1,8 +1,9 @@
 # E1 — Material 3 Expressive, pass 1: buttons
 
-**Branch:** `task/E1-expressive-buttons` (from `main` at `ee3197ed`) · **Round:** 1 plus
-**Fix round 1** below (D19: 2 of at most 2) · **Leases:** `E1-uivzs` then `E1-7ojmj`, the same
-pair-a devices (`emulator-5574` + iOS 27 `nitro-ui A` / Metro `8295`)
+**Branch:** `task/E1-merge`, from `task/E1-expressive-buttons` at `4f7018e3`, which branched from
+`main` at `ee3197ed` · **Rounds:** 1, **fix round 1**, **fix round 2** and the **merge round**
+below (D19: cap reached) · **Leases:** `E1-uivzs`, `E1-7ojmj`, `E1-jnmeq` — the same pair-a
+devices every time (`emulator-5574` + iOS 27 `nitro-ui A` / Metro `8295`)
 
 ## API settled
 
@@ -29,26 +30,40 @@ The three button-shaped Android controls now sit on Material 3 Expressive's own 
 
 ## Gates
 
+The merge tree - code tree `3bb396299e94`, worktree clean at `aa001be` - with all five merge
+gates on it:
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1733 tests / 69 suites | `1ba96127946f` | 2 m 40 s | start 3.3 / med 4.0 / max 5.1 |
-| `harness:ios` | **PASS** | 394 tests / 23 suites + isolated 2 tests / 1 suites | `1ba96127946f` (ios tree) | 9 m 22 s | start 4.8 / med 4.5 / max 6.2 |
-| `harness:android` | **PASS** | 443 tests / 23 suites + isolated 2 tests / 1 suites | `1ba96127946f` (android tree) | 13 m 43 s | start 3.2 / med 2.7 / max 5.4 |
-| `real-input:ios` | stale | — | 999b709cbac0 (not this tree) | 2 m 22 s | start 3.3 / med 52.1 / max 63.7 |
-| `real-input:android` | **PASS** | — | `1ba96127946f` (android tree) | 35 m 34 s | start 3.5 / med 2.9 / max 7.5 |
-| `harness:android:Button` | stale | 1 failed of 14 tests / 1 suites | 8e41cf8df99b (not this tree) | 18.0 s | start 4.8 / med 5.1 / max 5.2 |
-| `harness:android:Chip` | stale | 2 failed of 12 tests / 1 suites | 8f9c2aafabc2 (not this tree) | 28.9 s | start 3.3 / med 3.3 / max 3.3 |
-| `harness:android:SegmentedControl` | stale | 1 failed of 21 tests / 1 suites | 3ad29a4ffdba (not this tree) | 26.2 s | start 3.1 / med 3.6 / max 3.6 |
-| `harness:android:SegmentedControl:--background` | stale | — | 55085cafd3c4 (not this tree) | 1.2 s | start 2.5 / med 2.5 / max 2.5 |
-| `harness:android:shape` | stale | — | df06f455351b (not this tree) | 1.4 s | start 7.1 / med 7.1 / max 7.1 |
-| `harness:ios:Button` | stale | 1 failed of 14 tests / 1 suites | 8e41cf8df99b (not this tree) | 17.5 s | start 4.6 / med 4.6 / max 4.7 |
-| `harness:ios:shape` | stale | — | df06f455351b (not this tree) | 0.7 s | start 7.3 / med 7.3 / max 7.3 |
-| `real-input:android:--control:segmented-control` | stale | — | 9a0202aabce2 (not this tree) | 6 m 50 s | start 1.8 / med 2.5 / max 6.1 |
-| `real-input:android:--control:segmented-control:--background` | stale | — | ab2987c39792 (not this tree) | 0.5 s | start 3.1 / med 3.1 / max 3.1 |
+| `check` | **PASS** | 1774 tests / 70 suites | `3bb396299e94` | 2 m 39 s | start 9.3 / med 6.9 / max 9.3 |
+| `harness:ios` | **PASS** | 444 tests / 25 suites + isolated 4 tests / 2 suites | `3bb396299e94` (ios tree) | 10 m 48 s | start 3.7 / med 4.2 / max 7.2 |
+| `harness:android` | **PASS** | 493 tests / 25 suites + isolated 4 tests / 2 suites | `3bb396299e94` (android tree) | 15 m 01 s | start 3.7 / med 2.5 / max 4.5 |
+| `real-input:ios` | **PASS** | — | `3bb396299e94` (ios tree) | 27 m 55 s | start 2.5 / med 5.2 / max 16.0 |
+| `real-input:android` | **PASS** | — | `3bb396299e94` (android tree) | 41 m 02 s | start 5.8 / med 2.5 / max 5.8 |
+| `harness:android:Menu` | stale | 1 failed of 43 tests / 2 suites | dea667423cae (not this tree) | 1 m 22 s | start 3.4 / med 4.7 / max 6.6 |
+| `harness:android:Menu:--verbose` | stale | 43 tests / 2 suites | 94893b5e2fa7 (not this tree) | 1 m 21 s | start 6.3 / med 4.3 / max 6.3 |
+| `harness:ios:Menu` | stale | 43 tests / 2 suites | 94893b5e2fa7 (not this tree) | 2 m 22 s | start 12.7 / med 8.1 / max 12.7 |
+
+`need --for merge`: need: merge is satisfied on this code tree.
+
+Each ran once and passed; neither known flake appeared (no BottomSheet 50-cycle failure, no
+refused iOS edit). The counts are the merged suite's, so E2's, G17's, G18's and X19's own
+checks rode along: 1774 unit tests, 444 iOS and 493 Android harness tests, and 41 m of real
+touches including `searchfield`, `tooltip` and `tab-targets`.
+
+The three stale rows are this round's own filtered probes, each red or green on a tree it
+mutated: `harness:android:Menu` on `dea667423cae` is the fallback-collision proof, and the two
+passes on `94893b5e2fa7` are the Menu suites read before anything moved (`--verbose` is a flag
+the harness CLI does not forward, so that run is the ordinary green one with a longer name).
+The ledger holds two more `harness:android:Menu` fails the table no longer prints: the harvest
+red on `0239981d0099` and the same edit refused for a stale app stamp one minute earlier.
+
+### Rounds 1-2, on `1ba96127946f`
+
 
 `need --for review`: need: review is satisfied on this code tree.
 
-Only four rows describe the code in front of the reader; the rest is history the ledger keeps, and `table` prints the newest line per gate name. `harness:android:shape` / `harness:ios:shape` are the first two attempts at the `shape` proofs, refused before they ran because no app was stamped yet. `harness:android:Button`, `harness:android:Chip`, `harness:ios:Button` and `--control:segmented-control` are red-proof runs, each on its own mutated tree, so each is stale by its own mutation. The `…:--control:segmented-control:--background` row is a `--background` flag put after the `--`, which the runner read as another `--control` argument and refused in half a second. Every red line in the ledger has its excerpt in `docs/tasks/E1/failures/`.
+That round’s table is not pasted: the report carries exactly one, the generated one above, and every row it printed on `1ba96127946f` stays in the ledger the export commits. What those rows said: four described the code of that round, and the rest was history the ledger kept, since `table` prints the newest line per gate name. `harness:android:shape` / `harness:ios:shape` are the first two attempts at the `shape` proofs, refused before they ran because no app was stamped yet. `harness:android:Button`, `harness:android:Chip`, `harness:ios:Button` and `--control:segmented-control` are red-proof runs, each on its own mutated tree, so each is stale by its own mutation. The `…:--control:segmented-control:--background` row is a `--background` flag put after the `--`, which the runner read as another `--control` argument and refused in half a second. Every red line in the ledger has its excerpt in `docs/tasks/E1/failures/`.
 
 Two runs in the ledger carry this fix round's own history. The first full `real-input:android` went red on `picker` alone: three cycles into the drop picker's unmount loop, the tap that arms the app's own 2.5 s unmount landed and the tap that opens the menu did not, so the retry re-read the tree after the control had gone — the race the check's own comment names, on a box carrying another task's `real-input:ios`, with the other 19 controls green. The PASS above is the re-run. `real-input:ios` has no green on this tree: its last run was refused because the code tree moved under its own build, mid-way through the round-1 screenshot work. It was not re-run because no iOS source moved since — this round's diff is Android Kotlin, two `scripts/real-input/` files and docs, and only the Android runner imports either — and `harness:ios` is green on this exact tree.
 
@@ -80,6 +95,11 @@ Fix round 2:
 - `example/__tests__/SegmentedControl.harness.tsx · G4 · is as wide as its own segments added up` -> `ConnectedRow` made to demand n x the widest item and always share the result (what `Modifier.weight(1f, fill = false)` at `width(IntrinsicSize.Max)` does) -> `the row of Hour, Day, Week, Month, Year measures 369.52x48.00 … but its own segments are 62.86 + 56.00 + 66.67 + 72.38 + 60.19 plus 4 gaps of 2 dp = 326.10 dp - off by 43.42 dp`; 1 of 21 failed, and the other 20 stayed green because an equal share is still right for the over-wide cases.
 - `scripts/real-input/android.mjs · segment 1 is drawn with its connected corner` -> the pill mutation left in and a tap on segment 1 added before the probe -> `the corner probe will not read segment 1 while it is not plainly unselected (checked=true)`. The run also printed what the probe would have concluded: `onStroke=true`, probe `rgb(255,255,255)` against a reference of `rgb(110,116,136)` — page-against-fill reads as stroke, which is the false green the line now refuses. Its first attempt threw a bare `AbortedCheck` instead and the run reported **PASS** (tree 3c92ebffc732), which is why it goes through `t.log.abort`.
 
+Merge round:
+
+- `Menu.harness.tsx · Menu · G7a · lays each configuration out at the size the control measured` -> the re-measured fallback planted as a *measured* box (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP` := 76.57/48.00, the `filled` `Variant` trigger, with the harness mirror moved to the same pair) -> `expected true to be false` at Menu.harness.tsx:785, the `sameSize(box, DECLARED_FALLBACK)` refusal; 1 failed of 43 (`05-54-01Z`).
+- The same test, and this one is a harvest rather than a guard proof: the corrections floor *after* its `console.log` raised to 1000 so Jest prints the suite’s console block at all -> `expected 7 to be greater than or equal to 1000` (Menu.harness.tsx:799), and the line above it is the measurement `docs/components/menu.md` now carries (`cfg-filled=76.57x48.00 … cfg-size-large=88.76x56.00`) (`05-46-06Z`).
+
 Data: `docs/tasks/E1/mutations.json`.
 
 ## Files changed
@@ -106,6 +126,8 @@ Data: `docs/tasks/E1/mutations.json`.
 - Button: at `small` the drawn container is Material's own 40 dp floor while the box is laid out at the 48 dp touch target, so the ladder's first rung is a 40 dp picture in a 48 dp box.
 - Button / SegmentedControl / Chip: the shape caches key on the `MotionScheme` instance plus the rung (and corner or state); a theme that changed its shape tokens while holding one `MotionScheme` object would read a stale pair, and nothing here detects that.
 - SegmentedControl: `ConnectedRow` asks each item for its `maxIntrinsicWidth`, which is the label plus padding only because a segment is one `Text` at `maxLines = 1`; a wrapping or multi-line child would break that and nothing here says so.
+- Menu: `FALLBACK_WIDTH_DP`/`HEIGHT` in `HybridNitroUiMenu.kt`, the `DECLARED_FALLBACKS` row and `Menu.harness.tsx`'s `DECLARED_FALLBACK` are three copies of one pair with nothing cross-checking them - this round moved all three by hand.
+- Harness: a green suite's `console.log` never reaches the gate log, so a measured table (menu.md's, and any future one) can only be read out of a deliberate red; a knob that kept console output for green runs would retire that trick.
 - Bench: not re-run since round 1 (out of this fix round's scope), so the numbers above are still round 1's.
 
 ## Fix round 1
@@ -141,3 +163,23 @@ than the row replaced, not ~18%. `Month` spells itself out in the retaken 720 px
 its own arithmetic answers `onStroke=true` for a pill. It aborts through `t.log.abort`: a bare
 `AbortedCheck` is swallowed and the run read green. Docs, comments, the changeset and
 `mutations.json` say what happens now.
+
+## Merge round
+
+`origin/main` (`2c139cf2`: E2, G17, G18, X19 and the 0.7.0 Version Packages commit) merged in as
+`9f55064a`. Git found no conflicts in the six files the brief named; each was diffed against both
+parents — both sides survived, the shared table, registry and nitrogen regenerate to what is
+committed, and E1's SegmentedControl checks now read G17's `ECHO`/`screenTab` maps. E1's
+changeset stays a minor: the release commit consumed the older ones.
+
+Menu's trigger *is* `NitroUiM3Button`, so its Android column was re-measured on the combined tree:
+`filled`/`tonal`/`outlined`/`elevated` 92.57 → 76.57 dp, `small` 57.90 → 58.67, `large`
+108.57 × 50.29 → 88.76 × 56.00, `text` unchanged at 68.95 × 48.00. The declared fallback went
+118 × 52 → 75.1 × 52 — Button's own medium width, the 52 height kept off every measured box —
+mirrored into `DECLARED_FALLBACKS`, the generated table and the harness's copy; `menu-android.png`
+retaken at 720 px. ContextMenu and Picker keep their own triggers (`OutlinedTextField`; none), and
+the iOS trigger is SwiftUI's `.buttonStyle`, which E1 never reached — the iOS column stands
+un-re-measured.
+
+Lease `E1-jnmeq` (pair-a: `emulator-5574`, iOS 27 `nitro-ui A`, Metro 8295); no device setting was
+written.

@@ -1,0 +1,171 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-11-06T05:54:01.806Z on code tree `dea667423cae` at HEAD `9f55064` (branch `task/E1-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 81605 ms
+- Load: start 3.44, end 3.68, median 4.74, max 6.59
+- Device: android / device `emulator-5574` / lease `E1-jnmeq`
+- Full log: `task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log` (<store>/task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · G7a › lays each configuration out at the size the control measured`
+- `expected true to be false // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-jnmeq (still live)
+  |   E1-jnmeq                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.68 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 125 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu (cwd example)
+gate: code tree dea667423cae at HEAD 9f55064a
+gate: git tree e8cc325a2a06 with a DIRTY worktree (not reusable)
+gate: log task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log
+gate:       <store>/task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree dea667423cae, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.65/3.57 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      trigger parity: menu=62.10x48.00 button=62.10x48.00 corrections=2
+
+
+    console.log
+      group is not in the key: 57.90x48.00 -> 57.90x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=64.76x48.00 long=129.90x48.00
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      open/close: ["events:open","events:close","events:open"]
+
+
+    console.log
+      disable-while-open: ["disable:open","disable:close"]
+
+
+    console.log
+      wide list: trigger 174 px, popup 380 px (144.8 dp), floor list 316 px, start 21 vs 0, trigger box 66.29x48.00
+
+
+    console.log
+      long header: popup 735 px (280.0 dp, cap 280 dp)
+
+
+    console.log
+      short list: popup 316 px = 120.4 dp (floor 112), trigger 152 px
+
+
+    console.log
+      untitled group: android drawn=(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)
+
+
+    console.log
+      drop-while-open: live 0 -> 1 -> 0
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: android drawn=(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)
+
+
+    console.log
+      e2 in place: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      e2 remount: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      hosted anchoring: gap=16 -> 0 px at anchor bottom 126 -> 441
+
+
+    console.log
+      hosted anchor move: anchor top 126 -> 147 px, window taken down
+
+
+    console.log
+      read back: variant=outlined size=large tint=-3655765 label=Open the actions
+
+
+    console.log
+      a11y tree: named=null fallback=null plain=null
+
+  ● Menu · G7a › lays each configuration out at the size the control measured
+
+    expected true to be false // Object.is equality
+
+      [0m [90m 783 |[39m       [90m// surviving means the correction never beat the first frame (X4 rule 1).[39m
+       [90m 784 |[39m       expect(sameSize(box[33m,[39m [33mWRONG_SIZE[39m))[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 785 |[39m       expect(sameSize(box[33m,[39m [33mDECLARED_FALLBACK[39m))[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m     |[39m                                                    [31m[1m^[22m[39m
+       [90m 786 |[39m       lines[33m.[39mpush([32m`${testId}=${describeSize(box)}`[39m)[33m;[39m
+       [90m 787 |[39m     }
+       [90m 788 |[39m     [36mawait[39m settle([35m300[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 42 passed, 43 total
+Snapshots:   0 total
+Time:        80.359 s
+Ran all test suites matching Menu.
+gate: harness:android:Menu FAIL in 81.6 s
+gate: recorded in .gates/task/E1-merge.jsonl
+
+
+gate: appended the device context to task/E1-merge/harness+android+Menu-2026-11-06T05-54-01.446Z.log (5 probe(s))
+
+```

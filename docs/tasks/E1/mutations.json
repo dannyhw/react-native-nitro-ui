@@ -1,6 +1,6 @@
 {
   "task": "E1",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file`). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The two rows added in fix round 1 follow the same convention against the fix round's own tree, and ran on lease `E1-7ojmj` (the same pair-a devices) on 2026-11-06. The rows added in fix round 2 ran on lease `E1-fei60` (the same pair-a devices) on 2026-11-06, and the connected-corner row was re-run there because round 1 wrote its `after` against a local `resting` val that round 2's file no longer has — see its note. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file`). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The two rows added in fix round 1 follow the same convention against the fix round's own tree, and ran on lease `E1-7ojmj` (the same pair-a devices) on 2026-11-06. The rows added in fix round 2 ran on lease `E1-fei60` (the same pair-a devices) on 2026-11-06, and the connected-corner row was re-run there because round 1 wrote its `after` against a local `resting` val that round 2's file no longer has — see its note. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move. The merge round added two rows on lease `E1-jnmeq`, pair-a, on 2026-11-06: the first is the guard that keeps the Menu fallback re-measured here honest, the second is not a guard proof at all but the harvest that read the merged tree’s numbers, and its `mutation` says so.",
   "mutations": [
     {
       "test": "example/__tests__/Button.harness.tsx · shape · the corner (E1) · reaches the control",
@@ -153,6 +153,29 @@
         "segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)"
       ],
       "note": "Written twice. Fix round 1 applied it as a hoisted `val resting = buttonShapes(ButtonShape.Round, ButtonScale.Medium).shape` in `Component` and passed `resting`; that val is gone from today's file, so the row now says what round 2 actually ran — `group.lone.shape`, which is exactly that stadium (`loneSegmentShapes()` builds it from `buttonShapes(Round, Medium)`) reached without adding anything. Reproduce it by putting `(group.lone.shape)` on the three calls and nothing else. Green, the same two pixels read the segment's own 1 dp border — rgb(93,95,103) against rgb(255,255,255) from the same segment's transparent interior — and the note prints both. This probe is the line that guards the corners: pills 2 dp apart and a connected group have the same boxes, the same 2 dp gap and the same three nodes per segment, so every other line in the block passes for both. The tree's gap between two items is 0 px (the 2 dp is Compose padding the item node does not carry), which is why the page reference is sampled inside segment 1 rather than in the gap."
+    },
+    {
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a · lays each configuration out at the size the control measured",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "mutation": "the merge round's new declared fallback is planted as a *measured* box - 76.57 x 48.00, the `filled` `Variant` trigger it must never equal - and `Menu.harness.tsx`'s `DECLARED_FALLBACK` mirror moves to the same pair, which is the collision X4's rule 1 exists to refuse",
+      "before": "    private const val FALLBACK_WIDTH_DP = 75.1\n    private const val FALLBACK_HEIGHT_DP = 52.0",
+      "after": "    private const val FALLBACK_WIDTH_DP = 76.57\n    private const val FALLBACK_HEIGHT_DP = 48.0",
+      "run": "harness:android:Menu — FAIL, 1 of 43 (`05-54-01Z`); filtered, so it satisfies nothing",
+      "redTests": [
+        "expected true to be false // Object.is equality (Menu.harness.tsx:785 - `expect(sameSize(box, DECLARED_FALLBACK)).toBe(false)`)"
+      ]
+    },
+    {
+      "test": "example/__tests__/Menu.harness.tsx · Menu · G7a · lays each configuration out at the size the control measured",
+      "file": "example/__tests__/Menu.harness.tsx",
+      "mutation": "not a guard proof - a harvest. A green harness run's console output never reaches the gate log - only a failed suite's `● Console` block does - so the `menu sizes ...` line that this table was rewritten from had to be read out of a deliberate red: the corrections floor *after* that console.log is raised to 1000 so the suite fails having printed. Reverted before anything else ran; the numbers it printed are in `docs/components/menu.md`.",
+      "before": "    expect(cold.corrections).toBeGreaterThanOrEqual(\n      VARIANTS.length + TRIGGER_SIZES.length\n    );",
+      "after": "    expect(cold.corrections).toBeGreaterThanOrEqual(\n      1000\n    );",
+      "run": "harness:android:Menu — FAIL, 1 of 43 (`05-46-06Z`). The same gate's fail one minute earlier (`05-45-40Z`) is this edit refused before it ran - the uncommitted test file moved the code tree and the stamped app no longer matched - not a second red.",
+      "redTests": [
+        "expected 7 to be greater than or equal to 1000 (Menu.harness.tsx:799)",
+        "console.log: `menu sizes (declared fallback 118.00x52.00): cfg-filled=76.57x48.00 cfg-tonal=76.57x48.00 cfg-outlined=76.57x48.00 cfg-text=68.95x48.00 cfg-elevated=76.57x48.00 cfg-size-small=58.67x48.00 cfg-size-large=88.76x56.00 corrections=7 measurements=14`"
+      ]
     }
   ]
 }
