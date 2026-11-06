@@ -1731,7 +1731,7 @@ describe('Progress', () => {
         .map(
           ([name, box]) =>
             `${name} ${box.width}x${box.height}px ink=${box.inkCount} ` +
-            `opaque=${box.opaqueCount} top=0x${(box.topColor >>> 0)
+            `opaque=${box.opaqueCount} top=0x${box.topColor
               .toString(16)
               .padStart(8, '0')}x${box.topColorCount}`
         )
