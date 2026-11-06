@@ -247,10 +247,16 @@ class MenuModelTest {
 
     model.reset()
 
+    // The next owner's first layout pass, which is the only thing that makes "the boxes
+    // were cleared" observable at all: an unread half is `-1` either way, so without this
+    // the assertion would pass on a `reset` that kept the previous owner's geometry and
+    // only stopped summing it. With it, a kept box reads back as a real rect.
+    model.noteCompositionOrigin(20, 40)
+
     val report = model.readMenuReport()
     assertFalse("the recycled control is not a split button", report.contains(";split=1;"))
-    assertTrue(report.contains(";leading=-1,-1,-1,-1;"))
-    assertTrue(report.endsWith(";trailing=-1,-1,-1,-1"))
+    assertTrue("the previous owner's halves are gone: " + report, report.contains(";leading=-1,-1,-1,-1;"))
+    assertTrue("the previous owner's halves are gone: " + report, report.endsWith(";trailing=-1,-1,-1,-1"))
   }
 
   @Test
