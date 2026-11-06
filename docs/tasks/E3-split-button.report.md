@@ -105,6 +105,9 @@ mutation expected to go red that did not, and the claim it then forced.
 - `Menu.harness.tsx` "is two halves…" (the leading half) -> all four variant branches get `onClick = { model.setOpen(true) }` -> `"the action half" reported 0 of 1 expected events within 8000ms` (tree `c5113ff8e40b`)
 - organic: the trailing-half press the test was missing -> `harness:android` 1 of 498 red: `"split" never matched; last read "expanded":false,"split":true,"trailing":[202,0,328,126]` — nothing had asked for the open (tree `d1e7262c1780`)
 - organic: both iOS branches written in Android's shape -> `harness:ios` 2 of 449 red: `expected ['split:action'] to deeply equal []` and `expected null to be false` — a SwiftUI `Menu(primaryAction:)` does take the harness's synthesised tap (tree `d1e7262c1780`)
+- **organic**: the split step looked both halves up by name -> the example's Menu screen holds two split triggers, so the library's name for a trailing half belongs to both, and document order answered with the *other* control -> `✗ the list half is one node too, named for the options it opens — expected 1, saw 2`, `✗ the two halves sit side by side without overlapping`, and `✗ one press of the list half is one open and one close — expected action > open > close, saw action` in the **full** `real-input:android` run (tree `0ed4937d8240`); pairing the halves by their shared vertical band makes every one of them green (tree `37f052865161`)
+- **organic**: the split pick's expectation stopped at the select -> `close` lands in the same frame -> `a pick from the split list to reach JS: tap 1/3 on menu row "Bravo" left "… > select bravo > close" - tapping again`; the expectation now includes the close the pick causes
+
 - `scripts/real-input/android.mjs` `CHECKS.menu` step 7 -> `MENU_MORE_OPTIONS_LABEL = "Show the list"` -> `✗ the list half is one node too, named for the options it opens — expected 1, saw 0`, while the action half was still found (tree `a5acf666717b`)
 
 ## Files changed
@@ -134,6 +137,13 @@ mutation expected to go red that did not, and the claim it then forced.
   table is keyed per component and has no per-prop axis; giving it one is a suite change.
 - real-input iOS: no on-device case for "long press opens the menu", iOS's half of D29 — the
   suites have no long-press primitive; the harness covers the action tap.
+- `scripts/real-input/android.mjs`: `tapOptionUntilValue` matches the echoed value
+  exactly, so a fixture whose echo carries *every* event has to expect the whole history
+  including the trailing `close`; E2 tripped on the same trap. A prefix comparison in the
+  helper would remove it, and that is a shared-runner change.
+- Shared conformance: `recycle: Menu` proves little for Menu (Q9's round-2 follow-up).
+  E3's reset proof is `aRecycleClearsTheSplitTriggerAndItsHalves` plus the harness's
+  "starts a new mount..." case, neither of which goes through that case.
 - Native style: no ktlint/ktfmt yet (`docs/research/setup-decisions.md`), so nothing catches a
   too-long Kotlin line; the two in `MenuSplitButton.kt` were found by hand and wrapped here.
 - Docs: a Menu screenshot pair showing the split trigger would be nice, and the `SplitTrigger`
@@ -150,6 +160,11 @@ mutation expected to go red that did not, and the claim it then forced.
   killed run cost one re-run of `check`; it is not why that gate was red — `manifest:check`
   failed deterministically on every tree since the new source landed, because it was not yet
   in `etc/package-files.txt`.
+- **A full-suite run caught what a filtered one could not.** The single-control
+  `real-input:android:--control:menu` run passed while the split step was wrong, because
+  the second split trigger is only in the dump once the screen has been scrolled to it.
+  The filtered runs sit in the ledger under their own names and satisfy nothing, which is
+  what that rule is for.
 - **Ledger noise**, left in place rather than edited out: `harness:android:Menu:--background`
   (my argument-order error, 0.6 s), one killed duplicate `harness:android:Menu` that recorded 0
   tests, a `real-input:android:--control:menu` refused for "no lease" before the lease env was
