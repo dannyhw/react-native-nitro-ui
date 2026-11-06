@@ -30,6 +30,10 @@ type HybridRefHandler = (view: NitroUiProgressHandle) => void;
 export interface NitroUiProgressHandle {
   /** `'linear'` or `'circular'`. */
   readonly variant: string;
+  /** `'flat'` or `'wavy'` - stored on iOS, where nothing draws it. */
+  readonly appearance: string;
+  /** Whether a `'loading'` indicator has a container. */
+  readonly contained: boolean;
   /** The fraction React sent, or `null` for an indeterminate indicator. */
   readonly value: number | null;
   /** The tint as this platform's `processColor` produces it, or `null`. */
@@ -63,6 +67,8 @@ export interface NitroUiProgressHandle {
 export interface NativeNitroUiProgressProps
   extends HybridViewProps, NitroUiIntrinsicProps {
   variant: string;
+  appearance: string;
+  contained: boolean;
   value: number | null;
   tintColor: number | null;
   trackColor: number | null;
