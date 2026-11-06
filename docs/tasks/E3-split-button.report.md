@@ -1,7 +1,10 @@
 # E3 — SplitButton: Menu's `primaryAction` on Android
 
 **Branch:** `task/E3-split-button` (from `main` at `8a8f005c`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `E3-o7x7a` (`pair-b` — `emulator-5570` / iPhone 17 simulator `3AE7EE8D…` / Metro `8293`)
+**Leases:** `E3-o7x7a` (`pair-b` — `emulator-5570` / iPhone 17 simulator `3AE7EE8D…` /
+Metro `8293`) for the real-input runs and every mutation; its TTL lapsed mid-round, so the
+two harness runs are on `E3-xiu98` (`pair-a` — `emulator-5574` / `49D5024D…` / Metro
+`8295`), which the gate itself claimed. Every device row carries its lease id.
 
 ## API
 
@@ -78,6 +81,22 @@ G2 measured that a `Button`'s gesture environment refuses it. Both are recorded 
 `docs/tasks/E3/mutations.json`, the first as the negative control that forced the wording.
 
 ## Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1774 tests / 70 suites | `37f052865161` | 2 m 43 s | start 3.5 / med 5.7 / max 10.4 |
+| `harness:ios` | **PASS** | 449 tests / 25 suites + isolated 4 tests / 2 suites | `37f052865161` (ios tree) | 10 m 49 s | start 4.8 / med 3.7 / max 6.6 |
+| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `37f052865161` (android tree) | 15 m 04 s | start 4.8 / med 2.7 / max 7.5 |
+| `real-input:ios` | **PASS** | — | `37f052865161` (ios tree) | 27 m 52 s | start 1.9 / med 5.2 / max 50.3 |
+| `real-input:android` | **PASS** | — | `37f052865161` (android tree) | 41 m 59 s | start 2.5 / med 3.0 / max 5.4 |
+| `harness:android:Menu` | stale | 1 failed of 48 tests / 2 suites | c5113ff8e40b (not this tree) | 1 m 45 s | start 3.2 / med 3.1 / max 3.4 |
+| `harness:android:Menu:--background` | stale | — | c5e18881c939 (not this tree) | 0.6 s | start 3.1 / med 3.1 / max 3.1 |
+| `harness:android:Slider` | **PASS** | 24 tests / 1 suites | `37f052865161` (android tree) | 20.5 s | start 3.8 / med 5.2 / max 5.4 |
+| `real-input:android:--control:menu` | **PASS** | — | `37f052865161` (android tree) | 9 m 44 s | start 3.2 / med 2.8 / max 4.9 |
+
+`need --for review`: `need: review is satisfied on this code tree.` (exit 0;
+`check` green, `harness:ios` green on the ios tree, `harness:android` green on the android
+tree, and both `real-input:*` green on their own halves.)
 
 
 ## Red proofs
@@ -171,6 +190,19 @@ mutation expected to go red that did not, and the claim it then forced.
   the second split trigger is only in the dump once the screen has been scrolled to it.
   The filtered runs sit in the ledger under their own names and satisfy nothing, which is
   what that rule is for.
+- **Two gates went red once, on unchanged code, and went green on the re-run.**
+  `harness:android` at 12:18 failed one test outside E3 — `Slider › steps to the next
+  legal value when a screen reader asks`, `expected [ 3, 6, 3 ] to deeply equal
+  [ 3, 6, 9 ]` — with `Menu.harness.tsx` green at 26 of 26; a filtered
+  `harness:android:Slider` run straight after it was 24 of 24, and the full re-run is the
+  green row above. That test is recorded as a load-bound flake in
+  `docs/tasks/X4-conformance.rereview2.md`, `docs/tasks/G3-progress.report.md` and the logs
+  under `docs/tasks/G10-component-followups/failures/` and `docs/tasks/G15/failures/`; the
+  red row here carries a load1 median of 2.85, so the machine was not overloaded and no
+  cause was found — E3 touches no Slider code. `check` at 12:49 failed
+  `scripts/__tests__/ci-workflows.test.js › the preflight does not wait forever for
+  -accel-check` with `asked: false, elapsedMs: 2123`: the preflight never reached its first
+  poll. Both reds are superseded by the green rows above, on the same code tree.
 - **Ledger noise**, left in place rather than edited out: `harness:android:Menu:--background`
   (my argument-order error, 0.6 s), one killed duplicate `harness:android:Menu` that recorded 0
   tests, a `real-input:android:--control:menu` refused for "no lease" before the lease env was
