@@ -104,9 +104,7 @@ describe('Button · sizing key', () => {
         testID="second"
       />
     );
-    expect(keyOf(backslashInIcon, 'first')).toBe(
-      'filled|medium|a\\\\||b\\|c'
-    );
+    expect(keyOf(backslashInIcon, 'first')).toBe('filled|medium|a\\\\||b\\|c');
     expect(keyOf(backslashInIcon, 'first')).not.toBe(
       keyOf(forgedIcon, 'second')
     );

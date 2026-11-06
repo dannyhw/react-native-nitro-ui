@@ -72,7 +72,9 @@ describe('androidIcon name rules', () => {
       warnAndroidIconName('Button', 'androidIcon', 'Share Icon');
       warnAndroidIconName('Button', 'androidIcon', 'Share Icon');
       expect(warn).toHaveBeenCalledTimes(1);
-      expect(warn.mock.calls[0][0]).toMatch(/is not a valid Android resource name/);
+      expect(warn.mock.calls[0][0]).toMatch(
+        /is not a valid Android resource name/
+      );
       warnAndroidIconName('Button', 'androidIcon', 'share');
       expect(warn).toHaveBeenCalledTimes(1);
     } finally {
@@ -110,14 +112,47 @@ describe('Button · androidIcon', () => {
     );
   });
 
-  it('does not let a pipe in the drawable name forge the title field', async () => {
-    // The same collision the icon field already guards against, one field over.
-    const a = await render(
-      <Button title="b" androidIcon="x|a" testID="first" />
+  it('escapes a pipe in the drawable name, spelled out', async () => {
+    // Pinned as the literal key rather than as "these two keys differ". A
+    // collision needs two *unescaped* fields to forge each other, and `title` is
+    // escaped on its own, so dropping the escape on `androidIcon` alone would
+    // still leave every pair of Buttons distinguishable - a test built as a
+    // collision check therefore stays green over the very bug it is meant to
+    // catch. The string is what says the field was escaped before it was joined.
+    const view = await render(
+      <Button title="c" androidIcon={'a|b'} testID="first" />
     );
-    const b = await render(<Button title="a|b" androidIcon="x" testID="second" />);
-    expect(nativeProps(a, 'first').nuiSizingKey).not.toBe(
-      nativeProps(b, 'second').nuiSizingKey
+    expect(nativeProps(view, 'first').nuiSizingKey).toBe(
+      'filled|medium||a\\|b|c'
     );
+  });
+
+  it('warns in development about a name the app can never ship', async () => {
+    // The call site, not the function: a rule nobody calls is a rule that does
+    // not exist, and this is the line a developer actually sees.
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await render(
+        <Button title="Share" androidIcon="Share Icon" testID="c" />
+      );
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(
+        /is not a valid Android resource name/
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('says nothing about a name that is merely unusual', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await render(
+        <Button title="Share" androidIcon="Share-24px" testID="d" />
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
