@@ -2939,6 +2939,38 @@ export function deviceFromEnv(env, platform = null) {
 }
 
 /**
+ * Why this gate must not run on the lease in `env`, or `null` (X20 item 3).
+ *
+ * A lease taken with `lease.mjs acquire --ios-runtime 26.5` hands out a simulator on one of the
+ * machine's *other* iOS runtimes, for a screenshot or a probe (D42 item 1). It exports
+ * `NITRO_UI_LEASE_IOS_RUNTIME`, and that is what is read here: such a simulator never runs a gate
+ * that drives a device - the harness, real-input, a smoke install or a bench - because those are
+ * the merge evidence, and the merge bar is measured on the default pairs' runtime. A row recorded
+ * on iOS 26.5 would satisfy `need` for a tree nobody tested where the bar says. `check` and
+ * `smoke:pack` touch no device, so they still run from that shell.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {{gate: string, platform: string | null, bench?: boolean}} resolved what `resolveGate` returned
+ * @returns {string | null}
+ */
+export function lookLeaseRefusal(env, resolved) {
+  const runtime = String(env?.NITRO_UI_LEASE_IOS_RUNTIME ?? '').trim();
+  if (runtime === '') return null;
+  const gate = String(resolved?.gate ?? '');
+  if (
+    gate === 'check' ||
+    gate === 'smoke:pack' ||
+    gate.startsWith('smoke:pack:')
+  )
+    return null;
+  return (
+    `${gate} is a device gate, and ${env?.NITRO_UI_LEASE_ID ?? 'this shell'}'s lease is an ` +
+    `iOS ${runtime} look-check simulator (lease.mjs acquire --ios-runtime). The merge gates run ` +
+    'on the default pairs: release this lease and acquire one without --ios-runtime.'
+  );
+}
+
+/**
  * A gate name with any extra arguments encoded into it, so a filtered run can
  * never be recorded as the full gate.
  *

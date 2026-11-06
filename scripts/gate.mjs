@@ -77,6 +77,7 @@ import {
   gateLogStoreDir,
   isFailedRunWithLog,
   isUsageProbe,
+  lookLeaseRefusal,
   lastLogLine,
   ledgerFileName,
   ledgerLineFromRun,
@@ -1640,6 +1641,13 @@ function changedCodePaths({ base }) {
  */
 async function runGate(name, resolved, options = {}) {
   let claim = null;
+  // Before anything else, and before a ledger line: a look-check simulator's lease never runs a
+  // device gate (X20 item 3), and a refused run is no evidence of anything, so none is recorded.
+  const lookRefusal = lookLeaseRefusal(process.env, resolved);
+  if (lookRefusal != null) {
+    process.stderr.write(`gate: refused before the run - ${lookRefusal}\n`);
+    return 1;
+  }
   if (resolved.platform != null) {
     const preflight = metroPreflight();
     // A number, not `{ status }`: reading `.status` off it is `undefined`, which is
