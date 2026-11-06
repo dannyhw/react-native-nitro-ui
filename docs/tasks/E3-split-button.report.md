@@ -171,6 +171,24 @@ mutation expected to go red that did not, and the claim it then forced.
 - Tooling: a new Android source is missing from `etc/package-files.txt` until `manifest:check`
   runs, late in `check`; `bun run task-ready` deliberately runs no gates, so nothing is earlier.
 
+From the E3 review (fix round 1) — filed, not fixed:
+
+- Review: `readMenuReport` says the halves exist but carries no `expanded`, so a witness run
+  cannot tell "the list is up over a split trigger" from "it is down"; the a11y dump does not
+  say either.
+- Review: `MENU_MORE_OPTIONS_LABEL` is hard-coded English — the trailing half has no string
+  resource and no override.
+- Review: the chevron turns through `Modifier.rotate`, which redraws the icon;
+  `graphicsLayer { rotationZ }` is the cheaper form Material's own sample uses.
+- Review: only the variant → split-set mapping is guarded; nothing asserts each of the four
+  branches uses its own shapes, content padding and icon size.
+- Review: the split box is measured at `medium` only — no `small` / `large` split row in the
+  sizing table.
+- Review: nothing asserts the on → off narrowing hands back the *plain* box; the harness
+  checks the witness (`split=false`) in that direction, not the width.
+- Review: `SplitButtonShapesCache` holds one (motion scheme, scale) pair, so a screen that
+  alternates two rungs recomputes both shapes every time.
+
 ## Notes for the reviewer
 
 - **Hygiene incident, self-reported.** Twice this round I used `pkill -P` / `pgrep -P | kill`
