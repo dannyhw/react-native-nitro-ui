@@ -313,8 +313,12 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
         putDouble("inkHeight", if (maxY >= 0) (maxY - minY + 1).toDouble() else -1.0)
         putDouble("attempts", attempts.toDouble())
         putDouble("opaqueCount", opaqueCount.toDouble())
-        // Unsigned, because JS sees an ARGB as the number processColor gave it.
-        putDouble("topColor", (topColor?.key ?: 0).toLong().toDouble())
+        // Unsigned, and widened: JS sees an ARGB as the number `processColor` gave
+        // it, and a negative one here would have to be fixed up with a bit op.
+        putDouble(
+          "topColor",
+          ((topColor?.key ?: 0).toLong() and 0xFFFFFFFFL).toDouble()
+        )
         putDouble("topColorCount", (topColor?.value ?: 0).toDouble())
       }
     )
