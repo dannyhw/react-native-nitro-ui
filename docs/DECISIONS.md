@@ -537,3 +537,23 @@ G18's review accepted both of Tooltip's departures from Q7's design:
    outside closes it first, so following only matters for moves nobody touched for, such as the keyboard or data
    loading.
 
+
+## D42 — ButtonGroup, IconButton and `androidIcon`; config plugins are allowed (2026-11-06)
+
+Q9 (`docs/tasks/Q9-buttongroup-iconbutton-design.report.md`) designed ButtonGroup, IconButton and the `androidIcon`
+prop, and ran the iOS `ControlGroup` check: a connected row in plain content on iOS 27.0, which ignores
+`variant`/`size`/`tint`, shows no on state for toggles and has no overflow of its own. The orchestrator adopted its
+designs and build order (G19 `androidIcon` + IconButton, then G20 ButtonGroup and G21 `androidIcon` on Menu rows,
+SplitButton and Chip). The owner decided C and D.
+
+1. **iOS versions (question A):** the device pool gets simulators on the other installed runtimes (26.5 and 27.1)
+   for look checks (X20), and G20 re-runs the ControlGroup probe on them before building. The docs say which
+   versions were checked.
+2. **Toggles in a connected iOS group (question B):** fall back to a row of bordered toggles, documented.
+3. **Config plugins (owner, question C; clarifies PLAN principle 3):** an Expo config plugin is fine and expected
+   where it makes the library better. What the owner rules out is a lot of manual setup: installing stays `npm i` +
+   pod install / prebuild, and a bare React Native app may need a few small, documented steps but not many manual code
+   changes. `androidIcon` ships with a config plugin that copies the app's vector drawables into `res/drawable/` at
+   prebuild (and keeps them from resource shrinking); bare apps copy the files themselves.
+4. **Size names (owner, question D):** the shared size ladder gains `xlarge` and `xxlarge`, used by Button and
+   IconButton (Material's XS–XL map onto small…xxlarge).
