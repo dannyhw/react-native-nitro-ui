@@ -143,7 +143,10 @@ same on both without a `Platform.select`.
    read as `_`, so `share-24px` finds `share_24px.xml` — but `aapt` will not
    accept a file named with either, so the file has to be renamed anyway.
 4. The icon is tinted to the control's text colour and sized by the control, so
-   any 24 dp vector works. A multicolour drawable draws in one colour.
+   any 24 dp vector works. It is the colour the label itself paints with, so the
+   glyph fades with the label when the control is disabled and follows
+   `tintColor` when it is not. A multicolour drawable draws in one colour
+   (`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt`).
 
 **Expo (prebuild / CNG):** put the files in a folder of their own — say
 `assets/android-icons/` — and name the plugin in `app.json`:
@@ -170,7 +173,10 @@ entries you added by hand for something else survive.
 
 **A name that is not found draws no icon and leaves the Button exactly as if
 `androidIcon` were not set** — no slot is reserved and no padding changes, the
-same way iOS treats an SF Symbol name that does not exist. One warning is logged
+same way iOS treats an SF Symbol name that does not exist (measured: on iOS all
+five configurations — no icon, a shipped name, a 32 × 12 slab, an unresolvable
+name, a name that resolves to something with no intrinsic size — land on the
+identical 68.00 × 34.33 pt box, because iOS draws none of them). One warning is logged
 per name (`adb logcat -s NitroUi`), and a name that could never be a resource
 name (`Share Icon`, `24px`, an empty string) is reported from JavaScript in
 development, where you can still fix it.
@@ -245,11 +251,27 @@ is this ladder under other names:
 | `size`   | `small` | `medium` | `large` | `xlarge` | `xxlarge` |
 
 iOS has four usable `.controlSize` values against those five rungs, so the top two
-share one: `xlarge` and `xxlarge` both draw `.extraLarge` (iOS 17+) and `.large`
-before it. On an iOS version without `.extraLarge` the top three rungs are the
-same control, and only Android distinguishes all five. The boxes for the two new
-rungs are not in the table above, which was measured before they existed; the
-token heights are asserted in `android/src/test/.../NitroUiIconTest.kt`.
+ask for one: `xlarge` and `xxlarge` both draw `.extraLarge` (iOS 17+) and `.large`
+before it. Measured, they draw that box alongside `large` as well — on iOS 27
+`.large` and `.extraLarge` are the same size for these styles — so iOS gives three
+heights to five rungs and Android gives five.
+
+Measured with `title="Rung"` and nothing else overridden (the API 35 emulator at
+420 dpi in dp, the iPhone Air on iOS 27 in pt):
+
+| `size`  |       Android |           iOS |
+| ------- | ------------- | ------------- |
+| small   | 57.90 × 48.00 | 55.67 × 28.00 |
+| medium  | 64.38 × 48.00 | 63.67 × 34.33 |
+| large   | 85.71 × 56.00 | 79.67 × 50.33 |
+| xlarge  |  150.86 × 96.00 | 79.67 × 50.33 |
+| xxlarge | 200.76 × 136.00 | 79.67 × 50.33 |
+
+The Android heights are the ladder itself — 48 / 48 / 56 / 96 / 136 — and the last
+two can only come from the two new container tokens.
+`example/__tests__/Button.harness.tsx` ("the top of the ladder") asserts the
+ordering, the touch-target floor under every rung, and that the top rungs collapse
+on iOS without doing it on Android.
 
 Width is the title's, so the same control at the same size is a different width
 per label — measured at iOS M 61.0 / 76.7 / 92.7 and Android M 62.5 / 75.1 /
