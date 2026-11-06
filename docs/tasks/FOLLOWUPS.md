@@ -197,3 +197,6 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E3 review: the split chevron's `Modifier.rotate` recomposes each frame; use `graphicsLayer { rotationZ }`.
 - E3 review: variant to trailing-button branches are unguarded (only `MenuSplitVariant.of` is tested); small/large split boxes are unmeasured; the on-to-off narrowing isn't asserted.
 - E3 review: `SplitButtonShapesCache` holds one entry, so Menus at mixed sizes rebuild shapes each recomposition.
+- X20 review: the text guard against other `AbortedCheck` catches is easy to dodge (`catch {}`, `e.name`, subdirectories); `runCheck` is the real protection.
+- X20 review: a default lease's env file never unsets `NITRO_UI_LEASE_IOS_RUNTIME`; `gate.mjs --background` under a look-check lease detaches before refusing; `portWait` spans both kinds of pair.
+- Gate ledgers commit simulator UDIDs in their `device` field (about 50 on main). Decide whether D25's scrub should cover them.
