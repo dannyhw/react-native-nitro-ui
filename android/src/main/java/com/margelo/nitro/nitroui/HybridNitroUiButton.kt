@@ -12,6 +12,7 @@ import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedButton
@@ -714,11 +715,20 @@ internal fun NitroUiM3Button(
     // It carries no content description: the Button's own node already names the
     // control (`docs/architecture/core.md` §3), and a description here would make
     // TalkBack read "Share, Share".
+    //
+    // The tint is `LocalContentColor`, read here inside the control's content, and
+    // not [buttonColors]' `contentColor`: the label below sets no colour of its
+    // own, so that local *is* the colour the label paints with, including the
+    // disabled state Material dims through it. `colors.contentColor` is the
+    // resting colour and ignores `enabled` - a glyph tinted with it keeps its full
+    // strength while the label fades, which the harness's disabled probe catches
+    // (`example/__tests__/Button.harness.tsx`, "draws the glyph in the control
+    // content colour").
     if (painter != null) {
       NitroUiIconGlyph(
         painter = painter,
         size = iconSize,
-        tint = colors.contentColor,
+        tint = LocalContentColor.current,
         contentDescription = null,
         modifier = Modifier.padding(end = iconSpacing),
       )
