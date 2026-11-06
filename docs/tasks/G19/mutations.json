@@ -1,0 +1,287 @@
+{
+  "task": "G19",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it, so `before` is findable verbatim in `file`). The 16 Jest and JVM rows were run on 2026-11-06 on this checkout at code tree cb51a5a30283, in the gap between the two real-input gates, and each file was restored by the driver (`git status` clean afterwards). Rows marked `organic` are not mutations: they are the test going red against the real bug before the fix landed. The `harness:android:Button` / `harness:ios:Button` runs are filtered, so they satisfy nothing but their own name, and each was made against an app rebuilt for that mutation (`node scripts/build-app.mjs --platform android`). The last row is not a proof either: it is a mutation the suite does NOT catch, recorded so the coverage hole is data rather than an omission.",
+  "mutations": [
+    {
+      "test": "src/__tests__/iconName.test.tsx",
+      "file": "src/iconName.ts",
+      "mutation": "the name is lower-cased but never renamed the way aapt forces a file to be renamed",
+      "before": "  return name.toLowerCase().replace(/[-.]/g, '_');",
+      "after": "  return name.toLowerCase();",
+      "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 4 of 10",
+      "redTests": [
+        "androidIcon name rules › reads a name the way the file had to be renamed to build: Expected: \"share_24px\" / Received: \"share-24px\"",
+        "androidIcon name rules › accepts every name a resource table could hold",
+        "Button · androidIcon › sends the normalised name, not the one that was typed",
+        "Button · androidIcon › says nothing about a name that is merely unusual"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconName.test.tsx",
+      "file": "src/iconName.ts",
+      "mutation": "the name rule stops saying why a string can never be a resource name",
+      "before": "  if (!NORMALIZED_NAME.test(normalized)) {",
+      "after": "  if (false) {",
+      "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 3 of 10",
+      "redTests": [
+        "androidIcon name rules › names the reason a name can never resolve: Received has value: null",
+        "androidIcon name rules › warns once per bad name, and never about a good one",
+        "Button · androidIcon › warns in development about a name the app can never ship"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconName.test.tsx",
+      "file": "src/iconName.ts",
+      "mutation": "the once-per-name guard is dropped, so a bad name is repeated on every render",
+      "before": "  if (warnedNames.has(key)) {",
+      "after": "  if (false) {",
+      "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
+      "redTests": [
+        "androidIcon name rules › warns once per bad name, and never about a good one: Expected number of calls: 1 / Received number of calls: 3"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconName.test.tsx",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "the JS rule exists but Button never calls it",
+      "before": "    warnAndroidIconName('Button', 'androidIcon', androidIcon);",
+      "after": "    /* mutated: the call site is gone */",
+      "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
+      "redTests": [
+        "Button · androidIcon › warns in development about a name the app can never ship: Expected number of calls: 1 / Received number of calls: 0"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconName.test.tsx",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "the androidIcon field is joined unescaped",
+      "before": "    escapeField(androidIcon ?? ''),",
+      "after": "    androidIcon ?? '',",
+      "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
+      "redTests": [
+        "Button · androidIcon › escapes a pipe in the drawable name, spelled out: Expected: \"filled|medium||a\\\\|b|c\" / Received: \"filled|medium||a|b|c\""
+      ]
+    },
+    {
+      "test": "src/__tests__/buttonSizingKey.test.tsx",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "androidIcon is dropped from the sizing key, so two Buttons that differ only by an icon share one cached size",
+      "before": "    escapeField(systemImage ?? ''),\n    escapeField(androidIcon ?? ''),",
+      "after": "    escapeField(systemImage ?? ''),",
+      "run": "npx jest src/__tests__/buttonSizingKey.test.tsx src/__tests__/iconName.test.tsx - FAIL, 5 of 14",
+      "redTests": [
+        "Button · androidIcon › is part of the size configuration, because a glyph makes the control wider: Expected: not \"filled|medium||Share\"",
+        "Button · sizing key › is the variant, the scale, both icon fields and the title: Expected: \"tonal|small|square.and.arrow.down||Save\" / Received: \"tonal|small|square.and.arrow.down|Save\"",
+        "Button · sizing key › separates a pipe in the icon from a pipe in the title",
+        "Button · sizing key › escapes a backslash too, so the escape cannot be forged"
+      ],
+      "note": "the same mutation on the device, where it is a wrong size rather than a wrong string, is the dev-sizing-key row below"
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "the Kotlin normaliser loses the hyphen substitution its JS twin keeps",
+      "before": "  fun normalize(name: String): String = name.lowercase().replace('-', '_').replace('.', '_')",
+      "after": "  fun normalize(name: String): String = name.lowercase().replace('.', '_')",
+      "run": "bash scripts/native-tests-android.sh --tests \"*NitroUiIconTest*\" - FAIL, 2 tests",
+      "redTests": [
+        "NitroUiIconTest > aNameIsNormalisedTheWayAFileHasToBeRenamedToBuild FAILED - java.lang.AssertionError at NitroUiIconTest.kt:57",
+        "NitroUiIconTest > aNameThatCannotBeAResourceNameIsSaidSo FAILED"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "every non-empty string is allowed to be a resource name",
+      "before": "  fun isValid(name: String): Boolean = RESOURCE_NAME.matches(normalize(name))",
+      "after": "  fun isValid(name: String): Boolean = name.isNotEmpty()",
+      "run": "bash scripts/native-tests-android.sh --tests \"*NitroUiIconTest*\" - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconTest > aNameThatCannotBeAResourceNameIsSaidSo FAILED - java.lang.AssertionError at NitroUiIconTest.kt:60"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "the once-per-name warning fires on every lookup instead of once",
+      "before": "  fun shouldWarn(name: String): Boolean = warned.add(name)",
+      "after": "  fun shouldWarn(name: String): Boolean {\n    warned.add(name)\n    return true\n  }",
+      "run": "bash scripts/native-tests-android.sh --tests \"*NitroUiIconTest*\" - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconTest > aBadNameIsReportedOnceHoweverManyTimesItIsSent FAILED - java.lang.AssertionError at NitroUiIconTest.kt:70"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "the cache stops evicting the least recently used entry (insertion-ordered LinkedHashMap)",
+      "before": "  private val entries = LinkedHashMap<Int, Value>(16, 0.75f, true)",
+      "after": "  private val entries = LinkedHashMap<Int, Value>(16, 0.75f, false)",
+      "run": "bash scripts/native-tests-android.sh --tests \"*NitroUiIconTest*\" - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconTest > theStoreStopsGrowingAtItsBoundAndDropsTheLeastRecentlyUsedFirst FAILED - java.lang.AssertionError at NitroUiIconTest.kt:113"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "recycling forgets to clear androidIcon, so a reused view keeps the previous control's glyph",
+      "before": "    systemImage = null\n    androidIcon = null",
+      "after": "    systemImage = null",
+      "run": "bash scripts/native-tests-android.sh --tests \"*ButtonModelTest*\" - FAIL, 1 test",
+      "redTests": [
+        "ButtonModelTest > aRecycledModelForgetsTheCornerAndEverythingElseSentWithIt FAILED - java.lang.AssertionError at ButtonModelTest.kt:57"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "xlarge is given the rung below it (Material's MediumContainerHeight)",
+      "before": "        XLarge -> ButtonDefaults.LargeContainerHeight",
+      "after": "        XLarge -> ButtonDefaults.MediumContainerHeight",
+      "run": "bash scripts/native-tests-android.sh --tests \"*NitroUiIconTest*\" - FAIL, 2 tests",
+      "redTests": [
+        "NitroUiIconTest > everyRungIsTallerThanTheOneBelowIt FAILED - java.lang.AssertionError: xlarge must be taller than large",
+        "NitroUiIconTest > theTwoNewRungsAreMaterialsLargeAndExtraLargeContainerHeights FAILED"
+      ]
+    },
+    {
+      "test": "plugin/__tests__/plugin.test.js",
+      "file": "plugin/index.js",
+      "mutation": "the plugin reads the folder and reports it, but never copies the drawable",
+      "before": "    fs.copyFileSync(sourceFile, path.join(drawableDir, entry));",
+      "after": "    void sourceFile;",
+      "run": "npx jest plugin/ - FAIL, 2 of 10",
+      "redTests": [
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file (the copied-file list is empty)",
+        "react-native-nitro-ui/plugin › leaves out what aapt would reject, and says why"
+      ]
+    },
+    {
+      "test": "plugin/__tests__/plugin.test.js",
+      "file": "plugin/index.js",
+      "mutation": "the aapt name guard is removed, so a file the build would reject is copied anyway",
+      "before": "    if (!RESOURCE_NAME.test(name)) {",
+      "after": "    if (false) {",
+      "run": "npx jest plugin/ - FAIL, 3 of 10",
+      "redTests": [
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file",
+        "react-native-nitro-ui/plugin › leaves out what aapt would reject, and says why: Not_A_Valid_Name.xml is copied and named",
+        "react-native-nitro-ui/plugin › adds the tools namespace to a keep file that has none"
+      ]
+    },
+    {
+      "test": "plugin/__tests__/plugin.test.js",
+      "file": "plugin/index.js",
+      "mutation": "the shrinker keep file is never written",
+      "before": "    result.keepPath = writeKeepFile(resDir, result.copied);",
+      "after": "    result.keepPath = null;",
+      "run": "npx jest plugin/ - FAIL, 5 of 10",
+      "redTests": [
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file",
+        "react-native-nitro-ui/plugin › is a no-op the second time prebuild runs it",
+        "react-native-nitro-ui/plugin › keeps the app’s own keep rules when it merges: Expected substring: \"@drawable/share\" against a keep file that was never written",
+        "react-native-nitro-ui/plugin › adds the tools namespace to a keep file that has none",
+        "react-native-nitro-ui/plugin › refuses to overwrite a keep file it cannot read"
+      ]
+    },
+    {
+      "test": "plugin/__tests__/plugin.test.js",
+      "file": "plugin/index.js",
+      "mutation": "merging replaces the app's own keep rules instead of adding to them",
+      "before": "    for (const entry of `${attribute[1]},${ours.join(',')}`.split(',')) {",
+      "after": "    for (const entry of ours.join(',').split(',')) {",
+      "run": "npx jest plugin/ - FAIL, 1 of 10",
+      "redTests": [
+        "react-native-nitro-ui/plugin › keeps the app’s own keep rules when it merges: Expected substring: \"@font/brand\""
+      ]
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the glyph is never drawn, whatever loaded",
+      "before": "    if (painter != null) {",
+      "after": "    if (false && painter != null) {",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7), rebuilt app",
+      "redTests": [
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: expected 0 to be greater than 0",
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: expected 68.19047619047619 to be greater than 68.79047619047618"
+      ],
+      "note": "device row from the round; the 16 Jest and JVM rows above were re-run line for line at the end of the round"
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "a name that resolves to nothing loads a 1 x 1 transparent bitmap instead - the realistic \"it loaded, it is just empty\" bug, which reserves a slot for artwork that never arrives",
+      "before": "    }\n    return null\n  }\n  NitroUiIconCache.get(resId)?.let { return it }",
+      "after": "    }\n    return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)\n  }\n  NitroUiIconCache.get(resId)?.let { return it }",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7), rebuilt app",
+      "redTests": [
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: sameSize(boxOf('missing'), plain) - expected false to be true"
+      ],
+      "note": "device row from the round"
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "androidIcon is dropped from the JS sizing key, so the star Button is laid out at the plain Button's cached width",
+      "before": "    escapeField(systemImage ?? ''),\n    escapeField(androidIcon ?? ''),",
+      "after": "    escapeField(systemImage ?? ''),",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7)",
+      "redTests": [
+        "testID \"slot-star\" (the star Button) never reached 96.38x48.00 - last box 68.19x48.00, control measured 96.38x48.00"
+      ],
+      "note": "device row from the round; the same mutation reddens five Jest tests (the js-key row above)"
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the glyph is tinted with ButtonColors.contentColor, the resting colour, instead of the colour the label actually paints with",
+      "before": "        tint = colors.contentColor,",
+      "after": "        tint = LocalContentColor.current,",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7) against the pre-fix app",
+      "redTests": [
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: expected 641 to be +0 (the disabled probe's report was byte-identical to the enabled control's)",
+        "after the fix the same probe reads probe-icon hits=641 ... probe-disabled hits=0 mean=#7F7F7F"
+      ],
+      "organic": true,
+      "note": "not a mutation: this is the shipped bug, found by this test and fixed in 4689d0d2; the test went red against the real thing first, which is the stronger evidence"
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "Material's hasStartIcon padding is taken unconditionally, so every Button is ~8 dp too wide, icon or not",
+      "before": "    if (iconBitmap == null) {",
+      "after": "    if (false) {",
+      "run": "harness:android:Button - PASS: all 18 Button tests stayed green on emulator-5570",
+      "redTests": [
+        "no test went red - recorded as a coverage hole, not a proof"
+      ],
+      "note": "the slot assertions compare controls to each other, so a constant added to every one of them is invisible; only an absolute-box golden would catch it. The bug the assertions DO pin is the missing-name row above."
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "ios/components/Button/HybridNitroUiButton.swift",
+      "mutation": "iOS falls back to a placeholder SF Symbol when only androidIcon is sent, so the Android name reaches the screen",
+      "before": "(a branch added to the iOS content builder, not a one-line swap)",
+      "after": "(reverted before the next run)",
+      "run": "harness:ios:Button - FAIL on nitro-ui B / iPhone Air 27.0",
+      "redTests": [
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: iOS drew an Android icon: star=98.00x35.00 vs plain=68.00x34.33 - expected false to be true"
+      ],
+      "note": "device row from the round"
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "ios/components/Button/HybridNitroUiButton.swift",
+      "mutation": "the iOS pixel probe claims it sampled pixels, which it cannot do",
+      "before": "    return \"n=\\(probes) no pixels platform=ios\"",
+      "after": "    return \"n=\\(probes) sampled pixels platform=ios\"",
+      "run": "harness:ios:Button - FAIL on nitro-ui B / iPhone Air 27.0",
+      "redTests": [
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: the pixel probe for \"probe-icon\" reported a line that is neither a sample nor a refusal: n=1 sampled pixels platform=ios"
+      ],
+      "note": "this row proves the JS -> Swift -> JS wiring is live rather than the assertion reading a constant"
+    }
+  ]
+}

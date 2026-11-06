@@ -1,0 +1,88 @@
+# Failure excerpt — harness:ios:Button
+
+- Ran: 2026-11-06T19:24:16.750Z on code tree `92c648d1da04` at HEAD `4689d0d` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Button`
+- Result: fail, exit 1, 17683 ms
+- Load: start 8.07, end 7.25, median 7.25, max 8.07
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G19-8d0j7`
+- Full log: `task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log` (<store>/task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-8d0j7 (still live)
+  |   G19-8d0j7                G19          both              pair-b
+  |   E3-d03xi                 E3           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 7.25 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Button
+gate: node ../scripts/harness.mjs --harnessRunner ios Button (cwd example)
+gate: code tree 92c648d1da04 at HEAD 4689d0d2
+gate: git tree b850ea0ff696 with a DIRTY worktree (not reusable)
+gate: log task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log
+gate:       <store>/task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Button
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 92c648d1da04, 17 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.07/8.03 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Button.harness.tsx
+  ● androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it
+
+    the pixel probe for "probe-icon" (probe-icon) reported a line that is neither a sample nor a refusal: n=1 sampled pixels platform=ios
+
+      [0m [90m 306 |[39m     [33m![39m[35m/no pixels/[39m[33m.[39mtest(report)
+       [90m 307 |[39m   ) {
+      [31m[1m>[22m[39m[90m 308 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 309 |[39m       [32m`the pixel probe for "${testId}" (${what}) reported a line that is neither a `[39m [33m+[39m
+       [90m 310 |[39m         [32m`sample nor a refusal: ${report}`[39m
+       [90m 311 |[39m     )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 17 passed, 18 total
+Snapshots:   0 total
+Time:        16.15 s
+Ran all test suites matching Button.
+gate: harness:ios:Button FAIL in 17.7 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+ios+Button-2026-11-06T19-24-16.016Z.log (4 probe(s))
+
+```
