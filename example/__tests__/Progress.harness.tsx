@@ -28,7 +28,13 @@
  * catch it passes for the wrong reason. The first test carries its own mount
  * budget instead.
  */
-import { Platform, TurboModuleRegistry, View } from 'react-native';
+import {
+  PixelRatio,
+  Platform,
+  processColor,
+  TurboModuleRegistry,
+  View,
+} from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -67,6 +73,9 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
  */
 type ProgressHandle = {
   readonly variant: string;
+  /** `'flat'` or `'wavy'` - answered on iOS too, where nothing draws it. */
+  readonly appearance: string;
+  readonly contained: boolean;
   readonly value: number | null;
   readonly tintColor: number | null;
   readonly trackColor: number | null;
@@ -239,6 +248,167 @@ afterEach(() => {
   cleanup();
   handles.clear();
 });
+
+/**
+ * The size each configuration is supposed to have, in platform units.
+ *
+ * MEASURED by E4 on the same two devices the rest of this file quotes (an iPhone Air
+ * simulator on iOS 27, and the `nitroui_b` API 35 / 420 dpi emulator), from
+ * `measureContent()` and the Yoga box in the same run - the rule D17 sets for every
+ * number in this suite. Android's are Material 3's own defaults for the shape drawn:
+ * a 10 dp wavy bar (`LinearProgressIndicatorTokens.WaveHeight`), a 48 dp wavy ring and
+ * a 48 dp loading container. iOS's are *the flat control's*, because SwiftUI has
+ * neither a wavy indicator nor a loading one: `appearance` and `contained` are stored
+ * there and the box stays the 4 pt bar / 20 pt ring G3 measured.
+ */
+const LINEAR_WAVY_HEIGHT = Platform.select({
+  // MEASURED (nitroui_b, API 35, 420 dpi): 10 dp, the wave's own container height.
+  android: 10,
+  // iOS paints the flat bar whatever `appearance` says (`docs/components/progress.md`).
+  default: 4,
+})!;
+const CIRCULAR_WAVY_SIZE = Platform.select({
+  // MEASURED: Material's `CircularWavyProgressIndicator` is a 48 dp square.
+  android: 48,
+  default: 20,
+})!;
+const LOADING_SIZE = Platform.select({
+  // MEASURED: `LoadingIndicator`'s container is 48 dp (its shape is 38 dp inside it).
+  android: 48,
+  // iOS answers `loading` with the same circular `ProgressView` as `circular`.
+  default: 20,
+})!;
+
+/**
+ * One configuration of the control: the three props that decide which indicator is
+ * built, the sizing key `Progress.tsx` has to build from them, and the box the control
+ * measures.
+ *
+ * The key is written out per row, not computed - the same rule Button's suite follows:
+ * a suite that built the key through the library's own helper could not catch the
+ * helper forgetting an input, and a dropped input is exactly the bug class (every
+ * later mount of the other configuration inherits the first one's size).
+ */
+type Configuration = {
+  /** Also the `testID`, and the label in every failure message. */
+  name: string;
+  variant: 'linear' | 'circular' | 'loading';
+  appearance?: 'flat' | 'wavy';
+  contained?: boolean;
+  key: string;
+  /** `bar` is `fillWidth` (only the height is the control's); `square` is `intrinsic`. */
+  policy: 'bar' | 'square';
+  size: number;
+};
+
+const CONFIGURATIONS: ReadonlyArray<Configuration> = [
+  {
+    name: 'linear-flat',
+    variant: 'linear',
+    key: '',
+    policy: 'bar',
+    size: LINEAR_HEIGHT,
+  },
+  {
+    name: 'linear-wavy',
+    variant: 'linear',
+    appearance: 'wavy',
+    key: 'wavy',
+    policy: 'bar',
+    size: LINEAR_WAVY_HEIGHT,
+  },
+  {
+    name: 'circular-flat',
+    variant: 'circular',
+    key: 'circular',
+    policy: 'square',
+    size: CIRCULAR_SIZE,
+  },
+  {
+    name: 'circular-wavy',
+    variant: 'circular',
+    appearance: 'wavy',
+    key: 'circular|wavy',
+    policy: 'square',
+    size: CIRCULAR_WAVY_SIZE,
+  },
+  {
+    name: 'loading',
+    variant: 'loading',
+    key: 'loading',
+    policy: 'square',
+    size: LOADING_SIZE,
+  },
+  {
+    name: 'loading-contained',
+    variant: 'loading',
+    contained: true,
+    key: 'loading|contained',
+    policy: 'square',
+    size: LOADING_SIZE,
+  },
+];
+
+/**
+ * What {@link NitroUiProbe.paintedInk} answers: the control's box, and how much of it
+ * is the colour that was asked for (`-1` on either axis when nothing matched).
+ *
+ * Every number is in **whole screen pixels**, not dp: this is a readback of the
+ * compositor, and the honest unit for it is the pixel. `PixelRatio.get()` converts
+ * what an assertion needs to compare with a Yoga box; the rest stays raw, which is
+ * also what makes the fill-density assertions dimensionless.
+ *
+ * Fetched lazily, the way `MountChurn.harness.tsx` fetches the heap probe: on iOS the
+ * module does not exist and this file still has to load there.
+ */
+type Ink = {
+  width: number;
+  height: number;
+  inkCount: number;
+  inkWidth: number;
+  inkHeight: number;
+  attempts: number;
+  /** Pixels in the box that drew anything at all - a black copy reads as zero ink. */
+  opaqueCount: number;
+  /** The most frequent of those, unsigned ARGB, and how many pixels it is. */
+  topColor: number;
+  topColorCount: number;
+};
+type ProbeModule = {
+  paintedInk(testTag: string, colorArgb: number, tolerance: number): Promise<Ink>;
+};
+
+let inkProbe: ProbeModule | null = null;
+
+/**
+ * The pixels of one control's box that are `colorArgb`, within a channel tolerance.
+ *
+ * The tolerance is for antialiasing at the edges of a stroke, and it is wide rather
+ * than tight because the claim being tested is a shape's *extent and fill*, not one
+ * pixel's exact hue - while still far too narrow for the scheme's own colours to pass
+ * as the red or blue the test asked for.
+ */
+async function probeInk(testId: string, colorArgb: number): Promise<Ink> {
+  if (inkProbe == null) {
+    inkProbe = TurboModuleRegistry.getEnforcing(
+      'NitroUiProbe'
+    ) as unknown as ProbeModule;
+  }
+  const box = await waitForBox(testId);
+  // Settle first: a determinate indicator is static, but the frame that has just been
+  // composited may be the one before its props landed.
+  await sleep(250);
+  const ink = await inkProbe.paintedInk(testId, colorArgb, 26);
+  // The tree reports dp, the window reports pixels; one device density apart, and a
+  // probe of the wrong rectangle would answer every shape in the file identically.
+  const px = PixelRatio.get();
+  expect(
+    Math.abs(ink.width - box.width * px),
+    `${testId} is ${box.width}x${box.height} dp in the tree and ` +
+      `${ink.width}x${ink.height} px on screen at ${px} px/dp`
+  ).toBeLessThanOrEqual(2);
+  return ink;
+}
 
 describe('Progress', () => {
   // No warm-up: this first test is the process's first hosted control, so it pays
@@ -1051,4 +1221,591 @@ describe('Progress', () => {
       nitroUiCore.drainPerf();
     }
   });
+
+  /* --------------------------------------------------------------------- *
+   * E4: `variant="loading"` and `appearance="wavy"`
+   * --------------------------------------------------------------------- */
+
+  it('lays every configuration out at the size it measures', async () => {
+    // D17 again, for six configurations instead of two. Each row is checked against
+    // *its own* number: the component declares one fallback for all six (the engine
+    // keys declarations by component, not by configuration), so five of them are
+    // cold from the *bar's* box, and a wavy bar that never corrected would still be
+    // 23 tall here. A fixture that equalled the declared fallback could not tell a
+    // correction from a control that never made one, which is why the guess below is
+    // a size no Progress has (`wrong` above is the same shape of fixture).
+    const before = nitroUiCore.sizingStats();
+    const wrong = { width: 137, height: 23 };
+    for (const configuration of CONFIGURATIONS) {
+      nitroUiCore.seedSizingSize(
+        COMPONENT,
+        configuration.key,
+        wrong.width,
+        wrong.height
+      );
+    }
+    nitroUiCore.invalidateSizingEnvironment();
+    expect(nitroUiCore.sizingStats().environmentEpoch).toBe(
+      before.environmentEpoch + 1
+    );
+    const correctionsBefore =
+      before.correctionsImmediate + before.correctionsBatched;
+
+    await render(
+      <View style={{ width: 300 }}>
+        {CONFIGURATIONS.map((configuration) => (
+          <Progress
+            key={configuration.name}
+            {...configurationProps(configuration)}
+            value={0.4}
+            testID={configuration.name}
+            hybridRef={captureFor(configuration.name)}
+          />
+        ))}
+      </View>
+    );
+
+    for (const configuration of CONFIGURATIONS) {
+      const handle = await handleFor(configuration.name);
+      const measured = await measuredOf(handle);
+      // (1) What the control measured is this configuration's own size - not the
+      // component's one declared fallback, and not its neighbour's. This is the
+      // assertion the R3 bug class cannot survive: two configurations sharing one
+      // cache entry means one of these two numbers is wrong.
+      expect(
+        Math.abs(measured.height - configuration.size),
+        `${configuration.name} height`
+      ).toBeLessThan(1);
+      if (configuration.policy === 'square') {
+        expect(
+          Math.abs(measured.width - configuration.size),
+          `${configuration.name} width`
+        ).toBeLessThan(1);
+      }
+      // (2) The box became it, so the poisoned guess was outranked. Polled, not
+      // read once: D17 gives a cold configuration one frame, and reading the moment
+      // the testID becomes queryable races the flush.
+      const box = await pollUntil(
+        () => {
+          const candidate = harnessUi.queryByTestId(configuration.name);
+          if (candidate == null) {
+            return null;
+          }
+          if (Math.abs(candidate.height - measured.height) >= 1) {
+            return null;
+          }
+          return configuration.policy === 'square' &&
+            Math.abs(candidate.width - measured.width) >= 1
+            ? null
+            : candidate;
+        },
+        () =>
+          new Error(
+            `${configuration.name}'s box never became ${describeBox(
+              measured
+            )} (last=${describeBox(
+              harnessUi.queryByTestId(configuration.name)
+            )}, guess was ${wrong.width}x${wrong.height}).`
+          )
+      );
+      // (3) The handle answers the configuration it was cached under, so the key,
+      // the drawing and the ledger entry cannot be three different things.
+      expect(handle.variant).toBe(configuration.variant);
+      expect(handle.appearance).toBe(configuration.appearance ?? 'flat');
+      expect(handle.contained).toBe(configuration.contained ?? false);
+      await waitForDisplayed(handle, 'displayed=0.4');
+      console.log(
+        `configuration ${configuration.name}: key="${configuration.key}" ` +
+          `measured=${describeBox(measured)} box=${describeBox(box)} ` +
+          `expected=${configuration.size}`
+      );
+    }
+
+    const after = nitroUiCore.sizingStats();
+    expect(
+      after.correctionsImmediate + after.correctionsBatched
+    ).toBeGreaterThan(correctionsBefore);
+
+    // (4) Self-healing, for all six at once: every measurement is the cache's now,
+    // so a second mount of each configuration costs no correction at all (D17's
+    // "already exact lays out exact" half).
+    await render(
+      <View style={{ width: 300 }}>
+        {CONFIGURATIONS.map((configuration) => (
+          <Progress
+            key={configuration.name}
+            {...configurationProps(configuration)}
+            value={0.4}
+            testID={`warm-${configuration.name}`}
+          />
+        ))}
+      </View>
+    );
+    const warmCorrectionsBefore =
+      nitroUiCore.sizingStats().correctionsImmediate +
+      nitroUiCore.sizingStats().correctionsBatched;
+    for (const configuration of CONFIGURATIONS) {
+      const box = await waitForBox(`warm-${configuration.name}`);
+      if (configuration.policy === 'square') {
+        expect(Math.abs(box.width - configuration.size)).toBeLessThan(1);
+      }
+      expect(Math.abs(box.height - configuration.size)).toBeLessThan(1);
+    }
+    const warm = nitroUiCore.sizingStats();
+    expect(
+      warm.correctionsImmediate +
+        warm.correctionsBatched -
+        warmCorrectionsBefore
+    ).toBe(0);
+  });
+
+  it('re-measures an appearance change on the same view', async () => {
+    // `appearance` is a size change that is not a shape change: the sizing policy
+    // stays `fillWidth`, so `Progress.tsx` does not remount the control and the new
+    // box has to arrive through the sizing key instead. That is the path the
+    // `noteSizingKeyChanged()` call exists for, and this is the row that can tell it
+    // working from a control that kept the flat bar's 4.
+    const { rerender } = await render(
+      <View style={{ width: 300 }}>
+        <Progress
+          value={0.5}
+          testID="appearance"
+          hybridRef={captureFor('appearance')}
+        />
+      </View>
+    );
+    const flatBox = await waitForBox('appearance');
+    const handle = await handleFor('appearance');
+    const flatMeasured = await measuredOf(handle);
+    expect(Math.abs(flatBox.height - LINEAR_HEIGHT)).toBeLessThan(1);
+    expect(handle.appearance).toBe('flat');
+    // The `wavy` entry is warm by now - the first test of this file mounted one - so a
+    // change that did re-measure would cost nothing to notice. Poisoning that key first
+    // makes the re-measure *paid for*, and the poison does not coincide with the answer
+    // (D17): 71 tall is neither the flat bar's 4 nor the wave's 10, so a change that
+    // re-measured the wrong key would sit at 4.19 and one that read the poison would sit
+    // at 71. It is provisional, not authoritative (`docs/architecture/sizing.md` §8), so
+    // the control outranks it either way.
+    nitroUiCore.seedSizingSize(COMPONENT, keyOf('linear-wavy'), 137, 71);
+    const before =
+      nitroUiCore.sizingStats().correctionsImmediate +
+      nitroUiCore.sizingStats().correctionsBatched;
+
+    await rerender(
+      <View style={{ width: 300 }}>
+        <Progress
+          value={0.5}
+          appearance="wavy"
+          testID="appearance"
+          hybridRef={captureFor('appearance')}
+        />
+      </View>
+    );
+    // The same handle, answering the *wavy* bar's height. A control that had been
+    // remounted instead would leave this one dropped, with its cache frozen at the
+    // flat number, and a native side that ignored the prop never leaves it.
+    const wavyMeasured = await pollUntil(
+      () => {
+        const size = handle.measureContent();
+        return Math.abs(size.height - LINEAR_WAVY_HEIGHT) < 1 ? size : null;
+      },
+      () =>
+        new Error(
+          `The wavy bar never measured ${LINEAR_WAVY_HEIGHT} tall (last=${describeBox(
+            handle.measureContent()
+          )}, flat was ${describeBox(flatMeasured)}).`
+        )
+    );
+    const wavyBox = await pollUntil(
+      () => {
+        const box = harnessUi.queryByTestId('appearance');
+        return box !== null && Math.abs(box.height - wavyMeasured.height) < 1
+          ? box
+          : null;
+      },
+      () =>
+        new Error(
+          `The bar's box never became ${describeBox(
+            wavyMeasured
+          )} tall (last=${describeBox(harnessUi.queryByTestId('appearance'))}).`
+        )
+    );
+    expect(handle.appearance).toBe('wavy');
+    await waitForDisplayed(handle, 'displayed=0.5');
+    const after =
+      nitroUiCore.sizingStats().correctionsImmediate +
+      nitroUiCore.sizingStats().correctionsBatched;
+    console.log(
+      `appearance: flat=${describeBox(flatMeasured)} ` +
+        `wavy=${describeBox(wavyMeasured)} box=${describeBox(wavyBox)} ` +
+        `sameHandle=${handles.get('appearance') === handle} ` +
+        `corrections=${after - before}`
+    );
+    expect(after).toBeGreaterThan(before);
+
+    // And back, because an app does this while a download runs: the flat
+    // configuration is warm by now, so the box returns without a correction.
+    await rerender(
+      <View style={{ width: 300 }}>
+        <Progress
+          value={0.5}
+          testID="appearance"
+          hybridRef={captureFor('appearance')}
+        />
+      </View>
+    );
+    await waitFor(
+      async () => {
+        const box = harnessUi.queryByTestId('appearance');
+        expect(box).not.toBeNull();
+        expect(Math.abs(box!.height - LINEAR_HEIGHT)).toBeLessThan(1);
+      },
+      { timeout: 5000 }
+    );
+    expect(handle.appearance).toBe('flat');
+  });
+
+  it('gives a contained loading indicator its own cache entry', async () => {
+    // The two loading configurations measure the *same* square, so nothing about a
+    // size can show that `contained` is in the key. The ledger can. The plain one is
+    // mounted first and becomes exact; the contained one then has to be a *miss*,
+    // and a miss has to be paid for with a correction. If the key dropped `contained`
+    // this second mount is an exact hit on the first one's entry - zero corrections,
+    // and a contained indicator laid out from a non-contained one's number, which is
+    // the R3 bug in the one shape where no measurement can reveal it. It is also why
+    // the native setter has to *ask* for the measure: Compose has no reason to
+    // re-measure a 48 dp square that has always been 48 dp, and without the ask the
+    // host's dedupe swallows the report that never comes (review F1).
+    const { rerender } = await render(
+      <View style={{ width: 300 }}>
+        <Progress
+          variant="loading"
+          value={0.4}
+          testID="contained"
+          hybridRef={captureFor('contained')}
+        />
+      </View>
+    );
+    const plain = await waitForBox('contained');
+    const handle = await handleFor('contained');
+    const measured = await measuredOf(handle);
+    expect(Math.abs(measured.width - LOADING_SIZE)).toBeLessThan(1);
+    expect(Math.abs(plain.height - LOADING_SIZE)).toBeLessThan(1);
+    expect(handle.contained).toBe(false);
+
+    // Same trick, and it is the only witness this row has: the two loading
+    // configurations measure the *same* 48 dp square, so no box can tell them apart and
+    // the ledger is the whole claim. With `contained` in the key this mount misses the
+    // plain entry, is laid out at the 37 dp poison, and has to correct back to 48. With
+    // `contained` dropped from the key it hits the plain entry - already exact at 48 -
+    // and the correction that proves the miss never happens.
+    nitroUiCore.seedSizingSize(COMPONENT, keyOf('loading-contained'), 61, 37);
+    const before =
+      nitroUiCore.sizingStats().correctionsImmediate +
+      nitroUiCore.sizingStats().correctionsBatched;
+    await rerender(
+      <View style={{ width: 300 }}>
+        <Progress
+          variant="loading"
+          contained
+          value={0.4}
+          testID="contained"
+          hybridRef={captureFor('contained')}
+        />
+      </View>
+    );
+    await waitFor(
+      async () => {
+        const box = harnessUi.queryByTestId('contained');
+        expect(box).not.toBeNull();
+        expect(Math.abs(box!.width - measured.width)).toBeLessThan(1);
+        expect(Math.abs(box!.height - measured.height)).toBeLessThan(1);
+      },
+      { timeout: 5000 }
+    );
+    const after =
+      nitroUiCore.sizingStats().correctionsImmediate +
+      nitroUiCore.sizingStats().correctionsBatched;
+    console.log(
+      `contained: box=${describeBox(plain)}->` +
+        `${describeBox(harnessUi.queryByTestId('contained'))} ` +
+        `corrections=${after - before} flag=${String(handle.contained)}`
+    );
+    expect(handle.contained).toBe(true);
+    expect(after).toBeGreaterThan(before);
+    await waitForDisplayed(handle, 'displayed=0.4');
+  });
+
+  it('animates every new configuration while it is on screen and stops when it is gone', async () => {
+    // The invariant `nuiTestIsAnimating()` exists for, per configuration: an
+    // indeterminate indicator may only draw itself while something can see it. The
+    // four rows are the new ones - a wavy bar, a wavy ring, and the two loading
+    // shapes - and each is the *indeterminate* case, because a determinate one is
+    // not allowed to animate at all.
+    for (const configuration of CONFIGURATIONS.filter(
+      (candidate) =>
+        candidate.variant === 'loading' || candidate.appearance === 'wavy'
+    )) {
+      const testId = `anim-${configuration.name}`;
+      const { unmount } = await render(
+        <Progress
+          {...configurationProps(configuration)}
+          value={null}
+          testID={testId}
+          hybridRef={captureFor(testId)}
+        />
+      );
+      await waitForBox(testId);
+      const handle = await handleFor(testId);
+      await waitForDisplayed(handle, 'displayed=indeterminate');
+      await waitFor(
+        () => expect(handle.nuiTestIsAnimating()).toBe(true),
+        { timeout: 5000 }
+      );
+
+      unmount();
+      // The gate closes on the way out: the detach / `onDropView` says so before the
+      // composition or hosting controller goes away, so the answer must flip without
+      // a timer's help.
+      await waitFor(
+        () => expect(handle.nuiTestIsAnimating()).toBe(false),
+        { timeout: 5000 }
+      );
+      console.log(
+        `animate ${configuration.name}: mounted=true dropped=false`
+      );
+      cleanup();
+    }
+  });
+
+  if (Platform.OS === 'android') {
+    it('paints the wavy and loading shapes it was asked for', async () => {
+      // The row the size cannot settle. A wavy ring and `variant="loading"` both
+      // measure 48 dp, both publish one semantics node with the same range info, and
+      // both answer the same `displayed=` - so a size, a node tree and a prop read
+      // all agree no matter which of them the canvas drew. This one reads the
+      // window: `NitroUiProbe.paintedInk` copies the control's own rectangle back out
+      // of the compositor and counts the pixels that are the tint the app asked for.
+      // What is asserted is shape, not pixels: a 4 dp bar is an 11 px band and a wavy
+      // one is the 10 dp wave; a ring is a third of its own box and a filled loading
+      // shape most of it; and a container the platform was told not to draw is not
+      // painted at all.
+      // The *source* strings are what the props take: `Progress` runs `processColor`
+      // itself (D10), and running it twice shuffles the byte order a second time, so a
+      // probe handed the processed number looks for a colour the control never painted.
+      // A plain RN View painted `#00ff00` rides along as the control: if the probe
+      // cannot see a colour it knows, no answer about a shape means anything.
+      const TINT = '#e03131';
+      const CONTAINER = '#1864ab';
+      const tint = processColor(TINT) as number;
+      const container = processColor(CONTAINER) as number;
+      const green = processColor('#00ff00') as number;
+      await render(
+        <View style={{ width: 300 }}>
+          <View
+            style={{ width: 60, height: 60, backgroundColor: '#00ff00' }}
+            testID="ink-control-green"
+          />
+          <Progress
+            value={0.8}
+            tintColor={TINT}
+            testID="ink-bar-flat"
+            hybridRef={captureFor('ink-bar-flat')}
+          />
+          <Progress
+            value={0.8}
+            appearance="wavy"
+            tintColor={TINT}
+            testID="ink-bar-wavy"
+            hybridRef={captureFor('ink-bar-wavy')}
+          />
+          <Progress
+            value={0.8}
+            variant="circular"
+            tintColor={TINT}
+            testID="ink-ring-flat"
+            hybridRef={captureFor('ink-ring-flat')}
+          />
+          <Progress
+            value={0.8}
+            variant="circular"
+            appearance="wavy"
+            tintColor={TINT}
+            testID="ink-ring-wavy"
+            hybridRef={captureFor('ink-ring-wavy')}
+          />
+          <Progress
+            value={0.2}
+            variant="loading"
+            tintColor={TINT}
+            testID="ink-loading"
+            hybridRef={captureFor('ink-loading')}
+          />
+          <Progress
+            value={0.2}
+            variant="loading"
+            contained
+            tintColor={TINT}
+            trackColor={CONTAINER}
+            testID="ink-loading-contained"
+            hybridRef={captureFor('ink-loading-contained')}
+          />
+        </View>
+      );
+      // Every one of these handles has to have drawn what its props asked, or the
+      // pixels below would be a picture of a different control.
+      for (const row of [
+        { name: 'ink-bar-flat', shown: 'displayed=0.8' },
+        { name: 'ink-bar-wavy', shown: 'displayed=0.8' },
+        { name: 'ink-ring-flat', shown: 'displayed=0.8' },
+        { name: 'ink-ring-wavy', shown: 'displayed=0.8' },
+        { name: 'ink-loading', shown: 'displayed=0.2' },
+        { name: 'ink-loading-contained', shown: 'displayed=0.2' },
+      ]) {
+        await waitForDisplayed(await handleFor(row.name), row.shown);
+      }
+
+      const barFlat = await probeInk('ink-bar-flat', tint);
+      const barWavy = await probeInk('ink-bar-wavy', tint);
+      const ringFlat = await probeInk('ink-ring-flat', tint);
+      const ringWavy = await probeInk('ink-ring-wavy', tint);
+      const loading = await probeInk('ink-loading', tint);
+      const contained = await probeInk('ink-loading-contained', tint);
+      // The same `trackColor` asked of the two loading shapes: painted on the
+      // contained one, absent from the plain one.
+      const containerOnPlain = await probeInk('ink-loading', container);
+      const containerOnContained = await probeInk(
+        'ink-loading-contained',
+        container
+      );
+      for (const [name, box] of [
+        ['bar-flat', barFlat],
+        ['bar-wavy', barWavy],
+        ['ring-flat', ringFlat],
+        ['ring-wavy', ringWavy],
+        ['loading', loading],
+        ['loading-contained', contained],
+      ] as const) {
+        console.log(
+          `ink ${name}: box=${describeBox(box)} count=${String(box.inkCount)} ` +
+            `ink=${Math.round(box.inkWidth)}x${Math.round(box.inkHeight)} ` +
+            `density=${(
+              box.inkCount / Math.max(1, box.inkWidth * box.inkHeight)
+            ).toFixed(2)}`
+        );
+      }
+      console.log(
+        `ink container: plain=${String(containerOnPlain.inkCount)} ` +
+          `contained=${String(containerOnContained.inkCount)}`
+      );
+
+      const density = (box: Ink) =>
+        box.inkCount / Math.max(1, box.inkWidth * box.inkHeight);
+
+      // First: the copy is not empty. Every ink number below reads as "the wrong
+      // composable" when the real answer is "PixelCopy handed back a black bitmap",
+      // and the colour the box *did* draw is the difference between a rebuild and a
+      // reading. Six boxes, so a single black one names itself.
+      const probeRows = [
+        ['bar-flat', barFlat],
+        ['bar-wavy', barWavy],
+        ['ring-flat', ringFlat],
+        ['ring-wavy', ringWavy],
+        ['loading', loading],
+        ['loading-contained', contained],
+      ] as const;
+      const probeSummary = probeRows
+        .map(
+          ([name, box]) =>
+            `${name} ${box.width}x${box.height}px ink=${box.inkCount} ` +
+            `opaque=${box.opaqueCount} top=0x${(box.topColor >>> 0)
+              .toString(16)
+              .padStart(8, '0')}x${box.topColorCount}`
+        )
+        .join(' | ');
+      const control = await probeInk('ink-control-green', green);
+      // The control first: a probe that cannot see a known colour has no answer to
+      // give about any of the shapes below.
+      expect(control.inkCount).toBeGreaterThan(control.width * control.height * 0.9);
+      if (probeRows.some(([, box]) => box.inkCount === 0)) {
+        throw new Error(`no ink: ${probeSummary}`);
+      }
+
+      const px = PixelRatio.get();
+      // A flat bar is its 4 dp stroke and nothing else: the wave would be twice the
+      // band, and antialiasing buys at most a row each side.
+      expect(barFlat.inkHeight).toBeGreaterThan(LINEAR_HEIGHT * px * 0.7);
+      expect(barFlat.inkHeight).toBeLessThan(LINEAR_HEIGHT * px * 1.6);
+      // The wavy bar is the wave - Material's 10 dp of stroke and amplitude - so the
+      // same tint covers well over twice the band it does flat. That difference *is*
+      // the composable being a different composable, and no size on the tree shows
+      // it: both are `fillWidth` and both fill the same 300-wide box.
+      expect(barWavy.inkHeight).toBeGreaterThan(LINEAR_WAVY_HEIGHT * px * 0.7);
+      expect(barWavy.inkHeight).toBeGreaterThan(barFlat.inkHeight * 1.6);
+      expect(barWavy.inkWidth).toBeGreaterThan(barFlat.inkWidth * 0.9);
+
+      // A wavy ring is Material's 48 dp wave against the flat indicator's 40 dp, so
+      // the ink of each spans its own circle and the ratio is the two composables'.
+      expect(ringWavy.inkWidth).toBeGreaterThan(ringFlat.inkWidth * 1.1);
+
+      // Loading is a *filled* morphing shape and a ring is a 4 dp stroke: fill density
+      // separates them by more than two to one, in a box the two share.
+      expect(density(ringFlat)).toBeLessThan(0.45);
+      expect(density(loading)).toBeGreaterThan(0.55);
+      expect(density(loading)).toBeGreaterThan(density(ringFlat) * 1.5);
+
+      // `contained` is the container, painted in `trackColor` - and the same colour is
+      // painted nowhere on the plain configuration beside it, which is what turns the
+      // first number into an assertion rather than a match against something that was
+      // on screen anyway.
+      expect(containerOnPlain.inkCount).toBe(0);
+      expect(containerOnContained.inkCount).toBeGreaterThan(500);
+      // The container is the *box*: its ink spans the control's own square, which is
+      // what `ContainedLoadingIndicator` adds and `LoadingIndicator` does not. Its
+      // fill density is the visible ring left around the morphing shape, not a
+      // property worth asserting - the shape's own ink covers the middle.
+      expect(containerOnContained.inkWidth).toBeGreaterThan(
+        LOADING_SIZE * px * 0.75
+      );
+      expect(containerOnContained.inkHeight).toBeGreaterThan(
+        LOADING_SIZE * px * 0.75
+      );
+      expect(contained.inkCount).toBeGreaterThan(0);
+      cleanup();
+    });
+  }
 });
+
+/**
+ * The sizing key of one {@link CONFIGURATIONS} row, for a test that has to poison it.
+ *
+ * Read from the table rather than written again: the table's keys are themselves
+ * hand-written and asserted by `progressSizingKey.test.tsx`, so a second copy here
+ * could only drift, not catch.
+ */
+function keyOf(name: string): string {
+  const found = CONFIGURATIONS.find((configuration) => configuration.name === name);
+  if (found === undefined) {
+    throw new Error(`No configuration named "${name}".`);
+  }
+  return found.key;
+}
+
+/**
+ * The three configuration props of one row of {@link CONFIGURATIONS}.
+ *
+ * Spread rather than written out at each call site: a test that asks for a wavy ring
+ * in one place and gets a flat one in another has stopped testing the thing its name
+ * says.
+ */
+function configurationProps(configuration: Configuration): {
+  variant: Configuration['variant'];
+  appearance: Configuration['appearance'];
+  contained: boolean;
+} {
+  return {
+    variant: configuration.variant,
+    appearance: configuration.appearance ?? 'flat',
+    contained: configuration.contained ?? false,
+  };
+}

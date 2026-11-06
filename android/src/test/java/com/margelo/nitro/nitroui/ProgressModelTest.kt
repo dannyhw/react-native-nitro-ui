@@ -128,6 +128,78 @@ class ProgressModelTest {
     assertEquals("", model.sizingKey)
   }
 
+  // MARK: - configuration (E4)
+
+  @Test
+  fun aResetClearsTheConfigurationToo() {
+    // `prepareForRecycle` resets the model, and E4 added two configuration fields to
+    // it. A recycled view that kept `wavy` would show its previous owner's Material
+    // wave to the next one - and the wrapper re-sends every prop on each mount, so
+    // this reset is the belt rather than the braces: nothing on either platform can
+    // show it missing through a prop read, which is why it is asserted here.
+    val model = ProgressModel().apply {
+      variant = ProgressModel.VARIANT_LOADING
+      appearance = ProgressModel.APPEARANCE_WAVY
+      contained = true
+    }
+
+    model.reset()
+
+    assertEquals(ProgressModel.VARIANT_LINEAR, model.variant)
+    assertEquals(ProgressModel.APPEARANCE_FLAT, model.appearance)
+    assertFalse(model.contained)
+    assertFalse(model.drawsWavy)
+    assertFalse(model.drawsContainer)
+    assertFalse(model.isIntrinsicShape)
+  }
+
+  @Test
+  fun onlyAShapeThatHasAWavyFormDrawsWavy() {
+    // `appearance` is one of the two props E4 adds, and it is not a promise the
+    // loading indicator makes: Material has no wavy form of it. The drawing code asks
+    // [drawsWavy] rather than the field, so this is the whole of that rule.
+    val model = ProgressModel().apply { appearance = ProgressModel.APPEARANCE_WAVY }
+    assertTrue(model.drawsWavy)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertTrue(model.drawsWavy)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertFalse(model.drawsWavy)
+    model.appearance = ProgressModel.APPEARANCE_FLAT
+    assertFalse(model.drawsWavy)
+  }
+
+  @Test
+  fun onlyTheLoadingShapeHasAContainer() {
+    val model = ProgressModel().apply { contained = true }
+    assertFalse(model.drawsContainer)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertFalse(model.drawsContainer)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertTrue(model.drawsContainer)
+    model.contained = false
+    assertFalse(model.drawsContainer)
+  }
+
+  @Test
+  fun aRingAndALoadingIndicatorBothAskTheIntrinsicQuestion() {
+    // The sizing policy `host.sizingPolicy` is set from this, and a shape that got
+    // the wrong one is a control that measures the wrong thing forever: a `fillWidth`
+    // bar has no width of its own to answer with, and a 48 dp square asked at the
+    // box's width is a stretched ring.
+    val model = ProgressModel()
+    assertFalse(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertTrue(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertTrue(model.isIntrinsicShape)
+    // `appearance` moves a box (10 dp against 4) but not the *question*, which is why
+    // an appearance change re-measures instead of remounting.
+    model.appearance = ProgressModel.APPEARANCE_WAVY
+    assertTrue(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_LINEAR
+    assertFalse(model.isIntrinsicShape)
+  }
+
   // MARK: - percent
 
   @Test
