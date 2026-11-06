@@ -694,6 +694,170 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.stderr).not.toContain('FAILED');
   });
 
+  // X20 item 2. Q9 took a lease for iOS only, and `acquire --boot` printed `pm clear` on the pair's
+  // emulator: the hand-off reset the whole pair whatever the lease was for. The emulator may be
+  // another task's Android device at that moment, and an iOS lease has no business asking it
+  // anything - not to clear, not whether the app is installed, not to boot.
+  it('touches only the simulator for an iOS-only lease', () => {
+    tools({ androidUp: true, iosUp: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'Q9',
+      '--platform',
+      'ios',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
+    expect(acquired.stderr).toContain(`reset ios:${UDID_A}`);
+    expect(acquired.stderr).not.toContain('reset avd:');
+    // Nothing addressed to the emulator at all: `adb devices` lists the machine and is not a
+    // command *to* a device, but every `-s <serial>` is.
+    expect(log()).not.toContain('pm clear');
+    expect(log()).not.toContain('pm path');
+    expect(log()).not.toContain(`-s ${SERIAL_A}`);
+    expect(log()).not.toContain('emulator @');
+  });
+
+  it('touches only the emulator for an Android-only lease', () => {
+    tools({ androidUp: true, iosUp: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'A1',
+      '--platform',
+      'android',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
+    expect(acquired.stderr).not.toContain('reset ios:');
+    expect(log()).not.toContain('simctl uninstall');
+    expect(log()).not.toContain('get_app_container');
+    expect(log()).not.toContain('simctl boot');
+  });
+
+  it('keeps a re-acquired iOS lease on iOS when the second acquire names no platform', () => {
+    // `--platform` defaults to `both`, and re-running `acquire --boot` to get the env file again is
+    // the documented path. The lease is for iOS, so the default must not widen it to the emulator.
+    tools({ androidUp: false, iosUp: false });
+    withLeaseFile([
+      {
+        id: 'Q9-aaaa',
+        task: 'Q9',
+        platform: 'ios',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'Q9',
+      '--boot',
+      '--boot-timeout-minutes',
+      '0',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl boot ${UDID_A}`);
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain('pm clear');
+    expect(log()).not.toContain(`-s ${SERIAL_A}`);
+    expect(acquired.stdout).not.toContain('ANDROID_SERIAL');
+  });
+
+  // X20 item 3: a look-check simulator on another iOS runtime lives by the pool's lifecycle rules.
+  // `--boot` brings it up, `release` leaves it warm, and only an explicit `reap` powers it off; and
+  // it is the only device such a lease touches. The shared stub lists pair-a's simulator only, so
+  // this case swaps in a `simctl` that also lists the example's iOS 26.5 simulator, with its state
+  // in a file the stub's own `boot`/`shutdown` move.
+  const UDID_R = '00000000-0000-4000-8000-00000000265A';
+  const runtimeSimctl = (initial) => {
+    writeFileSync(join(home, 'fake-state.r265'), `${initial}\n`);
+    const listing = (state) =>
+      JSON.stringify({
+        devices: {
+          'com.apple.CoreSimulator.SimRuntime.iOS-27-0': [
+            { udid: UDID_A, name: 'iPhone 17', state: 'Shutdown' },
+          ],
+          'com.apple.CoreSimulator.SimRuntime.iOS-26-5': [
+            { udid: UDID_R, name: 'nitro-ui iOS 26.5', state },
+          ],
+        },
+      });
+    writeFileSync(
+      join(bins, 'simctl'),
+      [
+        '#!/bin/sh',
+        'echo "simctl $*" >> "$NITRO_UI_FAKE_CALLS"',
+        'f="$NITRO_UI_FAKE_STATE.r265"',
+        'case "$*" in',
+        "  *'get_app_container'*' app'*) printf '%s\\n' '/x/NitroUiExample.app' ;;",
+        "  *'get_app_container'*) exit 1 ;;",
+        "  *'uninstall'*) exit 0 ;;",
+        `  *'boot ${UDID_R}'*) echo up > "$f" ;;`,
+        `  *'shutdown ${UDID_R}'*) echo down > "$f" ;;`,
+        '  *)',
+        '    if [ "$(cat "$f")" = up ]; then',
+        `      printf '%s' ${shellQuote(listing('Booted'))}`,
+        '    else',
+        `      printf '%s' ${shellQuote(listing('Shutdown'))}`,
+        '    fi ;;',
+        'esac',
+        '',
+      ].join('\n')
+    );
+    chmodSync(join(bins, 'simctl'), 0o755);
+  };
+
+  it('boots a look-check simulator, leaves it up on release, and only reap powers it off', () => {
+    tools({ androidUp: true });
+    runtimeSimctl('down');
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'G20',
+      '--ios-runtime',
+      '26.5',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl boot ${UDID_R}`);
+    expect(log()).toContain(`simctl uninstall ${UDID_R} nitroui.example`);
+    // Its own device and nothing else: not pair-a's simulator, not the emulator.
+    expect(log()).not.toContain(`simctl boot ${UDID_A}`);
+    expect(log()).not.toContain(`uninstall ${UDID_A}`);
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain(`-s ${SERIAL_A}`);
+    expect(poolDevices().map((x) => x.key)).toContain(`ios:${UDID_R}`);
+
+    writeFileSync(calls, '');
+    expect(cli(['release', 'G20']).status).toBe(0);
+    expect(log()).not.toContain('shutdown');
+
+    expect(cli(['reap', '--idle-minutes', '0']).status).toBe(0);
+    expect(log()).toContain(`simctl shutdown ${UDID_R}`);
+  });
+
+  it('reuses a look-check simulator that is already up', () => {
+    tools({ androidUp: true });
+    runtimeSimctl('up');
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'G20',
+      '--ios-runtime',
+      '26.5',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(acquired.stderr).toContain(`${UDID_R} is already up - reusing it`);
+    expect(log()).not.toContain('simctl boot');
+  });
+
   it('starts a device that is down, and records the boot on the lease', () => {
     // Nothing is up, and the emulator stays "down" as far as the stub is concerned: the lease still
     // has to come back (bounded), and it still has to have *asked* for the boot.
