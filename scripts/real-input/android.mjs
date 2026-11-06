@@ -6827,6 +6827,12 @@ function makeContext(harness, log) {
      */
     splitTrigger(actionLabel, listLabel) {
       const nodes = harness.hierarchy();
+      const box = (
+        /** @type {import('./uiautomator.mjs').UiautomatorNode} */ node
+      ) => {
+        const { x1, y1, x2, y2 } = node.bounds;
+        return `${String(x1)},${String(y1)} → ${String(x2)},${String(y2)}`;
+      };
       const actions = findAllByDescription(nodes, actionLabel);
       const action = actions[0];
       if (action == null) {
@@ -6838,8 +6844,7 @@ function makeContext(harness, log) {
       const named = findAllByDescription(nodes, listLabel);
       for (const node of named) {
         log.note(
-          `"${listLabel}" at ${boundsText(node)} while "${actionLabel}" is at ` +
-            boundsText(action)
+          `"${listLabel}" at ${box(node)} while "${actionLabel}" is at ${box(action)}`
         );
       }
       return {
