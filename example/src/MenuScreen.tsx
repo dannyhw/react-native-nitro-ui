@@ -122,6 +122,33 @@ export default function MenuScreen() {
       current === 'none' ? said : `${current} > ${said}`
     );
   }, []);
+
+  // The split trigger's own echo (E3), deliberately separate from `events`: the real-
+  // input check for the plain Menu asserts that string as a *whole*, so a second
+  // control writing into it would make its deterministic shape depend on this screen's
+  // layout. One control, one history - and the order inside it is still the point.
+  const [splitEvents, setSplitEvents] = useState('none');
+  const appendSplitEvent = useCallback((said: string) => {
+    setSplitEvents((current) =>
+      current === 'none' ? said : `${current} > ${said}`
+    );
+  }, []);
+  const noteSplitAction = useCallback(
+    () => appendSplitEvent('action'),
+    [appendSplitEvent]
+  );
+  const noteSplitOpen = useCallback(
+    () => appendSplitEvent('open'),
+    [appendSplitEvent]
+  );
+  const noteSplitClose = useCallback(
+    () => appendSplitEvent('close'),
+    [appendSplitEvent]
+  );
+  const noteSplitSelect = useCallback(
+    (id: string) => appendSplitEvent(`select ${id}`),
+    [appendSplitEvent]
+  );
   const noteRealSelect = useCallback(
     (id: string) => {
       setLastPick(id);
@@ -338,11 +365,14 @@ export default function MenuScreen() {
         </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>
-          iOS only: a primary action
+          A primary action, and the list beside it
         </Text>
         <Text style={styles.note}>
-          Tap runs the action, a long-press opens the menu. Android always opens
-          on tap and never calls it.
+          Both platforms draw this now (DECISIONS D29, E3), each in its own
+          idiom: on iOS a tap runs the action and a long-press opens the menu;
+          on Android the control is Material 3's split button - the left half
+          runs the action, the chevron on the right opens the list. The control
+          is therefore wider on Android than the plain trigger above.
         </Text>
         <View style={styles.row}>
           <Menu
@@ -352,6 +382,36 @@ export default function MenuScreen() {
             primaryAction={recordPrimary}
             testID="menu-primary"
           />
+        </View>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
+          The split trigger under a real finger
+        </Text>
+        <Text style={styles.note}>
+          The two halves of one control, named for a screen reader as a button
+          and as a &quot;More options&quot; button. Everything the split trigger
+          reports lands in its own echo, in the order it happened:
+        </Text>
+        <View style={styles.row}>
+          <Menu
+            title="Publish"
+            group={REAL_INPUT_GROUP}
+            accessibilityLabel="Real-input split menu"
+            primaryAction={noteSplitAction}
+            onSelect={noteSplitSelect}
+            onOpen={noteSplitOpen}
+            onClose={noteSplitClose}
+            testID="real-input-menu-split"
+          />
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            split trigger reported
+          </Text>
+          <Text
+            testID="real-input-menu-split-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {splitEvents}
+          </Text>
         </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>

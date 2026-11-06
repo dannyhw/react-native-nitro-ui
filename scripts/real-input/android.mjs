@@ -1122,6 +1122,132 @@ const CHECKS = {
       'open > close > open > select bravo > close > open > close > open > select alpha > close' +
         ' > open > select checked > close'
     );
+
+    // 7. The split trigger (E3): the same `primaryAction` prop, drawn as two hit
+    //    targets.
+    //
+    //    Everything above is the plain trigger, where a tap can only mean "open". The
+    //    screen's second Menu hands the same prop a leading half that acts and a
+    //    trailing half that opens, and the only out-of-process witnesses are the two
+    //    accessibility nodes and the control's own echo - so this step reads the tree
+    //    the dump gives (two announcement sites, side by side), then presses each one
+    //    where it is and asserts the echo order the two halves have to keep.
+    //
+    //    The accessibility half is worth naming as a claim in its own right. The
+    //    library bundles no string catalogue (D40 item 2), so the trailing half's name
+    //    is written in `MenuSplitButton.kt` as "More options"; asserting it here, from
+    //    the dump, is what keeps "the second half is reachable and says what it does"
+    //    from meaning "the second half exists somewhere".
+    const SPLIT_ACTION = 'Real-input split menu';
+    const SPLIT_LIST = 'More options';
+    await t.requireControlOnScreen(SPLIT_ACTION);
+    const splitHalves = t.nodesNamed(SPLIT_ACTION);
+    const listHalves = t.nodesNamed(SPLIT_LIST);
+    t.log.checkEquals(
+      'the action half is one node, named by the control it belongs to',
+      splitHalves.length,
+      1
+    );
+    t.log.checkEquals(
+      'the list half is one node too, named for the options it opens',
+      listHalves.length,
+      1
+    );
+    const leading = /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (
+      splitHalves[0]
+    );
+    const trailing =
+      /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (
+        listHalves[0]
+      );
+    t.log.note(
+      `split halves: action ${t.boundsText(leading)} list ${t.boundsText(trailing)}`
+    );
+    // Two targets, not one target with a chevron painted on it: side by side, the same
+    // band, and neither one a sliver a finger could miss.
+    t.log.checkEquals(
+      'the two halves sit side by side without overlapping',
+      leading.bounds.x2 <= trailing.bounds.x1 + 1 &&
+        trailing.bounds.x1 > leading.bounds.x1,
+      true
+    );
+    t.log.checkEquals(
+      'and they are the same height, so they read as one control',
+      leading.bounds.height === trailing.bounds.height &&
+        leading.bounds.y1 === trailing.bounds.y1,
+      true
+    );
+    t.log.checkEquals(
+      'the split trigger has reported nothing before a touch',
+      t.requireEcho(ECHO.menuSplitEvents),
+      'none'
+    );
+
+    // The action half: an echo and no window. Reading the echo costs a dump - about
+    // two seconds - which is the wait under "and it opened nothing": a popup that this
+    // press had caused would be up and counted by the time the tree came back.
+    await t.tapNode(leading);
+    t.log.checkEquals(
+      'a real tap on the action half runs the primary action',
+      t.requireEcho(ECHO.menuSplitEvents),
+      'action'
+    );
+    t.log.checkEquals(
+      'and raises no list - no window, and no open in the echo either',
+      `${String(t.popupWindowCount())} | ${t.requireEcho(ECHO.menuSplitEvents)}`,
+      '0 | action'
+    );
+
+    // The list half: a window, and one open that Back answers with one close.
+    await t.tapUntilUp(
+      () => t.requireControl(SPLIT_LIST),
+      'a real tap on the list half of the split trigger',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    await t.pressBack();
+    t.log.checkEquals(
+      'the list half shuts on Back',
+      t.waitForPopupCount(0, 'the split list to come down'),
+      0
+    );
+    t.log.checkEquals(
+      'one press of the list half is one open and one close',
+      t.requireEcho(ECHO.menuSplitEvents),
+      'action > open > close'
+    );
+
+    // And a row, pressed for real through the window that half opened - the pick that
+    // `nuiTestSelectRow` only imitates, on the trigger whose other half is an action.
+    await t.tapUntilUp(
+      () => t.requireControl(SPLIT_LIST),
+      'a real tap that reopens the split list',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    t.log.checkEquals(
+      `a real tap on the row "${PICK}" of the split list reaches JS`,
+      await t.tapOptionUntilValue(
+        PICK,
+        ECHO.menuSplitEvents,
+        'action > open > close > open > select bravo',
+        'a pick from the split list to reach JS'
+      ),
+      'action > open > close > open > select bravo'
+    );
+    t.log.checkEquals(
+      'a pick from the split list closes its own popup',
+      t.waitForPopupCount(0, 'the split pick to take its popup down'),
+      0
+    );
+    // The whole history, in the order the fingers did it - which is the shape E3 has to
+    // keep: an action that does not open, a list that opens once per press, and the
+    // control-wide promise from step 3 that every open has exactly one close.
+    t.log.checkEquals(
+      'the split trigger pairs every open with a close, action included',
+      t.requireEcho(ECHO.menuSplitEvents),
+      'action > open > close > open > select bravo > close'
+    );
   },
 
   /**
