@@ -240,6 +240,13 @@ From the E3 review (fix round 1) — filed, not fixed:
   `scripts/__tests__/ci-workflows.test.js › the preflight does not wait forever for
   -accel-check` with `asked: false, elapsedMs: 2123`: the preflight never reached its first
   poll. Both reds are superseded by the green rows above, on the same code tree.
+- **Fix-round ledger noise**, same reason: `harness:android:earns%20its%20own%20box` (2 s, zero
+  tests — the `--` filter is a path pattern, not a test name, so `Menu` is the narrowest run
+  there is), the two `harness:android:Menu` rows on trees `e955bdb1b9f9` / `e5ddec035f0c` which
+  *are* the mutation red proofs, and one `harness:ios` row at 287 s with no counts — a run of
+  mine I killed by PID after editing a comment mid-flight, which had already stopped being
+  green-worthy the moment the tree moved.
+
 - **Ledger noise**, left in place rather than edited out: `harness:android:Menu:--background`
   (my argument-order error, 0.6 s), one killed duplicate `harness:android:Menu` that recorded 0
   tests, a `real-input:android:--control:menu` refused for "no lease" before the lease env was
