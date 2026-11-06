@@ -94,7 +94,10 @@ Recorded as data in `docs/tasks/G19/mutations.json` — 23 rows. The 16 Jest and
 re-run line for line at the end of the round by a driver that applies one mutation, runs the
 named suite, then restores the file (`git status` clean after the batch); the seven device rows
 were run against an app rebuilt for that mutation, one of them is the shipped bug rather than a
-mutation, and one is a mutation the suite does *not* catch. `run` says which.
+mutation, and one is a mutation the suite does *not* catch. `run` says which. Every device row's
+failing run is committed as a scrubbed excerpt beside the ledger (the `68.19047619047619`,
+`641 to be +0`, `false to be true`, `96.38x48.00` and `iOS drew an Android icon` lines below are
+quoted from those files, not from notes).
 
 JS (`npx jest src/__tests__/iconName.test.tsx`, ~2 s a run):
 
