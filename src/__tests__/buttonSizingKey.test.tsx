@@ -42,7 +42,7 @@ const keyOf = (view: RenderResult, testId: string): string =>
   String(nativeProps(view, testId).nuiSizingKey);
 
 describe('Button · sizing key', () => {
-  it('is the variant, the scale, the icon and the title', async () => {
+  it('is the variant, the scale, both icon fields and the title', async () => {
     const view = await render(
       <Button
         title="Save"
@@ -53,7 +53,13 @@ describe('Button · sizing key', () => {
         testID="plain"
       />
     );
-    expect(keyOf(view, 'plain')).toBe('tonal|small|square.and.arrow.down|Save');
+    // The empty field between the two icon names is `androidIcon`, which a Button
+    // on iOS never fills: an omitted icon and an empty one are one configuration,
+    // so both render as an empty field rather than being dropped - dropping a
+    // field would shift every one after it and make the count ambiguous.
+    expect(keyOf(view, 'plain')).toBe(
+      'tonal|small|square.and.arrow.down||Save'
+    );
   });
 
   it('separates a pipe in the icon from a pipe in the title', async () => {
@@ -68,8 +74,8 @@ describe('Button · sizing key', () => {
     const titleCarriesIt = await render(
       <Button title="a|b" systemImage="x" onPress={undefined} testID="title" />
     );
-    expect(keyOf(iconCarriesIt, 'icon')).toBe('filled|medium|x\\|a|b');
-    expect(keyOf(titleCarriesIt, 'title')).toBe('filled|medium|x|a\\|b');
+    expect(keyOf(iconCarriesIt, 'icon')).toBe('filled|medium|x\\|a||b');
+    expect(keyOf(titleCarriesIt, 'title')).toBe('filled|medium|x||a\\|b');
     expect(keyOf(iconCarriesIt, 'icon')).not.toBe(
       keyOf(titleCarriesIt, 'title')
     );
@@ -98,7 +104,9 @@ describe('Button · sizing key', () => {
         testID="second"
       />
     );
-    expect(keyOf(backslashInIcon, 'first')).toBe('filled|medium|a\\\\|b\\|c');
+    expect(keyOf(backslashInIcon, 'first')).toBe(
+      'filled|medium|a\\\\||b\\|c'
+    );
     expect(keyOf(backslashInIcon, 'first')).not.toBe(
       keyOf(forgedIcon, 'second')
     );
