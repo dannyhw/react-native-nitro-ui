@@ -99,5 +99,5 @@
 | E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | fix round 1 (PR #41; review FIX ROUND: a README line reverses iOS behaviour, the sizing key's `action` field is unguarded, TalkBack can't close from the chevron) |
 | Q9 | ButtonGroup and IconButton (`androidIcon`) design, with the iOS ControlGroup check (D40) | Opus | orchestrator | done (report merged; D42 adopts it, owner decided C and D) |
 | G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | running |
-| X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | fix round 1 (PR #42; review FIX ROUND: the gate refusal and a doctor port fixture lack a failing proof; code correct) |
+| X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merge round (PR #42; fix round 1 accepted at `a1889dce`: the refusal, port fixture and required platform each shown red) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
