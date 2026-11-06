@@ -340,7 +340,8 @@ internal fun MenuSplitButton(
         // Material fills its corner while the window is up. The callback is the press,
         // and the value it hands over is the one the press asks for - opening when the
         // list is down, closing when it is somehow up - which [MenuModel.setOpen]
-        // funnels either way, so one press is never two events.
+        // funnels either way, so one press is never two events. The semantics arm in
+        // [halfModifier] asks for that same transition through [MenuModel.applyListAction].
         val onOpenChange: (Boolean) -> Unit = { wantsOpen -> model.setOpen(wantsOpen) }
         val chevron: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
           Icon(
@@ -420,7 +421,10 @@ internal fun MenuSplitButton(
  *   TalkBack says the title then "Button" - a press runs the app's `primaryAction`;
  * - trailing: named [MENU_MORE_OPTIONS_LABEL], `Role.Button`, `stateDescription`
  *   `expanded` / `collapsed` - so TalkBack says "More options", then the state, then
- *   "Button", and the state is the menu's, not a local toggle's.
+ *   "Button", and the state is the menu's, not a local toggle's. Its click action is
+ *   [MenuModel.applyListAction], which toggles: this arm bypasses the checked button
+ *   below, so an `open = true` here would be a list a screen reader could raise and
+ *   never put down (E3's review).
  *
  * The plain trigger's single `Role.DropdownList` node cannot survive a split: there is no
  * single node left to carry it, and a half that opens a list is not the same control as a
@@ -460,7 +464,7 @@ private fun halfModifier(
           if (leading) {
             model.applyPrimaryAction()
           } else {
-            model.setOpen(true)
+            model.applyListAction()
           }
           true
         }

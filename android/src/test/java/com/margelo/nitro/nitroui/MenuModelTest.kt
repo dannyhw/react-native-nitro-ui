@@ -190,6 +190,50 @@ class MenuModelTest {
     assertFalse(model.expanded)
   }
 
+  /**
+   * The trailing half's accessibility action - the one press path no on-device test
+   * reaches (E3's review).
+   *
+   * A *finger* on that half goes through Material's checked button, which reports the
+   * value the press asks for and so toggles by itself; `Menu.harness.tsx` and the
+   * real-input gate both inject pointer events, which is why the asymmetry survived the
+   * whole split suite. TalkBack's click action skips Material entirely and lands on the
+   * arm in `halfModifier`, so that arm has to ask for the same transition. An
+   * always-open there is a list a screen-reader user can raise and never put down.
+   */
+  @Test
+  fun theListActionTogglesLikeAPressDoes() {
+    val events = mutableListOf<String>()
+    val up = openModel(events)
+
+    up.applyListAction()
+
+    assertFalse("an open list goes down", up.expanded)
+    assertEquals("one action, one close", listOf("close"), events)
+
+    val down = openModel(events).apply { expanded = false }
+    events.clear()
+
+    down.applyListAction()
+
+    assertTrue("a closed list comes up", down.expanded)
+    assertEquals("one action, one open", listOf("open"), events)
+  }
+
+  @Test
+  fun aDisabledControlRefusesTheListAction() {
+    val events = mutableListOf<String>()
+    val model = openModel(events).apply {
+      expanded = false
+      enabled = false
+    }
+
+    model.applyListAction()
+
+    assertEquals("a disabled control raises nothing of its own", emptyList<String>(), events)
+    assertFalse(model.expanded)
+  }
+
   @Test
   fun aMenuWithNoPrimaryActionHasOneTriggerAndNoHalves() {
     // The report's split half, in the configuration every existing harness case is in.
