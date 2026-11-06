@@ -174,8 +174,16 @@ idiom (DECISIONS D29, which shipped this iOS-only, and E3, which added Android):
 | Runs `primaryAction`  | a tap, while the menu is closed                                              | a press on the leading half, which shows `title`                                               |
 | Opens the list        | a long-press                                                                 | a press on the trailing half, which shows a chevron                                            |
 | Open state on the control | not observable (D32)                                                     | the trailing half's `checked` state, so its inner corner stays morphed while the list is up    |
-| Screen reader         | the one trigger, named by `accessibilityLabel`/`title`                       | two stops: a button named by the title, then a button named "More options" that says expanded/collapsed |
+| Screen reader         | the one trigger, named by `accessibilityLabel`/`title`                       | two stops: a button named by the title, then a button named "More options" that says expanded/collapsed and **toggles** |
 | `disabled`            | disables the trigger; an open menu is SwiftUI's to keep (D32)                 | disables **both** halves, and an open list closes                                              |
+
+The two halves are reached two ways, and both have to toggle. A finger on the trailing
+half goes through Material's *checked* button, so it reports the value the press asks for
+and closes an open list; TalkBack's click action skips that button and lands on the
+half's own semantics arm, which therefore asks `MenuModel.applyListAction` for the same
+transition rather than a plain "open". `MenuModelTest.theListActionTogglesLikeAPressDoes`
+holds it — the one split behaviour no on-device test can reach, because the harness and
+the real-input gate both inject pointer events.
 
 Two rules hold on both platforms, so an app does not have to branch: a press that runs
 `primaryAction` never opens the list and never fires `onOpen`, and it is refused while
@@ -302,8 +310,13 @@ layout; Android's is 46.09 dp wider — a second container, Material's gap and t
 which is the whole reason `action` is a field of the sizing key. Both pairs came off a
 poisoned cache (declared fallback 74.00 × 38.00 on iOS, 75.10 × 52.00 on Android) and both
 configurations corrected twice. `Menu.harness.tsx` ("earns its own box, which is not the
-plain trigger's") poisons both entries and compares the two boxes, so a key that lost the
-field goes red on whichever configuration mounted second.
+plain trigger's") poisons both entries and compares the two boxes: a source that stopped
+sending the `action` field puts both Menus in one cache entry, and the case goes red with
+the **split** control sitting at the plain trigger's width (`78.86 × 48` where it measures
+`124.95 × 48`) — the last correction to a shared entry is the answer every holder of it
+gets, so the control that measured first is the one left wrong. The field itself is
+guarded one level up, by `src/__tests__/menuSizingKey.test.tsx`; both reds are in
+`docs/tasks/E3/mutations.json`.
 
 The heights are Button's three heights — iOS 28.0 / 34.3 / 50.3 and Android 48.0 / 48.0 /
 56.0 (`docs/components/button.md`) — which is the claim being checked: the trigger is

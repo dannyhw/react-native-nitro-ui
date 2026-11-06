@@ -471,6 +471,24 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     }
   }
 
+  /**
+   * The list half was reached through its accessibility action: open the list if it is
+   * down, close it if it is up.
+   *
+   * A finger on the same half already toggles, because Material's trailing button is a
+   * *checked* button whose `checked` is [expanded] (`MenuSplitButton.kt`), so the value
+   * it reports back is `!expanded`. The semantics action the half restates is a separate
+   * arm and does not go through Material at all, so it has to ask for the same
+   * transition itself: a bare `setOpen(true)` there left TalkBack unable to dismiss the
+   * list it had just opened (`docs/components/menu.md`, "Primary action"). A disabled
+   * control refuses, the same rule [applyPrimaryAction] has.
+   */
+  fun applyListAction() {
+    if (enabled) {
+      setOpen(!expanded)
+    }
+  }
+
   /** Record that this mount's composition drew, or stopped drawing, the split trigger. */
   fun noteSplitDrawn(drawn: Boolean) {
     splitDrawn = drawn
@@ -1023,7 +1041,8 @@ class HybridNitroUiMenu(
   override var primaryAction: (() -> Unit)?
     get() = model.primaryAction
     set(next) {
-      // Stored, never called: see [hasPrimaryAction].
+      // Stored, and run only by the leading half: see [hasPrimaryAction] and
+      // [MenuModel.applyPrimaryAction].
       model.primaryAction = next
     }
 

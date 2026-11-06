@@ -1035,9 +1035,9 @@ The full list per control is in its doc; these are the ones that bite.
   and a `disabled` that arrives while the menu is open closes it on Android only —
   an iOS menu can stay up over a disabled trigger. Build app state
   on `onSelect`. A submenu nests on iOS and renders inline under a divider on
-  Android. `primaryAction` runs on both platforms, but a press on the action opens
-  the list on iOS's control and not on Android's, and on Android it makes the
-  trigger wider.
+  Android. `primaryAction` runs on both platforms: on iOS one button does both — a
+  tap runs it and a long press opens the list; on Android they are two halves, and
+  the trigger is wider.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
   one except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
   `Tooltip`. Any other child — one of those six, an RN view, text, another

@@ -63,7 +63,7 @@ export interface MenuProps extends ViewProps {
    * - iOS: a plain button - a tap runs this and a long-press opens the menu.
    * - Android: a Material 3 Expressive split button - the left half runs this, the
    *   right half (the chevron) opens the menu. The control is wider than the plain
-   *   trigger, and `variant=\"text\"` draws the outlined split button.
+   *   trigger, and `variant="text"` draws the outlined split button.
    *
    * Setting it is also a size statement, so the sizing key changes with it.
    */
