@@ -203,12 +203,14 @@ private fun splitButtonShapes(scale: ButtonScale): Pair<SplitButtonShapes, Split
  * agree with a box React Native moves (`docs/components/host.md`) and that box is now the
  * split button's rather than one button's.
  *
- * Where [popup] is composed *is* the anchor question. A Compose `Popup` is positioned
- * against the layout it is composed in - which is why E2 put the list in a `Box` whose
- * only measured child is the trigger - so composing it inside the trailing half's box is
- * what puts the list under the half that opens it. No offset arithmetic, no second
- * anchor, and the popup window still hangs off this composition, which is what lets a
- * layout move or a dispose take it down (`MenuWitness`).
+ * Where [popup] is composed *is* the anchor question, and E3 measured the answer rather
+ * than assuming it: the list lands under the half whose *slot* composes it. Composing it
+ * in the leading half's slot instead moved the window to 21 px on a device where the
+ * trailing half starts at 202 px (`docs/tasks/E3/mutations.json`), and moving the call out
+ * of this half's own `Box` while staying in this half's slot moved it nowhere - the `Box`
+ * is `propagateMinConstraints` plumbing, not the anchor. No offset arithmetic and no
+ * second anchor either way, and the popup window still hangs off this composition, which
+ * is what lets a layout move or a dispose take it down (`MenuWitness`).
  */
 @Composable
 internal fun MenuSplitButton(
