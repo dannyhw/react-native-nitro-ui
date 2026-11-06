@@ -72,6 +72,28 @@ class ButtonModelTest {
     assertEquals(48f, MinTouchTargetHeight.value)
   }
 
+  /**
+   * The corner each variant actually draws for a requested `shape`.
+   *
+   * This is the one Button rule on Android that no device can see: the `text`
+   * variant's container is transparent, so `shape` there changes only what the
+   * ripple is clipped to, and a screenshot at rest or a harness measurement looks
+   * the same either way. It is therefore exactly the rule that would quietly stop
+   * being applied - `docs/components/button.md`'s Corners table says `text` ignores
+   * the prop, and only this line keeps that sentence honest. [cornerFor] is where
+   * `NitroUiM3Button` resolves the corner before asking [buttonShapes] for a pair,
+   * so an assertion on the table is an assertion on what the one renderer draws.
+   */
+  @Test
+  fun onlyTheTextVariantIgnoresTheCornerItWasSent() {
+    for (variant in ButtonVariant.entries.filter { it != ButtonVariant.Text }) {
+      assertEquals(ButtonShape.Square, cornerFor(variant, ButtonShape.Square))
+      assertEquals(ButtonShape.Round, cornerFor(variant, ButtonShape.Round))
+    }
+    assertEquals(ButtonShape.Round, cornerFor(ButtonVariant.Text, ButtonShape.Square))
+    assertEquals(ButtonShape.Round, cornerFor(ButtonVariant.Text, ButtonShape.Round))
+  }
+
   @Test
   fun anUnknownCornerNameIsRoundLikeEveryOtherUnrecognisedButtonName() {
     assertEquals(ButtonShape.Square, ButtonShape.from("square"))

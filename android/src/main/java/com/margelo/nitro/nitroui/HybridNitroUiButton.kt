@@ -452,6 +452,10 @@ internal fun contentPaddingFor(
 /**
  * The resting + pressed shapes for a corner at [scale].
  *
+ * [cornerFor] decides the corner before this is called: a caller with a variant
+ * resolves it first, so `text` reaches here with [ButtonShape.Round] whatever its
+ * prop says and there is no second copy of that rule to forget.
+ *
  * [ButtonShape.Round] is Material's own answer for the height - which is already
  * a pair: Expressive morphs it toward [ButtonDefaults.squareShape] while the
  * button is held. [ButtonShape.Square] rests on `squareShape` and morphs the
@@ -469,21 +473,40 @@ internal fun contentPaddingFor(
  */
 @Composable
 internal fun buttonShapes(
-  shape: ButtonShape,
+  corner: ButtonShape,
   scale: ButtonScale,
 ): ButtonShapes {
   val motion = MaterialTheme.motionScheme
-  ButtonShapesCache.get(motion, scale, shape)?.let { cached -> return cached }
+  ButtonShapesCache.get(motion, scale, corner)?.let { cached -> return cached }
   val rounded = ButtonDefaults.shapesFor(scale.layoutHeight)
   val built =
-    if (shape == ButtonShape.Round) {
+    if (corner == ButtonShape.Round) {
       rounded
     } else {
       ButtonShapes(shape = ButtonDefaults.squareShape, pressedShape = rounded.shape)
     }
-  ButtonShapesCache.put(motion, scale, shape, built)
+  ButtonShapesCache.put(motion, scale, corner, built)
   return built
 }
+
+/**
+ * The corner a [variant] actually draws for a requested [shape].
+ *
+ * `text` has no container: there is no surface to give a corner, so the prop has
+ * nothing to act on and the variant rests on Material's own rounded answer - which
+ * is also what it drew before the prop existed. It still gets the morph that comes
+ * with the round corner, because that belongs to the height, not to the choice.
+ * Every other variant draws what it is sent.
+ *
+ * `internal` and separate from [buttonShapes] so the JVM test can read the table:
+ * the corner is the one Button rule here that a device cannot see - a `text`
+ * variant paints no container, so a clipped ripple is the only difference, and no
+ * screenshot at rest or in the harness can tell one from the other.
+ */
+internal fun cornerFor(
+  variant: ButtonVariant,
+  shape: ButtonShape,
+): ButtonShape = if (variant == ButtonVariant.Text) ButtonShape.Round else shape
 
 /** The [buttonShapes] store: one motion scheme at a time, [ButtonScale] x [ButtonShape] entries. */
 private object ButtonShapesCache {
@@ -597,7 +620,7 @@ internal fun NitroUiM3Button(
   val colors = buttonColors(variant, tint)
   val padding = contentPaddingFor(variant, scale)
   val labelStyle = buttonLabelStyle(scale)
-  val shapes = buttonShapes(shape, scale)
+  val shapes = buttonShapes(cornerFor(variant, shape), scale)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
