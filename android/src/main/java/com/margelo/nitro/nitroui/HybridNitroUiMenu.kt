@@ -3,9 +3,7 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.os.Looper
 import android.view.View
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -39,17 +37,18 @@ import java.util.concurrent.atomic.AtomicInteger
  * The Menu component: a button that opens a list of actions. The trigger is the
  * same Material 3 button the `Button` component draws - same variant switch, same
  * colours cache, same label style and content padding, so the box *is* a Button's
- * box (`docs/components/menu.md`) - and the list is a `DropdownMenu`, which is a
- * Compose `Popup` with a `PopupWindow` of its own.
+ * box (`docs/components/menu.md`) - and the list is Material 3 Expressive's
+ * `DropdownMenuPopup` (E2), a Compose `Popup` with a `PopupWindow` of its own, drawn
+ * as groups by `MenuRows.kt`'s shared [MenuGroups].
  *
  * The popup engineering is `HybridNitroUiPicker.kt`'s, because it is the same
  * problem H2b solved: a window that belongs to a composition has to agree with a
  * box React Native moves under it (`docs/components/host.md`), it has to be
  * witnessed rather than assumed (`MenuWitness`), and its a11y has to be one node
  * (`clearAndSetSemantics`, G6 review M3). What is new here is only that a submenu's
- * items come inline under a divider instead of nesting: a second popup needs a
- * second anchor and a second witness, and DECISIONS D29 spends this round on the
- * divider instead.
+ * items come inline as a group of their own instead of nesting: a second popup needs
+ * a second anchor and a second witness, and DECISIONS D29 spends that round on the
+ * inline form instead.
  *
  * This file must stay in the package `com.margelo.nitro.nitroui`: the generated
  * manager resolves the implementation through a wildcard import of exactly that
@@ -148,6 +147,9 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
   /** How many rows the menu listed at its last recomposition. */
   private var menuRowCount = 0
 
+  /** The popup's semantics tree as last read, `drawn` notation, or `null` unread. */
+  @Volatile private var drawn: String? = null
+
   /** The popup's view, for as long as its composition group is composed. */
   private var menuView: View? = null
 
@@ -189,9 +191,9 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
    * followed by exactly one `onClose`, including when the close is caused by a pick,
    * by the control being disabled (D29), by the anchor moving, or by the popup's
    * composition going away. Idempotent by the transition test rather than by each
-   * caller remembering whether it already closed, which is why the anchor's press,
-   * `menuAnchor`'s own press handling and Material's dismissal callbacks can all
-   * report the same request without the harness seeing it twice.
+   * caller remembering whether it already closed, which is why the trigger's press, its
+   * semantics click and Material's dismissal callback can all report the same request
+   * without the harness seeing it twice.
    *
    * [reset] writes `expanded` directly: a recycled control has no mount left to
    * report a close to.
@@ -296,6 +298,15 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     menuView = view
   }
 
+  override fun noteMenuDrawn(tree: String) {
+    drawn = tree
+  }
+
+  /** Re-read the open popup's semantics now (`nuiTestMenuProbe`). UI thread. */
+  fun refreshDrawn() {
+    refreshMenuDrawn(menuView, this)
+  }
+
   /**
    * Re-read the open menu's window after the composition's own view moved.
    *
@@ -338,8 +349,8 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
           "-1,-1,-1,-1"
         } +
         ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount" +
-        // `nuiTestMenuProbe`'s field, which only iOS can answer (see that method).
-        ";drawn=-1"
+        // The popup's own semantics tree, as it was last laid out (E2).
+        ";drawn=${drawn ?: "-1"}"
     }
   }
 
@@ -403,6 +414,7 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     compositionLeft = -1
     compositionTop = -1
     menuView = null
+    drawn = null
     sizingKey = ""
     onSelect = null
     onOpen = null
@@ -495,36 +507,17 @@ private class MenuHost(
       placedView.addOnLayoutChangeListener(listener)
       onDispose { placedView.removeOnLayoutChangeListener(listener) }
     }
-    // An anchor that opens a popup, rather than `Modifier.clickable` beside a plain
-    // `DropdownMenu`. The reason is Material's contract: `ExposedDropdownMenuBox` hands
-    // the popup the *anchor's* rectangle, while a plain `DropdownMenu` is positioned
-    // against its container. G7b tried to reproduce the second form's mis-anchoring
-    // inside a `<Host>` four ways (the anchor dropped inside the box, a `clickable` +
-    // `DropdownMenu`, that pair inside a `fillMaxSize` Box, and a 300 dp
-    // `Modifier.offset` on the list's content) and none of them moved the popup's
-    // window off the button, so on this Material version (1.4.0) the mis-anchoring this
-    // anchor exists to prevent does not reproduce. `menuAnchor` stays because it is the
-    // documented way to say "positioned against *this* control" rather than relying on
-    // what a container happens to be, and `Menu.harness.tsx` bounds the gap so a
-    // Material that does move the popup is caught: a plain `DropdownMenu` with
-    // `offset = DpOffset(0.dp, 64.dp)` moves the window and turns that bound red,
-    // which is what shows the reading is live. Numbers and both mutant recipes are in
-    // `example/__tests__/Menu.harness.tsx` and `docs/tasks/G7b-menu-finish.report.md`.
-    ExposedDropdownMenuBox(
-      expanded = expanded,
-      // The anchor reports the request, including the dismissals it decides on
-      // itself - outside tap and the back gesture - and stops reporting for an
-      // anchor whose `enabled` went false.
-      onExpandedChange = { request ->
-        model.setOpen(request && enabled)
-      },
-    ) {
+    // The trigger and the popup share one `Box`, and the box *is* the trigger: a
+    // Compose `Popup` is positioned against the layout it is composed in, so this is
+    // what anchors the list to the button rather than to whatever contains it - the
+    // job `ExposedDropdownMenuBox`'s `menuAnchor` did before E2 (G7b). Expressive's
+    // `DropdownMenuPopup` takes a position provider instead of an anchor modifier, and
+    // `rememberDropdownMenuPopupPositionProvider(Below)` hands it this box's bounds.
+    // `Menu.harness.tsx` bounds the gap between the button and the window, and the
+    // G7b mutant (a 64 dp offset) is the recipe that shows the bound is live.
+    Box {
       val anchorModifier =
         Modifier
-          .menuAnchor(
-            ExposedDropdownMenuAnchorType.PrimaryNotEditable,
-            enabled = enabled,
-          )
           .onGloballyPositioned { coordinates ->
             // Where the trigger ended up, inside the composition's own view: the
             // space a popup is positioned in. A layout callback, so it costs no
@@ -536,8 +529,8 @@ private class MenuHost(
           // `clearAndSetSemantics` fix, not `semantics`, for the reason
           // `HybridNitroUiPicker` records from `uiautomator dump` (G6 review M3):
           // the M3 button's own node would be a second, nameless focus stop. The
-          // clear also drops the action the anchor contributes, so it is restated
-          // here; pointer input is untouched.
+          // clear also drops the button's own click action, so it is restated here;
+          // pointer input is untouched.
           .clearAndSetSemantics {
             contentDescription = spokenLabel
             this[SemanticsProperties.Text] = listOf(AnnotatedString(model.title))
@@ -564,27 +557,22 @@ private class MenuHost(
         // opens and never calls the callback (`docs/components/menu.md`).
         onClick = { model.setOpen(true) },
       )
-      // `matchAnchorWidth = false`, which switches off the `exposedDropdownSize()`
-      // this call would otherwise get *inside* Material: that modifier sets
-      // `minWidth = maxWidth = anchorWidth`, so with the default the list came back
-      // exactly as wide as the button and any label longer than the title lost its
-      // tail. Left to its content, the list is as wide as its items need — between
-      // Material's own 112 dp floor and the 280 dp a row's content caps at — which
-      // is what iOS's menu does.
-      ExposedDropdownMenu(
-        expanded = expanded,
-        matchAnchorWidth = false,
+      // The list is as wide as its rows need: Material's rows keep their own 112 dp
+      // floor and 280 dp cap, and a group label is capped the same way, which is what
+      // iOS's menu does. `expanded && enabled`, so a disabled trigger never composes a
+      // list even for the frame before `disabled`'s close lands.
+      NitroUiMenuPopup(
+        expanded = expanded && enabled,
         onDismissRequest = {
           // Everything that closes a popup without a choice: outside tap, the
           // system back gesture, the composition going away.
           model.setOpen(false)
         },
+        witness = model,
       ) {
-        // Must be first: it reads `LocalView`, which inside this lambda is the
-        // *popup's* view.
-        MenuWitness(model)
-        MenuEntries(
+        MenuGroups(
           entries = entries,
+          menuTitle = null,
           enabled = enabled,
           onPick = { id -> choose(id) },
           onRowsComposed = model::noteMenuRows,
@@ -713,8 +701,9 @@ class HybridNitroUiMenu(
         // D29: a disabled Menu is not showing a list. Reported through the funnel
         // so the app that opened it also hears it close.
         //
-        // `menuAnchor(enabled = false)` also stops the popup being composed, so a
-        // mutation of this line alone may well leave the gate green - the gate is an
+        // The popup is composed with `expanded && enabled`, so it also stops being
+        // composed without this line, and a mutation of it alone may well leave the
+        // gate green - the gate is an
         // outcome gate ("a disabled control is not showing a list of choices"). The
         // write stays because it is what makes that the control's rule rather than
         // the widget library's, and because this control's own `expanded` is what
@@ -940,13 +929,22 @@ class HybridNitroUiMenu(
    * a hosted popup needs a witness of its own. Reads a lock-protected snapshot of a
    * few integers, so it is safe on the JS thread and never waits for the UI thread.
    */
-  override fun nuiTestMenuReport(): String = model.readMenuReport()
+  override fun nuiTestMenuReport(): String {
+    MenuDrawnWitness.wanted = true
+    return model.readMenuReport()
+  }
 
   /**
-   * A no-op here: the probe asks iOS's second renderer (UIKit's `UIMenu`) what it
-   * built, and Android has none - `rows` in the report is already counted from the
-   * rows the popup composed, so `drawn` answers `-1`. See
-   * `NitroUiMenuMethods.nuiTestMenuProbe`.
+   * Re-read the open popup's semantics tree into `drawn` now, on the UI thread. The
+   * witness reads it on each layout of the popup's window anyway; this is for a change
+   * that repaints without a layout. See `NitroUiMenuMethods.nuiTestMenuProbe`.
    */
-  override fun nuiTestMenuProbe() = Unit
+  override fun nuiTestMenuProbe() {
+    MenuDrawnWitness.wanted = true
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      model.refreshDrawn()
+    } else {
+      host.post { model.refreshDrawn() }
+    }
+  }
 }

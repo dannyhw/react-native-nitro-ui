@@ -40,7 +40,7 @@ export interface NitroUiMenuRow {
    * `'action'`, `'submenu'` or `'section'`. Anything else behaves as `'action'`.
    *
    * A `'submenu'` owns the rows whose `parentId` is its id: iOS nests them,
-   * Android paints them inline under a divider (D29). A `'section'` is a header
+   * Android paints them inline as a group of their own (D29). A `'section'` is a header
    * row that owns rows the same way, and renders as a group on both platforms.
    */
   kind: string;
@@ -58,6 +58,19 @@ export interface NitroUiMenuRow {
   destructive: boolean;
   /** Leading SF Symbol name, or `null`. iOS only - Android ignores it. */
   systemImage: string | null;
+  /**
+   * The row's second line, or `null` for none (the wrapper sends `null` for `''`):
+   * iOS `UIAction.subtitle`, Android the row's supporting text. Always `null` on a
+   * `'submenu'` or `'section'` row.
+   */
+  subtitle: string | null;
+  /**
+   * `null` for a plain row; a boolean makes the row checkable and says whether it is
+   * checked: iOS a menu `Toggle` (`UIAction.state`), Android a selected row with a
+   * check. Not a value: a pick still only reports the id. Always `null` on a
+   * `'submenu'` or `'section'` row.
+   */
+  checked: boolean | null;
 }
 
 /**
@@ -223,19 +236,25 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * found in the platform's own menu. `-1` means "this platform cannot measure
    * that".
    *
-   * Android answers with the first five, and `-1` for `drawn`: its `rows` is
-   * already read from the rows the popup composed. iOS answers `rows` from its
-   * model, `drawn` from the probe, and `-1` for the other four: SwiftUI keeps a
-   * `Menu`'s open state and its window to itself, so there is no popup here to
+   * Android answers all six: `rows` is read from the rows the popup composed, and
+   * `drawn` from the open popup's own semantics tree - the rows TalkBack reaches - at
+   * its last layout, once any report or probe has been asked for. iOS answers `rows`
+   * from its model, `drawn` from the probe, and `-1` for the other four: SwiftUI keeps
+   * a `Menu`'s open state and its window to itself, so there is no popup here to
    * measure - the same answer `HybridNitroUiPicker.nuiTestMenuReport` gives, and
    * never a `0` that would read as "checked".
    *
    * `drawn`'s tree, written in the menu's order with `,` between siblings: a row is
-   * its title, with `!` after it when it is destructive and `~` when it is
-   * disabled; an inline group (a section) is `(<title>:<rows>)`, with an empty
-   * title for an untitled one; a submenu is `{<title>:<rows>}`; anything else is
-   * `?`. Titles are written as they are, so a fixture that reads this keeps `,`,
-   * `:`, `;`, `!`, `~` and brackets out of its titles.
+   * its title, then `@<subtitle>` when it has one, `+` when it is checked, `=` when it
+   * is checkable and unchecked (Android only: UIKit gives an unchecked toggle and a
+   * plain row the same `.off` state), `!` when it is destructive (iOS only: on Android
+   * that is a colour, nothing in the tree) and `~` when it is disabled. A group is
+   * `(<title>:<rows>)`, with an empty title for an untitled one: on iOS a section, on
+   * Android every Material group, top-level actions included. A submenu is
+   * `{<title>:<rows>}` (iOS; Android draws it as a group), a menu's own title
+   * `#<title>` (Android ContextMenu), and anything else `?`. Titles are written as they
+   * are, so a fixture that reads this keeps `,`, `:`, `;`, `@`, `#`, `+`, `=`, `!`,
+   * `~` and brackets out of its titles and subtitles.
    *
    * @internal Not app API (DECISIONS D14).
    */
@@ -255,8 +274,9 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * rather than open, or cannot be done. Runs on the UI thread, so a call from JS
    * hops there; poll the report for the answer.
    *
-   * Android has no second renderer to ask - its `rows` already counts the
-   * composed rows - so this is a no-op there and `drawn` stays `-1`.
+   * On Android the popup's witness already reads `drawn` from the popup's semantics
+   * tree on each layout of its window; the probe re-reads it from the open popup now,
+   * for a change that repaints without a layout. With no popup open it does nothing.
    *
    * @internal Not app API (DECISIONS D14). Deleted when the harness can open a
    * SwiftUI `Menu` and read its rows itself.

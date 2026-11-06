@@ -1,0 +1,15 @@
+{
+  "name": "Tooltip",
+  "hybridView": "NitroUiTooltip",
+  "implementation": "HybridNitroUiTooltip",
+  "id": "tooltip",
+  "sizing": null,
+  "hostable": false,
+  "exampleTab": "tooltip",
+  "exampleLabel": "Tooltip",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone"
+}

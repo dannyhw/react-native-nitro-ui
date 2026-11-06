@@ -1,0 +1,141 @@
+# Failure excerpt — harness:ios:Tooltip:-t:presents%20once%20when%20mounted%7Crecycled%20view%7Cleaves%20nothing%20when%20dropped
+
+- Ran: 2026-11-03T16:49:58.364Z on code tree `77cb1afa3afa` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Tooltip -t presents once when mounted|recycled view|leaves nothing when dropped`
+- Result: fail, exit 1, 63404 ms
+- Load: start 11.89, end 9.76, median 10.13, max 12.36
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+ios+Tooltip+-t+presents+20once+20when+20mounted+7Crecycled+20view+7Cleaves+20nothing+20when+20dropped-2026-11-03T16-49-58.364Z.log` (<store>/task/G18-tooltip/harness+ios+Tooltip+-t+presents+20once+20when+20mounted+7Crecycled+20view+7Cleaves+20nothing+20when+20dropped-2026-11-03T16-49-58.364Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window`
+- `● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped while open`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 50 ms into its entry`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 100 ms into its entry`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 150 ms into its entry`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+ios+Tooltip+-t+presents+20once+20when+20mounted+7Crecycled+20view+7Cleaves+20nothing+20when+20dropped-2026-11-03T16-49-58.364Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G18-rcjjt                G18          both              pair-b
+  |   G16-w8ewe                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.76 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 94 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Tooltip -t presents once when mounted|recycled view|leaves nothing when dropped
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 77cb1afa3afa, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.89/13.54 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+ios+Tooltip+-t+presents+20once+20when+20mounted+7Crecycled+20view+7Cleaves+20nothing+20when+20dropped-2026-11-03T16-49-58.364Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone Air...
+HARNESS Runner ios ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window
+
+    "at-mount" never reached up from the first commit; its report is "presented=1;js=1;live=2;presentCount=2;onScreen=1;anchorW=40.0;anchorH=40.0;touchable=0;kind=popover;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;presenter=ownWindow;sourceIsOwnRoot=1;sourceIsAnchorBox=1;sourceMoves=0;permitted=up+down;arrow=down;contentW=267.0;contentH=97.0;anchorRect=40.0,200.0,40.0,40.0;popRect=10.0,90.0,267.0,97.0;contentId=at-mount-tooltip;appTop=-;topPresented=-;modalHosts=0;windows=2;drops=0;recycles=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from
+
+    "recycled" never reached the old tooltip up; its report is "presented=1;js=1;live=4;presentCount=2;onScreen=1;anchorW=40.0;anchorH=40.0;touchable=0;kind=popover;title=Old title;message=Old message;actions=1;ids=ok;presenter=ownWindow;sourceIsOwnRoot=1;sourceIsAnchorBox=1;sourceMoves=0;permitted=up+down;arrow=down;contentW=124.0;contentH=97.0;anchorRect=40.0,200.0,40.0,40.0;popRect=10.0,90.0,124.0,97.0;contentId=recycled-tooltip;appTop=-;topPresented=-;modalHosts=0;windows=4;drops=1;recycles=1"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped while open
+
+    "dropped" never reached up; its report is "presented=1;js=1;live=5;presentCount=1;onScreen=1;anchorW=40.0;anchorH=40.0;touchable=0;kind=popover;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;presenter=ownWindow;sourceIsOwnRoot=1;sourceIsAnchorBox=1;sourceMoves=0;permitted=up+down;arrow=down;contentW=267.0;contentH=97.0;anchorRect=40.0,200.0,40.0,40.0;popRect=10.0,90.0,267.0,97.0;contentId=dropped-tooltip;appTop=-;topPresented=-;modalHosts=0;windows=5;drops=2;recycles=2"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 50 ms into its entry
+
+    "probe-228131601.373041" never reached live=0 (dropped 50 ms into its entry); its report is "presented=0;js=0;live=6;presentCount=0;onScreen=0;anchorW=40.0;anchorH=40.0;touchable=0;kind=none;appTop=-;topPresented=-;modalHosts=0;windows=6;drops=4;recycles=4"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 100 ms into its entry
+
+    "probe-228140484.112041" never reached live=0 (dropped 100 ms into its entry); its report is "presented=0;js=0;live=7;presentCount=0;onScreen=0;anchorW=40.0;anchorH=40.0;touchable=0;kind=none;appTop=-;topPresented=-;modalHosts=0;windows=7;drops=6;recycles=6"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 150 ms into its entry
+
+    "probe-228149417.387041" never reached live=0 (dropped 150 ms into its entry); its report is "presented=0;js=0;live=8;presentCount=0;onScreen=0;anchorW=40.0;anchorH=40.0;touchable=0;kind=none;appTop=-;topPresented=-;modalHosts=0;windows=8;drops=8;recycles=8"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 16 skipped, 22 total
+Snapshots:   0 total
+Time:        61.208 s
+Ran all test suites matching Tooltip with tests matching "presents once when mounted|recycled view|leaves nothing when dropped".
+
+
+
+```

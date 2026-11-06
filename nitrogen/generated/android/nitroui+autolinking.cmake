@@ -67,6 +67,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiTooltipSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiTooltipComponent.cpp
   # Android-specific Nitrogen C++ sources
   ../nitrogen/generated/android/c++/JHybridNitroUiMaterialThemeSpec.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiBottomSheetSpec.cpp
@@ -104,6 +106,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiTooltipSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiTooltipStateUpdater.cpp
 )
 
 # From node_modules/react-native/ReactAndroid/cmake-utils/folly-flags.cmake

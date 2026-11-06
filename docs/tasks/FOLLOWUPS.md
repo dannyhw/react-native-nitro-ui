@@ -134,6 +134,15 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G14 (merge re-review): `BottomSheet.harness.tsx`'s comment at the 50-cycle block (~881-883) says the probe is never the cycling view handed back by the recycle pool; a probe mounted at the start of a round can still be a pooled view from an earlier round - say "never the view dropped in this round".
 - G14 (merge re-review): the Android root's `onInterceptHoverEvent` super fix (`super.onInterceptHoverEvent`) has no test; `adb shell input` sends no hover events and the JVM unit tests have no Android context.
 - G14 (merge re-review): `waitForFreshReport` (the `seq`-gated read) was never shown red on its own; break the `seq` gate (accept any read) with the iOS drop teardown removed and see the drop test go green.
+- G18: Tooltip has no bench arm (Q7 C8): a `present.tooltip` scenario needs the exclusive bench lease and a present/dismiss timing helper the bench does not have; `component.json` says `bench: false` until then.
+- G18: a popover in the app's chain made UIKit refuse the next RN `Modal` (Tooltip, measured); BottomSheet presents in the chain by D35 and was not measured for the same refusal.
+- G18: `scripts/__tests__/device-ops.test.js` "leaves the server alone when the pair names none" reads `ANDROID_ADB_SERVER_PORT` from the environment, so `check` run from a shell with the lease env sourced goes red.
+- G18: harness `console.log` output reaches no gate log, so numbers tests print (tooltip heights, recycle counts) are lost unless the test fails.
+- G18 merge: Android real input cannot see a non-focusable Material popup in its `uiautomator` dump (`focusable = false` aborted the tooltip check at its opening tap), so a popup that is not focusable has no real-input reading on Android.
+- G18 merge (review finding 4, not done): the iOS tooltip's `CADisplayLink` (`NitroUiTooltipAnchorTracker`) runs at the display's full rate while a popover is up, and `publishReport()` builds its string outside test runs too; the library has no test-run switch to skip it.
+- G18 merge: material3 1.5's `TooltipBox` keys the tooltip content on the anchor's position and composes it twice per presentation; Android Tooltip's readings now follow the popup (`state.isVisible`), and a material3 that changes either moves them again.
+- G18: a page-sheet `Modal` opened over an open iOS tooltip is unmeasured (expected: the tooltip stays above the sheet).
+- G18: `scripts/__tests__/conformance.test.js` "is complete for the ten controls today" now lists thirteen.
 - G16 ContextMenu bench arm (N = 200) not built: `bench: false`. Its mount is a `View` plus an empty 0 × 0 composition on Android and one interaction on iOS, so the arm would need its own bench screen and baseline cells; owed with the next bench pass.
 - G16: the iOS touch cancel (`RCTSurfaceTouchHandler` reset at `willDisplayMenu`, D37 item 1) is kept (orchestrator, fix round 1) but unproven below iOS 27: the lease pool is iOS 27 only, where UIKit already ends React Native's touch at the lift. Add an iOS 26.x pair to the pool (maintainer-mac-1 has a 26.4 runtime outside it) and prove the reset red there.
 - G16: Android ContextMenu has no mouse or stylus right-click (`performContextClick`); iOS gets a pointer's secondary click from UIKit.
@@ -162,4 +171,21 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - real-input Android (G17): the clear button is located by geometry (the one clickable node in the field's right half) because Material 3 gives it no stable `resource-id`; a tree change would make it report "two candidates" rather than mis-tap, but a named route would be better.
 - gate.mjs (G17): `wait --gate <g>` prints "last log line" from the newest log for the gate name, so in the seconds before a re-run writes its own log it shows the *previous* run's failure line — reads as if the new run were already red.
 - gate.mjs (G17 incident): a device gate started without the lease's env has no `NITRO_UI_LEASE_ID`, and the harness runner then picks an emulator itself and shuts one down on the way out (`HARNESS Shutting down Android emulator …`, and the isolated run then dies with an aborted Metro session). A device gate should refuse to start with no lease id in its environment rather than let the runner choose a device it does not own.
-
+- `gate.mjs export --task <ID>` replaces the task's `gates.jsonl` with the current branch's lines only, so a merge branch's export drops the task branch's ledger (X18 and X19 had it restored by hand). Make export append per branch.
+- G17 review: move Android SearchField to material3 1.5's stateful `InputField` in a plain `Surface`, not `SearchBar`, which wraps the field in `DisableSoftKeyboard`. Keyboard props come with it.
+- G17 review: `SearchFieldStrings` reads `Resources.getSystem()` once per process, so it ignores an app's own language setting.
+- G17 review: the declared-fallback constants aren't checked against the native constants (the harness poisons the cache).
+- G17 review: Android `hasText` uses `derivedStateOf` without `remember`; there's no SearchField IME composition test on Android.
+- G18 review: iOS Tooltip's own window calls `makeKeyAndVisible`, which may close the keyboard beside a focused field. Measure it.
+- G18 review: VoiceOver focus doesn't return to the anchor when a Tooltip closes (`.screenChanged` with `nil`).
+- G18 review: close a Tooltip when its anchor leaves the visible window. Add Tooltip to the MaterialTheme theme-switch cases. Test a real outside tap on Android's plain tooltip.
+- G18 review: iOS builds a new hosting controller per presentation rather than reusing one.
+- Component docs (`docs/components/*.md`) still carry task IDs and D-refs.
+- E2 review: the iOS menu probe can't tell a `Toggle` row from a `Button` row (both `.off` when unchecked). Make it read the source.
+- E2 review: subtitle rendering is verified only on iOS 27. Check the oldest installable runtime.
+- E2: the check glyph is defined twice (Chip and the menu rows). Share one after E1 merges.
+- E1 review: no test goes red if SegmentedControl's `.selectableGroup()` is dropped (uiautomator can't see collection info).
+- E1 review: `ConnectedSegment` allocates a label style and the shape values on each recomposition; pass `color =` to `Text` and cache the shapes.
+- E1 review: try a 32 dp XS button visual inside a 48 dp layout (`minimumInteractiveComponentSize()` before `height(token)`).
+- E1 review: `ButtonShapesCache` and `ChipShapesCache` key only on the motion scheme; fragile if shape tokens become themeable.
+- E1 merge round: Menu's trigger shares the button, so re-measure `menu.md`'s sizes, the Menu Android fallback and `menu-android.png` on the combined tree with E2.

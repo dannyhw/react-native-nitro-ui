@@ -13,7 +13,6 @@ import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -160,6 +159,10 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
   private var menuBottom = -1
   private var menuRowCount = -1
 
+  /** The popup's semantics tree as last read, `drawn` notation, or `null` unread. */
+  @Volatile var drawn: String? = null
+    private set
+
   /** Whether a long press would open a menu: enabled, and something to pick. */
   val canOpen: Boolean
     get() = enabled && actionableRowCount > 0
@@ -270,6 +273,15 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     setOpen(false)
   }
 
+  override fun noteMenuDrawn(tree: String) {
+    drawn = tree
+  }
+
+  /** Re-read the open popup's semantics now (`nuiTestMenuProbe`). UI thread. */
+  fun refreshDrawn() {
+    refreshMenuDrawn(menuView, this)
+  }
+
   fun noteMenuRows(rows: Int) {
     menuRowCount = rows
   }
@@ -316,6 +328,7 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     closes = 0
     selects = 0
     menuView = null
+    drawn = null
     clearMenuFrame()
     anchorPlaced = "-1"
     anchorPlacements = 0
@@ -333,8 +346,8 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
 }
 
 /**
- * The menu's composition: a zero-size anchor at the press point and Material 3's
- * `DropdownMenu` on it, with Menu's rows. Laid out at 0 x 0 by [ContextMenuView].
+ * The menu's composition: a zero-size anchor at the press point and Menu's Material 3
+ * Expressive popup on it, with Menu's groups and rows (`MenuRows.kt`). Laid out at 0 x 0 by [ContextMenuView].
  */
 internal class ContextMenuHost(
   context: Context,
@@ -362,19 +375,17 @@ internal class ContextMenuHost(
         }
       },
     ) {
-      DropdownMenu(
+      // Menu's popup and groups (E2), anchored at the finger: the zero-size box is the
+      // layout the popup is positioned against. The title is the first group's label.
+      NitroUiMenuPopup(
         expanded = model.expanded,
         // Outside tap and the back gesture.
         onDismissRequest = { model.setOpen(false) },
+        witness = model,
       ) {
-        // First: it reads `LocalView`, which here is the popup's view.
-        MenuWitness(model)
-        val title = model.title
-        if (title != null) {
-          MenuHeader(title)
-        }
-        MenuEntries(
+        MenuGroups(
           entries = model.entries,
+          menuTitle = model.title,
           enabled = model.enabled,
           onPick = { id -> choose(id) },
           onRowsComposed = model::noteMenuRows,
@@ -944,13 +955,24 @@ class HybridNitroUiContextMenu(
     if (Looper.myLooper() == Looper.getMainLooper()) host.choose(id) else wrapper.post { host.choose(id) }
   }
 
-  /** A no-op: Android has no second renderer to ask (see the spec); `drawn` stays `-1`. */
-  override fun nuiTestMenuProbe() = Unit
+  /**
+   * Re-read the open popup's semantics tree into `drawn`, on the UI thread: the rows a
+   * screen reader reaches, in Menu's notation. The witness reads it on each layout of the
+   * popup anyway; this is for a repaint without one.
+   */
+  override fun nuiTestMenuProbe() {
+    MenuDrawnWitness.wanted = true
+    wrapper.post {
+      model.refreshDrawn()
+      publish()
+    }
+  }
 
   override fun nuiTestContextMenuReport(): String {
     // From the first read on, every state change keeps the report fresh; until then
     // nothing builds it. This read returns the last one built.
     model.reportsWanted = true
+    MenuDrawnWitness.wanted = true
     wrapper.post { publish() }
     return report
   }
@@ -980,7 +1002,7 @@ class HybridNitroUiContextMenu(
     report =
       "open=${if (model.expanded) 1 else 0};opens=${model.opens};closes=${model.closes};" +
       "selects=${model.selects};configs=-1;cancels=${wrapper.cancels};rows=${model.reportedRows};" +
-      "drawn=-1;title=${model.title ?: "-"};box=${dp(wrapper.width)}x${dp(wrapper.height)};" +
+      "drawn=${model.drawn ?: "-1"};title=${model.title ?: "-"};box=${dp(wrapper.width)}x${dp(wrapper.height)};" +
       "contentIndex=${wrapper.indexOfChild(host)}/${wrapper.childCount};interaction=-1;" +
       "ax=${if (wrapper.isFocusable) 1 else 0};a11yAction=${wrapper.a11yActionLabel()};" +
       "radius=-1;press=$press;menu=${model.menuFrame};anchor=${model.anchorPlaced};live=${ContextMenuModel.liveMenus.get()};" +

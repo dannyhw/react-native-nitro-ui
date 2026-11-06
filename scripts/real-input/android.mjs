@@ -823,6 +823,9 @@ const CHECKS = {
     const PICK = 'Bravo';
     const TWIN = 'Alpha';
     const LOCKED = 'Locked row';
+    // The checkable row: a `CheckableDropdownMenuItem`, whose pick goes through
+    // `onCheckedChange` rather than `onClick` - the wiring step 6 exists for.
+    const CHECKED = 'Checked row';
 
     // 1. Before any touch: the echoes, the window table, and what a screen reader is
     //    offered. The trigger's node is read here rather than later because a popup
@@ -1051,6 +1054,55 @@ const CHECKS = {
       'the whole echo pairs every open with a close, in the order the gestures happened',
       t.requireEcho(ECHO.menuEvents),
       'open > close > open > select bravo > close > open > close > open > select alpha > close'
+    );
+
+    // 6. The checked row. Its pick is a different handler from every row above
+    //    (`onCheckedChange`, `MenuRows.kt`), and the harness never reaches it:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    await t.tapUntilUp(
+      () => t.requireControlAt('Real-input menu', control),
+      'a real tap that reopens the menu for the checked row',
+      () => t.popupWindowCount(),
+      { pollMs: DUMP_POLL_MS }
+    );
+    const checkedRow = t.waitForOption(
+      CHECKED,
+      'the menu to show the checked row'
+    );
+    t.log.note(
+      `row "${CHECKED}": enabled=${checkedRow.enabled} clickable=${checkedRow.clickable} ` +
+        `checkable=${checkedRow.checkable} checked=${checkedRow.checked} ` +
+        `class=${checkedRow.className}`
+    );
+    t.log.checkEquals(
+      `a real tap on the checked row "${CHECKED}" reaches JS as its id`,
+      await t.tapOptionUntilValue(
+        CHECKED,
+        ECHO.menuPick,
+        'checked',
+        'a pick of the checked row to reach JS'
+      ),
+      'checked'
+    );
+    t.log.checkEquals(
+      'a pick of the checked row closes its own popup',
+      t.waitForPopupCount(0, 'the checked-row pick to take its popup down'),
+      0
+    );
+    const finalEvents = t.requireEcho(ECHO.menuEvents);
+    t.log.checkEquals(
+      'the checked row reported exactly one select',
+      finalEvents.split(' > ').filter((said) => said === 'select checked')
+        .length,
+      1
+    );
+    t.log.checkEquals(
+      'and the whole echo ends with one more open > select checked > close',
+      finalEvents,
+      'open > close > open > select bravo > close > open > close > open > select alpha > close' +
+        ' > open > select checked > close'
     );
   },
 
@@ -2130,6 +2182,151 @@ const CHECKS = {
       `action:delete > presented:false > ${tail}`
     );
     await waitGone(SHEET_ROW, 'the row to take the sheet down');
+  },
+
+  'tooltip': async (t) => {
+    // The rich tooltip `TooltipScreen` opens around its star. Its message and its
+    // action's title appear nowhere else on the screen, so a text match names the
+    // popup. Material's popup is a window of its own, and while it is up the dump can
+    // be that window's tree rather than the app's - so the log is read only with the
+    // tooltip down, and "up" is read as the tooltip's own message.
+    const MESSAGE = 'Tap the star to keep this search.';
+    const TITLE = 'Saved searches';
+    const ACTION = 'Got it';
+    const upCount = () =>
+      t.dump().filter((node) => node.text === MESSAGE).length;
+    const opener = () => {
+      const node = t.nodeByTestId('tooltip-open-rich');
+      if (node == null) {
+        t.log.abort('no "tooltip-open-rich" opener on the Tooltip screen');
+      }
+      return node;
+    };
+    const open = async (description) => {
+      await t.tapUntilUp(opener, description, upCount, {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(MESSAGE, description);
+    };
+    const waitGone = async (description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    // One real tap on the star, confirmed by its own count. The anchor is the app's
+    // `Pressable`; the tooltip's overlay is behind it and takes no touch.
+    const pressAnchor = async (expected, description) => {
+      const { delivered, shown } = await t.pressUntil({
+        what: 'the star the tooltip points at (tooltip-anchor)',
+        waitingFor: description,
+        attempts: 1,
+        press: async () => {
+          await t.tapTestId('tooltip-anchor');
+        },
+        reading: () => t.echo(ECHO.tooltipPresses),
+        raised: (current) => current === expected,
+      });
+      if (!delivered) {
+        t.log.abort(
+          `${description}: the star's count says "${String(shown)}", not "${expected}"`
+        );
+      }
+      return shown;
+    };
+    // Outside: the log line, a `Text` with no press of its own, well above the popup
+    // that hangs over the star. Found while the tooltip is down (an open popup's window
+    // can be all the dump holds), and tapped where it was. A fixed fraction of the
+    // screen could land on a tab, or on a button a passed-through touch would press.
+    const logNode = t.nodeByTestId(ECHO.tooltipLog);
+    if (logNode == null) {
+      t.log.abort('no "tooltip-log" on the Tooltip screen to tap outside on');
+    }
+    const tapOutside = async () => {
+      await t.tapNode(logNode);
+      await t.settle(400);
+    };
+
+    // 1. Before a touch: nothing reported, nothing up, and a closed tooltip leaves a
+    //    real tap on its anchor to the anchor - once.
+    t.log.checkEquals(
+      'no tooltip has reported anything before a touch',
+      t.requireEcho(ECHO.tooltipLog),
+      'none'
+    );
+    t.log.checkEquals('no tooltip is up before a touch', upCount(), 0);
+    t.log.checkEquals(
+      'a real tap on the anchor of a closed tooltip presses the anchor once',
+      await pressAnchor('star presses: 1', 'the real tap on the star'),
+      'star presses: 1'
+    );
+    await t.settle(800);
+    t.log.checkEquals(
+      'and opens nothing, reports nothing',
+      `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+      '0 up, log none'
+    );
+
+    // 2. A real tap on a plain RN button opens it, with its title and its action. JS
+    //    opened it, so it reports nothing (read once it is down, in step 3).
+    await open('the real tap that opens the rich tooltip');
+    t.log.checkEquals(
+      'the tooltip shows its title and its action',
+      `${String(t.dump().filter((n) => n.text === TITLE).length)} title, ` +
+        `${String(t.dump().filter((n) => n.text === ACTION).length)} action`,
+      '1 title, 1 action'
+    );
+
+    // 3. A tap outside closes it, and reports the close alone.
+    await tapOutside();
+    await waitGone('a tap outside to take the tooltip down');
+    t.log.checkEquals(
+      'a tap outside closes the tooltip and reports the close alone',
+      t.requireEcho(ECHO.tooltipLog),
+      'presented:false'
+    );
+
+    // 4. Back closes a tooltip with an action - Material makes that one focusable.
+    await open('the real tap that reopens the rich tooltip');
+    await t.pressBack();
+    await waitGone('Back to take the tooltip down');
+    t.log.checkEquals(
+      'Back closes it and reports the close alone',
+      t.requireEcho(ECHO.tooltipLog),
+      'presented:false > presented:false'
+    );
+
+    // 5. Its action reports, before the close it causes (D32).
+    await open('the real tap that opens it again');
+    const afterAction =
+      'presented:false > presented:false > action:ok > presented:false';
+    t.log.checkEquals(
+      'a real tap on its action reports the id, then the close - once each, in order',
+      await t.tapOptionUntilValue(
+        ACTION,
+        ECHO.tooltipLog,
+        afterAction,
+        `the real tap on "${ACTION}"`
+      ),
+      afterAction
+    );
+    await waitGone('the action to take the tooltip down');
+
+    // 6. Closed again, the anchor's taps are its own.
+    t.log.checkEquals(
+      'once it is closed, a real tap on the anchor presses it once more',
+      await pressAnchor('star presses: 2', 'the second real tap on the star'),
+      'star presses: 2'
+    );
+    await t.settle(800);
+    t.log.checkEquals(
+      'and opens nothing, reports nothing',
+      `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
+      `0 up, log ${afterAction}`
+    );
   },
 
   'bottom-sheet': async (t) => {
@@ -4640,7 +4837,7 @@ class DeviceHarness {
    * off to poll an echo called `undefined`; iOS never noticed, because it taps a tab by
    * its `testID`, which Android's accessibility tree does not carry.
    *
-   * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet'} screen
+   * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet' | 'tooltip'} screen
    */
   async goToScreen(screen) {
     const { anchor } = screenTab(screen);

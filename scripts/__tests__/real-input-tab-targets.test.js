@@ -61,12 +61,11 @@ describe('exampleTabs', () => {
   });
 
   it('picks up tabs the registry adds, so the next components need no edit here', () => {
-    // The next two components (X19 brief, written as two names this repo does not have
-    // yet) get their tabs written into App.tsx by the same region `bun run regen`
-    // rewrites; the rule has to see them from that output alone. The names are chosen
-    // against the manifests on disk rather than hard-coded, because a component that has
-    // since landed (SearchField did, between this test and the merge) would arrive twice
-    // and `manifestsFromEntries` would refuse the whole registry.
+    // SearchField and Tooltip were the next two components (X19 brief). Their tabs are
+    // written into App.tsx by the same region `bun run regen` rewrites; the rule has to
+    // see them from that output alone. A component that has landed since (Tooltip, G18)
+    // is read from its own manifest rather than invented a second time, which the
+    // registry would refuse as a duplicate.
     const dirs = readdirSync(join(repoRoot, 'src/components'), {
       withFileTypes: true,
     })
@@ -98,22 +97,11 @@ describe('exampleTabs', () => {
       delete manifest.exports;
       return { directory: name, text: JSON.stringify(manifest) };
     };
-    // Two controls the repo does not have. Both directions of the name are picked free of
-    // the manifests on disk, so the fixture stays valid as the library grows.
-    const taken = new Set(entries.map((entry) => entry.directory));
-    const nextName = (base) => {
-      let name = base;
-      for (let n = 2; taken.has(name); n += 1) name = `${base}${n}`;
-      taken.add(name);
-      return name;
-    };
-    const [first, second] = [nextName('Tooltip'), nextName('Ripple')];
-    const toTab = (name) => name.toLowerCase();
-    const manifests = manifestsFromEntries([
-      ...entries,
-      fresh(first, toTab(first), 'Tooltip'),
-      fresh(second, toTab(second), 'Ripple'),
-    ]);
+    const invented = [
+      fresh('SearchField', 'searchfield', 'Search'),
+      fresh('Tooltip', 'tooltip', 'Tooltip'),
+    ].filter((entry) => !dirs.includes(entry.directory));
+    const manifests = manifestsFromEntries([...entries, ...invented]);
     const region = regionsFor(manifests).find(
       (spec) => spec.path === APP && spec.describe === 'TABS'
     );
@@ -122,8 +110,8 @@ describe('exampleTabs', () => {
     const tabs = exampleTabs(written.content);
     expect(tabs).toEqual(
       expect.arrayContaining([
-        { id: toTab(first), label: 'Tooltip' },
-        { id: toTab(second), label: 'Ripple' },
+        { id: 'searchfield', label: 'Search' },
+        { id: 'tooltip', label: 'Tooltip' },
       ])
     );
     // And the hand-written Host entry after the region is still read.

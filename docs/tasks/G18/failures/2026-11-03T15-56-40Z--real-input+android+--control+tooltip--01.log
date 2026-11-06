@@ -1,0 +1,123 @@
+# Failure excerpt — real-input:android:--control:tooltip
+
+- Ran: 2026-11-03T15:56:40.381Z on code tree `52510abb7372` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node scripts/real-input/android.mjs --control tooltip`
+- Result: fail, exit 1, 609121 ms
+- Load: start 24.43, end 124.35, median 41.17, max 124.35
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log` (<store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the real tap on the star: the star's count says "star presses: 0", not "star presses: 1"`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 124.35 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 80 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: real-input:android:--control:tooltip
+gate: node scripts/real-input/android.mjs --control tooltip (cwd .)
+gate: code tree 52510abb7372 at HEAD 604e3b25
+gate: git tree 66879fbbd5ec with a DIRTY worktree (not reusable)
+gate: log task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log
+gate:       <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log
+real-input (android): emulator-5570 · nitroui_t01 · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    · the real tap on the star: tap 1/1 on the star the tooltip points at (tooltip-anchor) left "star presses: 0" - tapping again
+    ✗ the real tap on the star: the star's count says "star presses: 0", not "star presses: 1"
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,737][1038,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,737][492,863]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2053][1038,2179]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2273][714,2399]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,383][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+tooltip: FAIL (no retries)
+    failed: the real tap on the star: the star's count says "star presses: 0", not "star presses: 1"
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 16/16 auxiliary checks passed
+gate: real-input:android:--control:tooltip FAIL in 609.1 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T15-56-39.830Z.log (5 probe(s))
+
+```

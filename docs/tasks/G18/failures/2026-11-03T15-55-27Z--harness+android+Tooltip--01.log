@@ -1,0 +1,175 @@
+# Failure excerpt — harness:android:Tooltip
+
+- Ran: 2026-11-03T15:55:27.801Z on code tree `52510abb7372` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Tooltip`
+- Result: fail, exit 1, 62810 ms
+- Load: start 44.51, end 26.57, median 33.77, max 44.51
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+android+Tooltip-2026-11-03T15-55-27.801Z.log` (<store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T15-55-27.801Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · early checks (Q7 C9) › leaves a tap on its anchor to the anchor (check 1)`
+- `● Tooltip · early checks (Q7 C9) › presents from a window of its own inside an RN Modal, and still points at its anchor (check 3)`
+- `expected 'in-modal:presented:false,in-modal:pre…' to be 'in-modal:presented:false' // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › reports a JS close as nothing, and a user close as a close (barrier twin)`
+- `expected 'quiet:presented:false,twin:presented:…' to be 'twin:presented:false' // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › reports an action before the close it causes`
+- `expected 'act:action:ok,act:presented:false,act…' to be 'act:action:ok,act:presented:false' // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › draws the plain kind with no title and no actions (Android), one popover on iOS`
+- `expected 'rich' to be 'plain' // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › gives the overlay the wrapper's box, which hugs a 40 x 40 anchor`
+- `expected 320 to be 40 // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › gives the overlay the wrapper's box, which hugs a 120 x 40 anchor`
+- `expected 320 to be 120 // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once`
+- `expected 2 to be 1 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T15-55-27.801Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 26.57 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 117 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Tooltip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 52510abb7372, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 44.51/35.78 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T15-55-27.801Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · early checks (Q7 C9) › leaves a tap on its anchor to the anchor (check 1)
+
+    the harness tap on the anchor inside a closed tooltip never reached it; the tooltip says "presented=0;js=0;live=0;presentCount=0;composing=0;anchorW=1080;anchorH=116;kind=none;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=0;recycles=0;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 306 |[39m       () [33m=>[39m (presses[33m.[39mlength [33m>[39m [35m0[39m [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 307 |[39m       () [33m=>[39m
+      [31m[1m>[22m[39m[90m 308 |[39m         [36mnew[39m [33mError[39m(
+       [90m     |[39m                  [31m[1m^[22m[39m
+       [90m 309 |[39m           [32m`the harness tap on the anchor inside a closed tooltip never reached it; the tooltip says "${reportOf('touch').raw}"`[39m
+       [90m 310 |[39m         )[33m,[39m
+       [90m 311 |[39m       [35m5000[39m[0m
+
+  ● Tooltip · early checks (Q7 C9) › presents from a window of its own inside an RN Modal, and still points at its anchor (check 3)
+
+    expected 'in-modal:presented:false,in-modal:pre…' to be 'in-modal:presented:false' // Object.is equality
+
+      [0m [90m 499 |[39m     handles[33m.[39m[36mget[39m([32m'in-modal'[39m)[33m?[39m[33m.[39mnuiTestDismiss()[33m;[39m
+       [90m 500 |[39m     [36mawait[39m waitForLive([32m'in-modal'[39m[33m,[39m [35m0[39m[33m,[39m [32m'dismissed inside the Modal'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 501 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m'in-modal:presented:false'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 502 |[39m     [36mif[39m ([33mIOS[39m) {
+       [90m 503 |[39m       [36mawait[39m waitForReport(
+       [90m 504 |[39m         [32m'in-modal'[39m[33m,[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › reports a JS close as nothing, and a user close as a close (barrier twin)
+
+    expected 'quiet:presented:false,twin:presented:…' to be 'twin:presented:false' // Object.is equality
+
+      [0m [90m 532 |[39m     handles[33m.[39m[36mget[39m([32m'twin'[39m)[33m?[39m[33m.[39mnuiTestDismiss()[33m;[39m
+       [90m 533 |[39m     [36mawait[39m waitForLive([32m'twin'[39m[33m,[39m [35m0[39m[33m,[39m [32m'the twin dismissed by the user'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 534 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m'twin:presented:false'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 535 |[39m   })[33m;[39m
+       [90m 536 |[39m
+       [90m 537 |[39m   it([32m'reports an action before the close it causes'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● Tooltip · behaviour (Q7 C7) › reports an action before the close it causes
+
+    expected 'act:action:ok,act:presented:false,act…' to be 'act:action:ok,act:presented:false' // Object.is equality
+
+      [0m [90m 546 |[39m     [36mawait[39m waitForLive([32m'act'[39m[33m,[39m [35m0[39m[33m,[39m [32m'closed by the action'[39m)[33m;[39m
+       [90m 547 |[39m     [36mawait[39m sleep([35m300[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 548 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m'act:action:ok,act:presented:false'[39m)[33m;[39m
+       [90m     |[39m                                    [31m[1m^[22m[39m
+       [90m 549 |[39m     expect(reportOf([32m'act'[39m)[33m.[39mpresented)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 550 |[39m   })[33m;[39m
+       [90m 551 |[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › draws the plain kind with no title and no actions (Android), one popover on iOS
+
+    expected 'rich' to be 'plain' // Object.is equality
+
+      [0m [90m 558 |[39m     [36mawait[39m waitForHandle([32m'plain'[39m)[33m;[39m
+       [90m 559 |[39m     [36mconst[39m up [33m=[39m [36mawait[39m waitForReport([32m'plain'[39m[33m,[39m isUpCounted([35m1[39m)[33m,[39m [32m'up'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 560 |[39m     expect(up[33m.[39mkind)[33m.[39mtoBe([33mIOS[39m [33m?[39m [32m'popover'[39m [33m:[39m [32m'plain'[39m)[33m;[39m
+       [90m     |[39m                         [31m[1m^[22m[39m
+       [90m 561 |[39m     expect(up[33m.[39mtitle)[33m.[39mtoBe([32m'-'[39m)[33m;[39m
+       [90m 562 |[39m     expect(up[33m.[39mactions)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 563 |[39m     [36mif[39m ([33m![39m[33mIOS[39m) expect(up[33m.[39mfocusable)[33m.[39mtoBe([32m'0'[39m)[33m;[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › gives the overlay the wrapper's box, which hugs a 40 x 40 anchor
+
+    expected 320 to be 40 // Object.is equality
+
+      [0m [90m 599 |[39m       )[33m;[39m
+       [90m 600 |[39m       [90m// The wrapper hugs its anchor (`alignSelf: 'flex-start'`), not the 320-wide row.[39m
+      [31m[1m>[22m[39m[90m 601 |[39m       expect(layout[33m.[39mwidth)[33m.[39mtoBe(width)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 602 |[39m       expect(layout[33m.[39mheight)[33m.[39mtoBe([35m40[39m)[33m;[39m
+       [90m 603 |[39m       [36mconst[39m report [33m=[39m [36mawait[39m waitForReport(
+       [90m 604 |[39m         [32m`box-${String(width)}`[39m[33m,[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › gives the overlay the wrapper's box, which hugs a 120 x 40 anchor
+
+    expected 320 to be 120 // Object.is equality
+
+      [0m [90m 599 |[39m       )[33m;[39m
+       [90m 600 |[39m       [90m// The wrapper hugs its anchor (`alignSelf: 'flex-start'`), not the 320-wide row.[39m
+      [31m[1m>[22m[39m[90m 601 |[39m       expect(layout[33m.[39mwidth)[33m.[39mtoBe(width)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 602 |[39m       expect(layout[33m.[39mheight)[33m.[39mtoBe([35m40[39m)[33m;[39m
+       [90m 603 |[39m       [36mconst[39m report [33m=[39m [36mawait[39m waitForReport(
+       [90m 604 |[39m         [32m`box-${String(width)}`[39m[33m,[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once
+
+    expected 2 to be 1 // Object.is equality
+
+      [0m [90m 649 |[39m       )[33m;[39m
+       [90m 650 |[39m       [36mconst[39m refusal [33m=[39m warnings[33m.[39mfilter((w) [33m=>[39m w[33m.[39mincludes([32m'closed by the user'[39m))[33m;[39m
+      [31m[1m>[22m[39m[90m 651 |[39m       expect(refusal[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m     |[39m                                  [31m[1m^[22m[39m
+       [90m 652 |[39m       expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe(
+       [90m 653 |[39m         [32m'refused:presented:false,refused:presented:false'[39m
+       [90m 654 |[39m       )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 14 passed, 22 total
+Snapshots:   0 total
+Time:        60.587 s
+Ran all test suites matching Tooltip.
+
+
+
+```
