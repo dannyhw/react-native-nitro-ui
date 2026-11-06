@@ -1,0 +1,103 @@
+# Failure excerpt — harness:ios:PopoverProto
+
+- Ran: 2026-11-06T02:16:04.530Z on code tree `e071d6c3c90d` at HEAD `66d4604` (branch `task/S5-popover-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios PopoverProto`
+- Result: fail, exit 1, 99574 ms
+- Load: start 5.74, end 4.02, median 4.34, max 5.79
+- Device: ios / device `F08675D3-A32B-4F88-BC81-02D7E0CB797E` / lease `S5-bp78g`
+- Full log: `task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log` (<store>/task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/PopoverProto.harness.tsx`
+- `● PopoverProto · evidence › prints every number the tests above measured (red by design)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S5-bp78g (still live)
+  |   S5-bp78g                 S5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 62 log line(s)
+
+```
+gate: claimed ios:F08675D3-A32B-4F88-BC81-02D7E0CB797E for this run
+gate: harness:ios:PopoverProto
+gate: node ../scripts/harness.mjs --harnessRunner ios PopoverProto (cwd example)
+gate: code tree e071d6c3c90d at HEAD 66d46049
+gate: git tree ecf528fcc10f with a DIRTY worktree (not reusable)
+gate: log task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log
+gate:       <store>/task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios PopoverProto
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree e071d6c3c90d, 17 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.74/6.79 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/PopoverProto.harness.tsx
+  ● PopoverProto · evidence › prints every number the tests above measured (red by design)
+
+    S5 evidence (red by design):
+
+      S5 Q1 10/10
+      k=0 ok=1 first=129x34 final=129x34 sizes=129x34 yoga=129x34 frames=37 trace=129x34/v4x1/o0.02,129x34/v29x10/o0.21,129x34/v29x10/o0.21,129x34/v61x22/o0.47,129x34/v61x22/o0.47,129x34/v89x32/o0.68,129x34/v89x32/o0.69,129x34/v108x40/o0.84
+      k=1 ok=1 first=225x68 final=225x68 sizes=225x68 yoga=225x68 frames=60 trace=225x68/v5x2/o0.01,225x68/v5x2/o0.01,225x68/v46x16/o0.19,225x68/v46x17/o0.20,225x68/v102x37/o0.45,225x68/v102x37/o0.45,225x68/v152x55/o0.67,225x68/v152x55/o0.67
+      k=2 ok=1 first=281x86 final=281x86 sizes=281x86 yoga=281x86 frames=60 trace=281x86/v5x2/o0.01,281x86/v6x2/o0.01,281x86/v55x19/o0.19,281x86/v55x19/o0.19,281x86/v126x44/o0.44,281x86/v126x44/o0.44,281x86/v188x66/o0.66,281x86/v188x66/o0.67
+      k=3 ok=1 first=320x124 final=320x124 sizes=320x124 yoga=320x124 frames=60 trace=320x124/v6x3/o0.01,320x124/v6x3/o0.01,320x124/v63x27/o0.19,320x124/v63x27/o0.19,320x124/v143x61/o0.44,320x124/v143x61/o0.44,320x124/v214x92/o0.66,320x124/v214x92/o0.67
+      k=4 ok=1 first=273x42 final=273x42 sizes=273x42 yoga=273x42 frames=60 trace=273x42/v6x1/o0.01,273x42/v7x1/o0.01,273x42/v57x11/o0.20,273x42/v57x11/o0.20,273x42/v125x25/o0.45,273x42/v125x25/o0.45,273x42/v185x37/o0.67,273x42/v185x37/o0.67
+      k=5 ok=1 first=320x97 final=320x97 sizes=320x97 yoga=320x97 frames=60 trace=320x97/v6x2/o0.01,320x97/v6x2/o0.01,320x97/v63x22/o0.19,320x97/v63x22/o0.19,320x97/v143x49/o0.44,320x97/v144x49/o0.44,320x97/v214x74/o0.67,320x97/v215x74/o0.67
+      k=6 ok=1 first=188x70 final=188x70 sizes=188x70 yoga=188x70 frames=60 trace=188x70/v4x2/o0.01,188x70/v4x2/o0.01,188x70/v37x16/o0.19,188x70/v37x16/o0.19,188x70/v84x37/o0.44,188x70/v84x37/o0.44,188x70/v126x55/o0.66,188x70/v126x55/o0.67
+      k=7 ok=1 first=315x111 final=315x111 sizes=315x111 yoga=315x111 frames=60 trace=315x111/v5x2/o0.01,315x111/v5x2/o0.01,315x111/v57x23/o0.17,315x111/v58x23/o0.18,315x111/v136x54/o0.43,315x111/v137x54/o0.43,315x111/v207x81/o0.65,315x111/v208x82/o0.66
+      k=8 ok=1 first=320x122 final=320x122 sizes=320x122 yoga=320x122 frames=60 trace=320x122/v6x3/o0.01,320x122/v7x3/o0.01,320x122/v63x27/o0.19,320x122/v64x27/o0.19,320x122/v144x61/o0.44,320x122/v144x61/o0.44,320x122/v214x90/o0.67,320x122/v215x91/o0.67
+      k=9 ok=1 first=320x146 final=320x146 sizes=320x146 yoga=320x146 frames=60 trace=320x146/v6x3/o0.01,320x146/v6x3/o0.01,320x146/v62x31/o0.19,320x146/v62x31/o0.19,320x146/v142x71/o0.44,320x146/v143x71/o0.44,320x146/v213x106/o0.66,320x146/v213x106/o0.66
+      S5 Q1 red arm: ok=0 first=320x480 final=320x124 sizes=320x480,320x124 yoga=320x124 frames=60 trace=320x480/v5x7/o0.00,320x480/v5x7/o0.00,320x480/v57x88/o0.17,320x480/v57x88/o0.17,320x480/v137x211/o0.42,320x480/v137x212/o0.42,320x480/v209x323/o0.65,320x480/v209x323/o0.65
+      S5 Q5 cycles: presentCount=50 live=0 controllers=0 touchRoots 0->0 windows=0 topPresented=-
+      S5 Q5 drop 0 ms: live=0 controllers=0 windows=0 topPresented=- touchRoots 0->0
+      S5 Q5 drop 50 ms: live=0 controllers=0 windows=0 topPresented=- touchRoots 0->0
+      S5 Q5 drop 100 ms: live=0 controllers=0 windows=0 topPresented=- touchRoots 0->0
+      S5 Q5 drop 150 ms: live=0 controllers=0 windows=0 topPresented=- touchRoots 0->0
+      S5 Q5 recycle rounds: 24,25,26,27
+      [0m [90m 449 |[39m   [90m// each with its own pass or fail.[39m
+       [90m 450 |[39m   it([32m'prints every number the tests above measured (red by design)'[39m[33m,[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 451 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`S5 evidence (red by design):\n${evidence.join('\n')}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 452 |[39m   })[33m;[39m
+       [90m 453 |[39m })[33m;[39m
+       [90m 454 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 passed, 9 total
+Snapshots:   0 total
+Time:        98.142 s
+Ran all test suites matching PopoverProto.
+gate: harness:ios:PopoverProto FAIL in 99.6 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+
+gate: appended the device context to task/S5-popover-spike/harness+ios+PopoverProto-2026-11-06T02-16-03.785Z.log (4 probe(s))
+
+```
