@@ -114,7 +114,10 @@ mutation expected to go red that did not, and the claim it then forced.
 - `MenuModelTest.aPrimaryActionPressRunsTheActionAndOpensNothing` -> the leading `onClick` also calls `setOpen(true)` -> `MenuModelTest.kt:173`
 - `MenuModelTest.{aDrawnSplitTriggerReportsItsTwoHalvesOnScreen,aRecycleClears…}` -> the report hardcodes `split=0` instead of reading the witness -> `MenuModelTest.kt:226`
 - `MenuModelTest.aDrawnSplitTriggerReportsItsTwoHalvesOnScreen` -> a half rect stops adding the composition's origin, so it is in the wrong space -> `MenuModelTest.kt:227`
-- `MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` -> delete `splitDrawn = false`, then `clearSplitBoxes()`, one at a time -> `MenuModelTest.kt:251` both times
+- `MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` -> two runs, one line deleted in each:
+  `splitDrawn = false` -> "the recycled control is not a split button"; `clearSplitBoxes()` ->
+  "the previous owner's halves are gone" (the `leading=-1,-1,-1,-1` assert, which needed the
+  post-reset `noteCompositionOrigin` in the fixture before a kept box read back as a cleared one)
 - `Menu.harness.tsx` Split trigger, all five -> `if (false && model.hasPrimaryAction)` -> `"split" never matched within 12000ms; last read "split":false,"leading":[-1,-1,-1,-1]` — 5 of 48 red, the other 21 Menu tests green (tree `638252adff9a`)
 - `Menu.harness.tsx` "takes the second half away with the action, and gives it back" -> the split composition's `onDispose {}` stops clearing -> `"split-inplace" never matched; last read "split":true,"trailing":[58,33,184,159]` — a stale second half on a control whose prop was taken away (tree `bb3943038c1b`)
 - negative control: `reset()` alone stops clearing -> **PASS, 48 of 48** (tree `c5e18881c939`) — dispose clears the same two fields, so the recycle case cannot see the model's reset line; that is why the next row mutates both paths, and why the JVM test above is what guards `reset()`
@@ -128,6 +131,22 @@ mutation expected to go red that did not, and the claim it then forced.
 - **organic**: the split pick's expectation stopped at the select -> `close` lands in the same frame -> `a pick from the split list to reach JS: tap 1/3 on menu row "Bravo" left "… > select bravo > close" - tapping again`; the expectation now includes the close the pick causes
 
 - `scripts/real-input/android.mjs` `CHECKS.menu` step 7 -> `MENU_MORE_OPTIONS_LABEL = "Show the list"` -> `✗ the list half is one node too, named for the options it opens — expected 1, saw 0`, while the action half was still found (tree `a5acf666717b`)
+
+Fix round 1 (E3 review):
+
+- `menuSizingKey.test.tsx` (all three) -> delete `hasPrimaryAction ? 'action' : 'plain'` from
+  `sizingVariantFor` -> `expected "filled|medium|action||Publish", received
+  "filled|medium||Publish"` (`src/__tests__/menuSizingKey.test.tsx:88`), 3 of 3 red
+- the same test -> the quieter form, the field kept but never `action` (`'plain'`) -> the same
+  line, 2 of 3 red (the plain fixture's key is still spelled right, which is the point)
+- `Menu.harness.tsx` "earns its own box", on a device -> that `'plain'` mutation ->
+  `testID "split-size" (split-size) never reached 124.95x48.00 - last box 78.86x48.00, control
+  measured 124.95x48.00` (`example/__tests__/Menu.harness.tsx:401`), 1 failed of 48 (tree
+  `e955bdb1b9f9`)
+- the same device case -> the field deleted outright -> the same line, 1 failed of 48 even with
+  nothing poisoned (tree `e5ddec035f0c`)
+- `MenuModelTest.theListActionTogglesLikeAPressDoes` -> `applyListAction` opens only
+  (`setOpen(true)`) -> `"an open list goes down"` (`MenuModelTest.kt:211`), 1 of 12 red
 
 ## Files changed
 
@@ -226,3 +245,20 @@ From the E3 review (fix round 1) — filed, not fixed:
   tests, a `real-input:android:--control:menu` refused for "no lease" before the lease env was
   exported, two early `harness:android` runs that found no stamped app to test, and the two
   diagnostic runs on tree `d1e7262c1780` that are the organic red proofs above.
+
+## Fix round 1
+
+Verdict FIX ROUND on `a4d20e4c`; five items, and the split button itself untouched.
+
+1. `README.md` said the opposite of iOS about `primaryAction`. It now says one button does both
+   there — a tap runs it, a long press opens the list — and two halves on Android, wider there.
+2. `src/__tests__/menuSizingKey.test.tsx` reads the key off the native props, so the `action`
+   field is itself under test; red both ways. The device case was measured with the same two
+   mutations and **does** go red — one shared entry leaves the split control at `78.86 × 48`
+   while it measures `124.95 × 48` — so the claim stays and the "whichever mounted second" guess
+   goes. Four `mutations.json` rows.
+3. `// Stored, never called` points at `applyPrimaryAction`.
+4. TalkBack can close the list: the trailing half's semantics action asks
+   `MenuModel.applyListAction`, the transition a finger gets; `theListActionTogglesLikeAPressDoes`
+   guards that entry point, the one split path a pointer-injecting run cannot reach.
+5. JSDoc backslashes dropped; row 7's `after` matches its own `run` and `redTests`.
