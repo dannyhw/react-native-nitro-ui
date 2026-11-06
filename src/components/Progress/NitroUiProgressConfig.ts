@@ -20,6 +20,8 @@ export const NitroUiProgressConfig: ViewConfig<NativeNitroUiProgressProps> = {
   directEventTypes: {},
   validAttributes: {
     variant: true,
+    appearance: true,
+    contained: true,
     value: true,
     tintColor: true,
     trackColor: true,

@@ -104,6 +104,18 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.variant.hasSameValue(oldViewProps->variant)) {
       swiftPart.setVariant(newViewProps.variant.get());
     }
+    // appearance: string
+    if (oldViewProps == nullptr
+          ? newViewProps.appearance.isProvided()
+          : !newViewProps.appearance.hasSameValue(oldViewProps->appearance)) {
+      swiftPart.setAppearance(newViewProps.appearance.get());
+    }
+    // contained: boolean
+    if (oldViewProps == nullptr
+          ? newViewProps.contained.isProvided()
+          : !newViewProps.contained.hasSameValue(oldViewProps->contained)) {
+      swiftPart.setContained(newViewProps.contained.get());
+    }
     // value: variant
     if (oldViewProps == nullptr
           ? newViewProps.value.isProvided()

@@ -58,6 +58,24 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* variant */)>("setVariant");
     method(_javaPart, jni::make_jstring(variant));
   }
+  std::string JHybridNitroUiProgressSpec::getAppearance() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getAppearance");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiProgressSpec::setAppearance(const std::string& appearance) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* appearance */)>("setAppearance");
+    method(_javaPart, jni::make_jstring(appearance));
+  }
+  bool JHybridNitroUiProgressSpec::getContained() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("getContained");
+    auto __result = method(_javaPart);
+    return static_cast<bool>(__result);
+  }
+  void JHybridNitroUiProgressSpec::setContained(bool contained) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* contained */)>("setContained");
+    method(_javaPart, contained);
+  }
   std::variant<nitro::NullType, double> JHybridNitroUiProgressSpec::getValue() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_Double>()>("getValue");
     auto __result = method(_javaPart);

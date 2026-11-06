@@ -4,8 +4,15 @@ import android.app.Activity
 import android.view.View
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.LoadingIndicatorDefaults
 import androidx.compose.material3.ProgressIndicatorDefaults
+import androidx.compose.material3.WavyProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.getValue
@@ -28,8 +35,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 /*
- * The Progress component: Material 3 `LinearProgressIndicator` and
- * `CircularProgressIndicator` on the core runtime.
+ * The Progress component: Material 3's `LinearProgressIndicator` and
+ * `CircularProgressIndicator`, their `…WavyProgressIndicator` forms, and
+ * Expressive's `LoadingIndicator` / `ContainedLoadingIndicator`, on the core
+ * runtime. Which of the six is built is decided by `variant`, `appearance` and
+ * `contained` - the three props that make up this control's sizing key.
  *
  * It is the library's first **non-interactive** control, so this is the file that
  * shows what a component without a handshake looks like
@@ -45,8 +55,29 @@ import kotlin.math.roundToInt
 
 /** State of one Progress. See [NitroUiModel] for the shape this has to have. */
 internal class ProgressModel : NitroUiModel() {
-  /** `'linear'` or `'circular'`. Rendered (it picks the indicator), so Compose reads it. */
+  /**
+   * `'linear'`, `'circular'` or `'loading'`. Rendered (it picks the indicator), so
+   * Compose reads it.
+   */
   var variant by mutableStateOf(VARIANT_LINEAR)
+
+  /**
+   * `'flat'` or `'wavy'`. Rendered: it picks *which* indicator composable is built,
+   * and a wavy bar/ring measures a bigger box than the flat one, which is why the
+   * sizing key carries it.
+   *
+   * A `'loading'` indicator has no wavy form, so [drawsWavy] is the question the
+   * drawing code asks rather than this field.
+   */
+  var appearance by mutableStateOf(APPEARANCE_FLAT)
+
+  /**
+   * Whether a `'loading'` indicator is drawn inside Material's tonal container
+   * ([ContainedLoadingIndicator]). Rendered, and part of the sizing key like the
+   * other two configuration props - although both loading boxes measure the same
+   * 48 dp, so this one re-measures to the same number.
+   */
+  var contained by mutableStateOf(false)
 
   /**
    * The fraction React sent, unclamped, or `null` for an indeterminate indicator.
@@ -155,8 +186,28 @@ internal class ProgressModel : NitroUiModel() {
   val isAnimating: Boolean
     get() = synchronized(mirrorLock) { animating }
 
+  /** Whether the shape is a self-sized square: a ring or a loading indicator. */
+  val isIntrinsicShape: Boolean
+    get() = variant == VARIANT_CIRCULAR || variant == VARIANT_LOADING
+
+  /**
+   * Whether a wavy composable is what draws.
+   *
+   * The `'loading'` shape has no wavy form in Material 3, so `appearance` asks
+   * nothing of it - the same kind of documented no-op as `trackColor` on iOS, and
+   * the reason the JS wrapper does not even send `'wavy'` for that shape.
+   */
+  val drawsWavy: Boolean
+    get() = appearance == APPEARANCE_WAVY && variant != VARIANT_LOADING
+
+  /** Whether the loading indicator is drawn inside its container. */
+  val drawsContainer: Boolean
+    get() = contained && variant == VARIANT_LOADING
+
   override fun reset() {
     variant = VARIANT_LINEAR
+    appearance = APPEARANCE_FLAT
+    contained = false
     value = null
     tintColor = null
     trackColor = null
@@ -172,6 +223,10 @@ internal class ProgressModel : NitroUiModel() {
   companion object {
     const val VARIANT_LINEAR = "linear"
     const val VARIANT_CIRCULAR = "circular"
+    const val VARIANT_LOADING = "loading"
+
+    const val APPEARANCE_FLAT = "flat"
+    const val APPEARANCE_WAVY = "wavy"
 
     /** The value as an accessibility percentage: `0.0...1.0` to `"0%"..."100%"`. */
     fun percent(value: Double): String {
@@ -258,13 +313,21 @@ private fun ProgressContent(model: ProgressModel) {
   val tint = model.tintColor
   val track = model.trackColor
   val label = model.accessibilityLabel
+  val loading = model.variant == ProgressModel.VARIANT_LOADING
   val circular = model.variant == ProgressModel.VARIANT_CIRCULAR
+  val wavy = model.drawsWavy
+  val contained = model.drawsContainer
 
   // One accessibility node for the control: the label it was given, and the value
   // as a progress range (indeterminate says so with M3's own `Indeterminate`).
   // `clearAndSetSemantics` rather than an extra `semantics { }`, the Slider's
   // reasoning (`HybridNitroUiSlider.kt`): the subtree is cleared to exactly this
   // node, so a screen reader hears one rule from one place.
+  //
+  // It also clears whatever semantics the indicator itself installs - the wavy
+  // indicators call `progressSemantics()` and the loading indicator publishes its
+  // own `ProgressBarRangeInfo` - which is the point: one node, published by this
+  // file, with the value React sent rather than the one the composable guessed.
   val semantics =
     Modifier.clearAndSetSemantics {
       if (label != null) {
@@ -278,7 +341,42 @@ private fun ProgressContent(model: ProgressModel) {
         }
     }
 
-  if (circular) {
+  // `fillMaxWidth` is what makes the M3 bar mean "the width is the box"
+  // (`docs/architecture/sizing.md` §5): the modifier's own default is
+  // `size(240.dp, 4.dp)`, so without it the indicator measures its preferred
+  // 240 dp and is centred in whatever box the host was given. With it, the bar
+  // takes the constraint the `fillWidth` question forwarded, and under an
+  // *unbounded* constraint `fillMaxWidth` is a no-op, which is why the intrinsic
+  // measurement path is unaffected. The wavy bar needs the same line for the same
+  // reason - its own preferred size is `size(240.dp, 10.dp)`.
+  val barModifier = semantics.fillMaxWidth()
+
+  when {
+    loading -> LoadingShape(model = model, drawn = drawn, tint = tint, track = track, semantics = semantics)
+
+    circular && wavy -> {
+      val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
+      if (drawn == null) {
+        // Material's wavy indicators share one track default across both states,
+        // and it is the visible one (`ProgressIndicatorTokens.TrackColor`), which
+        // is why a wavy ring keeps its track while indeterminate and the flat ring
+        // - whose own default for that state is transparent - does not.
+        val trackTint =
+          track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
+        CircularWavyProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
+      } else {
+        val trackTint =
+          track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
+        CircularWavyProgressIndicator(
+          progress = { drawn.toFloat() },
+          modifier = semantics,
+          color = color,
+          trackColor = trackTint,
+        )
+      }
+    }
+
+    circular -> {
     val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
     if (drawn == null) {
       // Material 3 has separate track defaults for the two states, so each branch
@@ -299,27 +397,98 @@ private fun ProgressContent(model: ProgressModel) {
         trackColor = trackTint,
       )
     }
-  } else {
+    }
+
+    wavy -> {
+      // Material's own defaults for amplitude, wavelength and speed: the brief's
+      // rule, and the right one - they are the numbers in Material's spec for the
+      // wavy form, and a component that passed its own would own tuning them.
+      val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearColor
+      val trackTint =
+        track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
+      if (drawn == null) {
+        LinearWavyProgressIndicator(modifier = barModifier, color = color, trackColor = trackTint)
+      } else {
+        LinearWavyProgressIndicator(
+          progress = { drawn.toFloat() },
+          modifier = barModifier,
+          color = color,
+          trackColor = trackTint,
+        )
+      }
+    }
+
+    else -> {
     val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearColor
     val trackTint =
       track?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearTrackColor
-    // `fillMaxWidth` is what makes the M3 bar mean "the width is the box"
-    // (`docs/architecture/sizing.md` §5): the modifier's own default is
-    // `size(240.dp, 4.dp)`, so without it the indicator measures its preferred
-    // 240 dp and is centred in whatever box the host was given. With it, the bar
-    // takes the constraint the `fillWidth` question forwarded, and under an
-    // *unbounded* constraint `fillMaxWidth` is a no-op, which is why the intrinsic
-    // measurement path is unaffected.
-    val width = semantics.fillMaxWidth()
     if (drawn == null) {
-      LinearProgressIndicator(modifier = width, color = color, trackColor = trackTint)
+        LinearProgressIndicator(modifier = barModifier, color = color, trackColor = trackTint)
     } else {
       LinearProgressIndicator(
         progress = { drawn.toFloat() },
-        modifier = width,
+          modifier = barModifier,
         color = color,
         trackColor = trackTint,
       )
+    }
+    }
+  }
+}
+
+/**
+ * The `variant="loading"` shape: Material 3 Expressive's morphing indicator,
+ * contained or not, determinate when React sent a fraction and indeterminate
+ * otherwise.
+ *
+ * This is the file's **only** use of an `@ExperimentalMaterial3ExpressiveApi`
+ * surface, and the opt-in is written here rather than at the file so the rest of
+ * Progress - the flat indicators, the wavy ones, the sizing, the a11y node and the
+ * whole host - keeps its ordinary "no opt-in required" compile-time guarantee.
+ *
+ * What the opt-in costs at material3 1.5.0 stable is written up in
+ * `docs/components/progress.md`; in short: an experimental member can change shape
+ * or vanish between minors without a deprecation cycle, and this file is where any
+ * such break would compile red, in one place, with the four call sites below.
+ */
+@Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun LoadingShape(
+  model: ProgressModel,
+  drawn: Double?,
+  tint: Int?,
+  track: Int?,
+  semantics: Modifier,
+) {
+  if (model.drawsContainer) {
+    val indicator =
+      tint?.let { ComposeColor(it) } ?: LoadingIndicatorDefaults.containedIndicatorColor
+    // `trackColor` has a job to do on this one shape: a contained loading
+    // indicator's container is the thing behind the shape, which is what the prop
+    // means everywhere else. Every other shape either paints its track (the flat
+    // and wavy indicators) or has none (the plain loading indicator).
+    val container =
+      track?.let { ComposeColor(it) } ?: LoadingIndicatorDefaults.containedContainerColor
+    if (drawn == null) {
+      ContainedLoadingIndicator(
+        modifier = semantics,
+        containerColor = container,
+        indicatorColor = indicator,
+      )
+    } else {
+      ContainedLoadingIndicator(
+        progress = { drawn.toFloat() },
+        modifier = semantics,
+        containerColor = container,
+        indicatorColor = indicator,
+      )
+    }
+  } else {
+    val color = tint?.let { ComposeColor(it) } ?: LoadingIndicatorDefaults.indicatorColor
+    if (drawn == null) {
+      LoadingIndicator(modifier = semantics, color = color)
+    } else {
+      LoadingIndicator(progress = { drawn.toFloat() }, modifier = semantics, color = color)
     }
   }
 }
@@ -365,6 +534,12 @@ class HybridNitroUiProgress(
      * serve. A cold first *circular* mount is therefore laid out at the linear box for
      * one frame before its own measurement corrects it - D17's one-frame budget, and
      * the harness test that names it.
+     *
+     * Six configurations, one declaration, so five of them pay that frame: the ring
+     * and the loading indicator are both squares (40 dp and 48 dp), and the wavy bar
+     * is 10 dp rather than 4. `docs/components/progress.md` has the table, and the
+     * harness's `lays every configuration out at the size it measures` test is what
+     * checks each one against its own number rather than against this pair.
      *
      * Both halves matter, for different parents (sizing.md §5). Under a finite
      * parent the box owns the width, so the **height** is the number that has to be
@@ -417,12 +592,14 @@ class HybridNitroUiProgress(
     get() = model.variant
     set(next) {
       // The wrapper is the only writer and sends one of two names; anything else
-      // behaves as `'linear'`, which is what the spec documents.
-      val normalized = if (next == ProgressModel.VARIANT_CIRCULAR) {
-        ProgressModel.VARIANT_CIRCULAR
-      } else {
-        ProgressModel.VARIANT_LINEAR
-      }
+      // The wrapper is the only writer and sends one of the three names; anything
+      // else behaves as `'linear'`, which is what the spec documents.
+      val normalized =
+        when (next) {
+          ProgressModel.VARIANT_CIRCULAR -> ProgressModel.VARIANT_CIRCULAR
+          ProgressModel.VARIANT_LOADING -> ProgressModel.VARIANT_LOADING
+          else -> ProgressModel.VARIANT_LINEAR
+        }
       if (normalized == model.variant) {
         return
       }
@@ -434,12 +611,50 @@ class HybridNitroUiProgress(
       // `Progress.tsx` keys the native view on the variant and a change remounts
       // (see the doc comment there). The setter still runs before that mount's first
       // measure, which is what makes the new policy the one its first frame uses.
+      // A loading indicator is a square like a ring, so it asks the same question.
       host.sizingPolicy =
-        if (normalized == ProgressModel.VARIANT_CIRCULAR) {
+        if (model.isIntrinsicShape) {
           NitroUiSizing.POLICY_INTRINSIC
         } else {
           NitroUiSizing.POLICY_FILL_WIDTH
         }
+      host.markDirty()
+    }
+
+  override var appearance: String
+    get() = model.appearance
+    set(next) {
+      // The wrapper normalises (`Progress.tsx`), so `'wavy'` reaches here only for a
+      // shape that has a wavy form; anything else behaves as `'flat'`.
+      val normalized = if (next == ProgressModel.APPEARANCE_WAVY) {
+        ProgressModel.APPEARANCE_WAVY
+      } else {
+        ProgressModel.APPEARANCE_FLAT
+      }
+      if (normalized == model.appearance) {
+        return
+      }
+      model.appearance = normalized
+      // Rendered (it picks the composable) and size-affecting - a wavy bar is 10 dp
+      // tall where the flat one is 4 - but *not* a new sizing question: the policy
+      // is the same, so the view is not remounted and the measure the new
+      // configuration needs is asked by the `nuiSizingKey` write that arrives in the
+      // same props batch.
+      host.markDirty()
+    }
+
+  override var contained: Boolean
+    get() = model.contained
+    set(next) {
+      if (next == model.contained) {
+        return
+      }
+      model.contained = next
+      // Rendered only for `variant="loading"`, where it swaps in
+      // [ContainedLoadingIndicator]. Both boxes are the same square, so the sizing
+      // key still changes - the engine must not hand a contained indicator a
+      // non-contained one's entry, which is a bug by construction rather than one
+      // that shows up at this size - and `nuiSizingKey` asks for the measure.
       host.markDirty()
     }
 
@@ -529,8 +744,19 @@ class HybridNitroUiProgress(
   override var nuiSizingKey: String
     get() = model.sizingKey
     set(next) {
-      // Store only: the engine reads the key out of Fabric state.
+      // The engine reads the key out of Fabric state, so storing is not what makes
+      // this work - asking for the measure is. `appearance` and `contained` change
+      // the configuration *without* a remount (the shape, and with it the sizing
+      // policy, is unchanged), and the engine has no answer for a key it has not
+      // seen, so it lays this out at the declared fallback. A wavy bar measured
+      // exactly what the flat bar beside it measured would also be swallowed by the
+      // host's dedupe (Button's `nuiSizingKey` says the same for its icon, review
+      // F1). Guarded, because React re-sends an unchanged key on every render.
+      if (next == model.sizingKey) {
+        return
+      }
       model.sizingKey = next
+      host.noteSizingKeyChanged()
     }
 
   override var nuiSizingId: Double
