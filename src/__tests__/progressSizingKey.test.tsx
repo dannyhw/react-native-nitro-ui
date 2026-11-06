@@ -63,7 +63,12 @@ const CONFIGURATIONS: ReadonlyArray<{
 }> = [
   { variant: 'linear', appearance: 'flat', contained: false, key: '' },
   { variant: 'linear', appearance: 'wavy', contained: false, key: 'wavy' },
-  { variant: 'circular', appearance: 'flat', contained: false, key: 'circular' },
+  {
+    variant: 'circular',
+    appearance: 'flat',
+    contained: false,
+    key: 'circular',
+  },
   {
     variant: 'circular',
     appearance: 'wavy',
@@ -132,23 +137,13 @@ describe('Progress · sizing key', () => {
 
     // appearance
     await view.rerender(
-      <Progress
-        value={0.5}
-        variant="circular"
-        appearance="wavy"
-        testID="one"
-      />
+      <Progress value={0.5} variant="circular" appearance="wavy" testID="one" />
     );
     expect(keyOf(view, 'one')).toBe('circular|wavy');
 
     // variant, holding the look
     await view.rerender(
-      <Progress
-        value={0.5}
-        variant="loading"
-        appearance="wavy"
-        testID="one"
-      />
+      <Progress value={0.5} variant="loading" appearance="wavy" testID="one" />
     );
     expect(keyOf(view, 'one')).toBe('loading');
 
@@ -188,7 +183,11 @@ describe('Progress · sizing key', () => {
 
   it('normalises a prop outside the union into the default configuration', async () => {
     const round = await render(
-      <Progress value={0.5} variant={'round' as ProgressVariant} testID="round" />
+      <Progress
+        value={0.5}
+        variant={'round' as ProgressVariant}
+        testID="round"
+      />
     );
     expect(shapeOf(round, 'round')).toBe('linear');
     expect(keyOf(round, 'round')).toBe('');
@@ -200,7 +199,9 @@ describe('Progress · sizing key', () => {
       <Progress value={0.5} contained testID="bar-container" />
     );
     expect(shapeOf(barWithContainer, 'bar-container')).toBe('linear');
-    expect(nativeProps(barWithContainer, 'bar-container').contained).toBe(false);
+    expect(nativeProps(barWithContainer, 'bar-container').contained).toBe(
+      false
+    );
     expect(keyOf(barWithContainer, 'bar-container')).toBe('');
   });
 
