@@ -1,0 +1,469 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-06T16:50:54.849Z on code tree `3db3f1315eae` at HEAD `dd81fe4` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 35639 ms
+- Load: start 3.87, end 4.30, median 4.10, max 4.50
+- Device: android / device `emulator-5574` / lease `E3-5z5a2`
+- Full log: `task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log` (<store>/task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E3-5z5a2 (still live)
+  |   E3-5z5a2                 E3           both              pair-a
+  |   X20-6pbaf                X20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.30 (the ledger line carries the samples across the whole run)
+gate: logcat
+  | --------- beginning of main
+  | 11-06 16:51:22.734 32562 32562 I nitroui.example: Late-enabling -Xcheck:jni
+  | 11-06 16:51:22.757 32562 32562 I nitroui.example: Using CollectorTypeCMC GC.
+  | 11-06 16:51:22.764 32562 32562 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+  | 11-06 16:51:22.800 32562 32562 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+  | 11-06 16:51:22.800 32562 32562 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+  | 11-06 16:51:22.801 32562 32562 W ziparchive: Unable to open '/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.dm': No such file or directory
+  | 11-06 16:51:22.801 32562 32562 W ziparchive: Unable to open '/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.dm': No such file or directory
+  | 11-06 16:51:23.220 32562 32562 D nativeloader: Configuring clns-7 for other apk /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/lib/arm64:/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/nitroui.example
+  | 11-06 16:51:23.232 32562 32562 V GraphicsEnvironment: Currently set values for:
+  | 11-06 16:51:23.232 32562 32562 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+  | 11-06 16:51:23.232 32562 32562 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+  | 11-06 16:51:23.233 32562 32562 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+  | 11-06 16:51:23.234 32562 32562 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+  | 11-06 16:51:23.274 32562 32562 W SoLoader: Initializing SoLoader: 0
+  | 11-06 16:51:23.275 32562 32562 W SoLoader: Recording new base apk path: /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk
+  | 11-06 16:51:23.275 32562 32562 W SoLoader: Previously recorded 0 base apk paths.
+  | 11-06 16:51:23.279 32562 32562 I SoLoader: Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]
+  | 11-06 16:51:23.280 32562 32562 I SoLoader: Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]
+  | 11-06 16:51:23.280 32562 32562 I SoLoader: Preparing SO source: DirectApkSoSource[root = [/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a]]
+  | 11-06 16:51:23.362 32562 32562 I SoLoader: Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/lib/arm64 flags = 0]]
+  | 11-06 16:51:23.363 32562 32562 I SoLoader: init finish: 4 SO sources prepared
+  | 11-06 16:51:23.363 32562 32562 W SoLoader: SoLoader initialized: 8
+  | 11-06 16:51:23.379 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libc++_shared.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.382 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libjsi.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.385 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libfbjni.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.391 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libreactnative.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x71a9a301cc
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x71a9c9bcc8
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x71a9cae55c
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x71a9d65790
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x71aa08a128
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x71aa09e1b0
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x71aa0c3420
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x71aa0cf48c
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x71aa152ef4
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x71aa2a5c04
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x71aa2bcf64
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x71aa2ccea0
+  | 11-06 16:51:23.391 32562 32562 D jni_lib_merge: About to register 12 actual methods.
+  | 11-06 16:51:23.397 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libreact_codegen_rngesturehandler_codegen.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.400 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libreact_codegen_RNCSlider.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.403 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libreact_codegen_rnsvg.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x71a9a301cc
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x71a9c9bcc8
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x71a9cae55c
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x71a9d65790
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 0x71aa08a128
+  | 11-06 16:51:23.403 32562 32562 D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x71aa09e1b0
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x71aa0c3420
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x71aa0cf48c
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x71aa152ef4
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x71aa2a5c04
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x71aa2bcf64
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x71aa2ccea0
+  | 11-06 16:51:23.404 32562 32562 D jni_lib_merge: About to register 12 actual methods.
+  | 11-06 16:51:23.408 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libreact_codegen_safeareacontext.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.410 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libappmodules.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.411 32562 32562 I NitroUiFeatureFlags: enableViewRecycling=true (forced over the RNOSS provider): null
+  | 11-06 16:51:23.461 32562 32562 D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+  | 11-06 16:51:23.546 32562 32562 I nitrouiOnLoad: Loading nitroui C++ library...
+  | 11-06 16:51:23.560 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libnitroui.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes3.dex): ok
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiCore"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiCore"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiButton"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiButton"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiProgress"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiProgress"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSlider"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSlider"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiHost"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiHost"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSwitch"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSwitch"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiDatePicker"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiDatePicker"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSegmentedControl"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSegmentedControl"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiPicker"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiPicker"!
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiMenu"...
+  | 11-06 16:51:23.563 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiMenu"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiDialog"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiDialog"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiTextField"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiTextField"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiBottomSheet"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiBottomSheet"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiChip"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiChip"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiSearchField"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiSearchField"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiCheckbox"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiCheckbox"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiMaterialTheme"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiMaterialTheme"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiContextMenu"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiContextMenu"!
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Registering HybridObject "NitroUiTooltip"...
+  | 11-06 16:51:23.564 32562 32562 I Nitro.HybridObjectRegistry: Successfully registered HybridObject "NitroUiTooltip"!
+  | 11-06 16:51:23.565 32562 32562 I nitrouiOnLoad: Successfully loaded nitroui C++ library!
+  | 11-06 16:51:23.602 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libhermesvm.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.604 32562 32562 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libhermestooling.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: Entering merged library JNI_OnLoad.
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x723dee68f8
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x723df15694
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x723df1770c
+  | 11-06 16:51:23.604 32562 32562 D jni_lib_merge: About to register 3 actual methods.
+  | 11-06 16:51:23.729 32562 32562 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+  | 11-06 16:51:23.732 32562 32562 W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+  | 11-06 16:51:23.734 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+  | 11-06 16:51:23.737 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Start
+  | 11-06 16:51:23.738 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getJSBundleLoader()
+  | 11-06 16:51:23.738 32562 32587 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning()
+  | 11-06 16:51:23.741 32562 32586 D TrafficStats: tagSocket(96) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:23.742 32562 32589 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:23.742 32562 32562 W nitroui.example: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+  | 11-06 16:51:23.753 32562 32562 W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+  | 11-06 16:51:23.753 32562 32562 W unknown:ReactNative: Packager connection already open, nooping.
+  | 11-06 16:51:23.757 32562 32586 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8295/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-06 16:51:23.760 32562 32589 W unknown:BridgelessReact: ReactHost{0}.isMetroRunning(): Async result = true
+  | 11-06 16:51:23.762 32562 32587 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro()
+  | 11-06 16:51:23.766 32562 32562 W HWUI    : Unknown dataspace 0
+  | 11-06 16:51:23.808 32562 32562 E unknown:ReactNative: Unable to display loading message because react activity isn't active, message: Loading from localhost:8295…
+  | 11-06 16:51:23.834 32562 32580 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+  | 11-06 16:51:23.834 32562 32580 I EGL_emulation: Opening libGLESv2_emulation.so
+  | 11-06 16:51:23.844 32562 32580 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+  | 11-06 16:51:23.844 32562 32580 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+  | 11-06 16:51:23.862 32562 32580 I Gralloc4: mapper 4.x is not supported
+  | 11-06 16:51:23.912 32562 32562 W unknown:BridgelessReact: ReactHost{0}.raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: Unhandled SoftException
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: com.facebook.react.bridge.ReactNoCrashSoftException: raiseSoftException(onWindowFocusChange(hasFocus = "true")): Tried to access onWindowFocusChange while context is not ready
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException(ReactHostImpl.kt:906)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.raiseSoftException$default(ReactHostImpl.kt:897)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.runtime.ReactHostImpl.onWindowFocusChange(ReactHostImpl.kt:679)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.ReactDelegate.onWindowFocusChanged(ReactDelegate.kt:226)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.ReactActivityDelegate.onWindowFocusChanged(ReactActivityDelegate.java:237)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.facebook.react.ReactActivity.onWindowFocusChanged(ReactActivity.java:161)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at androidx.appcompat.view.WindowCallbackWrapper.onWindowFocusChanged(WindowCallbackWrapper.java:124)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.android.internal.policy.DecorView.onWindowFocusChanged(DecorView.java:1772)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.View.dispatchWindowFocusChanged(View.java:16743)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewGroup.dispatchWindowFocusChanged(ViewGroup.java:1505)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewRootImpl.dispatchFocusEvent(ViewRootImpl.java:4697)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewRootImpl.handleWindowFocusChanged(ViewRootImpl.java:4601)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewRootImpl.-$$Nest$mhandleWindowFocusChanged(Unknown Source:0)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessageImpl(ViewRootImpl.java:6773)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.view.ViewRootImpl$ViewRootHandler.handleMessage(ViewRootImpl.java:6683)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.os.Handler.dispatchMessage(Handler.java:107)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.os.Looper.loopOnce(Looper.java:232)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.os.Looper.loop(Looper.java:317)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at java.lang.reflect.Method.invoke(Native Method)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+  | 11-06 16:51:23.915 32562 32562 E unknown:ReactHost: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)
+  | 11-06 16:51:24.050 32562 32569 I nitroui.example: Compiler allocated 4206KB to compile void android.widget.TextView.<init>(android.content.Context, android.util.AttributeSet, int, int)
+  | 11-06 16:51:24.140 32562 32569 I nitroui.example: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals()
+  | 11-06 16:51:24.237 32562 32589 W unknown:BridgelessReact: ReactHost{0}.loadJSBundleFromMetro(): Creating BundleLoader
+  | 11-06 16:51:24.240 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext
+  | 11-06 16:51:24.245 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+  | 11-06 16:51:24.274 32562 32589 D TrafficStats: tagSocket(120) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:24.352 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+  | 11-06 16:51:24.354 32562 32587 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()
+  | 11-06 16:51:24.357 32562 32587 W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+  | 11-06 16:51:24.358 32562 32562 W unknown:ReactNative: Packager connection already open, nooping.
+  | 11-06 16:51:24.358 32562 32562 W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+  | 11-06 16:51:24.358 32562 32562 W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+  | 11-06 16:51:24.433 32562 32599 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libworklets.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:24.612 32562 32598 I ReactNativeJS: Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+  | 11-06 16:51:24.620 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDatePickerManager
+  | 11-06 16:51:24.623 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+  | 11-06 16:51:24.625 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+  | 11-06 16:51:24.625 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
+  | 11-06 16:51:24.625 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSwitchManager
+  | 11-06 16:51:24.626 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativecommunity.slider.ReactSliderManager
+  | 11-06 16:51:24.627 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiMenuManager
+  | 11-06 16:51:24.628 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSegmentedControlManager
+  | 11-06 16:51:24.629 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiDialogManager
+  | 11-06 16:51:24.630 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSliderManager
+  | 11-06 16:51:24.631 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiChipManager
+  | 11-06 16:51:24.631 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiHostViewManager
+  | 11-06 16:51:24.631 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiProgressManager
+  | 11-06 16:51:24.632 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiPickerManager
+  | 11-06 16:51:24.632 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiBottomSheetViewManager
+  | 11-06 16:51:24.632 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiTextFieldManager
+  | 11-06 16:51:24.633 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
+  | 11-06 16:51:24.633 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+  | 11-06 16:51:24.635 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewShadowNode
+  | 11-06 16:51:24.635 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager
+  | 11-06 16:51:24.635 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiSearchFieldManager
+  | 11-06 16:51:24.636 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.NitroUiContextMenuViewManager
+  | 11-06 16:51:24.636 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.margelo.nitro.nitroui.views.HybridNitroUiButtonManager
+  | 11-06 16:51:24.675 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+  | 11-06 16:51:24.675 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.VirtualViewManager$RenderableShadowNode
+  | 11-06 16:51:24.678 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+  | 11-06 16:51:24.680 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager
+  | 11-06 16:51:24.682 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+  | 11-06 16:51:24.684 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+  | 11-06 16:51:24.687 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+  | 11-06 16:51:24.689 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+  | 11-06 16:51:24.692 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+  | 11-06 16:51:24.695 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.SvgViewManager
+  | 11-06 16:51:24.698 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+  | 11-06 16:51:24.700 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+  | 11-06 16:51:24.703 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+  | 11-06 16:51:24.706 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+  | 11-06 16:51:24.708 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+  | 11-06 16:51:24.711 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+  | 11-06 16:51:24.714 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+  | 11-06 16:51:24.717 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+  | 11-06 16:51:24.720 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+  | 11-06 16:51:24.723 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+  | 11-06 16:51:24.725 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+  | 11-06 16:51:24.728 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+  | 11-06 16:51:24.730 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+  | 11-06 16:51:24.732 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+  | 11-06 16:51:24.734 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+  | 11-06 16:51:24.738 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+  | 11-06 16:51:24.742 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+  | 11-06 16:51:24.746 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+  | 11-06 16:51:24.748 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager
+  | 11-06 16:51:24.750 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+  | 11-06 16:51:24.753 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+  | 11-06 16:51:24.756 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+  | 11-06 16:51:24.759 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+  | 11-06 16:51:24.761 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+  | 11-06 16:51:24.763 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+  | 11-06 16:51:24.765 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+  | 11-06 16:51:24.768 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+  | 11-06 16:51:24.770 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+  | 11-06 16:51:24.773 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+  | 11-06 16:51:24.775 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+  | 11-06 16:51:24.778 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+  | 11-06 16:51:24.780 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+  | 11-06 16:51:24.782 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+  | 11-06 16:51:24.785 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+  | 11-06 16:51:24.789 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+  | 11-06 16:51:24.792 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+  | 11-06 16:51:24.796 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+  | 11-06 16:51:24.798 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager
+  | 11-06 16:51:24.800 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+  | 11-06 16:51:24.802 32562 32598 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager
+  | 11-06 16:51:24.883 32562 32599 I WebViewFactory: Loading com.google.android.webview version 124.0.6367.219 (code 636771932)
+  | --------- beginning of system
+  | 11-06 16:51:24.892 32562 32599 V ResourcesManager: The following library key has been added: ResourcesKey{ mHash=5781c037 mResDir=null mSplitDirs=[] mOverlayDirs=[/product/overlay/EmulationPixel9/EmulationPixel9Overlay.apk,/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk] mLibDirs=[/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk,/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={420dpi always-compat} mLoaders=[]}
+  | 11-06 16:51:24.893 32562 32599 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-06 16:51:24.893 32562 32599 W ziparchive: Unable to open '/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.dm': No such file or directory
+  | 11-06 16:51:24.893 32562 32599 W nitroui.example: Entry not found
+  | 11-06 16:51:24.898 32562 32599 D nativeloader: Configuring clns-8 for other apk /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk. target_sdk_version=34, uses_libraries=ALL, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-06 16:51:24.898 32562 32599 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+  | 11-06 16:51:24.899 32562 32599 D nativeloader: Configuring clns-9 for other apk /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/lib/arm64:/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+  | 11-06 16:51:24.907 32562 32599 I cr_WVCFactoryProvider: Loaded version=124.0.6367.219 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+  | 11-06 16:51:24.920 32562 32599 D nativeloader: Load /data/app/~~ggfTcbMbavCHsyBxtW2gWA==/com.google.android.trichromelibrary_636771932-8J8fcbmB73vidfeR5_uB0g==/TrichromeLibrary.apk!/lib/arm64-v8a/libmonochrome_64.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-06 16:51:24.922 32562 32599 D nativeloader: Load /system/lib64/libwebviewchromium_plat_support.so using ns clns-9 from class loader (caller=/data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk): ok
+  | 11-06 16:51:24.928 32562 32611 I chromium: [1106/165124.928082:INFO:variations_seed_loader.cc(66)] Failed to open file for reading.: No such file or directory (2)
+  | 11-06 16:51:24.928 32562 32611 I cr_VariationsUtils: Failed reading seed file "/data/user/0/nitroui.example/app_webview/variations_seed_new"
+  | 11-06 16:51:24.928 32562 32611 I chromium: [1106/165124.928304:INFO:variations_seed_loader.cc(66)] Failed to open file for reading.: No such file or directory (2)
+  | 11-06 16:51:24.928 32562 32611 I cr_VariationsUtils: Failed reading seed file "/data/user/0/nitroui.example/app_webview/variations_seed"
+  | 11-06 16:51:24.934 32562 32612 I cr_VariationsUtils: Requesting new seed from IVariationsSeedServer
+  | 11-06 16:51:24.951 32562 32599 I cr_LibraryLoader: Successfully loaded native library
+  | 11-06 16:51:24.952 32562 32599 I cr_CachingUmaRecorder: Flushed 9 samples from 9 histograms, 0 samples were dropped.
+  | 11-06 16:51:24.985 32562 32620 D TrafficStats: tagSocket(132) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:24.988 32562 32621 D TrafficStats: tagSocket(133) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:25.069 32562 32623 W InteractionJankMonitor: Initializing without READ_DEVICE_CONFIG permission. enabled=true, interval=1, missedFrameThreshold=3, frameTimeThreshold=64, package=nitroui.example
+  | 11-06 16:51:25.083 32562 32626 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libimagepipeline.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:25.144 32562 32626 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libnative-imagetranscoder.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes19.dex): ok
+  | 11-06 16:51:25.237 32562 32633 D TrafficStats: tagSocket(153) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:25.760 32562 32589 D TrafficStats: tagSocket(146) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:26.127 32562 32598 I NitroModules: Loading NitroModules C++ library...
+  | 11-06 16:51:26.128 32562 32598 D nativeloader: Load /data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!/lib/arm64-v8a/libNitroModules.so using ns clns-7 from class loader (caller=/data/app/~~aTfxy_wXBpHG2ODsYKpHhg==/nitroui.example-m7jg6zaPGDpJLB_GD_0kPw==/base.apk!classes11.dex): ok
+  | 11-06 16:51:26.128 32562 32598 I NitroModules: Successfully loaded NitroModules C++ library!
+  | 11-06 16:51:26.129 32562 32598 I Nitro.Dispatcher: Installing global Dispatcher Holder into Runtime "HermesRuntime[RNBridgeless] (mqt_v_js)"...
+  | 11-06 16:51:26.129 32562 32598 I Nitro.JSICache: Creating new JSICache<T> for runtime HermesRuntime[RNBridgeless] (mqt_v_js)..
+  | 11-06 16:51:26.129 32562 32598 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroModulesProxy"...
+  | 11-06 16:51:26.129 32562 32598 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridObject"...
+  | 11-06 16:51:26.161 32562 32598 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiCoreSpec"...
+  | 11-06 16:51:26.181 32562 32598 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiMenuSpec"...
+  | 11-06 16:51:26.207 32562 32573 W nitroui.example: ApkAssets: Deleting an ApkAssets object '<empty> and /data/app/~~elHH3rerG_1g26Wz_E3_5g==/com.google.android.webview-alIFTsGMPoPT-dsCQCb3Zw==/WebViewGoogle.apk' with 2 weak references
+  | 11-06 16:51:26.419 32562 32562 W nitroui.example: Accessing hidden method Landroid/os/SystemProperties;->addChangeCallback(Ljava/lang/Runnable;)V (unsupported, reflection, allowed)
+  | 11-06 16:51:26.444 32562 32589 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:26.459 32562 32580 D EGL_emulation: app_time_stats: avg=101.09ms min=1.06ms max=1250.22ms count=23
+  | 11-06 16:51:26.467 32562 32598 I HarnessUI: queryByTestId called with: cfg-filled
+  | 11-06 16:51:26.478 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.479 32562 32598 I HarnessUI: queryByTestId called with: cfg-filled
+  | 11-06 16:51:26.480 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.480 32562 32598 I HarnessUI: queryByTestId called with: cfg-filled
+  | 11-06 16:51:26.480 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.481 32562 32598 I HarnessUI: queryByTestId called with: cfg-tonal
+  | 11-06 16:51:26.481 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":56,"height":48,"x":0}
+  | 11-06 16:51:26.482 32562 32598 I HarnessUI: queryByTestId called with: cfg-tonal
+  | 11-06 16:51:26.482 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":56,"height":48,"x":0}
+  | 11-06 16:51:26.482 32562 32598 I HarnessUI: queryByTestId called with: cfg-tonal
+  | 11-06 16:51:26.483 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":56,"height":48,"x":0}
+  | 11-06 16:51:26.483 32562 32598 I HarnessUI: queryByTestId called with: cfg-outlined
+  | 11-06 16:51:26.484 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":112,"height":48,"x":0}
+  | 11-06 16:51:26.484 32562 32598 I HarnessUI: queryByTestId called with: cfg-outlined
+  | 11-06 16:51:26.485 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":112,"height":48,"x":0}
+  | 11-06 16:51:26.485 32562 32598 I HarnessUI: queryByTestId called with: cfg-outlined
+  | 11-06 16:51:26.486 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":112,"height":48,"x":0}
+  | 11-06 16:51:26.486 32562 32598 I HarnessUI: queryByTestId called with: cfg-text
+  | 11-06 16:51:26.487 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":68.95237731933594,"y":168,"height":48,"x":0}
+  | 11-06 16:51:26.487 32562 32598 I HarnessUI: queryByTestId called with: cfg-text
+  | 11-06 16:51:26.488 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":68.95237731933594,"y":168,"height":48,"x":0}
+  | 11-06 16:51:26.488 32562 32598 I HarnessUI: queryByTestId called with: cfg-text
+  | 11-06 16:51:26.489 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":68.95237731933594,"y":168,"height":48,"x":0}
+  | 11-06 16:51:26.490 32562 32598 I HarnessUI: queryByTestId called with: cfg-elevated
+  | 11-06 16:51:26.490 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":224,"height":48,"x":0}
+  | 11-06 16:51:26.490 32562 32598 I HarnessUI: queryByTestId called with: cfg-elevated
+  | 11-06 16:51:26.491 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":224,"height":48,"x":0}
+  | 11-06 16:51:26.491 32562 32598 I HarnessUI: queryByTestId called with: cfg-elevated
+  | 11-06 16:51:26.492 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":76.57142639160156,"y":224,"height":48,"x":0}
+  | 11-06 16:51:26.492 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-small
+  | 11-06 16:51:26.492 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":58.66666793823242,"y":280,"height":48,"x":0}
+  | 11-06 16:51:26.493 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-small
+  | 11-06 16:51:26.493 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":58.66666793823242,"y":280,"height":48,"x":0}
+  | 11-06 16:51:26.494 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-small
+  | 11-06 16:51:26.494 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":58.66666793823242,"y":280,"height":48,"x":0}
+  | 11-06 16:51:26.495 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-large
+  | 11-06 16:51:26.495 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":88.76190185546875,"y":336,"height":56,"x":0}
+  | 11-06 16:51:26.496 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-large
+  | 11-06 16:51:26.496 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":88.76190185546875,"y":336,"height":56,"x":0}
+  | 11-06 16:51:26.496 32562 32598 I HarnessUI: queryByTestId called with: cfg-size-large
+  | 11-06 16:51:26.497 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":88.76190185546875,"y":336,"height":56,"x":0}
+  | 11-06 16:51:26.806 32562 32598 I ReactNativeJS: menu sizes (declared fallback 75.10x52.00): cfg-filled=76.57x48.00 cfg-tonal=76.57x48.00 cfg-outlined=76.57x48.00 cfg-text=68.95x48.00 cfg-elevated=76.57x48.00 cfg-size-small=58.67x48.00 cfg-size-large=88.76x56.00 corrections=7 measurements=14
+  | 11-06 16:51:26.821 32562 32598 I Nitro.HybridObjectPrototype: Creating new JS prototype for C++ instance type "HybridNitroUiButtonSpec"...
+  | 11-06 16:51:26.872 32562 32598 I HarnessUI: queryByTestId called with: twin-menu
+  | 11-06 16:51:26.892 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.892 32562 32598 I HarnessUI: queryByTestId called with: twin-button
+  | 11-06 16:51:26.892 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":56,"height":48,"x":0}
+  | 11-06 16:51:26.893 32562 32598 I HarnessUI: queryByTestId called with: twin-menu
+  | 11-06 16:51:26.893 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.893 32562 32598 I HarnessUI: queryByTestId called with: twin-menu
+  | 11-06 16:51:26.893 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":0,"height":48,"x":0}
+  | 11-06 16:51:26.894 32562 32598 I HarnessUI: queryByTestId called with: twin-button
+  | 11-06 16:51:26.894 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":56,"height":48,"x":0}
+  | 11-06 16:51:26.894 32562 32598 I HarnessUI: queryByTestId called with: twin-button
+  | 11-06 16:51:26.894 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":62.095237731933594,"y":56,"height":48,"x":0}
+  | 11-06 16:51:27.204 32562 32598 I ReactNativeJS: trigger parity: menu=62.10x48.00 button=62.10x48.00 corrections=2
+  | 11-06 16:51:27.259 32562 32598 I HarnessUI: queryByTestId called with: list-small
+  | 11-06 16:51:27.260 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":57.904762268066406,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.260 32562 32598 I HarnessUI: queryByTestId called with: list-small
+  | 11-06 16:51:27.262 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":57.904762268066406,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.262 32562 32598 I HarnessUI: queryByTestId called with: list-small
+  | 11-06 16:51:27.262 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":57.904762268066406,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.771 32562 32589 D TrafficStats: tagSocket(141) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:27.771 32562 32598 I HarnessUI: queryByTestId called with: list-small
+  | 11-06 16:51:27.772 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":57.904762268066406,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.774 32562 32598 I ReactNativeJS: group is not in the key: 57.90x48.00 -> 57.90x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+  | 11-06 16:51:27.822 32562 32598 I HarnessUI: queryByTestId called with: title
+  | 11-06 16:51:27.827 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":64.76190185546875,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.829 32562 32598 I HarnessUI: queryByTestId called with: title
+  | 11-06 16:51:27.830 32562 32580 D EGL_emulation: app_time_stats: avg=190.35ms min=2.86ms max=585.89ms count=7
+  | 11-06 16:51:27.831 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":64.76190185546875,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.831 32562 32598 I HarnessUI: queryByTestId called with: title
+  | 11-06 16:51:27.833 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":64.76190185546875,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.905 32562 32598 I HarnessUI: queryByTestId called with: title
+  | 11-06 16:51:27.908 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":129.90475463867188,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.908 32562 32598 I HarnessUI: queryByTestId called with: title
+  | 11-06 16:51:27.910 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":129.90475463867188,"y":0,"height":48,"x":0}
+  | 11-06 16:51:27.911 32562 32598 I ReactNativeJS: title R3: short=64.76x48.00 long=129.90x48.00
+  | 11-06 16:51:28.011 32562 32598 I HarnessUI: queryByTestId called with: pick
+  | 11-06 16:51:28.029 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":80,"y":27.428571701049805,"height":48,"x":0}
+  | 11-06 16:51:28.029 32562 32598 I HarnessUI: queryByTestId called with: menu-barometer
+  | 11-06 16:51:28.031 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":411.4285583496094,"y":0,"height":19.428571701049805,"x":0}
+  | 11-06 16:51:28.039 32562 32599 I HarnessUI: simulatePress called with nativeId: x:205.7142791748047 y:9.714285850524902
+  | 11-06 16:51:28.044 32562 32562 I HarnessUI: Sent touch down at (540.0, 25.5)
+  | 11-06 16:51:28.098 32562 32562 I HarnessUI: Tap completed at (540.0, 25.5)
+  | 11-06 16:51:29.173 32562 32598 I ReactNativeJS: picks: ["twin:copy","pick:copy","pick:delete"]
+  | 11-06 16:51:29.226 32562 32598 I HarnessUI: queryByTestId called with: events
+  | 11-06 16:51:29.234 32562 32580 D EGL_emulation: app_time_stats: avg=197.30ms min=6.18ms max=1194.97ms count=7
+  | 11-06 16:51:29.234 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":73.9047622680664,"y":0,"height":48,"x":0}
+  | 11-06 16:51:29.236 32562 32598 I HarnessUI: queryByTestId called with: events
+  | 11-06 16:51:29.241 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":73.9047622680664,"y":0,"height":48,"x":0}
+  | 11-06 16:51:29.243 32562 32599 I HarnessUI: simulatePress called with nativeId: x:36.9523811340332 y:24.0
+  | 11-06 16:51:29.249 32562 32562 I HarnessUI: Sent touch down at (97.0, 63.0)
+  | 11-06 16:51:29.297 32562 32646 D ProfileInstaller: Installing profile for nitroui.example
+  | 11-06 16:51:29.309 32562 32562 I HarnessUI: Tap completed at (97.0, 63.0)
+  | 11-06 16:51:29.329 32562 32562 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-06 16:51:29.329 32562 32562 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-06 16:51:29.582 32562 32562 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3b6d5dd
+  | 11-06 16:51:29.613 32562 32562 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-06 16:51:29.613 32562 32562 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-06 16:51:29.800 32562 32589 D TrafficStats: tagSocket(114) with statsTag=0xffffffff, statsUid=-1
+  | 11-06 16:51:29.946 32562 32562 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9e4203a
+  | 11-06 16:51:29.964 32562 32598 I HarnessUI: queryByTestId called with: events
+  | 11-06 16:51:29.965 32562 32598 I HarnessUI: Query result: {"nativeId":"<other device>","width":73.9047622680664,"y":0,"height":48,"x":0}
+  | 11-06 16:51:29.965 32562 32599 I HarnessUI: simulatePress called with nativeId: x:36.9523811340332 y:24.0
+  | 11-06 16:51:29.967 32562 32562 I HarnessUI: Sent touch down at (97.0, 63.0)
+  | 11-06 16:51:30.022 32562 32562 I HarnessUI: Tap completed at (97.0, 63.0)
+  | 11-06 16:51:30.033 32562 32562 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-06 16:51:30.033 32562 32562 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-06 16:51:30.207 32562 32598 I ReactNativeJS: open/close: ["events:open","events:close","events:open"]
+  | 11-06 16:51:30.231 32562 32562 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5622f98
+  | 11-06 16:51:30.243 32562 32580 D EGL_emulation: app_time_stats: avg=12.43ms min=1.60ms max=65.37ms count=55
+gate: ---- end device context ----
+```
+
+## Last 27 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 3db3f1315eae at HEAD dd81fe45
+gate: git tree 4ba17fd5ff44
+gate: log task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log
+gate:       <store>/task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 3db3f1315eae, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.87/11.62 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+gate: harness:android FAIL in 35.6 s (signal SIGTERM)
+gate: recorded in .gates/task/E3-split-button.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E3-split-button/harness+android-2026-11-06T16-50-54.269Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```
