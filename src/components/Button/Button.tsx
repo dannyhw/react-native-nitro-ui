@@ -314,7 +314,7 @@ export function Button({
         resolvedVariant,
         resolvedSize,
         systemImage,
-        androidIcon == null ? null : normalizeAndroidIconName(androidIcon),
+        androidIcon == null ? undefined : normalizeAndroidIconName(androidIcon),
         title
       )}
       nuiSizingId={sizingId}
