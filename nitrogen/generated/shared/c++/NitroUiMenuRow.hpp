@@ -49,10 +49,12 @@ namespace margelo::nitro::nitroui {
     bool disabled     SWIFT_PRIVATE;
     bool destructive     SWIFT_PRIVATE;
     std::optional<std::variant<nitro::NullType, std::string>> systemImage     SWIFT_PRIVATE;
+    std::optional<std::variant<nitro::NullType, std::string>> subtitle     SWIFT_PRIVATE;
+    std::optional<std::variant<bool, nitro::NullType>> checked     SWIFT_PRIVATE;
 
   public:
     NitroUiMenuRow() = default;
-    explicit NitroUiMenuRow(std::string id, std::string kind, std::string title, std::optional<std::variant<nitro::NullType, std::string>> parentId, bool disabled, bool destructive, std::optional<std::variant<nitro::NullType, std::string>> systemImage): id(id), kind(kind), title(title), parentId(parentId), disabled(disabled), destructive(destructive), systemImage(systemImage) {}
+    explicit NitroUiMenuRow(std::string id, std::string kind, std::string title, std::optional<std::variant<nitro::NullType, std::string>> parentId, bool disabled, bool destructive, std::optional<std::variant<nitro::NullType, std::string>> systemImage, std::optional<std::variant<nitro::NullType, std::string>> subtitle, std::optional<std::variant<bool, nitro::NullType>> checked): id(id), kind(kind), title(title), parentId(parentId), disabled(disabled), destructive(destructive), systemImage(systemImage), subtitle(subtitle), checked(checked) {}
 
   public:
     friend bool operator==(const NitroUiMenuRow& lhs, const NitroUiMenuRow& rhs) = default;
@@ -74,7 +76,9 @@ namespace margelo::nitro {
         JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "parentId"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "disabled"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "destructive"))),
-        JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "systemImage")))
+        JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "systemImage"))),
+        JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subtitle"))),
+        JSIConverter<std::optional<std::variant<bool, nitro::NullType>>>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "checked")))
       );
     }
     static inline jsi::Value toJSI(jsi::Runtime& runtime, const margelo::nitro::nitroui::NitroUiMenuRow& arg) {
@@ -86,6 +90,8 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "disabled"), JSIConverter<bool>::toJSI(runtime, arg.disabled));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "destructive"), JSIConverter<bool>::toJSI(runtime, arg.destructive));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "systemImage"), JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::toJSI(runtime, arg.systemImage));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "subtitle"), JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::toJSI(runtime, arg.subtitle));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "checked"), JSIConverter<std::optional<std::variant<bool, nitro::NullType>>>::toJSI(runtime, arg.checked));
       return obj;
     }
     static inline bool canConvert(jsi::Runtime& runtime, const jsi::Value& value) {
@@ -103,6 +109,8 @@ namespace margelo::nitro {
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "disabled")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "destructive")))) return false;
       if (!JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "systemImage")))) return false;
+      if (!JSIConverter<std::optional<std::variant<nitro::NullType, std::string>>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "subtitle")))) return false;
+      if (!JSIConverter<std::optional<std::variant<bool, nitro::NullType>>>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "checked")))) return false;
       return true;
     }
   };

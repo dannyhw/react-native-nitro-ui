@@ -23,8 +23,8 @@ the layout engine, and React never sees a native node.
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | `SingleChoiceSegmentedButtonRow`                             | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `ExposedDropdownMenuBox` (`menuAnchor`) + `DropdownMenuItem` | 0.4.0 | [menu.md](docs/components/menu.md)                           |
-| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 `DropdownMenu` opened at the finger                       | next  | [context-menu.md](docs/components/context-menu.md)           |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup` (M3 Expressive)    | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 Expressive `DropdownMenuPopup` opened at the finger       | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
 | `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
@@ -32,14 +32,15 @@ the layout engine, and React never sees a native node.
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
 | `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`        | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content              | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
+| `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`          | next  | [tooltip.md](docs/components/tooltip.md)                     |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children       | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`, and
-refuses those five with an error that names them. The first three wait for a
-round that measures them inside a Host; the last two are refused by design,
-because each is a `View` around React Native children, not a control a
+except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
+`Tooltip`, and refuses those six with an error that names them. The first three
+wait for a round that measures them inside a Host; the last three are refused by
+design, because each is a `View` around React Native children, not a control a
 composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
 
@@ -66,6 +67,7 @@ import {
   Slider,
   Switch,
   TextField,
+  Tooltip,
 } from 'react-native-nitro-ui';
 ```
 
@@ -309,7 +311,7 @@ export function ViewToggle() {
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
     <td><img src="docs/images/components/picker-ios.png" width="300" alt="Picker menu and wheel variants on iOS" /></td>
-    <td><img src="docs/images/components/picker-android.png" width="300" alt="Picker menu and wheel variants on Android" /></td>
+    <td><img src="docs/images/components/picker-android.png" width="300" alt="A Picker's open menu with its selected row checked on Android" /></td>
   </tr>
 </table>
 
@@ -361,33 +363,42 @@ export function DueDate() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with a disabled row on iOS" /></td>
-    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with a disabled row on Android" /></td>
+    <td><img src="docs/images/components/menu-ios.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on iOS" /></td>
+    <td><img src="docs/images/components/menu-android.png" width="300" alt="An open Menu with checked rows, subtitles and a titled group on Android" /></td>
   </tr>
 </table>
 
 A trigger that opens a list of actions. It has no value, so there is nothing to
 keep in sync: `onSelect` reports the `id` of the row that was picked, and the
 items are data — never child views. The trigger is drawn like a `Button`, with
-`Button`'s variants and sizes.
+`Button`'s variants and sizes. A row can carry a `subtitle` (a second line) and
+a `checked` (a check); a checked row is still just a row, so flip your own state
+when it is picked.
 
 ```tsx name=menu
-const FILE_ACTIONS: MenuGroup = {
-  actions: [
-    { id: 'rename', title: 'Rename' },
-    { id: 'duplicate', title: 'Duplicate' },
-  ],
-  sections: [
-    {
-      id: 'dangerous',
-      title: 'Dangerous',
-      items: [{ id: 'delete', title: 'Delete', destructive: true }],
-    },
-  ],
-};
-
 export function FileActions() {
   const [last, setLast] = useState('nothing yet');
+  const [pinned, setPinned] = useState(false);
+
+  const group: MenuGroup = {
+    actions: [
+      { id: 'rename', title: 'Rename' },
+      { id: 'duplicate', title: 'Duplicate', subtitle: 'Keeps the original' },
+      { id: 'pin', title: 'Pinned', checked: pinned },
+    ],
+    sections: [
+      {
+        id: 'dangerous',
+        title: 'Dangerous',
+        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+      },
+    ],
+  };
+
+  const handleSelect = (id: string) => {
+    setLast(id);
+    if (id === 'pin') setPinned((current) => !current);
+  };
 
   return (
     <>
@@ -395,10 +406,10 @@ export function FileActions() {
       <Menu
         accessibilityLabel="File"
         title="File"
-        group={FILE_ACTIONS}
+        group={group}
         variant="tonal"
         size="medium"
-        onSelect={setLast}
+        onSelect={handleSelect}
       />
     </>
   );
@@ -409,7 +420,7 @@ export function FileActions() {
 expansion binding, so iOS never reports either one — and a pick fires
 `onSelect` before the `onClose` that follows it. `systemImage` and
 `primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
-submenu nests on iOS and appears inline under a divider on Android.
+submenu nests on iOS and appears inline as a group of its own on Android.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
 ### ContextMenu
@@ -790,12 +801,57 @@ iOS the sheet presents in the screen's own chain, and from a window of its own
 when a React Native `Modal` is on top, so closing that `Modal` cannot strand it.
 [bottom-sheet.md](docs/components/bottom-sheet.md) has the platform details.
 
+### Tooltip
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/tooltip-ios.png" width="300" alt="A Tooltip with a title, a message and a Got it action, pointing at a star button, on iOS" /></td>
+    <td><img src="docs/images/components/tooltip-android.png" width="300" alt="A Tooltip with a title, a message and a Got it action, pointing at a star button, on Android" /></td>
+  </tr>
+</table>
+
+A tooltip the app opens next to its own views: Material 3's plain or rich
+tooltip on Android, and a popover on iOS, which has no tooltip control. The
+children are the anchor, laid out in place, and keep their own taps.
+
+```tsx name=tooltip
+export function StarHint({ onStar }: { onStar: () => void }) {
+  const [hint, setHint] = useState(true);
+
+  return (
+    <Tooltip
+      isPresented={hint}
+      onIsPresentedChange={setHint}
+      title="Saved searches"
+      message="Tap the star to keep this search."
+      actions={[{ id: 'ok', title: 'Got it' }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Star this search"
+        onPress={onStar}
+      >
+        <Text>★</Text>
+      </Pressable>
+    </Tooltip>
+  );
+}
+```
+
+There is no long-press trigger and no timeout: the app sets `isPresented`, and
+the tooltip stays up until a tap outside, an action, Back (Android, with an
+action) or the app closes it. `onAction` comes before the close it causes. The
+tooltip follows its anchor through a layout change or a scroll. At most two
+actions; a title or an action makes Android's tooltip the rich one.
+[tooltip.md](docs/components/tooltip.md) has the platform details.
+
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`; one of those
-five, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and `Tooltip`; one
+of those six, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -969,9 +1025,9 @@ The full list per control is in its doc; these are the ones that bite.
   Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
   changes what a tap does there.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet` and `ContextMenu`.
-  Any other child — one of those five, an RN view, text, another `<Host>` —
-  throws in development. Give
+  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
+  `Tooltip`. Any other child — one of those six, an RN view, text, another
+  `<Host>` — throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules

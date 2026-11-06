@@ -24,6 +24,7 @@
 #include "HybridNitroUiSliderSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
 #include "HybridNitroUiTextFieldSpecSwift.hpp"
+#include "HybridNitroUiTooltipSpecSwift.hpp"
 #include "NitroUi-Swift-Cxx-Umbrella.hpp"
 #include <NitroModules/NitroDefines.hpp>
 
@@ -338,6 +339,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiTextFieldSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiTooltipSpec>
+  std::shared_ptr<HybridNitroUiTooltipSpec> create_std__shared_ptr_HybridNitroUiTooltipSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiTooltipSpec_cxx swiftPart = NitroUi::HybridNitroUiTooltipSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiTooltipSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiTooltipSpec_(std__shared_ptr_HybridNitroUiTooltipSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiTooltipSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiTooltipSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiTooltipSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiTooltipSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
 

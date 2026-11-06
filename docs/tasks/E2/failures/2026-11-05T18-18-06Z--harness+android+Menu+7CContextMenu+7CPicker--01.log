@@ -1,0 +1,86 @@
+# Failure excerpt — harness:android:Menu%7CContextMenu%7CPicker
+
+- Ran: 2026-11-05T18:18:06.569Z on code tree `710347cf60c8` at HEAD `ee3197e` (branch `task/E2-expressive-menus`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu|ContextMenu|Picker`
+- Result: fail, exit 1, 464 ms
+- Load: start 24.66, end 24.66, median 24.66, max 24.66
+- Device: android / device `emulator-5574` / lease `E2-urxpj`
+- Full log: `task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log` (<store>/task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2-urxpj (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18-uswhw                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 24.66 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu%7CContextMenu%7CPicker
+gate: node ../scripts/harness.mjs --harnessRunner android Menu|ContextMenu|Picker (cwd example)
+gate: code tree 710347cf60c8 at HEAD ee3197ed
+gate: git tree da982051417b with a DIRTY worktree (not reusable)
+gate: log task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log
+gate:       <store>/task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu|ContextMenu|Picker
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 97f9a260 at ee3197ed839c36fb515917433e2d6db4dc2da09b, now 710347cf at ee3197ed839c36fb515917433e2d6db4dc2da09b)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 97f9a260 at ee3197ed839c36fb515917433e2d6db4dc2da09b, now 710347cf at ee3197ed839c36fb515917433e2d6db4dc2da09b)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:android:Menu%7CContextMenu%7CPicker FAIL in 0.5 s
+gate: recorded in .gates/task/E2-expressive-menus.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E2-expressive-menus/harness+android+Menu+7CContextMenu+7CPicker-2026-11-05T18-18-06.047Z.log (5 probe(s))
+
+```

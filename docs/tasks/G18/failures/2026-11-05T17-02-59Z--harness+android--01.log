@@ -1,0 +1,116 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-05T17:02:59.146Z on code tree `0b4960556a26` at HEAD `99b8ab2` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 682514 ms
+- Load: start 3.86, end 4.25, median 4.18, max 8.67
+- Device: android / device `emulator-5570` / lease `G18-rmhr8`
+- Full log: `task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log` (<store>/task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/BottomSheetModalHazard.harness.tsx`
+- `● Console`
+- `● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal closes under a sheet presented over it`
+- `expected [] to deeply equal [ 'dismiss' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rmhr8 (still live)
+  |   G18-rmhr8                G18          both              pair-b
+  |   X19merge-s6fdb           X19merge     both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.25 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 69 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 0b4960556a26 at HEAD 99b8ab20
+gate: git tree de6fd9725997
+gate: log task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log
+gate:       <store>/task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0b4960556a26, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.86/3.53 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 21 passed, 21 total
+Tests:       3 skipped, 413 passed, 416 total
+Snapshots:   0 total
+Time:        661.931 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0b4960556a26, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.07/4.26 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/isolated/BottomSheetModalHazard.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+  ● BottomSheet · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when the Modal closes under a sheet presented over it
+
+    expected [] to deeply equal [ 'dismiss' ]
+
+      [0m [90m 161 |[39m     setters[33m.[39m[36mget[39m([32m'sheet'[39m)[33m?[39m[33m.[39m([36mfalse[39m)[33m;[39m
+       [90m 162 |[39m     [36mawait[39m waitForReport([32m'sheet'[39m[33m,[39m (r) [33m=>[39m r[33m.[39mlive [33m===[39m [32m'0'[39m[33m,[39m [32m'closed'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 163 |[39m     expect(eventLog)[33m.[39mtoEqual([[32m'dismiss'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 164 |[39m   })[33m;[39m
+       [90m 165 |[39m
+       [90m 166 |[39m   it([32m'leaves no Modal host behind when the Modal holding the sheet closes while it is up'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 3 passed, 4 total
+Snapshots:   0 total
+Time:        18.52 s
+Ran all test suites.
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 682.5 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+
+
+gate: appended the device context to task/G18-tooltip/harness+android-2026-11-05T17-02-58.642Z.log (5 probe(s))
+
+```

@@ -26,6 +26,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTooltip.kt
 android/src/main/java/com/margelo/nitro/nitroui/MenuRows.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiBottomSheetViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
@@ -68,6 +69,7 @@ ios/components/Switch/HybridNitroUiSwitch.swift
 ios/components/TextField/HybridNitroUiTextField.swift
 ios/components/TextField/NitroUiTextEditing.swift
 ios/components/TextField/NitroUiTextLimit.swift
+ios/components/Tooltip/HybridNitroUiTooltip.swift
 ios/core/NitroSwiftUIHost.swift
 ios/core/NitroUIContent.swift
 ios/core/NitroUiDeclaredFallbacks.swift
@@ -75,6 +77,7 @@ ios/core/NitroUiDeclaredFallbacksLoader.m
 ios/core/NitroUiMainThread.swift
 ios/core/NitroUiModel.swift
 ios/core/NitroUiPresentation.swift
+ios/core/NitroUiPresenterChain.swift
 ios/core/UIColor+NitroUiColor.swift
 lib/module/MaterialTheme.js
 lib/module/MaterialTheme.js.map
@@ -216,6 +219,14 @@ lib/module/components/TextField/TextField.js
 lib/module/components/TextField/TextField.js.map
 lib/module/components/TextField/TextField.nitro.js
 lib/module/components/TextField/TextField.nitro.js.map
+lib/module/components/Tooltip/NativeNitroUiTooltip.js
+lib/module/components/Tooltip/NativeNitroUiTooltip.js.map
+lib/module/components/Tooltip/NitroUiTooltipConfig.js
+lib/module/components/Tooltip/NitroUiTooltipConfig.js.map
+lib/module/components/Tooltip/Tooltip.js
+lib/module/components/Tooltip/Tooltip.js.map
+lib/module/components/Tooltip/Tooltip.nitro.js
+lib/module/components/Tooltip/Tooltip.nitro.js.map
 lib/module/core/NitroUiIntrinsicProps.js
 lib/module/core/NitroUiIntrinsicProps.js.map
 lib/module/core/index.js
@@ -372,6 +383,14 @@ lib/typescript/src/components/TextField/TextField.d.ts
 lib/typescript/src/components/TextField/TextField.d.ts.map
 lib/typescript/src/components/TextField/TextField.nitro.d.ts
 lib/typescript/src/components/TextField/TextField.nitro.d.ts.map
+lib/typescript/src/components/Tooltip/NativeNitroUiTooltip.d.ts
+lib/typescript/src/components/Tooltip/NativeNitroUiTooltip.d.ts.map
+lib/typescript/src/components/Tooltip/NitroUiTooltipConfig.d.ts
+lib/typescript/src/components/Tooltip/NitroUiTooltipConfig.d.ts.map
+lib/typescript/src/components/Tooltip/Tooltip.d.ts
+lib/typescript/src/components/Tooltip/Tooltip.d.ts.map
+lib/typescript/src/components/Tooltip/Tooltip.nitro.d.ts
+lib/typescript/src/components/Tooltip/Tooltip.nitro.d.ts.map
 lib/typescript/src/core/NitroUiIntrinsicProps.d.ts
 lib/typescript/src/core/NitroUiIntrinsicProps.d.ts.map
 lib/typescript/src/core/index.d.ts
@@ -429,6 +448,8 @@ nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiTooltipSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiTooltipSpec.hpp
 nitrogen/generated/android/c++/JNitroUiButtonSize.hpp
 nitrogen/generated/android/c++/JNitroUiCheckboxSize.hpp
 nitrogen/generated/android/c++/JNitroUiChipSize.hpp
@@ -443,6 +464,7 @@ nitrogen/generated/android/c++/JNitroUiSheetDetent.hpp
 nitrogen/generated/android/c++/JNitroUiSize.hpp
 nitrogen/generated/android/c++/JNitroUiSliderSize.hpp
 nitrogen/generated/android/c++/JNitroUiTextFieldTestState.hpp
+nitrogen/generated/android/c++/JNitroUiTooltipAction.hpp
 nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
 nitrogen/generated/android/c++/JVariant_Boolean_NullType.hpp
 nitrogen/generated/android/c++/JVariant_NullType_Double.cpp
@@ -481,6 +503,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiTooltipStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiTooltipStateUpdater.hpp
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_bool_double.kt
@@ -505,6 +529,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegment
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTextFieldSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTooltipSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiCheckboxSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiChipSize.kt
@@ -519,6 +544,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSheetDetent.k
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSliderSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiTextFieldTestState.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiTooltipAction.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_Boolean_NullType.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_NullType_Double.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_NullType_String.kt
@@ -555,6 +581,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiS
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTextFieldManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTextFieldStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTooltipManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTooltipStateUpdater.kt
 nitrogen/generated/android/nitroui+autolinking.cmake
 nitrogen/generated/android/nitroui+autolinking.gradle
 nitrogen/generated/android/nitrouiOnLoad.cpp
@@ -597,6 +625,8 @@ nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiTooltipSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiTooltipSpecSwift.hpp
 nitrogen/generated/ios/c++/views/HybridNitroUiBottomSheetComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiButtonComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiCheckboxComponent.mm
@@ -613,6 +643,7 @@ nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiTextFieldComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiTooltipComponent.mm
 nitrogen/generated/ios/swift/Func_void.swift
 nitrogen/generated/ios/swift/Func_void_bool.swift
 nitrogen/generated/ios/swift/Func_void_bool_double.swift
@@ -652,6 +683,8 @@ nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiTooltipSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiTooltipSpec_cxx.swift
 nitrogen/generated/ios/swift/NitroUiButtonSize.swift
 nitrogen/generated/ios/swift/NitroUiCheckboxSize.swift
 nitrogen/generated/ios/swift/NitroUiChipSize.swift
@@ -666,6 +699,7 @@ nitrogen/generated/ios/swift/NitroUiSheetDetent.swift
 nitrogen/generated/ios/swift/NitroUiSize.swift
 nitrogen/generated/ios/swift/NitroUiSliderSize.swift
 nitrogen/generated/ios/swift/NitroUiTextFieldTestState.swift
+nitrogen/generated/ios/swift/NitroUiTooltipAction.swift
 nitrogen/generated/ios/swift/Variant_Bool_NullType.swift
 nitrogen/generated/ios/swift/Variant_NullType_Double.swift
 nitrogen/generated/ios/swift/Variant_NullType_String.swift
@@ -705,6 +739,8 @@ nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiTooltipSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiTooltipSpec.hpp
 nitrogen/generated/shared/c++/NitroUiButtonSize.hpp
 nitrogen/generated/shared/c++/NitroUiCheckboxSize.hpp
 nitrogen/generated/shared/c++/NitroUiChipSize.hpp
@@ -722,6 +758,7 @@ nitrogen/generated/shared/c++/NitroUiSizingStats.hpp
 nitrogen/generated/shared/c++/NitroUiSizingTraceEvent.hpp
 nitrogen/generated/shared/c++/NitroUiSliderSize.hpp
 nitrogen/generated/shared/c++/NitroUiTextFieldTestState.hpp
+nitrogen/generated/shared/c++/NitroUiTooltipAction.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiButtonComponent.cpp
@@ -754,6 +791,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiTooltipComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiTooltipComponent.hpp
 nitrogen/generated/shared/json/NitroUiBottomSheetConfig.json
 nitrogen/generated/shared/json/NitroUiButtonConfig.json
 nitrogen/generated/shared/json/NitroUiCheckboxConfig.json
@@ -770,6 +809,7 @@ nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
 nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
+nitrogen/generated/shared/json/NitroUiTooltipConfig.json
 package.json
 src/MaterialTheme.ts
 src/NitroUiCore.nitro.ts
@@ -841,6 +881,10 @@ src/components/TextField/NativeNitroUiTextField.ts
 src/components/TextField/NitroUiTextFieldConfig.ts
 src/components/TextField/TextField.nitro.ts
 src/components/TextField/TextField.tsx
+src/components/Tooltip/NativeNitroUiTooltip.ts
+src/components/Tooltip/NitroUiTooltipConfig.ts
+src/components/Tooltip/Tooltip.nitro.ts
+src/components/Tooltip/Tooltip.tsx
 src/core/NitroUiIntrinsicProps.ts
 src/core/index.ts
 src/core/useControlled.ts

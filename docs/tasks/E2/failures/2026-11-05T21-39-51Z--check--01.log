@@ -1,0 +1,176 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-05T21:39:51.308Z on code tree `5c6f2b0b2b32` at HEAD `530a750` (branch `task/E2-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 680136 ms
+- Load: start 9.08, end 57.83, median 194.61, max 288.45
+- Device: android / device `emulator-5574` / lease `E2merge-1kxry`
+- Full log: `task/E2-merge/check-2026-11-05T21-39-49.873Z.log` (<store>/task/E2-merge/check-2026-11-05T21-39-49.873Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/bench-baseline-merge.test.js (160.091 s)`
+- `● report.mjs merges one component › is gated by --check afterwards, for the merged and the untouched cells`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 0`
+- `Received: null`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2841 — the rest is in the full log above)
+
+```
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS src/__tests__/hostLayoutWarning.test.tsx
+  ● Console
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS src/__tests__/buttonSizingKey.test.tsx
+PASS scripts/__tests__/ci-workflows.test.js (86.092 s)
+PASS scripts/__tests__/gate.test.js (122.982 s)
+PASS scripts/__tests__/gate-check.test.js (130.337 s)
+FAIL scripts/__tests__/bench-baseline-merge.test.js (160.091 s)
+  ● report.mjs merges one component › is gated by --check afterwards, for the merged and the untouched cells
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: null
+
+      2585 |       );
+      2586 |       const clean = cli(ws, [fullRun, '--check']);
+    > 2587 |       expect(clean.status).toBe(0);
+           |                            ^
+      2588 |       expect(clean.all).not.toContain('missing-base');
+      2589 |
+      2590 |       /**
+
+      at toBe (scripts/__tests__/bench-baseline-merge.test.js:2587:28)
+      at body (scripts/__tests__/bench-baseline-merge.test.js:1870:14)
+      at Object.withTree (scripts/__tests__/bench-baseline-merge.test.js:2569:5)
+
+PASS scripts/__tests__/gate-logs.test.js (184.349 s)
+PASS scripts/__tests__/bench-gate.test.js (651.618 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/bench-baseline-merge.test.js (160.091 s)
+  ● report.mjs merges one component › is gated by --check afterwards, for the merged and the untouched cells
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: null
+
+      2585 |       );
+      2586 |       const clean = cli(ws, [fullRun, '--check']);
+    > 2587 |       expect(clean.status).toBe(0);
+           |                            ^
+      2588 |       expect(clean.all).not.toContain('missing-base');
+      2589 |
+      2590 |       /**
+
+      at toBe (scripts/__tests__/bench-baseline-merge.test.js:2587:28)
+      at body (scripts/__tests__/bench-baseline-merge.test.js:1870:14)
+      at Object.withTree (scripts/__tests__/bench-baseline-merge.test.js:2569:5)
+
+
+Test Suites: 1 failed, 69 passed, 70 total
+Tests:       1 failed, 1745 passed, 1746 total
+Snapshots:   0 total
+Time:        653.05 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 680.1 s
+gate: recorded in .gates/task/E2-merge.jsonl
+
+```

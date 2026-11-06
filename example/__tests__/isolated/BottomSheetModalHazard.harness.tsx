@@ -74,6 +74,22 @@ async function waitForReport(
   }
 }
 
+/**
+ * Waits until the event log holds at least `count` events, or `timeoutMs` passes, then
+ * leaves 200 ms for anything extra to land. A close's `onDismiss` reaches JS a hop after
+ * the report that already says `live=0`, so the log read straight after it can be empty.
+ */
+async function waitForEventCount(
+  count: number,
+  timeoutMs = 3000
+): Promise<void> {
+  const deadline = nitroUiCore.now() + timeoutMs;
+  while (eventLog.length < count && nitroUiCore.now() < deadline) {
+    await sleep(50);
+  }
+  await sleep(200);
+}
+
 const up = (report: Report) =>
   report.presented === '1' &&
   report.live === '1' &&
@@ -160,6 +176,7 @@ describe('BottomSheet · the stranded-Modal hazard (own app instance)', () => {
     }
     setters.get('sheet')?.(false);
     await waitForReport('sheet', (r) => r.live === '0', 'closed');
+    await waitForEventCount(1);
     expect(eventLog).toEqual(['dismiss']);
   });
 

@@ -51,6 +51,7 @@ final class RealInputTests: XCTestCase {
     static let checkboxTab = "tab-checkbox"
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
+    static let tooltipTab = "tab-tooltip"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
     static let searchFieldTab = "tab-searchfield"
@@ -91,6 +92,8 @@ final class RealInputTests: XCTestCase {
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
+    static let tooltipLog = "tooltip-log"
+    static let tooltipPresses = "tooltip-anchor-presses"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -2393,6 +2396,9 @@ final class RealInputTests: XCTestCase {
     let alpha = "Alpha"
     let bravo = "Bravo"
     let locked = "Locked row"
+    // The checkable row: a SwiftUI `Toggle` whose binding's setter is the pick, a
+    // different path from every `Button` row above (step 7 is for it).
+    let checkedRow = "Checked row"
 
     // 1. The announcement, before anything is presented: the popup is another
     //    window's tree once it is up, and the trigger is the only node worth reading.
@@ -2576,6 +2582,51 @@ final class RealInputTests: XCTestCase {
       try read(Echo.menuEvents),
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
+    )
+
+    // 7. The checked row. Its pick goes through the `Toggle` binding's setter
+    //    (`HybridNitroUiMenu.rowButton`), which the harness never reaches:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: checkedRow,
+      waitingFor: "the real tap that reopens the menu for the checked row"
+    )
+    let toggle = optionRow(checkedRow)
+    print(
+      "real-input (ios): menu: checked row type=\(toggle.elementType.rawValue) "
+        + "value=\(String(describing: toggle.value)) selected=\(toggle.isSelected)"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: checkedRow,
+        echo: Echo.menuPick,
+        expected: "checked",
+        waitingFor: "the real tap on the row \"\(checkedRow)\""
+      ),
+      "checked",
+      "a real tap on a checked row should reach JS as that row's id - the Toggle's setter "
+        + "is the pick, and a setter that does nothing leaves the echo where it was"
+    )
+    let events = try read(Echo.menuEvents)
+    XCTAssertEqual(
+      events.components(separatedBy: " > ").filter { $0 == "select checked" }.count,
+      1,
+      "the checked row should report exactly one select, read \"\(events)\""
+    )
+    XCTAssertEqual(
+      events,
+      "select bravo > select alpha > select checked",
+      "and nothing else: no open/close on iOS (D32), no second pick from one tap"
+    )
+    waitUntilOptionGone(checkedRow, "the checked-row pick to take its menu down")
+    XCTAssertEqual(
+      optionLabels(containing: checkedRow),
+      0,
+      "a pick of the checked row should take its own menu down"
     )
   }
 
@@ -3322,6 +3373,123 @@ final class RealInputTests: XCTestCase {
       "a sheet's action reports its id, then the close"
     )
     waitUntilOptionGone("Copy link", "the action to take the sheet down")
+  }
+
+  /// A real finger on a Tooltip (G18): a closed tooltip leaves a real tap on its anchor
+  /// to the anchor, a tap on a plain RN button opens it, a tap outside closes it and
+  /// reports the close alone, and a tap on its action reports the action before the
+  /// close it causes (D32).
+  ///
+  /// The tooltip is a UIKit popover in a window of its own, so "up" is read as its own
+  /// message on screen and the screen's log only with the tooltip down - the same reads
+  /// the dialog check makes, for the same reason.
+  func testRealInputTooltip() throws {
+    try goToTab(Tab.tooltipTab, showing: Echo.tooltipLog)
+    let message = "Tap the star to keep this search."
+    let title = "Saved searches"
+    let action = "Got it"
+
+    // One real tap on the star, confirmed by its own count: the tooltip's overlay is
+    // behind the app's `Pressable` and takes no touch.
+    func pressAnchor(_ expected: String, _ waitingFor: String) throws -> String {
+      return try pressUntil(
+        named: "the star the tooltip points at (tooltip-anchor)",
+        waitingFor: waitingFor,
+        attempts: 1,
+        press: { _ in try required("tooltip-anchor", as: "the tooltip's anchor").fingerTap() },
+        reading: { self.echoText(Echo.tooltipPresses) }
+      ) { shown in
+        shown == expected
+      }
+    }
+
+    // 1. Before a touch: nothing reported, nothing up, and a closed tooltip's anchor
+    //    takes a real tap as its own - once.
+    XCTAssertEqual(try read(Echo.tooltipLog), "none", "no tooltip has reported anything before a touch")
+    XCTAssertEqual(optionLabels(containing: message), 0, "no tooltip is up before a touch")
+    XCTAssertEqual(
+      try pressAnchor("star presses: 1", "the real tap on the star"),
+      "star presses: 1",
+      "a real tap on the anchor of a closed tooltip presses the anchor once"
+    )
+    Thread.sleep(forTimeInterval: 0.8)
+    XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
+    XCTAssertEqual(try read(Echo.tooltipLog), "none", "and reports nothing")
+    // Outside: the log line, a `Text` with no press of its own and well above the
+    // popover that hangs over the star. Found while the tooltip is down, tapped where it
+    // was. A fixed point on the screen could be a tab, or a button the tap would press.
+    let logFrame = try required(Echo.tooltipLog, as: "the log line").frame
+    let outside = app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.midY))
+
+    // 2. A real tap on a plain RN button opens it, with its title and its action. JS
+    //    opened it, so it reports nothing (read once it is down, in step 3).
+    try tapUntilOption(
+      "tooltip-open-rich",
+      as: "the rich tooltip's opener",
+      option: message,
+      waitingFor: "the real tap that opens the rich tooltip"
+    )
+    XCTAssertGreaterThan(optionLabels(containing: title), 0, "the tooltip shows its title")
+    XCTAssertGreaterThan(optionLabels(containing: action), 0, "and its action")
+    XCTAssertEqual(app.descendants(matching: .popover).count, 1, "the tooltip is one UIKit popover")
+    XCTAssertTrue(
+      app.descendants(matching: .any)["tooltip-rich-tooltip"].exists,
+      "the presented content carries <testID>-tooltip, for a test or an a11y tool to find"
+    )
+
+    // 3. A tap outside closes it, and reports the close alone. A later attempt taps
+    //    only while it is still up: once it is down, the log is merely slow.
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the log line outside the tooltip",
+        waitingFor: "the tap outside the tooltip to close it",
+        press: { attempt in
+          if attempt > 1 && optionLabels(containing: message) == 0 {
+            return
+          }
+          outside.tap()
+        },
+        reading: { self.echoText(Echo.tooltipLog) }
+      ) { shown in
+        shown == "presented:false"
+      },
+      "presented:false",
+      "a tap outside closes the tooltip and reports the close alone"
+    )
+    waitUntilOptionGone(message, "the tap outside to take the tooltip down")
+    XCTAssertEqual(optionLabels(containing: message), 0, "and the tooltip is gone")
+
+    // 4. Its action reports, before the close it causes.
+    try tapUntilOption(
+      "tooltip-open-rich",
+      as: "the rich tooltip's opener",
+      option: message,
+      waitingFor: "the real tap that reopens the rich tooltip"
+    )
+    let afterAction = "presented:false > action:ok > presented:false"
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: action,
+        echo: Echo.tooltipLog,
+        expected: afterAction,
+        waitingFor: "the real tap on \"\(action)\""
+      ),
+      afterAction,
+      "a real tap on its action reports the id, then the close - once each, in that order"
+    )
+    waitUntilOptionGone(message, "the action to take the tooltip down")
+    XCTAssertEqual(optionLabels(containing: message), 0, "an action closes its tooltip")
+
+    // 5. Closed again, the anchor's taps are its own.
+    XCTAssertEqual(
+      try pressAnchor("star presses: 2", "the second real tap on the star"),
+      "star presses: 2",
+      "once it is closed, a real tap on the anchor presses it once more"
+    )
+    Thread.sleep(forTimeInterval: 0.8)
+    XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
+    XCTAssertEqual(try read(Echo.tooltipLog), afterAction, "and reports nothing")
   }
 
   /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN

@@ -1,7 +1,8 @@
 # Menu
 
 A button that opens a list of actions: SwiftUI `Menu` on iOS, a Material 3
-`DropdownMenu` anchored to the trigger on Android. Both are hosted by the core
+Expressive menu (`DropdownMenuPopup` and its groups) anchored to the trigger on
+Android. Both are hosted by the core
 runtime (`docs/architecture/core.md`), so the menu's presentation, dismissal, press
 feedback and row metrics belong to the platform, not to us.
 
@@ -11,7 +12,10 @@ import { Menu } from 'react-native-nitro-ui';
 <Menu
   title="Actions"
   group={{
-    actions: [{ id: 'duplicate', title: 'Duplicate' }],
+    actions: [
+      { id: 'duplicate', title: 'Duplicate', subtitle: 'Keeps the original' },
+      { id: 'pin', title: 'Pinned', checked: pinned },
+    ],
     sections: [
       {
         id: 'dangerous',
@@ -60,7 +64,8 @@ width unless the app asks for one.
 
 ```ts
 interface MenuGroup    { actions?: (MenuAction | MenuSubmenu)[]; sections?: MenuSection[] }
-interface MenuAction   { id: string; title: string; disabled?: boolean; destructive?: boolean; systemImage?: string }
+interface MenuAction   { id: string; title: string; disabled?: boolean; destructive?: boolean; systemImage?: string;
+                         subtitle?: string | null; checked?: boolean | null }
 interface MenuSubmenu  { id: string; title: string; systemImage?: string; items: MenuAction[] }
 interface MenuSection  { id: string; title?: string; items: MenuAction[] }
 ```
@@ -69,8 +74,19 @@ interface MenuSection  { id: string; title?: string; items: MenuAction[] }
 - `id` is required on every row, submenu and section. It is what `onSelect` reports and
   what a test presses, so it must be unique within the menu and stable across renders;
   a re-ordered list keeps each row's identity.
-- `title` is optional on a section: a section with no title is its rows set off by a
-  divider, with no header (iOS draws it as a `Section` with no header — see G9 below).
+- `title` is optional on a section: a section with no title is its rows as a group of
+  their own, with no header (iOS draws it as a `Section` with no header — see G9 below;
+  Android as a Material group with no label).
+- `subtitle` is a second, smaller line under a row's title: iOS `UIAction.subtitle`
+  (a second `Text` in the row's label), Android the row's supporting text. `null`,
+  `''` or absent draws none.
+- `checked` makes a row checkable: `true` draws it checked, `false` unchecked, `null`
+  or absent is a plain row. iOS makes the row a menu `Toggle` (`UIAction.state`, the
+  leading check); Android a `CheckableDropdownMenuItem`, which draws a checked row
+  selected with a leading check and announces it as a checkbox. **The menu still has
+  no value**: picking a checkable row reports its `id` through `onSelect`, exactly like
+  any other row, and the check is whatever the app sends next — flip your own state in
+  `onSelect`. Nothing is toggled locally.
 - A submenu holds actions only. Depth stops at one level — the public type cannot
   express a submenu inside a submenu, and the wrapper has nothing to normalise into.
 - An empty `group` renders a trigger that opens nothing.
@@ -85,14 +101,17 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 
 | Concept            | iOS                                                              | Android                                                     |
 | ------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------- |
-| Control            | `Menu { rows } label: { ButtonLabel }`, `.menuStyle(.button)` (iOS 16+) plus Button's per-variant `.buttonStyle` | `ExposedDropdownMenuBox { NitroUiM3Button(menuAnchor) ; ExposedDropdownMenu { rows } }` |
+| Control            | `Menu { rows } label: { ButtonLabel }`, `.menuStyle(.button)` (iOS 16+) plus Button's per-variant `.buttonStyle` | `Box { NitroUiM3Button ; DropdownMenuPopup(rememberDropdownMenuPopupPositionProvider(Below)) { groups } }` (Material 3 Expressive) |
 | Host               | `UIHostingController` inside `NitroSwiftUIHost`                     | `NitroComposeHost<MenuModel>`: `AbstractComposeView`             |
 | Containment        | **required** (`needsContainment`) — the menu is the system's presentation | n/a — the popup is the composition's own window            |
 | Popup              | SwiftUI's own menu, presented by the system                          | its own `PopupWindow`, anchored to the trigger's own box          |
 | Trigger            | Button's label, Button's `.buttonStyle`, `.menuIndicator(.hidden)`    | Button's M3 button (`NitroUiM3Button`), one semantics node        |
-| Rows               | `Button`, `Section`, `Divider`, `Menu` inside `Menu`                 | `DropdownMenuItem`, `HorizontalDivider`, a non-interactive header row |
-| Submenu            | **nests** — a real second-level menu                                 | renders its items **inline under a divider**                     |
-| Section header     | `Section(header:)`; an untitled section is `Section` with **no** header | a non-interactive header row under a divider; none when untitled |
+| Rows               | `Button`, `Toggle` (a `checked` row), `Section`, `Menu` inside `Menu` | `DropdownMenuItem(shape = MenuDefaults.itemShape(…))`, `CheckableDropdownMenuItem` (a `checked` row) |
+| Groups             | a `Section` is an inline `UIMenu`, set off by UIKit's separator      | each section, each submenu and each run of top-level actions is a `DropdownMenuGroup`, spaced by `MenuDefaults.GroupSpacing` and shaped by `MenuDefaults.groupShape` — no dividers |
+| Submenu            | **nests** — a real second-level menu                                 | renders its items **inline, as a group** titled with the submenu's title |
+| Section header     | `Section(header:)`; an untitled section is `Section` with **no** header | `MenuDefaults.DropdownMenuGroupLabel`, a heading; none when untitled |
+| Subtitle           | a second `Text` in the row's label → `UIAction.subtitle`              | `supportingText`                                                  |
+| Checked            | `Toggle` → `UIAction.state` `.on` / `.off`                            | `CheckableDropdownMenuItem(checked)`: selected container and leading check, `Role.Checkbox` + `selected` |
 | Destructive row    | `Button(role: .destructive)`                                         | Material 3 error colour                                          |
 | Test id            | RN's `testID` → `accessibilityIdentifier`                            | `host.tag` (Compose has no test id)                              |
 | Recycle            | hosting controller reused                                            | objects reused; composition disposed and rebuilt (`core.md` §6)  |
@@ -155,22 +174,18 @@ the composition's own window and the Host has to keep it honest:
 | The Host is dropped or recycled while open           | The composition is disposed, which closes the window.                  |
 | iOS                                                | A Host is a passthrough, so the menu is the ordinary system presentation. |
 
-The Android popup hangs off the **trigger's** box, not the composition's. That is a
-deliberate departure from `docs/tasks/Q1-menu-design.md` §3, which asks for a
-`Modifier.clickable` trigger beside a plain `DropdownMenu`. `ExposedDropdownMenuBox` with
-`menuAnchor` is the documented way to say "position this popup against *this* control"
-rather than relying on what a container happens to be, and `Menu` inside a `<Host>` is
-exactly the case where that distinction should matter; the list is opened with
-`matchAnchorWidth = false`, because the default is `true` and it forces the popup to the
-trigger's width, while a menu's list is as wide as its items need. That means the popup's
-width is Material's own content sizing: no narrower than its 112 dp floor, and no wider
-than the 280 dp a row's content caps at — a cap a group's title carries as well, since it
-is the one child that is not a row and so is not covered by Material's own. The list stays
-aligned with the trigger's start edge, so it opens under its trigger in either direction.
-The anchor still
-reports through `onGloballyPositioned`, so the
-witness's `anchor=` rect is the trigger's box in composition space, and dismissal on a
-layout move is H2b's, unchanged.
+The Android popup hangs off the **trigger's** box, not the composition's. Since E2 the
+popup is Material 3 Expressive's `DropdownMenuPopup`, which is placed by a position
+provider (`MenuDefaults.rememberDropdownMenuPopupPositionProvider(MenuAnchorPosition.Below)`)
+against the layout it is composed in — and the trigger and the popup share one `Box` whose
+only measured child is the trigger, so that layout *is* the trigger's box. Until E2 the
+same job was `ExposedDropdownMenuBox` with `menuAnchor` (G7b), which Expressive does not
+use for a menu. The popup's width is Material's own content sizing: no narrower than a
+row's 112 dp floor, and no wider than a row's 280 dp cap plus its 4 dp inset on each side;
+a group label (`DropdownMenuGroupLabel`) carries the same cap. The list stays aligned with
+the trigger's start edge, so it opens under its trigger in either direction. The anchor
+still reports through `onGloballyPositioned`, so the witness's `anchor=` rect is the
+trigger's box in composition space, and dismissal on a layout move is H2b's, unchanged.
 
 The failure mode the anchor is here to prevent — a plain `DropdownMenu` opening its list
 under the whole Host rectangle instead of under the button — is **Material's documented
@@ -303,7 +318,7 @@ that list with VoiceOver and TalkBack remains a human pass.
   iOS it is neither enforced nor observable, for the same SDK reason — so an iOS menu
   can stay on screen over a disabled trigger (D32 accepts this as a platform limit). Do
   not rely on it going away.
-- **No submenus on Android.** A submenu's items appear inline under a divider, in place.
+- **No submenus on Android.** A submenu's items appear inline as a group, in place.
   Ask for a submenu only where that is acceptable, and expect a flat list there — the
   same kind of documented split as `Picker`'s iOS-only `wheel`.
 - **`systemImage` is iOS-only** on both the trigger and the rows, as it is on `Button`.
@@ -322,6 +337,13 @@ that list with VoiceOver and TalkBack remains a human pass.
   every row of an untitled group" reads the `UIMenu` UIKit actually built (through the
   test-only `nuiTestMenuProbe`, which opens the menu with `performPrimaryAction()` and closes
   it) and holds the rows and their roles (`G9-ios-menu-untitled-group.report.md`).
-- One submenu level, and no nesting of sections. No checkmarks, no per-row state —
-  a menu reports a pick and forgets it, which is the point of having no value.
+- One submenu level, and no nesting of sections. A `checked` row draws the check the
+  app sent and reports a pick like any row; the menu keeps no per-row state of its own,
+  which is the point of having no value.
+- **A checkable row is not drawn destructive on iOS.** SwiftUI's `Toggle` takes no
+  role, so `destructive` on a row with a `checked` is ignored there; Android still
+  draws it in the error colour.
+- **An unchecked row reads the same as a plain one on iOS.** UIKit gives a toggle that
+  is off and a plain action the same `.off` state; on Android a `checked: false` row is
+  announced as an unchecked checkbox.
 - No `ref` forwarding, and `aria-label`/`aria-disabled` are not translated.
