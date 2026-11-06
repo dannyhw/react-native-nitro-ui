@@ -375,7 +375,11 @@ type Ink = {
   topColorCount: number;
 };
 type ProbeModule = {
-  paintedInk(testTag: string, colorArgb: number, tolerance: number): Promise<Ink>;
+  paintedInk(
+    testTag: string,
+    colorArgb: number,
+    tolerance: number
+  ): Promise<Ink>;
 };
 
 let inkProbe: ProbeModule | null = null;
@@ -1045,8 +1049,7 @@ describe('Progress', () => {
       // Every configuration cycles through, not just the two the component shipped
       // with: `onDropView`/`prepareForRecycle` is per-shape code now, and the
       // loading indicator and the wave are the shapes whose reset is new.
-      const configuration =
-        CONFIGURATIONS[cycle % CONFIGURATIONS.length]!;
+      const configuration = CONFIGURATIONS[cycle % CONFIGURATIONS.length]!;
       const { unmount } = await render(
         <Progress
           {...configurationProps(configuration)}
@@ -1572,22 +1575,18 @@ describe('Progress', () => {
       await waitForBox(testId);
       const handle = await handleFor(testId);
       await waitForDisplayed(handle, 'displayed=indeterminate');
-      await waitFor(
-        () => expect(handle.nuiTestIsAnimating()).toBe(true),
-        { timeout: 5000 }
-      );
+      await waitFor(() => expect(handle.nuiTestIsAnimating()).toBe(true), {
+        timeout: 5000,
+      });
 
       unmount();
       // The gate closes on the way out: the detach / `onDropView` says so before the
       // composition or hosting controller goes away, so the answer must flip without
       // a timer's help.
-      await waitFor(
-        () => expect(handle.nuiTestIsAnimating()).toBe(false),
-        { timeout: 5000 }
-      );
-      console.log(
-        `animate ${configuration.name}: mounted=true dropped=false`
-      );
+      await waitFor(() => expect(handle.nuiTestIsAnimating()).toBe(false), {
+        timeout: 5000,
+      });
+      console.log(`animate ${configuration.name}: mounted=true dropped=false`);
       cleanup();
     }
   });
@@ -1740,7 +1739,9 @@ describe('Progress', () => {
       const control = await probeInk('ink-control-green', green);
       // The control first: a probe that cannot see a known colour has no answer to
       // give about any of the shapes below.
-      expect(control.inkCount).toBeGreaterThan(control.width * control.height * 0.9);
+      expect(control.inkCount).toBeGreaterThan(
+        control.width * control.height * 0.9
+      );
       if (probeRows.some(([, box]) => box.inkCount === 0)) {
         throw new Error(`no ink: ${probeSummary}`);
       }
@@ -1798,7 +1799,9 @@ describe('Progress', () => {
  * could only drift, not catch.
  */
 function keyOf(name: string): string {
-  const found = CONFIGURATIONS.find((configuration) => configuration.name === name);
+  const found = CONFIGURATIONS.find(
+    (configuration) => configuration.name === name
+  );
   if (found === undefined) {
     throw new Error(`No configuration named "${name}".`);
   }

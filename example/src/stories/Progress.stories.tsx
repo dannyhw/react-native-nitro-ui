@@ -37,7 +37,7 @@ const meta = {
       control: { type: 'select' },
       options: ['flat', 'wavy'],
       description:
-        "`wavy` is Material 3's wavy bar and ring, with Material's own amplitude, wavelength and speed. **Android only**: SwiftUI has no wavy indicator, so iOS paints flat. Says nothing about `variant=\"loading\"`, which has no wavy form.",
+        '`wavy` is Material 3\'s wavy bar and ring, with Material\'s own amplitude, wavelength and speed. **Android only**: SwiftUI has no wavy indicator, so iOS paints flat. Says nothing about `variant="loading"`, which has no wavy form.',
     },
     contained: {
       control: { type: 'boolean' },
@@ -139,7 +139,7 @@ export const States: Story = {
           <Progress variant="loading" contained />
         </Row>
       </Column>
-      <Column label="appearance=&quot;wavy&quot; (Android; iOS draws flat)">
+      <Column label='appearance="wavy" (Android; iOS draws flat)'>
         <Row label="linear 0.4">
           <Progress value={0.4} appearance="wavy" />
         </Row>
@@ -238,14 +238,14 @@ export const Sizing: Story = {
         <Progress value={0.5} appearance="wavy" />
       </Frame>
       <Note>
-        Every shape measures its own box: a flat bar is 4 pt tall on iOS (4.19 dp
-        on Android) and a wavy one is 4 pt on iOS against Material&apos;s 10 dp on
-        Android; a ring is 20 pt on iOS (40 dp on Android) and a wavy ring 20 pt
-        against 48 dp; `variant=&quot;loading&quot;` is 20 pt on iOS and 48 dp on
-        Android. The last two rows of the first group ask the ring to stretch and
-        it stays a circle - the wrapper answers that for you. The full table, with
-        what each configuration falls back to before it is measured, is in
-        `docs/components/progress.md`.
+        Every shape measures its own box: a flat bar is 4 pt tall on iOS (4.19
+        dp on Android) and a wavy one is 4 pt on iOS against Material&apos;s 10
+        dp on Android; a ring is 20 pt on iOS (40 dp on Android) and a wavy ring
+        20 pt against 48 dp; `variant=&quot;loading&quot;` is 20 pt on iOS and
+        48 dp on Android. The last two rows of the first group ask the ring to
+        stretch and it stays a circle - the wrapper answers that for you. The
+        full table, with what each configuration falls back to before it is
+        measured, is in `docs/components/progress.md`.
       </Note>
     </Showcase>
   ),
