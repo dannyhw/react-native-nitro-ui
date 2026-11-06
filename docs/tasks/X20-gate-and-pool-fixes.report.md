@@ -78,3 +78,38 @@ load the limit exists for). Documented in CONTRIBUTING "Older iOS runtimes, for 
 - lease: `--ios-runtime` with `NITRO_UI_LEASE_BOOT=1` boots a cold older simulator implicitly (load ~100 here); consider requiring a typed `--boot`.
 - doctor: a runtime removed from Xcode leaves its `iosRuntimes` entry; `doctor` flags it, nothing prunes it.
 - real-input (iOS): an abort there ends the whole run (`main().catch`), losing the remaining controls' results.
+- review: the "only catch" text guard is easy to dodge (an aliased import or `catch (e) { if (e.name …) }`).
+- review: `portWait` in `decideAcquire` spans both kinds of pair, so a busy look-check Metro shows in a default acquire's wait reason.
+- review: the env file never unsets `NITRO_UI_LEASE_IOS_RUNTIME`, so sourcing a default lease over a look-check one keeps the refusal.
+- review: `gate.mjs --background` detaches before the refusal, so the refusal lands in the log and `wait`, not the launching shell.
+- review: the refusal reads only the env variable, not the lease record.
+- review: the `gate.test.js:2747` comment overstates what the pure cases cover.
+- review: committed ledgers carry simulator UDIDs in the device field.
+
+## Fix round 1
+
+The reviewer's two surviving mutations are now red, and `resetPair` has no default platform.
+
+1. **The CLI refusal is tested.** A `describeCli` case in `gate.test.js` runs `gate.mjs harness:ios` in a throwaway checkout whose `node` is the fake runner, so no device or harness ever starts. With `NITRO_UI_LEASE_IOS_RUNTIME=26.5` it asserts exit 1, `refused before the run`, no runner output and an empty ledger. Without the variable, the same checkout must run and record `harness:ios`, so "no line" cannot pass by accident.
+2. **The doctor fixture no longer matches the answer.** A new case gives pair-b Metro 8297 and expects 8298 and 8299.
+3. **`resetPair` requires `platform`.** It throws on a missing or unknown platform before asking any device. Every caller passes one, and a test pins the throw and the single-half resets.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1812 tests / 70 suites | `3bedd4c64da7` | 2 m 41 s | start 6.5 / med 6.7 / max 8.1 |
+| `harness:ios` | stale | 444 tests / 25 suites + isolated 4 tests / 2 suites | 04114b070a8f (not this tree) | 11 m 01 s | start 203.1 / med 40.8 / max 203.1 |
+| `harness:android` | stale | 493 tests / 25 suites + isolated 4 tests / 2 suites | 04114b070a8f (not this tree) | 15 m 07 s | start 39.0 / med 6.1 / max 39.0 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | missing | — | — | — | — |
+
+`need --for review`: `check` green; `harness:ios`/`:android` are stale, because `device-pool.mjs` counts as both platforms. Both pairs were leased (E3, G19), so I did not re-run them — see Questions.
+
+Red proofs:
+- `gate.test.js` "exits 1 before the run…" -> delete the `if (lookRefusal != null)` block -> `Expected: 1, Received: 0`
+- `doctor.test.js` "starts past a pair whose Metro is above the default floor" -> `addRuntimeSims` reads only `iosRuntimes` ports -> `+ 8297`
+- `device-pool.test.js` "refuses to reset without being told which half" -> `platform = 'both'` default, no guard -> `Received function did not throw`
+
+## Questions for orchestrator
+
+- Re-run both harness gates for review, or leave them to the merge run? This round changed one guard in `device-pool.mjs` plus tests, and both pairs are leased. I recommend leaving them to merge, which runs the full harness anyway; otherwise I wait for a pair.
+
