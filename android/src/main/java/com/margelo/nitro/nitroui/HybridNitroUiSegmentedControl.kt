@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
+import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButtonColors
@@ -36,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.unit.dp
@@ -408,7 +408,6 @@ private class SegmentedControlHost(
     val label = model.accessibilityLabel
     val colors = segmentedColors(tint)
     val group = segmentGroupValues()
-    val resting = group.resting
     val labelStyle = group.labelStyle
     val contentPadding = group.contentPadding
     // The label goes on the row, because for this control the group is what a
@@ -421,6 +420,14 @@ private class SegmentedControlHost(
     // Material 3 Expressive replaced the segmented track with a connected button
     // group: the same row of choices, drawn with `ButtonGroupDefaults`' 2 dp gap and
     // its connected leading / middle / trailing corners.
+    //
+    // Those three helpers are called with *no arguments*, which is the whole point of
+    // the group. Their first parameter is the complete resting shape, not the corner
+    // the item shares with its neighbours, so handing them the control's own stadium
+    // (`ButtonDefaults.shapesFor`'s answer for the height) keeps the connected pressed
+    // and checked shapes but rests every item on a full pill: a row of separate pills
+    // 2 dp apart, which is the track-less look the group replaced and - at 48 dp -
+    // wide enough to cost the longest label in a five-option row its last letter.
     Row(
       modifier =
         labelModifier
@@ -442,19 +449,31 @@ private class SegmentedControlHost(
           colors = colors,
           shapes =
             when {
-              options.size == 1 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)
-              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)
-              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes(resting)
-              else -> ButtonGroupDefaults.connectedMiddleButtonShapes(resting)
+              // One option is not a group: there is no neighbour to be connected to,
+              // so the item is the full resting corner - what a lone round Button draws.
+              options.size == 1 -> group.lone
+              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+              else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
             },
           labelStyle = labelStyle,
           contentPadding = contentPadding,
+          // Weight, but not a fixed share: `fill = false` is what keeps a label
+          // readable. A `fill = true` share is the *mean* of the items' content, so a
+          // row whose labels differ hands its widest label less than it asked for -
+          // `Last 24 hours` came back as `Last 24 …`. With `fill = false` each item
+          // keeps the width its label measured (dumped: every segment is its label +
+          // 32 dp), and any space the row is *given* beyond that - a caller's own
+          // width - is still shared equally, which is what a group of equal choices
+          // should do. One label is still ellipsized by this row's own measure rather
+          // than by the share; `docs/components/segmented-control.md` has the dump.
+          //
           // Weight only: the selected state and the role are published by the
           // item's own `selectable` below, so the row does not also assert them
           // (a second `selected` here wins the merge, and the a11y checks in
           // `scripts/real-input/android.mjs` would then read this line instead of
           // the selection the item actually has).
-          modifier = Modifier.weight(1f),
+          modifier = Modifier.weight(1f, fill = false),
           onClick = {
             // A tap on the segment that is already selected reports nothing.
             // Foundation's `selectable` fires for a press on a selected node only
@@ -493,8 +512,13 @@ private class SegmentedControlHost(
  * takes Material's *geometry* - the connected corners, the 2 dp gap, the height's
  * padding and label style - and puts them on `Modifier.selectable(role =
  * Role.RadioButton)`, which is the same semantics Material's own segmented button
- * published. The press morph survives: the connected pressed shape replaces the
- * resting one while the item is held.
+ * published. The states keep their own corner - the connected pressed shape while
+ * the item is held, `connectedButtonCheckedShape` (Material's full stadium) when it
+ * is the selection - but they *swap*: material3's shape animator
+ * (`AnimatedShapeState`) is `internal`, so nothing here interpolates between the
+ * corner the item rests on and the corner it takes. Material's own toggle buttons
+ * morph across the same three shapes; this row changes instantly instead, and the
+ * only press feedback a segment owes is the ripple the `selectable` draws under it.
  */
 @Composable
 private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
@@ -510,6 +534,7 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
 ) {
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
+  // Chosen, not animated: see the note on the swap in the doc comment above.
   val shape =
     when {
       pressed -> shapes.pressedShape
@@ -548,9 +573,13 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
 }
 
 /**
- * The group's shared resting corner, its label style and its padding.
+ * The group's label style, its padding, and the shapes for a group of one.
  *
- * All three come from the *medium* rung, the one `Button` maps `size='medium'` to:
+ * The corners for two or more options are not here: they are the connected defaults
+ * `ButtonGroupDefaults.connectedLeadingButtonShapes()` and friends answer with, and
+ * this file does not touch them.
+ *
+ * The rest comes from the *medium* rung, the one `Button` maps `size='medium'` to:
  * the M3 small container height (40 dp) decides the padding and the label style, and
  * the box is the 48 dp touch target a `medium` Button is laid out at - so a row of
  * segments and a row of buttons sit on the same line, and a segment is no harder to
@@ -560,22 +589,43 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
  *
  * The rest of Q8's point stands: once the size is a height, the padding, the type and
  * the corner all follow from it instead of being three tables. Built once per `Component` call, not per
- * item, and the corner is [buttonShapes]' cached value rather than a fresh one.
+ * item, and a lone option's corner is [buttonShapes]' cached value rather than a
+ * fresh one.
  */
 @Composable
 private fun segmentGroupValues(): SegmentGroupValues =
   SegmentGroupValues(
-    resting = buttonShapes(ButtonShape.Round, ButtonScale.Medium).shape,
+    lone = loneSegmentShapes(),
     labelStyle = buttonLabelStyle(ButtonScale.Medium),
     contentPadding = ButtonDefaults.contentPaddingFor(ButtonDefaults.MinHeight),
   )
 
 /** The three values [segmentGroupValues] answers with. */
 private class SegmentGroupValues(
-  val resting: Shape,
+  val lone: ToggleButtonShapes,
   val labelStyle: TextStyle,
   val contentPadding: PaddingValues,
 )
+
+/**
+ * The shapes for a group of one: the control's own corner, which for the medium rung
+ * is a stadium, drawn on both ends because there is nothing to connect to.
+ *
+ * Built from [buttonShapes] rather than from `ButtonGroupDefaults`: what a lone
+ * option looks like is a round Button's question, and this is the same answer the
+ * Button gives at the same height - resting on the height's own shape, pressing
+ * toward Material's square one, and selected as the same stadium the group's checked
+ * shape already is (`connectedButtonCheckedShape`).
+ */
+@Composable
+private fun loneSegmentShapes(): ToggleButtonShapes {
+  val rounded = buttonShapes(ButtonShape.Round, ButtonScale.Medium)
+  return ToggleButtonShapes(
+    shape = rounded.shape,
+    pressedShape = rounded.pressedShape,
+    checkedShape = rounded.shape,
+  )
+}
 
 /** The Hybrid View React renders as `NitroUiSegmentedControl`. */
 class HybridNitroUiSegmentedControl(
