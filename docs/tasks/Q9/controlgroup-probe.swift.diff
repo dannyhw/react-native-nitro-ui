@@ -1,0 +1,150 @@
+diff --git a/ios/components/Button/HybridNitroUiButton.swift b/ios/components/Button/HybridNitroUiButton.swift
+index 49fade1d..ddd57971 100644
+--- a/ios/components/Button/HybridNitroUiButton.swift
++++ b/ios/components/Button/HybridNitroUiButton.swift
+@@ -91,7 +91,15 @@ struct ButtonContent: NitroUIContent {
+     self.model = model
+   }
+ 
+-  var body: some View {
++  @ViewBuilder var body: some View {
++    if model.title.hasPrefix("__CG:") {
++      Q9ControlGroupProbe(spec: String(model.title.dropFirst(5)))
++    } else {
++      realBody
++    }
++  }
++
++  private var realBody: some View {
+     // The style is the one thing that cannot be a runtime value: `buttonStyle`
+     // takes a concrete `PrimitiveButtonStyle`, so the switch picks the branch.
+     // Everything that applies to every variant stays *outside* it, so a variant
+@@ -272,7 +280,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
+     host.wantsContentSize = true
+     host.sizingPolicy = .intrinsic
+     // A Button presents nothing, so it needs no view-controller containment.
+-    host.needsContainment = false
++    host.needsContainment = true // Q9 THROWAWAY
+     // The backstop: startup normally registers this through
+     // ``NitroUiDeclaredFallbacks`` long before a Button can be measured, and a
+     // host built without that table still gets its fallback here.
+@@ -474,3 +482,119 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
+     return NitroUiButtonSize(width: Double(size.width), height: Double(size.height))
+   }
+ }
++
++// Q9 THROWAWAY: ControlGroup probe. Never committed outside docs/tasks/Q9/.
++struct Q9ControlGroupProbe: View {
++  let spec: String  // "<style>:<items>", items = text | label | icon
++
++  private var parts: [String] { spec.split(separator: ":").map(String.init) }
++  private var style: String { parts.first ?? "automatic" }
++  private var items: String { parts.count > 1 ? parts[1] : "text" }
++
++  @ViewBuilder private func item(_ title: String, _ symbol: String) -> some View {
++    switch items {
++    case "label": Button {} label: { Label(title, systemImage: symbol) }
++    case "icon": Button {} label: { Label(title, systemImage: symbol).labelStyle(.iconOnly) }
++    default: Button(title) {}
++    }
++  }
++
++  @ViewBuilder private var group: some View {
++    if #available(iOS 16.0, *) {
++      ControlGroup {
++        item("Day", "sun.max")
++        item("Week", "calendar")
++        item("Month", "square.grid.3x3")
++      } label: {
++        Label("Range", systemImage: "ellipsis.circle")
++      }
++    } else {
++      ControlGroup {
++        item("Day", "sun.max")
++        item("Week", "calendar")
++        item("Month", "square.grid.3x3")
++      }
++    }
++  }
++
++  static let six = ["Day", "Week", "Month", "Quarter", "Year", "All time"]
++
++  private func more(from: Int) -> some View {
++    Menu {
++      ForEach(from..<6, id: \.self) { i in Button(Self.six[i]) {} }
++    } label: {
++      Label("More", systemImage: "ellipsis")
++    }
++  }
++
++  var body: some View {
++    switch style {
++    case "navigation": group.controlGroupStyle(.navigation)
++    case "menu":
++      if #available(iOS 16.4, *) { group.controlGroupStyle(.menu) } else { Text("n/a") }
++    case "compactMenu":
++      if #available(iOS 16.4, *) { group.controlGroupStyle(.compactMenu) } else { Text("n/a") }
++    case "palette":
++      if #available(iOS 17.0, *) { group.controlGroupStyle(.palette) } else { Text("n/a") }
++    case "row":
++      HStack(spacing: 8) {
++        item("Day", "sun.max").buttonStyle(.bordered)
++        item("Week", "calendar").buttonStyle(.bordered)
++        item("Month", "square.grid.3x3").buttonStyle(.bordered)
++      }
++    case "segmented":
++      Picker("Range", selection: .constant(0)) {
++        Text("Day").tag(0); Text("Week").tag(1); Text("Month").tag(2)
++      }.pickerStyle(.segmented).fixedSize()
++    case "small": group.controlSize(.small)
++    case "large": group.controlSize(.large)
++    case "extraLarge":
++      if #available(iOS 17.0, *) { group.controlSize(.extraLarge) } else { Text("n/a") }
++    case "six":
++      ControlGroup {
++        Button("Day") {}; Button("Week") {}; Button("Month") {}
++        Button("Quarter") {}; Button("Year") {}; Button("All time") {}
++      }
++    case "disabled":
++      ControlGroup {
++        Button("Day") {}; Button("Week") {}.disabled(true); Button("Month") {}
++      }
++    case "toggle":
++      ControlGroup {
++        Toggle(isOn: .constant(true)) { Label("Bold", systemImage: "bold") }
++        Toggle(isOn: .constant(false)) { Label("Italic", systemImage: "italic") }
++        Toggle(isOn: .constant(false)) { Label("Underline", systemImage: "underline") }
++      }.toggleStyle(.button)
++    case "toggletext":
++      ControlGroup {
++        Toggle("Bold", isOn: .constant(true))
++        Toggle("Italic", isOn: .constant(false))
++        Toggle("Under", isOn: .constant(false))
++      }.toggleStyle(.button)
++    case "tint": group.tint(.red)
++    case "wide": group.frame(width: 300)
++    case "prominent": group.buttonStyle(.borderedProminent)
++    case "vtf":
++      if #available(iOS 16.0, *) {
++        ViewThatFits(in: .horizontal) {
++          ControlGroup { ForEach(0..<6, id: \.self) { i in Button(Self.six[i]) {} } }
++          ControlGroup { ForEach(0..<4, id: \.self) { i in Button(Self.six[i]) {} }; more(from: 4) }
++          ControlGroup { ForEach(0..<3, id: \.self) { i in Button(Self.six[i]) {} }; more(from: 3) }
++          ControlGroup { ForEach(0..<2, id: \.self) { i in Button(Self.six[i]) {} }; more(from: 2) }
++        }.frame(width: 300, alignment: .leading)
++      } else { Text("n/a") }
++    case "beside":
++      if #available(iOS 16.0, *) {
++        ViewThatFits(in: .horizontal) {
++          ControlGroup { ForEach(0..<6, id: \.self) { i in Button(Self.six[i]) {} } }
++          HStack(spacing: 8) { ControlGroup { ForEach(0..<4, id: \.self) { i in Button(Self.six[i]) {} } }; more(from: 4) }
++          HStack(spacing: 8) { ControlGroup { ForEach(0..<3, id: \.self) { i in Button(Self.six[i]) {} } }; more(from: 3) }
++          HStack(spacing: 8) { ControlGroup { ForEach(0..<2, id: \.self) { i in Button(Self.six[i]) {} } }; more(from: 2) }
++        }.frame(width: 300, alignment: .leading)
++      } else { Text("n/a") }
++    case "withmenu":
++      ControlGroup { Button("Day") {}; Button("Week") {}; more(from: 2) }
++    default: group.controlGroupStyle(.automatic)
++    }
++  }
++}

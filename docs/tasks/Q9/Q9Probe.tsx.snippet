@@ -1,0 +1,62 @@
+// Q9 THROWAWAY: ControlGroup probe screen. Never registered on main.
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, SafeAreaView, ScrollView, Text, View } from 'react-native';
+import { Button } from 'react-native-nitro-ui';
+
+const PAGE2 = ['small', 'automatic', 'large', 'extraLarge', 'six', 'disabled', 'toggle', 'toggletext', 'tint', 'wide', 'prominent'];
+const STYLES1 = ['automatic', 'navigation', 'menu', 'compactMenu', 'palette', 'row', 'segmented'];
+const KINDS = ['p3text', 'text', 'label', 'icon', 'p2text', 'p2label'];
+const PAGE3 = ['six', 'vtf', 'withmenu', 'beside'];
+
+type Handle = { measureContent(): { width: number; height: number } };
+
+function Row({ style, kind }: { style: string; kind: string }) {
+  const ref = useRef<Handle | null>(null);
+  const [box, setBox] = useState('');
+  const [measured, setMeasured] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const m = ref.current?.measureContent();
+      if (m) setMeasured(`${m.width.toFixed(2)}x${m.height.toFixed(2)}`);
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [kind]);
+  return (
+    <View style={{ marginBottom: 10 }}>
+      <Text style={{ fontSize: 11, color: '#666' }}>
+        {style} · measure {measured} · box {box}
+      </Text>
+      <View style={{ borderWidth: 0.5, borderColor: 'red', alignSelf: 'flex-start' }}>
+        <Button
+          title={`__CG:${style}:${kind}`}
+          hybridRef={(v) => {
+            ref.current = v;
+          }}
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            setBox(`${width.toFixed(2)}x${height.toFixed(2)}`);
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+export default function Q9Probe() {
+  const [k, setK] = useState(0);
+  const kind = KINDS[k % KINDS.length]!;
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+      <ScrollView contentContainerStyle={{ padding: 16 }}>
+        <Pressable testID="q9-next" onPress={() => setK(k + 1)}>
+          <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 12 }}>
+            ControlGroup probe · items: {kind} (tap to cycle)
+          </Text>
+        </Pressable>
+        {(kind.startsWith('p3') ? PAGE3 : kind.startsWith('p2') ? PAGE2 : STYLES1).map((s) => (
+          <Row key={`${s}-${kind}`} style={s} kind={kind.replace(/p[23]/, '')} />
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
