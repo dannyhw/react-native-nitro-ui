@@ -18,7 +18,7 @@ namespace margelo::nitro::nitroui {
   using namespace facebook;
 
   /**
-   * Represents the Java/Kotlin callback `(focused: Boolean) -> Unit`.
+   * Represents the Java/Kotlin callback `(ended: Boolean) -> Unit`.
    * This can be passed around between C++ and Java/Kotlin.
    */
   struct JFunc_void_bool: public jni::JavaClass<JFunc_void_bool> {
@@ -29,9 +29,9 @@ namespace margelo::nitro::nitroui {
     /**
      * Invokes the function this `JFunc_void_bool` instance holds through JNI.
      */
-    void invoke(bool focused) const {
-      static const auto method = javaClassStatic()->getMethod<void(jboolean /* focused */)>("invoke");
-      method(self(), focused);
+    void invoke(bool ended) const {
+      static const auto method = javaClassStatic()->getMethod<void(jboolean /* ended */)>("invoke");
+      method(self(), ended);
     }
   };
 
@@ -40,7 +40,7 @@ namespace margelo::nitro::nitroui {
    */
   class JFunc_void_bool_cxx final: public jni::HybridClass<JFunc_void_bool_cxx, JFunc_void_bool> {
   public:
-    static jni::local_ref<JFunc_void_bool::javaobject> fromCpp(const std::function<void(bool /* focused */)>& func) {
+    static jni::local_ref<JFunc_void_bool::javaobject> fromCpp(const std::function<void(bool /* ended */)>& func) {
       return JFunc_void_bool_cxx::newObjectCxxArgs(func);
     }
 
@@ -48,13 +48,13 @@ namespace margelo::nitro::nitroui {
     /**
      * Invokes the C++ `std::function<...>` this `JFunc_void_bool_cxx` instance holds.
      */
-    void invoke_cxx(jboolean focused) {
-      _func(static_cast<bool>(focused));
+    void invoke_cxx(jboolean ended) {
+      _func(static_cast<bool>(ended));
     }
 
   public:
     [[nodiscard]]
-    inline const std::function<void(bool /* focused */)>& getFunction() const {
+    inline const std::function<void(bool /* ended */)>& getFunction() const {
       return _func;
     }
 
@@ -65,11 +65,11 @@ namespace margelo::nitro::nitroui {
     }
 
   private:
-    explicit JFunc_void_bool_cxx(const std::function<void(bool /* focused */)>& func): _func(func) { }
+    explicit JFunc_void_bool_cxx(const std::function<void(bool /* ended */)>& func): _func(func) { }
 
   private:
     friend HybridBase;
-    std::function<void(bool /* focused */)> _func;
+    std::function<void(bool /* ended */)> _func;
   };
 
 } // namespace margelo::nitro::nitroui

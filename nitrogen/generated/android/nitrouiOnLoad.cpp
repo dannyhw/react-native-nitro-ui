@@ -55,6 +55,8 @@
 #include "views/JHybridNitroUiTextFieldStateUpdater.hpp"
 #include "JHybridNitroUiTooltipSpec.hpp"
 #include "views/JHybridNitroUiTooltipStateUpdater.hpp"
+#include "JHybridNitroUiPopoverProtoSpec.hpp"
+#include "views/JHybridNitroUiPopoverProtoStateUpdater.hpp"
 #include "HybridNitroUiCore.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
@@ -202,6 +204,14 @@ struct JHybridNitroUiTooltipSpecImpl: public jni::JavaClass<JHybridNitroUiToolti
     return javaPart->getJHybridNitroUiTooltipSpec();
   }
 };
+struct JHybridNitroUiPopoverProtoSpecImpl: public jni::JavaClass<JHybridNitroUiPopoverProtoSpecImpl, JHybridNitroUiPopoverProtoSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiPopoverProto;";
+  static std::shared_ptr<JHybridNitroUiPopoverProtoSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiPopoverProtoSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiPopoverProtoSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiPopoverProtoSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -248,6 +258,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiTextFieldStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiTooltipSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiTooltipStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiPopoverProtoSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiPopoverProtoStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -359,6 +371,12 @@ void registerAllNatives() {
     "NitroUiTooltip",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiTooltipSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiPopoverProto",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiPopoverProtoSpecImpl::create();
     }
   );
 }

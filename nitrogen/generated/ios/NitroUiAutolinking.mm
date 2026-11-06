@@ -27,6 +27,7 @@
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiTooltipSpecSwift.hpp"
+#include "HybridNitroUiPopoverProtoSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -155,6 +156,13 @@
     "NitroUiTooltip",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiTooltipSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTooltip();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiPopoverProto",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiPopoverProtoSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiPopoverProto();
       return hybridObject;
     }
   );

@@ -8,21 +8,21 @@
 import NitroModules
 
 /**
- * Wraps a Swift `(_ focused: Bool) -> Void` as a class.
+ * Wraps a Swift `(_ ended: Bool) -> Void` as a class.
  * This class can be used from C++, e.g. to wrap the Swift closure as a `std::function`.
  */
 public final class Func_void_bool {
   public typealias bridge = margelo.nitro.nitroui.bridge.swift
 
-  private let closure: (_ focused: Bool) -> Void
+  private let closure: (_ ended: Bool) -> Void
 
-  public init(_ closure: @escaping (_ focused: Bool) -> Void) {
+  public init(_ closure: @escaping (_ ended: Bool) -> Void) {
     self.closure = closure
   }
 
   @inline(__always)
-  public func call(focused: Bool) -> Void {
-    self.closure(focused)
+  public func call(ended: Bool) -> Void {
+    self.closure(ended)
   }
 
   /**

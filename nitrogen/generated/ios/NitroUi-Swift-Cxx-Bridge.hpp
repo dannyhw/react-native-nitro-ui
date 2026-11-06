@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
+// Forward declaration of `HybridNitroUiPopoverProtoSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiPopoverProtoSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -90,6 +92,8 @@ namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
+// Forward declaration of `HybridNitroUiPopoverProtoSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiPopoverProtoSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.
@@ -114,6 +118,7 @@ namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 #include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
+#include "HybridNitroUiPopoverProtoSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
@@ -1009,5 +1014,17 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiTooltipSpec>
   using std__weak_ptr_HybridNitroUiTooltipSpec_ = std::weak_ptr<HybridNitroUiTooltipSpec>;
   inline std__weak_ptr_HybridNitroUiTooltipSpec_ weakify_std__shared_ptr_HybridNitroUiTooltipSpec_(const std::shared_ptr<HybridNitroUiTooltipSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiPopoverProtoSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiPopoverProtoSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiPopoverProtoSpec_ = std::shared_ptr<HybridNitroUiPopoverProtoSpec>;
+  std::shared_ptr<HybridNitroUiPopoverProtoSpec> create_std__shared_ptr_HybridNitroUiPopoverProtoSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiPopoverProtoSpec_(std__shared_ptr_HybridNitroUiPopoverProtoSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiPopoverProtoSpec>
+  using std__weak_ptr_HybridNitroUiPopoverProtoSpec_ = std::weak_ptr<HybridNitroUiPopoverProtoSpec>;
+  inline std__weak_ptr_HybridNitroUiPopoverProtoSpec_ weakify_std__shared_ptr_HybridNitroUiPopoverProtoSpec_(const std::shared_ptr<HybridNitroUiPopoverProtoSpec>& strong) noexcept { return strong; }
 
 } // namespace margelo::nitro::nitroui::bridge::swift

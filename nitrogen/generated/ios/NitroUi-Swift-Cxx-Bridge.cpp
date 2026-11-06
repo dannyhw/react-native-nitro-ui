@@ -18,6 +18,7 @@
 #include "HybridNitroUiHostSpecSwift.hpp"
 #include "HybridNitroUiMenuSpecSwift.hpp"
 #include "HybridNitroUiPickerSpecSwift.hpp"
+#include "HybridNitroUiPopoverProtoSpecSwift.hpp"
 #include "HybridNitroUiProgressSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
@@ -338,6 +339,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiTooltipSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiPopoverProtoSpec>
+  std::shared_ptr<HybridNitroUiPopoverProtoSpec> create_std__shared_ptr_HybridNitroUiPopoverProtoSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiPopoverProtoSpec_cxx swiftPart = NitroUi::HybridNitroUiPopoverProtoSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiPopoverProtoSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiPopoverProtoSpec_(std__shared_ptr_HybridNitroUiPopoverProtoSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiPopoverProtoSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiPopoverProtoSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiPopoverProtoSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiPopoverProtoSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
 

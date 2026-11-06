@@ -22,6 +22,7 @@
  * started, so this script boots nothing and shuts nothing down.
  */
 
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
 import path from 'node:path';
@@ -2235,6 +2236,210 @@ const CHECKS = {
     await waitGone(SHEET_ROW, 'the row to take the sheet down');
   },
 
+  // S5 spike only (never merged): the Popover prototype, Q7 Appendix F.
+  's5-popover': async (t) => {
+    // Q1 and Q2 by real input: ten presentations, each a different content size, each
+    // opened by a real tap, its inner `Pressable` tapped once, closed by a tap outside.
+    // The press is counted, not retried: a tap that does not land once is a miss.
+    await s5Start(t);
+    // The empty middle of the screen: outside the popup wherever it was placed.
+    // The right edge: the popup is start-aligned and at most 320 dp wide.
+    const outside = {
+      x: Math.round(t.displayWidth() * 0.95),
+      y: Math.round(t.displayHeight() / 2),
+    };
+    let once = 0;
+    const lines = [];
+    for (let cycle = 1; cycle <= 10; cycle++) {
+      await s5TapUntil(
+        t,
+        's5-open',
+        () => t.nodeByTestId('s5-press') != null,
+        'the popover to open'
+      );
+      if (cycle === 1) s5Shot(t, 's5-android-popover-open');
+      const count = () => t.echo('s5-press-count');
+      await t.tapNode(t.nodeByTestId('s5-press'));
+      const arrived = await s5Until(
+        () => count() === `Pressed ${String(cycle)}`,
+        4000
+      );
+      await t.settle(800);
+      const after = count();
+      const landedOnce = arrived && after === `Pressed ${String(cycle)}`;
+      if (landedOnce) once += 1;
+      await s5TapUntil(
+        t,
+        outside,
+        () => t.nodeByTestId('s5-press') == null,
+        'a tap outside to close it'
+      );
+      await s5Until(
+        () => (s5Echo(t).fit ?? '').endsWith(`/${String(cycle)}`),
+        5000
+      );
+      const echo = s5Echo(t);
+      const line =
+        `cycle ${String(cycle)}: tap ${landedOnce ? 'once' : `NOT once (${String(after)})`} ` +
+        `press=${echo.press} closes=${echo.closes} fit=${echo.fit} | ${String(t.echo('s5-probe'))}`;
+      lines.push(line);
+      t.log.note(line);
+    }
+    const echo = s5Echo(t);
+    t.log.checkEquals(
+      'Q2: a real tap inside the popover lands exactly once, 10 of 10',
+      once,
+      10
+    );
+    t.log.checkEquals('and JS counted ten presses', echo.press, '10');
+    t.log.checkEquals(
+      'each tap outside closed it, reported once',
+      echo.closes,
+      '10'
+    );
+    t.log.checkEquals(
+      'Q1: the first frame was the final size, 10 of 10',
+      echo.fit,
+      '10/10'
+    );
+  },
+
+  's5-keyboard': async (t) => {
+    // Q3: a TextInput in the popover, focused by a real tap. Where the popup is against
+    // the keyboard is read from the screenshots and the field's bounds.
+    await s5Start(t);
+    await s5TapUntil(
+      t,
+      's5-open-input',
+      () => t.nodeByTestId('s5-text') != null,
+      'the input popover to open'
+    );
+    const before = t.nodeByTestId('s5-text');
+    s5Shot(t, 's5-android-keyboard-before');
+    await t.tapNode(before);
+    const shown = await s5Until(() => s5ImeShown(), 5000);
+    await t.settle(1200);
+    const after = t.nodeByTestId('s5-text');
+    s5Shot(t, 's5-android-keyboard-after');
+    await t.type('abc');
+    const typed = await s5Until(
+      () => t.nodeByTestId('s5-text')?.text === 'abc',
+      4000
+    );
+    t.log.note(
+      `Q3 ime=${shown ? 1 : 0} display=${String(t.displayWidth())}x${String(t.displayHeight())} ` +
+        `fieldBefore=${before == null ? '-' : t.boundsText(before)} fieldAfter=${after == null ? '-' : t.boundsText(after)} ` +
+        `imeFrame=${s5ImeFrame()} typed=${typed ? 1 : 0}`
+    );
+    await t.hideKeyboard();
+    await t.settle(500);
+    await t.pressBack();
+    await s5Until(() => t.nodeByTestId('s5-text') == null, 5000);
+    await t.settle(500);
+    const echo = s5Echo(t);
+    t.log.note(
+      `Q3 after close: focus=${echo.focus} text=${echo.text} iopen=${echo.iopen}`
+    );
+    t.log.checkEquals(
+      'Q3: a real tap on the TextInput brings up the keyboard',
+      shown,
+      true
+    );
+    t.log.checkEquals('and typing reaches JS', echo.text, 'abc');
+  },
+
+  's5-modal': async (t) => {
+    // Q4: a popover inside an RN Modal presents over it and takes a tap; closing it
+    // then the Modal, and closing the Modal from inside the open popover, both leave
+    // the app's own screen taking a real tap.
+    await s5Start(t);
+    const popupsBefore = t.popupWindowCount();
+    await s5TapUntil(
+      t,
+      's5-open-modal',
+      () => t.nodeByTestId('s5-modal-open') != null,
+      'the Modal to open'
+    );
+    await s5TapUntil(
+      t,
+      's5-modal-open',
+      () => t.nodeByTestId('s5-mpress') != null,
+      'the popover in the Modal'
+    );
+    s5Shot(t, 's5-android-modal-popover');
+    await t.tapNode(t.nodeByTestId('s5-mpress'));
+    const pressed = await s5Until(
+      () => t.dump().some((node) => node.text === 'Pressed 1'),
+      4000
+    );
+    t.log.checkEquals(
+      'Q4: a real tap inside the popover over the Modal lands',
+      pressed,
+      true
+    );
+    // Back closes the popover (it is focusable), leaving the Modal.
+    await t.pressBack();
+    await s5Until(() => t.nodeByTestId('s5-mpress') == null, 4000);
+    t.log.checkEquals(
+      'Back closes the popover and leaves the Modal up',
+      t.nodeByTestId('s5-modal-close') != null,
+      true
+    );
+    await s5TapUntil(
+      t,
+      's5-modal-close',
+      () => t.nodeByTestId('s5-main') != null,
+      'the Modal to close'
+    );
+    await t.tapTestId('s5-main');
+    await s5Until(() => s5Echo(t).main === '1', 4000);
+    const mainA = s5Echo(t).main;
+    // Path B: the Modal closed from a button inside the open popover.
+    await s5TapUntil(
+      t,
+      's5-open-modal',
+      () => t.nodeByTestId('s5-modal-open') != null,
+      'the Modal to open again'
+    );
+    await s5TapUntil(
+      t,
+      's5-modal-open',
+      () => t.nodeByTestId('s5-close-modal') != null,
+      'the popover in the Modal again'
+    );
+    await s5TapUntil(
+      t,
+      's5-close-modal',
+      () =>
+        t.nodeByTestId('s5-close-modal') == null &&
+        t.nodeByTestId('s5-modal') == null,
+      'the Modal and its popover to go'
+    );
+    await t.settle(1000);
+    s5Shot(t, 's5-android-modal-closed-from-popover');
+    await t.tapTestId('s5-main');
+    await s5Until(() => s5Echo(t).main === '2', 4000);
+    const echo = s5Echo(t);
+    t.log.note(
+      `Q4 mainA=${mainA} mainB=${echo.main} modal=${echo.modal} mopen=${echo.mopen} ` +
+        `popups ${String(popupsBefore)}->${String(t.popupWindowCount())}`
+    );
+    t.log.checkEquals(
+      'after the popover then the Modal closed, the screen takes a real tap',
+      mainA,
+      '1'
+    );
+    t.log.checkEquals(
+      'after the Modal closed under an open popover, the screen takes a real tap',
+      echo.main,
+      '2'
+    );
+    t.log.checkEquals(
+      'and no popup window is left',
+      t.popupWindowCount(),
+      popupsBefore
+    );
+  },
   'tooltip': async (t) => {
     // The rich tooltip `TooltipScreen` opens around its star. Its message and its
     // action's title appear nowhere else on the screen, so a text match names the
@@ -4647,6 +4852,8 @@ class DeviceHarness {
       host: ECHO.hostValue,
       textfield: ECHO.textTyping,
       contextmenu: 'ctx-echo',
+      // S5 spike only.
+      pop: 's5-echo',
     }[screen];
     const tab = this.tabs.find((entry) => entry.id === screen);
     if (tab == null || anchor == null) {
@@ -4980,6 +5187,88 @@ class DeviceHarness {
  * @param {DeviceHarness} harness
  * @param {import('./support.mjs').CheckLog} log
  */
+// S5 spike only (never merged): helpers for the Popover prototype's checks.
+
+/** The `s5-echo` line as a record. */
+function s5Echo(t) {
+  const out = {};
+  for (const pair of String(t.echo('s5-echo') ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) out[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return out;
+}
+
+async function s5Until(condition, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (condition()) return true;
+    if (Date.now() > deadline) return false;
+    await sleep(200);
+  }
+}
+
+/** Tap a testID (or a node) until `done`, at most three taps, retrying only while not done. */
+async function s5TapUntil(t, target, done, description) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    if (attempt > 1 && done()) return;
+    if (typeof target === 'string') {
+      await t.tapTestId(target);
+    } else if (target.bounds == null) {
+      await t.tapPx(target.x, target.y);
+    } else {
+      await t.tapNode(target);
+    }
+    if (await s5Until(done, REACT_TIMEOUT)) {
+      if (attempt > 1)
+        t.log.note(`${description}: answered on tap ${String(attempt)}/3`);
+      return;
+    }
+  }
+  t.log.abort(`three real taps did not bring ${description}`);
+}
+
+async function s5Start(t) {
+  await t.tapTestId('s5-reset');
+  await s5Until(
+    () => s5Echo(t).press === '0' && s5Echo(t).fit === '0/0',
+    REACT_TIMEOUT
+  );
+}
+
+function s5Adb(args) {
+  return spawnSync('adb', ['-s', process.env.ANDROID_SERIAL ?? '', ...args], {
+    maxBuffer: 64 * 1024 * 1024,
+  });
+}
+
+function s5Shot(t, name) {
+  const dir = process.env.S5_SHOTS_DIR;
+  if (!dir) return;
+  const result = s5Adb(['exec-out', 'screencap', '-p']);
+  if (result.status === 0 && result.stdout.length > 0) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${name}.png`), result.stdout);
+    t.log.note(`screenshot ${name}.png`);
+  }
+}
+
+function s5ImeShown() {
+  const out = String(s5Adb(['shell', 'dumpsys', 'input_method']).stdout ?? '');
+  return /mInputShown=true/.test(out) || /mIsInputViewShown=true/.test(out);
+}
+
+function s5ImeFrame() {
+  const out = String(
+    s5Adb(['shell', 'dumpsys', 'window', 'InputMethod']).stdout ?? ''
+  );
+  const frame =
+    out.match(/frame=\[[^\]]*\]\[[^\]]*\]/) ??
+    out.match(/mFrame=\[[^\]]*\]\[[^\]]*\]/);
+  const touch = out.match(/touchable region=SkRegion\(\(([^)]*)\)\)/);
+  return `${frame?.[0] ?? '-'} touchable=${touch?.[1] ?? '-'}`;
+}
+
 function makeContext(harness, log) {
   /**
    * @param {string} testID
