@@ -12,16 +12,16 @@ import { Menu, type MenuGroup } from '../components/Menu/Menu';
  * key is Button's with one field added - `variant|size|action|systemImage|title` - and
  * the fifth exists because of one configuration: on Android a `primaryAction` changes
  * the *layout*, so the split trigger is wider than the plain button it replaces. Drop
- * that field and the two configurations collide, and the second of them to mount is
- * laid out at the first one's width for the rest of the process.
+ * that field and the two configurations collide into one cache entry, and every control
+ * holding it ends up at whoever corrected it last.
  *
- * The device suite cannot see the collision. `Menu.harness.tsx` ("earns its own box")
- * poisons the keys *it* computes and then compares the two boxes it gets back, so
- * against a source that stopped sending `action` it poisons entries nobody asks for:
- * each control still reports its own measured size, and the width comparison still
- * holds. Only here, reading the prop the wrapper actually passed to native, is the
- * field itself under test. `buttonSizingKey.test.tsx` is the same shape for the four
- * fields the trigger shares with Button.
+ * `Menu.harness.tsx` ("earns its own box") does catch that collision - measured, both
+ * ways, in `docs/tasks/E3/mutations.json` - but it sees two boxes, never the key: it
+ * poisons the keys *it* computes itself, so it can only report what a shared entry does
+ * to a layout. Here the prop the wrapper passes to native is read directly, so the
+ * field is the thing under test, including the quiet mutation where the field stays in
+ * the key and can never say `action`. `buttonSizingKey.test.tsx` is the same shape for
+ * the four fields the trigger shares with Button.
  */
 const GROUP: MenuGroup = {
   actions: [{ id: 'now', title: 'Now' }],
