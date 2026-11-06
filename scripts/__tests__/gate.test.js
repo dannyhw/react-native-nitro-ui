@@ -2827,6 +2827,8 @@ describeCli('gate.mjs refuses a device gate on a look-check lease', () => {
     const ran = runCli(dir, ['harness:ios'], lease);
     expect(ran.status).toBe(0);
     expect(ran.stdout).toContain('fake runner');
-    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual(['harness:ios']);
+    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
+      'harness:ios',
+    ]);
   });
 });
