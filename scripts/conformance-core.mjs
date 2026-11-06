@@ -605,7 +605,10 @@ export const DECLARED_FALLBACKS = Object.freeze({
     ios: { width: 320, height: 4 },
   },
   NitroUiSegmentedControl: {
-    android: { width: 208.4, height: 48 },
+    // Re-measured on E1 fix round 2: the connected group's row is the sum of its
+    // segments, not n x the widest one, so the three-short-labels row the constant
+    // describes is narrower than round 1 recorded. 187.81 measured, rounded up.
+    android: { width: 187.9, height: 48 },
     ios: { width: 165, height: 31 },
   },
   // The one row whose iOS width belongs to a *locale* as well as a control: it is

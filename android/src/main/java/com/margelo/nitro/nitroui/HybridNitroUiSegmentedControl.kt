@@ -10,13 +10,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonGroupDefaults
@@ -34,6 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.ui.draw.clip
@@ -428,17 +428,17 @@ private class SegmentedControlHost(
     // and checked shapes but rests every item on a full pill: a row of separate pills
     // 2 dp apart, which is the track-less look the group replaced and - at 48 dp -
     // wide enough to cost the longest label in a five-option row its last letter.
-    Row(
+    // The row is measured from its contents, as the segmented row was: the labels are
+    // the width, and a stretched row would be a 420 dp control with three boxes in it
+    // (see `SELF_SIZING_BASE_STYLE` on the JS side). [ConnectedRow] is why the geometry
+    // is written here instead of in a `Row`: for this control an item's share of the
+    // row must not also be the most it is allowed to be.
+    ConnectedRow(
       modifier =
         labelModifier
-          // The row is measured from its contents, as the segmented row was: the
-          // labels are the width, and a stretched row would be a 420 dp control with
-          // three boxes in it (see `SELF_SIZING_BASE_STYLE` on the JS side).
-          .width(IntrinsicSize.Max)
-          // One group, so an announcements reads "1 of 3" - the position comes from
-          // here, the role and the selected state from each item below.
-          .selectableGroup(),
-      horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        // One group, so an announcement reads "1 of 3" - the position comes from
+        // here, the role and the selected state from each item below.
+        .selectableGroup(),
     ) {
       options.forEachIndexed { index, text ->
         val isSelected = index == selectedIndex
@@ -458,22 +458,11 @@ private class SegmentedControlHost(
             },
           labelStyle = labelStyle,
           contentPadding = contentPadding,
-          // Weight, but not a fixed share: `fill = false` is what keeps a label
-          // readable. A `fill = true` share is the *mean* of the items' content, so a
-          // row whose labels differ hands its widest label less than it asked for -
-          // `Last 24 hours` came back as `Last 24 …`. With `fill = false` each item
-          // keeps the width its label measured (dumped: every segment is its label +
-          // 32 dp), and any space the row is *given* beyond that - a caller's own
-          // width - is still shared equally, which is what a group of equal choices
-          // should do. One label is still ellipsized by this row's own measure rather
-          // than by the share; `docs/components/segmented-control.md` has the dump.
-          //
-          // Weight only: the selected state and the role are published by the
-          // item's own `selectable` below, so the row does not also assert them
-          // (a second `selected` here wins the merge, and the a11y checks in
-          // `scripts/real-input/android.mjs` would then read this line instead of
-          // the selection the item actually has).
-          modifier = Modifier.weight(1f, fill = false),
+          // No `modifier` at all: the width is [ConnectedRow]'s decision, and the
+          // selected state and the role are published by the item's own `selectable`
+          // below, so the row does not also assert them (a second `selected` there
+          // wins the merge, and the a11y checks in `scripts/real-input/android.mjs`
+          // would then read this line instead of the selection the item has).
           onClick = {
             // A tap on the segment that is already selected reports nothing.
             // Foundation's `selectable` fires for a press on a selected node only
@@ -494,6 +483,77 @@ private class SegmentedControlHost(
             model.onChange?.invoke(index.toDouble(), eventCount.toDouble())
           },
         )
+      }
+    }
+  }
+}
+
+/**
+ * The connected group's row: the geometry `Row` cannot give this control.
+ *
+ * Two things have to be true at once, and `Modifier.weight` cannot hold both.
+ *
+ * - **The labels are the width.** The control reports its own size and Yoga lays it
+ *   out at what it reported (D17), so a row of unequal labels has to be the *sum* of
+ *   its items. A weighted item's equal share is also its ceiling, and the row's own
+ *   demand is what the share is taken from: at `Modifier.width(IntrinsicSize.Max)` a
+ *   weighted `Row` asks for n x the widest label plus the gaps, so the widest label
+ *   is measured against the *mean* of its own row and the tail of that row paints
+ *   nothing. Dumped on the `OptionSets` story, the five-option row asked for 960 px,
+ *   was clamped to the 954 px column, handed each segment 186.8 px, and `Month` -
+ *   which wants 188 px - ellipsized to `Mon...` inside a box 38.9 dp wider than what
+ *   it drew. Equal labels hid all of this: for them the share *is* the content.
+ * - **A row that is given less than its labels want must share it.** Take the weight
+ *   away and a `Row` serves its children in order, each taking what it wants out of
+ *   what is left, so an over-wide row hands its whole box to the first segment and
+ *   nothing to the last. That box is not hypothetical: it is the placement measure
+ *   `NitroUiMeasuredRoot` asks for once a row reports wider than its box, and
+ *   `example/__tests__/SegmentedControl.harness.tsx` presses both ends of it in
+ *   `overwide`, `clamped` and `narrowing` - a segment with no width is a segment no
+ *   finger can reach.
+ *
+ * So the row asks each item what it wants - through the intrinsic API, never a second
+ * `measure()` on the same `Measurable` (`NitroUiMeasuredRoot`), and lays the answer
+ * out at the sum. Only a row that does *not* fit shares, and then equally, exactly as
+ * the weighted row did: the share was always right for the pass it was made for.
+ */
+@Composable
+private fun ConnectedRow(
+  modifier: Modifier = Modifier,
+  content: @Composable () -> Unit,
+) {
+  val gap = with(LocalDensity.current) { ButtonGroupDefaults.ConnectedSpaceBetween.roundToPx() }
+  Layout(modifier = modifier, content = content) { measurables, constraints ->
+    if (measurables.isEmpty()) {
+      return@Layout layout(constraints.minWidth, constraints.minHeight) {}
+    }
+    val count = measurables.size
+    val gaps = gap * (count - 1)
+    // What each item asks for. The intrinsic API answers this without consuming the
+    // `Measurable`: one `measure()` per item per pass is a hard rule here.
+    val natural = measurables.sumOf { it.maxIntrinsicWidth(0) } + gaps
+    // The row is its labels, clamped into the box the caller actually has.
+    val rowWidth = natural.coerceIn(constraints.minWidth, constraints.maxWidth)
+    // Negative means "nothing is shared out" - every row whose labels fit.
+    val share =
+      if (natural > rowWidth) ((rowWidth - gaps) / count).coerceAtLeast(0) else -1
+    val placeables = ArrayList<Placeable>(count)
+    var used = 0
+    measurables.forEachIndexed { index, measurable ->
+      val trailing = if (index < count - 1) gap else 0
+      val room = (rowWidth - used - trailing).coerceAtLeast(0)
+      val maxWidth = if (share < 0) room else minOf(share, room)
+      val placeable = measurable.measure(Constraints(minWidth = 0, maxWidth = maxWidth))
+      placeables += placeable
+      used += placeable.width + gap
+    }
+    val rowHeight =
+      placeables.maxOf { it.height }.coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(rowWidth, rowHeight) {
+      var x = 0
+      for (placeable in placeables) {
+        placeable.placeRelative(x, 0)
+        x += placeable.width + gap
       }
     }
   }
@@ -521,7 +581,7 @@ private class SegmentedControlHost(
  * only press feedback a segment owes is the ripple the `selectable` draws under it.
  */
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
+private fun ConnectedSegment(
   text: String,
   checked: Boolean,
   enabled: Boolean,
@@ -529,7 +589,6 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
   shapes: ToggleButtonShapes,
   labelStyle: TextStyle,
   contentPadding: PaddingValues,
-  modifier: Modifier,
   onClick: () -> Unit,
 ) {
   val interaction = remember { MutableInteractionSource() }
@@ -546,7 +605,7 @@ private fun androidx.compose.foundation.layout.RowScope.ConnectedSegment(
   val borderColor = if (checked) colors.activeBorderColor else colors.inactiveBorderColor
   Box(
     modifier =
-      modifier
+      Modifier
         .height(MinTouchTargetHeight)
         // Clip first, so the ripple and the container both take the connected
         // corner instead of painting a square one over it.
@@ -667,21 +726,23 @@ class HybridNitroUiSegmentedControl(
      *
      * Measured on the AVD this library's tests run on (the lease's `nitroui_a`,
      * pixel_9 profile at 420 dpi, API 35) with `options = ["One", "Two", "Three"]`:
-     * 208.38 x 48.0 dp on E1's connected group, against 256.0 x 48.0 for the
+     * 187.81 x 48.0 dp on E1's connected group, against 256.0 x 48.0 for the
      * `SingleChoiceSegmentedButtonRow` it replaces. The height did not move: the
      * group is laid out on the same 48 dp touch target a `medium` Button is, which
      * is also why it is not the 40 dp `ContainerHeight` the token names.
      *
-     * The width moved because the row no longer reserves a leading icon slot per
-     * item (`SegmentedButton`'s `icon = {}` still took the space) - 49.90 dp for one
-     * short segment, 281.52 dp for four labels that used to be clamped to the
-     * window. A
-     * wrong fallback costs a cold configuration a single frame's horizontal gap.
+     * The width moved twice, and both moves are the row being its own segments: the
+     * group reserves no leading icon slot per item (`SegmentedButton`'s `icon = {}`
+     * still took the space), and it lays the row out at the sum of its labels rather
+     * than n x the widest one - see [ConnectedRow] for why that is not a `Row`.
+     * 49.90 dp for one short segment, 265.90 dp for four labels that used to be
+     * clamped to the window. A wrong fallback costs a cold configuration a single
+     * frame's horizontal gap.
      * Rounded *up* rather than to nearest: a box smaller than the control is the
      * dead-touch story in `core.md` section 7.
      * `docs/components/segmented-control.md` has the measured table.
      */
-    private const val FALLBACK_WIDTH_DP = 208.4
+    private const val FALLBACK_WIDTH_DP = 187.9
     private const val FALLBACK_HEIGHT_DP = 48.0
 
     private val fallbackDeclared = AtomicBoolean(false)
