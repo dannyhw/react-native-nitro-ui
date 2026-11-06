@@ -192,3 +192,8 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E1 found: a bare `throw new AbortedCheck(...)` in an Android real-input check passes the whole run, because the runner (`scripts/real-input/android.mjs`, `instanceof AbortedCheck`) assumes `t.log.abort` already recorded the failure. Make the runner record an AbortedCheck the log never saw, or make the class private to `report.mjs`. A false green.
 - E1 fix round 2: `ConnectedRow` trusts `maxIntrinsicWidth` because each segment is one `maxLines = 1` `Text`; recheck it if a segment ever gains an icon.
 - E1 fix round 2: the SegmentedControl corner swap on press isn't animated (`AnimatedShapeState` is internal in material3 1.5).
+- E3 review: the split button's expanded/collapsed state and `Role.Button` aren't asserted (`uiautomator dump` has no `stateDescription`).
+- E3 review: the split button's "More options" label is hard-coded English; no override or localisation.
+- E3 review: the split chevron's `Modifier.rotate` recomposes each frame; use `graphicsLayer { rotationZ }`.
+- E3 review: variant to trailing-button branches are unguarded (only `MenuSplitVariant.of` is tested); small/large split boxes are unmeasured; the on-to-off narrowing isn't asserted.
+- E3 review: `SplitButtonShapesCache` holds one entry, so Menus at mixed sizes rebuild shapes each recomposition.
