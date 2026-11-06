@@ -1232,8 +1232,12 @@ export class DevicePool {
    * another task may hold for Android at that moment. `platform` is the lease's, and `both` keeps the
    * old behaviour for a lease that really is for both.
    *
+   * `platform` is required, with no default (X20 fix round 1): a default of `both` is how the
+   * hand-off came to reset the emulator under an iOS lease, and a future caller that forgot it would
+   * widen a reset by omission. Leaving it out throws rather than guessing.
+   *
    * @param {object} pair
-   * @param {{appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null, platform?: 'ios' | 'android' | 'both'}} [options]
+   * @param {{platform: 'ios' | 'android' | 'both', appId?: {android: string, ios: string}, attempts?: number, reinstallApp?: string | null}} options
    */
   resetPair(
     pair,
@@ -1241,9 +1245,15 @@ export class DevicePool {
       appId = EXAMPLE_APP_ID,
       attempts = 4,
       reinstallApp = process.env.HARNESS_APP_PATH ?? null,
-      platform = 'both',
-    } = {}
+      platform,
+    } = /** @type {any} */ ({})
   ) {
+    if (!['ios', 'android', 'both'].includes(platform)) {
+      throw new Error(
+        `resetPair needs { platform: 'ios' | 'android' | 'both' } (got ${String(platform)}): ` +
+          'a reset widened to both halves by omission is how an iOS lease cleared the emulator (X20)'
+      );
+    }
     const devices = [
       platform !== 'ios' && pair?.android?.avd
         ? {

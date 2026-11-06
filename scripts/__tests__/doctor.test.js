@@ -606,6 +606,22 @@ describe('iOS-runtime simulators (--setup)', () => {
     expect(again.iosRuntimes[2].metroPort).toBe(8299);
   });
 
+  it('starts past a pair whose Metro is above the default floor', () => {
+    // The case above cannot tell "read the pairs' ports" from "start at the floor": its pairs top
+    // out at 8295, under the 8296 floor, so a version that never looked at the pairs gives the same
+    // answer (X20 fix round 1). Here a pair already owns 8297, so the first new entry must be 8298.
+    const crowded = JSON.parse(JSON.stringify(config));
+    crowded.pairs[1].metroPort = 8297;
+    const next = addRuntimeSims(crowded, [
+      { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
+      { version: '27.1', udid: 'R271', name: 'nitro-ui iOS 27.1' },
+    ]);
+    expect(next.iosRuntimes.map((entry) => entry.metroPort)).toEqual([
+      8298, 8299,
+    ]);
+    expect(() => normalizeDevices(next)).not.toThrow();
+  });
+
   it('names a listed simulator that is missing, or is not on the runtime it claims', () => {
     const next = addRuntimeSims(config, [
       { version: '26.5', udid: 'R265', name: 'nitro-ui iOS 26.5' },
