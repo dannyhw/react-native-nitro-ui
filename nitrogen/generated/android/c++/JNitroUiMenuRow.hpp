@@ -10,6 +10,7 @@
 #include <fbjni/fbjni.h>
 #include "NitroUiMenuRow.hpp"
 
+#include "JVariant_Boolean_NullType.hpp"
 #include "JVariant_NullType_String.hpp"
 #include <NitroModules/JNull.hpp>
 #include <NitroModules/Null.hpp>
@@ -50,6 +51,10 @@ namespace margelo::nitro::nitroui {
       jboolean destructive = this->getFieldValue(fieldDestructive);
       static const auto fieldSystemImage = clazz->getField<JVariant_NullType_String>("systemImage");
       jni::local_ref<JVariant_NullType_String> systemImage = this->getFieldValue(fieldSystemImage);
+      static const auto fieldSubtitle = clazz->getField<JVariant_NullType_String>("subtitle");
+      jni::local_ref<JVariant_NullType_String> subtitle = this->getFieldValue(fieldSubtitle);
+      static const auto fieldChecked = clazz->getField<JVariant_Boolean_NullType>("checked");
+      jni::local_ref<JVariant_Boolean_NullType> checked = this->getFieldValue(fieldChecked);
       return NitroUiMenuRow(
         id->toStdString(),
         kind->toStdString(),
@@ -57,7 +62,9 @@ namespace margelo::nitro::nitroui {
         parentId != nullptr ? std::make_optional(parentId->toCpp()) : std::nullopt,
         static_cast<bool>(disabled),
         static_cast<bool>(destructive),
-        systemImage != nullptr ? std::make_optional(systemImage->toCpp()) : std::nullopt
+        systemImage != nullptr ? std::make_optional(systemImage->toCpp()) : std::nullopt,
+        subtitle != nullptr ? std::make_optional(subtitle->toCpp()) : std::nullopt,
+        checked != nullptr ? std::make_optional(checked->toCpp()) : std::nullopt
       );
     }
 
@@ -67,7 +74,7 @@ namespace margelo::nitro::nitroui {
      */
     [[maybe_unused]]
     static jni::local_ref<JNitroUiMenuRow::javaobject> fromCpp(const NitroUiMenuRow& value) {
-      using JSignature = JNitroUiMenuRow(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<JVariant_NullType_String>, jboolean, jboolean, jni::alias_ref<JVariant_NullType_String>);
+      using JSignature = JNitroUiMenuRow(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<JVariant_NullType_String>, jboolean, jboolean, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_Boolean_NullType>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -78,7 +85,9 @@ namespace margelo::nitro::nitroui {
         value.parentId.has_value() ? JVariant_NullType_String::fromCpp(value.parentId.value()) : nullptr,
         value.disabled,
         value.destructive,
-        value.systemImage.has_value() ? JVariant_NullType_String::fromCpp(value.systemImage.value()) : nullptr
+        value.systemImage.has_value() ? JVariant_NullType_String::fromCpp(value.systemImage.value()) : nullptr,
+        value.subtitle.has_value() ? JVariant_NullType_String::fromCpp(value.subtitle.value()) : nullptr,
+        value.checked.has_value() ? JVariant_Boolean_NullType::fromCpp(value.checked.value()) : nullptr
       );
     }
   };

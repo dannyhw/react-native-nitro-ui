@@ -216,6 +216,9 @@ const GROUP: MenuGroup = {
 /** What the menu built from {@link GROUP} is, in Menu's `drawn` notation. */
 const GROUP_DRAWN =
   'Reply,Copy,Pin~,{More:Archive,Mail},(Tools:Flag),(:Delete!)';
+/** The same menu as the Android popup's semantics tree has it (E2): every group `( )`. */
+const GROUP_DRAWN_ANDROID =
+  '(:Reply,Copy,Pin~),(More:Archive,Mail),(Tools:Flag),(:Delete)';
 /** Its pickable rows: 7 actions, the submenu's own row not among them. */
 const GROUP_ROWS = '7';
 
@@ -622,20 +625,67 @@ describe('ContextMenu · the menu', () => {
       expect(report.drawn).toBe(GROUP_DRAWN);
       expect(report.rows).toBe(GROUP_ROWS);
     } else {
-      // Android has no second renderer: the popup's own composition is what counts.
+      // Android: the popup's own composition, and its semantics tree (E2) - Menu's
+      // Material groups, the submenu inline as a group of its own.
       handle.nuiTestA11yLongClick();
-      const report = await reportWhen('tree', (r) => r.open === '1', 'open');
+      await reportWhen('tree', (r) => r.open === '1', 'open');
       const composed = await reportWhen(
         'tree',
-        (r) => r.menu !== '-1',
+        (r) => r.menu !== '-1' && r.drawn !== '-1',
         'the popup witness'
       );
-      console.log(`    · rows=${composed.rows} menu=${composed.menu}`);
-      expect(report.drawn).toBe('-1');
+      console.log(
+        `    · rows=${composed.rows} menu=${composed.menu} drawn=${composed.drawn}`
+      );
+      expect(composed.drawn).toBe(GROUP_DRAWN_ANDROID);
       expect(composed.rows).toBe(GROUP_ROWS);
       handle.nuiTestSelectRow('reply');
       await reportWhen('tree', (r) => r.open === '0', 'closed');
     }
+  });
+
+  it('carries subtitle and checked into the menu it builds (E2)', async () => {
+    const checks: MenuGroup = {
+      actions: [
+        { id: 'pin', title: 'Pin', subtitle: 'Keep on top', checked: true },
+        { id: 'mute', title: 'Mute', checked: false },
+      ],
+      sections: [
+        {
+          id: 'tools',
+          title: 'Tools',
+          items: [{ id: 'flag', title: 'Flag', subtitle: 'For later' }],
+        },
+      ],
+    };
+    await render(<Message testId="e2-ctx" group={checks} />);
+    const handle = await handleFor('e2-ctx');
+    if (IOS) {
+      handle.nuiTestMenuProbe();
+      const report = await reportWhen(
+        'e2-ctx',
+        (r) => r.drawn !== '-1',
+        'the probe'
+      );
+      console.log(`    · drawn=${report.drawn}`);
+      // `UIAction.subtitle` and `.on`; an unchecked toggle is `.off`, like a plain row.
+      expect(report.drawn).toBe('Pin@Keep on top+,Mute,(Tools:Flag@For later)');
+    } else {
+      handle.nuiTestA11yLongClick();
+      const report = await reportWhen(
+        'e2-ctx',
+        (r) => r.open === '1' && r.drawn !== '-1',
+        'the popup witness'
+      );
+      console.log(`    · drawn=${report.drawn}`);
+      expect(report.drawn).toBe(
+        '(:Pin@Keep on top+,Mute=),(Tools:Flag@For later)'
+      );
+    }
+    // A checked row's pick is a pick.
+    if (IOS) await openedBy('e2-ctx-target');
+    handle.nuiTestSelectRow('pin');
+    await until('the pick', () => eventsOf('e2-ctx').includes('select:pin'));
   });
 
   it('refuses a disabled row and an unknown id, and still closes', async () => {

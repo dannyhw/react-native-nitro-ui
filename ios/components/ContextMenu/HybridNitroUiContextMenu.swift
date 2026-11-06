@@ -574,17 +574,29 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     if item.destructive { attributes.insert(.destructive) }
     if item.disabled { attributes.insert(.disabled) }
     let id = item.id
+    // A `checked` row is a menu toggle: its state draws the check. `nil` is a plain row.
+    // A pick reports the id; the next `checked` is the app's to send (Menu's rule).
     return UIAction(
       title: item.title,
+      subtitle: item.subtitle,
       image: item.systemImage.flatMap { UIImage(systemName: $0) },
       identifier: UIAction.Identifier(id),
-      attributes: attributes
+      attributes: attributes,
+      state: item.checked == true ? .on : .off
     ) { [weak self] _ in
       self?.applyPick(id)
     }
   }
 
   /// Menu's `drawn` notation (`Menu.nitro.ts`), for one level of a `UIMenu`.
+  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before it there
+  /// is nothing to read, and the mark is left off.
+  private static func subtitleMark(_ action: UIAction) -> String {
+    guard #available(iOS 16.0, *), let subtitle = action.subtitle, !subtitle.isEmpty
+    else { return "" }
+    return "@\(subtitle)"
+  }
+
   private static func describe(_ elements: [UIMenuElement]) -> String {
     elements.map { element -> String in
       if let menu = element as? UIMenu {
@@ -595,6 +607,8 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
       }
       if let action = element as? UIAction {
         return action.title
+          + Self.subtitleMark(action)
+          + (action.state == .on ? "+" : "")
           + (action.attributes.contains(.destructive) ? "!" : "")
           + (action.attributes.contains(.disabled) ? "~" : "")
       }
