@@ -24,6 +24,7 @@
 
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -47,6 +48,7 @@ import {
   parseHierarchy,
 } from './uiautomator.mjs';
 import { nativeChecked, nativeEnabled } from './android-tree.mjs';
+import { decodePng, pixelAt } from './png-pixel.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
   calendarGridProblems,
@@ -163,7 +165,23 @@ const MIN_PRESSABLE_PX = 16;
  *
  * Each check gets the `t` object from `makeContext`: it is the only way in, so a
  * check cannot reach adb, Nitro or the app process by accident.
+ *
+ * One control's check reads a screenshot rather than the tree, because a box's
+ * corners are the one thing about it that `uiautomator` cannot see; that is the
+ * `screencap` method on `DeviceHarness`, still the only adb entry point.
  */
+
+/**
+ * How far (per channel, 0-255) a pixel has to be from the page to be *ink*.
+ *
+ * Half of the measured gap between Material's light `outline` stroke and the page
+ * this control sits on (162 at the run that fixed the number): antialiasing on a
+ * 1 dp stroke is a blend, and this is the loosest reading that is still certainly
+ * not the page. The page is sampled from the same screenshot rather than assumed,
+ * so the number only has to separate a border from a background, not name either.
+ */
+const MIN_STROKE_INK_DISTANCE = 40;
+
 const CHECKS = {
   /**
    * A real tap must flip the hosted Material 3 Switch and bring the new value
@@ -2011,6 +2029,88 @@ const CHECKS = {
         gap >= 0 && gap <= connectedGapPx
       );
     }
+
+    // **The corner.** A row of pills has the same box, the same 2 dp gap and the
+    // same tree as a connected group, so every line above passes for both - and the
+    // line that would tell them apart cannot come from the tree, because the tree
+    // says where a box is and never how its corners were clipped. Material's own
+    // answer rests each item on `RoundedCornerShape(cornerFull, cornerValueSmall,
+    // cornerValueSmall, cornerFull)`: round at the end that faces the window edge,
+    // cut to 8 dp at the end that faces a neighbour. Handing
+    // `connectedLeadingButtonShapes` the control's own stadium instead - the shape
+    // `ButtonDefaults.shapesFor` answers with for the height - keeps everything else
+    // and rests the item on a full pill, which is what this probe is for.
+    //
+    // It reads the segment's own 1 dp border (`SegmentedButtonDefaults.BorderWidth`),
+    // because that is the only ink an unselected segment has: `SegmentedButtonDefaults
+    // .colors()` gives it a *transparent* container, so its interior is the page
+    // whatever the corner is. Along the top edge, at 10 dp in from the segment's
+    // right:
+    //
+    //   - connected: the inner corner's arc is over 2 dp earlier, so the border runs
+    //     straight here and is flush with the box - pixels (x2 - 10dp, y1) and
+    //     (y1 + 1px) are on the stroke;
+    //   - pill: a percentage corner is 50 % of the *shorter* side, and a segment is
+    //     38 x 48 dp, so its radius is 19 dp and the arc never reaches a straight top
+    //     edge at all. At 10 dp in it is 19 - sqrt(19^2 - 9^2) = 2.3 dp down, past a
+    //     1 dp stroke, so those two pixels are page. (Read from the height the radius
+    //     would be 24 dp and the drop 4.5 dp; the arithmetic is written out so a red
+    //     line can be checked against the geometry rather than against a guess.)
+    //
+    // The two drawings therefore disagree at every inset between the inner corner's
+    // 8 dp and half the box's width. 10 dp leaves the connected border 2 dp of
+    // straight run and puts the pill's arc 2.3 dp out of reach of the pixels.
+    //
+    // Both are read against a third pixel that is page by definition: inside segment 1
+    // itself, 6 dp from its left edge and mid-height, past any corner and clear of the
+    // label. The 2 dp gap is not a place a run can sample - it is Compose's own
+    // padding, and the measured gap between two item nodes is 0 px, because the item
+    // node is the box inside that padding. So the assertion compares two pixels of one
+    // screenshot instead of trusting a colour this file does not own: a theme change
+    // moves both halves together, and a decoder that misread the file could not make
+    // the stroke and the page agree.
+    const screen = t.screencap();
+    const density = t.density();
+    const segmentOne = items[0];
+    if (segmentOne == null) {
+      throw new AbortedCheck(
+        'the corner probe has no first segment to probe (the tree line above is the reason)'
+      );
+    }
+    const probeX = segmentOne.bounds.x2 - Math.round(10 * density);
+    const probeTop = segmentOne.bounds.y1;
+    const probeInk = [probeTop, probeTop + 1].map((y) =>
+      screen.pixel(probeX, y)
+    );
+    const pagePixel = screen.pixel(
+      segmentOne.bounds.x1 + Math.round(6 * density),
+      segmentOne.bounds.y1 + Math.round(24 * density)
+    );
+    const rgb = (pixel) => pixel.slice(0, 3).join(',');
+    const inkDistance = (pixel) =>
+      Math.max(
+        ...pixel
+          .slice(0, 3)
+          .map((channel, at) => Math.abs(channel - (pagePixel[at] ?? 0)))
+      );
+    // The map the next person reads from a red line: the box the probe sits in, the
+    // two pixels themselves, and the page it compares them with.
+    t.log.note(
+      `corner probe: segment 1 [${boundsText(segmentOne)}], pixels ` +
+        `(${String(probeX)}, ${String(probeTop)}) = rgb(${rgb(probeInk[0] ?? [0, 0, 0])}) and ` +
+        `(${String(probeX)}, ${String(probeTop + 1)}) = rgb(${rgb(probeInk[1] ?? [0, 0, 0])}) ` +
+        `against segment 1's own interior at rgb(${rgb(pagePixel)})`
+    );
+    const onStroke = probeInk.some(
+      (pixel) => inkDistance(pixel) >= MIN_STROKE_INK_DISTANCE
+    );
+    t.log.check(
+      `segment 1 is drawn with its connected corner: the border is still on the top edge ` +
+        `10dp inside the corner (a pill's arc is 2.3dp below the edge there) - ` +
+        `rgb(${rgb(probeInk[0] ?? [0, 0, 0])}) / rgb(${rgb(probeInk[1] ?? [0, 0, 0])}) ` +
+        `vs page rgb(${rgb(pagePixel)})`,
+      onStroke
+    );
 
     const moved = await t.requireControl('Real-input segmented control');
     t.log.checkEquals(
@@ -4303,6 +4403,44 @@ class DeviceHarness {
   }
 
   /**
+   * The screen as the emulator shows it, with a `pixel(x, y)` over it.
+   *
+   * `exec-out screencap -p` rather than `shell screencap`: `shell` puts the pty in
+   * text mode and rewrites every `0x0a` in a PNG into two bytes, and the decode
+   * then fails somewhere that has nothing to do with the control being checked.
+   *
+   * The pixels are the *screen*, which is what a check that has to prove what is
+   * painted wants - the accessibility tree says where a box is, never what colour
+   * its corners were clipped to. `png-pixel.mjs` decodes it without a dependency,
+   * and refuses a PNG whose header it cannot describe rather than guessing.
+   *
+   * @returns {{ width: number, height: number, pixel: (x: number, y: number) => [number, number, number, number] }}
+   */
+  screencap() {
+    const result = spawnSync(
+      'adb',
+      ['-s', this.serial, 'exec-out', 'screencap', '-p'],
+      { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, env: process.env }
+    );
+    if (result.error != null) {
+      throw new Error(
+        `real-input: screencap could not run: ${String(result.error)}`
+      );
+    }
+    if (result.status !== 0 || result.stdout == null) {
+      throw new Error(
+        `real-input: screencap exited ${String(result.status)}: ${String(result.stderr ?? '')}`
+      );
+    }
+    const image = decodePng(Buffer.from(result.stdout));
+    return {
+      width: image.width,
+      height: image.height,
+      pixel: (x, y) => pixelAt(image, x, y),
+    };
+  }
+
+  /**
    * The screen size in pixels, from `wm size`. A swipe is a pair of absolute
    * coordinates, so a scroll has to know the screen it is scrolling.
    *
@@ -4878,6 +5016,14 @@ function makeContext(harness, log) {
      */
     density() {
       return harness.density();
+    },
+
+    /**
+     * A screenshot of the screen, for the few checks that can only be answered by
+     * what is painted. See `DeviceHarness.screencap`.
+     */
+    screencap() {
+      return harness.screencap();
     },
 
     /**
