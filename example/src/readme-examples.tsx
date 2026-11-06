@@ -158,6 +158,10 @@ export function FileActions() {
     if (id === 'pin') setPinned((current) => !current);
   };
 
+  const handlePrimary = () => {
+    setLast('file itself');
+  };
+
   return (
     <>
       <Text>Last action: {last}</Text>
@@ -167,6 +171,7 @@ export function FileActions() {
         group={group}
         variant="tonal"
         size="medium"
+        primaryAction={handlePrimary}
         onSelect={handleSelect}
       />
     </>
