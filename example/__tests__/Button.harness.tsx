@@ -28,6 +28,7 @@
 import {
   Platform,
   Pressable,
+  processColor,
   Text,
   TurboModuleRegistry,
   View,
@@ -68,6 +69,8 @@ const harnessUi = TurboModuleRegistry.getEnforcing(
  */
 type ButtonHandle = {
   readonly title: string;
+  /** The normalised drawable name React sent, or `null` (G19). */
+  readonly androidIcon: string | null;
   readonly variant: string;
   readonly size: string;
   /** The resolved corner (`'round'` for anything the wrapper does not recognise). */
@@ -82,6 +85,8 @@ type ButtonHandle = {
    */
   readonly onPress?: unknown;
   measureContent(): { width: number; height: number };
+  nuiTestPixelProbe(color: number): void;
+  nuiTestPixelReport(): string;
 };
 
 /** Handles by testID, so a test can ask each control what it measured. */
@@ -266,20 +271,80 @@ async function collectTrace(
 }
 
 /**
- * The key `Button.tsx` builds for a configuration: `variant|size|systemImage|title`.
+ * Ask `testId`'s Button what its pixels say about `color`, and wait for that
+ * probe's own answer.
+ *
+ * SegmentedControl's helper of the same name, copied rather than shared because
+ * the two files run in separate suites and a harness util module would be a third
+ * thing to keep in step; the report format both sides accept is asserted below
+ * rather than trusted, for the reason that helper gives (a mean that overruns its
+ * six digits is unreadable *and* assertable).
+ */
+async function pixelProbe(testId: string, color: number, what: string) {
+  const handle = handles.get(testId);
+  if (handle == null) {
+    throw new Error(
+      `testID "${testId}" has no handle - it was never rendered.`
+    );
+  }
+  const before = handle.nuiTestPixelReport();
+  handle.nuiTestPixelProbe(color);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPixelReport();
+      return next === '' || next === before ? null : next;
+    },
+    () =>
+      new Error(
+        `the pixel probe for "${testId}" (${what}) never reported. Last report: ` +
+          `"${handle.nuiTestPixelReport()}".`
+      ),
+    8000
+  );
+  if (
+    !/ hits=\d+ mean=#[0-9A-F]{6}/.test(report) &&
+    !/no pixels/.test(report)
+  ) {
+    throw new Error(
+      `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
+        `sample nor a refusal: ${report}`
+    );
+  }
+  return report;
+}
+
+/** The `hits=` count of a probe line. */
+function probeHits(report: string): number {
+  const hits = / hits=(\d+)/.exec(report);
+  return hits == null ? 0 : Number(hits[1]);
+}
+
+/**
+ * The key `Button.tsx` builds for a configuration:
+ * `variant|size|systemImage|androidIcon|title`.
  *
  * Written out here rather than imported - a harness that poisoned the cache
  * through the library's own helper could not catch the helper being wrong, and a
  * missing input in that key is precisely the R3 bug class (every later instance of
  * a different configuration inherits the first one's size).
+ *
+ * The cost of that choice is that this copy has to be edited in step with the
+ * wrapper, and a copy that falls behind is worse than a missing field: the seed
+ * lands under a key nothing ever asks for, every later "it was corrected, so the
+ * planted size cannot have answered it" assertion passes for the wrong reason, and
+ * nothing says so. G19's `androidIcon` is the fifth field, and the test at the end
+ * of this file is what keeps the two copies honest - it poisons a key built here
+ * and requires the engine's first `laidOut` event for that mount to carry *this*
+ * file's poisoned number, which only happens if the wrapper asked for this key.
  */
 function sizingKey(
   variant: string,
   size: string,
   title: string,
-  systemImage = ''
+  systemImage = '',
+  androidIcon = ''
 ): string {
-  return `${variant}|${size}|${systemImage}|${title}`;
+  return `${variant}|${size}|${systemImage}|${androidIcon}|${title}`;
 }
 
 /**
@@ -1280,5 +1345,349 @@ describe('shape · the corner (E1)', () => {
       back.cachedSizes,
       `two corner changes opened ${String(back.cachedSizes)} new size configuration(s)`
     ).toBe(0);
+  });
+});
+
+/* -------------------------------------------------------------------------------------
+ */
+
+/**
+ * The `androidIcon` prop (G19): the drawable the *app* ships, named from JS.
+ *
+ * Three things have to be true and only one of them is a prop echo:
+ *
+ *  - the glyph is **drawn** in the control's content colour, not stored on the
+ *    model and not drawn in something hard-coded — the pixel probe answers that
+ *    one, and it is the only reading that can (G4 F1 was a colour that arrived as
+ *    a prop and never reached the screen);
+ *  - a name that does not resolve is **exactly the no-icon control**: no glyph, no
+ *    slot, no padding change — which is the contract iOS already keeps for an SF
+ *    Symbol that does not exist, and the opposite of a layout bug that only shows
+ *    up in a release build where nothing warns;
+ *  - the artwork does not decide the box: Material's ladder does, so a 24 dp star
+ *    and a 32 x 12 slab widen the control by the same amount.
+ *
+ * iOS is tested here too, from the other side: `androidIcon` is a prop it accepts
+ * and must never draw (`docs/components/button.md`), so on iOS every icon
+ * configuration has to measure what the no-icon control measures.
+ */
+describe('androidIcon · the drawable the app ships (G19)', () => {
+  /** Names that exist in the example app, and two that draw nothing. */
+  const SHIPPED = 'nitroui_test_star';
+  const WIDE_SHIPPED = 'nitroui_test_wide';
+  const NOT_SHIPPED = 'nitroui_test_never_built';
+  /** Resolves, but has no intrinsic size, so it cannot be rasterised (see the fixture). */
+  const NO_ICON_SIZE = 'nitroui_test_shape';
+
+  const configurations = [
+    ['plain', undefined],
+    ['star', SHIPPED],
+    ['wide', WIDE_SHIPPED],
+    ['missing', NOT_SHIPPED],
+    ['shape', NO_ICON_SIZE],
+  ] as const;
+
+  it('takes the icon slot for a name that resolves, and no slot for one that does not', async () => {
+    poisonConfigurations(
+      configurations.map(([, icon]) =>
+        sizingKey('filled', 'medium', 'Share', '', icon ?? '')
+      )
+    );
+    const before = stats();
+    await render(
+      <View style={rowStyle}>
+        {configurations.map(([name, icon]) => (
+          <Button
+            key={name}
+            title="Share"
+            androidIcon={icon}
+            testID={`slot-${name}`}
+            hybridRef={captureHybrid(`slot-${name}`)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+
+    const boxes = new Map<string, Size>();
+    /** A box that exists: a missing entry is a failed render, not an `undefined` to assert on. */
+    const boxOf = (name: string): Size => {
+      const size = boxes.get(name);
+      if (size == null) {
+        throw new Error(`"${name}" never produced a box.`);
+      }
+      return size;
+    };
+    for (const [name] of configurations) {
+      const testId = `slot-${name}`;
+      await waitForTestId(testId);
+      const content = await waitForMeasured(testId, `the ${name} Button`);
+      await waitForBox(testId, content, `the ${name} Button`);
+      boxes.set(name, content);
+    }
+    const d = delta(before, stats());
+    console.log(
+      `androidIcon boxes: ` +
+        configurations
+          .map(([name]) => `${name}=${describeSize(boxOf(name))}`)
+          .join(' ') +
+        ` corrections=${String(d.corrections)}`
+    );
+
+    // Five configurations, five poisoned keys, five corrections - the engine has to
+    // have been *asked* about each one, which is also the only way this file's copy
+    // of the key can be shown to still match the wrapper's.
+    expect(d.corrections).toBeGreaterThanOrEqual(5);
+
+    if (Platform.OS === 'android') {
+      const plain = boxOf('plain');
+      const star = boxOf('star');
+      // The slot is the ladder's, so the control is wider than its no-icon self by
+      // Material's icon size plus its spacing. Deliberately not a constant: the two
+      // controls are each other's oracle, and a fixed expectation here would be a
+      // second copy of `iconSizeFor` to go stale.
+      expect(star.width).toBeGreaterThan(plain.width + 0.6);
+      expect(Math.abs(star.height - plain.height)).toBeLessThan(0.6);
+      // The 32 x 12 slab fits the same square slot, so it must land on the *same*
+      // width. A fix that reserved the drawable's intrinsic box instead of the
+      // token would pass the line above and fail here.
+      expect(Math.abs(boxOf('wide').width - star.width)).toBeLessThan(0.6);
+      // An unresolvable name, and a name that resolves to something with no
+      // intrinsic size, are both "no icon": the same box as the control that never
+      // asked, not a narrower one and not a crashed one.
+      expect(sameSize(boxOf('missing'), plain)).toBe(true);
+      expect(sameSize(boxOf('shape'), plain)).toBe(true);
+    } else {
+      // iOS draws `systemImage` and no `androidIcon`, so none of the five keys may
+      // move the box. They are five keys because the platforms read one key, and
+      // the engine is allowed to hold five identical answers.
+      for (const [name] of configurations) {
+        expect(
+          sameSize(boxOf(name), boxOf('plain')),
+          `iOS drew an Android icon: ${name}=${describeSize(boxOf(name))} vs plain=${describeSize(boxOf('plain'))}`
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('draws the glyph in the control content colour, and nothing at all without it', async () => {
+    // A `text` Button with no title, so the *only* thing on the control that can
+    // carry the content colour is the glyph: the variant has no container and no
+    // border, and an empty title draws no label. That is what makes `hits` mean
+    // "the icon is painted" rather than "something of this colour is somewhere".
+    const tint = processColor('#FF00A0') as number;
+    const TINT_CSS = '#FF00A0';
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title=""
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={SHIPPED}
+          testID="probe-icon"
+          hybridRef={captureHybrid('probe-icon')}
+        />
+        <Button
+          title=""
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={NOT_SHIPPED}
+          testID="probe-missing"
+          hybridRef={captureHybrid('probe-missing')}
+        />
+        <Button
+          title=""
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={NO_ICON_SIZE}
+          testID="probe-shape"
+          hybridRef={captureHybrid('probe-shape')}
+        />
+        <Button
+          title=""
+          variant="text"
+          tintColor={TINT_CSS}
+          testID="probe-bare"
+          hybridRef={captureHybrid('probe-bare')}
+        />
+        <Button
+          title=""
+          variant="text"
+          disabled
+          tintColor={TINT_CSS}
+          androidIcon={SHIPPED}
+          testID="probe-disabled"
+          hybridRef={captureHybrid('probe-disabled')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    for (const id of [
+      'probe-icon',
+      'probe-missing',
+      'probe-shape',
+      'probe-bare',
+      'probe-disabled',
+    ]) {
+      await waitForTestId(id);
+      const content = await waitForMeasured(id, id);
+      await waitForBox(id, content, id);
+    }
+
+    const reports = new Map<string, string>();
+    for (const id of [
+      'probe-icon',
+      'probe-missing',
+      'probe-shape',
+      'probe-bare',
+      'probe-disabled',
+    ]) {
+      reports.set(id, await pixelProbe(id, tint, id));
+    }
+    console.log(`androidIcon probes: ${JSON.stringify([...reports])}`);
+    const hitsOf = (id: string): number => {
+      const report = reports.get(id);
+      if (report == null) {
+        throw new Error(`"${id}" never produced a probe report.`);
+      }
+      return probeHits(report);
+    };
+
+    if (Platform.OS === 'android') {
+      expect(hitsOf('probe-icon')).toBeGreaterThan(0);
+      // The three controls that must not draw a glyph: a name that is not in the
+      // app, one that is in the app but cannot be an icon, and no name at all.
+      expect(hitsOf('probe-missing')).toBe(0);
+      expect(hitsOf('probe-shape')).toBe(0);
+      expect(hitsOf('probe-bare')).toBe(0);
+      // Disabled: Material repaints the content at 38%, so the *pure* tint is no
+      // longer on screen. A glyph tinted with a constant instead of the control's
+      // content colour keeps its exact colour here and fails this line.
+      expect(hitsOf('probe-disabled')).toBe(0);
+    } else {
+      // iOS has no glyph to sample, and says so in the shape the probe helper
+      // refuses to read as an answer - a test that probed here was the wrong test.
+      expect(reports.get('probe-icon') ?? '').toContain('no pixels');
+    }
+  });
+
+  it('is the key the wrapper sends, not one this file invented', async () => {
+    // The poisoned-fallback trick only works while this file's `sizingKey` matches
+    // `Button.tsx`'s, and nothing but the engine can say so: a seed planted under a
+    // stale key is simply never read, and every "it was corrected" assertion below
+    // then passes on the declared fallback instead of on the planted size.
+    //
+    // So: poison a key built *here*, for a configuration with an `androidIcon`, and
+    // require the engine's first `laidOut` event to carry the planted number. That
+    // happens only if the wrapper asked for exactly this key - drop `androidIcon`
+    // from the wrapper's key, or reorder its fields, and the first layout comes back
+    // at the declared fallback and this goes red.
+    const key = sizingKey('filled', 'medium', 'TracedKey', '', SHIPPED);
+    poisonConfigurations([key]);
+    nitroUiCore.setSizingTraceEnabled(true);
+    await render(
+      <Button
+        title="TracedKey"
+        androidIcon={SHIPPED}
+        testID="traced-key"
+        hybridRef={captureHybrid('traced-key')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('traced-key');
+    const content = await waitForMeasured('traced-key', 'the control');
+    await waitForBox('traced-key', content, 'the control');
+    const trace = await collectTrace((events) =>
+      events.some((event) => event.stage === 'laidOut')
+    );
+    const laidOut = trace.filter((event) => event.stage === 'laidOut');
+    console.log(
+      `key trace: key="${key}" laidOut=${JSON.stringify(
+        laidOut.map((e) => `${e.width.toFixed(1)}x${e.height.toFixed(1)}`)
+      )} real=${describeSize(content)}`
+    );
+    expect(laidOut.length).toBeGreaterThan(0);
+    expect(
+      laidOut.some((event) => sameSize(event, WRONG_SIZE)),
+      `the engine never asked for the key this file poisoned (${key}): the first ` +
+        `layout was ${laidOut.map((e) => describeSize(e)).join(', ')}, so ` +
+        `Button.tsx's key and this file's copy have drifted apart`
+    ).toBe(true);
+  });
+});
+
+/**
+ * The two rungs D42 item 4 added.
+ *
+ * The JVM test in `android/src/test` pins which Material token each rung reads;
+ * what only a device can say is what box that produces, because the token is not
+ * the box - Material floors a control at its 48 dp minimum interactive size, which
+ * is why `small` and `medium` are the same height and `xxlarge` is 136 dp and not
+ * a rumour. These are also the numbers `docs/components/button.md` prints, so the
+ * line the test logs is the line the docs copy.
+ */
+describe('the top of the ladder (D42 item 4)', () => {
+  const RUNGS = ['small', 'medium', 'large', 'xlarge', 'xxlarge'] as const;
+
+  it('lays the five rungs out in order, and never below the touch target', async () => {
+    poisonConfigurations(
+      RUNGS.map((size) => sizingKey('filled', size, 'Rung'))
+    );
+    await render(
+      <View style={rowStyle}>
+        {RUNGS.map((size) => (
+          <Button
+            key={size}
+            title="Rung"
+            size={size}
+            testID={`rung-${size}`}
+            hybridRef={captureHybrid(`rung-${size}`)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+
+    const heights = new Map<string, number>();
+    /** A rung that produced a height: a missing entry is a failed render, not `undefined`. */
+    const heightOf = (size: string): number => {
+      const height = heights.get(size);
+      if (height == null) {
+        throw new Error(`"${size}" never produced a height.`);
+      }
+      return height;
+    };
+    const logged: string[] = [];
+    for (const size of RUNGS) {
+      const testId = `rung-${size}`;
+      await waitForTestId(testId);
+      const content = await waitForMeasured(testId, `the ${size} Button`);
+      await waitForBox(testId, content, `the ${size} Button`);
+      heights.set(size, content.height);
+      logged.push(`${size}=${describeSize(content)}`);
+    }
+    console.log(`rung boxes: ${logged.join(' ')}`);
+
+    if (Platform.OS === 'android') {
+      // Four rungs of a five-rung ladder must be strictly taller than the one
+      // below - `small` and `medium` share a box because the 48 dp touch target
+      // floors both, which is the one place the ladder is allowed to repeat.
+      expect(heightOf('medium')).toBeLessThan(heightOf('large'));
+      expect(heightOf('large')).toBeLessThan(heightOf('xlarge'));
+      expect(heightOf('xlarge')).toBeLessThan(heightOf('xxlarge'));
+      for (const size of RUNGS) {
+        expect(
+          heightOf(size),
+          `${size} is laid out below Material's 48 dp minimum interactive size`
+        ).toBeGreaterThanOrEqual(47.5);
+      }
+    } else {
+      // iOS draws four `.controlSize` values against five rungs, so the top two
+      // are the same control there - documented, and asserted rather than assumed.
+      expect(heightOf('large')).toBeLessThanOrEqual(heightOf('xlarge'));
+      expect(Math.abs(heightOf('xlarge') - heightOf('xxlarge'))).toBeLessThan(
+        0.6
+      );
+    }
   });
 });
