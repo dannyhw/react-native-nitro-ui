@@ -532,7 +532,14 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     accessibilityLabel = null
     // The split trigger's own layout witness. `hasPrimaryAction` above is the prop; this
     // is the layout, and a recycled control that kept it would report a second hit target
-    // its next owner never asked for (`Menu.harness.tsx`'s remount gate reads the pair).
+    // its next owner never asked for.
+    //
+    // Two paths clear the same pair, this line and the split composition's own `onDispose`,
+    // so neither is visible alone: `Menu.harness.tsx`'s remount gate went red only with
+    // *both* removed, and `MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` is the
+    // test that guards this line by itself (rows 7, 9 and 10 of
+    // `docs/tasks/E3/mutations.json`). Belt and braces is the point - the belt is just not
+    // what the device sees.
     splitDrawn = false
     clearSplitBoxes()
     clearMenuFrame()
