@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-05T19:08:40.435Z on code tree `07e2e266dba4` at HEAD `8a28a12` (branch `task/G17-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 163326 ms
+- Load: start 8.27, end 12.05, median 15.55, max 19.84
+- Device: none recorded (not a device gate)
+- Full log: `task/G17-merge/check-2026-11-05T19-08-39.992Z.log` (<store>/task/G17-merge/check-2026-11-05T19-08-39.992Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "registry:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2889 — the rest is in the full log above)
+
+```
+[NitroModules] 🔥 Your app is boosted by nitro modules!
+
+> Configure project :react-native-nitro-ui
+[NitroModules] 🔥 nitroui is boosted by nitro!
+
+> Task :react-native-nitro-ui:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-nitro-modules:prepareHeaders UP-TO-DATE
+> Task :react-native-nitro-modules:preBuild UP-TO-DATE
+> Task :react-native-nitro-modules:preDebugBuild UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-modules:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-modules:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugKotlin UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugJavaRes UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibRuntimeToJarDebug UP-TO-DATE
+
+> Task :react-native-nitro-ui:generateCodegenSchemaFromJavaScript
+No modules to process in combine-js-to-schema-cli. If this is unexpected, please check if you set up your NativeComponent correctly. See combine-js-to-schema.js for how codegen finds modules.
+
+> Task :react-native-nitro-ui:generateCodegenArtifactsFromSchema
+> Task :react-native-nitro-ui:preBuild
+> Task :react-native-nitro-ui:preDebugBuild
+> Task :react-native-nitro-ui:preDebugUnitTestBuild
+> Task :react-native-nitro-ui:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugUnitTestStubRFile FROM-CACHE
+
+> Task :react-native-nitro-ui:compileDebugKotlin
+w: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiBottomSheet.kt:48:8 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+w: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiBottomSheet.kt:258:9 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+w: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiBottomSheet.kt:351:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+
+> Task :react-native-nitro-ui:processDebugJavaRes
+> Task :react-native-nitro-ui:compileDebugJavaWithJavac
+> Task :react-native-nitro-ui:bundleLibCompileToJarDebug
+> Task :react-native-nitro-ui:bundleLibRuntimeToJarDebug
+> Task :react-native-nitro-ui:compileDebugUnitTestKotlin
+> Task :react-native-nitro-ui:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :react-native-nitro-ui:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :react-native-nitro-ui:testDebugUnitTest
+
+[Incubating] Problems report is available at: file://<repo>/example/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 17s
+44 actionable tasks: 9 executed, 1 from cache, 34 up-to-date
+Configuration cache entry stored.
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — pass, 3.7s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 18/18 HybridObjects in 2.3s!
+💡  Your code is in <tmp>/nitrogen-check-SszV3z/nitrogen/generated
+‼️   Added 573 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: no drift (383 generated files match, 53 view(s) patched).
+──────── registry:check — fail, 0.1s ─────────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 9 passed, 1 failed, 7 skipped in 163.2s
+check: failed step(s): registry:check
+check: not started after the first failure: perf:renders, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: registry:check ────────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: 1 generated file(s) do not match the manifests in src/components/*/component.json:
+  - example/src/App.tsx
+      line 110: "  { id: 'searchfieldx', label: 'Search' }," -> "  { id: 'searchfield', label: 'Search' },"
+
+Run `bun run registry` (or `bun run regen`) and commit the result.
+error: script "registry:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 163.3 s
+gate: recorded in .gates/task/G17-merge.jsonl
+
+```

@@ -148,6 +148,16 @@
         "implementationClassName": "HybridNitroUiChip"
       }
     },
+    "NitroUiSearchField": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiSearchField"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiSearchField"
+      }
+    },
     "NitroUiCheckbox": {
       "ios": {
         "language": "swift",

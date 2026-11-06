@@ -190,6 +190,7 @@ describe('coverage', () => {
       'Menu',
       'Picker',
       'Progress',
+      'SearchField',
       'SegmentedControl',
       'Slider',
       'Switch',
@@ -2045,6 +2046,7 @@ describe('the a11y sweep, against a fake device', () => {
         'checkbox',
         'host',
         'textfield',
+        'searchfield',
         'contextmenu',
       ]);
     });

@@ -18,6 +18,7 @@ import { NitroUiTextFieldConfig } from '../components/TextField/NitroUiTextField
 import { NitroUiChipConfig } from '../components/Chip/NitroUiChipConfig';
 import { NitroUiCheckboxConfig } from '../components/Checkbox/NitroUiCheckboxConfig';
 import { NitroUiContextMenuConfig } from '../components/ContextMenu/NitroUiContextMenuConfig';
+import { NitroUiSearchFieldConfig } from '../components/SearchField/NitroUiSearchFieldConfig';
 import { NitroUiTooltipConfig } from '../components/Tooltip/NitroUiTooltipConfig';
 // @end-generated
 // `<Host>` is a container rather than a control, so it has no manifest and the
@@ -55,6 +56,7 @@ const copies: Record<string, unknown> = {
   'NitroUiChipConfig.json': NitroUiChipConfig,
   'NitroUiCheckboxConfig.json': NitroUiCheckboxConfig,
   'NitroUiContextMenuConfig.json': NitroUiContextMenuConfig,
+  'NitroUiSearchFieldConfig.json': NitroUiSearchFieldConfig,
   'NitroUiTooltipConfig.json': NitroUiTooltipConfig,
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.

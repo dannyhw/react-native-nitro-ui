@@ -9,6 +9,7 @@ import {
   nitroUiCore,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
@@ -101,6 +102,7 @@ const SMOKE_CONTROLS = [
   'text-field',
   'chip',
   'checkbox',
+  'search-field',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -296,6 +298,11 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('text-field')}
           placeholder="Name"
           testID="SMOKE-text-field"
+        />
+        <SearchField
+          onLayout={measureFor('search-field')}
+          placeholder="Search"
+          testID="SMOKE-search-field"
         />
         <Chip
           onLayout={measureFor('chip')}

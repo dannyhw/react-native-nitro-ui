@@ -30,6 +30,7 @@ the layout engine, and React never sees a native node.
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                     | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                             | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
+| `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`        | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content              | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`          | next  | [tooltip.md](docs/components/tooltip.md)                     |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children       | 0.1.0 | [host.md](docs/components/host.md)                           |
@@ -61,6 +62,7 @@ import {
   Menu,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
@@ -682,6 +684,61 @@ export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
 an emoji in half. A multi-line field grows with its text; Return then inserts a
 newline instead of submitting. A `TextField` cannot be a child of `<Host>` yet.
 [text-field.md](docs/components/text-field.md) has the details.
+
+### SearchField
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/search-field-ios.png" width="300" alt="SearchFields on iOS: an empty bordered field with a search glyph and no prompt, the same field with a query, the field again with maxLength set to 8 and an eleven-character default the cap does not trim, and a field that is not editable" /></td>
+    <td><img src="docs/images/components/search-field-android.png" width="300" alt="SearchFields on Android: an empty search bar reading Search, the same bar with a query and its clear icon, the bar again with maxLength set to 8 and an eleven-character default the cap does not trim, and a field that is not editable" /></td>
+  </tr>
+</table>
+
+A search field: one line, the keyboard's Search key, a leading search glyph and a
+clear button that comes with the query — on iOS while the field is editing.
+UIKit's own `UISearchTextField` on iOS,
+Material 3's search input field on Android, so each platform draws its own search
+field rather than a copy of the other's. Same React Native `TextInput` prop names
+as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()` — and no
+keyboard props: a search field is one line and its Return key is Search.
+
+```tsx name=search-field
+export function ProductSearch({
+  onSearch,
+}: {
+  onSearch: (query: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  return (
+    <>
+      <SearchField
+        accessibilityLabel="Search products"
+        placeholder="Search the catalogue"
+        maxLength={40}
+        value={query}
+        onChangeText={setQuery}
+        onSubmitEditing={onSearch}
+      />
+      <Text>
+        {query === ''
+          ? 'Type a product name, then press search.'
+          : `Searching for ${query}…`}
+      </Text>
+    </>
+  );
+}
+```
+
+The Search key submits the query and then dismisses the keyboard, and an empty
+query never submits — pressing it with nothing typed reports nothing. Tapping the
+clear button is one edit: `onChangeText('')`, with the field still focused. Android
+puts the framework's own localized word in an unset placeholder; iOS's standalone
+UIKit field has no prompt of its own, so pass one if you want a word there. A
+`SearchField`
+cannot be a child of `<Host>` yet.
+[search-field.md](docs/components/search-field.md) has the details.
 
 ### BottomSheet
 
