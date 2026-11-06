@@ -14,9 +14,13 @@
  *
  * `--setup` only ever *adds*: it creates simulators named `nitro-ui A`/`nitro-ui B`
  * and AVDs `nitroui_a`/`nitroui_b` (reusing them if present), then writes
- * `devices.json` if there is none. It never edits or deletes a device it did not
- * create, never installs SDK packages or accepts licenses (it prints the command
- * instead), and never boots anything.
+ * `devices.json` if there is none. Then, whether or not that file existed, one
+ * simulator `nitro-ui iOS <v>` per *other* installed iOS runtime (X20 item 3), for
+ * `lease.mjs acquire --ios-runtime <v>` look checks, appended to the file's
+ * `iosRuntimes` list - the one edit it makes to an existing `devices.json`, and it
+ * never changes an entry already there. It never edits or deletes a device it did
+ * not create, never installs SDK packages or accepts licenses (it prints the
+ * command instead), and never boots anything.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -36,7 +40,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   DEFAULT_PAIRS,
   REQUIREMENTS,
+  addRuntimeSims,
   applyAvdConfig,
+  otherIosRuntimes,
+  planRuntimeSims,
   bunStatus,
   cocoapodsProblem,
   deviceTypeId,
@@ -62,6 +69,7 @@ import {
   readJson,
   stateHome,
   statePaths,
+  writeJsonAtomic,
 } from './lease-core.mjs';
 // The prime's per-build budget belongs to the module that owns the queue it waits
 // behind, not to this file (N4).
@@ -572,14 +580,21 @@ function checkDevices({ runtime, emulator, adb }) {
       status: problems.length === 0 ? 'ok' : 'fail',
       detail:
         problems.length === 0
-          ? `${config.pairs.length} pair(s), all present`
+          ? `${config.pairs.length} pair(s)` +
+            (Array.isArray(config.iosRuntimes) && config.iosRuntimes.length > 0
+              ? ` and ${config.iosRuntimes.length} iOS-runtime simulator(s) ` +
+                `(${config.iosRuntimes.map((entry) => entry?.ios?.system).join(', ')})`
+              : '') +
+            ', all present'
           : problems.join('; '),
       fix:
         problems.length === 0
           ? undefined
           : 'fix the file by hand, or move it away and run --setup',
     },
-    ...checkUnownedDevices(config, listingJson, adb),
+    // The normalized pool, so a look-check simulator booted with no lease is reported like a
+    // pair's (X20 item 3): `normalizeDevices` is what folds `iosRuntimes` into the pool's pairs.
+    ...checkUnownedDevices(normalizeDevices(config), listingJson, adb),
   ];
 }
 
@@ -836,6 +851,122 @@ function setupDevices({ runtime, tools }) {
 }
 
 /**
+ * One look-check simulator per installed iOS runtime the pairs do not run on (X20 item 3, D42
+ * item 1), recorded in `devices.json` under `iosRuntimes` so `lease.mjs acquire --ios-runtime <v>`
+ * can hand it out. Runs after the pairs, and also when `devices.json` already existed - which is
+ * how a machine set up before X20 gets them: the file gains entries, and nothing in it changes.
+ *
+ * @returns {Result[]}
+ */
+function setupRuntimeSims({ runtime }) {
+  const { devices: file } = statePaths(stateHome());
+  if (!existsSync(file)) return [];
+  let config;
+  try {
+    config = JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    return [
+      {
+        area: 'setup',
+        name: 'iOS runtimes',
+        status: 'fail',
+        detail: `devices.json is not JSON (${String(error?.message ?? error)}); left alone`,
+      },
+    ];
+  }
+  const pairSystems = (Array.isArray(config?.pairs) ? config.pairs : [])
+    .map((pair) => pair?.ios?.system)
+    .filter((system) => system != null);
+  if (pairSystems.length === 0 && runtime != null)
+    pairSystems.push(runtime.version);
+  const runtimes = otherIosRuntimes(
+    json('xcrun', ['simctl', 'list', 'runtimes', '-j']) ?? {},
+    pairSystems
+  );
+  if (runtimes.length === 0) {
+    return [
+      {
+        area: 'setup',
+        name: 'iOS runtimes',
+        status: 'ok',
+        detail: `no iOS runtime installed besides the pairs' (${pairSystems.join(', ')})`,
+      },
+    ];
+  }
+  const plan = planRuntimeSims({
+    runtimes,
+    config,
+    simulators: [
+      ...simulatorsByUdid(
+        json('xcrun', ['simctl', 'list', 'devices', '-j']) ?? {}
+      ).values(),
+    ],
+    types: json('xcrun', ['simctl', 'list', 'devicetypes', '-j']) ?? {},
+  });
+  const results = [];
+  const added = [];
+  for (const step of plan) {
+    if (step.action === 'configured') {
+      results.push({
+        area: 'setup',
+        name: step.name,
+        status: 'ok',
+        detail: `iOS ${step.version} is already in devices.json; left alone`,
+      });
+    } else if (step.action === 'reuse') {
+      added.push({ ...step, udid: step.udid });
+      results.push({
+        area: 'setup',
+        name: step.name,
+        status: 'ok',
+        detail: `reused ${step.udid}`,
+      });
+    } else if (step.action === 'no-type') {
+      results.push({
+        area: 'setup',
+        name: step.name,
+        status: 'warn',
+        detail: `iOS ${step.version} lists no iPhone to create a simulator with`,
+      });
+    } else {
+      const made = run('xcrun', [
+        'simctl',
+        'create',
+        step.name,
+        step.type,
+        step.runtime.identifier,
+      ]);
+      if (!made.ok) {
+        results.push({
+          area: 'setup',
+          name: step.name,
+          status: 'fail',
+          detail: made.stderr,
+        });
+        continue;
+      }
+      added.push({ ...step, udid: made.stdout });
+      results.push({
+        area: 'setup',
+        name: step.name,
+        status: 'ok',
+        detail: `created ${step.typeName} ${made.stdout}`,
+      });
+    }
+  }
+  if (added.length > 0) {
+    writeJsonAtomic(file, addRuntimeSims(config, added));
+    results.push({
+      area: 'setup',
+      name: 'devices.json',
+      status: 'ok',
+      detail: `added ${added.map((sim) => `iOS ${sim.version}`).join(', ')} to iosRuntimes`,
+    });
+  }
+  return results;
+}
+
+/**
  * Builds both platforms once, in the main checkout, so the first real build of the
  * first task is not the cold one (`coldCacheWarning` is what points here).
  *
@@ -956,7 +1087,8 @@ export function main(argv = process.argv.slice(2)) {
   results.push(...ios.results, ...android.results, ...checkGitAndAgents());
   if (argv.includes('--setup')) {
     results.push(
-      ...setupDevices({ runtime: ios.runtime, tools: android.tools })
+      ...setupDevices({ runtime: ios.runtime, tools: android.tools }),
+      ...setupRuntimeSims({ runtime: ios.runtime })
     );
   }
   results.push(

@@ -13,8 +13,9 @@ Status of each phase/task lives in `docs/tasks/STATUS.md` (maintained by the orc
    cross-platform API is the default export.
 2. **Performance is a feature with guardrails**: every component ships with benchmarks and
    must not regress against the committed baseline. See "Guardrails".
-3. **Simple install**: `npm i <pkg> react-native-nitro-modules` + pod install / prebuild.
-   No config plugin, no app-level Gradle/Podfile edits, no patch-package for consumers.
+3. **Simple install**: `npm i <pkg> react-native-nitro-modules` + pod install / prebuild, with no patch-package
+   for consumers. An Expo config plugin is fine where it makes the library better (D42); what is ruled out is a lot
+   of manual setup. A bare app may need a few small, documented steps, not many manual code changes.
 4. **Small, self-contained tasks**: each task has a brief in `docs/tasks/<id>.md` with
    everything needed (context, files to touch, acceptance criteria, commands).
 5. Follow `docs/research/nitro-patterns.md` (Nitro constraints + patterns from the best libs).

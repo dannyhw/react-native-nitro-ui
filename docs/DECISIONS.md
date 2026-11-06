@@ -525,8 +525,8 @@ orchestrator adopted its recommendations; the owner may override any of them.
    state-based Slider; pass 3 — real Android wheels (Picker `wheel`, DatePicker time), Picker `radio`, Dialog rows,
    SearchField v2 (keyboard props via the new `InputField`), Stepper.
 2. **Android icons (Q8 question A):** an `androidIcon` prop naming a drawable resource the app ships (e.g. a Material
-   Symbols vector), alongside iOS's `systemImage`; the library bundles no icon set. IconButton and icon-only group
-   items build on it.
+   Symbols vector), alongside iOS's `systemImage`. IconButton and icon-only group items build on it. *("The library
+   bundles no icon set" was withdrawn by D43.)*
 3. Q8's other calls (SegmentedControl's new look, the Button size remap, LoadingIndicator as a Progress variant) stand.
 
 ## D41 — Tooltip presents from its own window on iOS (2026-11-05)
@@ -540,4 +540,36 @@ G18's review accepted both of Tooltip's departures from Q7's design:
 2. **On Android the tooltip follows its anchor when the anchor moves, as on iOS, instead of closing.** Any touch
    outside closes it first, so following only matters for moves nobody touched for, such as the keyboard or data
    loading.
+
+
+## D42 — ButtonGroup, IconButton and `androidIcon`; config plugins are allowed (2026-11-06)
+
+Q9 (`docs/tasks/Q9-buttongroup-iconbutton-design.report.md`) designed ButtonGroup, IconButton and the `androidIcon`
+prop, and ran the iOS `ControlGroup` check: a connected row in plain content on iOS 27.0, which ignores
+`variant`/`size`/`tint`, shows no on state for toggles and has no overflow of its own. The orchestrator adopted its
+designs and build order (G19 `androidIcon` + IconButton, then G20 ButtonGroup and G21 `androidIcon` on Menu rows,
+SplitButton and Chip). The owner decided C and D.
+
+1. **iOS versions (question A):** the device pool gets simulators on the other installed runtimes (26.5 and 27.1)
+   for look checks (X20), and G20 re-runs the ControlGroup probe on them before building. The docs say which
+   versions were checked.
+2. **Toggles in a connected iOS group (question B):** fall back to a row of bordered toggles, documented.
+3. **Config plugins (owner, question C; clarifies PLAN principle 3):** an Expo config plugin is fine and expected
+   where it makes the library better. What the owner rules out is a lot of manual setup: installing stays `npm i` +
+   pod install / prebuild, and a bare React Native app may need a few small, documented steps but not many manual code
+   changes. *(How `androidIcon` gets its drawables is being redesigned under D43; the drawable-copying plugin is on
+   hold.)*
+4. **Size names (owner, question D):** the shared size ladder gains `xlarge` and `xxlarge`, used by Button and
+   IconButton (Material's XS–XL map onto small…xxlarge).
+
+## D43 — Real Material icons, never hand-drawn ones (2026-11-06)
+
+The owner withdrew D40 item 2's "the library bundles no icon set": hand-typed icon paths are not acceptable. A
+mistyped copy of Material's search path shipped in SearchField 0.7.0 and drew a key instead of a magnifier.
+
+1. **The library's own icons** (search, clear, the checks, the split button's chevron, and any later ones) come from
+   Google's official Material Symbols files (Apache 2.0), copied unchanged by a script and checked against the
+   source. No glyph path is typed by hand. Where a material3 component draws its own icon, that one is used.
+2. **Icons apps pass in** (`androidIcon` and the like): the design is proposed in the orchestrator's 2026-11-06
+   write-up (Metro assets, with `@expo/material-symbols` as the icon source) and is pending the owner's answer.
 

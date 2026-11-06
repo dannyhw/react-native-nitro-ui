@@ -45,9 +45,13 @@ bun install
 To check a machine against all of the above (plus `gh` push access, the agent
 CLIs, disk and load), run the doctor. `--setup` also creates two simulator/AVD
 pairs (`nitro-ui A`/`B`, `nitroui_a`/`b`) and writes the `~/.nitro-ui/devices.json`
-the lease script reads (see "Leasing a device or port"). It only adds: it never
-touches an existing device or `devices.json`, never installs SDK packages or
-accepts licenses (it prints the command), and never boots anything.
+the lease script reads (see "Leasing a device or port"). It also creates one
+simulator per _other_ installed iOS runtime (`nitro-ui iOS 26.5`, …) for look
+checks, and lists it under `iosRuntimes` in `devices.json` - on a machine whose
+file already exists too, which is the one edit it makes to that file (see "Older
+iOS runtimes, for look checks"). It only adds: it never touches an existing
+device, never changes an entry already in `devices.json`, never installs SDK
+packages or accepts licenses (it prints the command), and never boots anything.
 
 What that file can say is in `scripts/devices.example.json`, so copy it rather than
 typing it. Besides the pool it carries the machine's two limits: `maxDeviceLeases`
@@ -556,6 +560,58 @@ real one.
 `ANDROID_ADB_SERVER_PORT` is part of a lease on purpose: a private adb server per
 task means one task's `adb` never queues behind another's, and it is what makes
 `adb kill-server` on the default port somebody else's problem - so don't.
+
+A lease is for the platform it names. `--platform ios` boots and resets only the
+pair's simulator, and `--platform android` only its emulator: the hand-off used to
+reset the whole pair, so an iOS-only lease ran `pm clear` on an emulator another
+task may have been using (X20 item 2). A re-acquire narrows to what the lease was
+taken for, so re-running `acquire --boot` without `--platform` does not widen an
+iOS lease to the emulator either.
+
+### Older iOS runtimes, for look checks
+
+The pairs run the gates on one iOS runtime. A design question is sometimes about
+another one - how a SwiftUI control looks on 26.5, or whether 27.1 changed it - so
+the pool also holds **one simulator per other installed runtime** (D42 item 1):
+
+```sh
+node scripts/doctor.mjs --setup                                  # creates them, adds them to devices.json
+node scripts/lease.mjs acquire --task G20 --ios-runtime 26.5 --boot
+node scripts/lease.mjs release G20                               # it stays booted, like a pair
+```
+
+```json
+"iosRuntimes": [
+  {
+    "id": "ios-26.5",
+    "ios": { "name": "nitro-ui iOS 26.5", "udid": "<simulator udid>", "system": "26.5" },
+    "metroPort": 8297
+  }
+]
+```
+
+- **For screenshots and probes only.** The env file exports
+  `NITRO_UI_LEASE_IOS_RUNTIME`, and `gate.mjs` refuses every gate that drives a
+  device under it (harness, real-input, smoke installs, bench): merge evidence is
+  measured on the pairs' runtime, so a row recorded on 26.5 would answer the wrong
+  question. `check` still runs. Install and launch by hand, as in "README
+  screenshots".
+- **iOS only, and never exclusive.** `--ios-runtime` implies `--platform ios` and
+  refuses `--platform android|both` and `--exclusive`.
+- **Kept apart from the pairs.** An acquire without `--ios-runtime` never gets one
+  of these, and `--ios-runtime` never gets a pair. A task holds one lease, so a
+  task that holds a pair and wants a look check leases it under a second name
+  (`--task G20-26.5`); the refusal names the command.
+- **The same rules as any device lease.** It counts against `maxDeviceLeases` (a
+  simulator boot is the load D13 limits, whatever the runtime), `--boot` boots
+  and resets it, `release` leaves it booted, only `lease.mjs reap` or an
+  `--exclusive` acquire powers it off, and an exclusive lease holds it with the
+  pairs.
+- **What `--setup` picks.** Every available iOS runtime the pairs do not use, on
+  an iPhone 17 where the runtime has one and otherwise the first iPhone it lists
+  (27.1 shipped with a single device type). Remove a runtime with Xcode and its
+  entry stays in `devices.json` until you delete it; `doctor` then reports the
+  missing simulator.
 
 ### The lease owns device lifecycle (X11)
 

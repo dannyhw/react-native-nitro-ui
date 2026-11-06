@@ -192,3 +192,13 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E1 found: a bare `throw new AbortedCheck(...)` in an Android real-input check passes the whole run, because the runner (`scripts/real-input/android.mjs`, `instanceof AbortedCheck`) assumes `t.log.abort` already recorded the failure. Make the runner record an AbortedCheck the log never saw, or make the class private to `report.mjs`. A false green.
 - E1 fix round 2: `ConnectedRow` trusts `maxIntrinsicWidth` because each segment is one `maxLines = 1` `Text`; recheck it if a segment ever gains an icon.
 - E1 fix round 2: the SegmentedControl corner swap on press isn't animated (`AnimatedShapeState` is internal in material3 1.5).
+- E3 review: the split button's expanded/collapsed state and `Role.Button` aren't asserted (`uiautomator dump` has no `stateDescription`).
+- E3 review: the split button's "More options" label is hard-coded English; no override or localisation.
+- E3 review: the split chevron's `Modifier.rotate` recomposes each frame; use `graphicsLayer { rotationZ }`.
+- E3 review: variant to trailing-button branches are unguarded (only `MenuSplitVariant.of` is tested); small/large split boxes are unmeasured; the on-to-off narrowing isn't asserted.
+- E3 review: `SplitButtonShapesCache` holds one entry, so Menus at mixed sizes rebuild shapes each recomposition.
+- X20 review: the text guard against other `AbortedCheck` catches is easy to dodge (`catch {}`, `e.name`, subdirectories); `runCheck` is the real protection.
+- X20 review: a default lease's env file never unsets `NITRO_UI_LEASE_IOS_RUNTIME`; `gate.mjs --background` under a look-check lease detaches before refusing; `portWait` spans both kinds of pair.
+- Gate ledgers commit simulator UDIDs in their `device` field (about 50 on main). Decide whether D25's scrub should cover them.
+- X20: `gate.mjs export --task <ID>` on a merge branch overwrites `docs/tasks/<ID>/gates.jsonl` with that branch's lines only; it should append across the task's branches.
+- X20: `task-ready` on `task/<ID>-merge` looks only for `<ID>-merge.report.md` or `<ID>.report.md`, not the task's real report name.
