@@ -94,5 +94,5 @@
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
 | X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merged (`a87271c`, PR #35) |
 | E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | fix round 1 (PR #39; review FIX ROUND: Android segments draw as pills, not a connected group) |
-| E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merge round on mac-1 (PR #38; review MERGE WITH FOLLOW-UPS; a real tap on a checked row owed) |
+| E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merged `9044521` (PR #38; merge gates green on code tree `5c6f2b0b`; the iOS 15 subtitle guard stays at 16: `UIAction.subtitle` is iOS 16+) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
