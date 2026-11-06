@@ -240,12 +240,32 @@ export function VolumeSlider() {
 </table>
 
 `value` is a fraction of the whole; `null` means indeterminate rather than
-empty.
+empty. `appearance="wavy"` and `variant="loading"` are Material 3 Expressive's
+shapes — Android draws them, iOS draws the closest `ProgressView` it has.
 
 ```tsx name=progress
 export function UploadProgress({ fraction }: { fraction: number | null }) {
   // `null` is indeterminate ("working"); a number 0…1 is a determinate bar.
   return <Progress accessibilityLabel="Uploading" value={fraction} />;
+}
+
+export function UploadProgressExpressive({
+  fraction,
+}: {
+  fraction: number | null;
+}) {
+  // Material 3 Expressive: the wavy bar and the morphing loading shape. Both are
+  // Android's; iOS draws the flat bar and the ring it has.
+  return (
+    <>
+      <Progress
+        accessibilityLabel="Uploading"
+        appearance="wavy"
+        value={fraction}
+      />
+      <Progress accessibilityLabel="Uploading" variant="loading" contained />
+    </>
+  );
 }
 ```
 
