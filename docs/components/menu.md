@@ -313,8 +313,8 @@ configurations corrected twice. `Menu.harness.tsx` ("earns its own box, which is
 plain trigger's") poisons both entries and compares the two boxes: a source that stopped
 sending the `action` field puts both Menus in one cache entry, and the case goes red with
 the **split** control sitting at the plain trigger's width (`78.86 × 48` where it measures
-`124.95 × 48`) — the last correction to a shared entry is the answer every holder of it
-gets, so the control that measured first is the one left wrong. The field itself is
+`124.95 × 48`) — a shared entry keeps one answer, the last correction written to it, and
+the split control is the holder that stops matching its own measurement. The field itself is
 guarded one level up, by `src/__tests__/menuSizingKey.test.tsx`; both reds are in
 `docs/tasks/E3/mutations.json`.
 

@@ -2563,10 +2563,11 @@ describe('Menu · Split trigger (E3)', () => {
    * sizing key carries an `action` field precisely so these two configurations cannot
    * share a cache entry. A source that dropped the field puts both Menus in one entry,
    * and this is the case that sees it - on the *split* control, left at the plain
-   * trigger's width, because a correction to a shared entry is the answer every holder
-   * of it gets and the plain control measures last. Both directions of the mutation are
-   * in `docs/tasks/E3/mutations.json`; the field itself, which no device run can read, is
-   * guarded by `src/__tests__/menuSizingKey.test.tsx`.
+   * trigger's width. A shared entry holds one answer, the last correction written to it,
+   * and the split control is the holder that no longer matches its own measurement. Both
+   * directions of the mutation are in `docs/tasks/E3/mutations.json`; the field itself,
+   * which no device run can read, is guarded by
+   * `src/__tests__/menuSizingKey.test.tsx`.
    */
   it("earns its own box, which is not the plain trigger's", async () => {
     const splitKey = sizingKey('filled', 'medium', 'Publish', '', 'action');
