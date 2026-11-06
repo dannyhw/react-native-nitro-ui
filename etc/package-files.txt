@@ -31,6 +31,7 @@ android/src/main/java/com/margelo/nitro/nitroui/MenuRows.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiBottomSheetViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
@@ -239,6 +240,8 @@ lib/module/core/useSizingId.js
 lib/module/core/useSizingId.js.map
 lib/module/core/useStableCallback.js
 lib/module/core/useStableCallback.js.map
+lib/module/iconName.js
+lib/module/iconName.js.map
 lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
@@ -403,6 +406,8 @@ lib/typescript/src/core/useSizingId.d.ts
 lib/typescript/src/core/useSizingId.d.ts.map
 lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
+lib/typescript/src/iconName.d.ts
+lib/typescript/src/iconName.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
 nitro-ui.sizing.json
@@ -891,4 +896,5 @@ src/core/useControlled.ts
 src/core/useProcessedColor.ts
 src/core/useSizingId.ts
 src/core/useStableCallback.ts
+src/iconName.ts
 src/index.ts

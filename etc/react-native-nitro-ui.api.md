@@ -59,6 +59,7 @@ export function Button(input: ButtonProps): JSX.Element;
 
 // @public
 export interface ButtonProps extends ViewProps {
+    androidIcon?: string | undefined;
     disabled?: boolean | undefined;
     // @internal
     hybridRef?: ((view: {
@@ -69,6 +70,7 @@ export interface ButtonProps extends ViewProps {
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
@@ -90,7 +92,7 @@ export interface ButtonProps extends ViewProps {
 export type ButtonShape = 'round' | 'square';
 
 // @public
-export type ButtonSize = 'small' | 'medium' | 'large';
+export type ButtonSize = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
 
 // @public
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
