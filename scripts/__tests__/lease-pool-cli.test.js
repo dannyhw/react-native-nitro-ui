@@ -694,6 +694,81 @@ describe('the lease owns the device lifecycle', () => {
     expect(acquired.stderr).not.toContain('FAILED');
   });
 
+  // X20 item 2. Q9 took a lease for iOS only, and `acquire --boot` printed `pm clear` on the pair's
+  // emulator: the hand-off reset the whole pair whatever the lease was for. The emulator may be
+  // another task's Android device at that moment, and an iOS lease has no business asking it
+  // anything - not to clear, not whether the app is installed, not to boot.
+  it('touches only the simulator for an iOS-only lease', () => {
+    tools({ androidUp: true, iosUp: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'Q9',
+      '--platform',
+      'ios',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl uninstall ${UDID_A} nitroui.example`);
+    expect(acquired.stderr).toContain(`reset ios:${UDID_A}`);
+    expect(acquired.stderr).not.toContain('reset avd:');
+    // Nothing addressed to the emulator at all: `adb devices` lists the machine and is not a
+    // command *to* a device, but every `-s <serial>` is.
+    expect(log()).not.toContain('pm clear');
+    expect(log()).not.toContain('pm path');
+    expect(log()).not.toContain(`-s ${SERIAL_A}`);
+    expect(log()).not.toContain('emulator @');
+  });
+
+  it('touches only the emulator for an Android-only lease', () => {
+    tools({ androidUp: true, iosUp: true });
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'A1',
+      '--platform',
+      'android',
+      '--boot',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`adb -P 5043 -s ${SERIAL_A} shell pm clear`);
+    expect(acquired.stderr).not.toContain('reset ios:');
+    expect(log()).not.toContain('simctl uninstall');
+    expect(log()).not.toContain('get_app_container');
+    expect(log()).not.toContain('simctl boot');
+  });
+
+  it('keeps a re-acquired iOS lease on iOS when the second acquire names no platform', () => {
+    // `--platform` defaults to `both`, and re-running `acquire --boot` to get the env file again is
+    // the documented path. The lease is for iOS, so the default must not widen it to the emulator.
+    tools({ androidUp: false, iosUp: false });
+    withLeaseFile([
+      {
+        id: 'Q9-aaaa',
+        task: 'Q9',
+        platform: 'ios',
+        exclusive: false,
+        holds: ['pair-a'],
+        acquiredAt: new Date().toISOString(),
+        ttlMinutes: 240,
+      },
+    ]);
+    const acquired = cli([
+      'acquire',
+      '--task',
+      'Q9',
+      '--boot',
+      '--boot-timeout-minutes',
+      '0',
+    ]);
+    expect(acquired.status).toBe(0);
+    expect(log()).toContain(`simctl boot ${UDID_A}`);
+    expect(log()).not.toContain('emulator @');
+    expect(log()).not.toContain('pm clear');
+    expect(log()).not.toContain(`-s ${SERIAL_A}`);
+    expect(acquired.stdout).not.toContain('ANDROID_SERIAL');
+  });
+
   it('starts a device that is down, and records the boot on the lease', () => {
     // Nothing is up, and the emulator stays "down" as far as the stub is concerned: the lease still
     // has to come back (bounded), and it still has to have *asked* for the boot.
