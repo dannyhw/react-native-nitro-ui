@@ -88,7 +88,7 @@
 | S3 | ContextMenu spike (Q6 Appendix G; GO = questions 1, 2, 3, 5 on both platforms) | Opus (on mac-1) | Opus | done: GO (report merged; D37) |
 | G16 | ContextMenu (Q6 + S3, D36/D37) | Opus (on mac-1) | Opus | merged (PR #33; 1 impl + 1 fix round, re-review MERGE; merged with Checkbox and gated on mac-1, all five green) |
 | Q7 | Next components after ContextMenu: re-rank Q5's remainder, designs for the top two | Opus | Opus | done (report merged; D38) |
-| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | merge round part 2 (takes in E2 and G18, then the five merge gates) |
+| G17 | SearchField (Q7 Appendix B, D38) | Apex | Opus | merged (PR #37; merge gates green on code tree `ce2f7aab` with E2 and G18 in) |
 | G18 | Tooltip (Q7 Appendix C, D38) | Opus (on mac-1) | Opus | merged (PR #36; merge gates green on code tree `d651692a` with E2 and X19 in; recycle and Back red proofs; display-link rate item left in FOLLOWUPS) |
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
