@@ -3,6 +3,7 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -65,13 +66,28 @@ internal enum class ButtonVariant(val wireName: String) {
 }
 
 /**
- * `small` / `medium` / `large`: which Material 3 container height the control's
- * padding, label style and corner are read from.
+ * The five rungs, and which Material 3 container height the control's padding,
+ * label style and corner are read from.
+ *
+ * The names are the library's, the numbers are Material's (D42 item 4): the
+ * Expressive ladder is indexed by a container height, and Material publishes five
+ * of them, so the ladder has five rungs. `small` / `medium` / `large` keep the
+ * heights they had; `xlarge` and `xxlarge` are the two taller tokens, which is how
+ * Material names its own XS–XL button row lines up with this one:
+ *
+ * | Material | XS | S | M | L | XL |
+ * | -------- | -- | - | - | - | -- |
+ * | nitro-ui | `small` | `medium` | `large` | `xlarge` | `xxlarge` |
+ *
+ * IconButton (G19) is documented in Material's names because its tokens are
+ * Material's own, and this table is the bridge between the two spellings.
  */
 internal enum class ButtonScale(val wireName: String) {
   Small("small"),
   Medium("medium"),
-  Large("large");
+  Large("large"),
+  XLarge("xlarge"),
+  XXLarge("xxlarge");
 
   companion object {
     /** The scale for a wire string; anything unrecognised is `medium`. */
@@ -102,6 +118,8 @@ internal enum class ButtonScale(val wireName: String) {
         Small -> ButtonDefaults.ExtraSmallContainerHeight
         Medium -> ButtonDefaults.MinHeight
         Large -> ButtonDefaults.MediumContainerHeight
+        XLarge -> ButtonDefaults.LargeContainerHeight
+        XXLarge -> ButtonDefaults.ExtraLargeContainerHeight
       }
 
   /**
@@ -201,6 +219,22 @@ internal class ButtonModel : NitroUiModel() {
   var systemImage: String? = null
 
   /**
+   * The app drawable this Button draws before its label, or `null`.
+   *
+   * Observed, unlike [systemImage]: it is what the label is laid out next to, so
+   * resolving it changes the control's width. The bitmap is loaded in
+   * `afterUpdate()` on the main thread and never during composition
+   * ([loadIconBitmap]); this holds the result.
+   */
+  var androidIconBitmap by mutableStateOf<android.graphics.Bitmap?>(null)
+
+  /**
+   * The drawable name React sent, after [NitroUiIconNames.normalize]. Stored so the
+   * getter reports what was asked for; rendering reads [androidIconBitmap].
+   */
+  var androidIcon: String? = null
+
+  /**
    * The size configuration React sent. The sizing engine reads the key out of Fabric
    * state itself; the host only needs to hear that it changed (see
    * [NitroComposeHost.noteSizingKeyChanged]).
@@ -222,6 +256,8 @@ internal class ButtonModel : NitroUiModel() {
     tintColor = null
     accessibilityLabel = null
     systemImage = null
+    androidIcon = null
+    androidIconBitmap = null
     sizingKey = ""
     onPress = null
   }
@@ -585,6 +621,7 @@ private class ButtonHost(
       tint = model.tintColor,
       modifier = labelModifier,
       onClick = { press?.invoke() },
+      iconBitmap = model.androidIconBitmap,
     )
   }
 }
@@ -612,16 +649,44 @@ internal fun NitroUiM3Button(
   tint: Int?,
   modifier: Modifier,
   onClick: () -> Unit,
+  iconBitmap: android.graphics.Bitmap? = null,
 ) {
   // No height is set: the scale picks Material's padding, label style and corner,
   // and Material itself lays the box out at no less than MinTouchTargetHeight, so
   // the ladder reaches down to the XS token (32 dp of padding and type) without
   // shipping a control a thumb cannot hit. Measured box: 48 / 48 / 56 dp.
   val colors = buttonColors(variant, tint)
-  val padding = contentPaddingFor(variant, scale)
+  // `hasStartIcon` is Material's own input to the padding, and it is the difference
+  // between a row of two things and a row of one: the ladder widens the leading
+  // edge so the glyph does not sit where the label's own inset used to be. Passing
+  // it unconditionally is how an icon and a no-icon Button end up the same width
+  // when the name resolves to nothing.
+  val padding =
+    if (iconBitmap == null) {
+      contentPaddingFor(variant, scale)
+    } else {
+      ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
+    }
   val labelStyle = buttonLabelStyle(scale)
   val shapes = buttonShapes(cornerFor(variant, shape), scale)
+  val painter = rememberIconPainter(iconBitmap)
+  val iconSize = ButtonDefaults.iconSizeFor(scale.height)
+  val iconSpacing = ButtonDefaults.iconSpacingFor(scale.height)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+    // The glyph goes in the slot Material's `Button` would use, drawn by
+    // [NitroUiIconGlyph] rather than by m3's `Icon` - see that function for why.
+    // It carries no content description: the Button's own node already names the
+    // control (`docs/architecture/core.md` §3), and a description here would make
+    // TalkBack read "Share, Share".
+    if (painter != null) {
+      NitroUiIconGlyph(
+        painter = painter,
+        size = iconSize,
+        tint = colors.contentColor,
+        contentDescription = null,
+        modifier = Modifier.padding(end = iconSpacing),
+      )
+    }
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
     // label truncates instead of painting outside its box (the iOS content does
@@ -849,6 +914,35 @@ class HybridNitroUiButton(
       // Stored, never rendered: v0.1 ignores the SF Symbol on Android
       // (`docs/components/button.md`). No `markDirty()` - nothing observes it.
       model.systemImage = next.asSecondOrNull()
+    }
+
+  /**
+   * `androidIcon`: the app drawable to draw before the label.
+   *
+   * The setter only stores the name and marks the model - loading a drawable is
+   * the expensive half and belongs in `afterUpdate()`, once per commit, not in a
+   * setter that may run for each prop of that commit (AGENTS' perf contract). The
+   * bitmap is observed, so resolving it in `afterUpdate()` recomposes once.
+   */
+  override var androidIcon: Variant_NullType_String
+    get() =
+      model.androidIcon?.let { Variant_NullType_String.Second(it) }
+        ?: Variant_NullType_String.First(NullType.NULL)
+    set(next) {
+      val name = next.asSecondOrNull()
+      val normalized = name?.let { NitroUiIconNames.normalize(it) }
+      if (normalized == model.androidIcon) {
+        return
+      }
+      model.androidIcon = normalized
+      // The load happens here rather than in the composable, and behind the
+      // name-change guard above: a commit that re-sends the same name costs
+      // nothing, and a commit that changes it pays once, on the thread that is
+      // already applying props. Doing it in composition instead would ask
+      // React Native's resource-id helper - which is `synchronized` - on every
+      // recomposition of this Button for the life of the view.
+      model.androidIconBitmap = normalized?.let { loadIconBitmap(host.context, it) }
+      host.markDirty()
     }
 
   override var testID: Variant_NullType_String

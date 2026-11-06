@@ -53,6 +53,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<bool> disabled;
     nitro::ReactProp<std::variant<nitro::NullType, double>> tintColor;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> systemImage;
+    nitro::ReactProp<std::variant<nitro::NullType, std::string>> androidIcon;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> testID;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
     nitro::ReactProp<std::variant<nitro::NullType, double>> nuiPerfId;
@@ -70,6 +71,7 @@ namespace margelo::nitro::nitroui::views {
              disabled.hasSameValue(other.disabled) &&
              tintColor.hasSameValue(other.tintColor) &&
              systemImage.hasSameValue(other.systemImage) &&
+             androidIcon.hasSameValue(other.androidIcon) &&
              testID.hasSameValue(other.testID) &&
              accessibilityLabel.hasSameValue(other.accessibilityLabel) &&
              nuiPerfId.hasSameValue(other.nuiPerfId) &&
@@ -88,6 +90,7 @@ namespace margelo::nitro::nitroui::views {
              disabled.isProvided() ||
              tintColor.isProvided() ||
              systemImage.isProvided() ||
+             androidIcon.isProvided() ||
              testID.isProvided() ||
              accessibilityLabel.isProvided() ||
              nuiPerfId.isProvided() ||
