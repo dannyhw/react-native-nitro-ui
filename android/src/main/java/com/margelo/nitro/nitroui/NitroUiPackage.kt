@@ -76,6 +76,8 @@ class NitroUiPackage : BaseReactPackage() {
     // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
     // Fabric's child indices. See `NitroUiContextMenuViewManager`.
     NitroUiContextMenuViewManager(),
+    // S5 spike only (never merged): the Popover prototype's hand-written manager.
+    NitroUiPopoverProtoViewManager(),
   )
 
   companion object {

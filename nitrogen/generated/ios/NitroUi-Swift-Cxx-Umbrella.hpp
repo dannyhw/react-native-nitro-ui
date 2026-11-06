@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiMenuSpec; }
 // Forward declaration of `HybridNitroUiPickerSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiPickerSpec; }
+// Forward declaration of `HybridNitroUiPopoverProtoSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiPopoverProtoSpec; }
 // Forward declaration of `HybridNitroUiProgressSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiProgressSpec; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec` to properly resolve imports.
@@ -80,6 +82,7 @@ namespace margelo::nitro::nitroui { struct NitroUiTooltipAction; }
 #include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
+#include "HybridNitroUiPopoverProtoSpec.hpp"
 #include "HybridNitroUiProgressSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
@@ -140,6 +143,8 @@ namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 namespace NitroUi { class HybridNitroUiMenuSpec_cxx; }
 // Forward declaration of `HybridNitroUiPickerSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiPickerSpec_cxx; }
+// Forward declaration of `HybridNitroUiPopoverProtoSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiPopoverProtoSpec_cxx; }
 // Forward declaration of `HybridNitroUiProgressSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiProgressSpec_cxx; }
 // Forward declaration of `HybridNitroUiSegmentedControlSpec_cxx` to properly resolve imports.

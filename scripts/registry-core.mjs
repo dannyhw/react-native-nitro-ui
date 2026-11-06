@@ -1062,10 +1062,12 @@ export function sizingTableContent(manifests, current, currentText) {
  * unknown key would also ignore a component deleted from the registry and left
  * behind in `nitro.json`.
  */
+// `NitroUiPopoverProto` is the S5 spike's prototype (never merged).
 export const NON_CONTROL_AUTOLINKING = [
   'NitroUiCore',
   'NitroUiHost',
   'NitroUiMaterialTheme',
+  'NitroUiPopoverProto',
 ];
 
 /**

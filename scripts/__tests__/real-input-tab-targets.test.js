@@ -114,8 +114,9 @@ describe('exampleTabs', () => {
         { id: 'tooltip', label: 'Tooltip' },
       ])
     );
-    // And the hand-written Host entry after the region is still read.
-    expect(tabs.at(-1)?.id).toBe('host');
+    // And the hand-written Host entry after the region is still read (S5 spike only: the
+    // prototype's Pop tab follows it).
+    expect(tabs.slice(-2).map((tab) => tab.id)).toEqual(['host', 'pop']);
   });
 });
 

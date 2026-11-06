@@ -186,10 +186,36 @@ const HOST_CONTROL_ROWS = Object.freeze([
   },
 ]);
 
+/**
+ * S5 spike only (never merged): the Popover prototype's measurements, Q7
+ * Appendix F. Hand-written like the `<Host>` rows: the prototype has no manifest.
+ */
+const S5_SPIKE_ROWS = Object.freeze([
+  {
+    id: 's5-popover',
+    title:
+      'S5 Q1/Q2: ten real opens, each a new size shown first at its final size, and a real tap inside lands once',
+    screen: 'pop',
+  },
+  {
+    id: 's5-keyboard',
+    title:
+      'S5 Q3: a real tap on a TextInput in the popover brings up the keyboard',
+    screen: 'pop',
+  },
+  {
+    id: 's5-modal',
+    title:
+      'S5 Q4: a popover over an RN Modal takes a tap, and closing either way strands nothing',
+    screen: 'pop',
+  },
+]);
+
 /** Every control the suite proves, in the order it proves them. */
 export const REAL_INPUT_CONTROLS = Object.freeze([
   ...REAL_INPUT_CONTROL_ROWS,
   ...HOST_CONTROL_ROWS,
+  ...S5_SPIKE_ROWS,
 ]);
 
 /**

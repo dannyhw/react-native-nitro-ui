@@ -385,10 +385,17 @@ describe('patch-nitrogen: content children (G14)', () => {
       writeFileSync(
         join(root, 'nitro.json'),
         JSON.stringify({
-          autolinking: declare ? { NitroUiBottomSheet: {} } : {},
+          // S5 spike only: the Popover prototype is in the list too.
+          autolinking: declare
+            ? { NitroUiBottomSheet: {}, NitroUiPopoverProto: {} }
+            : {},
         })
       );
       if (mm != null) writeFileSync(join(root, MM), mm);
+      writeFileSync(
+        join(root, MM.replace('BottomSheet', 'PopoverProto')),
+        generated().replace('BottomSheet', 'PopoverProto')
+      );
       return fn(root);
     } finally {
       rmSync(root, { recursive: true, force: true });

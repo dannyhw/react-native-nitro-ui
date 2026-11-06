@@ -24,6 +24,8 @@ import { NitroUiTooltipConfig } from '../components/Tooltip/NitroUiTooltipConfig
 // registry writes no row for it. The "covers every generated config" test below is
 // what fails if a Hybrid View arrives without a manifest, or without its row here.
 import { NitroUiHostConfig } from '../components/Host/NitroUiHostConfig';
+// The S5 spike's prototype (never merged): no manifest either.
+import { NitroUiPopoverProtoConfig } from '../spike/PopoverProto/NitroUiPopoverProtoConfig';
 
 const generatedDir = join(
   __dirname,
@@ -59,6 +61,7 @@ const copies: Record<string, unknown> = {
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.
   'NitroUiHostConfig.json': NitroUiHostConfig,
+  'NitroUiPopoverProtoConfig.json': NitroUiPopoverProtoConfig,
 };
 
 describe('hand-written view configs', () => {

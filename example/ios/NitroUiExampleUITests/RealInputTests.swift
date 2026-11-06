@@ -4249,6 +4249,243 @@ final class RealInputTests: XCTestCase {
   /// `.any` rather than a concrete type: the hosted controls are views React
   /// Native hosts, and which accessibility subclass they surface as is the
   /// library's business, not the check's.
+  // MARK: - S5 spike only (never merged): the Popover prototype, Q7 Appendix F
+
+  private enum S5 {
+    static let tab = "tab-pop"
+    static let echo = "s5-echo"
+    static let probe = "s5-probe"
+  }
+
+  private func s5Log(_ line: String) {
+    print("real-input (ios): s5 \(line)")
+  }
+
+  private func s5Echo() -> [String: String] {
+    var out: [String: String] = [:]
+    for part in echoText(S5.echo).split(separator: ";") {
+      let pair = part.split(separator: "=", maxSplits: 1)
+      if pair.count == 2 { out[String(pair[0])] = String(pair[1]) }
+    }
+    return out
+  }
+
+  @discardableResult
+  private func s5Wait(timeout: TimeInterval = 8, _ ok: () -> Bool) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !ok() && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+    }
+    return ok()
+  }
+
+  private func s5Exists(_ identifier: String) -> Bool {
+    app.descendants(matching: .any)[identifier].exists
+  }
+
+  private func s5Shot(_ name: String) {
+    let shot = XCUIScreen.main.screenshot()
+    let attachment = XCTAttachment(image: shot.image)
+    attachment.name = name
+    attachment.lifetime = .keepAlways
+    add(attachment)
+    if let dir = ProcessInfo.processInfo.environment["S5_SHOTS_DIR"], !dir.isEmpty {
+      let url = URL(fileURLWithPath: dir).appendingPathComponent("\(name).png")
+      try? FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try? shot.pngRepresentation.write(to: url)
+      s5Log("screenshot \(name) -> \(url.lastPathComponent)")
+    }
+  }
+
+  private func s5Start() throws {
+    try goToTab(S5.tab, showing: S5.echo)
+    try required("s5-reset", as: "the S5 reset button").fingerTap()
+    s5Wait { self.s5Echo()["press"] == "0" && self.s5Echo()["fit"] == "0/0" }
+  }
+
+  /// A point outside every popover: the empty middle of the screen, between the plain
+  /// popover's anchor (near the top; UIKit may put the popover above *or* below it) and
+  /// the input popover's anchor (low). Nothing there takes a press.
+  private func s5Outside() throws -> XCUICoordinate {
+    // The right edge: a popover is start-aligned and at most 320 pt wide.
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+  }
+
+  /// Q1 and Q2 by real input: ten presentations, each of a different content size, each
+  /// opened by a real tap, its inner `Pressable` tapped once by a real finger, and closed
+  /// by a real tap outside. Counted, not retried: a tap that does not land once is a miss.
+  func testRealInputS5Popover() throws {
+    try s5Start()
+    let outside = try s5Outside()
+    var pressedOnce = 0
+    var lines: [String] = []
+    for cycle in 1...10 {
+      try tapUntilElement("s5-open", as: "the popover's anchor", appears: "s5-press")
+      if cycle == 1 {
+        XCTAssertEqual(app.descendants(matching: .popover).count, 1, "it is one UIKit popover")
+        s5Shot("s5-ios-popover-open")
+      }
+      let press = try required("s5-press", as: "the Pressable inside the popover")
+      let label = { press.label }
+      press.fingerTap()
+      let arrived = s5Wait(timeout: 4) { label() == "Pressed \(cycle)" }
+      Thread.sleep(forTimeInterval: 0.8)
+      let after = label()
+      let once = arrived && after == "Pressed \(cycle)"
+      if once { pressedOnce += 1 }
+      // Close with a real tap outside, retried only while the popover is still up.
+      try pressUntil(
+        named: "the echo line outside the popover",
+        waitingFor: "the tap outside to close the popover",
+        press: { attempt in
+          if attempt > 1 && !self.s5Exists("s5-press") { return }
+          outside.tap()
+        },
+        reading: { self.s5Exists("s5-press") ? "up" : "gone" }
+      ) { $0 == "gone" }
+      s5Wait { self.s5Echo()["fit"]?.hasSuffix("/\(cycle)") == true }
+      let echo = s5Echo()
+      let probe = echoText(S5.probe)
+      let line =
+        "cycle \(cycle): tap \(once ? "once" : "NOT once (\(after))") press=\(echo["press"] ?? "?") closes=\(echo["closes"] ?? "?") fit=\(echo["fit"] ?? "?") | \(probe)"
+      lines.append(line)
+      s5Log(line)
+    }
+    let echo = s5Echo()
+    s5Log("Q2 pressed exactly once: \(pressedOnce)/10; Q1 fit: \(echo["fit"] ?? "?")")
+    XCTAssertEqual(pressedOnce, 10, "a real tap on the Pressable inside the popover lands exactly once, 10 of 10")
+    XCTAssertEqual(echo["press"], "10", "and JS counted ten presses in all")
+    XCTAssertEqual(echo["closes"], "10", "each tap outside closed it and was reported once")
+    XCTAssertEqual(echo["fit"], "10/10", "Q1: the first frame was the final size, 10 of 10: \(lines.joined(separator: " || "))")
+  }
+
+  /// Q3 by real input: a `TextInput` in the popover, focused by a real tap. Screenshots
+  /// before and after the keyboard, and where the popover is against the keyboard.
+  func testRealInputS5Keyboard() throws {
+    try s5Start()
+    let outside = try s5Outside()
+    try tapUntilElement("s5-open-input", as: "the input popover's anchor", appears: "s5-text")
+    let popover = app.descendants(matching: .any)["s5-input-popover"].firstMatch
+    let field = try required("s5-text", as: "the TextInput inside the popover")
+    let before = popover.exists ? popover.frame : field.frame
+    s5Shot("s5-ios-keyboard-before")
+    field.fingerTap()
+    let keyboardUp = s5Wait(timeout: 5) { self.app.keyboards.count > 0 }
+    Thread.sleep(forTimeInterval: 1.0)
+    let keyboard = app.keyboards.firstMatch
+    let keyboardFrame = keyboard.exists ? keyboard.frame : .zero
+    let after = popover.exists ? popover.frame : field.frame
+    let fieldAfter = field.frame
+    s5Shot("s5-ios-keyboard-after")
+    field.typeText("abc")
+    let typed = s5Wait(timeout: 4) { (field.value as? String) == "abc" }
+    let afterTypeText = (field.value as? String) ?? "-"
+    // A probe of how typing arrives: one real tap per key on the keyboard itself.
+    var keyTaps = "-"
+    if keyboardUp {
+      for key in ["x", "y", "z"] {
+        let button = app.keyboards.firstMatch.keys[key]
+        if button.exists { button.tap() }
+        Thread.sleep(forTimeInterval: 0.4)
+      }
+      keyTaps = (field.value as? String) ?? "-"
+    }
+    s5Log("Q3 typing: typeText(abc) -> \"\(afterTypeText)\"; then key taps x,y,z -> \"\(keyTaps)\"")
+    let covered = keyboardUp && fieldAfter.maxY > keyboardFrame.minY
+    s5Log(
+      "Q3 keyboard=\(keyboardUp ? 1 : 0) keyboardFrame=\(keyboardFrame) popoverBefore=\(before) popoverAfter=\(after) "
+        + "fieldAfter=\(fieldAfter) moved=\(Int(after.minY - before.minY)) covered=\(covered ? 1 : 0) typed=\(typed ? 1 : 0)")
+    try pressUntil(
+      named: "the echo line outside the popover",
+      waitingFor: "the tap outside to close the input popover",
+      press: { attempt in
+        if attempt > 1 && !self.s5Exists("s5-text") { return }
+        if self.app.keyboards.count > 0 { outside.tap() }
+        outside.tap()
+      },
+      reading: { self.s5Exists("s5-text") ? "up" : "gone" }
+    ) { $0 == "gone" }
+    s5Wait { self.s5Echo()["iopen"] == "0" }
+    let echo = s5Echo()
+    s5Log("Q3 after close: focus=\(echo["focus"] ?? "?") text=\(echo["text"] ?? "?") keyboards=\(app.keyboards.count)")
+    XCTAssertTrue(keyboardUp, "a real tap on the TextInput in the popover brings up the keyboard")
+    // Real key taps must reach the field. `typeText` is logged, not asserted: on this
+    // controlled TextInput it dropped characters run to run ("a", "ab") while every
+    // per-key tap landed, so it measures XCUITest's typing speed, not the popover.
+    _ = typed
+    XCTAssertTrue(
+      keyTaps.hasSuffix("xyz"),
+      "and real key taps reach it (typeText -> \(afterTypeText), keys -> \(keyTaps))")
+  }
+
+  /// Q4 by real input: a popover inside an RN `Modal` presents over it, takes a tap,
+  /// and closes cleanly both ways - a tap outside then the Modal's own close, and the
+  /// Modal closed *from inside the popover* while it is up. Afterwards the app's own
+  /// screen takes a real tap: a stranded Modal would swallow it.
+  func testRealInputS5Modal() throws {
+    try s5Start()
+    // 1. Open the Modal, then the popover inside it; tap inside the popover.
+    try tapUntilElement("s5-open-modal", as: "the Modal's opener", appears: "s5-modal-open")
+    try tapUntilElement("s5-modal-open", as: "the popover's anchor in the Modal", appears: "s5-mpress")
+    s5Shot("s5-ios-modal-popover")
+    let mpress = try required("s5-mpress", as: "the Pressable in the Modal's popover")
+    mpress.fingerTap()
+    let pressed = s5Wait(timeout: 4) { mpress.label == "Pressed 1" }
+    s5Log("Q4 over the Modal: popovers=\(app.descendants(matching: .popover).count) pressed=\(pressed ? 1 : 0) label=\(mpress.label)")
+    XCTAssertTrue(pressed, "a real tap inside the popover over the Modal lands")
+
+    // 2. Close the popover with a tap outside (on the Modal), then the Modal itself.
+    let modalEcho = try required("s5-modal-echo", as: "the Modal's echo line").frame
+    let outside = app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: modalEcho.midX, dy: modalEcho.midY))
+    try pressUntil(
+      named: "the Modal's echo line outside the popover",
+      waitingFor: "the tap outside to close the popover in the Modal",
+      press: { attempt in
+        if attempt > 1 && !self.s5Exists("s5-mpress") { return }
+        outside.tap()
+      },
+      reading: { self.s5Exists("s5-mpress") ? "up" : "gone" }
+    ) { $0 == "gone" }
+    try tapUntilElement("s5-modal-close", as: "the Modal's close button", appears: "s5-main")
+    let mainA = try s5MainTaps(expect: "1")
+    s5Log("Q4 path A (popover closed, then Modal): main=\(mainA) modalGone=\(s5Exists("s5-modal") ? 0 : 1)")
+
+    // 3. Again, but the Modal is closed from a button inside the popover, with the
+    //    popover still up: React unmounts the popover with the Modal.
+    try tapUntilElement("s5-open-modal", as: "the Modal's opener", appears: "s5-modal-open")
+    try tapUntilElement("s5-modal-open", as: "the popover's anchor in the Modal", appears: "s5-close-modal")
+    try pressUntil(
+      named: "the Pressable that closes the Modal from inside the popover",
+      waitingFor: "the Modal and the popover to go",
+      press: { attempt in
+        if attempt > 1 && !self.s5Exists("s5-close-modal") { return }
+        try self.required("s5-close-modal", as: "the close-Modal Pressable").fingerTap()
+      },
+      reading: { self.s5Exists("s5-close-modal") || self.s5Exists("s5-modal") ? "up" : "gone" }
+    ) { $0 == "gone" }
+    Thread.sleep(forTimeInterval: 1.0)
+    s5Shot("s5-ios-modal-closed-from-popover")
+    let mainB = try s5MainTaps(expect: "2")
+    let echo = s5Echo()
+    s5Log(
+      "Q4 path B (Modal closed under the popover): main=\(mainB) modal=\(echo["modal"] ?? "?") mopen=\(echo["mopen"] ?? "?") "
+        + "popovers=\(app.descendants(matching: .popover).count)")
+    XCTAssertEqual(mainA, "1", "after the popover then the Modal closed, the app's screen takes a real tap")
+    XCTAssertEqual(mainB, "2", "after the Modal closed under an open popover, the app's screen takes a real tap - nothing stranded")
+    XCTAssertEqual(app.descendants(matching: .popover).count, 0, "and no popover is left")
+  }
+
+  /// Tap the screen's own Pressable once and read its count: what a stranded Modal or
+  /// a leftover window would swallow.
+  private func s5MainTaps(expect: String) throws -> String {
+    let main = try required("s5-main", as: "the app screen's own Pressable")
+    main.fingerTap()
+    s5Wait(timeout: 5) { self.s5Echo()["main"] == expect }
+    return s5Echo()["main"] ?? "?"
+  }
+
   private func required(
     _ identifier: String,
     as what: String,

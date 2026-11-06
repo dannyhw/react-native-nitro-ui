@@ -410,7 +410,11 @@ export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
  * view (see the file header). A list here rather than a manifest key: it is a fact
  * about how the generated iOS component mounts, which only this file changes.
  */
-export const CONTENT_CHILDREN_VIEWS = ['HybridNitroUiBottomSheet'];
+// `HybridNitroUiPopoverProto` is the S5 spike's prototype (never merged).
+export const CONTENT_CHILDREN_VIEWS = [
+  'HybridNitroUiBottomSheet',
+  'HybridNitroUiPopoverProto',
+];
 
 /**
  * Give the generated iOS component view `mountChildComponentView:index:` and
