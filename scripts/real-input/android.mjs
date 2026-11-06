@@ -1245,14 +1245,19 @@ const CHECKS = {
       { pollMs: DUMP_POLL_MS }
     );
     t.log.checkEquals(
-      `a real tap on the row "${PICK}" of the split list reaches JS`,
+      // The pick and its own close, not the pick alone: this echo carries every event
+      // the control reports, so `close` follows `select` within the same frame, and an
+      // expectation that stops at the select is a race the reader usually loses. The
+      // plain trigger above can ask for the pick alone because its echo only carries
+      // picks.
+      `a real tap on the row "${PICK}" of the split list reaches JS and closes its own list`,
       await t.tapOptionUntilValue(
         PICK,
         ECHO.menuSplitEvents,
-        'action > open > close > open > select bravo',
+        'action > open > close > open > select bravo > close',
         'a pick from the split list to reach JS'
       ),
-      'action > open > close > open > select bravo'
+      'action > open > close > open > select bravo > close'
     );
     t.log.checkEquals(
       'a pick from the split list closes its own popup',
