@@ -2384,6 +2384,9 @@ final class RealInputTests: XCTestCase {
     let alpha = "Alpha"
     let bravo = "Bravo"
     let locked = "Locked row"
+    // The checkable row: a SwiftUI `Toggle` whose binding's setter is the pick, a
+    // different path from every `Button` row above (step 7 is for it).
+    let checkedRow = "Checked row"
 
     // 1. The announcement, before anything is presented: the popup is another
     //    window's tree once it is up, and the trigger is the only node worth reading.
@@ -2567,6 +2570,51 @@ final class RealInputTests: XCTestCase {
       try read(Echo.menuEvents),
       "select bravo > select alpha",
       "two picks should report two picks, in order, with no open/close between them"
+    )
+
+    // 7. The checked row. Its pick goes through the `Toggle` binding's setter
+    //    (`HybridNitroUiMenu.rowButton`), which the harness never reaches:
+    //    `nuiTestSelectRow` calls the model's pick directly. So a finger presses it here.
+    //    `tapOptionUntilValue` re-presses only while the row is still up, so a retry
+    //    cannot land a second pick; the echo below is what proves exactly one arrived.
+    try tapUntilOption(
+      "real-input-menu",
+      as: "the Menu trigger",
+      option: checkedRow,
+      waitingFor: "the real tap that reopens the menu for the checked row"
+    )
+    let toggle = optionRow(checkedRow)
+    print(
+      "real-input (ios): menu: checked row type=\(toggle.elementType.rawValue) "
+        + "value=\(String(describing: toggle.value)) selected=\(toggle.isSelected)"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: checkedRow,
+        echo: Echo.menuPick,
+        expected: "checked",
+        waitingFor: "the real tap on the row \"\(checkedRow)\""
+      ),
+      "checked",
+      "a real tap on a checked row should reach JS as that row's id - the Toggle's setter "
+        + "is the pick, and a setter that does nothing leaves the echo where it was"
+    )
+    let events = try read(Echo.menuEvents)
+    XCTAssertEqual(
+      events.components(separatedBy: " > ").filter { $0 == "select checked" }.count,
+      1,
+      "the checked row should report exactly one select, read \"\(events)\""
+    )
+    XCTAssertEqual(
+      events,
+      "select bravo > select alpha > select checked",
+      "and nothing else: no open/close on iOS (D32), no second pick from one tap"
+    )
+    waitUntilOptionGone(checkedRow, "the checked-row pick to take its menu down")
+    XCTAssertEqual(
+      optionLabels(containing: checkedRow),
+      0,
+      "a pick of the checked row should take its own menu down"
     )
   }
 

@@ -124,7 +124,7 @@ const meta = {
       control: false,
       table: { disable: true },
       description:
-        'The items, as data: `actions` (rows and submenus) then `sections` (a divider, a header, and its rows). No on-device control can type a tree, so the Playground picks one of five item lists from a chip.',
+        'The items, as data: `actions` (rows and submenus) then `sections` (a group with an optional header). A row can carry a `subtitle` and a `checked`. No on-device control can type a tree, so the Playground picks one of five item lists from a chip.',
     },
     variant: {
       control: { type: 'select' },
@@ -280,8 +280,8 @@ export const TriggerStyles: Story = {
  * The row vocabulary in one control: rows, a destructive row, a disabled row,
  * sections with and without a header, and a submenu.
  *
- * The submenu is the one row that differs by platform - nested on iOS, inline
- * under a divider on Android (D29) - and neither platform nests a submenu inside a
+ * The submenu is the one row that differs by platform - nested on iOS, inline as a
+ * group of its own on Android (D29) - and neither platform nests a submenu inside a
  * submenu.
  */
 export const ItemLists: Story = {
@@ -289,7 +289,7 @@ export const ItemLists: Story = {
     const [picked, setPicked] = useState('nothing yet');
     return (
       <Showcase>
-        <Row label="Sections and a divider-only group">
+        <Row label="Sections and an untitled group">
           <Menu
             title="File"
             group={GROUPS.sections}
@@ -315,8 +315,77 @@ export const ItemLists: Story = {
         </Row>
         <Note>
           Last pick: {picked}. A disabled row is drawn and announced as disabled
-          and reports nothing; the submenu nests on iOS and comes inline under a
-          divider on Android.
+          and reports nothing; the submenu nests on iOS and comes inline as a
+          group of its own on Android.
+        </Note>
+      </Showcase>
+    );
+  },
+};
+
+/**
+ * A row's second line and its check (E2): `subtitle` and `checked`.
+ *
+ * The checks are the story's own state - a menu has no value, so a pick reports the
+ * row's `id` and `onSelect` is where the app flips what the next `checked` says. iOS
+ * draws a check with `UIAction.state` and the subtitle under the title; Android draws
+ * a checked row selected, with a leading check, and the subtitle as supporting text.
+ */
+export const RowDetails: Story = {
+  render: function RowDetailsStory() {
+    const [layout, setLayout] = useState<'icons' | 'list'>('icons');
+    const [showHidden, setShowHidden] = useState(false);
+    const group = useMemo<MenuGroup>(
+      () => ({
+        actions: [
+          {
+            id: 'icons',
+            title: 'Icons',
+            subtitle: 'Large thumbnails',
+            checked: layout === 'icons',
+          },
+          {
+            id: 'list',
+            title: 'List',
+            subtitle: 'Names and dates',
+            checked: layout === 'list',
+          },
+        ],
+        sections: [
+          {
+            id: 'options',
+            title: 'Options',
+            items: [
+              { id: 'hidden', title: 'Show hidden files', checked: showHidden },
+              {
+                id: 'refresh',
+                title: 'Refresh',
+                subtitle: 'Updated a minute ago',
+              },
+            ],
+          },
+        ],
+      }),
+      [layout, showHidden]
+    );
+    const handleSelect = useCallback((id: string) => {
+      if (id === 'icons' || id === 'list') setLayout(id);
+      if (id === 'hidden') setShowHidden((current) => !current);
+    }, []);
+    return (
+      <Showcase>
+        <Row label="Checks and subtitles">
+          <Menu
+            title="View"
+            group={group}
+            onSelect={handleSelect}
+            testID="storybook-row-details"
+          />
+        </Row>
+        <Note>
+          Layout: {layout} - hidden files: {showHidden ? 'shown' : 'hidden'}. A
+          pick reports the row; the check is the app’s state, sent back as
+          `checked`.
         </Note>
       </Showcase>
     );

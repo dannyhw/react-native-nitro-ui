@@ -21,6 +21,7 @@ namespace margelo::nitro::nitroui { struct NitroUiMenuSize; }
 #include <optional>
 #include "JVariant_NullType_String.hpp"
 #include <NitroModules/JNull.hpp>
+#include "JVariant_Boolean_NullType.hpp"
 #include "JVariant_NullType_Double.hpp"
 #include <functional>
 #include "JFunc_void_std__string.hpp"

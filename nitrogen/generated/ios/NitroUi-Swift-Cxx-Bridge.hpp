@@ -571,6 +571,21 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return optional.value();
   }
   
+  // pragma MARK: std::optional<std::variant<bool, nitro::NullType>>
+  /**
+   * Specialized version of `std::optional<std::variant<bool, nitro::NullType>>`.
+   */
+  using std__optional_std__variant_bool__nitro__NullType__ = std::optional<std::variant<bool, nitro::NullType>>;
+  inline std::optional<std::variant<bool, nitro::NullType>> create_std__optional_std__variant_bool__nitro__NullType__(const std::variant<bool, nitro::NullType>& value) noexcept {
+    return std::optional<std::variant<bool, nitro::NullType>>(value);
+  }
+  inline bool has_value_std__optional_std__variant_bool__nitro__NullType__(const std::optional<std::variant<bool, nitro::NullType>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::variant<bool, nitro::NullType> get_std__optional_std__variant_bool__nitro__NullType__(const std::optional<std::variant<bool, nitro::NullType>>& optional) noexcept {
+    return optional.value();
+  }
+  
   // pragma MARK: std::vector<NitroUiMenuRow>
   /**
    * Specialized version of `std::vector<NitroUiMenuRow>`.

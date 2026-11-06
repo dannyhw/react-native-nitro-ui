@@ -1,0 +1,67 @@
+# Failure excerpt — real-input:android:--control:menu
+
+- Ran: 2026-11-05T21:15:04.126Z on code tree `79ec819354f6` at HEAD `653a38a` (branch `task/E2-merge`)
+- Command: `node scripts/real-input/android.mjs --control menu`
+- Result: fail, exit 1, 1163 ms
+- Load: start 26.20, end 26.20, median 26.20, max 26.20
+- Device: android / device `emulator-5574` / lease `E2merge-1kxry`
+- Full log: `task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log` (<store>/task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2merge-1kxry (still live)
+  |   G18merge-wc3ty           G18merge     both              pair-b
+  |   E2merge-1kxry            E2merge      both              pair-a
+gate: load
+  |   load1 at the moment of failure: 26.20 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: real-input:android:--control:menu
+gate: node scripts/real-input/android.mjs --control menu (cwd .)
+gate: code tree 79ec819354f6 at HEAD 653a38a0
+gate: git tree 80ec2bddccc7 with a DIRTY worktree (not reusable)
+gate: log task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log
+gate:       <store>/task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp f2545f63 at 653a38a0b2e0ca00d3ff466358945556454b0172, now 79ec8193 at 653a38a0b2e0ca00d3ff466358945556454b0172)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp f2545f63 at 653a38a0b2e0ca00d3ff466358945556454b0172, now 79ec8193 at 653a38a0b2e0ca00d3ff466358945556454b0172)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:menu FAIL in 1.2 s
+gate: recorded in .gates/task/E2-merge.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E2-merge/real-input+android+--control+menu-2026-11-05T21-15-02.851Z.log (5 probe(s))
+
+```

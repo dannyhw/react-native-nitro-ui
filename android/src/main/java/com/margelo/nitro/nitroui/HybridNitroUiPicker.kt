@@ -5,14 +5,15 @@ import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.ColorScheme
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
@@ -35,8 +36,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -212,6 +211,14 @@ internal class PickerModel : NitroUiModel() {
    */
   private var menuView: View? = null
 
+  /** The popup's semantics tree as last read, `drawn` notation, or `null` unread (E2). */
+  @Volatile private var drawn: String? = null
+
+  /** Record what the popup's semantics tree holds ([describeMenuSemantics]). */
+  fun noteMenuDrawn(tree: String) {
+    drawn = tree
+  }
+
   /** Guards the read that formats [readMenuReport] from the JS thread. */
   private val reportLock = Any()
 
@@ -367,7 +374,8 @@ internal class PickerModel : NitroUiModel() {
         } else {
           "-1,-1,-1,-1"
         } +
-        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount"
+        ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount" +
+        ";drawn=${drawn ?: "-1"}"
     }
   }
 
@@ -378,6 +386,7 @@ internal class PickerModel : NitroUiModel() {
     // content, so it goes back to closed like everything else.
     expanded = false
     clearMenuFrame()
+    drawn = null
     variant = "menu"
     label = null
     enabled = true
@@ -826,28 +835,33 @@ private class PickerHost(
           // tap, the system back gesture, and the composition going away.
           model.expanded = false
         },
-        modifier = Modifier.exposedDropdownSize(),
+        // Restyled as an Expressive menu (E2): the exposed dropdown has no Expressive
+        // replacement, so it keeps its box and anchor and takes the standalone group's
+        // shape and container colour. The call is 1.5's top-level extension - the
+        // scope's member overload is `HIDDEN` there - and it applies
+        // `exposedDropdownSize()` itself.
+        shape = MenuDefaults.standaloneGroupShape,
+        containerColor = MenuDefaults.groupStandardContainerColor,
       ) {
         // Everything this popup is, recorded for the tests that can only be answered
         // from inside it (H2b). Must be the first thing in the content: it reads
         // `LocalView`, which inside this lambda is the *popup's* view.
         MenuWitness(model)
         var listedRows = 0
+        val count = options.size
         options.forEachIndexed { index, text ->
           listedRows += 1
-          val isSelected = index == selectedIndex
-          DropdownMenuItem(
-            text = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+          // A real selected row (E2): Expressive's selectable row draws the selected
+          // container, shape and leading check - iOS's menu checks its selected row
+          // too - and says `Role.RadioButton` plus `selected` to TalkBack, which before
+          // E2 was a semantics-only flag on a plain row.
+          SelectableDropdownMenuItem(
+            selected = index == selectedIndex,
             onClick = { choose(index) },
+            text = { Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            shapes = MenuDefaults.itemShape(index, count),
+            selectedLeadingIcon = MenuLeadingCheck,
             enabled = enabled,
-            // The selected row says so to TalkBack. Material 1.4's
-            // `DropdownMenuItem` has no `selected` argument, and a check mark would
-            // be an affordance the iOS menu does not have, so it is semantics only
-            // (`docs/components/picker.md`).
-            modifier =
-              Modifier.semantics {
-                selected = isSelected
-              },
           )
         }
         // How many rows *this* menu composed, published after the composition rather
@@ -897,6 +911,11 @@ private class PickerHost(
             where[0] + view.width,
             where[1] + view.height,
           )
+          // The rows as the popup's semantics tree has them, once a harness has asked:
+          // what proves the selected row is selected, not only said to be (E2).
+          if (MenuDrawnWitness.wanted) {
+            describeMenuSemantics(view)?.let(model::noteMenuDrawn)
+          }
         }
       menuView.addOnLayoutChangeListener(listener)
       onDispose {
@@ -1343,5 +1362,8 @@ class HybridNitroUiPicker(
    * few integers, so it is safe on the JS thread and never waits for the UI thread
    * (core.md section 5).
    */
-  override fun nuiTestMenuReport(): String = model.readMenuReport()
+  override fun nuiTestMenuReport(): String {
+    MenuDrawnWitness.wanted = true
+    return model.readMenuReport()
+  }
 }

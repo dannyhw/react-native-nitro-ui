@@ -1,0 +1,202 @@
+# Failure excerpt — harness:android:Menu.harness%7CContextMenu
+
+- Ran: 2026-11-05T18:32:00.533Z on code tree `804f3892612e` at HEAD `ee3197e` (branch `task/E2-expressive-menus`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu.harness|ContextMenu`
+- Result: fail, exit 1, 87189 ms
+- Load: start 9.31, end 5.56, median 7.11, max 9.31
+- Device: android / device `emulator-5574` / lease `E2-urxpj`
+- Full log: `task/E2-expressive-menus/harness+android+Menu.harness+7CContextMenu-2026-11-05T18-32-00.017Z.log` (<store>/task/E2-expressive-menus/harness+android+Menu.harness+7CContextMenu-2026-11-05T18-32-00.017Z.log)
+- Scrubbed: 3 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● Console`
+- `● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once`
+- `expected 1 to be +0 // Object.is equality`
+- `● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)`
+- `expected '(:Reply,Copy,Pin~),(More:Archive,Mail…' to be '(:Pin@Keep on top+,Mute=),(Tools:Flag…' // Object.is equality`
+- `● ContextMenu · drop and recycle › comes back from the recycle pool with no previous owner and its interaction`
+- `expected '(:Reply,Copy,Pin~),(More:Archive,Mail…' to be '-1' // Object.is equality`
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · Expressive rows (E2) › takes subtitle and checked away in place, and a remount starts with neither`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-expressive-menus/harness+android+Menu.harness+7CContextMenu-2026-11-05T18-32-00.017Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2-urxpj (still live)
+  |   E2-urxpj                 E2           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.56 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 218 — the rest is in the full log above)
+
+```
+
+
+    console.log
+          · live before=0 after=0
+
+
+    console.log
+          · second owner: open=0;opens=0;closes=0;selects=0;configs=-1;cancels=0;rows=1;drawn=(:Reply,Copy,Pin~),(More:Archive,Mail),(Tools:Flag),(:Delete);title=-;box=379.4x120.0;contentIndex=1/2;interaction=-1;ax=0;a11yAction=none;radius=-1;press=-1;menu=-1;anchor=-1;live=0;arms=0;armed=0;copies=0;watchStray=0;seq=1;kids=second-target@12.2,12.2,355.4,96.0
+
+
+    console.log
+          · second owner ax=0 stale label box=none
+
+  ● ContextMenu · the gesture › opens on a hold, never presses the child, picks then closes, and the next tap presses once
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 437 |[39m     )[33m;[39m
+       [90m 438 |[39m     [90m// The cancel: the `Pressable` saw the touch begin and end, and never pressed.[39m
+      [31m[1m>[22m[39m[90m 439 |[39m     expect(count([32m'hold:press'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                     [31m[1m^[22m[39m
+       [90m 440 |[39m     expect(count([32m'hold:pressIn'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 441 |[39m     expect(count([32m'hold:pressOut'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 442 |[39m     [36mconst[39m open [33m=[39m [36mawait[39m reportWhen([32m'hold'[39m[33m,[39m (r) [33m=>[39m r[33m.[39mopen [33m===[39m [32m'1'[39m[33m,[39m [32m'open'[39m)[33m;[39m[0m
+
+  ● ContextMenu · the menu › carries subtitle and checked into the menu it builds (E2)
+
+    expected '(:Reply,Copy,Pin~),(More:Archive,Mail…' to be '(:Pin@Keep on top+,Mute=),(Tools:Flag…' // Object.is equality
+
+      [0m [90m 679 |[39m       )[33m;[39m
+       [90m 680 |[39m       console[33m.[39mlog([32m`    · drawn=${report.drawn}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 681 |[39m       expect(report[33m.[39mdrawn)[33m.[39mtoBe(
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 682 |[39m         [32m'(:Pin@Keep on top+,Mute=),(Tools:[scrubbed]@For later)'[39m
+       [90m 683 |[39m       )[33m;[39m
+       [90m 684 |[39m     }[0m
+
+  ● ContextMenu · drop and recycle › comes back from the recycle pool with no previous owner and its interaction
+
+    expected '(:Reply,Copy,Pin~),(More:Archive,Mail…' to be '-1' // Object.is equality
+
+      [0m [90m 1113 |[39m     expect(report[33m.[39mselects)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 1114 |[39m     expect(report[33m.[39mrows)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1115 |[39m     expect(report[33m.[39mdrawn)[33m.[39mtoBe([32m'-1'[39m)[33m;[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1116 |[39m     [36mif[39m ([33mIOS[39m) expect(report[33m.[39minteraction)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 1117 |[39m     [90m// And it still opens, for its own owner.[39m
+       [90m 1118 |[39m     [36mawait[39m openedBy([32m'second-target'[39m)[33m;[39m[0m
+
+FAIL __tests__/Menu.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      menu sizes (declared fallback 118.00x52.00): cfg-filled=92.57x48.00 cfg-tonal=92.57x48.00 cfg-outlined=92.57x48.00 cfg-text=68.95x48.00 cfg-elevated=92.57x48.00 cfg-size-small=57.90x48.00 cfg-size-large=108.57x50.29 corrections=7 measurements=14
+
+
+    console.log
+      trigger parity: menu=78.10x48.00 button=78.10x48.00 corrections=2
+
+
+    console.log
+      group is not in the key: 71.24x48.00 -> 71.24x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=80.76x48.00 long=145.90x48.00
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      open/close: ["events:open","events:close","events:open"]
+
+
+    console.log
+      disable-while-open: ["disable:open","disable:close"]
+
+
+    console.log
+      wide list: trigger 216 px, popup 380 px (144.8 dp), floor list 316 px, start 21 vs 0, trigger box 82.29x48.00
+
+
+    console.log
+      long header: popup 735 px (280.0 dp, cap 280 dp)
+
+
+    console.log
+      short list: popup 316 px = 120.4 dp (floor 112), trigger 172 px
+
+
+    console.log
+      untitled group: android drawn=(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)
+
+
+    console.log
+      drop-while-open: live 0 -> 1 -> 0
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: android drawn=(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)
+
+
+    console.log
+      hosted anchoring: gap=16 -> 0 px at anchor bottom 126 -> 441
+
+
+    console.log
+      hosted anchor move: anchor top 126 -> 132 px, window taken down
+
+
+    console.log
+      read back: variant=outlined size=large tint=-3655765 label=Open the actions
+
+
+    console.log
+      a11y tree: named=null fallback=null plain=null
+
+  ● Menu · Expressive rows (E2) › takes subtitle and checked away in place, and a remount starts with neither
+
+    Menu report for "e2-reset" never matched within 12000ms; last read {"expanded":true,"live":1,"anchor":[0,0,206,126],"menu":[21,142,337,1184],"rows":6,"drawn":"(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)"}.
+
+      [0m [90m 477 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 478 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 479 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 480 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 481 |[39m           [32m`last read ${seen}.`[39m
+       [90m 482 |[39m       )[33m;[39m[0m
+
+Test Suites: 2 failed, 2 total
+Tests:       4 failed, 39 passed, 43 total
+Snapshots:   0 total
+Time:        85.787 s
+Ran all test suites matching Menu.harness|ContextMenu.
+gate: harness:android:Menu.harness%7CContextMenu FAIL in 87.2 s
+gate: recorded in .gates/task/E2-expressive-menus.jsonl
+
+
+gate: appended the device context to task/E2-expressive-menus/harness+android+Menu.harness+7CContextMenu-2026-11-05T18-32-00.017Z.log (5 probe(s))
+
+```

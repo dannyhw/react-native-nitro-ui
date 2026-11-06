@@ -524,3 +524,16 @@ orchestrator adopted its recommendations; the owner may override any of them.
    Symbols vector), alongside iOS's `systemImage`; the library bundles no icon set. IconButton and icon-only group
    items build on it.
 3. Q8's other calls (SegmentedControl's new look, the Button size remap, LoadingIndicator as a Progress variant) stand.
+
+## D41 — Tooltip presents from its own window on iOS (2026-11-05)
+
+G18's review accepted both of Tooltip's departures from Q7's design:
+
+1. **iOS presents a Tooltip from its own window, not through D35's presentation chain.** UIKit lets a view
+   controller present only one thing at a time. A popover sitting in the app's chain made UIKit refuse the next React
+   Native `Modal`, and G18's red proof shows that. So D35 does not apply to Tooltip. BottomSheet carries the same
+   hazard under D35; it is in FOLLOWUPS.
+2. **On Android the tooltip follows its anchor when the anchor moves, as on iOS, instead of closing.** Any touch
+   outside closes it first, so following only matters for moves nobody touched for, such as the keyboard or data
+   loading.
+

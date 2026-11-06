@@ -165,3 +165,21 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - X19 review: `tabTarget` (`scripts/real-input/uiautomator.mjs`) has no unit test. Add a fixture where the label is narrower than the Pressable.
 - X19 review: Android can't detect a tab drawn but missing from `TABS` (iOS enumerates by testID). A filtered `--control` run still swipes through all 15 tabs to measure them.
 - X19: iOS TextField real-input "1 edits refused" failed once on tree `21a3e2b4` and passed on re-run. Track it as a possible flake.
+- `gate.mjs export --task <ID>` replaces the task's `gates.jsonl` with the current branch's lines only, so a merge branch's export drops the task branch's ledger (X18 and X19 had it restored by hand). Make export append per branch.
+- G17 review: move Android SearchField to material3 1.5's stateful `InputField` in a plain `Surface`, not `SearchBar`, which wraps the field in `DisableSoftKeyboard`. Keyboard props come with it.
+- G17 review: `SearchFieldStrings` reads `Resources.getSystem()` once per process, so it ignores an app's own language setting.
+- G17 review: the declared-fallback constants aren't checked against the native constants (the harness poisons the cache).
+- G17 review: Android `hasText` uses `derivedStateOf` without `remember`; there's no SearchField IME composition test on Android.
+- G18 review: iOS Tooltip's own window calls `makeKeyAndVisible`, which may close the keyboard beside a focused field. Measure it.
+- G18 review: VoiceOver focus doesn't return to the anchor when a Tooltip closes (`.screenChanged` with `nil`).
+- G18 review: close a Tooltip when its anchor leaves the visible window. Add Tooltip to the MaterialTheme theme-switch cases. Test a real outside tap on Android's plain tooltip.
+- G18 review: iOS builds a new hosting controller per presentation rather than reusing one.
+- Component docs (`docs/components/*.md`) still carry task IDs and D-refs.
+- E2 review: the iOS menu probe can't tell a `Toggle` row from a `Button` row (both `.off` when unchecked). Make it read the source.
+- E2 review: subtitle rendering is verified only on iOS 27. Check the oldest installable runtime.
+- E2: the check glyph is defined twice (Chip and the menu rows). Share one after E1 merges.
+- E1 review: no test goes red if SegmentedControl's `.selectableGroup()` is dropped (uiautomator can't see collection info).
+- E1 review: `ConnectedSegment` allocates a label style and the shape values on each recomposition; pass `color =` to `Text` and cache the shapes.
+- E1 review: try a 32 dp XS button visual inside a 48 dp layout (`minimumInteractiveComponentSize()` before `height(token)`).
+- E1 review: `ButtonShapesCache` and `ChipShapesCache` key only on the motion scheme; fragile if shape tokens become themeable.
+- E1 merge round: Menu's trigger shares the button, so re-measure `menu.md`'s sizes, the Menu Android fallback and `menu-android.png` on the combined tree with E2.

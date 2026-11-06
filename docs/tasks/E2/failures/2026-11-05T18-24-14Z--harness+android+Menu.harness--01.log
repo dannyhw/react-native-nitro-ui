@@ -1,0 +1,175 @@
+# Failure excerpt — harness:android:Menu.harness
+
+- Ran: 2026-11-05T18:24:14.800Z on code tree `710347cf60c8` at HEAD `ee3197e` (branch `task/E2-expressive-menus`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu.harness`
+- Result: fail, exit 1, 92720 ms
+- Load: start 6.01, end 5.17, median 5.53, max 6.60
+- Device: android / device `emulator-5574` / lease `E2-urxpj`
+- Full log: `task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log` (<store>/task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · inside a Host › comes down when its hosted child leaves the Host`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E2-urxpj (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18-uswhw                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.17 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 129 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:Menu.harness
+gate: node ../scripts/harness.mjs --harnessRunner android Menu.harness (cwd example)
+gate: code tree 710347cf60c8 at HEAD ee3197ed
+gate: git tree da982051417b with a DIRTY worktree (not reusable)
+gate: log task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log
+gate:       <store>/task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu.harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 710347cf60c8, 16 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.97/12.27 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      menu sizes (declared fallback 118.00x52.00): cfg-filled=92.57x48.00 cfg-tonal=92.57x48.00 cfg-outlined=92.57x48.00 cfg-text=68.95x48.00 cfg-elevated=92.57x48.00 cfg-size-small=57.90x48.00 cfg-size-large=108.57x50.29 corrections=7 measurements=14
+
+
+    console.log
+      trigger parity: menu=78.10x48.00 button=78.10x48.00 corrections=2
+
+
+    console.log
+      group is not in the key: 71.24x48.00 -> 71.24x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=80.76x48.00 long=145.90x48.00
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      open/close: ["events:open","events:close","events:open"]
+
+
+    console.log
+      disable-while-open: ["disable:open","disable:close"]
+
+
+    console.log
+      wide list: trigger 216 px, popup 380 px (144.8 dp), floor list 316 px, start 21 vs 0, trigger box 82.29x48.00
+
+
+    console.log
+      long header: popup 735 px (280.0 dp, cap 280 dp)
+
+
+    console.log
+      short list: popup 316 px = 120.4 dp (floor 112), trigger 172 px
+
+
+    console.log
+      untitled group: android drawn=(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)
+
+
+    console.log
+      drop-while-open: live 0 -> 1 -> 0
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: android drawn=(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)
+
+
+    console.log
+      e2 in place: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      e2 remount: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      hosted anchoring: gap=16 -> 0 px at anchor bottom 126 -> 441
+
+
+    console.log
+      hosted anchor move: anchor top 126 -> 132 px, window taken down
+
+
+    console.log
+      read back: variant=outlined size=large tint=-3655765 label=Open the actions
+
+
+    console.log
+      a11y tree: named=null fallback=null plain=null
+
+  ● Menu · inside a Host › comes down when its hosted child leaves the Host
+
+    Menu report for "hosted-removal" never matched within 12000ms; last read {"expanded":false,"live":0,"anchor":[0,0,245,126],"menu":[-1,-1,-1,-1],"rows":0,"drawn":null}.
+
+      [0m [90m 477 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 478 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 479 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 480 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 481 |[39m           [32m`last read ${seen}.`[39m
+       [90m 482 |[39m       )[33m;[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 42 passed, 43 total
+Snapshots:   0 total
+Time:        90.949 s
+Ran all test suites matching Menu.harness.
+gate: harness:android:Menu.harness FAIL in 92.7 s
+gate: recorded in .gates/task/E2-expressive-menus.jsonl
+
+
+gate: appended the device context to task/E2-expressive-menus/harness+android+Menu.harness-2026-11-05T18-24-14.167Z.log (5 probe(s))
+
+```

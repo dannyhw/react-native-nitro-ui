@@ -1,0 +1,693 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-05T19:29:17.285Z on code tree `aabd1795a598` at HEAD `bc5b7b5` (branch `merge/X19`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit null signal SIGTERM, 1416778 ms
+- Load: start 5.52, end 5.62, median 5.69, max 50.19
+- Device: android / device `emulator-5570` / lease `X19merge-ul5qi`
+- Full log: `merge/X19/real-input+android-2026-11-05T19-29-17.285Z.log` (<store>/merge/X19/real-input+android-2026-11-05T19-29-17.285Z.log)
+- Scrubbed: 40 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/merge/X19/real-input+android-2026-11-05T19-29-17.285Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X19merge-ul5qi (still live)
+  |   E1-uivzs                 E1           both              pair-a
+  |   X19merge-ul5qi           X19merge     both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.62 (the ledger line carries the samples across the whole run)
+gate: logcat (last 500 of 1122 lines)
+  | 11-05 19:45:17.121  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:122)
+  | 11-05 19:45:17.121  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+  | 11-05 19:45:17.121  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:408)
+  | 11-05 19:45:17.121  7910  7910 W BasicSecureTextField: 	at androidx.compose.material3.MaterialThemeKt.MaterialTheme(MaterialTheme.kt:107)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.material3.MaterialThemeKt.MaterialExpressiveTheme$lambda$0(MaterialTheme.kt:260)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.material3.MaterialThemeKt$$ExternalSyntheticLambda5.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:122)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:428)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.material3.MaterialThemeKt.MaterialExpressiveTheme(MaterialTheme.kt:259)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.margelo.nitro.nitroui.core.NitroComposeHostKt.NitroUiTheme(NitroComposeHost.kt:1483)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.margelo.nitro.nitroui.core.NitroComposeHost.Content(NitroComposeHost.kt:501)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.margelo.nitro.nitroui.core.NitroComposeHost.access$Content(NitroComposeHost.kt:104)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.margelo.nitro.nitroui.core.NitroComposeHost$ComposeContent.Content(NitroComposeHost.kt:523)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.AbstractComposeView.ensureCompositionCreated$lambda$0$0(ComposeView.android.kt:335)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.AbstractComposeView.$r8$lambda$haJlVCuyZDQPMe6uz0Clg0Uri0w(Unknown Source:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.AbstractComposeView$$ExternalSyntheticLambda0.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:122)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:408)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.CompositionLocalsKt.ProvideCommonCompositionLocals(CompositionLocals.kt:255)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.ComposeViewContext.ProvideCompositionLocals$lambda$4(ComposeViewContext.android.kt:518)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.ComposeViewContext$$ExternalSyntheticLambda4.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:122)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionLocalKt.CompositionLocalProvider(CompositionLocal.kt:408)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.ComposeViewContext.ProvideCompositionLocals$ui(ComposeViewContext.android.kt:490)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.setContent$lambda$0$1(Wrapper.android.kt:126)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.$r8$lambda$6M750dKfgrqZayQXx8RTdC0WEQA(Unknown Source:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition$$ExternalSyntheticLambda1.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:122)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.ComposableLambdaImpl.invoke(ComposableLambda.kt:52)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.internal.Expect_jvmKt.invokeComposable(Expect.jvmAndAndroid.kt:26)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.GapComposer.doCompose-aFTiNEg(GapComposer.kt:2643)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.GapComposer.composeContent--ZbOJvo$runtime(GapComposer.kt:2545)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionImpl.composeContent(Composition.kt:905)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.Recomposer.composeInitial$runtime(Recomposer.kt:1178)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionImpl.composeInitial(Composition.kt:735)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.runtime.CompositionImpl.setContent(Composition.kt:702)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.setContent$lambda$0(Wrapper.android.kt:123)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.AndroidComposeView.setOnReadyForComposition(AndroidComposeView.android.kt:2324)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.setContent(Wrapper.android.kt:105)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.onStateChanged(Wrapper.android.kt:155)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.lifecycle.LifecycleRegistry$ObserverWithState.dispatchEvent(LifecycleRegistry.jvm.kt:316)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.lifecycle.LifecycleRegistry.addObserver(LifecycleRegistry.jvm.kt:193)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition.setContent$lambda$0(Wrapper.android.kt:120)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.WrappedComposition$$ExternalSyntheticLambda2.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at androidx.compose.ui.platform.AndroidComposeView.onAttachedToWindow(AndroidComposeView.android.kt:2395)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.View.dispatchAttachedToWindow(View.java:22860)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.dispatchAttachedToWindow(ViewGroup.java:3492)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.dispatchAttachedToWindow(ViewGroup.java:3499)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.dispatchAttachedToWindow(ViewGroup.java:3499)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.dispatchAttachedToWindow(ViewGroup.java:3499)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.dispatchAttachedToWindow(ViewGroup.java:3499)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.addViewInner(ViewGroup.java:5299)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.addView(ViewGroup.java:5085)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.ViewGroup.addView(ViewGroup.java:5025)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.uimanager.ViewGroupManager.addView(ViewGroupManager.kt:29)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.uimanager.ViewGroupManager.addView(ViewGroupManager.kt:15)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.SurfaceMountingManager.addViewAt(SurfaceMountingManager.kt:369)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.mountitems.IntBufferBatchMountItem.execute(IntBufferBatchMountItem.kt:122)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.MountItemDispatcher.executeOrEnqueue(MountItemDispatcher.kt:379)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.MountItemDispatcher.dispatchMountItems$lambda$7$lambda$6(MountItemDispatcher.kt:269)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.MountItemDispatcher$$ExternalSyntheticLambda4.invoke(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.internal.tracing.PerformanceTracer.trace(PerformanceTracer.kt:46)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.internal.tracing.PerformanceTracer.trace(PerformanceTracer.kt:35)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.MountItemDispatcher.dispatchMountItems(MountItemDispatcher.kt:250)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.mounting.MountItemDispatcher.tryDispatchMountItems(MountItemDispatcher.kt:94)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.fabric.FabricUIManager$DispatchUIFrameCallback.doFrameGuarded(FabricUIManager.java:1660)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.uimanager.GuardedFrameCallback.doFrame(GuardedFrameCallback.kt:42)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.modules.core.ReactChoreographer.frameCallback$lambda$1(ReactChoreographer.kt:58)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.facebook.react.modules.core.ReactChoreographer$$ExternalSyntheticLambda0.doFrame(D8$$SyntheticClass:0)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1404)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.Choreographer$CallbackRecord.run(Choreographer.java:1415)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.Choreographer.doCallbacks(Choreographer.java:1015)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.Choreographer.doFrame(Choreographer.java:941)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.view.Choreographer$FrameDisplayEventReceiver.run(Choreographer.java:1389)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.os.Handler.handleCallback(Handler.java:959)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.os.Handler.dispatchMessage(Handler.java:100)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.os.Looper.loopOnce(Looper.java:232)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.os.Looper.loop(Looper.java:317)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at java.lang.reflect.Method.invoke(Native Method)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+  | 11-05 19:45:17.122  7910  7910 W BasicSecureTextField: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)
+  | 11-05 19:45:17.190  7910  7960 D EGL_emulation: app_time_stats: avg=13894.42ms min=13894.42ms max=13894.42ms count=1
+  | 11-05 19:45:18.684  7910  7960 D EGL_emulation: app_time_stats: avg=742.21ms min=4.35ms max=1480.06ms count=2
+  | 11-05 19:45:23.570  7910  7910 D InsetsController: show(ime(), fromIme=false)
+  | 11-05 19:45:23.573  7910  7910 I ImeTracker: nitroui.example:887f2537: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:45:23.574  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{54467c1 VFED..... .F....ID 0,0-933,63 aid=1073742966} flags=0 reason=SHOW_SOFT_INPUT_BY_INSETS_API
+  | 11-05 19:45:23.583  7910  7960 D EGL_emulation: app_time_stats: avg=272.11ms min=12.68ms max=4626.74ms count=18
+  | 11-05 19:45:23.600  7910  7910 I AssistStructure: Flattened final assist data: 6796 bytes, containing 1 windows, 54 views
+  | 11-05 19:45:23.617  7910  7910 I ImeTracker: nitroui.example:ee36ad5: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-05 19:45:23.621  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{54467c1 VFED..... .F...... 0,0-933,63 aid=1073742966} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-05 19:45:23.675  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:23.676  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:23.676  7910  7910 I ImeTracker: nitroui.example:ee36ad5: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:23.693  7910  7910 W InteractionJankMonitor: Initializing without READ_DEVICE_CONFIG permission. enabled=true, interval=1, missedFrameThreshold=3, frameTimeThreshold=64, package=nitroui.example
+  | 11-05 19:45:24.007  7910  7910 I ImeTracker: nitroui.example:887f2537: onShown
+  | 11-05 19:45:24.980  7910  7960 D EGL_emulation: app_time_stats: avg=52.16ms min=1.45ms max=508.20ms count=23
+  | 11-05 19:45:25.980  7910  7960 D EGL_emulation: app_time_stats: avg=499.97ms min=492.23ms max=507.71ms count=2
+  | 11-05 19:45:26.562  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f040035
+  | 11-05 19:45:26.998  7910  7960 D EGL_emulation: app_time_stats: avg=508.88ms min=508.41ms max=509.35ms count=2
+  | 11-05 19:45:28.495  7910  7960 D EGL_emulation: app_time_stats: avg=499.02ms min=496.01ms max=502.40ms count=3
+  | 11-05 19:45:28.647  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a3bc534
+  | 11-05 19:45:29.517  7910  7960 D EGL_emulation: app_time_stats: avg=511.11ms min=500.75ms max=521.47ms count=2
+  | 11-05 19:45:30.731  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eced1d0
+  | 11-05 19:45:31.009  7910  7960 D EGL_emulation: app_time_stats: avg=497.23ms min=492.74ms max=506.02ms count=3
+  | 11-05 19:45:32.515  7910  7960 D EGL_emulation: app_time_stats: avg=501.90ms min=495.13ms max=507.22ms count=3
+  | 11-05 19:45:32.801  7910  7910 D InsetsController: show(ime(), fromIme=false)
+  | 11-05 19:45:32.801  7910  7910 I ImeTracker: nitroui.example:380fc6f: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:45:32.802  7910  7910 I ImeTracker: nitroui.example:380fc6f: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:32.807  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:45:32.807  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:45:32.818  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:32.818  7910  7910 I ImeTracker: nitroui.example:85f359e8: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-05 19:45:32.818  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{dc9d6cd VFED..... .F....ID 0,0-933,63 aid=1073742965} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-05 19:45:32.843  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:32.847  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:32.847  7910  7910 I ImeTracker: nitroui.example:c2b85bd1: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:32.868  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:32.868  7910  7910 I ImeTracker: nitroui.example:85f359e8: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:33.093  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@db03a4a
+  | 11-05 19:45:33.658  7910  7960 D EGL_emulation: app_time_stats: avg=163.14ms min=16.38ms max=500.05ms count=7
+  | 11-05 19:45:34.258  7910  7910 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@<email>>
+  | 11-05 19:45:35.161  7910  7960 D EGL_emulation: app_time_stats: avg=501.07ms min=490.61ms max=506.36ms count=3
+  | 11-05 19:45:36.176  7910  7960 D EGL_emulation: app_time_stats: avg=507.34ms min=502.92ms max=511.76ms count=2
+  | 11-05 19:45:37.180  7910  7960 D EGL_emulation: app_time_stats: avg=502.11ms min=495.89ms max=508.32ms count=2
+  | 11-05 19:45:37.712  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ca8c55b
+  | 11-05 19:45:38.673  7910  7960 D EGL_emulation: app_time_stats: avg=497.40ms min=491.65ms max=507.60ms count=3
+  | 11-05 19:45:39.691  7910  7960 D EGL_emulation: app_time_stats: avg=508.89ms min=506.13ms max=511.66ms count=2
+  | 11-05 19:45:40.694  7910  7960 D EGL_emulation: app_time_stats: avg=501.60ms min=499.08ms max=504.12ms count=2
+  | 11-05 19:45:41.698  7910  7960 D EGL_emulation: app_time_stats: avg=501.86ms min=497.39ms max=506.33ms count=2
+  | 11-05 19:45:41.841  7910  7910 D InsetsController: show(ime(), fromIme=false)
+  | 11-05 19:45:41.841  7910  7910 I ImeTracker: nitroui.example:df63914f: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:45:41.841  7910  7910 I ImeTracker: nitroui.example:df63914f: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:41.849  7910  7910 I ImeTracker: nitroui.example:280cdd8a: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-05 19:45:41.850  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{32bb399 VFED..... .F....ID 0,0-933,63 aid=1073742964} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-05 19:45:41.850  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:41.865  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:41.873  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:41.873  7910  7910 I ImeTracker: nitroui.example:b6514a25: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:41.897  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:41.897  7910  7910 I ImeTracker: nitroui.example:9aa648e8: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:41.898  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:41.898  7910  7910 I ImeTracker: nitroui.example:280cdd8a: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:43.194  7910  7960 D EGL_emulation: app_time_stats: avg=149.54ms min=9.07ms max=504.56ms count=10
+  | 11-05 19:45:43.814  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 22MB AllocSpace bytes, 2(32KB) LOS objects, 19% free, 96MB/120MB, paused 158us,1.557ms total 156.522ms
+  | 11-05 19:45:44.213  7910  7960 D EGL_emulation: app_time_stats: avg=508.97ms min=500.94ms max=516.99ms count=2
+  | 11-05 19:45:44.762  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fa25251
+  | 11-05 19:45:45.713  7910  7960 D EGL_emulation: app_time_stats: avg=500.01ms min=493.22ms max=505.62ms count=3
+  | 11-05 19:45:46.733  7910  7960 D EGL_emulation: app_time_stats: avg=509.59ms min=495.80ms max=523.37ms count=2
+  | 11-05 19:45:46.958  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fdc68fd
+  | 11-05 19:45:48.224  7910  7960 D EGL_emulation: app_time_stats: avg=496.98ms min=493.46ms max=499.78ms count=3
+  | 11-05 19:45:49.063  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d6b731c
+  | 11-05 19:45:49.224  7910  7960 D EGL_emulation: app_time_stats: avg=500.00ms min=497.99ms max=502.02ms count=2
+  | 11-05 19:45:50.727  7910  7960 D EGL_emulation: app_time_stats: avg=501.04ms min=496.51ms max=504.20ms count=3
+  | 11-05 19:45:51.106  7910  7910 D InsetsController: show(ime(), fromIme=false)
+  | 11-05 19:45:51.106  7910  7910 I ImeTracker: nitroui.example:2bf575aa: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:45:51.106  7910  7910 I ImeTracker: nitroui.example:2bf575aa: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:51.109  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:51.112  7910  7910 I ImeTracker: nitroui.example:41cb8606: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-05 19:45:51.112  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{61f22f0 VFED..... .F....ID 0,0-933,63 aid=1073742963} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-05 19:45:51.123  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:51.126  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:51.126  7910  7910 I ImeTracker: nitroui.example:a5c743b7: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:51.148  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:51.148  7910  7910 I ImeTracker: nitroui.example:bbda3dd4: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:51.148  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:45:51.148  7910  7910 I ImeTracker: nitroui.example:41cb8606: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:52.126  7910  7960 D EGL_emulation: app_time_stats: avg=349.68ms min=12.64ms max=504.80ms count=4
+  | 11-05 19:45:53.126  7910  7960 D EGL_emulation: app_time_stats: avg=500.15ms min=498.46ms max=501.83ms count=2
+  | 11-05 19:45:54.129  7910  7960 D EGL_emulation: app_time_stats: avg=501.21ms min=488.83ms max=513.58ms count=2
+  | 11-05 19:45:55.139  7910  7960 D EGL_emulation: app_time_stats: avg=505.24ms min=501.10ms max=509.37ms count=2
+  | 11-05 19:45:56.021  7910  7910 D InsetsController: hide(ime(), fromIme=false)
+  | 11-05 19:45:56.023  7910  7910 I ImeTracker: nitroui.example:be44fa9d: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:45:56.028  7910  7910 I ImeTracker: nitroui.example:8502334c: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_REQUEST_HIDE_WITH_CONTROL fromUser false
+  | 11-05 19:45:56.039  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:45:56.039  7910  7910 D InsetsController: hide(ime(), fromIme=true)
+  | 11-05 19:45:56.039  7910  7910 I ImeTracker: nitroui.example:8502334c: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:45:56.143  7910  7960 D EGL_emulation: app_time_stats: avg=100.33ms min=5.83ms max=499.19ms count=10
+  | 11-05 19:45:56.337  7910  7910 I ImeTracker: nitroui.example:f6d04dea: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_ON_ANIMATION_STATE_CHANGED fromUser false
+  | 11-05 19:45:56.338  7910  7910 I ImeTracker: nitroui.example:be44fa9d: onHidden
+  | 11-05 19:46:02.527  7910  7960 D EGL_emulation: app_time_stats: avg=491.04ms min=12.96ms max=6182.85ms count=13
+  | 11-05 19:46:02.573  7910  7910 D InsetsController: show(ime(), fromIme=false)
+  | 11-05 19:46:02.573  7910  7910 I ImeTracker: nitroui.example:4d5ca81f: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:46:02.573  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{61f22f0 VFED..... .F....ID 0,0-933,63 aid=1073742963} flags=0 reason=SHOW_SOFT_INPUT_BY_INSETS_API
+  | 11-05 19:46:02.578  7910  7910 I ImeTracker: nitroui.example:f9e37fc2: onRequestShow at ORIGIN_CLIENT reason SHOW_SOFT_INPUT fromUser false
+  | 11-05 19:46:02.578  7910  7910 D InputMethodManager: showSoftInput() view=androidx.compose.ui.platform.AndroidComposeView{61f22f0 VFED..... .F....ID 0,0-933,63 aid=1073742963} flags=0 reason=SHOW_SOFT_INPUT
+  | 11-05 19:46:02.623  7910  7910 D InsetsController: show(ime(), fromIme=true)
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766758, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766780, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766802, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766824, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766839, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766854, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766869, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766884, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766899, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766914, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766929, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766951, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766973, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7766995, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7767010, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7767039, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7767054, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7767069, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.657  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7767084, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:02.658  7910 15215 V PerfettoTrigger: Triggering /system/bin/trigger_perfetto com.android.telemetry.interaction-jank-monitor-81
+  | 11-05 19:46:02.954  7910  7910 I ImeTracker: nitroui.example:f9e37fc2: onShown
+  | 11-05 19:46:03.589  7910  7960 D EGL_emulation: app_time_stats: avg=44.27ms min=12.09ms max=499.25ms count=24
+  | 11-05 19:46:04.589  7910  7960 D EGL_emulation: app_time_stats: avg=499.99ms min=499.56ms max=500.42ms count=2
+  | 11-05 19:46:04.994  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@13134ea
+  | 11-05 19:46:05.596  7910  7960 D EGL_emulation: app_time_stats: avg=503.41ms min=500.56ms max=506.26ms count=2
+  | 11-05 19:46:06.598  7910  7960 D EGL_emulation: app_time_stats: avg=500.92ms min=491.45ms max=510.39ms count=2
+  | 11-05 19:46:07.612  7910  7960 D EGL_emulation: app_time_stats: avg=506.44ms min=505.08ms max=507.79ms count=2
+  | 11-05 19:46:08.625  7910  7960 D EGL_emulation: app_time_stats: avg=506.46ms min=498.37ms max=514.55ms count=2
+  | 11-05 19:46:09.103  7910  7910 D InsetsController: hide(ime(), fromIme=false)
+  | 11-05 19:46:09.104  7910  7910 I ImeTracker: nitroui.example:ece36ed0: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_BY_INSETS_API fromUser false
+  | 11-05 19:46:09.105  7910  7910 I ImeTracker: nitroui.example:af9659f5: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_REQUEST_HIDE_WITH_CONTROL fromUser false
+  | 11-05 19:46:09.114  7910  7910 W RemoteInputConnectionImpl: requestCursorUpdates on inactive InputConnection
+  | 11-05 19:46:09.115  7910  7910 D InsetsController: hide(ime(), fromIme=true)
+  | 11-05 19:46:09.115  7910  7910 I ImeTracker: nitroui.example:af9659f5: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+  | 11-05 19:46:09.420  7910  7910 I ImeTracker: nitroui.example:8dd679e5: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_ON_ANIMATION_STATE_CHANGED fromUser false
+  | 11-05 19:46:09.421  7910  7910 I ImeTracker: nitroui.example:ece36ed0: onHidden
+  | 11-05 19:46:13.201  7910  7910 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@<email>>
+  | 11-05 19:46:15.782  7910  7960 D EGL_emulation: app_time_stats: avg=340.78ms min=9.60ms max=6355.92ms count=21
+  | 11-05 19:46:15.799  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e1852ac
+  | 11-05 19:46:16.789  7910  7960 D EGL_emulation: app_time_stats: avg=2.42ms min=1.03ms max=20.39ms count=61
+  | 11-05 19:46:18.749  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@887a96b
+  | 11-05 19:46:19.668  7910  7910 E FrameTracker: force finish cuj, time out: J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773045, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773060, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773089, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773104, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773119, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773134, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773149, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773164, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.668  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773179, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773194, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773209, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773224, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773246, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773268, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773283, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773305, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773320, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.669  7910  7910 W FrameTracker: Missed SF frame:PREDICTION_ERROR, 7773335, 0, CUJ=J<IME_INSETS_HIDE_ANIMATION::1@<email>>
+  | 11-05 19:46:19.670  7910 15215 V PerfettoTrigger: Not triggering com.android.telemetry.interaction-jank-monitor-81 - not enough time since last trigger
+  | 11-05 19:46:20.829  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dd11b36
+  | 11-05 19:46:22.965  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@541d29
+  | 11-05 19:46:22.968  7910  7960 D EGL_emulation: app_time_stats: avg=6163.82ms min=6163.82ms max=6163.82ms count=1
+  | 11-05 19:46:22.975  7910  7910 I ImeTracker: nitroui.example:2cadc73e: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT_CLOSE_CURRENT_SESSION fromUser false
+  | 11-05 19:46:24.550  7910  7960 D EGL_emulation: app_time_stats: avg=790.64ms min=9.25ms max=1572.03ms count=2
+  | 11-05 19:46:25.032  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7dc0bd1
+  | 11-05 19:46:27.081  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c558d4
+  | 11-05 19:46:29.084  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ad185b3
+  | 11-05 19:46:33.143  7910  7960 D EGL_emulation: app_time_stats: avg=477.38ms min=12.00ms max=8320.98ms count=18
+  | 11-05 19:46:33.307  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:46:33.307  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:46:34.743  7910  7960 D EGL_emulation: app_time_stats: avg=18.58ms min=1.10ms max=720.42ms count=50
+  | 11-05 19:46:35.764  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a547fa3
+  | 11-05 19:46:37.819  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@88719ef
+  | 11-05 19:46:40.513  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@414958a
+  | 11-05 19:46:42.547  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@408a1e1
+  | 11-05 19:46:44.592  7910  7960 D EGL_emulation: app_time_stats: avg=5724.32ms min=79.01ms max=11369.63ms count=2
+  | 11-05 19:46:44.594  7910  7960 D EGL_emulation: app_time_stats: avg=579.50ms min=13.00ms max=9589.17ms count=17
+  | 11-05 19:46:44.628  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3772466
+  | 11-05 19:46:46.992  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@18aae6d
+  | 11-05 19:46:50.993  7910  7960 D EGL_emulation: app_time_stats: avg=6398.40ms min=6398.40ms max=6398.40ms count=1
+  | 11-05 19:46:51.044  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@54d234f
+  | 11-05 19:46:52.489  7910  7960 D EGL_emulation: app_time_stats: avg=299.33ms min=53.52ms max=505.02ms count=5
+  | 11-05 19:46:53.379  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@858290d
+  | 11-05 19:46:53.991  7910  7960 D EGL_emulation: app_time_stats: avg=500.45ms min=492.24ms max=506.98ms count=3
+  | 11-05 19:46:54.992  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5617a81
+  | 11-05 19:46:54.998  7910  7960 D EGL_emulation: app_time_stats: avg=503.17ms min=502.26ms max=504.09ms count=2
+  | 11-05 19:46:55.425  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a7d081f
+  | 11-05 19:46:56.008  7910  7960 D EGL_emulation: app_time_stats: avg=28.07ms min=11.78ms max=429.64ms count=36
+  | 11-05 19:46:57.514  7910  7960 D EGL_emulation: app_time_stats: avg=39.62ms min=11.73ms max=509.30ms count=38
+  | 11-05 19:46:58.998  7910  7960 D EGL_emulation: app_time_stats: avg=494.49ms min=491.20ms max=500.18ms count=3
+  | 11-05 19:47:00.008  7910  7960 D EGL_emulation: app_time_stats: avg=505.01ms min=498.36ms max=511.66ms count=2
+  | 11-05 19:47:01.508  7910  7960 D EGL_emulation: app_time_stats: avg=500.07ms min=498.06ms max=501.81ms count=3
+  | 11-05 19:47:02.523  7910  7960 D EGL_emulation: app_time_stats: avg=507.19ms min=501.10ms max=513.29ms count=2
+  | 11-05 19:47:03.524  7910  7960 D EGL_emulation: app_time_stats: avg=500.68ms min=500.16ms max=501.21ms count=2
+  | 11-05 19:47:04.559  7910  7960 D EGL_emulation: app_time_stats: avg=19967.42ms min=19967.42ms max=19967.42ms count=1
+  | 11-05 19:47:04.561  7910  7960 D EGL_emulation: app_time_stats: avg=345.65ms min=38.27ms max=502.27ms count=3
+  | 11-05 19:47:06.022  7910  7960 D EGL_emulation: app_time_stats: avg=486.71ms min=462.51ms max=505.01ms count=3
+  | 11-05 19:47:06.958  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1deacb6
+  | 11-05 19:47:07.024  7910  7960 D EGL_emulation: app_time_stats: avg=78.68ms min=1.66ms max=505.88ms count=12
+  | 11-05 19:47:07.105  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@264c05
+  | 11-05 19:47:07.120  7910  7960 D EGL_emulation: app_time_stats: avg=2560.93ms min=2560.93ms max=2560.93ms count=1
+  | 11-05 19:47:07.123  7910  7910 I ImeTracker: nitroui.example:a54eb761: onRequestHide at ORIGIN_CLIENT reason HIDE_SOFT_INPUT fromUser false
+  | 11-05 19:47:07.124  7910  7910 I ImeTracker: nitroui.example:a54eb761: onFailed at PHASE_CLIENT_VIEW_SERVED
+  | 11-05 19:47:09.380  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@984eea1
+  | 11-05 19:47:13.402  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dce22b1
+  | 11-05 19:47:13.406  7910  7960 D EGL_emulation: app_time_stats: avg=1561.60ms min=1.26ms max=6235.03ms count=4
+  | 11-05 19:47:13.540  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:47:13.540  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:47:15.007  7910  7960 D EGL_emulation: app_time_stats: avg=31.47ms min=7.98ms max=767.05ms count=50
+  | 11-05 19:47:18.015  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bc292da
+  | 11-05 19:47:18.758  7910  7960 D EGL_emulation: app_time_stats: avg=220.60ms min=14.21ms max=3484.45ms count=17
+  | 11-05 19:47:19.004  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fb45e57
+  | 11-05 19:47:19.029  7910  7960 D EGL_emulation: app_time_stats: avg=2811.70ms min=67.75ms max=5555.64ms count=2
+  | 11-05 19:47:21.295  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@58ea0fd
+  | 11-05 19:47:21.423  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 4(80KB) LOS objects, 20% free, 95MB/119MB, paused 202us,1.679ms total 139.234ms
+  | 11-05 19:47:25.332  7910  7960 D EGL_emulation: app_time_stats: avg=1575.77ms min=9.95ms max=6259.76ms count=4
+  | 11-05 19:47:25.471  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:47:25.471  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:47:26.942  7910  7960 D EGL_emulation: app_time_stats: avg=31.47ms min=8.71ms max=769.33ms count=50
+  | 11-05 19:47:29.980  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@984b1a0
+  | 11-05 19:47:32.734  7910  7910 E unknown:ReactNative: Got DOWN touch before receiving UP or CANCEL from last gesture
+  | 11-05 19:47:32.747  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@451a4ef
+  | 11-05 19:47:32.776  7910  7960 D EGL_emulation: app_time_stats: avg=343.14ms min=14.60ms max=5569.90ms count=17
+  | 11-05 19:47:33.205  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2057b9b
+  | 11-05 19:47:33.228  7910  7960 D EGL_emulation: app_time_stats: avg=3947.78ms min=75.25ms max=7820.31ms count=2
+  | 11-05 19:47:37.835  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eae44bc
+  | 11-05 19:47:39.899  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2cb82bb
+  | 11-05 19:47:41.875  7910  7960 D EGL_emulation: app_time_stats: avg=2882.27ms min=13.87ms max=8617.17ms count=3
+  | 11-05 19:47:44.346  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d49e7bd
+  | 11-05 19:47:50.497  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c03b112
+  | 11-05 19:47:54.030  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3af1309
+  | 11-05 19:47:56.034  7910  7910 E unknown:ReactNative: Got DOWN touch before receiving UP or CANCEL from last gesture
+  | 11-05 19:47:56.045  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@78e696c
+  | 11-05 19:47:56.076  7910  7960 D EGL_emulation: app_time_stats: avg=301.35ms min=4.68ms max=13420.61ms count=47
+  | 11-05 19:48:00.213  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@57417a0
+  | 11-05 19:48:02.248  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@98042ef
+  | 11-05 19:48:04.224  7910  7960 D EGL_emulation: app_time_stats: avg=11174.46ms min=65.53ms max=22283.38ms count=2
+  | 11-05 19:48:04.242  7910  7960 D EGL_emulation: app_time_stats: avg=272.19ms min=12.20ms max=7686.20ms count=30
+  | 11-05 19:48:04.504  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@43aabe1
+  | 11-05 19:48:06.638  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d618abc
+  | 11-05 19:48:08.666  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ad28016
+  | 11-05 19:48:10.712  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b4b7ddd
+  | 11-05 19:48:12.732  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e9d6250
+  | 11-05 19:48:14.781  7910  7960 D EGL_emulation: app_time_stats: avg=3519.04ms min=12.95ms max=10223.97ms count=3
+  | 11-05 19:48:14.906  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:48:14.906  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:48:16.389  7910  7960 D EGL_emulation: app_time_stats: avg=17.59ms min=1.18ms max=767.98ms count=50
+  | 11-05 19:48:17.365  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1441efa
+  | 11-05 19:48:22.244  7910  7960 D EGL_emulation: app_time_stats: avg=344.40ms min=14.24ms max=5588.68ms count=17
+  | 11-05 19:48:22.280  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@476bc8b
+  | 11-05 19:48:22.631  7910  7960 D EGL_emulation: app_time_stats: avg=2616.42ms min=45.04ms max=7754.57ms count=3
+  | 11-05 19:48:26.157  7910  7960 D EGL_emulation: app_time_stats: avg=126.20ms min=13.95ms max=3416.45ms count=31
+  | 11-05 19:48:26.194  7910  7960 D EGL_emulation: app_time_stats: avg=445.38ms min=15.40ms max=3434.71ms count=8
+  | 11-05 19:48:26.259  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a6cc510
+  | 11-05 19:48:29.891  7910  7960 D EGL_emulation: app_time_stats: avg=233.37ms min=13.02ms max=3484.61ms count=16
+  | 11-05 19:48:30.154  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ea29d0b
+  | 11-05 19:48:30.176  7910  7960 D EGL_emulation: app_time_stats: avg=1991.32ms min=249.42ms max=3733.21ms count=2
+  | 11-05 19:48:32.417  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6c9e03d
+  | 11-05 19:48:34.478  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b26a830
+  | 11-05 19:48:36.585  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8cb4cbf
+  | 11-05 19:48:41.546  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@53e43ec
+  | 11-05 19:48:43.711  7910  7960 D EGL_emulation: app_time_stats: avg=4511.45ms min=12.98ms max=13504.74ms count=3
+  | 11-05 19:48:45.236  7910  7960 D EGL_emulation: app_time_stats: avg=506.26ms min=1.67ms max=1498.17ms count=3
+  | 11-05 19:48:45.819  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5f80d34
+  | 11-05 19:48:47.848  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bb34cce
+  | 11-05 19:48:49.928  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@80b11f5
+  | 11-05 19:48:52.011  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b65e548
+  | 11-05 19:48:56.145  7910  7960 D EGL_emulation: app_time_stats: avg=592.37ms min=1.30ms max=10623.68ms count=18
+  | 11-05 19:48:56.349  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 22MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 97MB/121MB, paused 299us,2.018ms total 160.719ms
+  | 11-05 19:48:58.547  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a608d36
+  | 11-05 19:49:00.633  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f8f6d7d
+  | 11-05 19:49:02.680  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8a29670
+  | 11-05 19:49:06.730  7910  7960 D EGL_emulation: app_time_stats: avg=206.70ms min=1.72ms max=9724.31ms count=51
+  | 11-05 19:49:06.818  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4a3c5d7
+  | 11-05 19:49:09.129  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9c4c119
+  | 11-05 19:49:11.248  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d052ebc
+  | 11-05 19:49:15.349  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8f86325
+  | 11-05 19:49:17.371  7910  7960 D EGL_emulation: app_time_stats: avg=200.76ms min=8.90ms max=9782.30ms count=53
+  | 11-05 19:49:17.420  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b8a804f
+  | 11-05 19:49:19.764  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@7b72c5b
+  | 11-05 19:49:26.493  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@45ada7a
+  | 11-05 19:49:28.529  7910  7960 D EGL_emulation: app_time_stats: avg=212.27ms min=1.39ms max=10306.06ms count=52
+  | 11-05 19:49:28.595  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@19e03e7
+  | 11-05 19:49:30.980  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bb9e7e2
+  | 11-05 19:49:35.613  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e68fb53
+  | 11-05 19:49:39.661  7910  7960 D EGL_emulation: app_time_stats: avg=210.03ms min=9.08ms max=10271.93ms count=53
+  | 11-05 19:49:42.082  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@37abe02
+  | 11-05 19:49:46.188  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f2036f3
+  | 11-05 19:49:50.255  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8b4a12f
+  | 11-05 19:49:51.392  7910  7959 I nitroui.example: Waiting for a blocking GC ProfileSaver
+  | 11-05 19:49:51.466  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 25MB AllocSpace bytes, 0(0B) LOS objects, 20% free, 95MB/119MB, paused 159us,1.684ms total 146.410ms
+  | 11-05 19:49:51.466  7910  7959 I nitroui.example: WaitForGcToComplete blocked ProfileSaver on Background for 74.170ms
+  | 11-05 19:49:52.313  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4e1a507
+  | 11-05 19:49:54.632  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@5c07b82
+  | 11-05 19:50:01.214  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8d4ce1d
+  | 11-05 19:50:05.310  7910  7960 D EGL_emulation: app_time_stats: avg=483.94ms min=13.87ms max=24786.79ms count=53
+  | 11-05 19:50:05.366  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d3fa13e
+  | 11-05 19:50:09.811  7910  7960 D EGL_emulation: app_time_stats: avg=78.54ms min=1.54ms max=3619.78ms count=53
+  | 11-05 19:50:10.822  7910  7960 D EGL_emulation: app_time_stats: avg=16.56ms min=11.33ms max=22.09ms count=61
+  | 11-05 19:50:14.795  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f74fbb9
+  | 11-05 19:50:16.863  7910  7960 D EGL_emulation: app_time_stats: avg=3020.50ms min=16.93ms max=6024.07ms count=2
+  | 11-05 19:50:20.137  7910  7960 D EGL_emulation: app_time_stats: avg=61.75ms min=11.97ms max=2414.42ms count=53
+  | 11-05 19:50:21.683  7910  7960 D EGL_emulation: app_time_stats: avg=507.00ms min=4.46ms max=1510.62ms count=3
+  | 11-05 19:50:22.229  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f0cb11d
+  | 11-05 19:50:24.265  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c12e90
+  | 11-05 19:50:26.331  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3ef069f
+  | 11-05 19:50:28.365  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d326da1
+  | 11-05 19:50:30.481  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@24f64e4
+  | 11-05 19:50:32.615  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8204103
+  | 11-05 19:50:36.780  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e1686e0
+  | 11-05 19:50:38.775  7910  7960 D EGL_emulation: app_time_stats: avg=1005.36ms min=11.88ms max=16835.91ms count=17
+  | 11-05 19:50:38.813  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6b2f1df
+  | 11-05 19:50:48.727  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 96MB/120MB, paused 152us,1.561ms total 147.250ms
+  | 11-05 19:50:51.560  7910  7960 D EGL_emulation: app_time_stats: avg=241.21ms min=7.08ms max=11920.80ms count=53
+  | 11-05 19:50:56.034  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@449da4b
+  | 11-05 19:50:58.098  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8728196
+  | 11-05 19:51:00.118  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ca96d5d
+  | 11-05 19:51:02.177  7910  7960 D EGL_emulation: app_time_stats: avg=200.32ms min=11.33ms max=9754.56ms count=53
+  | 11-05 19:51:06.813  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@58d39ec
+  | 11-05 19:51:09.404  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ca01c6
+  | 11-05 19:51:13.494  7910  7960 D EGL_emulation: app_time_stats: avg=213.52ms min=13.25ms max=10455.28ms count=53
+  | 11-05 19:51:16.013  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@aaf2ef3
+  | 11-05 19:51:20.764  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@1984e10
+  | 11-05 19:51:22.841  7910  7960 D EGL_emulation: app_time_stats: avg=176.36ms min=12.97ms max=8485.78ms count=53
+  | 11-05 19:51:22.915  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@bb3eb3b
+  | 11-05 19:51:25.363  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4aa8746
+  | 11-05 19:51:31.703  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a245571
+  | 11-05 19:51:33.749  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@322aef4
+  | 11-05 19:51:35.778  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@6f78790
+  | 11-05 19:51:39.929  7910  7960 D EGL_emulation: app_time_stats: avg=17087.34ms min=17087.34ms max=17087.34ms count=1
+  | 11-05 19:51:42.380  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b4ab3b9
+  | 11-05 19:51:44.521  7910  7960 D EGL_emulation: app_time_stats: avg=86.63ms min=12.99ms max=3732.06ms count=53
+  | 11-05 19:51:44.528  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a4542e5
+  | 11-05 19:51:45.523  7910  7960 D EGL_emulation: app_time_stats: avg=2.14ms min=1.22ms max=6.91ms count=61
+  | 11-05 19:51:47.532  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ea88937
+  | 11-05 19:51:49.645  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@3ec6d72
+  | 11-05 19:51:51.770  7910  7960 D EGL_emulation: app_time_stats: avg=3108.42ms min=1.30ms max=6215.54ms count=2
+  | 11-05 19:51:53.349  7910  7960 D EGL_emulation: app_time_stats: avg=781.28ms min=3.18ms max=1559.37ms count=2
+  | 11-05 19:51:55.833  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@53a22c6
+  | 11-05 19:52:00.001  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a06a067
+  | 11-05 19:52:02.306  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@2d52e62
+  | 11-05 19:52:04.397  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b57a00c
+  | 11-05 19:52:05.606  7910  7916 I nitroui.example: Background concurrent mark compact GC freed 23MB AllocSpace bytes, 0(0B) LOS objects, 19% free, 96MB/120MB, paused 151us,1.508ms total 147.238ms
+  | 11-05 19:52:06.393  7910  7960 D EGL_emulation: app_time_stats: avg=724.57ms min=7.91ms max=12770.10ms count=18
+  | 11-05 19:52:06.455  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@844ed70
+  | 11-05 19:52:08.783  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ee77f91
+  | 11-05 19:52:11.313  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@e225f94
+  | 11-05 19:52:13.326  7910  7960 D EGL_emulation: app_time_stats: avg=3466.44ms min=131.18ms max=6801.70ms count=2
+  | 11-05 19:52:13.363  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c3aa42e
+  | 11-05 19:52:15.683  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@fce3a78
+  | 11-05 19:52:18.247  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9dba3a7
+  | 11-05 19:52:20.260  7910  7960 D EGL_emulation: app_time_stats: avg=3466.75ms min=131.03ms max=6802.48ms count=2
+  | 11-05 19:52:20.294  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f1fa469
+  | 11-05 19:52:22.637  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4b79476
+  | 11-05 19:52:25.178  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@cd31dbd
+  | 11-05 19:52:27.212  7910  7960 D EGL_emulation: app_time_stats: avg=3476.36ms min=130.91ms max=6821.81ms count=2
+  | 11-05 19:52:27.266  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@f67034f
+  | 11-05 19:52:27.593  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:52:27.593  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:52:29.644  7910  7960 D EGL_emulation: app_time_stats: avg=133.76ms min=0.87ms max=1822.64ms count=14
+  | 11-05 19:52:30.597  7910  7960 D EGL_emulation: app_time_stats: avg=846.16ms min=19.72ms max=2954.60ms count=4
+  | 11-05 19:52:30.656  7910  7960 D EGL_emulation: app_time_stats: avg=202.32ms min=14.85ms max=948.67ms count=5
+  | 11-05 19:52:30.806  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d8d64eb
+  | 11-05 19:52:30.807  7910  7960 D HWUI    : endAllActiveAnimators on 0xb400007dd99a2550 (UnprojectedRipple) with handle 0xb400007e28a528e0
+  | 11-05 19:52:34.960  7910  7960 D EGL_emulation: app_time_stats: avg=2181.34ms min=258.77ms max=4103.92ms count=2
+  | 11-05 19:52:34.995  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@94cd6f8
+  | 11-05 19:52:37.330  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@c7d5972
+  | 11-05 19:52:39.659  7910  7960 D EGL_emulation: app_time_stats: avg=2349.66ms min=132.07ms max=4567.24ms count=2
+  | 11-05 19:52:39.694  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8db69c
+  | 11-05 19:52:40.049  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:52:40.049  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:52:42.093  7910  7960 D EGL_emulation: app_time_stats: avg=145.15ms min=6.29ms max=1834.95ms count=14
+  | 11-05 19:52:43.046  7910  7960 D EGL_emulation: app_time_stats: avg=1128.88ms min=36.69ms max=2938.56ms count=3
+  | 11-05 19:52:43.105  7910  7960 D EGL_emulation: app_time_stats: avg=202.47ms min=15.26ms max=948.78ms count=5
+  | 11-05 19:52:43.255  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8d77ad8
+  | 11-05 19:52:43.256  7910  7960 D HWUI    : endAllActiveAnimators on 0xb400007dd9a63750 (UnprojectedRipple) with handle 0xb400007e28a8d7d0
+  | 11-05 19:52:45.420  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@34e85be
+  | 11-05 19:52:47.391  7910  7960 D EGL_emulation: app_time_stats: avg=2172.47ms min=261.83ms max=4083.11ms count=2
+  | 11-05 19:52:47.427  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@df3707
+  | 11-05 19:52:49.748  7910  7910 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ace74c9
+  | 11-05 19:52:52.094  7910  7960 D EGL_emulation: app_time_stats: avg=2351.40ms min=132.25ms max=4570.55ms count=2
+  | 11-05 19:52:52.477  7910  7910 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+  | 11-05 19:52:52.477  7910  7910 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: Error occurred, shutting down websocket connection: Websocket exception
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: java.io.EOFException
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.require(RealBufferedSource.kt:199)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okio.RealBufferedSource.readByte(RealBufferedSource.kt:209)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.readHeader(WebSocketReader.kt:119)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.WebSocketReader.processNextFrame(WebSocketReader.kt:102)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket.loopReader(RealWebSocket.kt:293)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.ws.RealWebSocket$connect$1.onResponse(RealWebSocket.kt:195)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+  | 11-05 19:52:54.121  7910  7966 E unknown:ReconnectingWebSocket: 	at java.lang.Thread.run(Thread.java:1012)
+  | 11-05 19:52:54.121  7910  7966 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8293/message?device=sdk_gphone64_arm64%20-%2015%20-%20API%2035&app=nitroui.example&clientid=BridgelessDevSupportManager", will silently retry
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: Cannot connect to Metro.
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: 
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: Try the following to fix the issue:
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: - Ensure that Metro is running and available on the same network
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: - Ensure that your device/emulator is connected to your machine and has USB debugging enabled - run 'adb devices' to see a list of connected devices
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: - If you're on a physical device connected to the same machine, run 'adb reverse tcp:8081 tcp:8081' to forward requests from your device
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: - If your device is on the same Wi-Fi network, set 'Debug server host & port for device' in 'Dev settings' to your machine's IP address and the port of the local dev server - e.g. 10.0.1.1:8081
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: 
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: URL: localhost:8293
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: 
+  | 11-05 19:52:54.125  7910  8007 W ReactNativeJS: Error: undefined
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 298 — the rest is in the full log above)
+
+```
+    ✓ the disabled picker is one node as well — expected 1, saw 1
+    ✓ and that node is the one that says it is disabled — expected false, saw false
+    · name node reports focusable=false - kept as evidence, not asserted
+
+  menu: real tap opens the menu under the trigger, a real tap on a row reports the pick, and a disabled row takes none
+    · "Real-input menu" occupies 42,944 → 294,1070
+    ✓ one node carries the trigger's name, so TalkBack announces it once — expected 1, saw 1
+    ✓ and that same node carries the title it paints as its value — expected Actions, saw Actions
+    ✓ the node announces the role of a list of choices — expected android.widget.Spinner, saw android.widget.Spinner
+    ✓ the Menu has reported no pick before a touch — expected -, saw -
+    ✓ and no event of any kind — expected none, saw none
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Real-input menu" occupies 42,944 → 294,1070
+    ✓ a real tap on the trigger opens the menu as a popup window — expected 1, saw 1
+    ✓ the popup carries all three rows in the accessibility tree — expected 3, saw 3
+    · row "Alpha": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Bravo": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    · row "Locked row": enabled=true clickable=false checkable=false selected=false class=android.widget.TextView
+    ✓ Back shuts the popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no pick — expected -, saw -
+    ✓ and the pair the platform does report: one open, one close — expected open > close, saw open > close
+    · "Real-input menu" occupies 42,944 → 294,1070
+    ✓ a real tap on the row "Bravo" reaches JS — expected bravo, saw bravo
+    ✓ a pick closes its own popup — expected 0, saw 0
+    ✓ one pick reports open, then select, then close - in that order — expected open > close > open > select bravo > close, saw open > close > open > select bravo > close
+    · "Real-input menu" occupies 42,944 → 294,1070
+    · the disabled row's tap left popup windows = 1
+    · that popup came down on the scrim tap; popup windows now 0
+    ✓ a tap on the disabled row reports no pick — expected bravo, saw bravo
+    · "Real-input menu" occupies 42,944 → 294,1070
+    ✓ the enabled row "Alpha", tapped the same way, does report a pick — expected alpha, saw alpha
+    ✓ so the line above measured a refusal, not a dead screen — expected 0, saw 0
+    ✓ the whole echo pairs every open with a close, in the order the gestures happened — expected open > close > open > select bravo > close > open > close > open > select alpha > close, saw open > close > open > select bravo > close > open > close > open > select alpha > close
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    ✓ no dialog has reported anything before a touch — expected none, saw none
+    ✓ no alert is up before a touch — expected 0, saw 0
+    ✓ a disabled action is a node that is not enabled — expected false, saw false
+    ✓ and an ordinary action is enabled — expected true, saw true
+    ✓ a real tap on a disabled action leaves the alert up — expected 1, saw 1
+    ✓ a real tap on an action reports its id, then the close - once each, in order — expected action:delete > presented:false, saw action:delete > presented:false
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✓ the sheet's disabled row is not enabled — expected false, saw false
+    ✓ a sheet's row reports its id, then the close; Back before it reported a close alone — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false
+
+  text-field: real keystrokes reach the field and JS sees the text, a refused edit reverts, maxLength holds, and a real tap focuses and blurs it
+    ✓ the typing field starts empty — expected typed:  (0), saw typed:  (0)
+    · "Capped field" occupies 73,1610 → 1006,1673
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    ✓ and the field holds the same five — expected abcde, saw abcde
+    · "Frozen field" occupies 73,1334 → 1006,1397
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    ✓ and each one is reverted: the field still shows what JS kept — expected frozen, saw frozen
+    · "Typing field" occupies 73,1057 → 1006,1120
+    ✓ real keystrokes reach the field, and React sees its text — expected typed: abc12 (5), saw typed: abc12 (5)
+    ✓ the field shows what React was told — expected abc12, saw abc12
+    · "Focus field" occupies 73,672 → 1006,735
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ Enter submits the text and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+
+  bottom-sheet: a real tap opens the sheet and presses a Pressable inside it, a drag or back or a tap outside closes a dismissible one and none of them closes a sticky one
+    ✓ no sheet has reported anything before a touch — expected none, saw none
+    ✓ the sheet's content is not mounted before it is presented — expected 0, saw 0
+    ✓ the presented sheet is the node named sheet-fit-sheet — expected true, saw true
+    ✓ a real tap inside the sheet presses its Pressable once — expected Pressed 1 times, saw Pressed 1 times
+    ✓ a real tap on the sheet's TextInput reaches JS as a whole press — expected Input touches: in 1 out 1, saw Input touches: in 1 out 1
+    ✓ a horizontal drag scrolls the list inside the sheet (Chip 1 moved left or out) — expected true, saw true
+    ✓ and leaves the sheet up — expected 1, saw 1
+    ✓ the Pressable still takes a real tap after the scroll — expected Pressed 2 times, saw Pressed 2 times
+    ✓ Back, a tap outside and a drag down each reported the close, then the dismissal — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss
+    ✓ Back leaves the sticky sheet up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ and so does a drag down — expected 1, saw 1
+    ✓ only the sticky sheet button closed it — expected press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss, saw press:1 > press:2 > presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss
+    · bottom-sheet: the two-detent header moved from y=1391 to y=321
+    ✓ a drag up on the header expands the sheet (its top moves up by more than a third) — expected true, saw true
+    ✓ Back from the expanded detent leaves the sheet up, half expanded — expected 1, saw 1
+    ✓ a drag up reported detent 1, Back stepped down to detent 0, and Back closed it — expected presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss, saw presented:false > dismiss > presented:false > dismiss > presented:false > dismiss > close > dismiss > detent:1 > detent:0 > presented:false > dismiss
+
+  chip: real tap toggles a filter chip, a refused toggle snaps back, an assist chip presses, and a disabled one takes neither
+    ✓ the filter chip starts unselected — expected off, saw off
+    ✓ the filter chip's own node starts not checked — expected off, saw off
+    · "Real-input chip" occupies 42,785 → 290,869
+    ✓ one real tap selects the filter chip (React renders "on") — expected on, saw on
+    ✓ the selected chip's node says it is checked — expected on, saw on
+    · "Real-input chip" occupies 42,785 → 337,869
+    ✓ a second real tap deselects it (React renders "off") — expected off, saw off
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the deselected chip's node stops saying it is checked — expected off, saw off
+    · "Real-input refusing chip" occupies 311,785 → 541,869
+    ✓ refused request 1 reaches onSelectedChange — expected 1, saw 1
+    ✓ refused request 1 asks for true (a chip that kept the refused selection would ask for false on the second tap) — expected true, saw true
+    ✓ the refused chip snaps back to unchecked after request 1 — expected off, saw off
+    · "Real-input refusing chip" occupies 311,785 → 541,869
+    ✓ refused request 2 reaches onSelectedChange — expected 2, saw 2
+    ✓ refused request 2 asks for true (a chip that kept the refused selection would ask for false on the second tap) — expected true, saw true
+    ✓ the refused chip snaps back to unchecked after request 2 — expected off, saw off
+    · "Real-input assist chip" occupies 42,927 → 231,1011
+    ✓ one real tap on the assist chip reaches onPress once — expected 1, saw 1
+    · "Real-input disabled chip" occupies 562,785 → 964,869
+    · "Real-input disabled assist chip" occupies 252,927 → 595,1011
+    ✓ the disabled filter chip announces itself not enabled — expected false, saw false
+    ✓ the disabled assist chip announces itself not enabled — expected false, saw false
+    ✓ its enabled twin announces itself enabled (so the reads above can say true) — expected true, saw true
+    ✓ a real tap on the disabled filter chip is refused — expected 2, saw 2
+    ✓ a real tap on the disabled assist chip is refused — expected 1, saw 1
+    · "Real-input assist chip" occupies 42,927 → 231,1011
+    ✓ the enabled assist chip still presses after the refused taps — expected at least 2, saw 2
+
+  checkbox: real tap checks the checkbox and JS sees the new value, a refused change snaps back, and a disabled one takes nothing
+    ✓ the checkbox starts unchecked (React renders "off") — expected off, saw off
+    ✓ the checkbox has reported no change before a touch — expected 0, saw 0
+    ✓ the counter the disabled checkbox reports into starts at zero, so a stray delivery is a number that moved rather than a callback nobody saw — expected 0, saw 0
+    ✓ the box publishes a toggleable state, and it says unchecked — expected off, saw off
+    · name node "Real-input checkbox": checkable=false checked=false enabled=true clickable=false class=android.view.View
+    · "Real-input checkbox" occupies 42,764 → 387,890
+    ✓ one real tap checks the checkbox (React renders "on") — expected on, saw on
+    ✓ the checked box's node says it is checked — expected on, saw on
+    ✓ one real tap reports one change — expected 1, saw 1
+    · "Real-input checkbox" occupies 42,764 → 387,890
+    ✓ a second real tap unchecks it (React renders "off") — expected off, saw off
+    ✓ the unchecked box reports it back — expected off, saw off
+    ✓ two taps report two changes, one per tap — expected 2, saw 2
+    · "Real-input refusing checkbox" occupies 42,900 → 365,1026
+    ✓ refused request 1 reaches onCheckedChange — expected 1, saw 1
+    ✓ refused request 1 asks for true — a checkbox that kept the refused change would ask for false on the second tap — expected true, saw true
+    ✓ the refused checkbox snaps back to unchecked after request 1 — expected off, saw off
+    · "Real-input refusing checkbox" occupies 42,900 → 365,1026
+    ✓ refused request 2 reaches onCheckedChange — expected 2, saw 2
+    ✓ refused request 2 asks for true — a checkbox that kept the refused change would ask for false on the second tap — expected true, saw true
+    ✓ the refused checkbox snaps back to unchecked after request 2 — expected off, saw off
+    · "Real-input disabled checkbox" occupies 42,1037 → 577,1163
+    · disabled box node: enabled=true checkable=false class=android.view.View — kept as evidence, not asserted, for the reason given above
+    ✓ a real tap on the disabled checkbox reports no change — expected 0, saw 0
+    ✓ and nothing reached the enabled checkbox either — expected 2, saw 2
+    ✓ the refused tap leaves the value echo where it was — expected off, saw off
+    · "Real-input checkbox" occupies 42,764 → 387,890
+    ✓ the enabled checkbox, tapped the same way, still answers — expected on, saw on
+
+  context-menu: a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing
+    ✓ a quick tap presses the child once and opens nothing (of 3) — expected 3, saw 3
+
+
+
+```
