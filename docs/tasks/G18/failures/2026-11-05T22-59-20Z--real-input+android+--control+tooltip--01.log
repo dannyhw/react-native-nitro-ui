@@ -1,0 +1,80 @@
+# Failure excerpt — real-input:android:--control:tooltip
+
+- Ran: 2026-11-05T22:59:20.248Z on code tree `b9f8b3800a0a` at HEAD `3b97a2f` (branch `task/G18-merge`)
+- Command: `node scripts/real-input/android.mjs --control tooltip`
+- Result: fail, exit 1, 133287 ms
+- Load: start 5.51, end 5.22, median 5.61, max 6.20
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-59-20.248Z.log` (<store>/task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-59-20.248Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ timed out waiting for Back to take the tooltip down`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-59-20.248Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (no longer live)
+  |   E2merge-1kxry            E2merge      both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.22 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: ---- end device context ----
+```
+
+## Last 37 log line(s)
+
+```
+real-input (android): emulator-5570 · nitroui_t01 · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    ✓ a real tap on the anchor of a closed tooltip presses the anchor once — expected star presses: 1, saw star presses: 1
+    ✓ and opens nothing, reports nothing — expected 0 up, log none, saw 0 up, log none
+    ✓ the tooltip shows its title and its action — expected 1 title, 1 action, saw 1 title, 1 action
+    ✓ a tap outside closes the tooltip and reports the close alone — expected presented:false, saw presented:false
+    ✗ timed out waiting for Back to take the tooltip down
+
+  a11y:switch: Switch a11y
+
+real-input (android): Error: real-input: no tab of the example is in the accessibility tree, so the "Switch" tab cannot be scrolled to.
+
+
+
+```

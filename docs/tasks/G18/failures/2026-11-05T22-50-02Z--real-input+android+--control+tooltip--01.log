@@ -1,0 +1,140 @@
+# Failure excerpt — real-input:android:--control:tooltip
+
+- Ran: 2026-11-05T22:50:02.565Z on code tree `507cec96e26c` at HEAD `3b97a2f` (branch `task/G18-merge`)
+- Command: `node scripts/real-input/android.mjs --control tooltip`
+- Result: fail, exit 1, 497482 ms
+- Load: start 9.69, end 6.63, median 7.27, max 10.59
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-50-02.565Z.log` (<store>/task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-50-02.565Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the real tap that opens the rich tooltip: 3 real taps opened nothing - either the taps were never delivered (FOLLOWUPS.md:58) or the control cannot present. The dump above is the screen a finger would have found.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/real-input+android+--control+tooltip-2026-11-05T22-50-02.565Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (no longer live)
+  |   E2merge-1kxry            E2merge      both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.58 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (lease G18merge-wc3ty is no longer live, so its device is not ours to ask)
+gate: ---- end device context ----
+```
+
+## Last 97 log line(s)
+
+```
+real-input (android): emulator-5570 · nitroui_t01 · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    ✓ a real tap on the anchor of a closed tooltip presses the anchor once — expected star presses: 1, saw star presses: 1
+    ✓ and opens nothing, reports nothing — expected 0 up, log none, saw 0 up, log none
+    · the real tap that opens the rich tooltip: tap 1/3 on its window left "0" - tapping again
+    · the real tap that opens the rich tooltip: tap 2/3 on its window left "0" - tapping again
+    · the real tap that opens the rich tooltip: tap 3/3 on its window left "0" - tapping again
+    ✗ the real tap that opens the rich tooltip: 3 real taps opened nothing - either the taps were never delivered (FOLLOWUPS.md:58) or the control cannot present. The dump above is the screen a finger would have found.
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][492,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2080][1038,2206]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2089][714,2215]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+tooltip: FAIL (no retries)
+    failed: the real tap that opens the rich tooltip: 3 real taps opened nothing - either the taps were never delivered (FOLLOWUPS.md:58) or the control cannot present. The dump above is the screen a finger would have found.
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 19/19 auxiliary checks passed
+
+
+
+```
