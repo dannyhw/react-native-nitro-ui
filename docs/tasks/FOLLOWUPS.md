@@ -189,3 +189,6 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E1 review: try a 32 dp XS button visual inside a 48 dp layout (`minimumInteractiveComponentSize()` before `height(token)`).
 - E1 review: `ButtonShapesCache` and `ChipShapesCache` key only on the motion scheme; fragile if shape tokens become themeable.
 - E1 merge round: Menu's trigger shares the button, so re-measure `menu.md`'s sizes, the Menu Android fallback and `menu-android.png` on the combined tree with E2.
+- E1 found: a bare `throw new AbortedCheck(...)` in an Android real-input check passes the whole run, because the runner (`scripts/real-input/android.mjs`, `instanceof AbortedCheck`) assumes `t.log.abort` already recorded the failure. Make the runner record an AbortedCheck the log never saw, or make the class private to `report.mjs`. A false green.
+- E1 fix round 2: `ConnectedRow` trusts `maxIntrinsicWidth` because each segment is one `maxLines = 1` `Text`; recheck it if a segment ever gains an icon.
+- E1 fix round 2: the SegmentedControl corner swap on press isn't animated (`AnimatedShapeState` is internal in material3 1.5).

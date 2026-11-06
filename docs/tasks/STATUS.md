@@ -93,7 +93,7 @@
 | X18 | Current platforms (D39): RN 0.88 floor, Compose 1.12 / material3 1.5, MaterialExpressiveTheme by default | Opus | Opus | merged (`740663f`, PR #34): RN 0.88 floor, material3 1.5, one `MaterialExpressiveTheme` root with `setMaterialTheme` choosing the motion scheme |
 | Q8 | Material 3 Expressive per component, new Expressive components, everything held back for old RN | Opus (on mac-1) | Opus | done (report merged; D40) |
 | X19 | Example-app navigation that scales (tabs >= 48 dp / 44 pt; scroll-into-view navigation) | Opus (on mac-1) | Opus | merged (`a87271c`, PR #35) |
-| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | fix round 2, the last (PR #39 @ `8297124e`; re-check: round-1 fixes hold; Android "Month" truncates because weighted segments are capped at an equal share) |
+| E1 | Material 3 Expressive pass 1: buttons (Button shapes/sizes + `shape`, SegmentedControl as connected toggle buttons, Chip) (D40) | Apex | Opus | merge round (PR #39; fix round 2 accepted at `4f7018e3`: segments sized to their labels, Month fits; the Menu re-measure is owed in this round) |
 | E2 | Material 3 Expressive pass 1: menus (Menu, ContextMenu, Picker rows; `subtitle`, `checked`) (D40) | Opus (on mac-1) | Opus | merged `9044521` (PR #38; merge gates green on code tree `5c6f2b0b`; the iOS 15 subtitle guard stays at 16: `UIAction.subtitle` is iOS 16+) |
 | S5 | Popover spike (React Native content; Q7 Appendix F, D38; GO = questions 1, 2, 5 on both platforms) | Opus (on mac-1) | Opus | running |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
