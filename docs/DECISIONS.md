@@ -335,6 +335,10 @@ as `bun`, not `root`, and Changesets then names tags `react-native-nitro-ui@0.1.
   kind of documented platform difference as Picker's iOS-only `wheel`).
 - **`primaryAction` ships iOS-only:** tap runs it, long-press opens the menu. It is ignored on
   Android and documented as iOS-only.
+  _E3 (2026-11-06) lifts the Android half of this: the rule stands for iOS, and Android now draws
+  Material 3's `SplitButtonLayout` for the same prop (leading half acts, trailing half opens). The
+  two rules that survive unchanged are that a press on the action never opens the list and that a
+  disabled control runs neither half. `docs/components/menu.md` keeps both idioms._
 - **`disabled` while open closes the menu**, as Picker and DatePicker do, and a harness test gates it.
 
 ## D30 — 0.4 ships without TextField (2026-10-28)

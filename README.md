@@ -23,7 +23,7 @@ the layout engine, and React never sees a native node.
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)      | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs             | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup` (M3 Expressive)    | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup`; `SplitButtonLayout` with a `primaryAction` (M3 Expressive) | 0.4.0 | [menu.md](docs/components/menu.md)                           |
 | `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 Expressive `DropdownMenuPopup` opened at the finger       | next  | [context-menu.md](docs/components/context-menu.md)           |
 | `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                               | 0.6.0 | [chip.md](docs/components/chip.md)                           |
 | `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                           | next  | [checkbox.md](docs/components/checkbox.md)                   |
@@ -376,7 +376,9 @@ keep in sync: `onSelect` reports the `id` of the row that was picked, and the
 items are data — never child views. The trigger is drawn like a `Button`, with
 `Button`'s variants and sizes. A row can carry a `subtitle` (a second line) and
 a `checked` (a check); a checked row is still just a row, so flip your own state
-when it is picked.
+when it is picked. Give it a `primaryAction` and the control carries both a
+default action and a list — one button with a long-press on iOS, a split button
+on Android.
 
 ```tsx name=menu
 export function FileActions() {
@@ -403,6 +405,10 @@ export function FileActions() {
     if (id === 'pin') setPinned((current) => !current);
   };
 
+  const handlePrimary = () => {
+    setLast('file itself');
+  };
+
   return (
     <>
       <Text>Last action: {last}</Text>
@@ -412,6 +418,7 @@ export function FileActions() {
         group={group}
         variant="tonal"
         size="medium"
+        primaryAction={handlePrimary}
         onSelect={handleSelect}
       />
     </>
@@ -421,9 +428,12 @@ export function FileActions() {
 
 `onOpen`/`onClose` exist but fire on Android only — SwiftUI's `Menu` has no
 expansion binding, so iOS never reports either one — and a pick fires
-`onSelect` before the `onClose` that follows it. `systemImage` and
-`primaryAction` (tap runs it, long-press opens the menu) are iOS-only; a
-submenu nests on iOS and appears inline as a group of its own on Android.
+`onSelect` before the `onClose` that follows it. `systemImage` is iOS-only, and
+a submenu nests on iOS and appears inline as a group of its own on Android.
+`primaryAction` works on both and is drawn each platform's way: on iOS the
+trigger stays one button, where a tap runs the action and a long-press opens
+the list; on Android it becomes Material 3's split button, so the left half
+runs the action and the chevron on the right opens the list.
 [menu.md](docs/components/menu.md) says which prop is which platform's.
 
 ### ContextMenu
@@ -1025,8 +1035,9 @@ The full list per control is in its doc; these are the ones that bite.
   and a `disabled` that arrives while the menu is open closes it on Android only —
   an iOS menu can stay up over a disabled trigger. Build app state
   on `onSelect`. A submenu nests on iOS and renders inline under a divider on
-  Android, and `primaryAction` (tap runs it, long-press opens) is iOS-only and
-  changes what a tap does there.
+  Android. `primaryAction` runs on both platforms, but a press on the action opens
+  the list on iOS's control and not on Android's, and on Android it makes the
+  trigger wider.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
   one except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and
   `Tooltip`. Any other child — one of those six, an RN view, text, another
