@@ -1,0 +1,87 @@
+# Failure excerpt — harness:android:Tooltip
+
+- Ran: 2026-11-03T14:38:51.052Z on code tree `d75445e563f4` at HEAD `6f84beb` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Tooltip`
+- Result: fail, exit 1, 59335 ms
+- Load: start 24.33, end 17.07, median 22.07, max 25.14
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log` (<store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · early checks (Q7 C9) › closes once when its anchor is moved by layout (check 2, Android; Picker’s rule)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 17.07 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: harness:android:Tooltip
+gate: node ../scripts/harness.mjs --harnessRunner android Tooltip (cwd example)
+gate: code tree d75445e563f4 at HEAD 6f84bebf
+gate: git tree e8cb7d034556 with a DIRTY worktree (not reusable)
+gate: log task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log
+gate:       <store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Tooltip
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree d75445e563f4, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 26.30/91.06 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · early checks (Q7 C9) › closes once when its anchor is moved by layout (check 2, Android; Picker’s rule)
+
+    "moved" never reached live=0 (closed by the move); its report is "presented=1;js=1;live=1;presentCount=1;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=0,475,616,354;anchorRect=0,840,105,105;hostRect=0,840,105,105;density=2.625;closes=-;drops=3;recycles=3;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 21 passed, 22 total
+Snapshots:   0 total
+Time:        56.506 s, estimated 127 s
+Ran all test suites matching Tooltip.
+gate: harness:android:Tooltip FAIL in 59.3 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+
+
+gate: appended the device context to task/G18-tooltip/harness+android+Tooltip-2026-11-03T14-38-49.643Z.log (5 probe(s))
+
+```

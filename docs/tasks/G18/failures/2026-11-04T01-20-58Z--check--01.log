@@ -1,0 +1,176 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-04T01:20:58.569Z on code tree `0b4960556a26` at HEAD `81004a6` (branch `task/G18-tooltip`)
+- Command: `bun run check`
+- Result: fail, exit 1, 107528 ms
+- Load: start 4.09, end 8.25, median 9.68, max 12.84
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/check-2026-11-04T01-20-58.165Z.log` (<store>/task/G18-tooltip/check-2026-11-04T01-20-58.165Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/device-ops.test.js`
+- `● what an emulator is started with › leaves the server alone when the pair names none`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: "none"`
+- `Received: ""`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2784 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/task-ready.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/lease-pool-cli.test.js (17.185 s)
+PASS scripts/__tests__/lease-metro-port.test.js (22.107 s)
+PASS scripts/__tests__/gate-check.test.js (30.972 s)
+PASS scripts/__tests__/gate-logs.test.js (50.948 s)
+PASS scripts/__tests__/gate.test.js (52.969 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (56.015 s)
+PASS scripts/__tests__/ci-workflows.test.js (71.306 s)
+PASS scripts/__tests__/bench-gate.test.js (102.217 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/device-ops.test.js
+  ● what an emulator is started with › leaves the server alone when the pair names none
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "none"
+    Received: ""
+
+      298 |     // the variable is absent, and `undefined` or an empty string would be a different bug.
+      299 |     await opsWithEmulator().bootEmulator({ avd: 'nitro-ui-a', port: 5574 });
+    > 300 |     expect(await recorded('emu.adb_server')).toBe('none');
+          |                                              ^
+      301 |   });
+      302 | });
+      303 |
+
+      at Object.toBe (scripts/__tests__/device-ops.test.js:300:46)
+
+
+Test Suites: 1 failed, 66 passed, 67 total
+Tests:       1 failed, 1712 passed, 1713 total
+Snapshots:   0 total
+Time:        102.599 s, estimated 168 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 107.5 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+
+```

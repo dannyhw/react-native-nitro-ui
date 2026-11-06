@@ -1,0 +1,103 @@
+# Failure excerpt — harness:ios:Tooltip
+
+- Ran: 2026-11-03T14:43:00.251Z on code tree `c6d93dd1d4f1` at HEAD `6f84beb` (branch `task/G18-tooltip`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Tooltip`
+- Result: fail, exit 1, 74198 ms
+- Load: start 8.54, end 8.02, median 7.16, max 8.54
+- Device: ios / device `331EF109-21DD-422B-AEF8-DFFFC6998DC3` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/harness+ios+Tooltip-2026-11-03T14-43-00.251Z.log` (<store>/task/G18-tooltip/harness+ios+Tooltip-2026-11-03T14-43-00.251Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once`
+- `● Tooltip · behaviour (Q7 C7) › updates the message in place while up`
+- `expected 69 to be greater than 69`
+- `● Tooltip · behaviour (Q7 C7) › closes and reports when a full-screen Modal takes its view out of the window`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/harness+ios+Tooltip-2026-11-03T14-43-00.251Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G16-qdjcd                G16          both              pair-a
+  |   G18-rcjjt                G18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Tooltip
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree c6d93dd1d4f1, 14 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.54/45.34 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-tooltip/harness+ios+Tooltip-2026-11-03T14-43-00.251Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator iPhone Air...
+HARNESS Runner ios ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once
+
+    "refused" never reached presented a second time after the refused close; its report is "presented=1;js=1;live=0;presentCount=2;onScreen=0;anchorW=40.0;anchorH=40.0;touchable=0;kind=none;appTop=NitroUiTooltipController;topPresented=-;modalHosts=0;windows=1;drops=7;recycles=7"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › updates the message in place while up
+
+    expected 69 to be greater than 69
+
+      [0m [90m 700 |[39m     )[33m;[39m
+       [90m 701 |[39m     [90m// Resized in place: taller for the wrapped text, and still the one presentation.[39m
+      [31m[1m>[22m[39m[90m 702 |[39m     expect(afterHeight)[33m.[39mtoBeGreaterThan(beforeHeight)[33m;[39m
+       [90m     |[39m                                        [31m[1m^[22m[39m
+       [90m 703 |[39m     expect(after[33m.[39mpresentCount)[33m.[39mtoBe(before[33m.[39mpresentCount)[33m;[39m
+       [90m 704 |[39m     expect(reportOf([32m'live'[39m)[33m.[39mlive)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 705 |[39m   })[33m;[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › closes and reports when a full-screen Modal takes its view out of the window
+
+    "under-full-screen" never reached live=0 (closed with its window gone); its report is "presented=1;js=1;live=1;presentCount=1;onScreen=1;anchorW=40.0;anchorH=40.0;touchable=0;kind=popover;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;presenter=ownWindow;sourceIsAnchor=1;sourceRectIsBounds=1;permitted=up+down;arrow=down;contentW=267.0;contentH=97.0;anchorRect=40.0,200.0,40.0,40.0;popRect=10.0,90.0,267.0,97.0;contentId=under-full-screen-tooltip;appTop=-;topPresented=NitroUiTooltipController;modalHosts=0;windows=1;drops=22;recycles=22"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 19 passed, 22 total
+Snapshots:   0 total
+Time:        72.62 s
+Ran all test suites matching Tooltip.
+
+
+
+```

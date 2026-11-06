@@ -53,6 +53,8 @@
 #include "JHybridNitroUiTextFieldSpec.hpp"
 #include "JFunc_void_std__string_double.hpp"
 #include "views/JHybridNitroUiTextFieldStateUpdater.hpp"
+#include "JHybridNitroUiTooltipSpec.hpp"
+#include "views/JHybridNitroUiTooltipStateUpdater.hpp"
 #include "HybridNitroUiCore.hpp"
 #include <NitroModules/DefaultConstructableObject.hpp>
 
@@ -192,6 +194,14 @@ struct JHybridNitroUiContextMenuSpecImpl: public jni::JavaClass<JHybridNitroUiCo
     return javaPart->getJHybridNitroUiContextMenuSpec();
   }
 };
+struct JHybridNitroUiTooltipSpecImpl: public jni::JavaClass<JHybridNitroUiTooltipSpecImpl, JHybridNitroUiTooltipSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiTooltip;";
+  static std::shared_ptr<JHybridNitroUiTooltipSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiTooltipSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiTooltipSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiTooltipSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -236,6 +246,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiTextFieldSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiTextFieldStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiTooltipSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiTooltipStateUpdater::registerNatives();
 
   // Register Nitro Hybrid Objects
   HybridObjectRegistry::registerHybridObjectConstructor(
@@ -341,6 +353,12 @@ void registerAllNatives() {
     "NitroUiContextMenu",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiContextMenuSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiTooltip",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiTooltipSpecImpl::create();
     }
   );
 }

@@ -1,0 +1,72 @@
+# Failure excerpt — real-input:android:--control:tooltip
+
+- Ran: 2026-11-03T17:14:58.051Z on code tree `9cd2af8d319b` at HEAD `604e3b2` (branch `task/G18-tooltip`)
+- Command: `node scripts/real-input/android.mjs --control tooltip`
+- Result: fail, exit 1, 69829 ms
+- Load: start 6.53, end 4.52, median 4.58, max 6.53
+- Device: android / device `emulator-5570` / lease `G18-rcjjt`
+- Full log: `task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log` (<store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ timed out waiting for a tap outside to take the tooltip down`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18-rcjjt (still live)
+  |   G18-rcjjt                G18          both              pair-b
+  |   G16-w8ewe                G16          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.52 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 29 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: real-input:android:--control:tooltip
+gate: node scripts/real-input/android.mjs --control tooltip (cwd .)
+gate: code tree 9cd2af8d319b at HEAD 604e3b25
+gate: git tree 66879fbbd5ec with a DIRTY worktree (not reusable)
+gate: log task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log
+gate:       <store>/task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log
+real-input (android): emulator-5570 · nitroui_t01 · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    ✓ a real tap on the anchor of a closed tooltip presses the anchor once — expected star presses: 1, saw star presses: 1
+    ✓ and opens nothing, reports nothing — expected 0 up, log none, saw 0 up, log none
+    ✓ the tooltip shows its title and its action — expected 1 title, 1 action, saw 1 title, 1 action
+    ✗ timed out waiting for a tap outside to take the tooltip down
+
+  a11y:switch: Switch a11y
+
+real-input (android): Error: real-input: no "Switch" tab in the accessibility tree, so the screen this check needs cannot be reached.
+gate: real-input:android:--control:tooltip FAIL in 69.8 s
+gate: recorded in .gates/task/G18-tooltip.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G18-tooltip/real-input+android+--control+tooltip-2026-11-03T17-14-57.546Z.log (5 probe(s))
+
+```

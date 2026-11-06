@@ -13,7 +13,7 @@ import com.facebook.proguard.annotations.DoNotStrip
 
 
 /**
- * Represents the JavaScript callback `(value: boolean, eventCount: number) => void`.
+ * Represents the JavaScript callback `(presented: boolean, eventCount: number) => void`.
  * This can be either implemented in C++ (in which case it might be a callback coming from JS),
  * or in Kotlin/Java (in which case it is a native callback).
  */
@@ -27,11 +27,11 @@ fun interface Func_void_bool_double: (Boolean, Double) -> Unit {
    */
   @DoNotStrip
   @Keep
-  override fun invoke(value: Boolean, eventCount: Double): Unit
+  override fun invoke(presented: Boolean, eventCount: Double): Unit
 }
 
 /**
- * Represents the JavaScript callback `(value: boolean, eventCount: number) => void`.
+ * Represents the JavaScript callback `(presented: boolean, eventCount: number) => void`.
  * This is implemented in C++, via a `std::function<...>`.
  * The callback might be coming from JS.
  */
@@ -55,14 +55,14 @@ class Func_void_bool_double_cxx: Func_void_bool_double {
 
   @DoNotStrip
   @Keep
-  override fun invoke(value: Boolean, eventCount: Double): Unit
-    = invoke_cxx(value,eventCount)
+  override fun invoke(presented: Boolean, eventCount: Double): Unit
+    = invoke_cxx(presented,eventCount)
 
-  private external fun invoke_cxx(value: Boolean, eventCount: Double): Unit
+  private external fun invoke_cxx(presented: Boolean, eventCount: Double): Unit
 }
 
 /**
- * Represents the JavaScript callback `(value: boolean, eventCount: number) => void`.
+ * Represents the JavaScript callback `(presented: boolean, eventCount: number) => void`.
  * This is implemented in Java/Kotlin, via a `(Boolean, Double) -> Unit`.
  * The callback is always coming from native.
  */
@@ -72,7 +72,7 @@ class Func_void_bool_double_cxx: Func_void_bool_double {
 class Func_void_bool_double_java(private val function: (Boolean, Double) -> Unit): Func_void_bool_double {
   @DoNotStrip
   @Keep
-  override fun invoke(value: Boolean, eventCount: Double): Unit {
-    return this.function(value, eventCount)
+  override fun invoke(presented: Boolean, eventCount: Double): Unit {
+    return this.function(presented, eventCount)
   }
 }

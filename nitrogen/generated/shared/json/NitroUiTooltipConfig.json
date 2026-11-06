@@ -1,0 +1,19 @@
+{
+  "uiViewClassName": "NitroUiTooltip",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "presented": true,
+    "mostRecentEventCount": true,
+    "message": true,
+    "title": true,
+    "actions": true,
+    "placement": true,
+    "testID": true,
+    "nuiPerfId": true,
+    "onPresentedChange": true,
+    "onAction": true,
+    "hybridRef": true
+  }
+}

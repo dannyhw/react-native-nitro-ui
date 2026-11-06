@@ -173,6 +173,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiContextMenu"
       }
+    },
+    "NitroUiTooltip": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiTooltip"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiTooltip"
+      }
     }
   },
   "ignorePaths": [
