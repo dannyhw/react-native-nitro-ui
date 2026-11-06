@@ -138,7 +138,9 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G18: a popover in the app's chain made UIKit refuse the next RN `Modal` (Tooltip, measured); BottomSheet presents in the chain by D35 and was not measured for the same refusal.
 - G18: `scripts/__tests__/device-ops.test.js` "leaves the server alone when the pair names none" reads `ANDROID_ADB_SERVER_PORT` from the environment, so `check` run from a shell with the lease env sourced goes red.
 - G18: harness `console.log` output reaches no gate log, so numbers tests print (tooltip heights, recycle counts) are lost unless the test fails.
-- G18: Tooltip's Android real-input Back step was not shown red on its own: it shares `onDismissRequest` with the outside tap, whose mutation aborts the check first.
+- G18 merge: Android real input cannot see a non-focusable Material popup in its `uiautomator` dump (`focusable = false` aborted the tooltip check at its opening tap), so a popup that is not focusable has no real-input reading on Android.
+- G18 merge (review finding 4, not done): the iOS tooltip's `CADisplayLink` (`NitroUiTooltipAnchorTracker`) runs at the display's full rate while a popover is up, and `publishReport()` builds its string outside test runs too; the library has no test-run switch to skip it.
+- G18 merge: material3 1.5's `TooltipBox` keys the tooltip content on the anchor's position and composes it twice per presentation; Android Tooltip's readings now follow the popup (`state.isVisible`), and a material3 that changes either moves them again.
 - G18: a page-sheet `Modal` opened over an open iOS tooltip is unmeasured (expected: the tooltip stays above the sheet).
 - G18: `scripts/__tests__/conformance.test.js` "is complete for the ten controls today" now lists thirteen.
 - G16 ContextMenu bench arm (N = 200) not built: `bench: false`. Its mount is a `View` plus an empty 0 × 0 composition on Android and one interaction on iOS, so the arm would need its own bench screen and baseline cells; owed with the next bench pass.
