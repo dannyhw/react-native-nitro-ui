@@ -420,7 +420,11 @@ that list with VoiceOver and TalkBack remains a human pass.
 - **`systemImage` is iOS-only** on both the trigger and the rows, as it is on `Button`.
 - **`primaryAction` is drawn differently on each platform, and it is a size statement on
   one of them.** iOS keeps one button and a gesture per job; Android draws two containers
-  and is wider for it. Neither fires `onOpen` from the action half.
+  and is wider for it. Neither fires `onOpen` from the action half. What the iOS half does
+  show in the harness is the action itself: E3 measured that the synthesised touch reaches
+  SwiftUI's tap on a `Menu` built with `primaryAction:` — unlike a `Button`'s gesture
+  environment (G2) — so `Menu.harness.tsx` asserts the action fired there, while opening on
+  iOS stays G7b's real-input case.
 - The menu is the platform's, so its look is the platform's. Beyond `tintColor` there is
   no row styling, no per-row icon on Android, and no way to place the popup.
 - Button's `.buttonStyle` does **not** reach an iOS menu's rows — measured, no longer open. G7b's

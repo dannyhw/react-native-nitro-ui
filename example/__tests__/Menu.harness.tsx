@@ -2347,12 +2347,13 @@ describe('Menu · Split trigger (E3)', () => {
     expect(primaryLog).toEqual(['split:action']);
     expect(orderLog).toEqual(['action:split', 'open:split']);
 
-    // --- And the list hangs off *that* half, not off the whole control. This is the
-    // empirical half of where `popup()` is composed in `MenuSplitButton.kt`: a Compose
-    // `Popup` is positioned against the layout it is composed in, so the window's left
-    // edge has to be the trailing half's, not the control's (`lLeft`, well to its
-    // left). Removing the `Box` around the popup would move this by the leading half's
-    // width, which is a long way.
+    // --- And the list hangs off *that* half, not off the whole control: the window's left
+    // edge has to be the trailing half's, not the control's (`lLeft`, well to its left).
+    // E3 measured which of the two placements decides that - composing the list in the
+    // leading half's slot moved this window to 21 px against these 202, while moving the
+    // call out of the half's own wrapper `Box` and staying in this half's slot moved it
+    // nowhere (`docs/tasks/E3/mutations.json`). The slot anchors the list; the `Box` is
+    // `propagateMinConstraints` plumbing.
     const [mLeft, mTop] = edges(opened.menu, 'menu');
     expect(mLeft).toBeGreaterThanOrEqual(tLeft - 2);
     expect(mLeft).toBeLessThanOrEqual(tLeft + 2);
