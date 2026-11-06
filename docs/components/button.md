@@ -22,11 +22,12 @@ a child of a `<Host>` since 0.2.0 — `docs/components/host.md`.)
 | `title`              | `string`                                      | required | The label — and one of the props that decide the width.         |
 | `onPress`            | `(() => void) \| undefined`                   | —        | SwiftUI `Button(action:)` / Compose `onClick`. One per tap.     |
 | `variant`            | `'filled' \| 'tonal' \| 'outlined' \| 'text' \| 'elevated'` | `filled` | The style per platform — see the table below.       |
-| `size`               | `'small' \| 'medium' \| 'large'`              | `medium` | SwiftUI `.controlSize` / content padding + label typography.    |
+| `size`               | `'small' \| 'medium' \| 'large' \| 'xlarge' \| 'xxlarge'` | `medium` | SwiftUI `.controlSize` / a Material 3 container height.    |
 | `shape`              | `'round' \| 'square' \| null`                  | `round`  | iOS `.buttonBorderShape` / Compose `shapes = ButtonShapes`.     |
 | `disabled`           | `boolean \| undefined`                        | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.              |
 | `tintColor`          | `ColorValue \| undefined`                     | platform | SwiftUI `.tint()` / the variant's container or label colour.    |
-| `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android** (see Limits).         |
+| `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android** (see Android icons).  |
+| `androidIcon`        | `string \| undefined`                         | —        | Android leading drawable by resource name. **Ignored on iOS** (see Android icons). |
 | `style`              | `ViewStyle`                                   | —        | Overrides the measured box (see Sizing).                        |
 | `testID`             | `string \| undefined`                         | —        | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.    |
 | `accessibilityLabel` | `string \| undefined`                         | —        | Label of the control itself; falls back to `title`.             |
@@ -120,6 +121,55 @@ on a timer, a row of differently sized buttons and a 200-button list.
 Material's `outlined` and `text` containers are transparent by design, so the
 tint goes to the label there — the same trade the Switch's `tintColor` makes.
 
+## Android icons
+
+iOS draws `systemImage` from SF Symbols. Android has no system icon set, so you
+ship the icons you use and name them with `androidIcon`:
+
+```tsx
+<Button title="Share" systemImage="square.and.arrow.up" androidIcon="share" onPress={share} />
+```
+
+Each platform takes its own prop and ignores the other, so one Button reads the
+same on both without a `Platform.select`.
+
+1. Download the icon as an **Android vector drawable**, for example from Material
+   Symbols (Google Fonts → Icons → pick one → *Android*). You get an `.xml` file.
+   Material Symbols are Apache 2.0.
+2. **Bare React Native:** put it in `android/app/src/main/res/drawable/`, named
+   in lower case with underscores (`share.xml`), then rebuild the app. A JS reload
+   cannot add resources.
+3. `androidIcon` is the file name without `.xml`. `-` and `.` are accepted and
+   read as `_`, so `share-24px` finds `share_24px.xml` — but `aapt` will not
+   accept a file named with either, so the file has to be renamed anyway.
+4. The icon is tinted to the control's text colour and sized by the control, so
+   any 24 dp vector works. A multicolour drawable draws in one colour.
+
+**Expo (prebuild / CNG):** *(config plugin: see Follow-ups — the plugin is not in
+this build yet.)* Until it lands, copy the files into
+`android/app/src/main/res/drawable/` yourself in the same way a bare app does.
+Expo Go cannot load app resources, so use a development build.
+
+**A name that is not found draws no icon and leaves the Button exactly as if
+`androidIcon` were not set** — no slot is reserved and no padding changes, the
+same way iOS treats an SF Symbol name that does not exist. One warning is logged
+per name (`adb logcat -s NitroUi`), and a name that could never be a resource
+name (`Share Icon`, `24px`, an empty string) is reported from JavaScript in
+development, where you can still fix it.
+
+**If your release build shrinks resources** (`shrinkResources true`, or Expo's
+`enableShrinkResourcesInReleaseBuilds`), keep the icons. The shrinker cannot see
+names that arrive from JavaScript:
+
+```xml
+<!-- android/app/src/main/res/raw/keep.xml -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/share,@drawable/send" />
+```
+
+A `layer-list`, an adaptive icon or a shape with no intrinsic size is treated as
+not found for the same reason — it cannot be drawn at an icon's size — and says
+so once in the same log.
+
 ## Sizing
 
 Button is the library's first control whose size comes from its **props**, so it
@@ -127,12 +177,14 @@ owns the R3 verification of `docs/architecture/sizing.md` (D16):
 `example/__tests__/Button.harness.tsx` asserts the laid-out box against the
 control's own measurement after every `title` and `size` change.
 
-The sizing key is `variant|size|systemImage|title`
+The sizing key is `variant|size|systemImage|androidIcon|title`
 (`src/components/Button/Button.tsx`, passed as `nuiSizingKey` at
 `src/components/Button/Button.tsx`) — everything that moves the control's
 size, nothing that only repaints it (`disabled`, `tintColor`) and no environment
-inputs, which native folds in through the epoch. Free-form values come last so a
-`|` inside one cannot shift a fixed field.
+inputs, which native folds in through the epoch. Both icon props are in it: a
+glyph before the label makes the control wider, so two Buttons that differ only
+in the icon must not share a cached size. Free-form values are escaped, so a `|`
+inside one cannot forge a field boundary.
 
 Measured, with `title="Save"` and nothing overridden (iPhone Air / iOS 27 in pt;
 an API 35 emulator at 420 dpi, in dp):
@@ -161,6 +213,22 @@ which is SwiftUI's own behaviour. Measuring `height(scale.height)` rather than
 letting Material floor the box reproduces the token exactly (a 32.0 dp `small`)
 and takes the touch target down with the picture, so the ladder is what moves
 here and the 48 dp target is what stays.
+
+**The two tallest rungs.** `xlarge` and `xxlarge` are Material's own
+`LargeContainerHeight` (96 dp) and `ExtraLargeContainerHeight` (136 dp), so the
+ladder now has the five rungs the tokens publish and Material's XS–XL button row
+is this ladder under other names:
+
+| Material | XS | S | M | L | XL |
+| -------- | -- | - | - | - | -- |
+| `size`   | `small` | `medium` | `large` | `xlarge` | `xxlarge` |
+
+iOS has four usable `.controlSize` values against those five rungs, so the top two
+share one: `xlarge` and `xxlarge` both draw `.extraLarge` (iOS 17+) and `.large`
+before it. On an iOS version without `.extraLarge` the top three rungs are the
+same control, and only Android distinguishes all five. The boxes for the two new
+rungs are not in the table above, which was measured before they existed; the
+token heights are asserted in `android/src/test/.../NitroUiIconTest.kt`.
 
 Width is the title's, so the same control at the same size is a different width
 per label — measured at iOS M 61.0 / 76.7 / 92.7 and Android M 62.5 / 75.1 /
@@ -273,9 +341,9 @@ semantics node on Android.
   `.roundedRectangle(radius: 8)` — the nearest border shape SwiftUI offers — and
   no press morph, because a `ButtonBorderShape` is static. The `text` variant
   ignores `shape` on both platforms (see Corners).
-- `systemImage` is iOS-only: Android ignores it and the label stays the
-  `title` text. It is still in the sizing key on both platforms so the two
-  cannot drift apart when it is implemented.
+- `systemImage` is iOS-only and `androidIcon` is Android-only; each platform
+  ignores the other's prop, so a Button that wants a glyph on both writes both
+  names (see Android icons).
 - `elevated` and `filled` are the same control on iOS, and `outlined` is
   `.bordered` plus a stroke: iOS has five button styles but not these three
   Material roles (see the mapping above).
