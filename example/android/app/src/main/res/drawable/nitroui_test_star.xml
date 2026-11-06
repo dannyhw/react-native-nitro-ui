@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A test fixture, not app art: the drawable the `androidIcon` harness tests name
+  (`example/__tests__/Button.harness.tsx`, `IconButton.harness.tsx`).
+
+  Shape: Google's Material Symbols "star", which is Apache-2.0
+  (https://fonts.google.com/icons) — the same set `docs/components/button.md`
+  points app developers at, so the file a test loads is the kind of file an app
+  ships. Authored here at 24 dp with a solid black fill, which is what makes it
+  tintable: `NitroUiIconGlyph` recolours it with `ColorFilter.tint`, so a black
+  source is the only fill whose tint can be probed.
+
+  The name is `nitroui_test_`-prefixed for the same reason the example app's test
+  IDs are: a resource name is process-wide, and a fixture must not collide with a
+  name a real story wants.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="24"
+  android:viewportHeight="24"
+  android:tint="#FF000000">
+  <path
+    android:fillColor="#FF000000"
+    android:pathData="M12,17.27L18.18,21l-1.64,-7.03L22,9.24l-7.19,-0.61L12,2L9.19,8.63L2,9.24l5.46,4.73L5.82,21z" />
+</vector>

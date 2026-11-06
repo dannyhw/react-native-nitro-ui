@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The "resolves but cannot be an icon" case: a `<shape>` has no intrinsic size.
+
+  `loadIconBitmap` asks the drawable for `intrinsicWidth`/`intrinsicHeight` and
+  refuses anything non-positive, because rasterising a sizeless shape means
+  inventing a box, which would be a different picture per control and could not be
+  shared through the icon cache. Q9 Appendix C predicted a `layer-list` for this
+  branch; measured, a layer-list *does* have an intrinsic size (its children's) and
+  rasterises, so it is not the undrawable case — a shape is. With this name the
+  control draws no glyph, reserves no slot, and logs one warning.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+  android:shape="oval">
+  <solid android:color="#FF000000" />
+</shape>
