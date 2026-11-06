@@ -242,7 +242,8 @@ internal fun MenuSplitButton(
     remember(scale) {
       SplitButtonDefaults.trailingButtonContentPaddingFor(scale.height)
     }
-  val chevronSize: Dp = remember(scale) { SplitButtonDefaults.trailingButtonIconSizeFor(scale.height) }
+  val chevronSize: Dp =
+    remember(scale) { SplitButtonDefaults.trailingButtonIconSizeFor(scale.height) }
   val labelStyle = buttonLabelStyle(scale)
   // The chevron turns as Material's own split-button sample does: half a turn while the
   // list is up, on the theme's effects spec so the spring belongs to the motion scheme
@@ -277,7 +278,8 @@ internal fun MenuSplitButton(
   SplitButtonLayout(
     modifier = modifier.heightIn(min = scale.layoutHeight),
     leadingButton = {
-      val leadingModifier = halfModifier(model, spokenLabel, title, leading = true, enabled = enabled)
+      val leadingModifier =
+        halfModifier(model, spokenLabel, title, leading = true, enabled = enabled)
       val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
         // One line, tail-truncated, exactly as `NitroUiM3Button` draws its label: the
         // half's intrinsic width is the title's, and a caller who gives the control a
