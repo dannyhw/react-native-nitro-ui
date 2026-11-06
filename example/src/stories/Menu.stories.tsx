@@ -572,9 +572,9 @@ export const SplitTrigger: Story = {
           </Row>
         ))}
         <Note>
-          Plain trigger on the left, `primaryAction` on the right. On Android the
-          right-hand one is a split button, and wider; on iOS the pair is the same
-          box. Last events:{' '}
+          Plain trigger on the left, `primaryAction` on the right. On Android
+          the right-hand one is a split button, and wider; on iOS the pair is
+          the same box. Last events:{' '}
           {log.length > 0 ? log.join(' · ') : 'nothing yet'}.
         </Note>
       </Showcase>
