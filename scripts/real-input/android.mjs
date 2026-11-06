@@ -1141,28 +1141,47 @@ const CHECKS = {
     const SPLIT_ACTION = 'Real-input split menu';
     const SPLIT_LIST = 'More options';
     await t.requireControlOnScreen(SPLIT_ACTION);
-    const splitHalves = t.nodesNamed(SPLIT_ACTION);
-    const listHalves = t.nodesNamed(SPLIT_LIST);
+    const halves = t.splitTrigger(SPLIT_ACTION, SPLIT_LIST);
     t.log.checkEquals(
       'the action half is one node, named by the control it belongs to',
-      splitHalves.length,
+      halves.actions.length,
       1
     );
     t.log.checkEquals(
-      'the list half is one node too, named for the options it opens',
-      listHalves.length,
+      "the list half is one node in the action half's band, named for the options it opens",
+      halves.list.length,
       1
     );
-    const leading = /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (
-      splitHalves[0]
-    );
+    if (halves.list.length !== 1) {
+      t.log.abort(
+        `the split trigger gives ${String(halves.list.length)} list halves to the ` +
+          'band the action half is in, so a real tap has nothing to aim at - the ' +
+          'boxes printed above are the evidence'
+      );
+    }
+    const leading = halves.action;
     const trailing =
       /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (
-        listHalves[0]
+        halves.list[0]
       );
     t.log.note(
       `split halves: action ${t.boundsText(leading)} list ${t.boundsText(trailing)}`
     );
+    // Every later press re-reads the pair rather than reusing these boxes: a dump taken
+    // before a scroll or a popup aims a real finger at a box that no longer exists,
+    // which is the failure this step had.
+    const listHalf = () => {
+      const again = t.splitTrigger(SPLIT_ACTION, SPLIT_LIST);
+      if (again.list.length !== 1) {
+        t.log.abort(
+          `a fresh dump gives ${String(again.list.length)} list halves in the ` +
+            "action half's band, so the press has nothing to aim at"
+        );
+      }
+      return /** @type {import('./uiautomator.mjs').UiautomatorNode} */ (
+        again.list[0]
+      );
+    };
     // Two targets, not one target with a chevron painted on it: side by side, the same
     // band, and neither one a sliver a finger could miss.
     t.log.checkEquals(
@@ -1200,7 +1219,7 @@ const CHECKS = {
 
     // The list half: a window, and one open that Back answers with one close.
     await t.tapUntilUp(
-      () => t.requireControl(SPLIT_LIST),
+      listHalf,
       'a real tap on the list half of the split trigger',
       () => t.popupWindowCount(),
       { pollMs: DUMP_POLL_MS }
@@ -1220,7 +1239,7 @@ const CHECKS = {
     // And a row, pressed for real through the window that half opened - the pick that
     // `nuiTestSelectRow` only imitates, on the trigger whose other half is an action.
     await t.tapUntilUp(
-      () => t.requireControl(SPLIT_LIST),
+      listHalf,
       'a real tap that reopens the split list',
       () => t.popupWindowCount(),
       { pollMs: DUMP_POLL_MS }
@@ -6788,6 +6807,52 @@ function makeContext(harness, log) {
      */
     nodesNamed(description) {
       return findAllByDescription(harness.hierarchy(), description);
+    },
+
+    /**
+     * The two halves of one split trigger, read out of a single dump.
+     *
+     * A trailing half's name is written in the library (`MENU_MORE_OPTIONS_LABEL`), and
+     * the example's Menu screen mounts two split triggers, so that name is not a handle
+     * for one control: it belongs to both, and a search by name alone answers with
+     * whichever half composes higher on the page. That is how a check aimed at one
+     * control ends up pressing the other, and why a full-suite run can fail where a
+     * single-control run passed — the second split trigger is only in the tree once the
+     * screen has been scrolled to it. The halves of ONE control share a vertical band,
+     * so the band is what pairs them. Every node carrying the name is printed with its
+     * box, because a half whose box is wrong is exactly what those numbers show.
+     *
+     * @param {string} actionLabel the leading half's `accessibilityLabel`
+     * @param {string} listLabel the name the library gives every trailing half
+     */
+    splitTrigger(actionLabel, listLabel) {
+      const nodes = harness.hierarchy();
+      const actions = findAllByDescription(nodes, actionLabel);
+      const action = actions[0];
+      if (action == null) {
+        log.abort(
+          `no node named "${actionLabel}" in the accessibility tree - the split ` +
+            'trigger offers nothing a real tap could be aimed at'
+        );
+      }
+      const named = findAllByDescription(nodes, listLabel);
+      for (const node of named) {
+        log.note(
+          `"${listLabel}" at ${boundsText(node)} while "${actionLabel}" is at ` +
+            boundsText(action)
+        );
+      }
+      return {
+        actions,
+        action,
+        named,
+        list: named.filter(
+          (node) =>
+            node.bounds.y1 === action.bounds.y1 &&
+            node.bounds.y2 === action.bounds.y2 &&
+            node.bounds.x2 > action.bounds.x1
+        ),
+      };
     },
 
     /**
