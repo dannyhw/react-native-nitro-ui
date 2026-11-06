@@ -161,6 +161,11 @@ mutation expected to go red that did not, and the claim it then forced.
   killed run cost one re-run of `check`; it is not why that gate was red — `manifest:check`
   failed deterministically on every tree since the new source landed, because it was not yet
   in `etc/package-files.txt`.
+- **Two independent witnesses agree on the two halves.** The component reports them in
+  its own space (`leading 0,0,197,126`, `trailing 202,0,328,126`); real input finds the
+  same boxes from outside the app (`42,1986 → 239,2112` and `244,1986 → 370,2112`, the
+  same 5 px gap). `docs/components/menu.md` tabulates the first; the real-input gate reads
+  the second and presses both.
 - **A full-suite run caught what a filtered one could not.** The single-control
   `real-input:android:--control:menu` run passed while the split step was wrong, because
   the second split trigger is only in the dump once the screen has been scrolled to it.
