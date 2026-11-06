@@ -38,7 +38,13 @@ data class NitroUiMenuRow(
   val destructive: Boolean,
   @DoNotStrip
   @Keep
-  val systemImage: Variant_NullType_String?
+  val systemImage: Variant_NullType_String?,
+  @DoNotStrip
+  @Keep
+  val subtitle: Variant_NullType_String?,
+  @DoNotStrip
+  @Keep
+  val checked: Variant_Boolean_NullType?
 ) {
   /* primary constructor */
 
@@ -52,6 +58,8 @@ data class NitroUiMenuRow(
       && Objects.deepEquals(this.disabled, other.disabled)
       && Objects.deepEquals(this.destructive, other.destructive)
       && Objects.deepEquals(this.systemImage, other.systemImage)
+      && Objects.deepEquals(this.subtitle, other.subtitle)
+      && Objects.deepEquals(this.checked, other.checked)
   }
 
   override fun hashCode(): Int {
@@ -62,7 +70,9 @@ data class NitroUiMenuRow(
       parentId,
       disabled,
       destructive,
-      systemImage
+      systemImage,
+      subtitle,
+      checked
     ).contentDeepHashCode()
   }
 
@@ -74,8 +84,8 @@ data class NitroUiMenuRow(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Boolean, destructive: Boolean, systemImage: Variant_NullType_String?): NitroUiMenuRow {
-      return NitroUiMenuRow(id, kind, title, parentId, disabled, destructive, systemImage)
+    private fun fromCpp(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Boolean, destructive: Boolean, systemImage: Variant_NullType_String?, subtitle: Variant_NullType_String?, checked: Variant_Boolean_NullType?): NitroUiMenuRow {
+      return NitroUiMenuRow(id, kind, title, parentId, disabled, destructive, systemImage, subtitle, checked)
     }
   }
 }

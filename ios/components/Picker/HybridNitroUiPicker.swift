@@ -561,7 +561,7 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
   /// has no `expanded` to read about a SwiftUI menu at all. The `<Host>` that made this
   /// worth measuring is Android-only (D23), so no iOS test reads more than the shape.
   func nuiTestMenuReport() throws -> String {
-    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1;rows=-1"
+    return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1;rows=-1;drawn=-1"
   }
 
   private var model: PickerModel {

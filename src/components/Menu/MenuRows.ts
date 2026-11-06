@@ -28,13 +28,25 @@ export interface MenuAction {
   systemImage?: string | undefined;
   /** Disable this one row. Default: `false`. */
   disabled?: boolean | undefined;
+  /**
+   * A second, smaller line under the title: iOS `UIAction.subtitle`, Android the
+   * row's supporting text. `null` or absent draws none.
+   */
+  subtitle?: string | null | undefined;
+  /**
+   * Draw the row as a checkable one, with a check when `true`: iOS a menu toggle
+   * (`UIAction.state`), Android a selected row with a leading check. `null` or
+   * absent is a plain row. The menu still has no value: a pick reports the row's `id`
+   * through `onSelect`, and the app flips its own state.
+   */
+  checked?: boolean | null | undefined;
 }
 
 /**
  * A row that opens a further list.
  *
- * iOS nests it (a real submenu). Android renders its items inline under a divider,
- * because a second nested popup needs a second anchor and a second witness - the
+ * iOS nests it (a real submenu). Android renders its items inline, as a group of
+ * their own titled with the submenu's title, because a second nested popup needs a second anchor and a second witness - the
  * same kind of documented platform difference as Picker's iOS-only `wheel`
  * (DECISIONS D29). Depth stops here: a submenu cannot contain a submenu.
  */
@@ -50,13 +62,13 @@ export interface MenuSubmenu {
 }
 
 /**
- * A titled group of rows - a divider and a header on iOS, a divider and a
- * non-interactive header row on Android.
+ * A group of rows with an optional header: an inline section on iOS, a Material 3
+ * Expressive menu group on Android.
  */
 export interface MenuSection {
   /** Unique id for this menu. */
   id: string;
-  /** The group's header, or `undefined` for a group that is only a divider. */
+  /** The group's header, or `undefined` for a group with no header. */
   title?: string | undefined;
   /** The rows inside it. */
   items: MenuAction[];
@@ -104,6 +116,11 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: action.disabled === true,
       destructive: action.destructive === true,
       systemImage: action.systemImage ?? null,
+      subtitle:
+        action.subtitle == null || action.subtitle === ''
+          ? null
+          : action.subtitle,
+      checked: action.checked ?? null,
     });
   };
   const pushSubmenu = (row: MenuSubmenu): void => {
@@ -115,6 +132,8 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: false,
       destructive: false,
       systemImage: row.systemImage ?? null,
+      subtitle: null,
+      checked: null,
     });
     for (const item of row.items) pushAction(item, row.id);
   };
@@ -131,6 +150,8 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: false,
       destructive: false,
       systemImage: null,
+      subtitle: null,
+      checked: null,
     });
     for (const item of section.items) pushAction(item, section.id);
   }
@@ -156,7 +177,9 @@ function groupSignature(rows: readonly NitroUiMenuRow[]): string {
       row.parentId ?? '',
       row.disabled ? 'd' : '',
       row.destructive ? 'x' : '',
-      row.systemImage ?? ''
+      row.systemImage ?? '',
+      row.subtitle ?? '',
+      row.checked == null ? '' : row.checked ? 'c' : 'u'
     );
   }
   return parts.join(' ');

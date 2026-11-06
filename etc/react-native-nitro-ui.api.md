@@ -288,9 +288,11 @@ export function Menu(input: MenuProps): JSX.Element;
 
 // @public
 export interface MenuAction {
+    checked?: boolean | null | undefined;
     destructive?: boolean | undefined;
     disabled?: boolean | undefined;
     id: string;
+    subtitle?: string | null | undefined;
     systemImage?: string | undefined;
     title: string;
 }
