@@ -123,7 +123,9 @@ export class CheckLog {
   abort(message) {
     this.failures.push(message);
     console.log(`    ✗ ${message}`);
-    throw new AbortedCheck(message);
+    const error = new AbortedCheck(message);
+    RECORDED_ABORTS.set(error, this);
+    throw error;
   }
 
   get passed() {
@@ -135,8 +137,51 @@ export class CheckLog {
  * A check stopped because something it needs is not there at all (an element
  * that never appeared, a gesture that timed out). The reason is already on the
  * report, so the run moves on to the next control instead of losing it too.
+ *
+ * "Already on the report" is only true when {@link CheckLog.abort} threw it. A bare
+ * `throw new AbortedCheck(...)` from a check skips the log, and the runner that
+ * swallowed it to move on used to report that control as passed - E1 saw a PASS on
+ * a check that never ran (X20 item 1). So which log recorded an abort is kept here,
+ * and {@link runCheck} turns one no log recorded into a failure of the control.
  */
 export class AbortedCheck extends Error {}
+
+/**
+ * The aborts {@link CheckLog.abort} threw, and the log that recorded each. A
+ * `WeakMap` rather than a flag on the error: a flag is a public field, and a check
+ * that copied it onto its own `new AbortedCheck` would be the false green again.
+ *
+ * @type {WeakMap<AbortedCheck, CheckLog>}
+ */
+const RECORDED_ABORTS = new WeakMap();
+
+/**
+ * Runs one control's check against its log, and moves on when it aborts.
+ *
+ * The contract the runner relies on, in one place so a runner cannot get it
+ * wrong: an abort `log` itself recorded is a failure that is already printed, so
+ * the run carries on with the next control; an `AbortedCheck` that `log` never
+ * recorded (thrown bare, or by another log) is recorded here as a failure, because
+ * otherwise the control reads PASS with no assertion behind it; any other error is
+ * not a check result at all and ends the run.
+ *
+ * @param {CheckLog} log the control's log
+ * @param {() => unknown} fn the check
+ * @returns {Promise<void>}
+ */
+export async function runCheck(log, fn) {
+  try {
+    await fn();
+  } catch (error) {
+    if (!(error instanceof AbortedCheck)) throw error;
+    if (RECORDED_ABORTS.get(error) === log) return;
+    log.check(
+      `the check stopped with an abort its log never recorded, so nothing it ` +
+        `asserted can be trusted: ${error.message}`,
+      false
+    );
+  }
+}
 
 /**
  * The run's report, shared by both platforms so the two print the same shape.
