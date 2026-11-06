@@ -203,4 +203,4 @@ export function run(command, args, options = {}) {
 
 /* The report lives in `report.mjs` so a unit test can import it; re-exported here
  * because every caller has always spelled this module's name. */
-export { AbortedCheck, CheckLog, Suite } from './report.mjs';
+export { AbortedCheck, CheckLog, Suite, runCheck } from './report.mjs';

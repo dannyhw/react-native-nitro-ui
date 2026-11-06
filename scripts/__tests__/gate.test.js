@@ -51,6 +51,7 @@ import {
   renderGateTable,
   requiredGatesFor,
   resolveGate,
+  lookLeaseRefusal,
   summarizeGates,
   summarizeLoad,
   codeTreeDigest,
@@ -2738,3 +2739,96 @@ describeCli(
     }
   }
 );
+
+/**
+ * X20 item 3: a look-check simulator never runs the merge gates. Its lease exports
+ * `NITRO_UI_LEASE_IOS_RUNTIME`, and every gate that drives a device is refused on it, while the
+ * two that touch no device still run from that shell. Checked over every gate name `resolveGate`
+ * knows, so a gate added later is refused by default rather than by remembering this list.
+ */
+describe('a lease on an older iOS runtime', () => {
+  const LOOK = {
+    NITRO_UI_LEASE_ID: 'G20-ab12',
+    NITRO_UI_LEASE_IOS_RUNTIME: '26.5',
+  };
+  const DEVICE_GATES = [
+    'harness:ios',
+    'harness:android',
+    'harness:ios:ColdSizing',
+    'real-input:ios',
+    'real-input:android',
+    'smoke:expo',
+    'smoke:rn-cli',
+    'bench',
+  ];
+
+  it('refuses every gate that drives a device, naming the runtime and the way out', () => {
+    for (const name of DEVICE_GATES) {
+      const why = lookLeaseRefusal(LOOK, resolveGate(name));
+      expect(why).toContain('iOS 26.5 look-check simulator');
+      expect(why).toContain('G20-ab12');
+      expect(why).toContain('without --ios-runtime');
+    }
+  });
+
+  it('still runs check and smoke:pack, which touch no device', () => {
+    expect(lookLeaseRefusal(LOOK, resolveGate('check'))).toBeNull();
+    expect(lookLeaseRefusal(LOOK, resolveGate('smoke:pack'))).toBeNull();
+  });
+
+  it('refuses nothing on a default lease, or with no lease at all', () => {
+    for (const name of DEVICE_GATES) {
+      expect(
+        lookLeaseRefusal({ NITRO_UI_LEASE_ID: 'G6-1' }, resolveGate(name))
+      ).toBeNull();
+      expect(lookLeaseRefusal({}, resolveGate(name))).toBeNull();
+      expect(
+        lookLeaseRefusal({ NITRO_UI_LEASE_IOS_RUNTIME: ' ' }, resolveGate(name))
+      ).toBeNull();
+    }
+  });
+});
+
+/**
+ * X20 fix round 1: the refusal as `gate.mjs` runs it, not only the pure rule above. Deleting the
+ * `if (lookRefusal != null)` block in `runGate` left every case in this file green, because nothing
+ * here went through the CLI with a look-check lease in the environment.
+ *
+ * The throwaway checkout's `node` is the fake runner, so a refusal that went missing runs a stub
+ * and records a ledger line - which is the failure this case catches - and never a real harness or
+ * a device. The control half runs the same gate in the same checkout without the variable and must
+ * record a line, so "no line was written" cannot pass because the fixture never writes one.
+ */
+describeCli('gate.mjs refuses a device gate on a look-check lease', () => {
+  const cleanup = [];
+  afterAll(() => {
+    for (const dir of cleanup) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 1 before the run and writes no ledger line, where a default lease runs and records', () => {
+    const dir = makeCheckout({
+      'nitrogen/generated/ios/NitroUiAutolinking.swift': '// marker\n',
+    });
+    cleanup.push(dir);
+    const home = path.join(dir, 'state');
+    fs.mkdirSync(home, { recursive: true });
+    const lease = { NITRO_UI_HOME: home, NITRO_UI_LEASE_ID: 'G20-ab12' };
+
+    const refused = runCli(dir, ['harness:ios'], {
+      ...lease,
+      NITRO_UI_LEASE_IOS_RUNTIME: '26.5',
+    });
+    expect(refused.status).toBe(1);
+    expect(refused.stderr).toContain('gate: refused before the run');
+    expect(refused.stderr).toContain('iOS 26.5 look-check simulator');
+    expect(refused.stdout).not.toContain('fake runner');
+    expect(ledgerLines(dir)).toEqual([]);
+
+    const ran = runCli(dir, ['harness:ios'], lease);
+    expect(ran.status).toBe(0);
+    expect(ran.stdout).toContain('fake runner');
+    expect(ledgerLines(dir).map((entry) => entry.gate)).toEqual([
+      'harness:ios',
+    ]);
+  });
+});
