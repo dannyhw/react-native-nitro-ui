@@ -29,9 +29,13 @@
  * composition never owns a window to measure (`HybridNitroUiPicker` answers `-1` for
  * the same reason and this control does too), and `userEvent`'s synthesised touch is
  * refused by SwiftUI's button gesture environment (`docs/tasks/G2-button.report.md`
- * measured that for every Button style). So on iOS the open/close counters, the
- * rects, `live` and the inline-vs-nested difference are asserted only as far as the
- * `-1`s and the row count go, and the taps that need a real HID-level event are
+ * measured that for every Button style). One exception, measured by E3's split suite:
+ * a `Menu` built with `primaryAction:` does take the synthesised tap, so the action
+ * half of that prop *is* observable on iOS - opening is not.
+ *
+ * So on iOS the open/close counters, the rects, `live` and the inline-vs-nested
+ * difference are asserted only as far as the `-1`s and the row count go, and the taps
+ * that need a real HID-level event are
  * G7b's real-input case (`docs/components/menu.md` says the same about
  * `onOpen`/`onClose`).
  *
@@ -2259,24 +2263,29 @@ describe('Menu · Split trigger (E3)', () => {
     await waitForHandle('split', 'the split menu');
 
     if (Platform.OS !== 'android') {
-      // iOS is unchanged by E3 and the assertion says so: the -1s are the answer
+      // iOS is unchanged by E3's *layout*, and the -1s are the answer that says so
       // ("no second hit target exists here to measure"), not a `0` that would claim a
-      // layout iOS chose. A `primaryAction` on iOS is a gesture on one button - tap
-      // acts, long-press opens - and the synthesised touch this harness can send is
-      // refused by SwiftUI's button gesture environment, which is why neither log may
-      // move: the existing iOS cases above are the behaviour gate, this one only holds
-      // that E3 changed no observable thing here.
+      // layout iOS chose. What the prop changes there is the gesture: a SwiftUI `Menu`
+      // built with `primaryAction:` acts on a tap and opens on a long press (D29).
+      //
+      // Measured on this run, the harness's synthesised touch does reach that tap -
+      // unlike a Button's own gesture environment, which refuses it (G2), so this is
+      // the one place the action half of the prop is observable off the real-input
+      // gate. The open half stays unobservable either way (system presentation), which
+      // is what the -1s above and the iOS cases further up are for.
       const before = report('split');
       expectUnanswerable(before);
       expect(before.split).toBeNull();
       await pressTrigger('split');
       await settle(400);
-      expect(primaryLog).toEqual([]);
+      // One press, one action, and still no second container in the report.
+      expect(primaryLog).toEqual(['split:action']);
       expect(stateLog).toEqual([]);
       expect(report('split').split).toBeNull();
       console.log(
-        'iOS: primaryAction stays a gesture on one button - split/leading/trailing ' +
-          'answer -1, and the harness press moves nothing (G7b owns the real taps)'
+        "iOS: one button, one gesture - the press reaches SwiftUI's tap and runs the " +
+          'action, while split/leading/trailing stay -1 because there is no second ' +
+          "hit target to measure and opening stays G7b's real-input case"
       );
       return;
     }
@@ -2329,6 +2338,7 @@ describe('Menu · Split trigger (E3)', () => {
     // --- The trailing half: the list, exactly once. One press is one `onOpen`, which
     // is the same funnel the plain trigger relies on - Material's checked button
     // reports a *request*, and `MenuModel.setOpen` is what keeps it to one event.
+    await pressRect(drawn.trailing, 'the list half');
     const opened = await waitForMenu(
       'split',
       (r) => r.expanded === true && r.live === liveBefore + 1
@@ -2464,10 +2474,12 @@ describe('Menu · Split trigger (E3)', () => {
     );
     await waitForHandle('split-recycle', 'the remounted plain menu');
     const fresh = report('split-recycle');
-    expect(fresh.split).toBe(false);
-    expect(fresh.leading).toEqual([-1, -1, -1, -1]);
-    expect(fresh.trailing).toEqual([-1, -1, -1, -1]);
     if (Platform.OS === 'android') {
+      // Android answers the layout question directly: the recycled view drew one
+      // trigger, so `split` is a `false` and both halves are unread rather than stale.
+      expect(fresh.split).toBe(false);
+      expect(fresh.leading).toEqual([-1, -1, -1, -1]);
+      expect(fresh.trailing).toEqual([-1, -1, -1, -1]);
       const liveBefore = fresh.live ?? 0;
       await pressTrigger('split-recycle');
       await waitForMenu(
@@ -2480,6 +2492,10 @@ describe('Menu · Split trigger (E3)', () => {
         'split-recycle',
         (r) => r.expanded === false && r.live === liveBefore
       );
+    } else {
+      // iOS never had a split layout to leak, so the three fields answer -1 before the
+      // remount and after it - the same answer, which is the claim E3 can make there.
+      expectUnanswerable(fresh);
     }
     console.log(
       `split remount: split=${String(report('split-recycle').split)}`
