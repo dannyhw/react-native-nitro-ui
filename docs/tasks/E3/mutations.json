@@ -189,9 +189,9 @@
       "mutation": "the trailing half is named something else than the label the gate reads",
       "before": "internal const val MENU_MORE_OPTIONS_LABEL = \"More options\"",
       "after": "internal const val MENU_MORE_OPTIONS_LABEL = \"Show the list\"",
-      "run": "real-input:android:--control:menu (code tree a5acf666717b)",
+      "run": "real-input:android:--control:menu — FAIL in 170.2 s (code tree a5acf666717b, lease E3-o7x7a)",
       "redTests": [
-        "pending"
+        "✗ the list half is one node too, named for the options it opens — expected 1, saw 0 (the action half, named by `accessibilityLabel`, was still found: \"Real-input split menu\" occupies 42,1986 → 239,2112)"
       ]
     }
   ]
