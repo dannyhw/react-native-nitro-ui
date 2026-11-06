@@ -1,5 +1,6 @@
 import { type ColorValue, type ViewProps } from 'react-native';
 
+import { normalizeAndroidIconName, warnAndroidIconName } from '../../iconName';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
@@ -18,10 +19,22 @@ export type ButtonVariant =
   'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
 
 /**
- * The button's size: SwiftUI `.controlSize` on iOS, content padding plus label
- * typography on Android.
+ * The button's size: one rung of the shared ladder (D42 item 4).
+ *
+ * On Android the rung *is* a Material 3 container-height token, and the five
+ * rungs are the five Material publishes, so Material's own XS–XL button row is
+ * this ladder under other names — `small`=XS, `medium`=S, `large`=M,
+ * `xlarge`=L, `xxlarge`=XL. IconButton is documented in Material's names because
+ * its tokens are Material's; `docs/components/button.md` carries the mapping for
+ * both spellings.
+ *
+ * On iOS the rung picks a `.controlSize`, and iOS has fewer of those than the
+ * ladder has rungs: `xlarge` and `xxlarge` both land on the largest the platform
+ * draws (`.extraLarge` where it exists, `.large` before it), so the two top rungs
+ * are the same control on iOS and differ only on Android. Documented rather than
+ * invented, because there is no taller iOS button to map to.
  */
-export type ButtonSize = 'small' | 'medium' | 'large';
+export type ButtonSize = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
 
 /**
  * The button's corner.
@@ -42,7 +55,13 @@ const VARIANTS: readonly ButtonVariant[] = [
   'text',
   'elevated',
 ];
-const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
+const SIZES: readonly ButtonSize[] = [
+  'small',
+  'medium',
+  'large',
+  'xlarge',
+  'xxlarge',
+];
 const SHAPES: readonly ButtonShape[] = ['round', 'square'];
 
 /**
@@ -77,10 +96,25 @@ export interface ButtonProps extends ViewProps {
    */
   tintColor?: ColorValue | undefined;
   /**
-   * Leading SF Symbol name. iOS only in v0.1 — Android ignores it (documented
-   * on `docs/components/button.md`), so it never affects the label's text.
+   * Leading SF Symbol name. **iOS only** — Android has no SF Symbols, so the prop
+   * is accepted there and draws nothing; give the drawable name in
+   * {@link androidIcon} and each platform takes its own.
    */
   systemImage?: string | undefined;
+  /**
+   * Leading app drawable, named by its Android resource name (`'share'` for
+   * `res/drawable/share.xml`). **Android only** — iOS draws {@link systemImage}
+   * and ignores this.
+   *
+   * The app ships the artwork: see `docs/components/button.md`, "Android icons",
+   * for the file, the Expo config plugin, and the resource-shrinking keep file.
+   * A name that does not resolve draws nothing and reserves no space, so the
+   * Button is exactly its no-icon self.
+   *
+   * Like {@link systemImage} this affects the control's width, so it is part of
+   * the size configuration.
+   */
+  androidIcon?: string | undefined;
   /**
    * Access to the native Hybrid Object, for this repo's harness and benchmarks.
    *
@@ -103,6 +137,7 @@ export interface ButtonProps extends ViewProps {
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
       }) => void)
@@ -165,12 +200,14 @@ function sizingVariantFor(
   variant: ButtonVariant,
   size: ButtonSize,
   systemImage: string | undefined,
+  androidIcon: string | undefined,
   title: string
 ): string {
   return [
     variant,
     size,
     escapeField(systemImage ?? ''),
+    escapeField(androidIcon ?? ''),
     escapeField(title),
   ].join(FIELD_SEPARATOR);
 }
@@ -226,6 +263,7 @@ export function Button({
   disabled = false,
   tintColor,
   systemImage,
+  androidIcon,
   testID,
   accessibilityLabel,
   hybridRef,
@@ -233,6 +271,12 @@ export function Button({
   style,
   ...restProps
 }: ButtonProps) {
+  // A name that cannot be a resource name is a typo the developer can fix right
+  // now, and native's answer to it is indistinguishable from a missing file.
+  // See `warnAndroidIconName` for why this is development-only and once per name.
+  if (androidIcon != null) {
+    warnAndroidIconName('Button', 'androidIcon', androidIcon);
+  }
   const resolvedVariant = resolveVariant(variant);
   const resolvedSize = resolveSize(size);
   const resolvedShape = resolveShape(shape);
@@ -259,6 +303,9 @@ export function Button({
       disabled={disabled}
       tintColor={processedTint}
       systemImage={systemImage ?? null}
+      androidIcon={
+        androidIcon == null ? null : normalizeAndroidIconName(androidIcon)
+      }
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
@@ -267,6 +314,7 @@ export function Button({
         resolvedVariant,
         resolvedSize,
         systemImage,
+        androidIcon == null ? null : normalizeAndroidIconName(androidIcon),
         title
       )}
       nuiSizingId={sizingId}

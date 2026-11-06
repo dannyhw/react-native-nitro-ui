@@ -59,10 +59,23 @@ export interface NitroUiButtonProps
    */
   tintColor: number | null;
   /**
-   * Leading SF Symbol name, or `null`. Ignored on Android in v0.1 — documented
-   * on `docs/components/button.md`.
+   * Leading SF Symbol name, or `null`. iOS only: Android has no SF Symbols, and
+   * the drawable lookup that would stand in for it is the separate `androidIcon`
+   * prop below. Documented on `docs/components/button.md`.
    */
   systemImage: string | null;
+  /**
+   * Leading app drawable, named by its Android resource name, or `null`.
+   *
+   * Android only: iOS draws `systemImage` and ignores this, so a caller writes
+   * both names on one Button and each platform takes its own
+   * (`docs/components/button.md`, "Android icons"). Already normalised by the
+   * wrapper, so the native side looks up exactly what it is given.
+   *
+   * It joins `nuiSizingKey`: a glyph before the label makes the control wider, so
+   * two Buttons that differ only in this prop must not share a cached size.
+   */
+  androidIcon: string | null;
   /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
   /**

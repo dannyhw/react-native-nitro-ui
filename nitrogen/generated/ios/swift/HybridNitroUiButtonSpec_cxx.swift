@@ -236,6 +236,36 @@ open class HybridNitroUiButtonSpec_cxx {
     }
   }
   
+  public final var androidIcon: bridge.std__variant_nitro__NullType__std__string_ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__variant_nitro__NullType__std__string_ in
+        switch self.__implementation.androidIcon {
+          case .first(let __value):
+            return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
+          case .second(let __value):
+            return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.androidIcon = { () -> Variant_NullType_String in
+        let __variant = newValue
+        switch __variant.index() {
+          case 0:
+            let __actual = __variant.get_0()
+            return .first(NullType.null)
+          case 1:
+            let __actual = __variant.get_1()
+            return .second(String(__actual))
+          default:
+            fatalError("Variant can never have index \(__variant.index())!")
+        }
+      }()
+    }
+  }
+  
   public final var testID: bridge.std__variant_nitro__NullType__std__string_ {
     @inline(__always)
     get {

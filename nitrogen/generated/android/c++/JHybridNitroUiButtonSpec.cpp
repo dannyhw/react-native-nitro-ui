@@ -116,6 +116,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_String> /* systemImage */)>("setSystemImage");
     method(_javaPart, JVariant_NullType_String::fromCpp(systemImage));
   }
+  std::variant<nitro::NullType, std::string> JHybridNitroUiButtonSpec::getAndroidIcon() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>()>("getAndroidIcon");
+    auto __result = method(_javaPart);
+    return __result->toCpp();
+  }
+  void JHybridNitroUiButtonSpec::setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_String> /* androidIcon */)>("setAndroidIcon");
+    method(_javaPart, JVariant_NullType_String::fromCpp(androidIcon));
+  }
   std::variant<nitro::NullType, std::string> JHybridNitroUiButtonSpec::getTestID() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JVariant_NullType_String>()>("getTestID");
     auto __result = method(_javaPart);
