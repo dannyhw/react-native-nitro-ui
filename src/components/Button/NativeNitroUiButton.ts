@@ -47,6 +47,10 @@ export interface NitroUiButtonHandle {
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiButtonSize;
+  /** Test-only: ask whether `color` is among the pixels this Button drew. */
+  nuiTestPixelProbe(color: number): void;
+  /** Test-only: the last probe's line (see the spec). */
+  nuiTestPixelReport(): string;
 }
 
 /**

@@ -82,6 +82,8 @@ namespace margelo::nitro::nitroui {
   public:
     // Methods
     NitroUiButtonSize measureContent() override;
+    void nuiTestPixelProbe(double color) override;
+    std::string nuiTestPixelReport() override;
 
   private:
     jni::global_ref<JHybridNitroUiButtonSpec::JavaPart> _javaPart;

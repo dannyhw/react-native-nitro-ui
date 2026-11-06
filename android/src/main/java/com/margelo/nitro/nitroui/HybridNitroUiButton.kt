@@ -1,6 +1,7 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -35,6 +36,7 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -247,6 +249,38 @@ internal class ButtonModel : NitroUiModel() {
    */
   var onPress: (() -> Unit)? = null
 
+  /**
+   * What the last `nuiTestPixelProbe` saw, as one line, or empty before the first.
+   *
+   * Plain rather than observed - nothing may recompose because a test reading moved -
+   * and stored behind a lock because the probe is posted to the main thread while
+   * `nuiTestPixelReport` answers from whichever thread Nitro called it on. The `n=`
+   * prefix counts probes, which is the only way a harness can tell its own answer
+   * from the previous control's. Cleared with everything else: a recycled Button that
+   * still reported another owner's pixels would let a test credit a hit that is not
+   * its control's.
+   */
+  var pixelReport = ""
+    private set
+
+  private val pixelReportLock = Any()
+
+  /** How many probes have reported, under [pixelReportLock]. */
+  private var pixelProbes = 0
+
+  /** Store what a probe found, numbered. Safe from any thread. */
+  fun publishPixelReport(report: String) {
+    synchronized(pixelReportLock) {
+      pixelProbes += 1
+      pixelReport = "n=$pixelProbes $report"
+    }
+  }
+
+  /** The last published probe, or empty before the first one. */
+  fun readPixelReport(): String {
+    synchronized(pixelReportLock) { return pixelReport }
+  }
+
   override fun reset() {
     title = ""
     variant = ButtonVariant.Filled
@@ -260,6 +294,8 @@ internal class ButtonModel : NitroUiModel() {
     androidIconBitmap = null
     sizingKey = ""
     onPress = null
+    pixelReport = ""
+    pixelProbes = 0
   }
 }
 
@@ -1044,4 +1080,24 @@ class HybridNitroUiButton(
     val size = host.contentSize ?: return NitroUiButtonSize(0.0, 0.0)
     return NitroUiButtonSize(size.width, size.height)
   }
+
+  /**
+   * Sample what this Button is drawing for [color], and store the answer.
+   *
+   * Posted rather than run inline: reading pixels needs the view drawn, and a Nitro
+   * method may not block for the UI thread. Same shape as SegmentedControl's pair and
+   * the same sampler (`nitroUiSamplePixels`), so the harness reads one report format
+   * from either control.
+   */
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  /** The last probe's line - see [ButtonModel.pixelReport]. */
+  override fun nuiTestPixelReport(): String = model.readPixelReport()
 }

@@ -43,6 +43,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridGetter("nuiSizingId", &HybridNitroUiButtonSpec::getNuiSizingId);
       prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiButtonSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiButtonSpec::measureContent);
+      prototype.registerHybridMethod("nuiTestPixelProbe", &HybridNitroUiButtonSpec::nuiTestPixelProbe);
+      prototype.registerHybridMethod("nuiTestPixelReport", &HybridNitroUiButtonSpec::nuiTestPixelReport);
     });
   }
 

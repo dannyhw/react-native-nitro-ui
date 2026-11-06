@@ -238,6 +238,10 @@ private struct OptionalAccessibility: ViewModifier {
 final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ButtonContent>
 
+  /// Guards `pixelProbes`, which a probe writes on main and a report reads from
+  /// whichever thread Nitro called.
+  private let pixelProbesLock = NSLock()
+
   /// This component's name in the sizing engine: `HybridNitroUiButtonComponentName`
   /// in the generated C++, and `getName()` in the generated Kotlin.
   private static let sizingComponentName = "NitroUiButton"
@@ -503,5 +507,31 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
       return NitroUiButtonSize(width: 0, height: 0)
     }
     return NitroUiButtonSize(width: Double(size.width), height: Double(size.height))
+  }
+
+  /// Probes answered since the view mounted, so the report's `n=` counts the
+  /// caller's own probe rather than a previous control's. Kept here rather than in
+  /// the model because there is nothing in the model for it to describe.
+  private var pixelProbes = 0
+
+  /// Records that a probe was asked for, and answers nothing.
+  ///
+  /// iOS has no glyph to sample: `androidIcon` is Android's prop and iOS draws
+  /// `systemImage` instead, so an iOS probe of an Android icon is a test that should
+  /// not be running there. The report below therefore says `no pixels`, which the
+  /// harness's probe helper already treats as a hard failure rather than an answer
+  /// (`pixelProbe` in `example/__tests__/SegmentedControl.harness.tsx`) - the honest
+  /// outcome is a red test, not a green one about nothing.
+  func nuiTestPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
   }
 }
