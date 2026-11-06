@@ -564,6 +564,98 @@ describe('SegmentedControl · G4', () => {
     unmount();
   });
 
+  /**
+   * The row is the sum of its own segments, not n x the widest one.
+   *
+   * E1 fix round 2's regression guard, and the arithmetic the connected group got
+   * wrong for two rounds: with `Modifier.weight` on each item, an item's equal share
+   * is also its ceiling, and the row's own demand at `width(IntrinsicSize.Max)` is
+   * n x the widest item - so a row of unequal labels was laid out at the *mean* of
+   * itself, widest label ellipsized by its own row, with the difference left as
+   * unpainted space at the end of a box that was still n x the widest label. The
+   * five labels below asked for 324.6 dp of segments and were laid out in a box of
+   * 363.4 dp, which is a control that looks off-centre when it is centred and whose
+   * dead tail ignores taps.
+   *
+   * The oracle is the same control measured one label at a time: a one-option row is
+   * that label's segment, so the five of them plus the four 2 dp gaps the group puts
+   * between items *is* the width the row has to have. Nothing here hard-codes a
+   * number, so the assertion holds across a font, a density or a padding change -
+   * and it is 5 x the widest minus the sum that goes red, not a constant.
+   *
+   * Android only for the sum: iOS draws a segmented `Picker`, whose segments share
+   * its own width and whose one-option row carries its own chrome, so the sum is not
+   * what iOS's row is either - measured here so the pairing is on the record, and
+   * asserted where the claim is.
+   */
+  it('is as wide as its own segments added up', async () => {
+    const FIVE = ['Hour', 'Day', 'Week', 'Month', 'Year'];
+    /** `ButtonGroupDefaults.ConnectedSpaceBetween`, the gap between two segments. */
+    const GAP_DP = 2;
+    const { unmount } = await render(
+      <View style={rowStyle}>
+        {FIVE.map((label) => (
+          <SegmentedControl
+            key={label}
+            options={[label]}
+            testID={`one-${label}`}
+            hybridRef={captureHybrid(`one-${label}`)}
+          />
+        ))}
+        <SegmentedControl
+          options={FIVE}
+          testID="five"
+          hybridRef={captureHybrid('five')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('five');
+    const singles = await Promise.all(
+      FIVE.map(
+        async (label) =>
+          (await waitForMeasured(`one-${label}`, `the "${label}" segment`))
+            .width
+      )
+    );
+    const row = await waitForMeasured('five', 'the five-label row');
+    const wanted =
+      singles.reduce((total, width) => total + width, 0) +
+      GAP_DP * (FIVE.length - 1);
+    // The box has to arrive at the row's own width, and `waitForBox` is the poll
+    // that lets it: laid out at the declared fallback first (D17), corrected the turn
+    // the measure lands. A box wider than what the row draws is the dead tail, and it
+    // is dead to a finger as much as to an eye.
+    const box = await waitForBox('five', row, 'the five-label row');
+    console.log(
+      `sum of segments (${Platform.OS}): singles=[${singles
+        .map((width) => width.toFixed(2))
+        .join(', ')}] row=${describeSize(row)} wanted=${wanted.toFixed(
+        2
+      )} box=${describeSize(box)}`
+    );
+
+    if (Platform.OS === 'android') {
+      // The row of *this* test: measured against its own segments, not a constant, so
+      // a font or density change moves both sides of the comparison together.
+      expect(
+        Math.abs(row.width - wanted) < 1 ||
+          `the row of ${FIVE.join(', ')} measures ${describeSize(
+            row
+          )} and was laid out at ${describeSize(
+            box
+          )}, but its own segments are ${singles
+            .map((width) => width.toFixed(2))
+            .join(' + ')} plus ${String(FIVE.length - 1)} gaps of ${String(
+            GAP_DP
+          )} dp = ${wanted.toFixed(2)} dp - off by ${(
+            row.width - wanted
+          ).toFixed(2)} dp`
+      ).toBe(true);
+    }
+    unmount();
+  });
+
   it('re-measures when the options change (R3)', async () => {
     const SHORT = ['Run'];
     const LONG = ['Run', 'the', 'whole', 'build'];

@@ -128,44 +128,60 @@ API 35 at 420 dpi, in dp):
 | `options`                          | iOS             | Android         |
 | ---------------------------------- | ----------------- | ----------------- |
 | `['Go']`                           | 36.00 × 31.00     | 49.90 × 48.00     |
-| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 208.38 × 48.00    |
-| `['North','South','East','West']`  | 220.00 × 31.00    | 281.52 × 48.00    |
+| `['One', 'Two', 'Three']`          | 165.00 × 31.00    | 187.81 × 48.00    |
+| `['North','South','East','West']`  | 220.00 × 31.00    | 265.90 × 48.00    |
 
 The height is the platform's control height and does not move with the labels —
 iOS draws a segmented `Picker` 31 pt tall for one option or for four long ones
 alike, and the group lays every segment on the 48 dp touch target a `medium`
 Button is laid out at. The width is the labels'. The Android column is the
-connected group, and it is ~18% narrower than the
+connected group, and it is ~27% narrower than the
 `SingleChoiceSegmentedButtonRow` these rows were measured on: that row reserved a
 leading icon slot per segment (`icon = {}` hides the check, not the space), and
 the group has no icon slot to reserve. The four-label row also fits the window
-now — the 344.00 above it was the box Yoga clamped the row to, not the row's own
-measurement.
+now — the 344.00 the older table carried above it was the box Yoga clamped the row
+to, not the row's own measurement.
 
-Android's one-option row is wider than its label because each segment carries
-Material's own content padding for the height, and a segment is never narrower
-than that: the row weights its items (`Modifier.weight(1f, fill = false)`) so
-space the row is *given* above its labels is shared equally, but no item is
-shrunk to the mean of the others. Dumped on the `OptionSets` story, every segment
-is then exactly its label plus 32 dp, so the three long labels are three different
-widths and all three are spelled out — the equal-share row truncated them. With
-equal labels the segments are equal, which is what the real-input taps assume.
+A segment is its label plus Material's own content padding for the height — 32 dp
+of it — and the row is the sum of its segments plus the 2 dp the group leaves
+between neighbours. A row of unequal labels is therefore unequal by exactly as
+much as its labels are, every one of them is spelled out, and the box the control
+reports is the row it draws. Dumped on the `OptionSets` story,
+`['Hour', 'Day', 'Week', 'Month', 'Year']` is 62.86 + 56.00 + 66.67 + 72.38 +
+60.19 plus 4 × 2 = 326.10 dp of segments, and the control measures 325.71 × 48.00
+with its box equal to its own measurement (the 0.39 dp between them is px↔dp
+rounding). `example/__tests__/SegmentedControl.harness.tsx` asserts that sum
+against the same control measured one label at a time, so a font, density or
+padding change moves both sides of the comparison together.
 
-That dump has one row still short: the five-option row measures 324.57 dp of
-content inside a 363.4 dp column, and its `Month` segment is 187 px — the 103 px
-its text laid out at, plus 2 × 16 dp. So neither the column nor the weighting
-squeezed it (the row had 38.9 dp beside it, and every other segment kept its
-label + 32 dp): the label measured narrower than the glyphs it paints, and
-ellipsizes to `Mon…`. The row this replaced spelled that word out, and it is not
-a width this device could make room for: in that older screenshot the glyphs of
-`Month` are 99 px wide at 420 dpi, so the word wants roughly 104 px of text box
-against the 103 px it is given — half a dp — and the row would fit at ~325 dp
-inside a column of 363.4 dp. The word is short by a rounding, not by a column.
+That sum is why the row is a hand-written `Layout` (`ConnectedRow`, in
+`android/.../HybridNitroUiSegmentedControl.kt`) and not a `Row` with a weight on
+each item. For a weighted child the equal share is not only what the child *gets*
+— it is the most the child may be: `fill = false` lowers the minimum, not the
+maximum. And the row's own demand at `width(IntrinsicSize.Max)` is n × the widest
+item, not the sum. Run that way these five labels demand 5 × 188 + 20 = 960 px,
+get clamped to the 954 px column, and are handed a 186.8 px share each while
+`Month` wants 188 px: the widest label is measured against the *mean* of its own
+row and ellipsizes to `Mon…`, inside a box 43 dp wider than the row drawn in it
+(369.52 dp against 326.10 dp, measured in the harness where nothing clamps it).
+The space beside such a row is not spare room — it is unpainted, it off-centres a
+centred control, and it ignores taps. Equal labels hide the whole thing, because
+for them the share *is* the content.
+
+The equal share was not simply wrong, though: it was also the reason an over-wide
+row worked. With no weight, a `Row` serves its children in order, each taking what
+it wants out of what is left, so a row laid out narrower than its labels hands its
+whole box to the first segment and nothing to the last. That box is not
+hypothetical — it is the placement measure `NitroUiMeasuredRoot` asks for once a
+row reports wider than its box, and the harness presses both ends of it in
+`overwide`, `clamped` and `narrowing`. `ConnectedRow` shares the box equally
+*only* when the labels do not fit, which is the pass the share was always right
+for, and lays the row at its own sum every other time.
 
 **What the engine starts from.** The engine keys fallbacks per component, so this
 component has one declared pair however many option lists exist: `165 × 31` pt
 (`ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift`) and
-`208.4 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
+`187.9 × 48` dp (`android/.../HybridNitroUiSegmentedControl.kt`) — the
 three-short-labels row above, measured rather than guessed, because a fallback
 smaller than the control is the dead-touch story in `core.md` §7. Every other
 option list is a first instance of *its own* configuration: it is laid out at the

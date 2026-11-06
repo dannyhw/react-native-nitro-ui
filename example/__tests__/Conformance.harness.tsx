@@ -182,7 +182,7 @@ const SHARED = {
     },
     "NitroUiSegmentedControl": {
       "android": {
-        "width": 208.4,
+        "width": 187.9,
         "height": 48
       },
       "ios": {
