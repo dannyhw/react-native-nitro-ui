@@ -1,0 +1,8 @@
+---
+'react-native-nitro-ui': minor
+---
+
+`Button` gains `androidIcon`, and the size ladder gains `xlarge` and `xxlarge`.
+
+- **`androidIcon: string`** names a drawable the app ships, and is Android's counterpart to `systemImage`: `<Button title="Share" systemImage="square.and.arrow.up" androidIcon="share" />` draws an SF Symbol on iOS and your `res/drawable/share.xml` on Android, with each platform ignoring the other's prop. The icon takes the control's own text colour, so it follows the variant, `enabled` and `tintColor`, and it is sized by the size ladder — the same numbers the label beside it is read from. A name that does not resolve draws nothing and reserves no space, so the Button is exactly its no-icon self, one line is logged per name (`adb logcat -s NitroUi`), and a name that could never be a resource name is reported from JavaScript in development, where it can still be fixed. Each drawable is loaded once per process and shared, so a list of forty rows with the same icon rasterises it once. `docs/components/button.md`, "Android icons", has the file layout and the resource-shrinking keep file.
+- **`size` now has five rungs.** `xlarge` and `xxlarge` are Material 3's own L and XL container heights (96 and 136 dp), so the ladder has the five rungs the tokens publish and Material's XS–XL button row is this ladder under other names — `small`=XS, `medium`=S, `large`=M, `xlarge`=L, `xxlarge`=XL. iOS draws four button sizes, so the top two rungs are both `.extraLarge` (iOS 17+) and `.large` before it: five rungs on Android, three distinguishable on iOS. The three rungs that already existed are unchanged.
