@@ -171,7 +171,7 @@ const meta = {
     primaryAction: {
       action: 'primary',
       description:
-        '**iOS only**: tap runs this and a long-press opens the menu. Android always opens on tap and never calls it (DECISIONS D29), so the Playground leaves it off - see `PrimaryAction`.',
+        'A second job for the trigger, drawn each platform’s way (DECISIONS D29, E3): on iOS a tap runs this and a long-press opens the menu; on Android the control becomes a split button whose left half runs this and whose chevron opens the menu. The Playground leaves it off because on iOS it turns a tap into something else - see `PrimaryAction`.',
     },
     hybridRef: { control: false, table: { disable: true } },
     nuiPerfId: { control: false, table: { disable: true } },
@@ -185,10 +185,10 @@ type Story = StoryObj<typeof meta>;
 /**
  * Every public prop on the Controls panel, with the item list on chips.
  *
- * `primaryAction` is deliberately left out of the Playground’s args: turning it on
+ * `primaryAction` is deliberately left out of the Playground’s args: on iOS it
  * turns a tap into an action and moves the menu behind a long-press, so the same
- * trigger would do two different things depending on a checkbox. `PrimaryAction`
- * is where that split is the point.
+ * trigger would do two different things depending on a checkbox. `PrimaryAction` is
+ * where that difference is the point.
  */
 export const Playground: Story = {
   render: function PlaygroundStory(props) {
@@ -497,16 +497,19 @@ export const Sizing: Story = {
 };
 
 /**
- * iOS's primary action: tap acts, a long-press opens the list.
+ * One control, two jobs - and each platform's own way of drawing that.
  *
- * Worth reading on an iPhone and then on Android, because the two answers differ by
- * ruling rather than by gap (D29): Material 3 has no tap-versus-long-press split on
- * a menu, so Android always opens and never calls the callback.
+ * The two answers differ by idiom, not by gap (D29 as E3 lifted its Android half):
+ * iOS keeps one button where a tap runs the action and a long-press opens the list,
+ * and Android draws Material 3's split button, where the left half runs the action and
+ * the chevron on the right opens the list. A press on the action half never opens the
+ * list on either platform, which is the part an app can rely on.
  */
 export const PrimaryAction: Story = {
   render: function PrimaryActionStory() {
     const [presses, setPresses] = useState(0);
     const [picks, setPicks] = useState(0);
+    const [opens, setOpens] = useState(0);
     return (
       <Showcase>
         <Row label="primaryAction">
@@ -515,13 +518,64 @@ export const PrimaryAction: Story = {
             group={GROUPS.flat}
             primaryAction={() => setPresses((current) => current + 1)}
             onSelect={() => setPicks((current) => current + 1)}
+            onOpen={() => setOpens((current) => current + 1)}
             testID="storybook-primary"
           />
         </Row>
         <Note>
-          Taps that acted: {presses} - picks: {picks}. On iOS a tap acts and a
-          long-press opens the list; Android always opens, so its action counter
-          stays at zero and only picks move.
+          Actions run: {presses} - picks: {picks} - the list opened: {opens}
+          ×. On iOS a tap acts and a long-press opens; on Android the left half
+          acts and the chevron opens.
+        </Note>
+      </Showcase>
+    );
+  },
+};
+
+/**
+ * The split configuration beside the plain trigger, at all three sizes.
+ *
+ * The difference only shows next to each other: on Android the second container makes
+ * the control visibly wider and gives the list its own half to open from, and on iOS
+ * both rows are the same box, because `primaryAction` is a gesture there and not a
+ * layout. That asymmetry is also why the sizing key carries an `action` field
+ * (`docs/components/menu.md`).
+ */
+export const SplitTrigger: Story = {
+  render: function SplitTriggerStory() {
+    const [log, setLog] = useState<string[]>([]);
+    const say = useCallback(
+      (said: string) => setLog((current) => [...current.slice(-5), said]),
+      []
+    );
+    return (
+      <Showcase>
+        {(['small', 'medium', 'large'] as const).map((size) => (
+          <Row key={size} label={size}>
+            <Menu
+              title={`Send ${size}`}
+              group={GROUPS.flat}
+              size={size}
+              testID={`storybook-split-plain-${size}`}
+              onOpen={() => say(`plain ${size} open`)}
+              onClose={() => say(`plain ${size} close`)}
+            />
+            <Menu
+              title={`Send ${size}`}
+              group={GROUPS.flat}
+              size={size}
+              primaryAction={() => say(`action ${size}`)}
+              testID={`storybook-split-action-${size}`}
+              onOpen={() => say(`split ${size} open`)}
+              onClose={() => say(`split ${size} close`)}
+            />
+          </Row>
+        ))}
+        <Note>
+          Plain trigger on the left, `primaryAction` on the right. On Android
+          the right-hand one is a split button, and wider; on iOS the pair is
+          the same box. Last events:{' '}
+          {log.length > 0 ? log.join(' · ') : 'nothing yet'}.
         </Note>
       </Showcase>
     );

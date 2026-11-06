@@ -148,6 +148,161 @@ class MenuModelTest {
     assertEquals("and no callback of the previous owner fires", emptyList<String>(), events)
   }
 
+  /**
+   * E3's primary action: the leading half of the split trigger.
+   *
+   * Three rules, all of them about what a press on that half is *not*: it is not a press
+   * on the list (no `open`), not available to a disabled control (D29's "both halves"),
+   * and not something the model buffers - one press, one call. `Menu.harness.tsx`
+   * asserts the same three through two real taps and an event log; this is the pair of
+   * them that a device run proves only when the injector lands where the half is, and
+   * the refusal is not reachable by an on-device tap at all, because Material keeps a
+   * disabled button inert before the model ever sees the press.
+   */
+  @Test
+  fun aPrimaryActionPressRunsTheActionAndOpensNothing() {
+    val events = mutableListOf<String>()
+    val model = openModel(events).apply {
+      expanded = false
+      hasPrimaryAction = true
+      primaryAction = { events.add("action") }
+    }
+
+    model.applyPrimaryAction()
+
+    assertEquals("one press, one call, and no open", listOf("action"), events)
+    assertFalse("the action half never raises the list", model.expanded)
+  }
+
+  @Test
+  fun aDisabledControlRefusesThePrimaryAction() {
+    val events = mutableListOf<String>()
+    val model = openModel(events).apply {
+      expanded = false
+      hasPrimaryAction = true
+      primaryAction = { events.add("action") }
+      enabled = false
+    }
+
+    model.applyPrimaryAction()
+
+    assertEquals("a disabled control has no primary action either", emptyList<String>(), events)
+    assertFalse(model.expanded)
+  }
+
+  /**
+   * The trailing half's accessibility action - the one press path no on-device test
+   * reaches (E3's review).
+   *
+   * A *finger* on that half goes through Material's checked button, which reports the
+   * value the press asks for and so toggles by itself; `Menu.harness.tsx` and the
+   * real-input gate both inject pointer events, which is why the asymmetry survived the
+   * whole split suite. TalkBack's click action skips Material entirely and lands on the
+   * arm in `halfModifier`, so that arm has to ask for the same transition. An
+   * always-open there is a list a screen-reader user can raise and never put down.
+   */
+  @Test
+  fun theListActionTogglesLikeAPressDoes() {
+    val events = mutableListOf<String>()
+    val up = openModel(events)
+
+    up.applyListAction()
+
+    assertFalse("an open list goes down", up.expanded)
+    assertEquals("one action, one close", listOf("close"), events)
+
+    val down = openModel(events).apply { expanded = false }
+    events.clear()
+
+    down.applyListAction()
+
+    assertTrue("a closed list comes up", down.expanded)
+    assertEquals("one action, one open", listOf("open"), events)
+  }
+
+  @Test
+  fun aDisabledControlRefusesTheListAction() {
+    val events = mutableListOf<String>()
+    val model = openModel(events).apply {
+      expanded = false
+      enabled = false
+    }
+
+    model.applyListAction()
+
+    assertEquals("a disabled control raises nothing of its own", emptyList<String>(), events)
+    assertFalse(model.expanded)
+  }
+
+  @Test
+  fun aMenuWithNoPrimaryActionHasOneTriggerAndNoHalves() {
+    // The report's split half, in the configuration every existing harness case is in.
+    // `split=0` with two unread boxes is a different claim from iOS's `-1` for all three
+    // ("there is no such measurement here"): Android looked, and found one button.
+    val model = MenuModel().apply { title = "Actions" }
+    val report = model.readMenuReport()
+    assertTrue(report.contains(";split=0;"))
+    assertTrue(report.contains(";leading=-1,-1,-1,-1;"))
+    assertTrue(report.endsWith(";trailing=-1,-1,-1,-1"))
+  }
+
+  /**
+   * The layout witness, as opposed to the prop.
+   *
+   * `hasPrimaryAction` is what JS sent; `split` is what Compose drew, and the two differ
+   * for exactly the case the recycle gate below cares about. The boxes are summed with
+   * the composition's own origin the same way the anchor's are, so a harness can press
+   * one - which is why the expectation is written as numbers and not as "some box".
+   */
+  @Test
+  fun aDrawnSplitTriggerReportsItsTwoHalvesOnScreen() {
+    val model =
+      MenuModel().apply {
+        title = "Actions"
+        hasPrimaryAction = true
+        noteCompositionOrigin(20, 40)
+        noteSplitDrawn(true)
+        noteLeadingBox(0f, 4f, 60f, 44f)
+        noteTrailingBox(62f, 4f, 100f, 44f)
+      }
+
+    val report = model.readMenuReport()
+    assertTrue(report.contains(";split=1;"))
+    assertTrue("leading box plus the composition's origin: " + report, report.contains(";leading=20,44,80,84;"))
+    assertTrue("trailing box plus the composition's origin: " + report, report.contains(";trailing=82,44,120,84"))
+  }
+
+  @Test
+  fun aRecycleClearsTheSplitTriggerAndItsHalves() {
+    // The recycle reset for E3's layout, next to F6's for the popup. A control that went
+    // through the pool with `split=1` still filed would tell the next owner's harness
+    // that its plain trigger is a split button - and its halves, still holding the
+    // previous owner's geometry, would be pressable coordinates for a box that is gone.
+    val model =
+      MenuModel().apply {
+        title = "Actions"
+        hasPrimaryAction = true
+        noteCompositionOrigin(20, 40)
+        noteSplitDrawn(true)
+        noteLeadingBox(0f, 4f, 60f, 44f)
+        noteTrailingBox(62f, 4f, 100f, 44f)
+      }
+    assertTrue(model.readMenuReport().contains(";split=1;"))
+
+    model.reset()
+
+    // The next owner's first layout pass, which is the only thing that makes "the boxes
+    // were cleared" observable at all: an unread half is `-1` either way, so without this
+    // the assertion would pass on a `reset` that kept the previous owner's geometry and
+    // only stopped summing it. With it, a kept box reads back as a real rect.
+    model.noteCompositionOrigin(20, 40)
+
+    val report = model.readMenuReport()
+    assertFalse("the recycled control is not a split button", report.contains(";split=1;"))
+    assertTrue("the previous owner's halves are gone: " + report, report.contains(";leading=-1,-1,-1,-1;"))
+    assertTrue("the previous owner's halves are gone: " + report, report.endsWith(";trailing=-1,-1,-1,-1"))
+  }
+
   @Test
   fun aCloseOnlyReportsTheTransition() {
     // The pairing D32 keeps: one open, one close, so a pick cannot leave an open a

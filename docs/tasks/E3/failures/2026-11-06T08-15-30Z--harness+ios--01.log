@@ -1,0 +1,197 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-06T08:15:30.746Z on code tree `d1e7262c1780` at HEAD `bcf42b2` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 1166252 ms
+- Load: start 3.28, end 3.40, median 5.01, max 135.51
+- Device: ios
+- Full log: `task/E3-split-button/harness+ios-2026-11-06T08-15-30.457Z.log` (<store>/task/E3-split-button/harness+ios-2026-11-06T08-15-30.457Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · Split trigger (E3) › is two halves, and each one does only its own job`
+- `expected [ 'split:action' ] to deeply equal []`
+- `● Menu · Split trigger (E3) › starts a new mount with one trigger, whatever the last one drew`
+- `expected null to be false // Object.is equality`
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+ios-2026-11-06T08-15-30.457Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   E3-o7x7a                 E3           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.40 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 190 — the rest is in the full log above)
+
+```
+
+    console.log
+      iOS: onOpen/onClose unobservable (system presentation) - asserted as unanswerable, not as zero
+
+
+    console.log
+      iOS: disabled-while-open is unobservable; the flag round-trips
+
+
+    console.log
+      submenu: android=composed rows (inline), ios=model rows (nested); rows=6
+
+
+    console.log
+      wide/floor lists on iOS: no popup window to measure (D23); rows 2/2
+
+
+    console.log
+      untitled group: ios drawn=Open,(Share:AirDrop,Mail),(:Delete!,Archive~),(More:Get Info)
+
+
+    console.log
+      iOS: no live-menu count exists to drop back to zero
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: ios drawn=Grid@Tiles+,List,Rename@Edit the name,(Sort:[scrubbed]@Newest first~),(:Delete!)
+
+
+    console.log
+      e2 in place: ios drawn=Grid,List,Rename,(Sort:Name,Date~),(:Delete!)
+
+
+    console.log
+      e2 remount: ios drawn=Grid,List,Rename,(Sort:Name,Date~),(:Delete!)
+
+
+    console.log
+      split sizes (declared fallback 74.00x38.00): split-size=79.67x34.33 plain-size=79.67x34.33 corrections=2
+
+
+    console.log
+      iOS hosted box: 79.33x34.33 measured 79.33x34.33
+
+
+    console.log
+      read back: variant=outlined size=large tint=4291311531 label=Open the actions
+
+
+    console.log
+      a11y tree: named=127.00x50.33 fallback=null plain=null
+
+  ● Menu · Split trigger (E3) › is two halves, and each one does only its own job
+
+    expected [ 'split:action' ] to deeply equal []
+
+      [0m [90m 2272 |[39m       [36mawait[39m pressTrigger([32m'split'[39m)[33m;[39m
+       [90m 2273 |[39m       [36mawait[39m settle([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2274 |[39m       expect(primaryLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 2275 |[39m       expect(stateLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m 2276 |[39m       expect(report([32m'split'[39m)[33m.[39msplit)[33m.[39mtoBeNull()[33m;[39m
+       [90m 2277 |[39m       console[33m.[39mlog([0m
+
+  ● Menu · Split trigger (E3) › starts a new mount with one trigger, whatever the last one drew
+
+    expected null to be false // Object.is equality
+
+      [0m [90m 2465 |[39m     [36mawait[39m waitForHandle([32m'split-recycle'[39m[33m,[39m [32m'the remounted plain menu'[39m)[33m;[39m
+       [90m 2466 |[39m     [36mconst[39m fresh [33m=[39m report([32m'split-recycle'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2467 |[39m     expect(fresh[33m.[39msplit)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2468 |[39m     expect(fresh[33m.[39mleading)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 2469 |[39m     expect(fresh[33m.[39mtrailing)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 2470 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {[0m
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+Summary of all failing tests
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · Split trigger (E3) › is two halves, and each one does only its own job
+
+    expected [ 'split:action' ] to deeply equal []
+
+      [0m [90m 2272 |[39m       [36mawait[39m pressTrigger([32m'split'[39m)[33m;[39m
+       [90m 2273 |[39m       [36mawait[39m settle([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2274 |[39m       expect(primaryLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                                 [31m[1m^[22m[39m
+       [90m 2275 |[39m       expect(stateLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m 2276 |[39m       expect(report([32m'split'[39m)[33m.[39msplit)[33m.[39mtoBeNull()[33m;[39m
+       [90m 2277 |[39m       console[33m.[39mlog([0m
+
+  ● Menu · Split trigger (E3) › starts a new mount with one trigger, whatever the last one drew
+
+    expected null to be false // Object.is equality
+
+      [0m [90m 2465 |[39m     [36mawait[39m waitForHandle([32m'split-recycle'[39m[33m,[39m [32m'the remounted plain menu'[39m)[33m;[39m
+       [90m 2466 |[39m     [36mconst[39m fresh [33m=[39m report([32m'split-recycle'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2467 |[39m     expect(fresh[33m.[39msplit)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2468 |[39m     expect(fresh[33m.[39mleading)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 2469 |[39m     expect(fresh[33m.[39mtrailing)[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m1[39m])[33m;[39m
+       [90m 2470 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {[0m
+
+
+Test Suites: 1 failed, 1 skipped, 23 passed, 24 of 25 total
+Tests:       2 failed, 2 skipped, 445 passed, 449 total
+Snapshots:   0 total
+Time:        1164.31 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp d1e7262c at bcf42b2eda697801cec5ae1c96cce614c3af9848, now 661818a8 at bacd404f184265e10c5de7bb032434e7f5cd6060)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp d1e7262c at bcf42b2eda697801cec5ae1c96cce614c3af9848, now 661818a8 at bacd404f184265e10c5de7bb032434e7f5cd6060)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:ios FAIL in 1166.3 s - note: the code tree moved during the run (661818a877cf now), so this line describes d1e7262c1780
+gate: recorded in .gates/task/E3-split-button.jsonl
+
+
+gate: appended the device context to task/E3-split-button/harness+ios-2026-11-06T08-15-30.457Z.log (4 probe(s))
+
+```
