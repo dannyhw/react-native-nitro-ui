@@ -1,0 +1,87 @@
+# Failure excerpt — harness:android:PopoverProto
+
+- Ran: 2026-11-06T02:13:46.228Z on code tree `b75307c766fd` at HEAD `66d4604` (branch `task/S5-popover-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android PopoverProto`
+- Result: fail, exit 1, 37823 ms
+- Load: start 3.46, end 3.63, median 3.53, max 3.63
+- Device: android / device `emulator-5574` / lease `S5-bp78g`
+- Full log: `task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log` (<store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/PopoverProto.harness.tsx`
+- `● PopoverProto · evidence › prints every number the tests above measured (red by design)`
+- `expected '\nS5 Q1 10/10\nk=0 ok=1 firstDraw=334…' to be '(the measurements, above)' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S5-bp78g (still live)
+  |   S5-bp78g                 S5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.90 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:PopoverProto
+gate: node ../scripts/harness.mjs --harnessRunner android PopoverProto (cwd example)
+gate: code tree b75307c766fd at HEAD 66d46049
+gate: git tree ecf528fcc10f with a DIRTY worktree (not reusable)
+gate: log task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log
+gate:       <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android PopoverProto
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree b75307c766fd, 18 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.46/7.99 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/PopoverProto.harness.tsx
+  ● PopoverProto · evidence › prints every number the tests above measured (red by design)
+
+    expected '\nS5 Q1 10/10\nk=0 ok=1 firstDraw=334…' to be '(the measurements, above)' // Object.is equality
+
+      [0m [90m 449 |[39m   [90m// each with its own pass or fail.[39m
+       [90m 450 |[39m   it([32m'prints every number the tests above measured (red by design)'[39m[33m,[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 451 |[39m     expect([32m`\n${evidence.join('\n')}\n`[39m)[33m.[39mtoBe([32m'(the measurements, above)'[39m)[33m;[39m
+       [90m     |[39m                                              [31m[1m^[22m[39m
+       [90m 452 |[39m   })[33m;[39m
+       [90m 453 |[39m })[33m;[39m
+       [90m 454 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 passed, 9 total
+Snapshots:   0 total
+Time:        36.879 s
+Ran all test suites matching PopoverProto.
+gate: harness:android:PopoverProto FAIL in 37.8 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+
+gate: appended the device context to task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-13-45.880Z.log (5 probe(s))
+
+```

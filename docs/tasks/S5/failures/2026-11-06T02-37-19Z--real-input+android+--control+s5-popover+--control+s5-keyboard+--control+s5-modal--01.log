@@ -1,0 +1,166 @@
+# Failure excerpt — real-input:android:--control:s5-popover:--control:s5-keyboard:--control:s5-modal
+
+- Ran: 2026-11-06T02:37:19.893Z on code tree `7d759cec1aa8` at HEAD `66d4604` (branch `task/S5-popover-spike`)
+- Command: `node scripts/real-input/android.mjs --control s5-popover --control s5-keyboard --control s5-modal`
+- Result: fail, exit 1, 626787 ms
+- Load: start 3.00, end 3.88, median 2.90, max 5.77
+- Device: android / device `emulator-5574` / lease `S5-bp78g`
+- Full log: `task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log` (<store>/task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ three real taps did not bring a tap outside to close it`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S5-bp78g (still live)
+  |   S5-bp78g                 S5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 124 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: real-input:android:--control:s5-popover:--control:s5-keyboard:--control:s5-modal
+gate: node scripts/real-input/android.mjs --control s5-popover --control s5-keyboard --control s5-modal (cwd .)
+gate: code tree 7d759cec1aa8 at HEAD 66d46049
+gate: git tree ecf528fcc10f with a DIRTY worktree (not reusable)
+gate: log task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log
+gate:       <store>/task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log
+real-input (android): emulator-5574 · nitroui_t03 · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Pop" (tab-pop) is 48.8 × 48 dp, at least the 48 dp minimum
+
+  s5-popover: S5 Q1/Q2: ten real opens, each a new size shown first at its final size, and a real tap inside lands once
+    · screenshot s5-android-popover-open.png
+    · cycle 1: tap once press=1 closes=1 fit=1/1 | ok=1 firstDraw=766x414 lastDraw=766x414 drawSizes=766x414 content=292x158dp density=2.625 draws=5 firstDrawMs=23 trace=766x414/r766x414/a1.00,766x414/r766x414/a1.00,766x414/r766x414/a1.00,766x414/r766x414/a1.00,766x414/r766x414/a1.00
+    ✗ three real taps did not bring a tap outside to close it
+
+  s5-keyboard: S5 Q3: a real tap on a TextInput in the popover brings up the keyboard
+    · screenshot s5-android-keyboard-before.png
+    · screenshot s5-android-keyboard-after.png
+    · Q3 ime=1 display=1080x2424 fieldBefore=84,2034 → 662,2123 fieldAfter=84,2034 → 662,2123 imeFrame=frame=[0,142][1080,2424] touchable=- typed=1
+    · Q3 after close: focus=1 text=abc iopen=0
+    ✓ Q3: a real tap on the TextInput brings up the keyboard — expected true, saw true
+    ✓ and typing reaches JS — expected abc, saw abc
+
+  s5-modal: S5 Q4: a popover over an RN Modal takes a tap, and closing either way strands nothing
+    · screenshot s5-android-modal-popover.png
+    ✓ Q4: a real tap inside the popover over the Modal lands — expected true, saw true
+    ✓ Back closes the popover and leaves the Modal up — expected true, saw true
+    · screenshot s5-android-modal-closed-from-popover.png
+    · Q4 mainA=1 mainB=2 modal=0 mopen=1 popups 0->0
+    ✓ after the popover then the Modal closed, the screen takes a real tap — expected 1, saw 1
+    ✓ after the Modal closed under an open popover, the screen takes a real tap — expected 2, saw 2
+    ✓ and no popup window is left — expected 0, saw 0
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][492,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2080][1038,2206]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2099][714,2225]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+s5-popover: FAIL (no retries)
+    failed: three real taps did not bring a tap outside to close it
+s5-keyboard: PASS (no retries)
+s5-modal: PASS (no retries)
+
+real-input (android): 2/3 controls passed · 0 press sequence(s) needed a retry · 19/19 auxiliary checks passed
+gate: real-input:android:--control:s5-popover:--control:s5-keyboard:--control:s5-modal FAIL in 626.8 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/S5-popover-spike/real-input+android+--control+s5-popover+--control+s5-keyboard+--control+s5-modal-2026-11-06T02-37-19.529Z.log (5 probe(s))
+
+```

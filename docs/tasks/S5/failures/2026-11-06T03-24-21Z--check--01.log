@@ -1,0 +1,177 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T03:24:21.874Z on code tree `0e5d24e14c8d` at HEAD `66d4604` (branch `task/S5-popover-spike`)
+- Command: `bun run check`
+- Result: fail, exit 1, 105548 ms
+- Load: start 2.48, end 5.55, median 6.96, max 8.67
+- Device: none recorded (not a device gate)
+- Full log: `task/S5-popover-spike/check-2026-11-06T03-24-21.535Z.log` (<store>/task/S5-popover-spike/check-2026-11-06T03-24-21.535Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `FAIL scripts/__tests__/real-input-tab-targets.test.js`
+- `● exampleTabs › picks up tabs the registry adds, so the next components need no edit here`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: "host"`
+- `Received: "pop"`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "nitrogen:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2815 — the rest is in the full log above)
+
+```
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+    console.error
+      You seem to have overlapping act() calls, this is not supported. Be sure to await previous act() calls before making a new one.
+
+      at popActScope (node_modules/react/cjs/react.development.js:630:17)
+      at node_modules/react/cjs/react.development.js:920:17
+
+PASS scripts/__tests__/bench-baseline-format.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS src/__tests__/materialTheme.test.ts
+PASS src/__tests__/NitroUiCore.test.ts
+PASS scripts/__tests__/component-coverage.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/harness-isolated.test.js
+PASS scripts/__tests__/check-runner.test.js (13.664 s)
+PASS scripts/__tests__/registry.test.js
+PASS scripts/__tests__/patch-nitrogen.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (14.828 s)
+PASS scripts/__tests__/lease-metro-port.test.js (19.772 s)
+PASS scripts/__tests__/gate-check.test.js (28.964 s)
+PASS scripts/__tests__/gate-logs.test.js (48.718 s)
+PASS scripts/__tests__/gate.test.js (52.26 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (54.518 s)
+PASS scripts/__tests__/ci-workflows.test.js (70.701 s)
+PASS scripts/__tests__/bench-gate.test.js (100.324 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/real-input-tab-targets.test.js
+  ● exampleTabs › picks up tabs the registry adds, so the next components need no edit here
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "host"
+    Received: "pop"
+
+      116 |     );
+      117 |     // And the hand-written Host entry after the region is still read.
+    > 118 |     expect(tabs.at(-1)?.id).toBe('host');
+          |                             ^
+      119 |   });
+      120 | });
+      121 |
+
+      at Object.toBe (scripts/__tests__/real-input-tab-targets.test.js:118:29)
+
+
+Test Suites: 1 failed, 69 passed, 70 total
+Tests:       1 failed, 1751 passed, 1752 total
+Snapshots:   0 total
+Time:        100.958 s
+Ran all test suites.
+error: script "test" exited with code 1
+──────── full log: nitrogen:check ────────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 19/19 HybridObjects in 1.4s!
+💡  Your code is in <tmp>/nitrogen-check-o7K4gv/nitrogen/generated
+‼️   Added 601 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiPopoverProtoComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverProtoComponent.mm
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/c++/JHybridNitroUiPopoverProtoSpec.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/c++/JHybridNitroUiPopoverProtoSpec.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/c++/views/JHybridNitroUiPopoverProtoStateUpdater.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/c++/views/JHybridNitroUiPopoverProtoStateUpdater.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPopoverProtoSpec.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverProtoManager.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverProtoStateUpdater.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/ios/c++/HybridNitroUiPopoverProtoSpecSwift.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/ios/c++/HybridNitroUiPopoverProtoSpecSwift.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/ios/c++/views/HybridNitroUiPopoverProtoComponent.mm is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/ios/swift/HybridNitroUiPopoverProtoSpec.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/ios/swift/HybridNitroUiPopoverProtoSpec_cxx.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/shared/c++/HybridNitroUiPopoverProtoSpec.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/shared/c++/HybridNitroUiPopoverProtoSpec.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/shared/c++/views/HybridNitroUiPopoverProtoComponent.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/shared/c++/views/HybridNitroUiPopoverProtoComponent.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-o7K4gv/nitrogen/generated/shared/json/NitroUiPopoverProtoConfig.json is not committed (run `bun run nitrogen`).
+
+nitrogen-check: 17 drift issue(s).
+error: script "nitrogen:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 105.5 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+```
