@@ -23,6 +23,11 @@ import UIKit
 
 // `NitroUiText` and `NitroUiTextLimit` live in `NitroUiTextLimit.swift`: Foundation
 // only, so `scripts/native-tests/text-limit.test.swift` compiles them on the host.
+//
+// The `NitroUiTextControl` protocol, `NitroUiTextTraits` and the shared half of the
+// Hybrid View (``NitroUiTextOwner``) live in `NitroUiTextEditing.swift`, because
+// `SearchField` drives the same rules with a different control and the two must not be
+// able to drift (DECISIONS D38 item 2).
 
 // MARK: - Model
 
@@ -64,8 +69,9 @@ final class TextFieldModel: NitroUiModel {
   /// The live UIKit control. Weak: the SwiftUI representable owns it.
   weak var control: NitroUiTextControl?
   /// Where the control reports to. Weak: the Hybrid View owns the host, which owns
-  /// this model.
-  weak var owner: HybridNitroUiTextField?
+  /// this model. The protocol so that a SearchField can drive the same model
+  /// (`NitroUiTextEditing.swift`).
+  weak var owner: (any NitroUiTextOwner)?
 
   override init() {
     super.init()
@@ -76,81 +82,6 @@ final class TextFieldModel: NitroUiModel {
 }
 
 // MARK: - The two UIKit controls
-
-/// What the Hybrid View needs from either control.
-protocol NitroUiTextControl: UIView {
-  /// The text the control holds, marked text included.
-  var nuiText: String { get }
-  /// Whether an IME composition (marked text) is open.
-  var nuiComposing: Bool { get }
-  /// Replace the text without reporting it as an edit.
-  func nuiSetText(_ text: String)
-  /// Re-apply the model's configuration (never its text).
-  func nuiApply()
-  /// What `nuiTestSetMarkedText` does: open, update or (`''`) commit a composition.
-  func nuiSetMarkedText(_ text: String)
-}
-
-/// Shared configuration, so the two controls cannot drift apart.
-enum NitroUiTextTraits {
-  static func keyboardType(_ name: String) -> UIKeyboardType {
-    switch name {
-    case "number-pad": return .numberPad
-    case "decimal-pad": return .decimalPad
-    case "numeric": return .numbersAndPunctuation
-    case "email-address": return .emailAddress
-    case "phone-pad": return .phonePad
-    case "url": return .URL
-    default: return .default
-    }
-  }
-
-  static func autocapitalization(_ name: String) -> UITextAutocapitalizationType {
-    switch name {
-    case "none": return .none
-    case "words": return .words
-    case "characters": return .allCharacters
-    default: return .sentences
-    }
-  }
-
-  static func returnKey(_ name: String) -> UIReturnKeyType {
-    switch name {
-    case "done": return .done
-    case "go": return .go
-    case "next": return .next
-    case "search": return .search
-    case "send": return .send
-    default: return .default
-    }
-  }
-
-  /// The platform body font, following Dynamic Type - the size every other
-  /// control's label follows, which is what the environment epoch re-measures for.
-  static var font: UIFont { UIFont.preferredFont(forTextStyle: .body) }
-
-  /// The input traits both controls take from the model, resolved once.
-  struct Resolved {
-    let keyboard: UIKeyboardType
-    let capitalization: UITextAutocapitalizationType
-    let correction: UITextAutocorrectionType
-    let spelling: UITextSpellCheckingType
-
-    init(_ model: TextFieldModel) {
-      keyboard = NitroUiTextTraits.keyboardType(model.keyboardType)
-      capitalization = NitroUiTextTraits.autocapitalization(model.autoCapitalize)
-      correction = model.autoCorrect ? .default : .no
-      // Spell checking follows autocorrect, as RN's `autoCorrect={false}` does.
-      spelling = model.autoCorrect ? .default : .no
-    }
-  }
-
-  /// Whether a composition is open: the `markedTextRange` check RN makes before it
-  /// compares or replaces text (`RCTTextInputComponentView.mm:873-905`).
-  static func composing(_ input: UITextInput) -> Bool {
-    input.markedTextRange != nil
-  }
-}
 
 /// The single-line control: a `UITextField`, undecorated like RN's `TextInput`.
 final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTextControl {
@@ -182,11 +113,24 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
 
   var nuiText: String { text ?? "" }
   var nuiComposing: Bool { NitroUiTextTraits.composing(self) }
+  var nuiModel: TextFieldModel { model }
 
   func nuiSetText(_ next: String) {
     applying = true
     text = next
     applying = false
+  }
+
+  func nuiSetCaret(at utf16Offset: Int) {
+    guard let caret = position(from: beginningOfDocument, offset: utf16Offset) else {
+      return
+    }
+    selectedTextRange = textRange(from: caret, to: caret)
+  }
+
+  func nuiReportEdit() {
+    guard !applying else { return }
+    model.owner?.userEdited(self)
   }
 
   func nuiApply() {
@@ -225,19 +169,6 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
     model.owner?.publishState()
   }
 
-  func nuiSetMarkedText(_ marked: String) {
-    if marked == "\u{18}" {
-      // CANCEL: what Backspace through a whole composition does - no marked text, then
-      // the session ends with nothing to commit.
-      setMarkedText("", selectedRange: NSRange(location: 0, length: 0))
-      unmarkText()
-    } else if marked.isEmpty {
-      unmarkText()
-    } else {
-      setMarkedText(marked, selectedRange: NSRange(location: (marked as NSString).length, length: 0))
-    }
-  }
-
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window != nil, model.focusWhenReady {
@@ -264,27 +195,17 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
     shouldChangeCharactersIn range: NSRange,
     replacementString string: String
   ) -> Bool {
-    // While a composition is open the IME owns the text: refusing or trimming a
-    // marked-text step destroys it. The limit is applied when it commits.
-    guard let limit = model.maxLength, !nuiComposing else { return true }
-    guard let fitting = NitroUiTextLimit.fitting(current: nuiText, range: range, replacement: string, limit: limit)
-    else {
-      return false
-    }
-    if fitting == string { return true }
-    // Part of it fits: insert that part ourselves, then report it as the edit it is.
-    let next = (nuiText as NSString).replacingCharacters(in: range, with: fitting)
-    nuiSetText(next)
-    if let caret = position(from: beginningOfDocument, offset: range.location + (fitting as NSString).length) {
-      selectedTextRange = textRange(from: caret, to: caret)
-    }
-    editingChanged()
-    return false
+    nuiShouldChangeCharacters(in: range, replacement: string)
+  }
+
+  /// UIKit's own clear button: refuse it on a field that is not editable, and let the
+  /// `editingChanged` it causes report the empty text as the edit it is.
+  func textFieldShouldClear(_ textField: UITextField) -> Bool {
+    nuiAllowsClear
   }
 
   @objc private func editingChanged() {
-    guard !applying else { return }
-    model.owner?.userEdited(self)
+    nuiReportEdit()
   }
 
   @objc private func didBegin() {
@@ -296,10 +217,7 @@ final class NitroUiSingleLineField: UITextField, UITextFieldDelegate, NitroUiTex
   }
 
   func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-    // RN's default for a single-line field (`submitBehavior` 'blurAndSubmit'):
-    // report the submit, then give focus up.
-    model.owner?.submitted(nuiText)
-    _ = resignFirstResponder()
+    nuiSubmitFromReturn()
     return false
   }
 
@@ -342,12 +260,26 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
 
   var nuiText: String { text ?? "" }
   var nuiComposing: Bool { NitroUiTextTraits.composing(self) }
+  var nuiModel: TextFieldModel { model }
 
   func nuiSetText(_ next: String) {
     applying = true
     text = next
     applying = false
     updatePlaceholder()
+  }
+
+  func nuiSetCaret(at utf16Offset: Int) {
+    selectedRange = NSRange(location: utf16Offset, length: 0)
+  }
+
+  /// The text changed by hand: the placeholder goes away with it, the height follows
+  /// the line count, and only then is the edit reported.
+  func nuiReportEdit() {
+    guard !applying else { return }
+    updatePlaceholder()
+    invalidateIntrinsicContentSize()
+    model.owner?.userEdited(self)
   }
 
   func nuiApply() {
@@ -371,19 +303,6 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
     if !model.editable, isFirstResponder { _ = resignFirstResponder() }
     updatePlaceholder()
     model.owner?.publishState()
-  }
-
-  func nuiSetMarkedText(_ marked: String) {
-    if marked == "\u{18}" {
-      // CANCEL: what Backspace through a whole composition does - no marked text, then
-      // the session ends with nothing to commit.
-      setMarkedText("", selectedRange: NSRange(location: 0, length: 0))
-      unmarkText()
-    } else if marked.isEmpty {
-      unmarkText()
-    } else {
-      setMarkedText(marked, selectedRange: NSRange(location: (marked as NSString).length, length: 0))
-    }
   }
 
   private func updatePlaceholder() {
@@ -425,24 +344,11 @@ final class NitroUiMultiLineField: UITextView, UITextViewDelegate, NitroUiTextCo
   }
 
   func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText string: String) -> Bool {
-    guard let limit = model.maxLength, !nuiComposing else { return true }
-    guard let fitting = NitroUiTextLimit.fitting(current: nuiText, range: range, replacement: string, limit: limit)
-    else {
-      return false
-    }
-    if fitting == string { return true }
-    let next = (nuiText as NSString).replacingCharacters(in: range, with: fitting)
-    nuiSetText(next)
-    selectedRange = NSRange(location: range.location + (fitting as NSString).length, length: 0)
-    textViewDidChange(self)
-    return false
+    nuiShouldChangeCharacters(in: range, replacement: string)
   }
 
   func textViewDidChange(_ textView: UITextView) {
-    guard !applying else { return }
-    updatePlaceholder()
-    invalidateIntrinsicContentSize()
-    model.owner?.userEdited(self)
+    nuiReportEdit()
   }
 
   func textViewDidBeginEditing(_ textView: UITextView) {
@@ -541,7 +447,7 @@ struct TextFieldContent: NitroUIContent {
 // MARK: - Hybrid View
 
 /// The Hybrid View React renders as `NitroUiTextField`.
-final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView {
+final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView, NitroUiTextOwner {
   private let host: NitroSwiftUIHost<TextFieldContent>
 
   /// This component's name in the sizing engine.
@@ -761,6 +667,23 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView {
     set { model.onSubmit = newValue }
   }
 
+  // MARK: - NitroUiTextOwner
+  // The half of the shared text logic (`NitroUiTextEditing.swift`) that is this
+  // view's own: which model it drives, and how a text change reaches its host.
+
+  var nuiTextModel: TextFieldModel { model }
+
+  func nuiMarkTextDirty(sizeMayChange: Bool) {
+    host.markDirty()
+    if sizeMayChange { host.noteContentSizeMayHaveChanged() }
+  }
+
+  /// Auto-grow: the text is another number of lines, so the cached content size is
+  /// wrong and nothing else will notice.
+  func nuiInvalidateTextSize() {
+    host.invalidateContentSize()
+  }
+
   // MARK: - Lifecycle
 
   func afterUpdate() {
@@ -768,24 +691,6 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView {
     syncText()
     host.commit()
     publishState()
-  }
-
-  /// Decide a pending `value` write: applied, stale, or held back by an open
-  /// composition. Called from a commit, and when a composition that held one back ends.
-  private func applyWrite() {
-    let composing = model.control?.nuiComposing ?? false
-    guard let js = model.state.js, js != model.state.displayed else { return }
-    if composing {
-      // Q2 §2.2: a write under an open composition would destroy it. Held back, not
-      // queued: `userEdited` decides it again when the composition ends.
-      model.lastWrite = "composing"
-    } else if model.state.reconcile() {
-      model.lastWrite = "applied"
-      host.markDirty()
-      if model.multiline { host.noteContentSizeMayHaveChanged() }
-    } else {
-      model.lastWrite = "stale"
-    }
   }
 
   func prepareForRecycle() {
@@ -834,66 +739,6 @@ final class HybridNitroUiTextField: HybridNitroUiTextFieldSpec, RecyclableView {
   }
 
   // MARK: - From the control
-
-  /// Write the model's text into the control when the two differ - a React write, a
-  /// default, a reset - and never into an open composition.
-  private func syncText() {
-    guard let control = model.control, !control.nuiComposing else { return }
-    if NitroUiText(control.nuiText) != model.state.displayed {
-      control.nuiSetText(model.state.displayed.string)
-    }
-  }
-
-  /// The user changed the text. Native owns it, counts it and emits it - once a
-  /// composition has committed, not at each of its steps (marked text belongs to the
-  /// IME until then; Android differs, see `docs/components/text-field.md`).
-  ///
-  /// The edit that ends a composition also settles a `value` write the composition held
-  /// back, whatever the text it leaves: a composition the user deleted puts back text
-  /// native already counted, so no edit and no commit would ever decide it again.
-  func userEdited(_ control: NitroUiTextControl) {
-    nitroUiAssertMainThread()
-    let composing = control.nuiComposing
-    let compositionEnded = model.wasComposing && !composing
-    model.wasComposing = composing
-    guard !composing else {
-      publishState()
-      return
-    }
-    var text = control.nuiText
-    if let limit = model.maxLength, (text as NSString).length > limit {
-      // A backstop for text that got past the delegate's cut - a composition's commit, or
-      // `insertText`. It cuts the *edit*, not the field: what the user typed takes the room
-      // the cap still has wherever they put it, and the text around it keeps its place.
-      // Cutting the tail instead lost the words on either side of a mid-field commit.
-      let kept = NitroUiCommitDelta.clamped(
-        displayed: model.state.displayed.string,
-        incoming: text,
-        limit: limit
-      )
-      if kept != text {
-        text = kept
-        control.nuiSetText(text)
-      }
-    }
-    let next = NitroUiText(text)
-    if next != model.state.displayed {
-      let eventCount = model.state.user(next)
-      if model.multiline {
-        // Auto-grow: the text can now be another number of lines, and nothing else
-        // will re-measure - no bounds change, no prop. Measures now and reports.
-        host.invalidateContentSize()
-      }
-      publishState()
-      model.onChange?(text, Double(eventCount))
-    }
-    if compositionEnded, model.lastWrite == "composing" {
-      applyWrite()
-      syncText()
-      if model.multiline { host.invalidateContentSize() }
-    }
-    publishState()
-  }
 
   func focusMoved(_ focused: Bool) {
     nitroUiAssertMainThread()

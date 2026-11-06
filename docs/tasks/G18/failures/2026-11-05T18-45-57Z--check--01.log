@@ -1,0 +1,173 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-05T18:45:57.908Z on code tree `a20ae8634f66` at HEAD `73c8eaf` (branch `task/G18-merge`)
+- Command: `bun run check`
+- Result: fail, exit 1, 220114 ms
+- Load: start 11.76, end 16.42, median 30.91, max 49.87
+- Device: none recorded (not a device gate)
+- Full log: `task/G18-merge/check-2026-11-05T18-45-56.978Z.log` (<store>/task/G18-merge/check-2026-11-05T18-45-56.978Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/real-input-tab-targets.test.js`
+- `● exampleTabs › picks up tabs the registry adds, so the next components need no edit here`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2798 — the rest is in the full log above)
+
+```
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-suite.test.js
+  ● Console
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/pod-install.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (33.003 s)
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/component-coverage.test.js
+PASS scripts/__tests__/lease.test.js (29.564 s)
+PASS scripts/__tests__/lease-metro-port.test.js (36.292 s)
+PASS scripts/__tests__/gate-check.test.js (74.551 s)
+PASS scripts/__tests__/ci-workflows.test.js (77.78 s)
+PASS scripts/__tests__/gate.test.js (79.006 s)
+PASS scripts/__tests__/gate-logs.test.js (106.994 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (135.476 s)
+PASS scripts/__tests__/bench-gate.test.js (206.828 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/real-input-tab-targets.test.js
+  ● exampleTabs › picks up tabs the registry adds, so the next components need no edit here
+
+    component registry is not valid:
+      - duplicate name "Tooltip": Tooltip and Tooltip cannot both claim it
+      - duplicate hybridView "NitroUiTooltip": Tooltip and Tooltip cannot both claim it
+      - duplicate id "tooltip": Tooltip and Tooltip cannot both claim it
+      - duplicate exampleTab "tooltip": Tooltip and Tooltip cannot both claim it
+      - duplicate export "Tooltip": Tooltip and Tooltip cannot both claim it
+
+      391 |   }
+      392 |   if (problems.length > 0) {
+    > 393 |     throw new Error(
+          |           ^
+      394 |       `component registry is not valid:\n${problems.map((p) => `  - ${p}`).join('\n')}`
+      395 |     );
+      396 |   }
+
+      at manifestsFromEntries (scripts/registry-core.mjs:393:11)
+      at Object.<anonymous> (scripts/__tests__/real-input-tab-targets.test.js:98:43)
+
+
+Test Suites: 1 failed, 69 passed, 70 total
+Tests:       1 failed, 1747 passed, 1748 total
+Snapshots:   0 total
+Time:        207.653 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 220.1 s
+gate: recorded in .gates/task/G18-merge.jsonl
+
+```

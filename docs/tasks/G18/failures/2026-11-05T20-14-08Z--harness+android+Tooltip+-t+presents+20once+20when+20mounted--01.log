@@ -1,0 +1,89 @@
+# Failure excerpt — harness:android:Tooltip:-t:presents%20once%20when%20mounted
+
+- Ran: 2026-11-05T20:14:08.221Z on code tree `a588d6e44176` at HEAD `5126eea` (branch `task/G18-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Tooltip -t presents once when mounted`
+- Result: fail, exit 1, 14996 ms
+- Load: start 10.51, end 10.70, median 10.61, max 10.70
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log` (<store>/task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window`
+- `expected 'presented=1;js=1;live=1;presentCount=…' to be 'DIAG' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18merge-wc3ty           G18merge     both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.70 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_t01 for this run
+gate: harness:android:Tooltip:-t:presents%20once%20when%20mounted
+gate: node ../scripts/harness.mjs --harnessRunner android Tooltip -t presents once when mounted (cwd example)
+gate: code tree a588d6e44176 at HEAD 5126eea5
+gate: git tree 5c8f565db0f8 with a DIRTY worktree (not reusable)
+gate: log task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log
+gate:       <store>/task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Tooltip -t presents once when mounted
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a588d6e44176, 17 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.51/9.77 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Tooltip.harness.tsx
+  ● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window
+
+    expected 'presented=1;js=1;live=1;presentCount=…' to be 'DIAG' // Object.is equality
+
+      [0m [90m 671 |[39m     )[33m;[39m
+       [90m 672 |[39m     [36mawait[39m sleep([35m800[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 673 |[39m     expect(reportOf([32m'at-mount'[39m)[33m.[39mraw)[33m.[39mtoBe([32m'DIAG'[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 674 |[39m     expect(up[33m.[39mlive)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 675 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m 676 |[39m   })[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 21 skipped, 22 total
+Snapshots:   0 total
+Time:        12.753 s
+Ran all test suites matching Tooltip with tests matching "presents once when mounted".
+gate: harness:android:Tooltip:-t:presents%20once%20when%20mounted FAIL in 15.0 s
+gate: recorded in .gates/task/G18-merge.jsonl
+
+
+gate: appended the device context to task/G18-merge/harness+android+Tooltip+-t+presents+20once+20when+20mounted-2026-11-05T20-14-07.479Z.log (5 probe(s))
+
+```

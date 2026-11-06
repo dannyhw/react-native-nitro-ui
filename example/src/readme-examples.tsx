@@ -25,15 +25,17 @@ import {
   type MenuGroup,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
   TextField,
   type TextFieldHandle,
+  Tooltip,
   setMaterialTheme,
 } from 'react-native-nitro-ui';
 import { useRef, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 // #region switch
 export function WifiSettings() {
@@ -132,22 +134,29 @@ export function DueDate() {
 // #endregion
 
 // #region menu
-const FILE_ACTIONS: MenuGroup = {
-  actions: [
-    { id: 'rename', title: 'Rename' },
-    { id: 'duplicate', title: 'Duplicate' },
-  ],
-  sections: [
-    {
-      id: 'dangerous',
-      title: 'Dangerous',
-      items: [{ id: 'delete', title: 'Delete', destructive: true }],
-    },
-  ],
-};
-
 export function FileActions() {
   const [last, setLast] = useState('nothing yet');
+  const [pinned, setPinned] = useState(false);
+
+  const group: MenuGroup = {
+    actions: [
+      { id: 'rename', title: 'Rename' },
+      { id: 'duplicate', title: 'Duplicate', subtitle: 'Keeps the original' },
+      { id: 'pin', title: 'Pinned', checked: pinned },
+    ],
+    sections: [
+      {
+        id: 'dangerous',
+        title: 'Dangerous',
+        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+      },
+    ],
+  };
+
+  const handleSelect = (id: string) => {
+    setLast(id);
+    if (id === 'pin') setPinned((current) => !current);
+  };
 
   return (
     <>
@@ -155,10 +164,10 @@ export function FileActions() {
       <Menu
         accessibilityLabel="File"
         title="File"
-        group={FILE_ACTIONS}
+        group={group}
         variant="tonal"
         size="medium"
-        onSelect={setLast}
+        onSelect={handleSelect}
       />
     </>
   );
@@ -304,6 +313,30 @@ export function Filters() {
 }
 // #endregion
 
+// #region tooltip
+export function StarHint({ onStar }: { onStar: () => void }) {
+  const [hint, setHint] = useState(true);
+
+  return (
+    <Tooltip
+      isPresented={hint}
+      onIsPresentedChange={setHint}
+      title="Saved searches"
+      message="Tap the star to keep this search."
+      actions={[{ id: 'ok', title: 'Got it' }]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Star this search"
+        onPress={onStar}
+      >
+        <Text>★</Text>
+      </Pressable>
+    </Tooltip>
+  );
+}
+// #endregion
+
 // #region text-field
 export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
   const [email, setEmail] = useState('');
@@ -333,6 +366,34 @@ export function SignInForm({ onSignIn }: { onSignIn: () => void }) {
         onChangeText={setPassword}
         onSubmitEditing={onSignIn}
       />
+    </>
+  );
+}
+// #endregion
+
+// #region search-field
+export function ProductSearch({
+  onSearch,
+}: {
+  onSearch: (query: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+
+  return (
+    <>
+      <SearchField
+        accessibilityLabel="Search products"
+        placeholder="Search the catalogue"
+        maxLength={40}
+        value={query}
+        onChangeText={setQuery}
+        onSubmitEditing={onSearch}
+      />
+      <Text>
+        {query === ''
+          ? 'Type a product name, then press search.'
+          : `Searching for ${query}…`}
+      </Text>
     </>
   );
 }

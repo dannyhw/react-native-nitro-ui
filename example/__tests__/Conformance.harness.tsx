@@ -106,10 +106,12 @@ import {
   Menu,
   Picker,
   Progress,
+  SearchField,
   SegmentedControl,
   Slider,
   Switch,
   TextField,
+  Tooltip,
   nitroUiCore,
   type MenuGroup,
   type NitroUiSizingStats,
@@ -221,6 +223,16 @@ const SHARED = {
         "height": 22
       }
     },
+    "NitroUiSearchField": {
+      "android": {
+        "width": 200,
+        "height": 56
+      },
+      "ios": {
+        "width": 200,
+        "height": 28
+      }
+    },
     "NitroUiChip": {
       "android": {
         "width": 96,
@@ -263,6 +275,7 @@ const SHARED = {
     "NitroUiDatePicker": "both",
     "NitroUiPicker": "both",
     "NitroUiTextField": "height",
+    "NitroUiSearchField": "height",
     "NitroUiChip": "none",
     "NitroUiCheckbox": "height"
   },
@@ -1581,6 +1594,43 @@ function sheetShows(report: Record<string, string>, height: number): boolean {
   );
 }
 
+const TOOLTIP_MESSAGE = 'Conformance tooltip';
+const TOOLTIP_MESSAGE_SECOND = 'Second owner’s tooltip';
+const TOOLTIP_ACTIONS = [{ id: 'ok', title: 'Got it' }];
+
+/**
+ * A Tooltip owner around a 40 x 40 anchor. The message is the name a presented tooltip
+ * carries, so it is also what the a11y rule's presentation half looks for.
+ */
+function tooltipOwner(presented: boolean, message: string): ReactElement {
+  return (
+    <Tooltip
+      isPresented={presented}
+      onIsPresentedChange={recordRecycle('conformance-tooltip')}
+      title="Conformance"
+      message={message}
+      actions={TOOLTIP_ACTIONS}
+      testID="conformance-tooltip"
+      hybridRef={captureDialog('conformance-tooltip')}
+    >
+      <View style={{ width: 40, height: 40 }} />
+    </Tooltip>
+  );
+}
+
+/** Whether a tooltip's report says it is up showing `message`. */
+function tooltipShows(
+  report: Record<string, string>,
+  message: string
+): boolean {
+  return (
+    report.presented === '1' &&
+    report.live === '1' &&
+    report.kind !== 'none' &&
+    report.message === message
+  );
+}
+
 /**
  * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
@@ -2022,6 +2072,150 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const handle = handleFor('conformance-text-field');
+        await settle(200);
+        return [
+          {
+            label: 'the text the controlled second owner shows',
+            expected: 'ctl',
+            actual: handle.nuiTestState?.().text,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'SearchField',
+    component: 'NitroUiSearchField',
+    label: 'Conformance search field',
+    testId: 'conformance-search-field',
+    owner: (second) => (
+      <View style={columnStyle}>
+        <SearchField
+          value={second ? 'second' : 'first'}
+          testID="conformance-search-field"
+          accessibilityLabel={
+            second
+              ? `Conformance search field, ${SECOND}`
+              : 'Conformance search field'
+          }
+          hybridRef={captureFor('conformance-search-field')}
+        />
+      </View>
+    ),
+    control: (testId, variant) => (
+      <SearchField
+        value={variant ? 'Leak B' : 'Leak A'}
+        testID={testId}
+        accessibilityLabel={`Leak search field ${String(variant)}`}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'value',
+        expected: second ? 'second' : 'first',
+        actual: handle.value,
+      },
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance search field, ${SECOND}`
+          : 'Conformance search field',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    probe: {
+      leaveBehind:
+        'typing `x` into an uncontrolled field seeded `first`, then a second owner whose ' +
+        'own `defaultValue` is `second` - text the control can only hold if the reset ' +
+        're-armed the default and cleared what the first owner typed',
+      first: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue="first"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-search-field', 'x', 'firstx');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-search-field:firstx',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue="second"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-search-field');
+        await settle(200);
+        const state = handle.nuiTestState?.();
+        return [
+          {
+            label: 'the text the control holds',
+            expected: 'second',
+            actual: state?.text,
+          },
+          {
+            label: 'native events counted for this owner',
+            expected: 0,
+            actual: state?.nativeEvents,
+          },
+        ];
+      },
+    },
+    controlledProbe: {
+      leaveBehind:
+        'three keystrokes into an uncontrolled field, then a second owner *controlled* at ' +
+        '`ctl` - counts left at `nativeEvents 3` would refuse that write as stale',
+      first: () => (
+        <View style={columnStyle}>
+          <SearchField
+            defaultValue=""
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        await typeIntoField('conformance-search-field', 'abc', 'abc');
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual([
+            'conformance-search-field:a',
+            'conformance-search-field:ab',
+            'conformance-search-field:abc',
+          ])
+        );
+      },
+      second: () => (
+        <View style={columnStyle}>
+          <SearchField
+            value="ctl"
+            onChangeText={recordRecycle('conformance-search-field')}
+            testID="conformance-search-field"
+            accessibilityLabel="Conformance search field"
+            hybridRef={captureFor('conformance-search-field')}
+          />
+        </View>
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-search-field');
         await settle(200);
         return [
           {
@@ -2834,6 +3028,86 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: "the content height its sheet holds (the second owner's)",
             expected: String(SHEET_SECOND_HEIGHT),
             actual: report.contentH,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'Tooltip',
+    component: 'NitroUiTooltip',
+    label: TOOLTIP_MESSAGE,
+    testId: 'conformance-tooltip',
+    selfSizing: false,
+    owner: () => tooltipOwner(false, TOOLTIP_MESSAGE),
+    control: (testId, variant) => (
+      <Tooltip
+        isPresented={false}
+        message={variant ? 'Leak B' : 'Leak A'}
+        testID={testId}
+      >
+        <View style={{ width: variant ? 60 : 40, height: 40 }} />
+      </Tooltip>
+    ),
+    state: (handle) => [
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // A tooltip's residue is the dialog's, plus its content: a user dismissal leaves one
+    // native event, so a reset that kept the count refuses the second owner's
+    // `isPresented` as stale; and a reset that kept the previous popup's content would
+    // show the first owner's message. Both are read from the view (`nuiTestStateReport`).
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event), and the message the ' +
+        "first owner's tooltip showed - the second owner presents with a fresh count " +
+        'and another message',
+      first: () => tooltipOwner(true, TOOLTIP_MESSAGE),
+      act: async () => {
+        const handle = await ensureHandle('conformance-tooltip');
+        const deadline = Date.now() + 8000;
+        while (!tooltipShows(dialogReportOf(handle), TOOLTIP_MESSAGE)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its tooltip: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-tooltip:false');
+        if (seen !== 'conformance-tooltip:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => tooltipOwner(true, TOOLTIP_MESSAGE_SECOND),
+      read: async () => {
+        const handle = handleFor('conformance-tooltip');
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 6000;
+        let report = dialogReportOf(handle);
+        while (
+          !tooltipShows(report, TOOLTIP_MESSAGE_SECOND) &&
+          Date.now() < deadline
+        ) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the tooltip the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: "the message its tooltip shows (the second owner's)",
+            expected: TOOLTIP_MESSAGE_SECOND,
+            actual: report.message,
           },
         ];
       },

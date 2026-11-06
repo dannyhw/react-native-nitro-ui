@@ -1,0 +1,15 @@
+{
+  "name": "SearchField",
+  "hybridView": "NitroUiSearchField",
+  "implementation": "HybridNitroUiSearchField",
+  "id": "search-field",
+  "sizing": "fillWidth",
+  "hostable": false,
+  "exampleTab": "searchfield",
+  "exampleLabel": "Search",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": true,
+  "realInput": true,
+  "realInputTitle": "real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard"
+}

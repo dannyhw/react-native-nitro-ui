@@ -121,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'contextmenu'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -353,6 +353,20 @@ export const A11Y_CONTROLS = Object.freeze([
     iosTrait: 'text field',
   },
   {
+    id: 'search-field',
+    component: 'SearchField',
+    hybridView: 'NitroUiSearchField',
+    screen: 'searchfield',
+    label: 'Typing search field',
+    role: 'interactive',
+    anchorTestId: 'search-typing',
+    // Both platforms are asked for the same announcement: UIKit gets it from the
+    // `.searchField` trait the shared text traits carry, Compose from the editable node
+    // it publishes under the label. Recording `other` because that is what a tree
+    // happened to say would freeze a miss into the expectation (this table's header).
+    iosTrait: 'search field',
+  },
+  {
     id: 'context-menu',
     component: 'ContextMenu',
     hybridView: 'NitroUiContextMenu',
@@ -413,6 +427,15 @@ export const A11Y_PRESENTATIONS = Object.freeze([
       "`testRealInputBottomSheet` (RealInputTests.swift) and `CHECKS['bottom-sheet']` " +
       "(scripts/real-input/android.mjs): the sheet's React Native content is read " +
       'and pressed through the accessibility tree, and the sheet carries <testID>-sheet',
+  },
+  {
+    id: 'tooltip',
+    component: 'Tooltip',
+    hybridView: 'NitroUiTooltip',
+    assertedBy:
+      '`testRealInputTooltip` (RealInputTests.swift) and `CHECKS.tooltip` ' +
+      "(scripts/real-input/android.mjs): the presented tooltip's title, message and " +
+      'action are read and tapped through the accessibility tree',
   },
 ]);
 

@@ -88,7 +88,19 @@ type PickerHandle = {
    * done with a real tap.
    */
   nuiTestSelect(index: number): void;
+  /** Test-only (`@internal`, D14): the popup witness line, `Picker.nitro.ts`. */
+  nuiTestMenuReport(): string;
 };
+
+/** The `drawn` field of a picker's witness line, or `-1`. */
+function drawnOf(testId: string): string {
+  const line = handles.get(testId)?.nuiTestMenuReport() ?? '';
+  const field = line.split(';').find((part) => part.startsWith('drawn='));
+  if (field == null) {
+    throw new Error(`No "drawn" in picker report "${line}".`);
+  }
+  return field.slice('drawn='.length);
+}
 
 /** Handles by testID, so a test can ask each control what it holds. */
 const handles = new Map<string, PickerHandle>();
@@ -1818,6 +1830,59 @@ describe('Picker · G6', () => {
     // is the C1 over-wide story - rather than the box's width back as a verdict.
     expect(asMenu.width).toBeGreaterThan(BOX.width + 1);
     unmount();
+  });
+
+  it('draws the selected row as a selected row (E2)', async () => {
+    await render(
+      <Picker
+        options={['Small', 'Medium', 'Large']}
+        defaultSelectedIndex={1}
+        onChange={recordChange('selected-row')}
+        testID="selected-row"
+        hybridRef={captureHybrid('selected-row')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('selected-row');
+    await pollUntil(
+      () => handles.get('selected-row') ?? null,
+      () => new Error('"selected-row" never handed back a hybrid handle.')
+    );
+    // Nothing has been laid out to read yet; iOS has no popup of its own at all.
+    expect(drawnOf('selected-row')).toBe('-1');
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    // The popup's own semantics tree, as TalkBack reads it: the selected row says
+    // `selected` (`+`) with `Role.RadioButton`, and only that row.
+    await pressAnchor('selected-row');
+    const opened = await pollUntil(
+      () => {
+        const drawn = drawnOf('selected-row');
+        return drawn === '-1' ? null : drawn;
+      },
+      () => new Error('The open picker never reported its rows.')
+    );
+    console.log(`selected row: drawn=${opened}`);
+    expect(opened).toBe('Small,Medium+,Large');
+    // A pick moves it: reopened, the new row is the selected one.
+    await pickRow('selected-row', 2);
+    await waitForMeasured('selected-row', 'after the pick');
+    await settle(300);
+    await pressAnchor('selected-row');
+    const moved = await pollUntil(
+      () => {
+        const drawn = drawnOf('selected-row');
+        return drawn !== opened && drawn !== '-1' ? drawn : null;
+      },
+      () =>
+        new Error(
+          `The reopened picker still reports ${drawnOf('selected-row')}.`
+        )
+    );
+    expect(moved).toBe('Small,Medium,Large+');
+    expect(eventLog).toEqual(['selected-row:2']);
+    await pickRow('selected-row', 2);
   });
 
   it('does not treat opening as a choice, and the next mount sizes normally after going away mid-menu', async () => {

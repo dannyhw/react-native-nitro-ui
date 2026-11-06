@@ -1,0 +1,23 @@
+{
+  "uiViewClassName": "NitroUiSearchField",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "placeholder": true,
+    "maxLength": true,
+    "editable": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "onFocusChange": true,
+    "onSubmitEditing": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

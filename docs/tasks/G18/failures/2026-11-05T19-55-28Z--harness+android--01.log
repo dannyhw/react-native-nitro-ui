@@ -1,0 +1,209 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-05T19:55:28.499Z on code tree `689dd0ba31f6` at HEAD `5126eea` (branch `task/G18-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 909331 ms
+- Load: start 14.44, end 11.66, median 11.46, max 25.13
+- Device: android / device `emulator-5570` / lease `G18merge-wc3ty`
+- Full log: `task/G18-merge/harness+android-2026-11-05T19-55-27.456Z.log` (<store>/task/G18-merge/harness+android-2026-11-05T19-55-27.456Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Tooltip.harness.tsx`
+- `● Console`
+- `● Tooltip · early checks (Q7 C9) › sits above its anchor, where the platform puts it (check 2, spacing)`
+- `● Tooltip · early checks (Q7 C9) › sits below its anchor, where the platform puts it (check 2, spacing)`
+- `● Tooltip · early checks (Q7 C9) › follows its anchor when a layout move carries it away (check 2)`
+- `expected 'a layout move: never placed again - {…' to be 'pointing' // Object.is equality`
+- `● Tooltip · early checks (Q7 C9) › follows its anchor when a scroll carries it away (check 2)`
+- `expected 'a scroll: never placed again - {"side…' to be 'pointing' // Object.is equality`
+- `● Tooltip · early checks (Q7 C9) › presents from a window of its own inside an RN Modal, and still points at its anchor (check 3)`
+- `● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once`
+- `● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window`
+- `expected '2' to be '1' // Object.is equality`
+- `● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 50 ms into its entry`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 100 ms into its entry`
+- `● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 150 ms into its entry`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G18-merge/harness+android-2026-11-05T19-55-27.456Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (331EF109-21DD-422B-AEF8-DFFFC6998DC3) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     iPhone 17 (RNSB starter) (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G18merge-wc3ty (still live)
+  |   E2-urxpj                 E2           both              pair-a
+  |   G18merge-wc3ty           G18merge     both              pair-b
+gate: load
+  |   load1 at the moment of failure: 11.66 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 328 — the rest is in the full log above)
+
+```
+    "at-below" never reached up, with its popup and anchor on screen; its report is "presented=1;js=1;live=1;presentCount=2;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=2;recycles=2;measuresAfterDrop=10;layoutsAfterDrop=10;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · early checks (Q7 C9) › follows its anchor when a layout move carries it away (check 2)
+
+    expected 'a layout move: never placed again - {…' to be 'pointing' // Object.is equality
+
+      [0m [90m 403 |[39m         [33m?[39m [32m'pointing'[39m
+       [90m 404 |[39m         [33m:[39m [32m`${what}: ${problems.join(', ')} - ${JSON.stringify(where)} - ${after.raw ?? ''}`[39m
+      [31m[1m>[22m[39m[90m 405 |[39m     )[33m.[39mtoBe([32m'pointing'[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 406 |[39m     [90m// Following is not a close: nothing was reported.[39m
+       [90m 407 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m 408 |[39m   }[0m
+
+  ● Tooltip · early checks (Q7 C9) › follows its anchor when a scroll carries it away (check 2)
+
+    expected 'a scroll: never placed again - {"side…' to be 'pointing' // Object.is equality
+
+      [0m [90m 403 |[39m         [33m?[39m [32m'pointing'[39m
+       [90m 404 |[39m         [33m:[39m [32m`${what}: ${problems.join(', ')} - ${JSON.stringify(where)} - ${after.raw ?? ''}`[39m
+      [31m[1m>[22m[39m[90m 405 |[39m     )[33m.[39mtoBe([32m'pointing'[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 406 |[39m     [90m// Following is not a close: nothing was reported.[39m
+       [90m 407 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m 408 |[39m   }[0m
+
+  ● Tooltip · early checks (Q7 C9) › presents from a window of its own inside an RN Modal, and still points at its anchor (check 3)
+
+    "in-modal" never reached up inside the Modal; its report is "presented=1;js=1;live=1;presentCount=2;composing=1;anchorW=315;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=5;recycles=5;measuresAfterDrop=11;layoutsAfterDrop=11;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › presents again when the app refuses a close, and warns once
+
+    "refused" never reached presented a third time; its report is "presented=1;js=1;live=1;presentCount=6;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=dismiss,dismiss;drops=7;recycles=7;measuresAfterDrop=11;layoutsAfterDrop=11;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › presents once when mounted presented, after the view has a window
+
+    expected '2' to be '1' // Object.is equality
+
+      [0m [90m 671 |[39m     )[33m;[39m
+       [90m 672 |[39m     [36mawait[39m sleep([35m800[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 673 |[39m     expect(reportOf([32m'at-mount'[39m)[33m.[39mpresentCount)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                                   [31m[1m^[22m[39m
+       [90m 674 |[39m     expect(up[33m.[39mlive)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 675 |[39m     expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m 676 |[39m   })[33m;[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › gives a recycled view none of the open tooltip it came from
+
+    round 1: the mount's recycle count did not grow (10 -> 7), so this round tested a fresh instance, not a recycled one
+
+      [0m [90m 781 |[39m       reuses[33m.[39mpush(recycles)[33m;[39m
+       [90m 782 |[39m       [36mif[39m ([33m![39m(recycles [33m>[39m previous)) {
+      [31m[1m>[22m[39m[90m 783 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 784 |[39m           [32m`round ${String(round)}: the mount's recycle count did not grow `[39m [33m+[39m
+       [90m 785 |[39m             [32m`(${reuses.join(' -> ')}), so this round tested a fresh instance, not a recycled one`[39m
+       [90m 786 |[39m         )[33m;[39m[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 50 ms into its entry
+
+    "dropped" never reached presenting; its report is "presented=1;js=1;live=1;presentCount=2;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=12;recycles=12;measuresAfterDrop=11;layoutsAfterDrop=11;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 100 ms into its entry
+
+    "dropped" never reached presenting; its report is "presented=1;js=1;live=1;presentCount=2;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=13;recycles=13;measuresAfterDrop=11;layoutsAfterDrop=11;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+  ● Tooltip · behaviour (Q7 C7) › leaves nothing when dropped 150 ms into its entry
+
+    "dropped" never reached presenting; its report is "presented=1;js=1;live=1;presentCount=2;composing=1;anchorW=105;anchorH=105;kind=rich;title=Saved searches;message=Tap the star to keep this search.;actions=1;ids=ok;focusable=1;popupRect=-;anchorRect=-;hostRect=-;closes=-;drops=14;recycles=14;measuresAfterDrop=11;layoutsAfterDrop=11;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 190 |[39m     }[33m,[39m
+       [90m 191 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 192 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 193 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 194 |[39m       )[33m,[39m
+       [90m 195 |[39m     timeoutMs[0m
+
+
+Test Suites: 1 failed, 23 passed, 24 total
+Tests:       11 failed, 3 skipped, 452 passed, 466 total
+Snapshots:   0 total
+Time:        873.929 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 689dd0ba31f6, 17 components registered)
+lease: nitroui_t01 boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.59/9.35 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G18-merge/harness+android-2026-11-05T19-55-27.456Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        29.996 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 909.3 s
+gate: recorded in .gates/task/G18-merge.jsonl
+
+
+gate: appended the device context to task/G18-merge/harness+android-2026-11-05T19-55-27.456Z.log (5 probe(s))
+
+```

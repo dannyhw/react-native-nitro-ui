@@ -125,6 +125,18 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real long press opens the menu at the finger, the Pressable under it never fires, a pick reports select then close, and a scroll opens nothing',
     screen: 'contextmenu',
   },
+  {
+    id: 'search-field',
+    title:
+      'real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard',
+    screen: 'searchfield',
+  },
+  {
+    id: 'tooltip',
+    title:
+      'a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone',
+    screen: 'tooltip',
+  },
   // @end-generated
 ]);
 

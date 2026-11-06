@@ -138,7 +138,7 @@ export interface NitroUiPickerMethods extends HybridViewMethods {
    * the composition that renders them measured them. One line:
    *
    * ```
-   * expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>
+   * expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>;drawn=<tree|-1>
    * ```
    *
    * `expanded` is the model's own flag. `live` is how many menus this **process** has
@@ -148,7 +148,10 @@ export interface NitroUiPickerMethods extends HybridViewMethods {
    * `anchor`/`menu` are screen pixel rects as the composition measured them (the
    * anchor's box inside its own composition's view plus that view's place on screen,
    * the menu's content view's own on-screen rect), and `rows` is how many rows the
-   * open menu composed. `-1` in a rect means "not measured yet".
+   * open menu composed. `-1` in a rect means "not measured yet". `drawn` is the open
+   * menu's rows as the popup's own semantics tree had them at its last layout, in
+   * `Menu.nitro.ts`'s notation (`+` marks the row that says `selected`), or `-1` before
+   * a menu has been laid out since the first report call (and always on iOS).
    *
    * This exists because a popup is the one thing about a control that a model cannot
    * describe, and a `<Host>` moves the composition: the claim under test is that a

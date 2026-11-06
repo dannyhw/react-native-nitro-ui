@@ -34,6 +34,10 @@ struct MenuActionItem {
   let destructive: Bool
   /// A symbol name already checked to resolve, like Button's (`nil` renders no icon).
   let systemImage: String?
+  /// The row's second line (`UIAction.subtitle`), or `nil` for none.
+  let subtitle: String?
+  /// `nil` for a plain row; otherwise the row is a menu toggle in this state.
+  let checked: Bool?
 }
 
 /// A row that opens a second-level menu.
@@ -44,7 +48,7 @@ struct MenuSubmenuItem {
   let items: [MenuActionItem]
 }
 
-/// A titled group. `title == nil` is a group that is only a divider.
+/// A group with an optional header. `title == nil` is a `Section` with no header.
 struct MenuSectionItem {
   let id: String
   let title: String?
@@ -78,7 +82,9 @@ func parseMenuRows(_ rows: [NitroUiMenuRow]) -> [MenuTopEntry] {
       // draw the missing-symbol placeholder and say nothing useful to VoiceOver.
       systemImage: row.systemImage?
         .asType(String.self)
-        .flatMap { UIImage(systemName: $0) == nil ? nil : $0 }
+        .flatMap { UIImage(systemName: $0) == nil ? nil : $0 },
+      subtitle: row.subtitle?.asType(String.self).flatMap { $0.isEmpty ? nil : $0 },
+      checked: row.checked?.asType(Bool.self)
     )
   }
 
@@ -373,18 +379,53 @@ struct MenuContent: NitroUIContent {
   ///
   /// `role: .destructive` is iOS's own red-and-warning treatment; the pick goes
   /// through the model so a test press and a real one cannot diverge.
+  ///
+  /// A row with a `checked` is a `Toggle`, which is what SwiftUI turns into a menu
+  /// action with a state (`UIAction.state`, the leading check). Its binding reads the
+  /// prop and a flip is a pick: the menu has no value, so the check is whatever the app
+  /// sends next, never a state of ours. A `Toggle` takes no role, so a checkable row is
+  /// not drawn destructive on iOS (`docs/components/menu.md`, Limits).
+  @ViewBuilder
   private func rowButton(_ item: MenuActionItem) -> some View {
-    Button(
-      role: item.destructive ? .destructive : nil,
-      action: { model.applyPick(item.id) }
-    ) {
-      if let systemImage = item.systemImage {
-        Label(item.title, systemImage: systemImage)
-      } else {
-        Text(item.title)
+    if let checked = item.checked {
+      Toggle(
+        isOn: Binding(get: { checked }, set: { _ in model.applyPick(item.id) })
+      ) {
+        rowLabel(item)
       }
+      .disabled(item.disabled)
+    } else {
+      Button(
+        role: item.destructive ? .destructive : nil,
+        action: { model.applyPick(item.id) }
+      ) {
+        rowLabel(item)
+      }
+      .disabled(item.disabled)
     }
-    .disabled(item.disabled)
+  }
+
+  /// A row's label: the title, then the subtitle as a second `Text`, which SwiftUI
+  /// turns into the menu action's `subtitle`; inside a `Label` when it has a symbol.
+  @ViewBuilder
+  private func rowLabel(_ item: MenuActionItem) -> some View {
+    if let systemImage = item.systemImage {
+      Label {
+        rowTexts(item)
+      } icon: {
+        Image(systemName: systemImage)
+      }
+    } else {
+      rowTexts(item)
+    }
+  }
+
+  @ViewBuilder
+  private func rowTexts(_ item: MenuActionItem) -> some View {
+    Text(item.title)
+    if let subtitle = item.subtitle {
+      Text(subtitle)
+    }
   }
 
 }
@@ -840,6 +881,14 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   }
 
   /// The spec's `drawn` notation for one level of a `UIMenu`.
+  /// `@<subtitle>` for an action that has one. The getter is iOS 16+; before it there
+  /// is nothing to read, and the mark is left off.
+  private static func subtitleMark(_ action: UIAction) -> String {
+    guard #available(iOS 16.0, *), let subtitle = action.subtitle, !subtitle.isEmpty
+    else { return "" }
+    return "@\(subtitle)"
+  }
+
   private static func describe(_ elements: [UIMenuElement]) -> String {
     elements.map { element -> String in
       if let menu = element as? UIMenu {
@@ -850,6 +899,8 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
       }
       if let action = element as? UIAction {
         return action.title
+          + Self.subtitleMark(action)
+          + (action.state == .on ? "+" : "")
           + (action.attributes.contains(.destructive) ? "!" : "")
           + (action.attributes.contains(.disabled) ? "~" : "")
       }

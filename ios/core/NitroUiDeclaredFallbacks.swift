@@ -38,6 +38,7 @@ enum NitroUiDeclaredFallbacks {
     HybridNitroUiTextField.declareFallback()
     HybridNitroUiChip.declareFallback()
     HybridNitroUiCheckbox.declareFallback()
+    HybridNitroUiSearchField.declareFallback()
     return true
   }()
 
