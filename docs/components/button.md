@@ -145,10 +145,28 @@ same on both without a `Platform.select`.
 4. The icon is tinted to the control's text colour and sized by the control, so
    any 24 dp vector works. A multicolour drawable draws in one colour.
 
-**Expo (prebuild / CNG):** *(config plugin: see Follow-ups — the plugin is not in
-this build yet.)* Until it lands, copy the files into
-`android/app/src/main/res/drawable/` yourself in the same way a bare app does.
-Expo Go cannot load app resources, so use a development build.
+**Expo (prebuild / CNG):** put the files in a folder of their own — say
+`assets/android-icons/` — and name the plugin in `app.json`:
+
+```json
+{
+  "plugins": [
+    ["react-native-nitro-ui/plugin", { "androidIcons": "./assets/android-icons" }]
+  ]
+}
+```
+
+`expo prebuild` then copies every `.xml` in that folder into
+`android/app/src/main/res/drawable/` and writes the `res/raw/keep.xml` entries
+below for you, so a shrink-enabled release build cannot drop them. It is opt-in:
+an app that never uses `androidIcon` needs no plugin, and installing the library
+does not add one. Names `aapt` would reject (`Share.xml`, `share-24px.xml`) are
+skipped with a warning rather than copied into a build that cannot compile them,
+and a file that is not a `<vector>` is copied with a warning, because a control
+may not be able to draw it at an icon's size. Expo Go cannot load app resources,
+so this needs a development build. Running prebuild twice changes nothing: the
+copy overwrites identical bytes and `keep.xml` is merged, not rewritten, so
+entries you added by hand for something else survive.
 
 **A name that is not found draws no icon and leaves the Button exactly as if
 `androidIcon` were not set** — no slot is reserved and no padding changes, the
@@ -165,6 +183,9 @@ names that arrive from JavaScript:
 <!-- android/app/src/main/res/raw/keep.xml -->
 <resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/share,@drawable/send" />
 ```
+
+(The Expo plugin above writes exactly this file and merges with one you have
+already written.)
 
 A `layer-list`, an adaptive icon or a shape with no intrinsic size is treated as
 not found for the same reason — it cannot be drawn at an icon's size — and says

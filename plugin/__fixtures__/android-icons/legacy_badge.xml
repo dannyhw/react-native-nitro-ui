@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Not a vector, which the plugin warns about: it copies the file because
+     `aapt` accepts it, but a control may not be able to draw it as an icon. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@android:drawable/btn_star" />
+</layer-list>
