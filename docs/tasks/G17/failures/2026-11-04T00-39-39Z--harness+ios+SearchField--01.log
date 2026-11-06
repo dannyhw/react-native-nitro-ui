@@ -1,0 +1,129 @@
+# Failure excerpt — harness:ios:SearchField
+
+- Ran: 2026-11-04T00:39:39.152Z on code tree `4aa9b2927e43` at HEAD `f205a5a` (branch `task/G17-search-field`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SearchField`
+- Result: fail, exit 1, 47534 ms
+- Load: start 4.70, end 124.75, median 100.96, max 135.44
+- Device: ios
+- Full log: `task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log` (<store>/task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › holds maxLength in UTF-16 units and never splits an emoji`
+- `expected 'ab👍cd' to be 'ab👍c' // Object.is equality`
+- `● SearchField › cuts an insertion at a grapheme boundary rather than leaving half an emoji`
+- `expected '👩\u200d' to be '' // Object.is equality`
+- `● SearchField › reports the clear button as one empty edit and keeps the focus`
+- `expected [ 'change:', 'blur' ] to deeply equal [ 'change:' ]`
+- `● SearchField › submits on the Search key, then blurs - and never on an empty field`
+- `expected [ 'focus', 'submit:', 'blur' ] to deeply equal [ 'focus' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G17-auva6                G17          both              pair-a
+  |   X18-c6m3f                X18          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 124.75 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 79 log line(s)
+
+```
+gate: harness:ios:SearchField
+gate: node ../scripts/harness.mjs --harnessRunner ios SearchField (cwd example)
+gate: code tree 4aa9b2927e43 at HEAD f205a5a7
+gate: git tree 5024a5e2044b with a DIRTY worktree (not reusable)
+gate: log task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log
+gate:       <store>/task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SearchField
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4aa9b2927e43, 14 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.70/4.53 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › holds maxLength in UTF-16 units and never splits an emoji
+
+    expected 'ab👍cd' to be 'ab👍c' // Object.is equality
+
+      [0m [90m 387 |[39m     [36mawait[39m typeText([32m'd'[39m)[33m;[39m
+       [90m 388 |[39m     [36mawait[39m sleep([35m120[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 389 |[39m     expect(handles[33m.[39m[36mget[39m([32m'capped'[39m)[33m?[39m[33m.[39mnuiTestState()[33m.[39mtext)[33m.[39mtoBe([32m'ab👍c'[39m)[33m;[39m
+       [90m     |[39m                                                            [31m[1m^[22m[39m
+       [90m 390 |[39m     expect(eventsOf([32m'capped'[39m)[33m.[39mat([33m-[39m[35m1[39m))[33m.[39mtoBe([32m'change:ab👍c'[39m)[33m;[39m
+       [90m 391 |[39m   })[33m;[39m
+       [90m 392 |[39m[0m
+
+  ● SearchField › cuts an insertion at a grapheme boundary rather than leaving half an emoji
+
+    expected '👩\u200d' to be '' // Object.is equality
+
+      [0m [90m 401 |[39m     [36mawait[39m sleep([35m150[39m)[33m;[39m
+       [90m 402 |[39m     [36mconst[39m state [33m=[39m handles[33m.[39m[36mget[39m([32m'family'[39m)[33m?[39m[33m.[39mnuiTestState()[33m;[39m
+      [31m[1m>[22m[39m[90m 403 |[39m     expect(state[33m?[39m[33m.[39mtext)[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+       [90m 404 |[39m     expect(
+       [90m 405 |[39m       eventsOf([32m'family'[39m)[33m.[39mfilter((entry) [33m=>[39m entry[33m.[39mstartsWith([32m'change:'[39m))
+       [90m 406 |[39m     )[33m.[39mtoEqual([])[33m;[39m[0m
+
+  ● SearchField › reports the clear button as one empty edit and keeps the focus
+
+    expected [ 'change:', 'blur' ] to deeply equal [ 'change:' ]
+
+      [0m [90m 436 |[39m     )[33m;[39m
+       [90m 437 |[39m     [36mconst[39m reported [33m=[39m eventsOf([32m'cleared'[39m)[33m.[39mslice(before)[33m;[39m
+      [31m[1m>[22m[39m[90m 438 |[39m     expect(reported)[33m.[39mtoEqual([[32m'change:'[39m])[33m;[39m
+       [90m     |[39m                             [31m[1m^[22m[39m
+      [90m 439 |[39m     expect(cleared[33m.[39mnativeEvents)[33m.[39mtoBe(typed[33m.[39mnativeEvents [33m+[39m [35m1[39m)[33m;[39m
+       [90m 440 |[39m     [90m// Focus stays: clearing a query is not leaving the field.[39m
+       [90m 441 |[39m     expect(cleared[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+  ● SearchField › submits on the Search key, then blurs - and never on an empty field
+
+    expected [ 'focus', 'submit:', 'blur' ] to deeply equal [ 'focus' ]
+
+      [0m [90m 488 |[39m     [90m// Exactly one event, and it is the focus: no `submit:`, and no `blur` either -[39m
+       [90m 489 |[39m     [90m// refusing a submit from an empty query does not send the field away.[39m
+      [31m[1m>[22m[39m[90m 490 |[39m     expect(eventsOf([32m'unsubmitted'[39m))[33m.[39mtoEqual([[32m'focus'[39m])[33m;[39m
+       [90m     |[39m                                            [31m[1m^[22m[39m
+       [90m 491 |[39m   })[33m;[39m
+       [90m 492 |[39m
+       [90m 493 |[39m   it([32m'sizes itself to its parent width and its own height, whatever its text'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+HARNESS Shutting down iOS simulator iPhone 17...
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 9 passed, 13 total
+Snapshots:   0 total
+Time:        46.439 s
+Ran all test suites matching SearchField.
+gate: harness:ios:SearchField FAIL in 47.5 s
+gate: recorded in .gates/task/G17-search-field.jsonl
+
+
+gate: appended the device context to task/G17-search-field/harness+ios+SearchField-2026-11-04T00-39-38.905Z.log (4 probe(s))
+
+```

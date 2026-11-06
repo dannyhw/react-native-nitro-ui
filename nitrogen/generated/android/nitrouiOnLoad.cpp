@@ -44,6 +44,9 @@
 #include "views/JHybridNitroUiPickerStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
 #include "views/JHybridNitroUiProgressStateUpdater.hpp"
+#include "JHybridNitroUiSearchFieldSpec.hpp"
+#include "JFunc_void_std__string_double.hpp"
+#include "views/JHybridNitroUiSearchFieldStateUpdater.hpp"
 #include "JHybridNitroUiSegmentedControlSpec.hpp"
 #include "views/JHybridNitroUiSegmentedControlStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
@@ -51,7 +54,6 @@
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "views/JHybridNitroUiSwitchStateUpdater.hpp"
 #include "JHybridNitroUiTextFieldSpec.hpp"
-#include "JFunc_void_std__string_double.hpp"
 #include "views/JHybridNitroUiTextFieldStateUpdater.hpp"
 #include "JHybridNitroUiTooltipSpec.hpp"
 #include "views/JHybridNitroUiTooltipStateUpdater.hpp"
@@ -170,6 +172,14 @@ struct JHybridNitroUiChipSpecImpl: public jni::JavaClass<JHybridNitroUiChipSpecI
     return javaPart->getJHybridNitroUiChipSpec();
   }
 };
+struct JHybridNitroUiSearchFieldSpecImpl: public jni::JavaClass<JHybridNitroUiSearchFieldSpecImpl, JHybridNitroUiSearchFieldSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiSearchField;";
+  static std::shared_ptr<JHybridNitroUiSearchFieldSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiSearchFieldSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiSearchFieldSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiSearchFieldSpec();
+  }
+};
 struct JHybridNitroUiCheckboxSpecImpl: public jni::JavaClass<JHybridNitroUiCheckboxSpecImpl, JHybridNitroUiCheckboxSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiCheckbox;";
   static std::shared_ptr<JHybridNitroUiCheckboxSpec> create() {
@@ -237,6 +247,9 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiPickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiSearchFieldSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiSearchFieldStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSegmentedControlSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSegmentedControlStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
@@ -244,7 +257,6 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiTextFieldSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_std__string_double_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiTextFieldStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiTooltipSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiTooltipStateUpdater::registerNatives();
@@ -335,6 +347,12 @@ void registerAllNatives() {
     "NitroUiChip",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiChipSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiSearchField",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiSearchFieldSpecImpl::create();
     }
   );
   HybridObjectRegistry::registerHybridObjectConstructor(

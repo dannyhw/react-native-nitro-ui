@@ -36,7 +36,7 @@ const READY_LINE =
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
   'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 chip=58x28 ' +
-  'checkbox=40x40 host=310x96';
+  'search-field=310x37 checkbox=40x40 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -50,7 +50,10 @@ const READY_LINE =
  * because no smoke run has been made since. It exercises the parser, not a
  * measurement; a real device line for it is a one-line follow-up. `chip=` (G12) is
  * written the same way, from the 66.29 x 48 dp the harness measured for a short
- * unselected filter chip on `nitroui_t03`.
+ * unselected filter chip on `nitroui_t03`. `search-field=` (G17) is written from the
+ * height the Android control measures - Material 3's 56 dp `InputFieldHeight`, which is
+ * also its declared fallback (iOS's own field is 28 pt, and the line is an Android
+ * logline) - so it is the box a smoke run prints unless the device disagrees.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
@@ -59,7 +62,7 @@ const READY_LINE_FRACTIONAL =
   'segmented-control=256x48 date-picker=120.76190185546875x48 ' +
   'picker=280x56.09523010253906 menu=97.619049072265625x48 ' +
   'text-field=363.4285583496094x24 chip=66.28571319580078x48 ' +
-  'checkbox=48x48 ' +
+  'search-field=363.4285583496094x56 checkbox=48x48 ' +
   'host=363.4285583496094x96';
 
 describe('smoke ready line', () => {

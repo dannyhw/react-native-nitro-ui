@@ -25,6 +25,7 @@ import TextFieldScreen from './TextFieldScreen';
 import ChipScreen from './ChipScreen';
 import CheckboxScreen from './CheckboxScreen';
 import ContextMenuScreen from './ContextMenuScreen';
+import SearchFieldScreen from './SearchFieldScreen';
 import TooltipScreen from './TooltipScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
@@ -47,6 +48,7 @@ type Screen =
   | 'chip'
   | 'checkbox'
   | 'contextmenu'
+  | 'searchfield'
   | 'tooltip'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
@@ -107,6 +109,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'chip', label: 'Chip' },
   { id: 'checkbox', label: 'Checkbox' },
   { id: 'contextmenu', label: 'Context' },
+  { id: 'searchfield', label: 'Search' },
   { id: 'tooltip', label: 'Tooltip' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
@@ -177,6 +180,7 @@ export default function App() {
         {screen === 'chip' ? <ChipScreen /> : null}
         {screen === 'checkbox' ? <CheckboxScreen /> : null}
         {screen === 'contextmenu' ? <ContextMenuScreen /> : null}
+        {screen === 'searchfield' ? <SearchFieldScreen /> : null}
         {screen === 'tooltip' ? <TooltipScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}

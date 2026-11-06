@@ -57,6 +57,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiSearchFieldComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
@@ -94,6 +96,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiSearchFieldStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp

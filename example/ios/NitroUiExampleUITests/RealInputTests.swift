@@ -54,6 +54,7 @@ final class RealInputTests: XCTestCase {
     static let tooltipTab = "tab-tooltip"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
+    static let searchFieldTab = "tab-searchfield"
     static let contextMenuTab = "tab-contextmenu"
   }
 
@@ -109,6 +110,10 @@ final class RealInputTests: XCTestCase {
     static let textFrozen = "text-frozen-echo"
     static let textCapped = "text-capped-echo"
     static let textFocus = "text-focus-echo"
+    static let searchTyping = "search-typing-echo"
+    static let searchFrozen = "search-frozen-echo"
+    static let searchCapped = "search-capped-echo"
+    static let searchFocus = "search-focus-echo"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -446,6 +451,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.hostTab, screenAnchor: Echo.hostMixedState),
       A11yCase(id: "text-field", testId: "text-typing", label: "Typing field",
                tab: Tab.textFieldTab, screenAnchor: Echo.textTyping),
+      A11yCase(id: "search-field", testId: "search-typing", label: "Typing search field",
+               tab: Tab.searchFieldTab, screenAnchor: Echo.searchTyping),
       A11yCase(id: "context-menu", testId: "ctx-accessible", label: "Message from Grace",
                tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
     ]
@@ -523,6 +530,11 @@ final class RealInputTests: XCTestCase {
     // than lower-casing `String(describing:)`: that would print "`switch`" with ticks.
     case .`switch`: return "switch"
     case .segmentedControl: return "segmented control"
+    // SearchField (G17): the first control in the table that is not one of the types
+    // this file was written for. Without the case the sweep printed the raw value —
+    // `announced as a type-45` — for a field XCUITest had already put in
+    // `app.searchFields`, so the failure was this table's, not the control's.
+    case .searchField: return "search field"
     case .textField: return "text field"
     case .secureTextField: return "secure text field"
     case .textView: return "text view"
@@ -3764,6 +3776,195 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: label)
     }
     return node
+  }
+
+  /// The search field element carrying `label`, asked for as the element type a screen
+  /// reader is told about (`app.searchFields`, not `app.textFields`).
+  ///
+  /// The query *is* an assertion: `HybridNitroUiSearchField.swift` adds `.searchField`
+  /// to the traits, and a field that lost it would be an ordinary text field to
+  /// VoiceOver while still typing perfectly - which no behavioural check would see.
+  private func searchField(labelled label: String) throws -> XCUIElement {
+    let node = app.searchFields.matching(NSPredicate(format: "label == %@", label)).firstMatch
+    if !node.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no search field labelled \"\(label)\"")
+      XCTFail("no search field labelled \"\(label)\" appeared within \(reactTimeout)s")
+      throw RealInputCheckAborted(identifier: label)
+    }
+    return node
+  }
+
+  /// The clear button of a field that is editing, by its own element rather than by
+  /// UIKit's localized "Clear text" - the label is UIKit's to translate, and a check
+  /// that spells it in English stops working in another language.
+  ///
+  /// `clearButtonMode = .whileEditing` means this exists only while the field edits with
+  /// text in it, which is the same condition a person sees the button under.
+  private func clearButton(of field: XCUIElement) throws -> XCUIElement {
+    let buttons = field.buttons
+    XCTAssertEqual(
+      buttons.count,
+      1,
+      "a focused search field with text should offer exactly one clear button, not \(buttons.count)"
+    )
+    let clear = buttons.firstMatch
+    if !clear.waitForExistence(timeout: reactTimeout) {
+      dumpHierarchy("no clear button inside the editing search field")
+      XCTFail("no clear button appeared inside the editing search field")
+      throw RealInputCheckAborted(identifier: "clear button")
+    }
+    XCTAssertFalse(
+      clear.label.isEmpty,
+      "and the clear button names itself, so VoiceOver can say what it does"
+    )
+    return clear
+  }
+
+  /// Real keystrokes into UIKit's own `UISearchTextField`, plus the two things a *search*
+  /// field does that a text field does not: the Search key refuses an empty query, and
+  /// the field grows a clear button that takes the query out without losing focus.
+  ///
+  /// Four assertions here are not in `testRealInputTextField`, and each is the out-of-app
+  /// half of a claim the component makes:
+  ///
+  /// - **the field is a search field to a screen reader** - by the query this check goes
+  ///   through (`searchField(labelled:)`), not by a trait read.
+  /// - **Return with nothing in the field reports nothing**: `enablesReturnKeyAutomatically`
+  ///   is on, so UIKit disables the key, and Android states the same rule in `onSearch`.
+  ///   This is the iOS half of the assertion Android makes with a real Enter key.
+  /// - **the clear button empties the field and keeps focus**: the blur counter does not
+  ///   move, so a clear that also dismissed the keyboard is caught.
+  /// - **Return submits the query and then blurs**, as a single-line field does.
+  ///
+  /// The emoji half of `maxLength` and the composition guard are the harness's, as they
+  /// are for TextField: XCUITest's keyboard types neither marked text nor emoji reliably.
+  func testRealInputSearchField() throws {
+    try goToTab(Tab.searchFieldTab, showing: Echo.searchTyping)
+    XCTAssertEqual(
+      try read(Echo.searchTyping),
+      "query:  (0)",
+      "the typing field should start empty"
+    )
+    XCTAssertEqual(
+      try read(Echo.searchFocus),
+      "focus: 0 blur: 0 submitted: -",
+      "nothing should have been focused, blurred or submitted yet"
+    )
+
+    // Lowest field first: once a keyboard is up it covers the lower half of the screen,
+    // and every later tap is aimed higher than the one before it.
+    let capped = try searchField(labelled: "Capped search field")
+    try focusByTap(capped, echo: nil, as: "the capped field")
+    capped.typeText("abcdefg")
+    XCTAssertEqual(
+      readUntil(Echo.searchCapped) { $0 == "capped: abcde (5)" },
+      "capped: abcde (5)",
+      "maxLength 5 should keep five of seven keys"
+    )
+    XCTAssertEqual(
+      capped.value as? String,
+      "abcde",
+      "and the field should hold the same five"
+    )
+
+    let frozen = try searchField(labelled: "Frozen search field")
+    try focusByTap(frozen, echo: nil, as: "the frozen field")
+    frozen.typeText("xy")
+    XCTAssertEqual(
+      readUntil(Echo.searchFrozen) { $0 == "frozen: 2 edits refused" },
+      "frozen: 2 edits refused",
+      "every key into the frozen field should be reported to JS"
+    )
+    XCTAssertEqual(
+      frozen.value as? String,
+      "frozen",
+      "and each one reverted: the field should still show what JS kept"
+    )
+
+    let typing = try searchField(labelled: "Typing search field")
+    try focusByTap(typing, echo: nil, as: "the typing field")
+    typing.typeText("latte")
+    XCTAssertEqual(
+      readUntil(Echo.searchTyping) { $0 == "query: latte (5)" },
+      "query: latte (5)",
+      "real keystrokes should reach the field, and React should see the query"
+    )
+    XCTAssertEqual(
+      typing.value as? String,
+      "latte",
+      "the field should show what React was told"
+    )
+
+    // 1. Focus, and the key that must not answer an empty query.
+    let focus = try searchField(labelled: "Focus search field")
+    try focusByTap(focus, echo: Echo.searchFocus, as: "the focus field")
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 1 blur: 0 submitted: -" },
+      "focus: 1 blur: 0 submitted: -",
+      "a real tap should focus the field (onFocus)"
+    )
+    focus.typeText("\n")
+    XCTAssertEqual(
+      readFor(1.5, Echo.searchFocus),
+      "focus: 1 blur: 0 submitted: -",
+      "Return with an empty query should submit nothing and blur nobody"
+    )
+
+    // 2. The clear button: one edit, focus kept.
+    focus.typeText("go")
+    XCTAssertEqual(
+      focus.value as? String,
+      "go",
+      "the field should hold the query before anything clears it"
+    )
+    try clearButton(of: focus).fingerTap()
+    XCTAssertEqual(
+      readFor(1.5, Echo.searchFocus),
+      "focus: 1 blur: 0 submitted: -",
+      "a real tap on the clear button should empty the query without a blur or a submit"
+    )
+    XCTAssertEqual(
+      focus.value as? String,
+      "",
+      "and the field should hold nothing"
+    )
+
+    // 3. The key that must answer, and the two imperative handles.
+    focus.typeText("go")
+    focus.typeText("\n")
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 1 blur: 1 submitted: go" },
+      "focus: 1 blur: 1 submitted: go",
+      "Return should submit the query, then blur the field"
+    )
+    try required("search-focus-js", as: "the Focus from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 2 blur: 1 submitted: go" },
+      "focus: 2 blur: 1 submitted: go",
+      "a real tap on a button that calls ref.focus() should focus the field"
+    )
+    try required("search-blur-js", as: "the Blur from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 2 blur: 2 submitted: go" },
+      "focus: 2 blur: 2 submitted: go",
+      "and one that calls ref.blur() should blur it"
+    )
+  }
+
+  /// Read an echo for `seconds` and hand back what it said at the end. The negative
+  /// assertions above need the period: one read taken before the keypress was processed
+  /// would say "nothing happened" about a submit that had not arrived yet.
+  private func readFor(_ seconds: TimeInterval, _ identifier: String) -> String {
+    let deadline = Date().addingTimeInterval(seconds)
+    var shown = ""
+    repeat {
+      let node = app.descendants(matching: .any)[identifier].firstMatch
+      if node.exists {
+        shown = node.label.isEmpty ? ((node.value as? String) ?? "") : node.label
+      }
+      Thread.sleep(forTimeInterval: 0.2)
+    } while Date() < deadline
+    return shown
   }
 
   /// Tap a field until it has the keyboard focus, retrying a dropped delivery the way
