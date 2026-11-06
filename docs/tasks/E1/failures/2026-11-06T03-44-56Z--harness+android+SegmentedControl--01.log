@@ -1,0 +1,88 @@
+# Failure excerpt — harness:android:SegmentedControl
+
+- Ran: 2026-11-06T03:44:56.082Z on code tree `55085cafd3c4` at HEAD `8297124` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SegmentedControl`
+- Result: fail, exit 1, 27020 ms
+- Load: start 2.74, end 3.51, median 3.51, max 3.61
+- Device: android / device `emulator-5574` / lease `E1-fei60`
+- Full log: `task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log` (<store>/task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SegmentedControl.harness.tsx`
+- `● SegmentedControl · G4 › is as wide as its own segments added up`
+- `expected false to be true // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-fei60 (still live)
+  |   E1-fei60                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.51 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:SegmentedControl
+gate: node ../scripts/harness.mjs --harnessRunner android SegmentedControl (cwd example)
+gate: code tree 55085cafd3c4 at HEAD 8297124e
+gate: git tree 0a78a0979201 with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log
+gate:       <store>/task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SegmentedControl
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 55085cafd3c4, 16 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.74/2.81 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SegmentedControl.harness.tsx
+  ● SegmentedControl · G4 › is as wide as its own segments added up
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 635 |[39m     [90m// dead tail, and it is dead to a finger as much as to an eye.[39m
+       [90m 636 |[39m     expect(box)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+      [31m[1m>[22m[39m[90m 637 |[39m     expect(sameSize(box[33m,[39m { width[33m:[39m row[33m.[39mwidth[33m,[39m height[33m:[39m row[33m.[39mheight }))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                         [31m[1m^[22m[39m
+       [90m 638 |[39m
+       [90m 639 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+       [90m 640 |[39m       expect([33mMath[39m[33m.[39mabs(row[33m.[39mwidth [33m-[39m wanted) [33m<[39m [35m1[39m)[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 20 passed, 21 total
+Snapshots:   0 total
+Time:        25.694 s
+Ran all test suites matching SegmentedControl.
+gate: harness:android:SegmentedControl FAIL in 27.0 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+
+
+gate: appended the device context to task/E1-expressive-buttons/harness+android+SegmentedControl-2026-11-06T03-44-55.744Z.log (5 probe(s))
+
+```

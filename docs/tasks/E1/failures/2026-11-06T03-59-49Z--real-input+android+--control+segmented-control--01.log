@@ -1,0 +1,167 @@
+# Failure excerpt — real-input:android:--control:segmented-control
+
+- Ran: 2026-11-06T03:59:49.667Z on code tree `585d9e6900fd` at HEAD `8297124` (branch `task/E1-expressive-buttons`)
+- Command: `node scripts/real-input/android.mjs --control segmented-control`
+- Result: fail, exit 1, 450694 ms
+- Load: start 4.02, end 2.92, median 3.02, max 5.70
+- Device: android / device `emulator-5574` / lease `E1-fei60`
+- Full log: `task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log` (<store>/task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-fei60 (still live)
+  |   E1-fei60                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.92 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 124 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:segmented-control
+gate: node scripts/real-input/android.mjs --control segmented-control (cwd .)
+gate: code tree 585d9e6900fd at HEAD 8297124e
+gate: git tree 0a78a0979201 with a DIRTY worktree (not reusable)
+gate: log task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log
+gate:       <store>/task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  segmented-control: real tap selects the segment under the finger, and a refused selection snaps back
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    ✓ the SegmentedControl has reported no index before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    ✓ a real tap on the second segment reaches JS as index 1 — expected 1, saw 1
+    ✓ one tap reports one change — expected 1, saw 1
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    · segment 1: item View [42,734 → 142,860] checked=false; role [42,734 → 147,860]; label [84,771 → 105,824]
+    · segment 2: item View [142,734 → 252,860] checked=true; role [152,734 → 257,860]; label [194,771 → 215,824]
+    · segment 3: item View [252,734 → 367,860] checked=false; role [262,734 → 367,860]; label [304,771 → 325,824]
+    ✓ the group still has one node per option — expected 3, saw 3
+    ✓ the group publishes one radio node per option — expected 3, saw 3
+    ✓ segment 1 of 3 is still a radio button — expected true, saw true
+    ✓ segment 1 is announced with its own label — expected true, saw true
+    ✓ segment 1 reports the selection the control has (index 1) — expected false, saw false
+    ✓ segment 2 of 3 is still a radio button — expected true, saw true
+    ✓ segment 2 is announced with its own label — expected true, saw true
+    ✓ segment 2 reports the selection the control has (index 1) — expected true, saw true
+    ✓ segment 3 of 3 is still a radio button — expected true, saw true
+    ✓ segment 3 is announced with its own label — expected true, saw true
+    ✓ segment 3 reports the selection the control has (index 1) — expected false, saw false
+    ✓ the three items are one row, not a stack — expected 1, saw 1
+    ✓ segment 2 is within the connected gap of its neighbour (=0px, at most 6px = 2dp)
+    ✓ segment 3 is within the connected gap of its neighbour (=0px, at most 6px = 2dp)
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    · MUTATION: segment 1 now checked=true
+    · MUTATION: the probe's own arithmetic on this screenshot says onStroke=true (probe rgb(255,255,255) vs reference rgb(110,116,136), distance 145)
+    · corner probe: segment 1 [42,734 → 142,860], pixels (116, 734) = rgb(255,255,255) and (116, 735) = rgb(255,255,255) against segment 1's own interior at rgb(255,255,255)
+    ✗ segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    ✓ the control did not move out from under the finger — expected 42,734 → 367,860, saw 42,734 → 367,860
+    · "Real-input segmented control" occupies 42,734 → 367,860
+    ✓ a real tap on the first segment reaches JS as index 0 — expected 0, saw 0
+    ✓ two taps report two changes — expected 2, saw 2
+    ✓ the refusing parent pins its SegmentedControl at index 0 — expected 0, saw 0
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1086 → 367,1212
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the index it sends is still 0 — expected 0, saw 0
+    · "Real-input rejecting segmented control" occupies 42,1086 → 367,1212
+    ✓ a second tap on segment 2 is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 0, saw 0
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,734][1038,860]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,734][367,860]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2050][1038,2176]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2134][535,2260]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,380][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+segmented-control: FAIL (no retries)
+    failed: segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)
+
+real-input (android): 0/1 controls passed · 0 press sequence(s) needed a retry · 18/18 auxiliary checks passed
+gate: real-input:android:--control:segmented-control FAIL in 450.7 s
+gate: recorded in .gates/task/E1-expressive-buttons.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E1-expressive-buttons/real-input+android+--control+segmented-control-2026-11-06T03-59-49.343Z.log (5 probe(s))
+
+```

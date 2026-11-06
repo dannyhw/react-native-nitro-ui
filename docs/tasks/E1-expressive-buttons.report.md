@@ -25,23 +25,25 @@ The three button-shaped Android controls now sit on Material 3 Expressive's own 
 
 **Chip** got its `ChipShapes`. The always-present leading slot stays: material3 1.5.0-beta02 still wraps it in an `expandHorizontally` spring (re-read, not inherited), and taking it out still costs a width a deselect cannot land on.
 
-**Sizing** (D17): heights unchanged at 48 dp; Android fallbacks moved with the numbers — Button 91 → 75.1 dp wide, SegmentedControl 256 → 208.4 — in `scripts/conformance-core.mjs` and its in-app mirror. Filter chips are 3.81 dp narrower at both states, constant, so a chip still grows by exactly its check mark.
+**Sizing** (D17): heights unchanged at 48 dp; Android fallbacks moved with the numbers — Button 91 → 75.1 dp wide, SegmentedControl 256 → 187.9 — in `scripts/conformance-core.mjs` and its in-app mirror. Filter chips are 3.81 dp narrower at both states, constant, so a chip still grows by exactly its check mark.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1733 tests / 69 suites | `b7a64e916821` | 3 m 10 s | start 52.6 / med 40.8 / max 65.2 |
-| `harness:ios` | **PASS** | 393 tests / 23 suites + isolated 2 tests / 1 suites | `b7a64e916821` (ios tree) | 9 m 22 s | start 3.5 / med 4.9 / max 15.5 |
-| `harness:android` | **PASS** | 442 tests / 23 suites + isolated 2 tests / 1 suites | `b7a64e916821` (android tree) | 14 m 00 s | start 16.9 / med 6.8 / max 20.7 |
+| `check` | **PASS** | 1733 tests / 69 suites | `1ba96127946f` | 2 m 40 s | start 3.3 / med 4.0 / max 5.1 |
+| `harness:ios` | **PASS** | 394 tests / 23 suites + isolated 2 tests / 1 suites | `1ba96127946f` (ios tree) | 9 m 22 s | start 4.8 / med 4.5 / max 6.2 |
+| `harness:android` | **PASS** | 443 tests / 23 suites + isolated 2 tests / 1 suites | `1ba96127946f` (android tree) | 13 m 43 s | start 3.2 / med 2.7 / max 5.4 |
 | `real-input:ios` | stale | — | 999b709cbac0 (not this tree) | 2 m 22 s | start 3.3 / med 52.1 / max 63.7 |
-| `real-input:android` | **PASS** | — | `b7a64e916821` (android tree) | 35 m 23 s | start 5.4 / med 3.1 / max 7.5 |
+| `real-input:android` | **PASS** | — | `1ba96127946f` (android tree) | 35 m 34 s | start 3.5 / med 2.9 / max 7.5 |
 | `harness:android:Button` | stale | 1 failed of 14 tests / 1 suites | 8e41cf8df99b (not this tree) | 18.0 s | start 4.8 / med 5.1 / max 5.2 |
 | `harness:android:Chip` | stale | 2 failed of 12 tests / 1 suites | 8f9c2aafabc2 (not this tree) | 28.9 s | start 3.3 / med 3.3 / max 3.3 |
+| `harness:android:SegmentedControl` | stale | 1 failed of 21 tests / 1 suites | 3ad29a4ffdba (not this tree) | 26.2 s | start 3.1 / med 3.6 / max 3.6 |
+| `harness:android:SegmentedControl:--background` | stale | — | 55085cafd3c4 (not this tree) | 1.2 s | start 2.5 / med 2.5 / max 2.5 |
 | `harness:android:shape` | stale | — | df06f455351b (not this tree) | 1.4 s | start 7.1 / med 7.1 / max 7.1 |
 | `harness:ios:Button` | stale | 1 failed of 14 tests / 1 suites | 8e41cf8df99b (not this tree) | 17.5 s | start 4.6 / med 4.6 / max 4.7 |
 | `harness:ios:shape` | stale | — | df06f455351b (not this tree) | 0.7 s | start 7.3 / med 7.3 / max 7.3 |
-| `real-input:android:--control:segmented-control` | stale | — | 91769b1bb8e8 (not this tree) | 7 m 17 s | start 2.5 / med 2.9 / max 7.2 |
+| `real-input:android:--control:segmented-control` | stale | — | 9a0202aabce2 (not this tree) | 6 m 50 s | start 1.8 / med 2.5 / max 6.1 |
 | `real-input:android:--control:segmented-control:--background` | stale | — | ab2987c39792 (not this tree) | 0.5 s | start 3.1 / med 3.1 / max 3.1 |
 
 `need --for review`: need: review is satisfied on this code tree.
@@ -49,6 +51,8 @@ The three button-shaped Android controls now sit on Material 3 Expressive's own 
 Only four rows describe the code in front of the reader; the rest is history the ledger keeps, and `table` prints the newest line per gate name. `harness:android:shape` / `harness:ios:shape` are the first two attempts at the `shape` proofs, refused before they ran because no app was stamped yet. `harness:android:Button`, `harness:android:Chip`, `harness:ios:Button` and `--control:segmented-control` are red-proof runs, each on its own mutated tree, so each is stale by its own mutation. The `…:--control:segmented-control:--background` row is a `--background` flag put after the `--`, which the runner read as another `--control` argument and refused in half a second. Every red line in the ledger has its excerpt in `docs/tasks/E1/failures/`.
 
 Two runs in the ledger carry this fix round's own history. The first full `real-input:android` went red on `picker` alone: three cycles into the drop picker's unmount loop, the tap that arms the app's own 2.5 s unmount landed and the tap that opens the menu did not, so the retry re-read the tree after the control had gone — the race the check's own comment names, on a box carrying another task's `real-input:ios`, with the other 19 controls green. The PASS above is the re-run. `real-input:ios` has no green on this tree: its last run was refused because the code tree moved under its own build, mid-way through the round-1 screenshot work. It was not re-run because no iOS source moved since — this round's diff is Android Kotlin, two `scripts/real-input/` files and docs, and only the Android runner imports either — and `harness:ios` is green on this exact tree.
+
+Fix round 2 adds four more rows of its own. `harness:android:SegmentedControl` on `3ad29a4ffdba` is the new row-width test going red against the weighted geometry, and `real-input:android:--control:segmented-control` on `9a0202aabce2` is the corner probe refusing a selected segment; both are filtered runs, so they satisfy nothing and are stale by their own mutation. The two between them on `d6c2e198b679` and `585d9e6900fd`, and the PASS on `3c92ebffc732`, are the same proof being written: the first two placed the tap after `segmentOne` was bound, so the guard never saw the selection, and the pass is what a bare `AbortedCheck` looks like to this runner — a check that stopped reading and a green run. `harness:android:SegmentedControl:--background` is the same `--background` flag put after the `--` as the `segmented-control:--background` row above, made a second time. `real-input:ios` is stale again and still not asked for: this round moved Android Kotlin, one `scripts/real-input/` file, a shared harness test and docs, and `harness:ios` is green on this exact tree because the harness test is shared.
 
 One hygiene incident: reading the emulator's night mode with `cmd uimode night` turned out to be a setter, so `night yes` went to `emulator-5574` for about five seconds during the final `real-input:android` run and came straight back (`night no`, `ui_night_mode=1`, verified after). Nothing in that window asserted a colour and the run is green, but it was a write to a leased device made blind.
 
@@ -71,12 +75,17 @@ Fix round 1 (both in the same data file):
 - `ButtonModelTest.onlyTheTextVariantIgnoresTheCornerItWasSent` -> `cornerFor` returns `shape` for every variant -> `java.lang.AssertionError at ButtonModelTest.kt:93` (the `text` + `square` case; 84 tests, 1 failed).
 - `scripts/real-input/android.mjs · segment 1 is drawn with its connected corner` -> the three `connected*ButtonShapes(resting)` calls put back -> `… 10dp inside the corner … - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)`. Green, those two pixels are the segment's own border, `rgb(93,95,103)`.
 
+Fix round 2:
+
+- `example/__tests__/SegmentedControl.harness.tsx · G4 · is as wide as its own segments added up` -> `ConnectedRow` made to demand n x the widest item and always share the result (what `Modifier.weight(1f, fill = false)` at `width(IntrinsicSize.Max)` does) -> `the row of Hour, Day, Week, Month, Year measures 369.52x48.00 … but its own segments are 62.86 + 56.00 + 66.67 + 72.38 + 60.19 plus 4 gaps of 2 dp = 326.10 dp - off by 43.42 dp`; 1 of 21 failed, and the other 20 stayed green because an equal share is still right for the over-wide cases.
+- `scripts/real-input/android.mjs · segment 1 is drawn with its connected corner` -> the pill mutation left in and a tap on segment 1 added before the probe -> `the corner probe will not read segment 1 while it is not plainly unselected (checked=true)`. The run also printed what the probe would have concluded: `onStroke=true`, probe `rgb(255,255,255)` against a reference of `rgb(110,116,136)` — page-against-fill reads as stroke, which is the false green the line now refuses. Its first attempt threw a bare `AbortedCheck` instead and the run reported **PASS** (tree 3c92ebffc732), which is why it goes through `t.log.abort`.
+
 Data: `docs/tasks/E1/mutations.json`.
 
 ## Files changed
 
 - Shared Expressive button code (Android): `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt` — the `ButtonScale` token ladder, `ButtonShape`, `buttonShapes` with its per-(scheme, rung, corner) cache, and the helpers `Menu`'s trigger already drew through (`NitroUiM3Button`); its popup untouched.
-- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt` — the connected group, the item's own radio semantics, `FALLBACK_WIDTH_DP` 256 → 208.4.
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt` — the connected group, the item's own radio semantics, `FALLBACK_WIDTH_DP` 256 → 187.9, and `ConnectedRow`, the row that lays the group out at the sum of its segments.
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiChip.kt` — `ChipShapes` with its own cache, and the leading-slot note re-verified rather than inherited.
 - iOS: `ios/components/Button/HybridNitroUiButton.swift` — `shape` → `.buttonBorderShape`, stored, applied in `afterUpdate()`, reset in `prepareForRecycle`; the `outlined` hairline follows the corner.
 - Spec + wrapper: `src/components/Button/Button.nitro.ts`, `src/components/Button/Button.tsx`, `src/components/Button/NativeNitroUiButton.ts`, `src/components/Button/NitroUiButtonConfig.ts`, `src/index.ts`, `etc/react-native-nitro-ui.api.md` and the `nitrogen/generated/**` Button files.
@@ -92,10 +101,11 @@ Data: `docs/tasks/E1/mutations.json`.
 - Bench: the Button / SegmentedControl / Chip arms were not re-run this round (the brief allows this line); the sizes above are the harness's, not the bench's.
 - SegmentedControl: the three states *swap* corners rather than morphing. Material animates its own buttons through `AnimatedShapeState`, which is `internal`, so the group needs its own corner animation to keep up with `Button`'s morph.
 - SegmentedControl: `Modifier.selectableGroup()` on the row has no red proof — dropping it leaves the tree these checks read looking the same. Guarding it needs a `CollectionInfo` assertion, not another node-count line.
+- SegmentedControl: `example/__tests__/SegmentedControl.harness.tsx` prints its segment sum on both platforms but asserts it on Android, and the iOS runner captures no JS console output into the gate log, so the iOS half of that pairing only reaches the simulator console.
 - SegmentedControl: `ConnectedSegment` allocates per recomposition — an interaction source and a `collectIsPressedAsState` per item, on top of `Button`'s cached shapes.
 - Button: at `small` the drawn container is Material's own 40 dp floor while the box is laid out at the 48 dp touch target, so the ladder's first rung is a 40 dp picture in a 48 dp box.
 - Button / SegmentedControl / Chip: the shape caches key on the `MotionScheme` instance plus the rung (and corner or state); a theme that changed its shape tokens while holding one `MotionScheme` object would read a stale pair, and nothing here detects that.
-- SegmentedControl: in the `OptionSets` story `Month` still ellipsizes — 324.57 dp of content inside a 363.4 dp column, the segment is its 103 px text plus 2 × 16 dp, and the glyphs measured off the screenshot this row replaced are 99 px wide, so the word is ~0.5 dp short of its own box. Nothing about the row's width explains it.
+- SegmentedControl: `ConnectedRow` asks each item for its `maxIntrinsicWidth`, which is the label plus padding only because a segment is one `Text` at `maxLines = 1`; a wrapping or multi-line child would break that and nothing here says so.
 - Bench: not re-run since round 1 (out of this fix round's scope), so the numbers above are still round 1's.
 
 ## Fix round 1
@@ -115,3 +125,19 @@ not *morph*: material3's shape animator is `internal`.
 container, so no device can see it. `small` selects the XS token's padding, type and corner, not a
 32 dp box; the typo and the task ids are out of the user docs; `segmented-control-android.png`
 is retaken at 720 px, where `Last 24 hours` spells itself out and `Month` still does not.
+
+## Fix round 2
+
+**The row is its own segments.** `Modifier.weight` is gone. For a weighted child the equal share is
+also the ceiling, and a weighted row at `width(IntrinsicSize.Max)` demands n x the widest item, so
+the row was measured against the mean of itself: `Month` ellipsized inside a box 43 dp wider than
+the row drawn in it. `ConnectedRow` now sums each item's intrinsic width and shares the box
+equally *only* when the labels do not fit - the pass `overwide` / `clamped` / `narrowing` need,
+which is why a plain `Row` cannot take the weight back. Five options measure 325.71 x 48.00, box
+equal to measurement; three short labels 187.81 (fallback now 187.9), four 265.90 - ~27% narrower
+than the row replaced, not ~18%. `Month` spells itself out in the retaken 720 px shot.
+
+**The corner probe refuses a selected segment.** Its reference must be the page; given the fill,
+its own arithmetic answers `onStroke=true` for a pill. It aborts through `t.log.abort`: a bare
+`AbortedCheck` is swallowed and the run read green. Docs, comments, the changeset and
+`mutations.json` say what happens now.
