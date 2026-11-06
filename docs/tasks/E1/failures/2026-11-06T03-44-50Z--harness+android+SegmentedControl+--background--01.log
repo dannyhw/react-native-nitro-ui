@@ -1,0 +1,59 @@
+# Failure excerpt — harness:android:SegmentedControl:--background
+
+- Ran: 2026-11-06T03:44:50.428Z on code tree `55085cafd3c4` at HEAD `8297124` (branch `task/E1-expressive-buttons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SegmentedControl --background`
+- Result: fail, exit 1, 1175 ms
+- Load: start 2.46, end 2.46, median 2.46, max 2.46
+- Device: android / device `emulator-5574` / lease `E1-fei60`
+- Full log: `task/E1-expressive-buttons/harness+android+SegmentedControl+--background-2026-11-06T03-44-50.428Z.log` (<store>/task/E1-expressive-buttons/harness+android+SegmentedControl+--background-2026-11-06T03-44-50.428Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E1-expressive-buttons/harness+android+SegmentedControl+--background-2026-11-06T03-44-50.428Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E1-fei60 (still live)
+  |   E1-fei60                 E1           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.46 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SegmentedControl --background
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 55085cafd3c4, 16 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.46/2.76 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E1-expressive-buttons/harness+android+SegmentedControl+--background-2026-11-06T03-44-50.428Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```

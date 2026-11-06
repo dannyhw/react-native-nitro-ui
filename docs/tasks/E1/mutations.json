@@ -1,6 +1,6 @@
 {
   "task": "E1",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file` at 5f5c2e5f). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The two rows added in fix round 1 follow the same convention against the fix round's own tree, and ran on lease `E1-7ojmj` (the same pair-a devices) on 2026-11-06. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it, so every `before` is findable verbatim in `file`). Device rows ran on lease E1-uivzs, pair-a (emulator-5574 + iOS 27 `nitro-ui A`, Metro 8295), on 2026-11-05; every filtered run is recorded under its own name and satisfies nothing else. The two rows added in fix round 1 follow the same convention against the fix round's own tree, and ran on lease `E1-7ojmj` (the same pair-a devices) on 2026-11-06. The rows added in fix round 2 ran on lease `E1-fei60` (the same pair-a devices) on 2026-11-06, and the connected-corner row was re-run there because round 1 wrote its `after` against a local `resting` val that round 2's file no longer has — see its note. The last row is not a mutation: it is the same check run against the row E1 replaced, recorded because it is the measurement behind the `segmented-control.md` claim that the semantics did not move.",
   "mutations": [
     {
       "test": "example/__tests__/Button.harness.tsx · shape · the corner (E1) · reaches the control",
@@ -32,7 +32,9 @@
       "before": "    shape = ButtonShape.Round\n    enabled = true",
       "after": "    enabled = true",
       "run": "bun run test:native:android — BUILD FAILED",
-      "redTests": ["java.lang.AssertionError at ButtonModelTest.kt:42"]
+      "redTests": [
+        "java.lang.AssertionError at ButtonModelTest.kt:42"
+      ]
     },
     {
       "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt · theBoxMaterialLaysOutNeverGoesBelowTheTouchTarget",
@@ -41,7 +43,9 @@
       "before": "    get() = if (height > MinTouchTargetHeight) height else MinTouchTargetHeight",
       "after": "    get() = height",
       "run": "bun run test:native:android — BUILD FAILED",
-      "redTests": ["java.lang.AssertionError at ButtonModelTest.kt:69"]
+      "redTests": [
+        "java.lang.AssertionError at ButtonModelTest.kt:69"
+      ]
     },
     {
       "test": "example/__tests__/Chip.harness.tsx · chip · a toggle round trip (E1)",
@@ -91,7 +95,32 @@
       "redTests": [
         "segment 2 is within the connected gap of its neighbour (=11px, at most 6px = 2dp)",
         "segment 3 is within the connected gap of its neighbour (=11px, at most 6px = 2dp)"
-      ]
+      ],
+      "note": "Run against fix round 1's `Row`, so these two lines are where the row was spaced then and are no longer findable in the file. After fix round 2 the spacing is ConnectedRow's gap instead, and the equivalent mutation today is `ButtonGroupDefaults.ConnectedSpaceBetween.roundToPx()` -> `(12.dp).roundToPx()` on that line; it was not re-run this round. The 11 px these red lines name is the 12 dp minus rounding: an `Arrangement` gap lands outside the item node and shows in the tree, which the connected 2 dp does not (it is Compose padding inside the item, so the tree gap is 0 px) — the difference the corner probe's note is about."
+    },
+    {
+      "test": "example/__tests__/SegmentedControl.harness.tsx · SegmentedControl · G4 · is as wide as its own segments added up",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
+      "mutation": "the row demands n x the widest item and always shares the result — `Modifier.weight(1f, fill = false)` at `width(IntrinsicSize.Max)`, rebuilt inside ConnectedRow",
+      "before": "    val natural = measurables.sumOf { it.maxIntrinsicWidth(0) } + gaps\n      if (natural > rowWidth) ((rowWidth - gaps) / count).coerceAtLeast(0) else -1",
+      "after": "    val widest = measurables.maxOf { it.maxIntrinsicWidth(0) }\n    val natural = widest * count + gaps\n      ((rowWidth - gaps) / count).coerceAtLeast(0)",
+      "run": "harness:android:SegmentedControl — FAIL (tree 3ad29a4ffdba, 1 of 21 failed)",
+      "redTests": [
+        "SegmentedControl · G4 › is as wide as its own segments added up"
+      ],
+      "note": "Fix round 2, and one mutation written across the two lines of [ConnectedRow] that decide the row's width — each is findable verbatim in the file; the blank line between them is where `rowWidth` is computed. This is the geometry the connected group shipped with for two rounds. Only the new test goes red: 369.52 dp of box against 326.10 dp of segments (5 x 72.38 + 4 x 2), which is 43 dp of tail the row never paints. The other 20 pass because an equal share is still what the over-wide `clamped`/`narrowing` cases want — which is the whole reason the row is a hand-written Layout and shares only when the labels do not fit."
+    },
+    {
+      "test": "scripts/real-input/android.mjs · segmented-control · segment 1 is drawn with its connected corner (the unselected-segment precondition)",
+      "file": "scripts/real-input/android.mjs",
+      "mutation": "the same pill mutation left in place, and a tap on segment 1 added just before the probe, so the probe reads a segment that is selected — with the tree re-read until it says checked=true",
+      "before": "    const screen = t.screencap();",
+      "after": "    await t.tapUntilValue(\n      () => t.requireControlAt(\"Real-input segmented control\", control),\n      ECHO.segmentedIndex,\n      \"0\",\n      \"mutation: segment 1 selected\",\n      { aim: (node) => t.tapControlAt(node, 0.12) }\n    );\n    /* poll t.dump() until items[0].checked === \"true\", then: */\n    const screen = t.screencap();",
+      "run": "real-input:android:--control:segmented-control — FAIL (tree 9a0202aabce2)",
+      "redTests": [
+        "the corner probe will not read segment 1 while it is not plainly unselected (checked=true)"
+      ],
+      "note": "Fix round 2. The point is what did NOT go red: the run was told to print what the probe's own arithmetic concludes on that screenshot, and it answered onStroke=true — probe rgb(255,255,255) (the page, because a pill is clipped away from the top edge there) against a reference of rgb(110,116,136) (the fill, because segment 1 is selected), distance 145. A selected segment turns the probe's page reference into ink, and page-against-ink reads as stroke: the line passes for a pill. Two things came out of running it. The first is the precondition itself. The second is that the first attempt threw a bare AbortedCheck and the whole run reported PASS — the runner swallows that error to move on to the next control, so the probe had vanished without a line (tree 3c92ebffc732). It goes through `t.log.abort` now, which records a failure before it stops, and this row is red only because of that."
     },
     {
       "organic": true,
@@ -100,8 +129,7 @@
       "mutation": "not a mutation: the file restored to ee3197ed (`SingleChoiceSegmentedButtonRow`), with one temporary note added to the check printing every node inside the control's box",
       "run": "real-input:android:--control:segmented-control — PASS (tree 7ba78c008a8c)",
       "finding": "The pre-E1 row publishes the same three nodes per segment as the connected group does — one item node carrying checkable/checked at the segment's box, one `android.widget.RadioButton` for the role, one `android.widget.TextView` for the label — which is what `docs/components/segmented-control.md` now says out loud, and what the first draft of this check got wrong (it asked the label node to be the radio button, and went red on both implementations)."
-    }
-,
+    },
     {
       "test": "android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt · onlyTheTextVariantIgnoresTheCornerItWasSent",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
@@ -117,14 +145,14 @@
     {
       "test": "scripts/real-input/android.mjs · segmented-control · segment 1 is drawn with its connected corner",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt",
-      "mutation": "the connected helpers are handed the control's own stadium again — the round-1 call — which keeps the 2 dp gap and the tree and rests every item on a full pill",
+      "mutation": "the connected helpers are handed the control's own stadium again, which keeps the 2 dp gap and the tree and rests every item on a full pill",
       "before": "              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()\n              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()\n              else -> ButtonGroupDefaults.connectedMiddleButtonShapes()",
-      "after": "              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(resting)\n              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes(resting)\n              else -> ButtonGroupDefaults.connectedMiddleButtonShapes(resting)",
-      "run": "real-input:android:--control:segmented-control — FAIL",
+      "after": "              index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes(group.lone.shape)\n              index == options.size - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes(group.lone.shape)\n              else -> ButtonGroupDefaults.connectedMiddleButtonShapes(group.lone.shape)",
+      "run": "real-input:android:--control:segmented-control — FAIL (round 2: tree 9a0202aabce2; round 1: the same mutation, written differently, tree 303d1acb)",
       "redTests": [
         "segment 1 is drawn with its connected corner: the border is still on the top edge 10dp inside the corner (a pill's arc is 2.3dp below the edge there) - rgb(255,255,255) / rgb(255,255,255) vs page rgb(255,255,255)"
       ],
-      "note": "Fix round 1. Green, the same two pixels read the segment's own 1 dp border — rgb(93,95,103) against rgb(255,255,255) from the same segment's transparent interior — and the note prints both. This probe is the line that guards the corners: pills 2 dp apart and a connected group have the same boxes, the same 2 dp gap and the same three nodes per segment, so every other line in the block passes for both. The tree's gap between two items is 0 px (the 2 dp is Compose padding the item node does not carry), which is why the page reference is sampled inside segment 1 rather than in the gap."
+      "note": "Written twice. Fix round 1 applied it as a hoisted `val resting = buttonShapes(ButtonShape.Round, ButtonScale.Medium).shape` in `Component` and passed `resting`; that val is gone from today's file, so the row now says what round 2 actually ran — `group.lone.shape`, which is exactly that stadium (`loneSegmentShapes()` builds it from `buttonShapes(Round, Medium)`) reached without adding anything. Reproduce it by putting `(group.lone.shape)` on the three calls and nothing else. Green, the same two pixels read the segment's own 1 dp border — rgb(93,95,103) against rgb(255,255,255) from the same segment's transparent interior — and the note prints both. This probe is the line that guards the corners: pills 2 dp apart and a connected group have the same boxes, the same 2 dp gap and the same three nodes per segment, so every other line in the block passes for both. The tree's gap between two items is 0 px (the 2 dp is Compose padding the item node does not carry), which is why the page reference is sampled inside segment 1 rather than in the gap."
     }
   ]
 }
