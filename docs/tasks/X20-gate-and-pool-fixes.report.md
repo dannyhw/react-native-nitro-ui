@@ -41,15 +41,8 @@ load the limit exists for). Documented in CONTRIBUTING "Older iOS runtimes, for 
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1808 tests / 70 suites | `04114b070a8f` | 3 m 16 s | start 26.8 / med 32.0 / max 71.5 |
-| `harness:ios` | **PASS** | 444 tests / 25 suites + isolated 4 tests / 2 suites | `04114b070a8f` (ios tree) | 11 m 01 s | start 203.1 / med 40.8 / max 203.1 |
-| `harness:android` | **PASS** | 493 tests / 25 suites + isolated 4 tests / 2 suites | `04114b070a8f` (android tree) | 15 m 07 s | start 39.0 / med 6.1 / max 39.0 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-
-`need --for review`: `need: review is satisfied on this code tree.` `real-input:ios`/`:android` are the merge bar and were not run here; the `--ios-runtime` refusal of `harness:ios` was a by-hand check under lease `X20-6gxmv` (refused, exit 1, no ledger line), not a recorded gate
+Round 1 had `check`, `harness:ios` and `harness:android` green on `04114b070a8f` (lease `X20-6pbaf`);
+the ledger keeps those rows. The current generated table is under "Fix round 1".
 
 ## Red proofs
 
@@ -88,11 +81,15 @@ load the limit exists for). Documented in CONTRIBUTING "Older iOS runtimes, for 
 
 ## Fix round 1
 
-The reviewer's two surviving mutations are now red, and `resetPair` has no default platform.
+Both mutations the review left green are now red, and `resetPair` has no default platform.
 
-1. **The CLI refusal is tested.** A `describeCli` case in `gate.test.js` runs `gate.mjs harness:ios` in a throwaway checkout whose `node` is the fake runner, so no device or harness ever starts. With `NITRO_UI_LEASE_IOS_RUNTIME=26.5` it asserts exit 1, `refused before the run`, no runner output and an empty ledger. Without the variable, the same checkout must run and record `harness:ios`, so "no line" cannot pass by accident.
-2. **The doctor fixture no longer matches the answer.** A new case gives pair-b Metro 8297 and expects 8298 and 8299.
-3. **`resetPair` requires `platform`.** It throws on a missing or unknown platform before asking any device. Every caller passes one, and a test pins the throw and the single-half resets.
+1. **CLI refusal tested.** A `describeCli` case runs `gate.mjs harness:ios` in a throwaway checkout
+   whose `node` is the fake runner, so no device starts. With `NITRO_UI_LEASE_IOS_RUNTIME=26.5`: exit
+   1, `refused before the run`, no runner output, empty ledger. Without it, the same checkout must
+   record `harness:ios`.
+2. **Doctor fixture.** Pair-b's Metro is 8297, so the new entries must be 8298 and 8299.
+3. **`resetPair` requires `platform`.** It throws before asking any device. Every caller passes one,
+   and a test pins the throw.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
@@ -102,12 +99,12 @@ The reviewer's two surviving mutations are now red, and `resetPair` has no defau
 | `real-input:ios` | missing | — | — | — | — |
 | `real-input:android` | missing | — | — | — | — |
 
-`need --for review`: `check` green; `harness:ios`/`:android` are stale, because `device-pool.mjs` counts as both platforms. Both pairs were leased (E3, G19), so I did not re-run them — see Questions.
+`need --for review`: `check` green. The harness rows are stale because `device-pool.mjs` counts as both platforms; both pairs were leased (Questions).
 
 Red proofs:
-- `gate.test.js` "exits 1 before the run…" -> delete the `if (lookRefusal != null)` block -> `Expected: 1, Received: 0`
-- `doctor.test.js` "starts past a pair whose Metro is above the default floor" -> `addRuntimeSims` reads only `iosRuntimes` ports -> `+ 8297`
-- `device-pool.test.js` "refuses to reset without being told which half" -> `platform = 'both'` default, no guard -> `Received function did not throw`
+- `gate.test.js` refusal case -> delete the `lookRefusal` block -> `Expected: 1, Received: 0`
+- `doctor.test.js` "above the default floor" -> read only `iosRuntimes` ports -> `+ 8297`
+- `device-pool.test.js` "which half" -> `platform = 'both'`, no guard -> `Received function did not throw`
 
 ## Questions for orchestrator
 
