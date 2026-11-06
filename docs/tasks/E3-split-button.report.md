@@ -84,27 +84,28 @@ G2 measured that a `Button`'s gesture environment refuses it. Both are recorded 
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1774 tests / 70 suites | `37f052865161` | 2 m 43 s | start 3.5 / med 5.7 / max 10.4 |
-| `harness:ios` | **PASS** | 449 tests / 25 suites + isolated 4 tests / 2 suites | `37f052865161` (ios tree) | 10 m 49 s | start 4.8 / med 3.7 / max 6.6 |
-| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `37f052865161` (android tree) | 15 m 04 s | start 4.8 / med 2.7 / max 7.5 |
-| `real-input:ios` | **PASS** | — | `37f052865161` (ios tree) | 27 m 52 s | start 1.9 / med 5.2 / max 50.3 |
-| `real-input:android` | **PASS** | — | `37f052865161` (android tree) | 41 m 59 s | start 2.5 / med 3.0 / max 5.4 |
-| `harness:android:Menu` | stale | 1 failed of 48 tests / 2 suites | c5113ff8e40b (not this tree) | 1 m 45 s | start 3.2 / med 3.1 / max 3.4 |
+| `check` | **PASS** | 1777 tests / 71 suites | `3db3f1315eae` | 3 m 23 s | start 104.0 / med 49.5 / max 104.0 |
+| `harness:ios` | **PASS** | 449 tests / 25 suites + isolated 4 tests / 2 suites | `3db3f1315eae` (ios tree) | 10 m 50 s | start 4.3 / med 11.6 / max 215.0 |
+| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `3db3f1315eae` (android tree) | 15 m 14 s | start 5.3 / med 4.7 / max 13.6 |
+| `real-input:ios` | stale | — | 37f052865161 (not this tree) | 27 m 52 s | start 1.9 / med 5.2 / max 50.3 |
+| `real-input:android` | stale | — | 37f052865161 (not this tree) | 41 m 59 s | start 2.5 / med 3.0 / max 5.4 |
+| `harness:android:earns%20its%20own%20box` | stale | — | e955bdb1b9f9 (not this tree) | 1.5 s | start 6.3 / med 6.5 / max 6.8 |
+| `harness:android:Menu` | stale | 1 failed of 48 tests / 2 suites | e5ddec035f0c (not this tree) | 1 m 38 s | start 62.2 / med 33.2 / max 62.2 |
 | `harness:android:Menu:--background` | stale | — | c5e18881c939 (not this tree) | 0.6 s | start 3.1 / med 3.1 / max 3.1 |
-| `harness:android:Slider` | **PASS** | 24 tests / 1 suites | `37f052865161` (android tree) | 20.5 s | start 3.8 / med 5.2 / max 5.4 |
-| `real-input:android:--control:menu` | **PASS** | — | `37f052865161` (android tree) | 9 m 44 s | start 3.2 / med 2.8 / max 4.9 |
+| `harness:android:Slider` | stale | 24 tests / 1 suites | 37f052865161 (not this tree) | 20.5 s | start 3.8 / med 5.2 / max 5.4 |
+| `real-input:android:--control:menu` | stale | — | 37f052865161 (not this tree) | 9 m 44 s | start 3.2 / med 2.8 / max 4.9 |
 
-`need --for review`: `need: review is satisfied on this code tree.` (exit 0;
-`check` green, `harness:ios` green on the ios tree, `harness:android` green on the android
-tree, and both `real-input:*` green on their own halves.)
-
+`need --for review`: `need: review is satisfied on this code tree.` (exit 0). The two
+`real-input:*` rows are stale by construction rather than regressed: fix round 1 touched both
+platform halves, and real input belongs to the merge bar, which runs the full harness plus
+real input once.
 
 ## Red proofs
 
-Data: `docs/tasks/E3/mutations.json` — 17 rows, each with the shipped `before`, the replaced
+Data: `docs/tasks/E3/mutations.json` — 22 rows, each with the shipped `before`, the replaced
 `after`, the run and the failing line. JVM rows are off-device
-(`:react-native-nitro-ui:testDebugUnitTest`); device rows are filtered runs on lease
-`E3-o7x7a`, so they satisfy nothing but their own name. "organic" = a new test going red
+(`:react-native-nitro-ui:testDebugUnitTest`); device rows are filtered runs on the
+round's lease (`E3-o7x7a`, then `E3-5z5a2`), so they satisfy nothing but their own name. "organic" = a new test going red
 against the shipped component before the test itself was right; "negative control" = a
 mutation expected to go red that did not, and the claim it then forced.
 
@@ -216,7 +217,8 @@ From the E3 review (fix round 1) — filed, not fixed:
 - daemon was touched, but AGENTS.md bans `pkill` outright and that is the rule I broke. The
   killed run cost one re-run of `check`; it is not why that gate was red — `manifest:check`
   failed deterministically on every tree since the new source landed, because it was not yet
-  in `etc/package-files.txt`.
+  in `etc/package-files.txt`. Fix round 1 used no `pkill`/`pgrep` in any form: the only
+  processes stopped were PIDs this round recorded, one `kill` each.
 - **Two independent witnesses agree on the two halves.** The component reports them in
   its own space (`leading 0,0,197,126`, `trailing 202,0,328,126`); real input finds the
   same boxes from outside the app (`42,1986 → 239,2112` and `244,1986 → 370,2112`, the
@@ -245,7 +247,13 @@ From the E3 review (fix round 1) — filed, not fixed:
   there is), the two `harness:android:Menu` rows on trees `e955bdb1b9f9` / `e5ddec035f0c` which
   *are* the mutation red proofs, and one `harness:ios` row at 287 s with no counts — a run of
   mine I killed by PID after editing a comment mid-flight, which had already stopped being
-  green-worthy the moment the tree moved.
+  green-worthy the moment the tree moved. One **full** `harness:android` row also went red on
+  this tree, outside E3 and on a mount timeout rather than an assertion:
+  `ContextMenu › closes an open menu when it becomes disabled` — `Render timeout: Element did
+  not mount within 1000ms`, 494 passed of 498, load1 median 9.2 and max 128.35. Nothing in the
+  fix round reaches it: the Android edits only add `MenuModel.applyListAction` and a comment,
+  and `ContextMenu` never composes `MenuSplitButton`. The quiet re-run (load1 median 4.7) is
+  the green row above — 495 passed of 498, that test included.
 
 - **Ledger noise**, left in place rather than edited out: `harness:android:Menu:--background`
   (my argument-order error, 0.6 s), one killed duplicate `harness:android:Menu` that recorded 0
@@ -255,17 +263,20 @@ From the E3 review (fix round 1) — filed, not fixed:
 
 ## Fix round 1
 
-Verdict FIX ROUND on `a4d20e4c`; five items, and the split button itself untouched.
+Verdict FIX ROUND on `a4d20e4c`; five items, the split button itself untouched.
 
-1. `README.md` said the opposite of iOS about `primaryAction`. It now says one button does both
-   there — a tap runs it, a long press opens the list — and two halves on Android, wider there.
+1. `README.md` said the opposite of iOS: there one button does both — a tap runs it, a long
+   press opens the list; Android gets two halves, wider. `menu.md` agrees.
 2. `src/__tests__/menuSizingKey.test.tsx` reads the key off the native props, so the `action`
-   field is itself under test; red both ways. The device case was measured with the same two
-   mutations and **does** go red — one shared entry leaves the split control at `78.86 × 48`
-   while it measures `124.95 × 48` — so the claim stays and the "whichever mounted second" guess
+   field is itself under test; red both ways. The device case, measured with the same two
+   mutations, **does** go red — a shared entry leaves the split control at `78.86 × 48` while
+   it measures `124.95 × 48` — so the claim stands and the "whichever mounted second" guess
    goes. Four `mutations.json` rows.
 3. `// Stored, never called` points at `applyPrimaryAction`.
 4. TalkBack can close the list: the trailing half's semantics action asks
-   `MenuModel.applyListAction`, the transition a finger gets; `theListActionTogglesLikeAPressDoes`
-   guards that entry point, the one split path a pointer-injecting run cannot reach.
-5. JSDoc backslashes dropped; row 7's `after` matches its own `run` and `redTests`.
+   `MenuModel.applyListAction`, the transition a finger gets, and
+   `theListActionTogglesLikeAPressDoes` guards that entry point — the one split path a
+   pointer-injecting run cannot reach, which is where the checking stops.
+5. JSDoc backslashes dropped; row 7's `after` now matches its own `run` and `redTests`.
+6. `harness:android` went red once here on a `ContextMenu` mount timeout under load1 128; the
+   quiet re-run is green, 495 of 498.
