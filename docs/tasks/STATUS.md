@@ -101,4 +101,4 @@
 | G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | running |
 | X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merge round (PR #42; fix round 1 accepted at `a1889dce`: the refusal, port fixture and required platform each shown red) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
-| FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | running |
+| FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
