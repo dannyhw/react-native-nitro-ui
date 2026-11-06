@@ -140,6 +140,8 @@ export interface ButtonProps extends ViewProps {
         readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
       }) => void)
     | undefined;
   /**

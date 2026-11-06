@@ -27,6 +27,8 @@ public protocol HybridNitroUiButtonSpec_protocol: HybridObject, HybridView {
 
   // Methods
   func measureContent() throws -> NitroUiButtonSize
+  func nuiTestPixelProbe(color: Double) throws -> Void
+  func nuiTestPixelReport() throws -> String
 }
 
 public extension HybridNitroUiButtonSpec_protocol {
