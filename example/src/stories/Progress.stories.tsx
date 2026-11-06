@@ -20,6 +20,8 @@ const meta = {
   component: Progress,
   args: {
     variant: 'linear',
+    appearance: 'flat',
+    contained: false,
     value: 0.4,
     tintColor: undefined,
     trackColor: undefined,
@@ -27,9 +29,20 @@ const meta = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['linear', 'circular'],
+      options: ['linear', 'circular', 'loading'],
       description:
-        "Which indicator to draw. It is also the control's size configuration, so switching it remounts the native view and costs the usual one-frame measurement correction.",
+        "Which indicator to draw. It is also the control's size configuration, so switching it remounts the native view and costs the usual one-frame measurement correction. `loading` is Material 3 Expressive's morphing indicator on Android and a circular `ProgressView` on iOS.",
+    },
+    appearance: {
+      control: { type: 'select' },
+      options: ['flat', 'wavy'],
+      description:
+        "`wavy` is Material 3's wavy bar and ring, with Material's own amplitude, wavelength and speed. **Android only**: SwiftUI has no wavy indicator, so iOS paints flat. Says nothing about `variant=\"loading\"`, which has no wavy form.",
+    },
+    contained: {
+      control: { type: 'boolean' },
+      description:
+        'Draw `variant="loading"` inside Material\'s tonal container (`ContainedLoadingIndicator`). Only `loading` reads it.',
     },
     value: {
       control: { type: 'select', labels: { null: 'indeterminate' } },
@@ -73,7 +86,10 @@ export const Playground: Story = {
         value={value}
       />
       <Text style={styles.readout}>
-        value: {value === null || value === undefined ? 'indeterminate' : value}
+        value: {value === null || value === undefined ? 'indeterminate' : value}{' '}
+        - {props.variant ?? 'linear'}
+        {props.appearance === 'wavy' ? ' wavy' : ''}
+        {props.contained ? ' contained' : ''}
       </Text>
     </View>
   ),
@@ -110,6 +126,31 @@ export const States: Story = {
             value={0.55}
             variant="linear"
           />
+        </Row>
+      </Column>
+      <Column label="loading (Material 3 Expressive; a ring on iOS)">
+        <Row label="0.4 (Android morphs, iOS keeps spinning)">
+          <Progress value={0.4} variant="loading" />
+        </Row>
+        <Row label="indeterminate">
+          <Progress variant="loading" />
+        </Row>
+        <Row label="contained (Android only)">
+          <Progress variant="loading" contained />
+        </Row>
+      </Column>
+      <Column label="appearance=&quot;wavy&quot; (Android; iOS draws flat)">
+        <Row label="linear 0.4">
+          <Progress value={0.4} appearance="wavy" />
+        </Row>
+        <Row label="linear indeterminate">
+          <Progress appearance="wavy" />
+        </Row>
+        <Row label="circular 0.4">
+          <Progress value={0.4} variant="circular" appearance="wavy" />
+        </Row>
+        <Row label="circular indeterminate">
+          <Progress variant="circular" appearance="wavy" />
         </Row>
       </Column>
       <Column label="clamped, not rejected">
@@ -190,10 +231,21 @@ export const Sizing: Story = {
       <Frame label="circular with alignSelf: stretch" width={160}>
         <Progress style={styles.stretch} value={0.5} variant="circular" />
       </Frame>
+      <Frame label="loading inside a 160-wide parent" width={160}>
+        <Progress value={0.5} variant="loading" />
+      </Frame>
+      <Frame label="wavy bar (Android 10 dp; iOS 4 pt)" width={160}>
+        <Progress value={0.5} appearance="wavy" />
+      </Frame>
       <Note>
-        A bar is 4 pt tall on iOS (4.19 dp on Android) and a ring measures its
-        own square (20 pt on iOS, 40 dp on Android). The last row asks the ring
-        to stretch and it stays a circle - the wrapper answers that for you.
+        Every shape measures its own box: a flat bar is 4 pt tall on iOS (4.19 dp
+        on Android) and a wavy one is 4 pt on iOS against Material&apos;s 10 dp on
+        Android; a ring is 20 pt on iOS (40 dp on Android) and a wavy ring 20 pt
+        against 48 dp; `variant=&quot;loading&quot;` is 20 pt on iOS and 48 dp on
+        Android. The last two rows of the first group ask the ring to stretch and
+        it stays a circle - the wrapper answers that for you. The full table, with
+        what each configuration falls back to before it is measured, is in
+        `docs/components/progress.md`.
       </Note>
     </Showcase>
   ),
