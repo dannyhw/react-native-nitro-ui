@@ -1,7 +1,6 @@
 package com.margelo.nitro.nitroui
 
 import android.content.Context
-import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -94,50 +93,81 @@ internal object NitroUiIconNames {
 }
 
 /**
- * The bitmaps behind every `androidIcon` in this process, keyed by resource id.
+ * A bounded, least-recently-used store of loaded artwork, keyed by resource id.
  *
- * The id, not the name: two names can reach one id (the normalising above, and
- * `drawable-hdpi`/`drawable` variants), and the id is what the pixels belong to.
+ * Generic over the artwork type so the *policy* — the part with a bug in it — is
+ * testable on the JVM, where `android.graphics.Bitmap` cannot be built at all.
+ * [NitroUiIconCache] is this with the one artwork type the library draws.
  *
  * Process-wide rather than `remember`ed because a hosted control is its own
  * composition (`docs/architecture/core.md`, "Shared objects"): a row of twenty
  * buttons would otherwise rasterise the same vector twenty times, and the
  * rasterising is the expensive part — it walks the path on the thread that asks.
  *
- * Bounded: [MAX_CACHED] entries, oldest evicted first. A cache miss only costs
- * the work of loading, never correctness, so a small bound is the safe choice
- * against an app that renders a long list of distinct icons.
+ * A miss costs only the work of loading, never correctness, so a small bound is
+ * the safe choice against an app that renders a long list of distinct icons.
  */
-internal object NitroUiIconCache {
-  private const val MAX_CACHED = 64
+internal class NitroUiIconStore<Value>(private val maxEntries: Int) {
+  /** Access-ordered, so the first key is the one nothing has asked for lately. */
+  private val entries = LinkedHashMap<Int, Value>(16, 0.75f, true)
 
-  private val bitmaps = LinkedHashMap<Int, Bitmap>(16, 0.75f, true)
-
-  /** The cached bitmap for [resId], or `null` when nothing has loaded it yet. */
+  /** The artwork loaded for [resId], or `null`. Id 0 is React Native's "not found". */
   @Synchronized
-  fun get(resId: Int): Bitmap? = if (resId == 0) null else bitmaps[resId]
+  fun get(
+    resId: Int,
+  ): Value? = if (resId == 0) null else entries[resId]
 
-  /** Remember the bitmap loaded for [resId], evicting the least recently used entry. */
+  /** Remember [value] for [resId], evicting the least recently used entry first. */
   @Synchronized
   fun put(
     resId: Int,
-    bitmap: Bitmap,
+    value: Value,
   ) {
-    if (bitmaps.size >= MAX_CACHED) {
-      val oldest = bitmaps.keys.iterator()
-      if (oldest.hasNext()) {
-        oldest.next()
-        oldest.remove()
+    while (entries.size >= maxEntries) {
+      val oldest = entries.keys.iterator()
+      if (!oldest.hasNext()) {
+        break
       }
+      oldest.next()
+      oldest.remove()
     }
-    bitmaps[resId] = bitmap
+    entries[resId] = value
   }
 
-  /** Drop everything. Called when the app's resources change identity (a configuration change). */
+  /** How much is held. For tests. */
+  @Synchronized
+  fun size(): Int = entries.size
+
+  /** Drop everything. */
   @Synchronized
   fun clear() {
-    bitmaps.clear()
+    entries.clear()
   }
+}
+
+/**
+ * The bitmaps behind every `androidIcon` in this process, keyed by resource id.
+ *
+ * The id, not the name: two names can reach one id (the normalising above, and
+ * `drawable-hdpi`/`drawable` variants), and the id is what the pixels belong to.
+ */
+internal object NitroUiIconCache {
+  /** Loaded names to remember before starting over. A handful per app, in practice. */
+  private const val MAX_CACHED = 64
+
+  private val store = NitroUiIconStore<android.graphics.Bitmap>(MAX_CACHED)
+
+  /** The cached bitmap for [resId], or `null` when nothing has loaded it yet. */
+  fun get(resId: Int): android.graphics.Bitmap? = store.get(resId)
+
+  /** Remember the bitmap loaded for [resId]. */
+  fun put(
+    resId: Int,
+    bitmap: android.graphics.Bitmap,
+  ) = store.put(resId, bitmap)
+
+  /** Drop everything. */
+  fun clear() = store.clear()
 }
 
 /**
@@ -159,7 +189,7 @@ internal object NitroUiIconCache {
 internal fun loadIconBitmap(
   context: Context,
   name: String,
-): Bitmap? {
+): android.graphics.Bitmap? {
   val normalizedName = NitroUiIconNames.normalize(name)
   if (normalizedName.isEmpty()) {
     return null
@@ -221,12 +251,12 @@ internal fun loadIconBitmap(
 }
 
 /** Rasterise [drawable] at its intrinsic size, premultiplied ARGB. */
-private fun drawableToBitmap(drawable: android.graphics.drawable.Drawable): Bitmap {
+private fun drawableToBitmap(drawable: android.graphics.drawable.Drawable): android.graphics.Bitmap {
   val bitmap =
-    Bitmap.createBitmap(
+    android.graphics.Bitmap.createBitmap(
       drawable.intrinsicWidth,
       drawable.intrinsicHeight,
-      Bitmap.Config.ARGB_8888,
+      android.graphics.Bitmap.Config.ARGB_8888,
     )
   val canvas = android.graphics.Canvas(bitmap)
   drawable.setBounds(0, 0, canvas.width, canvas.height)
@@ -243,7 +273,7 @@ private fun drawableToBitmap(drawable: android.graphics.drawable.Drawable): Bitm
  * bitmap, and that is [NitroUiIconCache]'s job.
  */
 @Composable
-internal fun rememberIconPainter(bitmap: Bitmap?): Painter? {
+internal fun rememberIconPainter(bitmap: android.graphics.Bitmap?): Painter? {
   val image: ImageBitmap? = bitmap?.asImageBitmap()
   return remember(image) { image?.let { BitmapPainter(it) } }
 }
