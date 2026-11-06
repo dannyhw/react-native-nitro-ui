@@ -91,13 +91,7 @@ Both mutations the review left green are now red, and `resetPair` has no default
 3. **`resetPair` requires `platform`.** It throws before asking any device. Every caller passes one,
    and a test pins the throw.
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1812 tests / 70 suites | `3bedd4c64da7` | 2 m 41 s | start 6.5 / med 6.7 / max 8.1 |
-| `harness:ios` | stale | 444 tests / 25 suites + isolated 4 tests / 2 suites | 04114b070a8f (not this tree) | 11 m 01 s | start 203.1 / med 40.8 / max 203.1 |
-| `harness:android` | stale | 493 tests / 25 suites + isolated 4 tests / 2 suites | 04114b070a8f (not this tree) | 15 m 07 s | start 39.0 / med 6.1 / max 39.0 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
+Fix round 1 had `check` green on `3bedd4c64da7`; its rows stay in the ledger, and the merge round's table replaces this one.
 
 `need --for review`: `check` green. The harness rows are stale because `device-pool.mjs` counts as both platforms; both pairs were leased (Questions).
 
@@ -110,3 +104,31 @@ Red proofs:
 
 - Re-run both harness gates for review, or leave them to the merge run? This round changed one guard in `device-pool.mjs` plus tests, and both pairs are leased. I recommend leaving them to merge, which runs the full harness anyway; otherwise I wait for a pair.
 
+## Merge round
+
+Branch `task/X20-merge`, from `task/X20-gate-and-pool-fixes` at `a1889dce`, with `origin/main` merged in
+(`c0c96887`). Main had four docs commits (`FOLLOWUPS.md`, `STATUS.md`). The merge was clean and touched
+no generated file. Both apps were rebuilt on the merged tree.
+The lease was `X20-9dxb5`, on pair-a (`emulator-5574` + iOS 27.0 `nitro-ui A`, Metro `8295`). It waited
+about 20 minutes for E3's pair and is released, and no Metro is left on 8295.
+
+All five merge gates passed on the first run: no flake, no re-run. `real-input:android` is the first real run
+through `runCheck`, and it reports `22/22 controls passed · 0 press sequence(s) needed a retry · 20/20
+auxiliary checks passed`. So the new catch leaves a green run green.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1812 tests / 70 suites | `3bedd4c64da7` | 2 m 55 s | start 4.4 / med 7.2 / max 11.5 |
+| `harness:ios` | **PASS** | 444 tests / 25 suites + isolated 4 tests / 2 suites | `3bedd4c64da7` (ios tree) | 10 m 47 s | start 3.3 / med 4.3 / max 19.1 |
+| `harness:android` | **PASS** | 493 tests / 25 suites + isolated 4 tests / 2 suites | `3bedd4c64da7` (android tree) | 14 m 55 s | start 17.6 / med 4.3 / max 17.6 |
+| `real-input:ios` | **PASS** | — | `3bedd4c64da7` (ios tree) | 28 m 48 s | start 4.3 / med 6.2 / max 28.1 |
+| `real-input:android` | **PASS** | — | `3bedd4c64da7` (android tree) | 40 m 34 s | start 7.6 / med 3.5 / max 7.7 |
+
+`need --for merge`: `need: merge is satisfied on this code tree.`
+
+`gate.mjs export` replaces `docs/tasks/X20/gates.jsonl` with the current branch's ledger. It dropped the task
+branch's 6 lines, so they were restored above the merge branch's 5 (11 lines). The fix-round failure
+excerpt is kept.
+
+- Follow-up: `gate.mjs export` should append to a task's ledger across branches, not replace it.
+- Follow-up: `task-ready` on `task/X20-merge` looks only for `X20-merge.report.md` or `X20.report.md`; run against a temporary copy, it passed all 6 checks.
