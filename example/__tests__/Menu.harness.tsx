@@ -561,8 +561,10 @@ async function settle(ms = 250): Promise<void> {
  * the library's own helper could not catch the helper being wrong, and a missing
  * input in that key is the R3 bug class. The absence of `group` is asserted, too
  * (see the "trigger, not the list" test), and the presence of `action` is asserted by
- * the split sizing gate: a split trigger that shared the plain trigger's entry would
- * be laid out at the wrong width for whichever of the two mounted second.
+ * the split sizing gate: a split trigger that shared the plain trigger's entry would be
+ * laid out at the wrong width, and measured that way - the *split* control is the one
+ * left at the other's box, because a shared entry keeps the last correction written to
+ * it. `docs/tasks/E3/mutations.json` carries both directions.
  */
 function sizingKey(
   variant: string,
