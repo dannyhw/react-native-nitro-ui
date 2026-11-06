@@ -134,7 +134,7 @@ API 35 at 420 dpi, in dp):
 The height is the platform's control height and does not move with the labels —
 iOS draws a segmented `Picker` 31 pt tall for one option or for four long ones
 alike, and the group lays every segment on the 48 dp touch target a `medium`
-Button is laid out at. The width is the labels'. The Android column is E1's
+Button is laid out at. The width is the labels'. The Android column is the
 connected group, and it is ~18% narrower than the
 `SingleChoiceSegmentedButtonRow` these rows were measured on: that row reserved a
 leading icon slot per segment (`icon = {}` hides the check, not the space), and
@@ -143,10 +143,24 @@ now — the 344.00 above it was the box Yoga clamped the row to, not the row's o
 measurement.
 
 Android's one-option row is wider than its label because each segment carries
-Material's own content padding for the height (and never less than
-`ButtonDefaults.MinWidth`), and the row gives each segment an equal share of the
-track (`Modifier.weight(1f)`), so with equal labels the segments are equal —
-which is what the real-input taps assume.
+Material's own content padding for the height, and a segment is never narrower
+than that: the row weights its items (`Modifier.weight(1f, fill = false)`) so
+space the row is *given* above its labels is shared equally, but no item is
+shrunk to the mean of the others. Dumped on the `OptionSets` story, every segment
+is then exactly its label plus 32 dp, so the three long labels are three different
+widths and all three are spelled out — the equal-share row truncated them. With
+equal labels the segments are equal, which is what the real-input taps assume.
+
+That dump has one row still short: the five-option row measures 324.57 dp of
+content inside a 363.4 dp column, and its `Month` segment is 187 px — the 103 px
+its text laid out at, plus 2 × 16 dp. So neither the column nor the weighting
+squeezed it (the row had 38.9 dp beside it, and every other segment kept its
+label + 32 dp): the label measured narrower than the glyphs it paints, and
+ellipsizes to `Mon…`. The row this replaced spelled that word out, and it is not
+a width this device could make room for: in that older screenshot the glyphs of
+`Month` are 99 px wide at 420 dpi, so the word wants roughly 104 px of text box
+against the 103 px it is given — half a dp — and the row would fit at ~325 dp
+inside a column of 363.4 dp. The word is short by a rounding, not by a column.
 
 **What the engine starts from.** The engine keys fallbacks per component, so this
 component has one declared pair however many option lists exist: `165 × 31` pt
@@ -198,9 +212,10 @@ drops the now-wrong cached sizes.
 ## Accessibility
 
 - Each segment is its own accessibility element with its own label, and the
-  selected one is announced as selected. E1 re-dumped it, because the row changed
-  shape: a segment is one item node at the segment's box carrying `checkable` and
-  `checked` — Compose's mapping of the toggleable state, and what a screen reader
+  selected one is announced as selected. The tree was dumped again for this row,
+  because the row changed shape: a segment is one item node at the segment's box
+  carrying `checkable` and `checked` — Compose's mapping of the toggleable state,
+  and what a screen reader
   reads as "selected" — with a `RadioButton`-class node for its role at the same box
   and its label as a child `TextView`, all inside the row's own group. Both halves of
   that were dumped on the same emulator, before and after the redraw: the connected
@@ -239,19 +254,24 @@ drops the now-wrong cached sizes.
   are served from a bounded process-wide cache keyed on the theme's identity
   (`android/.../HybridNitroUiSegmentedControl.kt`) — `SegmentedButtonDefaults.colors()`
   allocates, and building it per recomposition per mounted control is the cost the
-  "Shared objects" rule in `core.md` is about. The corners are cached too: the
-  resting corner is `Button`'s own cached `buttonShapes(Round, Medium)`, and the
-  three connected variants are derived from it per recomposition — cheap arithmetic
-  on one cached value, not a second cache.
+  "Shared objects" rule in `core.md` is about. The corners need no cache: a group
+  of two or more takes the connected shapes `ButtonGroupDefaults` already holds,
+  and only a one-option row asks `Button`'s cached `buttonShapes(Round, Medium)`
+  for a corner.
 - **Radio semantics win over `ToggleButton`.** Material's own
   `ToggleButton` publishes `Role.Checkbox` from inside its own semantics lambda,
   which an outer modifier cannot outvote, and Compose keeps the innermost
   semantics — so a row built from it announces "checkbox", not the "1 of 3,
   selected" this control promises. Each item is therefore a `Box` this file draws:
-  `Modifier.selectable(role = Role.RadioButton)` plus `semantics { selected = … }`,
-  with Material's connected corners, border stroke, `ButtonDefaults.MinHeight` and
-  the shared `Button` label style and padding laid on top. Same API, same look,
-  radio announcement (`docs/tasks/E1-expressive-buttons.md`).
+  `Modifier.selectable(selected = …, role = Role.RadioButton)` — the state and the
+  role from one call — with Material's connected corners, border stroke,
+  `ButtonDefaults.MinHeight` and the shared `Button` label style and padding laid
+  on top. Same API and the same radio announcement; the *look* is the group's, and
+  it is not the track that was there: an unselected segment is an outlined item on
+  the connected corner (round outside, 8 dp where it faces its neighbour) and the
+  selected one is Material's own stadium (`connectedButtonCheckedShape`), drawn
+  solid. The three states swap rather than morph: material3's shape animator is
+  `internal`, so the corner changes when the state does and not between them.
 - **No check icon.** Material 3's default `icon` renders a check on the selected
   segment only, which would make the measured width change with the selection and
   force the selection into the sizing key. Labels only, matching iOS.
