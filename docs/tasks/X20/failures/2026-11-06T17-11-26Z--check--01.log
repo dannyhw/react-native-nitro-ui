@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T17:11:26.218Z on code tree `ea1a8e4fdad1` at HEAD `5c609c4` (branch `task/X20-gate-and-pool-fixes`)
+- Command: `bun run check`
+- Result: fail, exit 1, 147436 ms
+- Load: start 28.27, end 7.01, median 14.33, max 28.27
+- Device: none recorded (not a device gate)
+- Full log: `task/X20-gate-and-pool-fixes/check-2026-11-06T17-11-25.889Z.log` (<store>/task/X20-gate-and-pool-fixes/check-2026-11-06T17-11-25.889Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2704 — the rest is in the full log above)
+
+```
+  ok    a ZWJ family is never cut inside (got nil, want nil)
+  ok    the cut falls before a family that does not fit (got "x", want "x")
+  ok    a flag is two regional indicators and is kept whole (got "🇯🇵", want "🇯🇵")
+  ok    half a flag is never inserted (got nil, want nil)
+  ok    a base and its combining mark go together (got nil, want nil)
+  ok    limit 0 takes nothing (got nil, want nil)
+  ok    limit 0 still allows an empty edit (got "", want "")
+  ok    a deletion from a field over its limit is allowed (got "", want "")
+  ok    an insertion into a field over its limit is not (got nil, want nil)
+NitroUiTextLimit.truncate
+  ok    under the limit, unchanged (got "abc", want "abc")
+  ok    cut to the limit (got "abcde", want "abcde")
+  ok    never through a surrogate pair (got "abcd", want "abcd")
+  ok    never through a ZWJ family (got "a", want "a")
+  ok    limit 0 is empty (got "", want "")
+NitroUiCommitDelta.clamped
+  ok    a commit in the middle takes the room the cap has, and the text past it stays -> "aかbcd"
+  ok    a commit in the middle that fits is taken whole -> "abかきcd"
+  ok    a ZWJ family that cannot fit is refused whole - never cut in half, never at the cost of the `cd` -> "abcd"
+  ok    an emoji that does not fit is refused, and nothing past it moves -> "abcd"
+  ok    a field already past the cap refuses new text and keeps what JS wrote -> "abcdefgh"
+  ok    a deletion from text past the cap is left alone -> "abcdefg"
+  ok    a selection replaced with text that fits is taken -> "aXd"
+  ok    a selection replaced with an emoji that does not fit keeps the selected text -> "abcd"
+  ok    a replacement in text JS wrote past the cap is refused, and the replaced text stays -> "abcdefgh"
+  ok    a combining mark that does not fit leaves the base letter it would have joined -> "e"
+NitroUiText ==
+  ok    the same code units are equal
+  ok    precomposed and decomposed é differ, as they do in JavaScript
+  ok    Swift's own == says they are equal (fixture sanity)
+text-limit.test: all passed
+── a11y-frame-stability.test (Swift)
+A11yFrameStability
+  ok    a stable tree settles
+  ok    a stable tree costs two reads, not six (got 2)
+  ok    `read` was called twice (got 2)
+  ok    a two-read wait keeps the first read for the log
+  ok    nothing moved between the two reads
+  ok    the pass settles once the snapshot stops being stale
+  ok    the disagreeing pair is not accepted (got 3)
+  ok    the snapshot handed back is the agreeing one, not the ⅓-scale one
+  ok    `first` is the stale read, not the agreeing read that preceded the settle
+  ok    moved counts first-vs-last frames, i.e. what one sample got wrong (got 2)
+  ok    the reads are separated in time (240 ms)
+  ok    a stably-wrong tree settles at once and is still graded (settled=true reads=2)
+  ok    the boxes it hands to the rule still disagree — the fix cannot make the finding go away
+  ok    a tree that will not hold still does not settle
+  ok    and stops at the read cap (got 5)
+  ok    `read` is called at most the cap (got 5)
+  ok    it reports what moved, for the log line
+  ok    the last read is the one printed — the freshest measurement available
+  ok    an out-of-budget wait is not a settle
+  ok    the budget stops the reads before the cap does (reads=4)
+  ok    and says how long it spent (1600 ms)
+  ok    the clock only ever pays for reads
+  ok    never more than the budget plus one read's cost (1600 ms)
+  ok    a budget smaller than one read's cost still buys the second read (reads=2)
+  ok    the ⅓-scale pair did not agree, so it is not a settle - it reads the next one
+  ok    past the pair the budget stops it (reads=2 settled=false)
+  ok    and prints the later read
+  ok    the ⅓-scale read is discarded at real cost
+  ok    and reported as the first read
+  ok    a changing element count is not a settle
+  ok    and it spends the same bounded wait (got 4)
+  ok    half a point is a move
+  ok    and so is a tenth
+  ok    a frame the platform cannot answer for never agrees with itself
+  ok    and the same CGRect does
+  ok    the moved count counts frames, for the log line
+  ok    a changed element count reports every frame
+  ok    a tree that flaps and holds still does settle
+  ok    on the fourth read (got 4)
+  ok    and the last box equals the first, so moved is 0 (got 0)
+  ok    a flapped-back tree is still reported - moved == 0 is not 'nothing happened'
+  ok    the ordinary two agreeing reads print nothing
+  ok    two reads that disagree and then settle are reported
+  ok    five quiet reads are reported
+  ok    an out-of-budget wait is reported even with nothing moved
+a11y-frame-stability.test: all checks passed
+── sizing.test (C++ / ASan + UBSan)
+sizing.test.cpp
+  382 checks passed
+test:native: PASS
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 5 passed, 2 failed, 10 skipped in 147.3s
+check: failed step(s): lint, format
+check: not started after the first failure: test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/example/src/readme-examples.tsx
+  301:22  warning  Inline style: { padding: 24, gap: 12 }  react-native/no-inline-styles
+
+<repo>/scripts/__tests__/bench-baseline-merge.test.js
+  1113:11  warning  'built' is already declared in the upper scope on line 968 column 9  no-shadow
+
+<repo>/scripts/__tests__/build-speed.test.js
+  251:45  warning  Spaces are hard to count. Use {2}  no-regex-spaces
+
+<repo>/scripts/__tests__/ci-workflows.test.js
+    57:24  warning  [true] is better written in dot notation  dot-notation
+  1879:7   warning  Spaces are hard to count. Use {2}         no-regex-spaces
+
+<repo>/scripts/__tests__/conformance.test.js
+  1740:11  warning  'harness' is already declared in the upper scope on line 1643 column 9  no-shadow
+
+<repo>/scripts/__tests__/gate.test.js
+  2830:66  error  Replace `'harness:ios'` with `⏎······'harness:ios',⏎····`  prettier/prettier
+
+<repo>/scripts/__tests__/real-input-a11y-ios.test.js
+  499:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+  523:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+
+<repo>/scripts/__tests__/registry.test.js
+  760:13  warning  'manifests' is already declared in the upper scope on line 484 column 11  no-shadow
+  815:11  warning  'manifests' is already declared in the upper scope on line 484 column 11  no-shadow
+
+<repo>/scripts/harness-suite-timing.mjs
+  25:19  warning  'join' is defined but never used  no-unused-vars
+
+<repo>/scripts/real-input/png-pixel.mjs
+  204:35  warning  Unexpected use of '|'  no-bitwise
+  205:35  warning  Unexpected use of '|'  no-bitwise
+  208:16  warning  Unexpected use of '|'  no-bitwise
+  221:23  warning  Unexpected use of '&'  no-bitwise
+  264:5   warning  Unexpected use of '|'  no-bitwise
+
+✖ 17 problems (1 error, 16 warnings)
+  1 error and 3 warnings potentially fixable with the `--fix` option.
+
+error: script "lint" exited with code 1
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] scripts/__tests__/gate.test.js
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 147.4 s
+gate: recorded in .gates/task/X20-gate-and-pool-fixes.jsonl
+
+```

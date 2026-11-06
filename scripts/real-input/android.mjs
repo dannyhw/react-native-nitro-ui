@@ -29,12 +29,12 @@ import path from 'node:path';
 import process from 'node:process';
 
 import {
-  AbortedCheck,
   artifactsDir,
   blockMs,
   chosenControls,
   ensureMetro,
   run,
+  runCheck,
   sleep,
   Suite,
 } from './support.mjs';
@@ -2078,7 +2078,7 @@ const CHECKS = {
     const density = t.density();
     const segmentOne = items[0];
     if (segmentOne == null) {
-      throw new AbortedCheck(
+      t.log.abort(
         'the corner probe has no first segment to probe (the tree line above is the reason)'
       );
     }
@@ -2096,8 +2096,10 @@ const CHECKS = {
     // tells the probe nothing about what is painted under its own corners.
     //
     // It goes through `t.log.abort`, not a bare `throw new AbortedCheck`: the runner
-    // swallows that error to move on to the next control, so a bare throw would
-    // silence this line and still report the run green. A probe that stopped reading
+    // used to swallow that error to move on to the next control, so a bare throw
+    // silenced the line and still reported the run green. `runCheck` now fails an
+    // abort the log never recorded (X20 item 1), but only `abort` says *why* on the
+    // control's own line, where the reader of a red run looks. A probe that stopped reading
     // has to be as loud as a probe that read wrong, or the day the fixture starts on
     // segment 1 nobody notices the guard swallowed the only corner check there is.
     if (segmentOne.checked !== 'false') {
@@ -4761,13 +4763,10 @@ async function main() {
     for (const control of toRun) {
       const log = suite.begin(control);
       await harness.goToScreen(control.screen);
-      try {
-        await CHECKS[control.id](makeContext(harness, log));
-      } catch (error) {
-        if (!(error instanceof AbortedCheck)) {
-          throw error;
-        }
-      }
+      // `runCheck` moves on after an abort the log recorded, and fails the control for one
+      // it did not (X20 item 1): swallowing every `AbortedCheck` here is how a bare throw
+      // reported PASS on a check that never ran.
+      await runCheck(log, () => CHECKS[control.id](makeContext(harness, log)));
     }
 
     // The a11y sweep, after the checks rather than among them: it needs no gestures and a
