@@ -169,3 +169,8 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E2 review: the iOS menu probe can't tell a `Toggle` row from a `Button` row (both `.off` when unchecked). Make it read the source.
 - E2 review: subtitle rendering is verified only on iOS 27. Check the oldest installable runtime.
 - E2: the check glyph is defined twice (Chip and the menu rows). Share one after E1 merges.
+- E1 review: no test goes red if SegmentedControl's `.selectableGroup()` is dropped (uiautomator can't see collection info).
+- E1 review: `ConnectedSegment` allocates a label style and the shape values on each recomposition; pass `color =` to `Text` and cache the shapes.
+- E1 review: try a 32 dp XS button visual inside a 48 dp layout (`minimumInteractiveComponentSize()` before `height(token)`).
+- E1 review: `ButtonShapesCache` and `ChipShapesCache` key only on the motion scheme; fragile if shape tokens become themeable.
+- E1 merge round: Menu's trigger shares the button, so re-measure `menu.md`'s sizes, the Menu Android fallback and `menu-android.png` on the combined tree with E2.
