@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.unit.dp
 
 /**
  * JVM unit test for the two rules a Progress has that are worth testing without a
@@ -92,6 +93,52 @@ class ProgressModelTest {
     assertEquals(0.0, model.drawnValue!!, 0.0)
   }
 
+  // MARK: - waveSpeed
+
+  @Test
+  fun anOffWindowWaveIsPinnedWhileAnInWindowOneKeepsMaterialsSpeed() {
+    // Material's determinate wave *travels*: the wavy nodes run an
+    // `infiniteRepeatable` offset animation whenever the node is attached and the
+    // speed is above zero, and the determinate indicators default that speed to the
+    // wavelength. So swapping to an empty determinate indicator off-window did not
+    // stop anything - the control animated a wave nobody could see while
+    // `nuiTestIsAnimating()` answered `false`. Zero is what stops it; `null` is the
+    // in-window answer, which passes nothing and leaves Material's tuning alone.
+    val model = ProgressModel().apply {
+      appearance = ProgressModel.APPEARANCE_WAVY
+      value = 0.4
+    }
+    assertEquals(0.dp, model.waveSpeed)
+
+    model.inWindow = true
+    assertNull(model.waveSpeed)
+  }
+
+  @Test
+  fun aDeterminateWaveInAWindowCountsAsAnimatingBecauseMaterialMovesIt() {
+    // The rule `isAnimating` has to tell the truth about: an indeterminate spinner
+    // animates, *and so does a determinate wave*. Reporting only the first let the
+    // off-window animation hide behind a `false` that was wrong in both directions.
+    val model = ProgressModel().apply {
+      appearance = ProgressModel.APPEARANCE_WAVY
+      value = 0.4
+      inWindow = true
+    }
+    model.recordDrawn(model.drawnValue)
+    assertTrue(model.isAnimating)
+
+    // The same draw with the flat bar is not animating, so this is not "on screen".
+    model.appearance = ProgressModel.APPEARANCE_FLAT
+    model.recordDrawn(model.drawnValue)
+    assertFalse(model.isAnimating)
+
+    // And a wavy control that left the window may not animate at all.
+    model.appearance = ProgressModel.APPEARANCE_WAVY
+    model.inWindow = false
+    model.recordDrawn(model.drawnValue)
+    assertFalse(model.isAnimating)
+  }
+
   // MARK: - the test-only mirrors
 
   @Test
@@ -126,6 +173,78 @@ class ProgressModelTest {
     assertNull(model.trackColor)
     assertNull(model.accessibilityLabel)
     assertEquals("", model.sizingKey)
+  }
+
+  // MARK: - configuration (E4)
+
+  @Test
+  fun aResetClearsTheConfigurationToo() {
+    // `prepareForRecycle` resets the model, and E4 added two configuration fields to
+    // it. A recycled view that kept `wavy` would show its previous owner's Material
+    // wave to the next one - and the wrapper re-sends every prop on each mount, so
+    // this reset is the belt rather than the braces: nothing on either platform can
+    // show it missing through a prop read, which is why it is asserted here.
+    val model = ProgressModel().apply {
+      variant = ProgressModel.VARIANT_LOADING
+      appearance = ProgressModel.APPEARANCE_WAVY
+      contained = true
+    }
+
+    model.reset()
+
+    assertEquals(ProgressModel.VARIANT_LINEAR, model.variant)
+    assertEquals(ProgressModel.APPEARANCE_FLAT, model.appearance)
+    assertFalse(model.contained)
+    assertFalse(model.drawsWavy)
+    assertFalse(model.drawsContainer)
+    assertFalse(model.isIntrinsicShape)
+  }
+
+  @Test
+  fun onlyAShapeThatHasAWavyFormDrawsWavy() {
+    // `appearance` is one of the two props E4 adds, and it is not a promise the
+    // loading indicator makes: Material has no wavy form of it. The drawing code asks
+    // [drawsWavy] rather than the field, so this is the whole of that rule.
+    val model = ProgressModel().apply { appearance = ProgressModel.APPEARANCE_WAVY }
+    assertTrue(model.drawsWavy)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertTrue(model.drawsWavy)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertFalse(model.drawsWavy)
+    model.appearance = ProgressModel.APPEARANCE_FLAT
+    assertFalse(model.drawsWavy)
+  }
+
+  @Test
+  fun onlyTheLoadingShapeHasAContainer() {
+    val model = ProgressModel().apply { contained = true }
+    assertFalse(model.drawsContainer)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertFalse(model.drawsContainer)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertTrue(model.drawsContainer)
+    model.contained = false
+    assertFalse(model.drawsContainer)
+  }
+
+  @Test
+  fun aRingAndALoadingIndicatorBothAskTheIntrinsicQuestion() {
+    // The sizing policy `host.sizingPolicy` is set from this, and a shape that got
+    // the wrong one is a control that measures the wrong thing forever: a `fillWidth`
+    // bar has no width of its own to answer with, and a 48 dp square asked at the
+    // box's width is a stretched ring.
+    val model = ProgressModel()
+    assertFalse(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_CIRCULAR
+    assertTrue(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_LOADING
+    assertTrue(model.isIntrinsicShape)
+    // `appearance` moves a box (10 dp against 4) but not the *question*, which is why
+    // an appearance change re-measures instead of remounting.
+    model.appearance = ProgressModel.APPEARANCE_WAVY
+    assertTrue(model.isIntrinsicShape)
+    model.variant = ProgressModel.VARIANT_LINEAR
+    assertFalse(model.isIntrinsicShape)
   }
 
   // MARK: - percent

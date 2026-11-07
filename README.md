@@ -234,18 +234,38 @@ export function VolumeSlider() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on iOS" /></td>
-    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on Android" /></td>
+    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on iOS: loading draws as a ring and wavy draws flat" /></td>
+    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on Android, with Material's morphing and contained loading shapes" /></td>
   </tr>
 </table>
 
 `value` is a fraction of the whole; `null` means indeterminate rather than
-empty.
+empty. `appearance="wavy"` and `variant="loading"` are Material 3 Expressive's
+shapes — Android draws them, iOS draws the closest `ProgressView` it has.
 
 ```tsx name=progress
 export function UploadProgress({ fraction }: { fraction: number | null }) {
   // `null` is indeterminate ("working"); a number 0…1 is a determinate bar.
   return <Progress accessibilityLabel="Uploading" value={fraction} />;
+}
+
+export function UploadProgressExpressive({
+  fraction,
+}: {
+  fraction: number | null;
+}) {
+  // Material 3 Expressive: the wavy bar and the morphing loading shape. Both are
+  // Android's; iOS draws the flat bar and the ring it has.
+  return (
+    <>
+      <Progress
+        accessibilityLabel="Uploading"
+        appearance="wavy"
+        value={fraction}
+      />
+      <Progress accessibilityLabel="Uploading" variant="loading" contained />
+    </>
+  );
 }
 ```
 

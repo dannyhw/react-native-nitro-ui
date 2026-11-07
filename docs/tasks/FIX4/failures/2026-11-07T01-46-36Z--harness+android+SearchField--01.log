@@ -1,0 +1,87 @@
+# Failure excerpt — harness:android:SearchField
+
+- Ran: 2026-11-07T01:46:36.999Z on code tree `8f25de914898` at HEAD `2361ff1` (branch `task/FIX4-official-icons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SearchField`
+- Result: fail, exit 1, 14363 ms
+- Load: start 4.28, end 5.88, median 5.08, max 5.88
+- Device: android / device `emulator-5574` / lease `FIX4-qo15u`
+- Full log: `task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log` (<store>/task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › draws its search glyph as a magnifier: a painted ring around an unpainted lens`
+- `expected 'lens=painted ring=clear ringTop=clear…' to be 'lens=clear ring=painted ringTop=paint…' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: FIX4-qo15u (still live)
+  |   FIX4-qo15u               FIX4         android           pair-a
+gate: load
+  |   load1 at the moment of failure: 5.88 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:SearchField
+gate: node ../scripts/harness.mjs --harnessRunner android SearchField (cwd example)
+gate: code tree 8f25de914898 at HEAD 2361ff12
+gate: git tree f9e3c76b7981 with a DIRTY worktree (not reusable)
+gate: log task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log
+gate:       <store>/task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SearchField
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 8f25de914898, 18 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.28/5.57 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › draws its search glyph as a magnifier: a painted ring around an unpainted lens
+
+    expected 'lens=painted ring=clear ringTop=clear…' to be 'lens=clear ring=painted ringTop=paint…' // Object.is equality
+
+      [0m [90m 683 |[39m     expect(
+       [90m 684 |[39m       [32m`lens=${painted('centre')} ring=${painted('ring')} ringTop=${painted('ringTop')} | ${answer}`[39m
+      [31m[1m>[22m[39m[90m 685 |[39m     )[33m.[39mtoBe([32m`lens=clear ring=painted ringTop=painted | ${answer}`[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 686 |[39m   })[33m;[39m
+       [90m 687 |[39m
+       [90m 688 |[39m   it([32m'comes back from the pool with none of its previous owner'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 14 passed, 15 total
+Snapshots:   0 total
+Time:        13.782 s
+Ran all test suites matching SearchField.
+gate: harness:android:SearchField FAIL in 14.4 s
+gate: recorded in .gates/task/FIX4-official-icons.jsonl
+
+
+gate: appended the device context to task/FIX4-official-icons/harness+android+SearchField-2026-11-07T01-46-36.611Z.log (5 probe(s))
+
+```
