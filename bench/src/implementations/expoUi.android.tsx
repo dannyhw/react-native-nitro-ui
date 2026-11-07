@@ -5,6 +5,8 @@ import {
   ExposedDropdownMenu,
   ExposedDropdownMenuBox,
   Host,
+  Icon,
+  IconButton,
   LoadingIndicator,
   SegmentedButton,
   SingleChoiceSegmentedButtonRow,
@@ -21,8 +23,11 @@ import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
+  ICON_BUTTON_LABEL,
+  iconButtonGlyph,
   menuItems,
   menuTitle,
+  onIconButtonPress,
   onPress,
   onMenuSelect,
   onPickerChange,
@@ -217,6 +222,8 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             {component === 'slider' ? (
               <BenchSlider value={value} />
+            ) : component === 'icon-button' ? (
+              <BenchIconButton value={value} />
             ) : component === 'text-field' ? (
               <BenchTextField value={value} />
             ) : component === 'progress' ? (
@@ -244,6 +251,30 @@ function BenchButton({ value }: { value: boolean }) {
     <Button onClick={onPress}>
       <Text>{buttonTitle(value)}</Text>
     </Button>
+  );
+}
+
+/**
+ * Material 3's bare `IconButton` with an `Icon` in its slot — the peer the G23
+ * brief names, and the closest thing in `@expo/ui` to the control under test.
+ *
+ * The default rung either way: this arm takes no `size`/`width` because
+ * `@expo/ui`'s `IconButton` exposes neither (its slot content decides, and
+ * `size={24}` on the icon is Material's own medium glyph), while nitro-ui gets its
+ * `medium` default. The two boxes are both Material's, which is the comparison.
+ * `contentDescription` is this arm's only name for the control, and it is the same
+ * string every other arm uses.
+ */
+function BenchIconButton({ value }: { value: boolean }) {
+  const glyph = iconButtonGlyph(value);
+  return (
+    <IconButton onClick={onIconButtonPress}>
+      <Icon
+        contentDescription={ICON_BUTTON_LABEL}
+        source={glyph.source}
+        size={24}
+      />
+    </IconButton>
   );
 }
 
@@ -361,6 +392,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchMenu key={index} value={value} />
           ) : component === 'slider' ? (
             <BenchSlider key={index} value={value} />
+          ) : component === 'icon-button' ? (
+            <BenchIconButton key={index} value={value} />
           ) : component === 'text-field' ? (
             <BenchTextField key={index} value={value} />
           ) : component === 'progress' ? (
