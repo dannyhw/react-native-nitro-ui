@@ -120,24 +120,44 @@ final class NitroUiFormRowHostView: UIView {
     fatalError("not used")
   }
 
-  /// Fabric writes Yoga's frame into this view (an `RCTViewComponentView` sets its content
-  /// view's frame in `updateLayoutMetrics`), and on iOS Yoga's origin now carries where this
-  /// row's *cell* came to rest - the shadow-tree half of S6b question 4's `measure` fix.
-  /// Where the view sits is UIKit's decision, not Yoga's: the cell owns that. So the origin
-  /// is dropped on the way in, and the row's component view - whose frame Fabric wrote from
-  /// the same metrics one statement earlier, before the write ever reached this view - is put
-  /// back where the cell put it. The size is untouched, which is the number the cell reads.
+  /// Fabric writes layout metrics into a row twice per update, and only one of the two is
+  /// allowed to move pixels: `RCTViewComponentView.updateLayoutMetrics:` sets the component
+  /// view's own frame from `layoutMetrics.frame` (origin included) and then, on the very
+  /// next statement, sets this view's - the content view - from `getContentFrame()`, whose
+  /// origin is the row's own border+padding (`RCTViewComponentView.mm`, read in 0.88).
   ///
-  /// This is why a row may carry a Yoga origin it does not obey: nothing else reads that
-  /// origin, because `measure` is computed from the shadow tree and hit-testing from this
-  /// view's real position.
-  override func setFrame(_ frame: CGRect) {
-    let own = frame.origin == .zero
-      ? frame
-      : CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
-    super.setFrame(own)
-    guard frame.origin != .zero,
-      let component = owner?.componentView,
+  /// Since S6b that origin is *not* zero-based any more: the Form publishes where this row's
+  /// cell came to rest into the row's absolute `top`/`left`, so that `measure` - which is a
+  /// shadow-tree walk, never a UIKit question (`Form.nitro.ts`'s `onFrameMoved`) - describes
+  /// where the row actually is. UIKit must not obey the same number: the cell owns where a
+  /// row is drawn. So on every write, after the component view has had its frame written
+  /// from the same metrics, the origin is taken back off it. Being asked from the content
+  /// view's own setter is what makes this reliable - it is the statement immediately after
+  /// the one that moves the component view, so there is no window in which the row is
+  /// displaced and no layout pass has to be coaxed into happening.
+  ///
+  /// The size is untouched: it is the number the cell's height constraint mirrors.
+  override var frame: CGRect {
+    get { super.frame }
+    set {
+      super.frame = newValue
+      pinComponentToCell()
+    }
+  }
+
+  override func didMoveToSuperview() {
+    super.didMoveToSuperview()
+    // Adopted into a cell (or handed back): the frame Fabric last wrote may predate the move.
+    pinComponentToCell()
+  }
+
+  /// Put the row's component view back at the cell's content origin, and only there.
+  ///
+  /// The guard is the whole check: this is the row's component view, whose superview is the
+  /// cell's container, and whose origin is not already zero. In a section's holding view the
+  /// row draws nothing, so a stale origin there costs nothing and is left alone.
+  private func pinComponentToCell() {
+    guard let component = owner?.componentView,
       component.superview is NitroUiFormRowContainer,
       component.frame.origin != .zero
     else { return }
