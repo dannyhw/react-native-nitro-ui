@@ -202,3 +202,14 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - Gate ledgers commit simulator UDIDs in their `device` field (about 50 on main). Decide whether D25's scrub should cover them.
 - X20: `gate.mjs export --task <ID>` on a merge branch overwrites `docs/tasks/<ID>/gates.jsonl` with that branch's lines only; it should append across the task's branches.
 - X20: `task-ready` on `task/<ID>-merge` looks only for `<ID>-merge.report.md` or `<ID>.report.md`, not the task's real report name.
+- E4 review: `NitroUiProbePackage.paintedInk` calls `findViewWithTag`/`getLocationInWindow` off the UI thread (test-only code).
+- E4 review: Progress's TalkBack and VoiceOver readings in `progress.md` are inferred, not observed on a device.
+- FIX4 review: G19's `NitroUiIcon.kt` (bitmap cache) and FIX4's `core/NitroUiIcons.kt` (vector cache) are two icon caches with near-identical names; reconcile them when G19 merges after FIX4.
+- FIX4 review: `fetch-material-symbols.mjs --verify` (the only check against Google's files) runs only by hand; consider a scheduled CI job.
+- `bun run task-ready` on a `task/<ID>-merge` branch derives `<ID>-merge.report.md`; `node scripts/task-ready.mjs --task <full task name>` works (E4).
+- E5: real-input `goToScreen` aborts a run when a tab arrival is slow (seen at `hosted-date-picker`) instead of looking again.
+- E5: the `frozen: N edits refused` real-input checks assume one edit per typed character and never retry keystrokes (the recurring "1 edits refused" iOS flake).
+- E5: `gate.mjs`'s `pidof` probe can report a live app as dead.
+- G19 review: an icon added in an over-the-air update (`file://` bundle, expo-updates/CodePush) has no drawable resource to resolve; document it or send `url:file://…`.
+- G19 review: `URI(url)` throws on asset paths with spaces, so such an icon draws nothing; a dev URL with `/assets/../..` is sent as-is, unverified against Metro.
+- G19 review: nothing checks that a release bundle actually contains the imported icon drawables (`drawable-mdpi/…`).

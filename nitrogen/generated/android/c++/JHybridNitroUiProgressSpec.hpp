@@ -52,6 +52,10 @@ namespace margelo::nitro::nitroui {
     // Properties
     std::string getVariant() override;
     void setVariant(const std::string& variant) override;
+    std::string getAppearance() override;
+    void setAppearance(const std::string& appearance) override;
+    bool getContained() override;
+    void setContained(bool contained) override;
     std::variant<nitro::NullType, double> getValue() override;
     void setValue(const std::variant<nitro::NullType, double>& value) override;
     std::variant<nitro::NullType, double> getTintColor() override;

@@ -24,10 +24,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -46,6 +42,7 @@ import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -173,34 +170,6 @@ internal class ChipModel : NitroUiModel() {
 }
 
 /**
- * The leading check of a selected filter chip, which Material 3 asks for and
- * `FilterChip` leaves to the caller.
- *
- * The geometry of Material's `Icons.Filled.Check` (Apache 2.0, the 24-unit
- * viewport), written out because this library does not depend on
- * `material-icons-core` for one glyph. Built once per process and shared, because a
- * hosted control is its own composition and `remember` cannot share anything between
- * two of them (`docs/architecture/core.md`, "Shared objects").
- */
-private val ChipCheckIcon: ImageVector by lazy {
-  ImageVector.Builder(
-    name = "NitroUiChipCheck",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-  ).path(fill = SolidColor(ComposeColor.Black)) {
-    moveTo(9f, 16.17f)
-    lineTo(4.83f, 12f)
-    lineToRelative(-1.42f, 1.41f)
-    lineTo(9f, 19f)
-    lineTo(21f, 7f)
-    lineToRelative(-1.41f, -1.41f)
-    close()
-  }.build()
-}
-
-/**
  * The chip's corners, on Material 3 1.5's `ChipShapes` overload.
  *
  * A *selected* filter chip gets a corner of its own - the pill Material draws for
@@ -237,10 +206,15 @@ private object ChipShapesCache {
   }
 }
 
-/** The check, at the chip's own icon size. One lambda for the process. */
+/**
+ * The leading check of a selected filter chip, which Material 3 asks for and
+ * `FilterChip` leaves to the caller: Google's Material Symbols `check`
+ * (`nitroui_check`, `core/NitroUiIcons.kt`), parsed once per process, at the
+ * chip's own icon size. One lambda for the process.
+ */
 private val ChipLeadingCheck: @Composable () -> Unit = {
   Icon(
-    imageVector = ChipCheckIcon,
+    imageVector = nitroUiIcon(R.drawable.nitroui_check),
     contentDescription = null,
     modifier = Modifier.size(FilterChipDefaults.IconSize),
   )
