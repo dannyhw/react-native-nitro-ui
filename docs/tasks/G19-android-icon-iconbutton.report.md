@@ -3,6 +3,10 @@
 **Branch:** `task/G19-android-icon-iconbutton` (from `main` at `9626bbe7`) · **Round:** 1 of up to 3 (D19) ·
 **Lease:** `G19-8d0j7` (pair-b — `nitro-ui B` / iPhone Air 27.0 + `emulator-5570` / API 35 · Metro 8293)
 
+**Fix round 1 changed what this branch ships:** `androidIcon` now takes a Metro `.xml` asset and the
+config plugin in the title is gone. The summary below is round 1's, kept as written; the state of
+the branch is `## Fix round 1`, at the end.
+
 ## Summary
 
 **Shipped:** `Button`'s `androidIcon`, the resolver behind it, the `xlarge`/`xxlarge`
