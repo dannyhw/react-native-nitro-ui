@@ -121,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -252,6 +252,22 @@ export const A11Y_CONTROLS = Object.freeze([
     // `docs/components/checkbox.md`). Android's `Role.Checkbox` is read from the
     // uiautomator tree by `CHECKS.checkbox`, which asserts `checkable`/`checked`.
     iosTrait: 'switch',
+  },
+  {
+    id: 'icon-button',
+    component: 'IconButton',
+    hybridView: 'NitroUiIconButton',
+    screen: 'iconbutton',
+    label: 'Real-input icon button',
+    role: 'interactive',
+    anchorTestId: 'real-input-icon-button',
+    // The press form is a `Button` whose label is `.iconOnly`, so the element a
+    // reader stops on is the button and its name is the Label's title - which is
+    // the only text the control has (`docs/components/icon-button.md`). The toggle
+    // form carries the toggle trait instead, exactly as Chip's filter control does
+    // (G12 measured `switch` with value 0/1 for `Toggle(.button)`), and its state
+    // is what `real-input:ios` reads after a tap rather than a static type here.
+    iosTrait: 'button',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all

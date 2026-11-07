@@ -12,6 +12,7 @@ import com.margelo.nitro.nitroui.HybridNitroUiTextField
 import com.margelo.nitro.nitroui.HybridNitroUiChip
 import com.margelo.nitro.nitroui.HybridNitroUiCheckbox
 import com.margelo.nitro.nitroui.HybridNitroUiSearchField
+import com.margelo.nitro.nitroui.HybridNitroUiIconButton
 
 /**
  * The startup half of `NitroUiSizing.setFallback` (T14) - Android's version of
@@ -51,5 +52,6 @@ object NitroUiDeclaredFallbacks {
     HybridNitroUiChip.declareFallback()
     HybridNitroUiCheckbox.declareFallback()
     HybridNitroUiSearchField.declareFallback()
+    HybridNitroUiIconButton.declareFallback()
   }
 }
