@@ -1639,6 +1639,63 @@ describe('Slider', () => {
     expect(alignedHandle.nuiTestFramePumpArmed()).toBe(false);
   });
 
+  it('steps up twice when a reader presses again before the a11y tree catches up', async () => {
+    // X21's flake, forced. The recurring Android failure was `expected [3, 6, 3] to
+    // deeply equal [3, 6, 9]` in the walk above: the *third* press moved the value
+    // back down (`docs/tasks/FOLLOWUPS.md:56`, and `[3, 6, 9, 6]` there is the same
+    // fault one step later).
+    //
+    // The two numbers a step needs come from two different moments. Android's rule
+    // is handed a *target* - the accessibility delegate computes it from the
+    // progress this control publishes, `ProgressBarRangeInfo`, which composition
+    // writes - and the model then decided which way to move by comparing that target
+    // with the value the model already had. Between one press and the next the tree
+    // can be a frame behind (Compose republishes semantics when the snapshot holding
+    // the new value is applied, and a loaded machine is exactly what denies a walk
+    // that frame), and then "up from the published 3" is *below* the model's 6 - a
+    // decrement. Two presses a frame apart, and a reader who double-taps increase
+    // gets 3 then 3.
+    //
+    // So both presses are posted before the UI thread runs either of them, which
+    // forces the ordering the flake got by accident. The destination stays the
+    // model's; the direction has to stay the reader's. iOS takes a direction rather
+    // than a target, so it has no such window and passes this either way - the test
+    // is here to keep Android honest.
+    const events = newEvents();
+    await render(
+      <View style={{ width: 300 }}>
+        <Slider
+          minimumValue={0}
+          maximumValue={12}
+          step={3}
+          defaultValue={0}
+          onValueChange={(v) => events.change.push(v)}
+          onSlidingStart={(v) => events.start.push(v)}
+          onSlidingComplete={(v) => events.complete.push(v)}
+          testID="a11y-double-press"
+          hybridRef={captureFor('a11y-double-press')}
+        />
+      </View>
+    );
+    await waitForBox('a11y-double-press');
+    const handle = await handleFor('a11y-double-press');
+
+    handle.nuiTestAccessibilityStep(1);
+    handle.nuiTestAccessibilityStep(1);
+
+    // Two gestures' worth of callbacks, and both of them upward.
+    await dragCompleted(events, 2, 5000);
+    console.log(
+      `a11y double press: start=${JSON.stringify(events.start)} ` +
+        `change=${JSON.stringify(events.change)} ` +
+        `complete=${JSON.stringify(events.complete)}`
+    );
+    expect(events.start).toEqual([0, 3]);
+    expect(events.change).toEqual([3, 6]);
+    expect(events.complete).toEqual([3, 6]);
+    expect(handle.nuiTestFramePumpArmed()).toBe(false);
+  });
+
   it('folds a screen reader step into a drag the finger has not released', async () => {
     // Two sources, one control: a finger is on the track and a reader asks for the
     // next value. The a11y path opens and closes its own start/change/complete
