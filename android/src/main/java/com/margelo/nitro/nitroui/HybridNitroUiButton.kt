@@ -222,20 +222,101 @@ internal class ButtonModel : NitroUiModel() {
   var systemImage: String? = null
 
   /**
-   * The app drawable this Button draws before its label, or `null`.
+   * The icon React asked for, verbatim: a resource name, or a `url:` string for a
+   * file to read (`NitroUiIconSource`).
    *
-   * Observed, unlike [systemImage]: it is what the label is laid out next to, so
-   * resolving it changes the control's width. The bitmap is loaded in
-   * `afterUpdate()` on the main thread and never during composition
-   * ([loadIconBitmap]); this holds the result.
-   */
-  var androidIconBitmap by mutableStateOf<android.graphics.Bitmap?>(null)
-
-  /**
-   * The drawable name React sent, after [NitroUiIconNames.normalize]. Stored so the
-   * getter reports what was asked for; rendering reads [androidIconBitmap].
+   * The wire form is kept rather than the parsed source because it is what
+   * `hybridRef` reports back and what a test compares against the string the
+   * wrapper built; [androidIconResolved] is the parsed half.
    */
   var androidIcon: String? = null
+
+  /**
+   * What that icon resolved to, as the composition reads it.
+   *
+   * Observed, unlike [androidIcon]: it is what the label is laid out next to, so
+   * resolving it changes the control's width. Nothing is loaded during composition
+   * — [resolveAndroidIcon] does it once per change, and a file load answers later,
+   * on the main thread.
+   */
+  var androidIconContent by mutableStateOf<NitroUiIconContent>(NitroUiIconContent.Absent)
+
+  /**
+   * The source [androidIconContent] was resolved for, so a commit that re-sends the
+   * same icon costs one comparison.
+   */
+  var androidIconResolved: NitroUiIconSource? = null
+
+  /**
+   * Bumped every time the requested icon changes, including by recycle.
+   *
+   * A file load answers some frames later, and by then the Button may have been
+   * recycled and given another owner's icon, or asked for a different one. The
+   * callback carries the generation it was started under and is dropped if that is
+   * no longer the current one — which is also what makes a recycled control unable
+   * to draw the previous owner's glyph.
+   */
+  var androidIconGeneration = 0
+
+  /**
+   * Resolve [androidIcon], once, if it is not what [androidIconContent] already is.
+   *
+   * Called from `afterUpdate()` rather than from the setter, and behind the
+   * comparison above, because resolving is the expensive half of the prop: a
+   * resource lookup touches a `synchronized` table, and a file load starts a
+   * network read. Both belong in the one place a commit is applied, not repeated
+   * for each prop of that commit (AGENTS' perf contract), and neither belongs in
+   * composition, which runs again for reasons this has nothing to do with.
+   *
+   * A resource resolves here and now, on the thread already applying props. A file
+   * reserves the slot now and fills it later, because the size of the slot comes
+   * from the size ladder and never from the file — so waiting costs an empty box,
+   * not a wrong one, and the label beside it does not move when the bytes arrive.
+   *
+   * [artwork] is the seam: the production answer is [NitroUiAppIconArtwork], and
+   * `android/src/test` hands a map so the release path — the resource lookup for
+   * the name Metro filed a bundled asset under — is a JVM test rather than only an
+   * emulator run.
+   */
+  fun resolveAndroidIcon(
+    artwork: NitroUiIconArtwork,
+  ) {
+    val source = NitroUiIconSource.parse(androidIcon)
+    if (source == androidIconResolved) {
+      return
+    }
+    androidIconResolved = source
+    val generation = ++androidIconGeneration
+    when (source) {
+      null -> androidIconContent = NitroUiIconContent.Absent
+
+      is NitroUiIconSource.Name -> androidIconContent = artwork.forName(source.name)
+
+      is NitroUiIconSource.Url -> {
+        val cached = artwork.cached(source.url)
+        if (cached != null) {
+          // A recycled control asking for an icon this process already read draws
+          // it in the same frame it mounted.
+          androidIconContent = NitroUiIconContent.Vector(cached)
+          return
+        }
+        if (artwork.knownBad(source.url)) {
+          androidIconContent = NitroUiIconContent.Absent
+          return
+        }
+        androidIconContent = NitroUiIconContent.Pending
+        artwork.read(source.url) { image ->
+          // On the main thread, which is the only thread allowed to write this.
+          if (generation == androidIconGeneration) {
+            // The answer to a load that failed is the answer round 1 gives a name
+            // that does not resolve: nothing drawn, nothing reserved.
+            androidIconContent =
+              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent
+          }
+        }
+      }
+    }
+  }
 
   /**
    * The size configuration React sent. The sizing engine reads the key out of Fabric
@@ -292,7 +373,11 @@ internal class ButtonModel : NitroUiModel() {
     accessibilityLabel = null
     systemImage = null
     androidIcon = null
-    androidIconBitmap = null
+    androidIconContent = NitroUiIconContent.Absent
+    androidIconResolved = null
+    // Bump rather than reset: a load started by the previous owner is still in
+    // flight, and this is what retires it.
+    androidIconGeneration += 1
     sizingKey = ""
     onPress = null
     pixelReport = ""
@@ -658,7 +743,7 @@ private class ButtonHost(
       tint = model.tintColor,
       modifier = labelModifier,
       onClick = { press?.invoke() },
-      iconBitmap = model.androidIconBitmap,
+      icon = model.androidIconContent,
     )
   }
 }
@@ -686,7 +771,7 @@ internal fun NitroUiM3Button(
   tint: Int?,
   modifier: Modifier,
   onClick: () -> Unit,
-  iconBitmap: android.graphics.Bitmap? = null,
+  icon: NitroUiIconContent = NitroUiIconContent.Absent,
 ) {
   // No height is set: the scale picks Material's padding, label style and corner,
   // and Material itself lays the box out at no less than MinTouchTargetHeight, so
@@ -698,15 +783,18 @@ internal fun NitroUiM3Button(
   // edge so the glyph does not sit where the label's own inset used to be. Passing
   // it unconditionally is how an icon and a no-icon Button end up the same width
   // when the name resolves to nothing.
+  // `Pending` takes the slot too. That is the point of it: the box the ladder
+  // describes is the box the first frame draws, and the glyph arriving later
+  // changes what is in the slot and not the size of it.
   val padding =
-    if (iconBitmap == null) {
+    if (icon == NitroUiIconContent.Absent) {
       contentPaddingFor(variant, scale)
     } else {
       ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
     }
   val labelStyle = buttonLabelStyle(scale)
   val shapes = buttonShapes(cornerFor(variant, shape), scale)
-  val painter = rememberIconPainter(iconBitmap)
+  val painter = rememberIconPainter(icon)
   val iconSize = ButtonDefaults.iconSizeFor(scale.height)
   val iconSpacing = ButtonDefaults.iconSpacingFor(scale.height)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
@@ -806,6 +894,15 @@ class HybridNitroUiButton(
 
   private val model = ButtonModel()
   private val host = ButtonHost(reactContext, reactContext.currentActivity, model)
+
+  /**
+   * The control's half of icon resolution: the app's resources and the shared
+   * file cache, bound to this control's `Context` ([NitroUiIconArtwork]).
+   *
+   * Held rather than built per commit — a prop commit is not a place to allocate,
+   * and the `Context` it captures is the one [host] already holds.
+   */
+  private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
   /** The Nitro `view` - created once here and never replaced. */
   override val view: View
@@ -963,12 +1060,19 @@ class HybridNitroUiButton(
     }
 
   /**
-   * `androidIcon`: the app drawable to draw before the label.
+   * `androidIcon`: the icon to draw before the label - an app drawable's resource
+   * name, or a `url:` string naming a file to read (G19 fix round 1, D43).
    *
-   * The setter only stores the name and marks the model - loading a drawable is
-   * the expensive half and belongs in `afterUpdate()`, once per commit, not in a
-   * setter that may run for each prop of that commit (AGENTS' perf contract). The
-   * bitmap is observed, so resolving it in `afterUpdate()` recomposes once.
+   * Stores and marks dirty, nothing else. Resolving is the expensive half - a
+   * resource lookup takes a lock on a shared table, and the file form starts a
+   * network read - so it happens once per commit in [afterUpdate], behind
+   * [ButtonModel.resolveAndroidIcon]'s comparison, and never in composition, which
+   * runs again for reasons that have nothing to do with icons.
+   *
+   * The string is stored as React sent it. The wrapper has already normalised a
+   * name and marked a URL ([NitroUiIconSource] reads the marker), and the getter is
+   * what `hybridRef` reports back - a harness comparing it against the string it
+   * built wants the answer verbatim, not a third spelling of it.
    */
   override var androidIcon: Variant_NullType_String
     get() =
@@ -976,18 +1080,10 @@ class HybridNitroUiButton(
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
       val name = next.asSecondOrNull()
-      val normalized = name?.let { NitroUiIconNames.normalize(it) }
-      if (normalized == model.androidIcon) {
+      if (name == model.androidIcon) {
         return
       }
-      model.androidIcon = normalized
-      // The load happens here rather than in the composable, and behind the
-      // name-change guard above: a commit that re-sends the same name costs
-      // nothing, and a commit that changes it pays once, on the thread that is
-      // already applying props. Doing it in composition instead would ask
-      // React Native's resource-id helper - which is `synchronized` - on every
-      // recomposition of this Button for the life of the view.
-      model.androidIconBitmap = normalized?.let { loadIconBitmap(host.context, it) }
+      model.androidIcon = name
       host.markDirty()
     }
 
@@ -1059,6 +1155,11 @@ class HybridNitroUiButton(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
+    // The icon first, if it changed: a resource resolved here is drawn in this
+    // commit, and a file that has to be read reserves its slot in this commit and
+    // fills it later. Both are cheaper here than in the setter, which may run for
+    // every prop of the commit (AGENTS' perf contract).
+    model.resolveAndroidIcon(iconArtwork)
     // No controlled value, so nothing to reconcile: one commit per React commit
     // (`docs/architecture/core.md` §12).
     host.commit()
