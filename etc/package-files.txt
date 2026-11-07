@@ -35,6 +35,7 @@ android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
@@ -818,7 +819,6 @@ nitrogen/generated/shared/json/NitroUiSwitchConfig.json
 nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
 nitrogen/generated/shared/json/NitroUiTooltipConfig.json
 package.json
-plugin/index.js
 src/MaterialTheme.ts
 src/NitroUiCore.nitro.ts
 src/NitroUiCore.ts
@@ -900,4 +900,5 @@ src/core/useProcessedColor.ts
 src/core/useSizingId.ts
 src/core/useStableCallback.ts
 src/iconName.ts
+src/iconSource.ts
 src/index.ts
