@@ -639,6 +639,7 @@ describe('Popover', () => {
     const popup = rectOf(up.popRect);
     expect(anchor).not.toBeNull();
     expect(popup).not.toBeNull();
+    const scale = scaleOf(up);
     if (IOS) {
       // UIKit puts the arrow on the anchor's far side and points at it: the popover is
       // either wholly below or wholly above, and its arrow names which.
@@ -652,9 +653,15 @@ describe('Popover', () => {
         Math.abs(popup!.x + popup!.width / 2 - (anchor!.x + anchor!.width / 2))
       ).toBeLessThan(Math.max(anchor!.width, 40) + 24);
     } else {
-      // Our own provider: below the anchor, start-aligned.
+      // Our own provider: below the anchor, start-aligned — where "start" is the anchor's
+      // own edge unless the window margin is closer: the fixture's anchor sits at x=0, and
+      // content that hung over the edge of the screen is the one thing the margin exists
+      // to prevent, so the provider pulls the popup in to 16 dp. Asserting the anchor's x
+      // exactly would call that a bug.
       expect(popup!.y).toBeGreaterThanOrEqual(anchor!.y + anchor!.height - 2);
-      expect(Math.abs(popup!.x - anchor!.x)).toBeLessThanOrEqual(2);
+      expect(
+        Math.abs(popup!.x - Math.max(anchor!.x, 16 * scale))
+      ).toBeLessThanOrEqual(2);
       expect(num(up, 'placed')).toBeGreaterThanOrEqual(1);
     }
 
