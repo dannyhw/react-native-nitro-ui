@@ -27,9 +27,16 @@ import java.util.concurrent.ConcurrentHashMap
  * per-view vector cache behind `ImageVector.vectorResource` in a composable) cannot
  * share anything between two of them (`docs/architecture/core.md`, "Shared
  * objects"), so a screen of fifty chips would otherwise parse the same check fifty
- * times. The parsed [ImageVector] keeps no reference to the context that parsed it:
- * the theme is only needed to read the file's `?attr/colorControlNormal` tint, which
- * [androidx.compose.material3.Icon] replaces with the content colour when it draws.
+ * times. The parsed [ImageVector] keeps no reference to the context that parsed it,
+ * but its *intrinsic tint* is the file's `?attr/colorControlNormal` as resolved by the
+ * first theme that asked - whichever activity, light or dark. So callers must tint it
+ * themselves: through [androidx.compose.material3.Icon], which replaces it with the
+ * content colour, or with a colour filter of their own - never a bare `Image`, which
+ * would draw the first theme's colour everywhere.
+ *
+ * Parsing needs that attribute to resolve, or reading the tint fails. React Native's
+ * AppCompat app theme defines it (and `react-android` brings AppCompat, which is also
+ * what lets these library resources link), so any React Native activity can parse them.
  */
 internal object NitroUiIcons {
   private val vectors = ConcurrentHashMap<Int, ImageVector>()

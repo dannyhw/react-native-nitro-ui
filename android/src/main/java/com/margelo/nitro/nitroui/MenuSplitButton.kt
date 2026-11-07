@@ -52,9 +52,8 @@ import com.margelo.nitro.nitroui.core.nitroUiIcon
 /**
  * The trailing half's accessibility label.
  *
- * The library bundles no icon set and no string catalogue (DECISIONS D40 item 2), and
- * this half has no text of its own to be read - only a chevron - so its name is written
- * here. It says what the half does, which is what a reader needs: the title belongs to
+ * The library bundles no string catalogue, and this half has no text of its own to be
+ * read - only a chevron - so its name is written here. It says what the half does, which is what a reader needs: the title belongs to
  * the leading half, and the rows are in a window of their own.
  */
 internal const val MENU_MORE_OPTIONS_LABEL = "More options"
