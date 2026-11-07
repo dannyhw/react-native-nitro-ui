@@ -1,0 +1,163 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T03:29:41.257Z on code tree `288374fe4fff` at HEAD `cbc0f2e` (branch `task/FIX4-official-icons`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 888980 ms
+- Load: start 8.22, end 3.23, median 5.28, max 8.39
+- Device: android / device `emulator-5574` / lease `FIX4-ufgny`
+- Full log: `task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log` (<store>/task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● Console`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `expected 9 to be 10 // Object.is equality`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+- `expected 19 to be 10 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: FIX4-ufgny (still live)
+  |   FIX4-ufgny               FIX4         android           pair-a
+gate: load
+  |   load1 at the moment of failure: 3.23 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 116 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 288374fe4fff at HEAD cbc0f2e3
+gate: git tree 256b9a837404
+gate: log task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log
+gate:       <store>/task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 288374fe4fff, 18 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.22/8.26 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● Console
+
+    console.warn
+      react-native-nitro-ui: list BottomSheet detents from smallest to largest - the sheet opens at the first, and UIKit expects them in that order.
+
+
+    console.warn
+      react-native-nitro-ui: a BottomSheet was dismissed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`, or pass `dismissible={false}` to keep the sheet up.
+
+
+    console.log
+      recycle: new view drops=16 recycles=16
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 9 to be 10 // Object.is equality
+
+      [0m [90m 971 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 972 |[39m       }
+      [31m[1m>[22m[39m[90m 973 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 974 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 975 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 976 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 19 to be 10 // Object.is equality
+
+      [0m [90m 971 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 972 |[39m       }
+      [31m[1m>[22m[39m[90m 973 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 974 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 975 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 976 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    expected 9 to be 10 // Object.is equality
+
+      [0m [90m 971 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 972 |[39m       }
+      [31m[1m>[22m[39m[90m 973 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 974 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 975 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 976 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    expected 19 to be 10 // Object.is equality
+
+      [0m [90m 971 |[39m         cycles [33m+=[39m [35m1[39m[33m;[39m
+       [90m 972 |[39m       }
+      [31m[1m>[22m[39m[90m 973 |[39m       expect(mounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 974 |[39m       expect(unmounts[33m.[39m[36mget[39m([32m'cycle'[39m))[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 975 |[39m       [36mif[39m (round [33m===[39m [35m4[39m) {
+       [90m 976 |[39m         expect(cycles)[33m.[39mtoBe([35m50[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 24 passed, 25 total
+Tests:       2 failed, 3 skipped, 494 passed, 499 total
+Snapshots:   0 total
+Time:        866.901 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 288374fe4fff, 18 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.51/4.38 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        20.3 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 889.0 s
+gate: recorded in .gates/task/FIX4-official-icons.jsonl
+
+
+gate: appended the device context to task/FIX4-official-icons/harness+android-2026-11-07T03-29-40.862Z.log (5 probe(s))
+
+```
