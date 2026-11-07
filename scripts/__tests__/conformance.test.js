@@ -2135,6 +2135,6 @@ describe('the a11y sweep, against a fake device', () => {
     ]);
     // ...and in the one line a reader of the run looks at first.
     expect(printed).toContain('1 press sequence(s) needed a retry');
-    expect(printed).toContain('1 of them by an auxiliary check');
+    expect(printed).toContain('1 of them on an auxiliary check');
   });
 });

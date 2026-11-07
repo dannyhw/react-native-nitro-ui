@@ -324,12 +324,12 @@ export class Suite {
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
         ` · ${String(totalRetries)} press sequence(s) needed a retry` +
+        (auxiliaryRetries === 0
+          ? ''
+          : ` (${String(auxiliaryRetries)} of them on an auxiliary check)`) +
         (totalRetries === 0
           ? ''
           : ' - see the "answered on tap/key" notes above for which') +
-        (auxiliaryRetries === 0
-          ? ''
-          : `, ${String(auxiliaryRetries)} of them by an auxiliary check`) +
         (this.auxiliary.length === 0
           ? ''
           : ` · ${String(this.auxiliary.length - auxFailed.length)}/` +
