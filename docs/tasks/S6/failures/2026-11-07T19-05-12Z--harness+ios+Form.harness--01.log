@@ -1,0 +1,79 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-07T19:05:12.547Z on code tree `921c71c2bba9` at HEAD `387d3bd` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 14159 ms
+- Load: start 3.43, end 4.40, median 3.91, max 4.40
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+Form.harness-2026-11-07T19-05-12.547Z.log` (<store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T19-05-12.547Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (S6 spike) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)`
+- `expected [ +0, +0 ] to deeply equal [ -1, -2 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T19-05-12.547Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G19-pxe0p                G19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.40 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 921c71c2bba9, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.43/4.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T19-05-12.547Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (S6 spike) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)
+
+    expected [ +0, +0 ] to deeply equal [ -1, -2 ]
+
+      [0m [90m 497 |[39m       [36mawait[39m userEvent[33m.[39mpress(toggle)[33m;[39m
+       [90m 498 |[39m       [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m250[39m))[33m;[39m
+      [31m[1m>[22m[39m[90m 499 |[39m       expect([probe[33m.[39mlog[33m.[39mpressable[33m,[39m probe[33m.[39mlog[33m.[39mswitches])[33m.[39mtoEqual([[33m-[39m[35m1[39m[33m,[39m [33m-[39m[35m2[39m])[33m;[39m
+       [90m     |[39m                                                                [31m[1m^[22m[39m
+       [90m 500 |[39m     }
+       [90m 501 |[39m     [36mfor[39m ([36mlet[39m index [33m=[39m [35m0[39m[33m;[39m index [33m<[39m [35m10[39m[33m;[39m index [33m+=[39m [35m1[39m) {
+       [90m 502 |[39m       [36mawait[39m userEvent[33m.[39mpress(pressable)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 4 passed, 5 total
+Snapshots:   0 total
+Time:        12.193 s
+Ran all test suites matching Form.harness.
+
+
+
+```

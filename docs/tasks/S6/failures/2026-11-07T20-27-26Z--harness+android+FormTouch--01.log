@@ -1,0 +1,81 @@
+# Failure excerpt — harness:android:FormTouch
+
+- Ran: 2026-11-07T20:27:26.092Z on code tree `9a587af75a80` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android FormTouch`
+- Result: fail, exit 1, 234106 ms
+- Load: start 10.75, end 4.43, median 8.22, max 13.55
+- Device: android / device `emulator-5570` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log` (<store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormTouch.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.43 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 35 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:FormTouch
+gate: node ../scripts/harness.mjs --harnessRunner android FormTouch (cwd example)
+gate: code tree 9a587af75a80 at HEAD 33749bf8
+gate: git tree 7057a799a09b with a DIRTY worktree (not reusable)
+gate: log task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log
+gate:       <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android FormTouch
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 9a587af75a80, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.75/10.06 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/FormTouch.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        232.523 s
+Ran all test suites matching FormTouch.
+gate: harness:android:FormTouch FAIL in 234.1 s
+gate: recorded in .gates/task/S6-form-spike.jsonl
+
+
+gate: appended the device context to task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-27-25.188Z.log (5 probe(s))
+
+```

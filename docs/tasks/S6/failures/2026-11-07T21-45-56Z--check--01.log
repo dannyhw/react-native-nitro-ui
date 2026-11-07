@@ -1,0 +1,185 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-07T21:45:56.797Z on code tree `f8a0afceafbb` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `bun run check`
+- Result: fail, exit 1, 154080 ms
+- Load: start 6.98, end 5.13, median 8.77, max 16.06
+- Device: android / device `emulator-5570` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/check-2026-11-07T21-45-56.490Z.log` (<store>/task/S6-form-spike/check-2026-11-07T21-45-56.490Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/registry.test.js`
+- `● component manifest schema › has a manifest for every component directory except the container`
+- `expect(received).toEqual(expected) // deep equality`
+- `● the generated tables cover what they claim › a control that stops being hostable keeps its import`
+- `● Console`
+- `FAIL src/__tests__/host.test.tsx`
+- `● Host children · tables cover the library › has an opinion on every control in src/components`
+- `FAIL scripts/__tests__/patch-nitrogen.test.js`
+- `● patch-nitrogen: content children (G14) › mounts the children into the content view, inside the @implementation`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 0`
+- `Received: 1`
+- `● patch-nitrogen: content children (G14) › is idempotent`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/android-icons.test.js`
+- `● Android icons (D43) › builds no glyph by hand anywhere in android/src/main`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3186 — the rest is in the full log above)
+
+```
+    + Received  + 0
+
+    @@ -4,11 +4,10 @@
+        "Checkbox",
+        "Chip",
+        "ContextMenu",
+        "DatePicker",
+        "Dialog",
+    -   "Form",
+        "Menu",
+        "Picker",
+        "Progress",
+        "SearchField",
+        "SegmentedControl",
+
+      300 |     // every directory except the container has one, and the container is the only one
+      301 |     // that does not - which is the property, not the size of the roster.
+    > 302 |     expect(withManifest.sort()).toEqual(
+          |                                 ^
+      303 |       componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
+      304 |     );
+      305 |     for (const container of NON_COMPONENT_DIRS) {
+
+      at Object.toEqual (scripts/__tests__/registry.test.js:302:33)
+
+  ● the generated tables cover what they claim › a control that stops being hostable keeps its import
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 0
+
+    @@ -4,11 +4,10 @@
+        "Checkbox",
+        "Chip",
+        "ContextMenu",
+        "DatePicker",
+        "Dialog",
+    -   "Form",
+        "Menu",
+        "Picker",
+        "Progress",
+        "SearchField",
+        "SegmentedControl",
+
+      704 |     expect(imports(after)).toContain('Switch');
+      705 |     // and every control the library has is imported, hostable or not
+    > 706 |     expect(importDirs(after).sort()).toEqual(
+          |                                      ^
+      707 |       componentDirs().filter((name) => !NON_COMPONENT_DIRS.includes(name))
+      708 |     );
+      709 |     // with every name its directory exports
+
+      at Object.toEqual (scripts/__tests__/registry.test.js:706:38)
+
+FAIL src/__tests__/host.test.tsx
+  ● Host children · tables cover the library › has an opinion on every control in src/components
+
+    ENOENT: no such file or directory, open '<repo>/src/components/Form/component.json'
+
+      571 |       .flatMap((entry) => {
+      572 |         const manifest = JSON.parse(
+    > 573 |           readFileSync(
+          |                       ^
+      574 |             join(componentsDir, entry.name, 'component.json'),
+      575 |             'utf8'
+      576 |           )
+
+      at src/__tests__/host.test.tsx:573:23
+          at Array.flatMap (<anonymous>)
+      at Object.flatMap (src/__tests__/host.test.tsx:571:8)
+
+FAIL scripts/__tests__/patch-nitrogen.test.js
+  ● patch-nitrogen: content children (G14) › mounts the children into the content view, inside the @implementation
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      399 |     withSheetTree(generated(), (root) => {
+      400 |       const result = runPatch(root);
+    > 401 |       expect(result.status).toBe(0);
+          |                             ^
+      402 |       const code = readFileSync(join(root, MM), 'utf8');
+      403 |       expect(code).toContain('- (void)mountChildComponentView:');
+      404 |       expect(code).toContain(
+
+      at toBe (scripts/__tests__/patch-nitrogen.test.js:401:29)
+      at fn (scripts/__tests__/patch-nitrogen.test.js:392:14)
+      at Object.withSheetTree (scripts/__tests__/patch-nitrogen.test.js:399:5)
+
+  ● patch-nitrogen: content children (G14) › is idempotent
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      418 |       const once = readFileSync(join(root, MM), 'utf8');
+      419 |       const again = runPatch(root);
+    > 420 |       expect(again.status).toBe(0);
+          |                            ^
+      421 |       expect(again.stdout).toContain(
+      422 |         'already-patched HybridNitroUiBottomSheetComponent.mm'
+      423 |       );
+
+      at toBe (scripts/__tests__/patch-nitrogen.test.js:420:28)
+      at fn (scripts/__tests__/patch-nitrogen.test.js:392:14)
+      at Object.withSheetTree (scripts/__tests__/patch-nitrogen.test.js:416:5)
+
+FAIL scripts/__tests__/android-icons.test.js
+  ● Android icons (D43) › builds no glyph by hand anywhere in android/src/main
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 8
+
+    - Array []
+    + Array [
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:616: a path command",
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:617: a path command",
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:618: a path command",
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:627: a path command",
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:628: a path command",
+    +   "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiFormSection.kt:629: a path command",
+    + ]
+
+      122 |       10
+      123 |     );
+    > 124 |     expect(handBuiltGlyphs(files, readRepoFile)).toEqual([]);
+          |                                                  ^
+      125 |   });
+      126 |
+      127 |   it('catches a hand-built glyph and a hand-typed drawable', () => {
+
+      at Object.toEqual (scripts/__tests__/android-icons.test.js:124:50)
+
+
+Test Suites: 4 failed, 70 passed, 74 total
+Tests:       6 failed, 1837 passed, 1843 total
+Snapshots:   0 total
+Time:        148.765 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 154.1 s
+gate: recorded in .gates/task/S6-form-spike.jsonl
+
+```
