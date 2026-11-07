@@ -137,6 +137,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone',
     screen: 'tooltip',
   },
+  {
+    id: 'icon-button',
+    title:
+      'real tap presses the icon button once, a toggle flips once per tap, a refused toggle snaps back, and a disabled one takes neither',
+    screen: 'iconbutton',
+  },
   // @end-generated
 ]);
 

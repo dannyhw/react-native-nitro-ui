@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -37,6 +37,7 @@ export const SCREEN_FILE = Object.freeze({
   searchfield: 'example/src/SearchFieldScreen.tsx',
   checkbox: 'example/src/CheckboxScreen.tsx',
   contextmenu: 'example/src/ContextMenuScreen.tsx',
+  iconbutton: 'example/src/IconButtonScreen.tsx',
 });
 
 /**
@@ -113,6 +114,15 @@ export const ECHO = Object.freeze({
   searchCapped: 'search-capped-echo',
   searchFocus: 'search-focus-echo',
   ctxEcho: 'ctx-echo',
+  // G23: an IconButton has no text, so every reading of it is one of these rows —
+  // the press count, the toggle's state, and the two counters a refused or refused
+  // -because-disabled tap would move.
+  iconButtonPresses: 'real-input-icon-button-presses',
+  iconButtonValue: 'real-input-icon-button-value',
+  iconButtonEvents: 'real-input-icon-button-events',
+  iconButtonRefusedLast: 'real-input-icon-button-refused-last',
+  iconButtonRefusedEvents: 'real-input-icon-button-refused-events',
+  iconButtonDisabledEvents: 'real-input-icon-button-disabled-events',
 });
 
 /**
@@ -218,6 +228,7 @@ export const SCREEN_TAB = Object.freeze({
   tooltip: { anchor: ECHO.tooltipLog },
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
+  iconbutton: { anchor: ECHO.iconButtonValue },
   host: { anchor: ECHO.hostValue },
 });
 

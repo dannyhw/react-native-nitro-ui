@@ -28,6 +28,7 @@
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiTooltipSpecSwift.hpp"
+#include "HybridNitroUiIconButtonSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -163,6 +164,13 @@
     "NitroUiTooltip",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiTooltipSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTooltip();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiIconButton",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiIconButtonSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiIconButton();
       return hybridObject;
     }
   );

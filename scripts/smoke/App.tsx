@@ -4,6 +4,7 @@ import {
   Chip,
   DatePicker,
   Host,
+  IconButton,
   Menu,
   type MenuGroup,
   nitroUiCore,
@@ -103,6 +104,7 @@ const SMOKE_CONTROLS = [
   'chip',
   'checkbox',
   'search-field',
+  'icon-button',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -313,6 +315,17 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('checkbox')}
           label="Accept"
           testID="SMOKE-checkbox"
+        />
+        {/* Named on both platforms, like every other icon button: the glyph is the
+            whole control, so this is also the only name the view has. The smoke app
+            is built for a release bundle too, where the drawable-name form is the
+            one that needs no dev server. */}
+        <IconButton
+          accessibilityLabel="Search"
+          androidIcon="nitroui_search"
+          onLayout={measureFor('icon-button')}
+          systemImage="magnifyingglass"
+          testID="SMOKE-icon-button"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a

@@ -27,6 +27,7 @@ import CheckboxScreen from './CheckboxScreen';
 import ContextMenuScreen from './ContextMenuScreen';
 import SearchFieldScreen from './SearchFieldScreen';
 import TooltipScreen from './TooltipScreen';
+import IconButtonScreen from './IconButtonScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
 // one import the registry does not write.
@@ -50,6 +51,7 @@ type Screen =
   | 'contextmenu'
   | 'searchfield'
   | 'tooltip'
+  | 'iconbutton'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
   | 'host';
@@ -111,6 +113,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'contextmenu', label: 'Context' },
   { id: 'searchfield', label: 'Search' },
   { id: 'tooltip', label: 'Tooltip' },
+  { id: 'iconbutton', label: 'Icons' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
   // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
@@ -182,6 +185,7 @@ export default function App() {
         {screen === 'contextmenu' ? <ContextMenuScreen /> : null}
         {screen === 'searchfield' ? <SearchFieldScreen /> : null}
         {screen === 'tooltip' ? <TooltipScreen /> : null}
+        {screen === 'iconbutton' ? <IconButtonScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}
       </View>
