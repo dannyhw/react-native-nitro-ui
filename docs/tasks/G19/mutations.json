@@ -1,6 +1,6 @@
 {
   "task": "G19",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it, so `before` is findable verbatim in `file`). The 16 Jest and JVM rows were run on 2026-11-06 on this checkout at code tree cb51a5a30283, in the gap between the two real-input gates, and each file was restored by the driver (`git status` clean afterwards). The 15 rows added by fix round 1 (the Metro-icon work) were run on 2026-11-07 on this checkout at code tree 34bbc3eb53af, the tree the round ships at, the same way. Rows marked `organic` are not mutations: they are the test going red against the real bug before the fix landed. The `harness:android:Button` / `harness:ios:Button` runs are filtered, so they satisfy nothing but their own name, and each was made against an app rebuilt for that mutation (`node scripts/build-app.mjs --platform android`). Every `harness:android:Button` / `harness:ios:Button` row below has its failing run committed as a scrubbed excerpt in this directory's `failures/` folder, next to `gates.jsonl`. The last row is not a proof either: it is a mutation the suite does NOT catch, recorded so the coverage hole is data rather than an omission.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it, so `before` is findable verbatim in `file`). The 16 Jest and JVM rows were run on 2026-11-06 on this checkout at code tree cb51a5a30283, in the gap between the two real-input gates, and each file was restored by the driver (`git status` clean afterwards). The 15 rows added by fix round 1 (the Metro-icon work) were run on 2026-11-07 on this checkout at code tree 34bbc3eb53af, the tree the round ships at, the same way. Rows marked `organic` are not mutations: they are the test going red against the real bug before the fix landed. The `harness:android:Button` / `harness:ios:Button` runs are filtered, so they satisfy nothing but their own name, and each was made against an app rebuilt for that mutation (`node scripts/build-app.mjs --platform android`). Every `harness:android:Button` / `harness:ios:Button` row below has its failing run committed as a scrubbed excerpt in this directory's `failures/` folder, next to `gates.jsonl`. The last row is not a proof either: it is a mutation the suite does NOT catch, recorded so the coverage hole is data rather than an omission. The 9 rows added by fix round 2 (the icon source, the failure memory and Menu's trigger) were run on 2026-11-07 against a clean worktree at code tree f3dcff73090e (HEAD 4c08f16e) - the code this round ships - by a driver script: one file mutated, its own suite run, `git checkout --` before the next row.",
   "mutations": [
     {
       "test": "src/__tests__/iconName.test.tsx",
@@ -505,6 +505,115 @@
       "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-w2v9t), rebuilt app",
       "redTests": [
         "androidIcon · an icon the app imports (D43) › draws nothing for a file the dev server does not have, and keeps the no-icon box: expected false to be true"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "a bundled asset's drawable name is sent bare, the way round 1 sent it - so a hoisted name has nothing to tell native to trust it",
+      "before": "    return markAndroidIconResource(androidDrawableNameForAsset(asset));",
+      "after": "    return androidDrawableNameForAsset(asset);",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 4 of 16",
+      "redTests": [
+        "androidIcon · the release build › sends a bundled asset as that name, marked as the bundler's: Expected: \"res:src_assets_icons_share_24px\" / Received: \"src_assets_icons_share_24px\"",
+        "androidIcon · the release build › files the same glyph under two paths as two drawables: Expected: \"res:src_assets_icons_v2_share_24px\" / Received: \"src_assets_icons_v2_share_24px\"",
+        "androidIcon · the release build › names a hoisted asset React Native's way, and marks it as the bundler's",
+        "androidIcon · the development build › names the drawable when the bundle is embedded, and says nothing"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconSourceTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "parse no longer knows the res: marker, so a name the bundler derived is judged by the rule for a name a person typed",
+      "before": "      if (raw.startsWith(RESOURCE_PREFIX)) {",
+      "after": "      if (false) {",
+      "run": "gradle :react-native-nitro-ui:testDebugUnitTest --tests \"*NitroUiIconSourceTest*\" - FAIL, 2 of 8",
+      "redTests": [
+        "aBundlerDerivedNameIsLookedUpAsSent (NitroUiIconSourceTest.kt:128)",
+        "twoDifferentSourcesAreNeverEqual (NitroUiIconSourceTest.kt:146) - \"two assets, two names, two drawables\""
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the build type is asked of __DEV__ again instead of of where the bundle came from",
+      "before": "    const origin =\n      env.devServerOrigin !== undefined",
+      "after": "    if (!__DEV__) {\n      return markAndroidIconResource(androidDrawableNameForAsset(asset));\n    }\n    const origin =\n      env.devServerOrigin !== undefined",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 16",
+      "redTests": [
+        "androidIcon · the development build › asks Metro for a dev=false bundle that Metro is serving: Expected: \"http://10.0.2.2:8081/src/assets/icons/share_24px.xml?platform=android&hash=a1b2c3d4\" / Received: null"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "a debug build whose bundle is embedded is warned at again, about a dev server it has no use for",
+      "before": "    // No server to ask, so the bundle was embedded",
+      "after": "    warnAndroidIconSource(\n      `cannot reach the dev server for the asset at id ${source}`\n    );\n    // No server to ask, so the bundle was embedded",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 16",
+      "redTests": [
+        "androidIcon · the development build › names the drawable when the bundle is embedded, and says nothing: + \"nitro-ui: androidIcon cannot reach the dev server for the asset at id 6. Nothing will be drawn for it.\""
+      ]
+    },
+    {
+      "test": "src/__tests__/menuSizingKey.test.tsx",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "Menu's own size list goes back to the three rungs it shipped with",
+      "before": "const SIZES: readonly ButtonSize[] = [\n  'small',\n  'medium',\n  'large',\n  'xlarge',\n  'xxlarge',\n];",
+      "after": "const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];",
+      "run": "npx jest src/__tests__/menuSizingKey.test.tsx - FAIL, 2 of 11",
+      "redTests": [
+        "Menu - the top of the ladder › sends xlarge to native rather than falling back to medium: Expected: \"xlarge\" / Received: \"medium\"",
+        "Menu - the top of the ladder › sends xxlarge to native rather than falling back to medium: Expected: \"xxlarge\" / Received: \"medium\""
+      ]
+    },
+    {
+      "test": "src/__tests__/menuSizingKey.test.tsx",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the key keeps the androidIcon field but can never name the icon - the quiet mutation this file names",
+      "before": "    escapeField(androidIcon ?? ''),",
+      "after": "    escapeField(''),",
+      "run": "npx jest src/__tests__/menuSizingKey.test.tsx - FAIL, 3 of 11",
+      "redTests": [
+        "Menu - androidIcon › is Button's key with the icon in the place Button puts it: Expected: \"tonal|small|plain|square.and.arrow.down|share|Publish\" / Received: \"tonal|small|plain|square.and.arrow.down||Publish\"",
+        "Menu - androidIcon › separates a glyph from the no-glyph trigger it replaces: Expected: not \"filled|medium|plain|||Publish\"",
+        "Menu - androidIcon › tells two glyphs apart, or one drawable gets the other's box: Expected: not \"filled|medium|plain|||Publish\""
+      ]
+    },
+    {
+      "test": "src/__tests__/menuSizingKey.test.tsx",
+      "file": "src/components/Menu/Menu.tsx",
+      "mutation": "the wrapper resolves the icon into the key and never sends the prop",
+      "before": "      androidIcon={resolvedAndroidIcon ?? null}\n",
+      "after": "",
+      "run": "npx jest src/__tests__/menuSizingKey.test.tsx - FAIL, 2 of 11",
+      "redTests": [
+        "Menu - androidIcon › is Button's key with the icon in the place Button puts it: Expected: \"share\" / Received: undefined",
+        "Menu - androidIcon › sends null when there is no glyph, and never an unset prop: expect(androidIcon in props) Received: undefined"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt",
+      "mutation": "the Menu trigger stores androidIcon and never resolves it - the prop arrives and dies on the model",
+      "before": "    iconSlot.resolve(androidIcon, artwork)",
+      "after": "    iconSlot.resolve(null, artwork)",
+      "run": "gradle :react-native-nitro-ui:testDebugUnitTest --tests \"*NitroUiIconReleasePathTest*\" - FAIL, 2 of 11",
+      "redTests": [
+        "aMenuTriggerResolvesTheNameExactlyAsAButtonDoes (NitroUiIconReleasePathTest.kt:259)",
+        "aMenuRecycleRetiresThePreviousOwnersFileLoad (NitroUiIconReleasePathTest.kt:301)"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconFailureMemoryTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "every load that did not bring artwork is remembered - round 1's rule, restored",
+      "before": "    if (read == NitroUiIconRead.Rejected) {",
+      "after": "    if (read !is NitroUiIconRead.Loaded) {",
+      "run": "gradle :react-native-nitro-ui:testDebugUnitTest --tests \"*NitroUiIconFailureMemoryTest*\" - FAIL, 2 of 5",
+      "redTests": [
+        "aRefusedConnectionLeavesTheUrlReadable (NitroUiIconFailureMemoryTest.kt:59) - \"Metro was restarting, not missing the file - the next mount must still ask\": expected false, was true",
+        "aDevServerStillCompilingIsNotAVerdict (NitroUiIconFailureMemoryTest.kt:100)"
       ]
     }
   ]

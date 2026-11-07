@@ -359,3 +359,62 @@ compare (the GitHub API is not reachable from here), so the claim is the digest,
 fresh diff. `@expo/material-symbols@0.1.1` was fetched and *is* reachable, and its
 `star.xml` path data matches `star_24px.xml` segment for segment, which is the closest
 independent check available.
+
+## Fix round 2
+
+**Lease:** none — part A only. FIX4's `NitroUiIcons.kt` is not on `origin/main`, so item 3,
+the glyph-check exemption and the fixture re-registration wait for part B; no gate ran.
+**Part A code `4c08f16e`.** 9 mutations, each reverted, in
+`docs/tasks/G19/mutations.json`. **The gate table above is stale** — `gate.mjs status`:
+0 green / 9 stale.
+
+**1.** A bundler-derived name crosses with its own `res:` marker and is looked up verbatim:
+in a hoisted monorepo Metro's location is `/assets/../../node_modules/…`, whose name
+`__node_modules_expo_materialsymbols_star` passes no rule for hand-typed names. JS pins its
+name against `getAndroidResourceIdentifier`; a typed name keeps the rule.
+**2.** The answer an asset gets follows the dev-server origin, not `__DEV__` — React
+Native's own `isLoadedFromServer` question; the false dev-server warning for an embedded
+bundle is gone.
+**5.** Only a verdict on the *file* is remembered — a 4xx, a non-`<vector>`, a too-large
+file. A timeout or refused connection is not written down, so a Metro restart no longer
+sticks an icon until the app is killed. `NitroUiIconRead` and `NitroUiIconBadList` put that
+rule where a JVM test reaches it; `allowCoreThreadTimeOut` makes the worker's keep-alive
+true.
+**4.** `Menu` gained both rungs and `androidIcon` — sizing key, model, trigger `icon =`,
+split-button leading half, `menu.md` — sharing `NitroUiIconSlot` with `Button`, so reserve
+and retire are written once.
+**6.** Changeset rewritten as release notes; `ButtonSize`'s TSDoc now says what `button.md`
+measures: three rungs, one iOS height.
+
+### Red proofs (fix round 2)
+
+Nine mutations, one per line; `->` separates test, mutation and the line that went red.
+
+- `iconSource.test.ts` -> release name sent bare -> `sends a bundled asset as that name, marked as the bundler's`: Expected `res:src_assets_icons_share_24px`, Received `src_assets_icons_share_24px` (+3 more).
+- `NitroUiIconSourceTest.kt` -> `parse` drops the `res:` branch -> `aBundlerDerivedNameIsLookedUpAsSent` (kt:128), `twoDifferentSourcesAreNeverEqual` (kt:146).
+- `iconSource.test.ts` -> `__DEV__` decides again -> `asks Metro for a dev=false bundle that Metro is serving`: Expected the `…share_24px.xml?platform=android&hash=…` URL, Received `null`.
+- `iconSource.test.ts` -> the false warning returns -> `names the drawable when the bundle is embedded, and says nothing`: +`nitro-ui: androidIcon cannot reach the dev server for the asset at id 6`.
+- `menuSizingKey.test.tsx` -> `SIZES` back to three rungs -> `sends xlarge …`: Expected `xlarge`, Received `medium` (and `xxlarge`).
+- `menuSizingKey.test.tsx` -> key field present but mute -> `is Button's key with the icon…`: Expected `tonal|small|plain|square.and.arrow.down|share|Publish`, Received `…down||Publish` (+2 collisions).
+- `menuSizingKey.test.tsx` -> prop resolved, never sent -> `Expected: "share" / Received: undefined` (+1).
+- `NitroUiIconReleasePathTest.kt` -> Menu stores, never resolves -> `aMenuTriggerResolvesTheNameExactlyAsAButtonDoes` (kt:259), `aMenuRecycleRetiresThePreviousOwnersFileLoad` (kt:301).
+- `NitroUiIconFailureMemoryTest.kt` -> remember every non-Loaded answer -> `aRefusedConnectionLeavesTheUrlReadable` (kt:59) expected `false`, was `true`; `aDevServerStillCompilingIsNotAVerdict` (kt:100).
+
+Green without a mutation: 1850 JS tests / 73 suites, 144 JVM tests, `nitrogen:check`
+(404 files, no drift), `registry:check`, `autolinking:check`, `manifest:check`,
+`readme:check`, eslint, prettier. The four new `Menu.harness.tsx` cases — rung heights at
+`xlarge`/`xxlarge`, the glyph's box against a Button's, the split leading half, the
+unresolvable name — are written and **not yet shown red on a device**: measuring needs the
+lease this round did not take, and so does the iOS compile (`swiftc -parse` is clean).
+
+### Follow-ups (fix round 2)
+
+- Part B: `res:` names in a release APK are `aapt`-legal but unusual — worth one on-device
+  release-form proof, not just the JVM name pin.
+- `example/__tests__/Button.harness.tsx:1693` still says "the top two are the same control"
+  where `button.md` measures three rungs at one height; a comment only, left alone by scope.
+- `Menu.harness.tsx`'s `sizingKey` mirror and `Menu.tsx`'s `sizingVariantFor` are two
+  copies of one key format; a shared helper would make the poisoning self-updating.
+- Carried from part A's brief, unchanged: OTA `file://` bundles, `..` in dev URLs, `URI()`
+  on paths with spaces, a release-bundle content check, the root `android:alpha`, iOS
+  `pixelProbes` on recycle.
