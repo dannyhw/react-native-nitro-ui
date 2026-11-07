@@ -392,6 +392,14 @@ async function probe(): Promise<string> {
 /**
  * Nothing of any popover is left anywhere: no presentation counted, no window, and on
  * iOS no controller and no touch root beyond the baseline the probe read at the start.
+ *
+ * Android's `lifecycleObservers` is deliberately *not* part of the claim. It is the
+ * Activity's own `LifecycleRegistry` count, and no view in this library has ever added an
+ * observer to it — the whole Android suite runs on the number going up as the app mounts
+ * anything, which is a claim about RN, not about a popover. It stays in the report as a
+ * diagnostic (`live` and `roots` are Popover's own counters and are what the drop rule
+ * needs); a full-suite run is what showed the difference, with `live=0;roots=0` sitting in
+ * the same report as an observer count 13 higher than a five-rounds-older baseline.
  */
 const nothingLeft = (baseline: Report) => (report: Report) =>
   report.live === '0' &&
@@ -399,11 +407,7 @@ const nothingLeft = (baseline: Report) => (report: Report) =>
     ? report.windows === '0' &&
       num(report, 'controllers') <= num(baseline, 'controllers') &&
       num(report, 'touchRoots') <= num(baseline, 'touchRoots')
-    : report.roots === '0' &&
-      // Android reads the observer count back off the main thread, so a report can name
-      // the number from before the last teardown. A leak only ever adds to it, which is
-      // the half of the claim that has to hold.
-      num(report, 'lifecycleObservers') <= num(baseline, 'lifecycleObservers'));
+    : report.roots === '0');
 
 /** No popover window is left anywhere, read through a live mount. */
 async function waitForNothingLeft(testId: string, what: string) {
