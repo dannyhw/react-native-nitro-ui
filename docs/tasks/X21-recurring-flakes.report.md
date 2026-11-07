@@ -77,6 +77,7 @@ comes from the published progress, the destination from the model.
 - `real-input:ios -- --control text-field` -> `refuseEdit` in `TextFieldScreen.tsx` emptied out, so the app takes the key and never reports it -> `3 real presses on key "x" into the frozen field left it at "frozen: 0 edits refused"`: a swallowed event is not retried into a green. It is not *named* as a lost event either - RN put the field back to `frozen` regardless, so the `took the key and lost the event` branch could not fire; `typeKey`'s comment now says so instead of claiming a witness this control does not give.
 - `harness:android -- BottomSheet` -> `unmounts` bumped 400 ms late + the old blind `toBe(10)` -> `expected 9 to be 10`, then `20/30/40/50 to be 10` in the rounds that inherit the counters.
 - `harness:android -- BottomSheet` -> tenth unmount dropped, with the fix in place -> `"cycle" never counted ten mounts and ten unmounts in round 1: mounts=10, unmounts=9`.
+- `harness:android -- BottomSheet` (fix round 1) -> product `dismissedCallback` parks its `setMounted(false)` in a 250 ms `setTimeout` while a harness-armed `__x21DeferUnmount` is set, once per case, and the loop re-opens on the `live=0` witness exactly as it did in round 1 -> `A: "proof-a" never counted ten mounts and ten unmounts: mounts=9, unmounts=9` and `C: expected 9 to be 10` on the **mounts** line - E2's line - while the same ten cycles with `waitForUnmount` between them (case B) passed: 2 failed, 28 passed of 30. The deferral only widens the batch; the ordering it forces is the one E2's two runs show, and the rebuild that lets a mutated tree run on a device is `build-app.mjs`, which re-stamps in 3 s.
 - `SliderModelTest.anAccessibilityStepTakesItsDirectionFromTheProgressTheReaderWasShown` -> direction compared against `from` again -> that test alone: `expected 6.0 to be 3.0`.
 - `harness:android -- Slider` (new a11y double-press case) -> old `accessibilityStepToward(target)` -> `Wanted 2 onSlidingComplete(s), have 1 after 5000ms (start=[0] change=[3] complete=[3])`.
 - `real-input:android -- --control button` -> first tab tap swallowed -> `navigation: the "Button" tab answered on tap 2/3 …` and `1 press sequence(s) needed a retry`.
@@ -132,7 +133,10 @@ PR #46 and PR #47, to get the facts above. No push, comment, review, label or `g
 ## Appendix — the E2 lines, in full
 
 Round 1 quoted these as its own cause, so the excerpts are kept here for whoever reads row 2 next.
-Both runs fail on the `mounts` assert (`example/__tests__/BottomSheet.harness.tsx:973`), and the
+Both runs fail on the `mounts` assert, at `example/__tests__/BottomSheet.harness.tsx:973` in the tree
+E2 ran (`9019f302`); on this branch's tree the same line is
+`example/__tests__/BottomSheet.harness.tsx:1068`, because the fix round added `waitForUnmount` above it.
+Both runs are short there, and the
 deficit is the same one cycle all the way through — a round that throws skips `reset()`, so the next
 round inherits the counters and the same missing cycle is counted again:
 
