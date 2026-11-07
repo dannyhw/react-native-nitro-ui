@@ -353,6 +353,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       configureDataSource()
     }
     dataSource?.apply(snapshot, animatingDifferences: false)
+    // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
+    // now wrong. One turn later, when UIKit has placed the cells, they are read again
+    // (the delegate's own `scrollViewDidLayout` also covers this; the first apply of a
+    // brand-new list is the moment it can miss).
+    DispatchQueue.main.async { [weak self] in self?.publishRowFrames() }
   }
 
   private func configureDataSource() {
@@ -580,6 +585,71 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
+  // MARK: - Where each row came to rest (`onFrameMoved`, S6b question 4)
+
+  /// Publish where every row's cell currently sits, in the Form's own coordinate space, so
+  /// the shadow tree can be told the same thing UIKit already knows.
+  ///
+  /// Two sources, and the difference is said out loud because it is a real difference:
+  ///
+  /// - a row with a cell on screen is read from that cell's view - the pixels the person
+  ///   sees, converted into ``holding``, which is the view the section's Yoga origin is at,
+  ///   which is exactly the space `measure` accumulates into;
+  /// - a row in a recycled cell has no view position, so its item's layout attributes minus
+  ///   `contentOffset` are used, offset by the insets the last visible cell was measured to
+  ///   apply. That is derived geometry: right for anything asking "where would that row be",
+  ///   wrong to the pixel if UIKit's margins disagree with the last one measured.
+  ///
+  /// Called when the list settles, never per scroll frame: JS cannot be told about every
+  /// frame of a flick, and an anchor is shown when a list is at rest. Between settles the
+  /// published number lags by the scroll offset, which is what `onFrameMoved` documents.
+  func publishRowFrames() {
+    guard let base = holdingIfMounted() else { return }
+    var cellInsets = lastCellInsets
+    for (sectionIndex, model) in sections.enumerated() {
+      for (rowIndex, row) in model.rows.enumerated() {
+        let path = IndexPath(item: rowIndex, section: sectionIndex)
+        let box: CGRect?
+        if let cell = list.cellForItem(at: path) as? NitroUiFormRowCell,
+          let shown = cell.row, shown.window != nil {
+          box = shown.convert(shown.bounds, to: base)
+          // What a cell adds between its item's box and the row inside it, learned from the
+          // cell rather than hard-coded: the list's margins and the cell's own chrome.
+          if let attributes = list.collectionViewLayout.layoutAttributesForItem(at: path) {
+            let inBase = list.convert(attributes.frame, to: base)
+            cellInsets = CGSize(
+              width: (box?.minX ?? 0) - inBase.minX,
+              height: (box?.minY ?? 0) - inBase.minY
+            )
+          }
+        } else if let attributes =
+          list.collectionViewLayout.layoutAttributesForItem(at: path) {
+          let inList = attributes.frame.offsetBy(
+            dx: -list.contentOffset.x,
+            dy: -list.contentOffset.y
+          )
+          box = list.convert(inList, to: base)
+            .offsetBy(dx: cellInsets.width, dy: cellInsets.height)
+        } else {
+          box = nil
+        }
+        guard let box else { continue }
+        HybridNitroUiForm.rowOwner(of: row)?.publishCellFrame(x: box.minX, y: box.minY)
+      }
+    }
+    lastCellInsets = cellInsets
+  }
+
+  /// The insets a cell puts between its item's box and the row it shows, from the last cell
+  /// that was on screen (so a recycled row's derived position is not a guess).
+  private var lastCellInsets = CGSize(width: 20, height: NitroUiFormRowCell.rowChrome)
+
+  /// The Form's content view, once it has one. Frames are published into this space because
+  /// it is where a section's Yoga origin is, which is what `measure` walks up from.
+  private func holdingIfMounted() -> UIView? {
+    holding.superview == nil ? nil : holding
+  }
+
   private func setBottomInset(_ inset: CGFloat) {
     keyboardInset = inset
     guard abs(list.contentInset.bottom - inset) > 0.5 else { return }
@@ -685,6 +755,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     DispatchQueue.main.async { [weak self] in
       self?.list.setContentOffset(CGPoint(x: 0, y: CGFloat(y)), animated: false)
       self?.list.layoutIfNeeded()
+      self?.publishRowFrames()
     }
   }
 
@@ -758,6 +829,12 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     while heights.count < 3 { heights.append("-") }
     out.append("h0=\(heights[0])")
+    // Diagnostic only (never a compared field): what the row itself measured, so a
+    // row box that is off by N is visibly the chrome and not the content. Absent for
+    // the SwiftUI reference, whose rows are not ours.
+    if let cell = list.cellForItem(at: first) as? NitroUiFormRowCell, cell.lastRowHeight > 0 {
+      out.append("rowH=\(Self.number(cell.lastRowHeight))")
+    }
     out.append("h1=\(heights[1])")
     out.append("h2=\(heights[2])")
     let headerKind = UICollectionView.elementKindSectionHeader

@@ -78,6 +78,11 @@ void JHybridNitroUiFormRowStateUpdater::updateViewProps(jni::alias_ref<jni::JCla
         : !newProps->onPress.hasSameValue(oldProps->onPress)) {
     hybridView->setOnPress(newProps->onPress.get());
   }
+  if (oldProps == nullptr
+        ? newProps->onFrameMoved.isProvided()
+        : !newProps->onFrameMoved.hasSameValue(oldProps->onFrameMoved)) {
+    hybridView->setOnFrameMoved(newProps->onFrameMoved.get());
+  }
 
   // Update hybridRef if it changed
   if (oldProps == nullptr

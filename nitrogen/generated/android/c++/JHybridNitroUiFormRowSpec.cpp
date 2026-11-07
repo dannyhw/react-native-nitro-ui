@@ -20,6 +20,7 @@ namespace margelo::nitro::nitroui { enum class NitroUiFormAccessory; }
 #include <optional>
 #include "JFunc_void.hpp"
 #include <NitroModules/JNICallable.hpp>
+#include "JFunc_void_double_double.hpp"
 #include <string>
 
 namespace margelo::nitro::nitroui {
@@ -104,6 +105,23 @@ namespace margelo::nitro::nitroui {
   void JHybridNitroUiFormRowSpec::setOnPress(const std::optional<std::function<void()>>& onPress) {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void::javaobject> /* onPress */)>("setOnPress_cxx");
     method(_javaPart, onPress.has_value() ? JFunc_void_cxx::fromCpp(onPress.value()) : nullptr);
+  }
+  std::optional<std::function<void(double /* x */, double /* y */)>> JHybridNitroUiFormRowSpec::getOnFrameMoved() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<JFunc_void_double_double::javaobject>()>("getOnFrameMoved_cxx");
+    auto __result = method(_javaPart);
+    return __result != nullptr ? std::make_optional([&]() -> std::function<void(double /* x */, double /* y */)> {
+      if (__result->isInstanceOf(JFunc_void_double_double_cxx::javaClassStatic())) [[likely]] {
+        auto downcast = jni::static_ref_cast<JFunc_void_double_double_cxx::javaobject>(__result);
+        return downcast->cthis()->getFunction();
+      } else {
+        auto __resultRef = jni::make_global(__result);
+        return JNICallable<JFunc_void_double_double, void(double, double)>(std::move(__resultRef));
+      }
+    }()) : std::nullopt;
+  }
+  void JHybridNitroUiFormRowSpec::setOnFrameMoved(const std::optional<std::function<void(double /* x */, double /* y */)>>& onFrameMoved) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JFunc_void_double_double::javaobject> /* onFrameMoved */)>("setOnFrameMoved_cxx");
+    method(_javaPart, onFrameMoved.has_value() ? JFunc_void_double_double_cxx::fromCpp(onFrameMoved.value()) : nullptr);
   }
 
   // Methods

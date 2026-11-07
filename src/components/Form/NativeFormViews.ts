@@ -45,6 +45,7 @@ type MetricsHandler = (
   gap: number
 ) => void;
 type PressHandler = () => void;
+type FrameMovedHandler = (x: number, y: number) => void;
 
 // MARK: - Form
 
@@ -116,6 +117,7 @@ export interface NativeNitroUiFormRowProps extends HybridViewProps {
   pressable: boolean;
   nuiPerfId: number | null;
   onPress: NitroCallbackProp<PressHandler>;
+  onFrameMoved: NitroCallbackProp<FrameMovedHandler>;
   hybridRef?: Ref<NitroUiFormRowMethods> | undefined;
 }
 
@@ -130,6 +132,7 @@ export const NitroUiFormRowConfig: ViewConfig<NativeNitroUiFormRowProps> = {
     pressable: true,
     nuiPerfId: true,
     onPress: true,
+    onFrameMoved: true,
     hybridRef: true,
   },
 };

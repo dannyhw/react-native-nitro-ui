@@ -26,6 +26,7 @@ namespace margelo::nitro::nitroui::views {
     pressable(nitro::ReactProp<bool>::fromRawValue("NitroUiFormRow", "pressable", rawProps, sourceProps.pressable)),
     nuiPerfId(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiFormRow", "nuiPerfId", rawProps, sourceProps.nuiPerfId)),
     onPress(nitro::ReactProp<std::optional<std::function<void()>>>::fromRawValue("NitroUiFormRow", "onPress", rawProps, sourceProps.onPress)),
+    onFrameMoved(nitro::ReactProp<std::optional<std::function<void(double /* x */, double /* y */)>>>::fromRawValue("NitroUiFormRow", "onFrameMoved", rawProps, sourceProps.onFrameMoved)),
     hybridRef(nitro::ReactProp<std::optional<std::function<void(const std::shared_ptr<HybridNitroUiFormRowSpec>& /* ref */)>>>::fromRawValue("NitroUiFormRow", "hybridRef", rawProps, sourceProps.hybridRef)) {
     // nitro-ui: initializeDynamicProps
     ::nitroui::compat::initializeDynamicProps(*this, sourceProps, rawProps, filterObjectKeys);
@@ -38,6 +39,7 @@ namespace margelo::nitro::nitroui::views {
       case hashString("pressable"): return true;
       case hashString("nuiPerfId"): return true;
       case hashString("onPress"): return true;
+      case hashString("onFrameMoved"): return true;
       case hashString("hybridRef"): return true;
       default: return false;
     }

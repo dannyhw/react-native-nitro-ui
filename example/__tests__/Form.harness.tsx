@@ -275,6 +275,8 @@ const styles = StyleSheet.create({
   pressable: { paddingHorizontal: 8 },
   column: { gap: 8 },
   columnRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
+  // E7: the measured box is the row's content, and `measureInWindow` on it is the question.
+  measured: { flex: 1, paddingVertical: 6 },
 });
 
 /**
@@ -352,6 +354,31 @@ async function reportUntil(
       throw new Error(`never saw "${what}" - last was ${String(read())}`);
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/**
+ * Poll an async probe until its own verdict passes, and hand back the last verdict either
+ * way. A settle is not a fixed wait: a published position travels native -> JS -> React ->
+ * Fabric and every hop is a turn of a queue, so the case asks again instead of sleeping. The
+ * failed verdict comes back rather than a timeout error, because the assertion that reads it
+ * names the rows that are still wrong.
+ */
+async function until<T>(
+  probe: () => Promise<T>,
+  ok: (value: T) => boolean,
+  timeoutMs: number,
+  what: string
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await probe();
+    if (ok(value)) return value;
+    if (Date.now() > deadline) {
+      console.log(`S6b MEASURE timed out waiting for ${what}`);
+      return value;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }
 
@@ -609,5 +636,157 @@ describe('Form (S6 spike)', () => {
         expect(num(report, 'inCells')).toBeLessThan(count);
       }
     }
+  });
+});
+
+// MARK: - E7: does `measure` say where the row is, or where the Form is?
+
+/** 24 rows: enough that the list scrolls on any phone, which is half the question. */
+const MEASURE_ROWS = 24;
+
+/** The row content of `MeasureForm`, kept by ref so a case can `measureInWindow` it. */
+const measured: Record<
+  string,
+  {
+    measureInWindow: (
+      callback: (x: number, y: number, width: number, height: number) => void
+    ) => void;
+  }
+> = {};
+
+/**
+ * A Form whose every row is measurable from JavaScript (`ref`) and reportable from native
+ * (`hybridRef`), so one case can ask both trees the same question.
+ */
+function MeasureForm() {
+  return (
+    <Form hybridRef={(view) => (forms.measure = view)} style={styles.form}>
+      <Form.Section title="Twenty-four">
+        {Array.from({ length: MEASURE_ROWS }, (_, index) => (
+          <Form.Row
+            hybridRef={(view) => (rows[`m${index}`] = view)}
+            key={`m${index}`}
+          >
+            <View
+              ref={(handle) => {
+                if (handle != null) measured[`m${index}`] = handle as never;
+              }}
+              style={styles.measured}
+              testID={`m${index}`}
+            >
+              <Text>Row {index}</Text>
+            </View>
+          </Form.Row>
+        ))}
+      </Form.Section>
+    </Form>
+  );
+}
+
+/** `measureInWindow` as a promise - the shadow tree's answer, in window points. */
+function measureInWindow(
+  testId: string
+): Promise<[number, number, number, number]> {
+  const handle = measured[testId];
+  if (handle == null)
+    throw new Error(`no measured view registered for "${testId}"`);
+  return new Promise((resolve) => {
+    handle.measureInWindow((x, y, width, height) =>
+      resolve([x, y, width, height])
+    );
+  });
+}
+
+/** `[x, y, w, h]` from a report's `window=` field, or null for a row with no window. */
+function windowOf(
+  report: Record<string, string>
+): [number, number, number, number] | null {
+  const box = report.window;
+  if (box == null || box === '-') return null;
+  const parts = box.split(',').map(Number);
+  return parts.length === 4 && parts.every(Number.isFinite)
+    ? (parts as [number, number, number, number])
+    : null;
+}
+
+/**
+ * Ask both trees where every row in a cell is, and return what disagrees.
+ *
+ * Rows without a cell are skipped rather than counted: their published position is derived
+ * from the list's layout, while `window=` is a view's real position, and there is no view to
+ * read for a recycled row. That is also why the case insists on a minimum count - "all zero
+ * rows agree" is a pass that proves nothing.
+ */
+async function compareRows(
+  what: string
+): Promise<{ compared: number; bad: string[] }> {
+  let compared = 0;
+  const bad: string[] = [];
+  for (let index = 0; index < MEASURE_ROWS; index += 1) {
+    const id = `m${index}`;
+    const report = await reportUntil(
+      () => rows[id]?.nuiTestRowReport(),
+      // A row in a section's holding view has no pixels to report (`-`), so it may answer
+      // with that instead of a box; anything else has to produce a box to be compared.
+      (r) =>
+        windowOf(r) != null || r.where === 'holding' || r.where === 'detached',
+      `${id} to have a window or be off screen`
+    );
+    const native = windowOf(report);
+    if (native == null) continue;
+    const measured2 = await measureInWindow(id);
+    compared += 1;
+    const off = Math.max(
+      Math.abs(measured2[0] - native[0]),
+      Math.abs(measured2[1] - native[1])
+    );
+    if (off > 1) {
+      bad.push(
+        `${id}: measureInWindow ${measured2.map(round1).join(',')} vs UIKit ` +
+          `${native.map(round1).join(',')} (off by ${round1(off)} pt)`
+      );
+    }
+  }
+  console.log(
+    `S6b MEASURE ${what}: compared=${compared} mismatched=${bad.length}` +
+      (bad.length > 0 ? ` - ${bad.join(' | ')}` : '')
+  );
+  return { compared, bad };
+}
+
+function round1(value: number): string {
+  return value.toFixed(1);
+}
+
+describe('Form measure (S6b spike, question 4)', () => {
+  it('measures a row as the row, before and after a scroll (E7)', async () => {
+    render(<MeasureForm />);
+    const form = await handleOf(() => forms.measure, 'the measuring Form');
+    await formReport(
+      (r) => num(r, 'rows') === MEASURE_ROWS,
+      `${MEASURE_ROWS} rows`,
+      'measure'
+    );
+
+    // At rest. Android is the control here: its rows never leave Yoga's box, so both trees
+    // have always agreed and a case that cannot see the difference is not worth running.
+    const atRest = await compareRows('at rest');
+    expect(atRest.bad).toEqual([]);
+    expect(atRest.compared).toBeGreaterThanOrEqual(10);
+
+    // Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do
+    // not, until the Form publishes where they came to rest. The poll is the settle - the
+    // number travels native -> JS -> React -> Fabric, and each hop is a turn of a queue.
+    const height = 180;
+    form.nuiTestScrollTo(height);
+    const scrolled = await until(
+      () => compareRows(`after ${height} pt`),
+      (r) => r.bad.length === 0 && r.compared >= 10,
+      20000,
+      'every row in a cell to measure where UIKit put it'
+    );
+    expect(scrolled.bad).toEqual([]);
+    expect(scrolled.compared).toBeGreaterThanOrEqual(10);
+    cleanup();
   });
 });

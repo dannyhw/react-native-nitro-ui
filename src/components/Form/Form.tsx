@@ -329,11 +329,29 @@ function RowRoot({
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
+  // iOS: where the Form says this row's cell came to rest, in the Form's own space
+  // (`onFrameMoved`). Null until the list settles the first time, when 0 is right: the
+  // first rows are at the top of the Form. Android never sets it - rows there stay where
+  // Yoga put them, which is the whole difference between the platforms.
+  const [cellOrigin, setCellOrigin] = useState<{ x: number; y: number } | null>(
+    null
+  );
+  const reportCellFrame = useStableCallback((x: number, y: number): void => {
+    setCellOrigin((previous) =>
+      previous != null && previous.x === x && previous.y === y
+        ? previous
+        : { x, y }
+    );
+  }) as NitroCallbackProp<(x: number, y: number) => void>;
+  // On iOS the row is drawn by its cell, and `NitroUiFormRowHostView` keeps the view at the
+  // origin UIKit gave it no matter what Yoga says - so this origin is *only* the shadow
+  // tree's copy of where the row is, which is what `measure`/`measureInWindow` return.
+  // Writing it is the difference between a row measuring as itself and as the Form (S6 Q4).
   const box: ViewStyle = IOS
     ? {
         position: 'absolute',
-        top: 0,
-        left: 0,
+        top: cellOrigin?.y ?? 0,
+        left: cellOrigin?.x ?? 0,
         width: width > 0 ? width : undefined,
       }
     : { marginVertical: gap / 2 };
@@ -346,6 +364,7 @@ function RowRoot({
       pressable={onPress != null}
       nuiPerfId={null}
       onPress={press}
+      onFrameMoved={reportCellFrame}
       hybridRef={hybridRefCallback ?? undefined}
     >
       {children}
