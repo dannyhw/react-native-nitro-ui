@@ -4,9 +4,6 @@ import android.app.Activity
 import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -14,7 +11,6 @@ import androidx.compose.material3.ButtonShapes
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.OutlinedButton
@@ -229,95 +225,31 @@ internal class ButtonModel : NitroUiModel() {
    *
    * The wire form is kept rather than the parsed source because it is what
    * `hybridRef` reports back and what a test compares against the string the
-   * wrapper built; [androidIconResolved] is the parsed half.
+   * wrapper built; [iconSlot] holds the parsed half.
    */
   var androidIcon: String? = null
 
   /**
-   * What that icon resolved to, as the composition reads it.
+   * Everything derived from [androidIcon], shared with `Menu`'s trigger.
    *
-   * Observed, unlike [androidIcon]: it is what the label is laid out next to, so
-   * resolving it changes the control's width. Nothing is loaded during composition
-   * — [resolveAndroidIcon] does it once per change, and a file load answers later,
-   * on the main thread.
+   * The rules live in [NitroUiIconSlot]: resolve once per change from
+   * `afterUpdate()`, reserve a file's slot before the bytes arrive, retire an answer
+   * whose generation has moved, and treat unresolvable artwork as no icon at all.
+   * Read it here as a property because the composition reads *this* model, and the
+   * state behind it is observed — so a glyph arriving is a recomposition of this
+   * control and nothing else.
    */
-  var androidIconContent by mutableStateOf<NitroUiIconContent>(NitroUiIconContent.Absent)
+  val iconSlot = NitroUiIconSlot()
 
-  /**
-   * The source [androidIconContent] was resolved for, so a commit that re-sends the
-   * same icon costs one comparison.
-   */
-  var androidIconResolved: NitroUiIconSource? = null
+  /** What the composition lays the label next to. Observed, through [iconSlot]. */
+  val androidIconContent: NitroUiIconContent
+    get() = iconSlot.content
 
-  /**
-   * Bumped every time the requested icon changes, including by recycle.
-   *
-   * A file load answers some frames later, and by then the Button may have been
-   * recycled and given another owner's icon, or asked for a different one. The
-   * callback carries the generation it was started under and is dropped if that is
-   * no longer the current one — which is also what makes a recycled control unable
-   * to draw the previous owner's glyph.
-   */
-  var androidIconGeneration = 0
-
-  /**
-   * Resolve [androidIcon], once, if it is not what [androidIconContent] already is.
-   *
-   * Called from `afterUpdate()` rather than from the setter, and behind the
-   * comparison above, because resolving is the expensive half of the prop: a
-   * resource lookup touches a `synchronized` table, and a file load starts a
-   * network read. Both belong in the one place a commit is applied, not repeated
-   * for each prop of that commit (AGENTS' perf contract), and neither belongs in
-   * composition, which runs again for reasons this has nothing to do with.
-   *
-   * A resource resolves here and now, on the thread already applying props. A file
-   * reserves the slot now and fills it later, because the size of the slot comes
-   * from the size ladder and never from the file — so waiting costs an empty box,
-   * not a wrong one, and the label beside it does not move when the bytes arrive.
-   *
-   * [artwork] is the seam: the production answer is [NitroUiAppIconArtwork], and
-   * `android/src/test` hands a map so the release path — the resource lookup for
-   * the name Metro filed a bundled asset under — is a JVM test rather than only an
-   * emulator run.
-   */
+  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
   fun resolveAndroidIcon(
     artwork: NitroUiIconArtwork,
   ) {
-    val source = NitroUiIconSource.parse(androidIcon)
-    if (source == androidIconResolved) {
-      return
-    }
-    androidIconResolved = source
-    val generation = ++androidIconGeneration
-    when (source) {
-      null -> androidIconContent = NitroUiIconContent.Absent
-
-      is NitroUiIconSource.Name -> androidIconContent = artwork.forName(source.name)
-
-      is NitroUiIconSource.Url -> {
-        val cached = artwork.cached(source.url)
-        if (cached != null) {
-          // A recycled control asking for an icon this process already read draws
-          // it in the same frame it mounted.
-          androidIconContent = NitroUiIconContent.Vector(cached)
-          return
-        }
-        if (artwork.knownBad(source.url)) {
-          androidIconContent = NitroUiIconContent.Absent
-          return
-        }
-        androidIconContent = NitroUiIconContent.Pending
-        artwork.read(source.url) { image ->
-          // On the main thread, which is the only thread allowed to write this.
-          if (generation == androidIconGeneration) {
-            // The answer to a load that failed is the answer round 1 gives a name
-            // that does not resolve: nothing drawn, nothing reserved.
-            androidIconContent =
-              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent
-          }
-        }
-      }
-    }
+    iconSlot.resolve(androidIcon, artwork)
   }
 
   /**
@@ -375,11 +307,7 @@ internal class ButtonModel : NitroUiModel() {
     accessibilityLabel = null
     systemImage = null
     androidIcon = null
-    androidIconContent = NitroUiIconContent.Absent
-    androidIconResolved = null
-    // Bump rather than reset: a load started by the previous owner is still in
-    // flight, and this is what retires it.
-    androidIconGeneration += 1
+    iconSlot.reset()
     sizingKey = ""
     onPress = null
     pixelReport = ""
@@ -796,43 +724,20 @@ internal fun NitroUiM3Button(
     }
   val labelStyle = buttonLabelStyle(scale)
   val shapes = buttonShapes(cornerFor(variant, shape), scale)
-  val painter = rememberIconPainter(icon)
-  val iconSize = ButtonDefaults.iconSizeFor(scale.height)
-  val iconSpacing = ButtonDefaults.iconSpacingFor(scale.height)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-    // The glyph goes in the slot Material's `Button` would use, drawn by
-    // [NitroUiIconGlyph] rather than by m3's `Icon` - see that function for why.
-    // It carries no content description: the Button's own node already names the
-    // control (`docs/architecture/core.md` §3), and a description here would make
-    // TalkBack read "Share, Share".
-    //
-    // The tint is `LocalContentColor`, read here inside the control's content, and
-    // not [buttonColors]' `contentColor`: the label below sets no colour of its
-    // own, so that local *is* the colour the label paints with, including the
-    // disabled state Material dims through it. `colors.contentColor` is the
-    // resting colour and ignores `enabled` - a glyph tinted with it keeps its full
-    // strength while the label fades, which the harness's disabled probe catches
-    // (`example/__tests__/Button.harness.tsx`, "draws the glyph in the control
-    // content colour").
-    if (painter != null) {
-      NitroUiIconGlyph(
-        painter = painter,
-        size = iconSize,
-        tint = LocalContentColor.current,
-        contentDescription = null,
-        modifier = Modifier.padding(end = iconSpacing),
-      )
-    } else if (icon != NitroUiIconContent.Absent) {
-      // `Pending`: nothing has arrived to paint, and the slot is painted anyway -
-      // as an empty one. This is the whole of D43's sizing rule at the one place it
-      // could be broken: the box comes from `iconSizeFor(scale)`, the same rung
-      // that sets the control's height, so the frame before the file and the frame
-      // after it are one box and the label beside the slot never moves. Skipping
-      // the empty case is invisible in a release build, where an icon is a
-      // resource and is never in flight, and in development it is a Button that
-      // grows sideways a few frames after the screen appears.
-      Spacer(modifier = Modifier.padding(end = iconSpacing).size(iconSize))
-    }
+    // The glyph goes in the slot Material's `Button` would use, in the one helper
+    // Menu's split trigger uses too - [NitroUiIconSlotContent]. It draws the artwork
+    // tinted with `LocalContentColor` (not [buttonColors]' resting `contentColor`,
+    // which ignores `enabled` and would leave a disabled control's glyph at full
+    // strength - the harness's disabled probe catches that), and it paints an empty
+    // slot for `Pending`, which is the whole of D43's sizing rule: the box comes from
+    // `iconSizeFor(scale)`, the same rung that sets the control's height, so the
+    // frame before a dev-server file and the frame after it are one box.
+    NitroUiIconSlotContent(
+      icon = icon,
+      size = ButtonDefaults.iconSizeFor(scale.height),
+      spacing = ButtonDefaults.iconSpacingFor(scale.height),
+    )
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
     // label truncates instead of painting outside its box (the iOS content does
