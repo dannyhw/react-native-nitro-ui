@@ -936,7 +936,7 @@ describe('Popover', () => {
         return (
           <Modal visible={modal} animationType="none">
             <View style={{ flex: 1 }}>
-              <Stage testId="in-modal" />
+              <Stage testId="in-modal" initial />
             </View>
           </Modal>
         );
