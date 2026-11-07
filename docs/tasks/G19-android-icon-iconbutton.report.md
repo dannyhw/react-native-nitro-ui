@@ -232,15 +232,15 @@ form, and iOS using `systemImage`. **IconButton stays out**, as the brief now sa
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1839 tests / 73 suites | `a8a616bb161f` | 2 m 44 s | start 12.4 / med 10.4 / max 14.6 |
-| `harness:ios` | **PASS** | 456 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (ios tree) | 14 m 03 s | start 3.6 / med 11.5 / max 195.2 |
-| `harness:android` | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (android tree) | 16 m 47 s | start 4.4 / med 5.1 / max 13.4 |
-| `real-input:ios` | **PASS** | — | `a8a616bb161f` (ios tree) | 29 m 25 s | start 6.7 / med 8.6 / max 71.8 |
-| `real-input:android` | **PASS** | — | `a8a616bb161f` (android tree) | 42 m 13 s | start 56.3 / med 5.6 / max 56.3 |
-| `harness:android:Button` | **PASS** | 21 tests / 1 suites | `a8a616bb161f` (android tree) | 39.0 s | start 5.7 / med 11.3 / max 13.9 |
-| `harness:android:draws%20the%20glyph:--background` | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
-| `harness:android:glyph` | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
-| `harness:ios:Button` | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
+| `check` (fix round 1) | **PASS** | 1839 tests / 73 suites | `a8a616bb161f` | 2 m 44 s | start 12.4 / med 10.4 / max 14.6 |
+| `harness:ios` (fix round 1) | **PASS** | 456 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (ios tree) | 14 m 03 s | start 3.6 / med 11.5 / max 195.2 |
+| `harness:android` (fix round 1) | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (android tree) | 16 m 47 s | start 4.4 / med 5.1 / max 13.4 |
+| `real-input:ios` (fix round 1) | **PASS** | — | `a8a616bb161f` (ios tree) | 29 m 25 s | start 6.7 / med 8.6 / max 71.8 |
+| `real-input:android` (fix round 1) | **PASS** | — | `a8a616bb161f` (android tree) | 42 m 13 s | start 56.3 / med 5.6 / max 56.3 |
+| `harness:android:Button` (fix round 1) | **PASS** | 21 tests / 1 suites | `a8a616bb161f` (android tree) | 39.0 s | start 5.7 / med 11.3 / max 13.9 |
+| `harness:android:draws%20the%20glyph:--background` (fix round 1) | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
+| `harness:android:glyph` (fix round 1) | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
+| `harness:ios:Button` (fix round 1) | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
 
 `need --for review` and `need --for merge` are both satisfied on this code tree, so the ledger wants
 nothing further from this round. Round 1's table above is labelled as round 1's: a gate appears in
@@ -360,35 +360,63 @@ fresh diff. `@expo/material-symbols@0.1.1` was fetched and *is* reachable, and i
 `star.xml` path data matches `star_24px.xml` segment for segment, which is the closest
 independent check available.
 
+Fixed by part B: `scripts/icons/fetch-material-symbols.mjs` now fetches both files at a pinned
+commit and records their digests in its lock, which `android-icons.test.js` re-checks at `check`
+time — the provenance is a script and a hash, not a README.
+
 ## Fix round 2
 
-**Lease:** none — part A only. FIX4's `NitroUiIcons.kt` is not on `origin/main`, so item 3,
-the glyph-check exemption and the fixture re-registration wait for part B; no gate ran.
-**Part A code `4c08f16e`.** 9 mutations, each reverted, in
-`docs/tasks/G19/mutations.json`. **The gate table above is stale** — `gate.mjs status`:
-0 green / 9 stale.
+**Lease:** `G19-3ttma` (`emulator-5570` + iPhone Air · Metro 8293). Part A `4c08f16e`, accepted;
+part B merges `origin/main` (FIX4, E3, X20) at `c487d84b`. 13 mutations in `docs/tasks/G19/mutations.json`,
+plus 3 organic reds.
 
-**1.** A bundler-derived name crosses with its own `res:` marker and is looked up verbatim:
-in a hoisted monorepo Metro's location is `/assets/../../node_modules/…`, whose name
-`__node_modules_expo_materialsymbols_star` passes no rule for hand-typed names. JS pins its
-name against `getAndroidResourceIdentifier`; a typed name keeps the rule.
-**2.** The answer an asset gets follows the dev-server origin, not `__DEV__` — React
-Native's own `isLoadedFromServer` question; the false dev-server warning for an embedded
-bundle is gone.
-**5.** Only a verdict on the *file* is remembered — a 4xx, a non-`<vector>`, a too-large
-file. A timeout or refused connection is not written down, so a Metro restart no longer
-sticks an icon until the app is killed. `NitroUiIconRead` and `NitroUiIconBadList` put that
-rule where a JVM test reaches it; `allowCoreThreadTimeOut` makes the worker's keep-alive
-true.
-**4.** `Menu` gained both rungs and `androidIcon` — sizing key, model, trigger `icon =`,
-split-button leading half, `menu.md` — sharing `NitroUiIconSlot` with `Button`, so reserve
-and retire are written once.
-**6.** Changeset rewritten as release notes; `ButtonSize`'s TSDoc now says what `button.md`
-measures: three rungs, one iOS height.
+**Part A.** A bundler-derived asset name crosses with its own `res:` marker and is looked up
+verbatim: `__node_modules_expo_materialsymbols_star` obeys no rule for typed names. An asset's
+answer follows the dev-server origin, not `__DEV__`. Only a verdict on the *file* is remembered,
+so a Metro restart no longer sticks an icon. `Menu` gained both rungs and
+`androidIcon` (sizing key, model, trigger `icon =`, split leading half, `menu.md`), sharing
+`NitroUiIconSlot` with `Button`. The changeset reads as release notes; `ButtonSize`'s TSDoc says
+what `button.md` measures.
+
+**Part B, item 3.** A `<vector>` in the app's resources goes through FIX4's `NitroUiIcons`
+(`ImageVector.vectorResource`) and is drawn at the slot's size; only a non-vector drawable
+rasterises, at its own. Round 1 stretched a 24 dp bitmap into the 32/40 dp slots and held one
+parsed shape in two caches. The root tag is read with `next()`, not `nextTag()` — `nextTag()`
+throws on AAPT2 output, so every drawable answered "not a vector". `android-icons.test.js`
+exempts one file by path, `NitroUiVectorDrawable.kt`, for `ImageVector.Builder` and `PathParser`
+only. The example's fixtures are Google's files, hash-checked under `exampleFiles` in FIX4's
+lock; four non-upstream ones state a reason. `MenuProps.hybridRef`'s inline handle had no
+`androidIcon` — `tsc` caught it. `etc/package-files.txt` and the API report are regenerated, and
+round 1's open fixture-provenance question closes with that lock.
+
+### Gates (fix round 2)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1863 tests / 75 suites | `829a6e682e46` | 2 m 45 s | start 3.5 / med 6.9 / max 13.6 |
+| `harness:ios` | **PASS** | 467 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (ios tree) | 11 m 21 s | start 4.7 / med 8.4 / max 33.1 |
+| `harness:android` | **PASS** | 518 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (android tree) | 15 m 36 s | start 30.2 / med 10.1 / max 53.8 |
+| `real-input:ios` | **PASS** | — | `829a6e682e46` (ios tree) | 28 m 40 s | start 2.5 / med 7.1 / max 219.6 |
+| `real-input:android` | **PASS** | — | `829a6e682e46` (android tree) | 41 m 26 s | start 5.5 / med 4.4 / max 25.0 |
+| `harness:android:-t:sharp` | stale | 1 failed of 518 tests / 25 suites | 977e600cbe93 (not this tree) | 45.3 s | start 5.1 / med 5.5 / max 5.6 |
+| `harness:android:Button` | stale | 1 failed of 21 tests / 1 suites | 2f7adac9a84f (not this tree) | 37.0 s | start 5.5 / med 4.7 / max 5.5 |
+| `harness:android:draws%20the%20glyph:--background` | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
+| `harness:android:glyph` | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
+| `harness:android:sharp` | stale | — | 72182da36f76 (not this tree) | 1.8 s | start 18.0 / med 18.0 / max 18.0 |
+| `harness:ios:Button` | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
+
+`need --for review` and `need --for merge` are both satisfied on this code tree, so the whole bar
+— `check`, both harnesses, both real-input runs — ran at `829a6e682e46`.
+
+One thing the table cannot show: the 09:50 `harness:android` line recorded **PASS** (678.9 s,
+518/518) and a `fail` line followed it, because that wrapper was still holding Metro when it was
+terminated to free the port for the next platform. The newest line is what `need` reads, so the
+row above is the 10:14 re-run, which ran to its own end; both lines are in the exported ledger.
 
 ### Red proofs (fix round 2)
 
-Nine mutations, one per line; `->` separates test, mutation and the line that went red.
+Part A's nine mutations, then part B's four plus the three that went red on a device or in `tsc`
+without a mutation. `->` separates test, mutation and the line that went red.
 
 - `iconSource.test.ts` -> release name sent bare -> `sends a bundled asset as that name, marked as the bundler's`: Expected `res:src_assets_icons_share_24px`, Received `src_assets_icons_share_24px` (+3 more).
 - `NitroUiIconSourceTest.kt` -> `parse` drops the `res:` branch -> `aBundlerDerivedNameIsLookedUpAsSent` (kt:128), `twoDifferentSourcesAreNeverEqual` (kt:146).
@@ -399,22 +427,34 @@ Nine mutations, one per line; `->` separates test, mutation and the line that we
 - `menuSizingKey.test.tsx` -> prop resolved, never sent -> `Expected: "share" / Received: undefined` (+1).
 - `NitroUiIconReleasePathTest.kt` -> Menu stores, never resolves -> `aMenuTriggerResolvesTheNameExactlyAsAButtonDoes` (kt:259), `aMenuRecycleRetiresThePreviousOwnersFileLoad` (kt:301).
 - `NitroUiIconFailureMemoryTest.kt` -> remember every non-Loaded answer -> `aRefusedConnectionLeavesTheUrlReadable` (kt:59) expected `false`, was `true`; `aDevServerStillCompilingIsNotAVerdict` (kt:100).
+- `android-icons.test.js` -> the exemption widened from two patterns to the whole parser file -> the expected finding `NitroUiVectorDrawable.kt:3: a path command` is missing: a hand-typed path inside the parser would be silent too.
+- `android-icons.test.js` -> a stray `ImageVector.Builder` in `HybridNitroUiButton.kt`, next to the exemption -> `+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:42: ImageVector.Builder` — the exemption is one file, not a pattern.
+- `android-icons.test.js` -> one vertex of the fetched `star_24px.xml` moved by a unit -> `star_24px.xml: sha256 b60478e6fe5c5584…, recorded 49d8cf2a439f18bc… - edited by hand? Rerun scripts/icons/fetch-material-symbols.mjs`.
+- `android-icons.test.js` -> a hand-typed `nitroui_sneaky.xml` dropped into the example's icons folder -> `neither fetched from Material Symbols by fetch-material-symbols.mjs nor declared in EXAMPLE_FIXTURES with the reason it cannot be upstream`.
+- `tsc` -> not a mutation: part A shipped the prop and the spec handle but left the inline copy on `MenuProps.hybridRef` behind -> `Menu.harness.tsx: Property 'androidIcon' does not exist on type …` (fixed by `06e1ef10`).
+- `Button.harness.tsx` -> not a mutation, a device: round 1's rasterising loader put back in the APK -> `close_24px` in the 40 dp slot reported 957 tinted pixels against the Metro-drawn file's 1138 (0.841, under the 0.95 line); the vector branch with `nextTag()` as its peek measured the same 957, because AAPT2's compiled XML makes `nextTag()` throw and every drawable answered "not a vector".
+- `Menu.harness.tsx` -> not a mutation either: three of the four new cases measured on their first device run; the fourth died with `"button-icon" (button-icon) never reported a measured size`, because the parity case asked the Menu handle map about a Button (`9feb4290`).
 
-Green without a mutation: 1850 JS tests / 73 suites, 144 JVM tests, `nitrogen:check`
-(404 files, no drift), `registry:check`, `autolinking:check`, `manifest:check`,
-`readme:check`, eslint, prettier. The four new `Menu.harness.tsx` cases — rung heights at
-`xlarge`/`xxlarge`, the glyph's box against a Button's, the split leading half, the
-unresolvable name — are written and **not yet shown red on a device**: measuring needs the
-lease this round did not take, and so does the iOS compile (`swiftc -parse` is clean).
+Green without a mutation: 1863 JS tests / 75 suites, 144 JVM tests, `nitrogen:check`,
+`registry:check`, `autolinking:check`, `manifest:check`, `readme:check`, eslint, prettier, and
+`bun run task-ready`. The four new `Menu.harness.tsx` cases — rung heights at `xlarge`/`xxlarge`,
+the glyph's box against a Button's, the split leading half, the unresolvable name — ran and
+passed on both platforms this time, 30 Menu tests each; so did iOS, which part A could only
+parse-check.
 
 ### Follow-ups (fix round 2)
 
-- Part B: `res:` names in a release APK are `aapt`-legal but unusual — worth one on-device
-  release-form proof, not just the JVM name pin.
-- `example/__tests__/Button.harness.tsx:1693` still says "the top two are the same control"
-  where `button.md` measures three rungs at one height; a comment only, left alone by scope.
-- `Menu.harness.tsx`'s `sizingKey` mirror and `Menu.tsx`'s `sizingVariantFor` are two
-  copies of one key format; a shared helper would make the poisoning self-updating.
-- Carried from part A's brief, unchanged: OTA `file://` bundles, `..` in dev URLs, `URI()`
-  on paths with spaces, a release-bundle content check, the root `android:alpha`, iOS
-  `pixelProbes` on recycle.
+- `harness:android`: `Slider › steps to the next legal value when a screen reader asks` went red in
+  the 09:11 run (`expected [ 3, 6, 3 ] to deeply equal [ 3, 6, 9 ]`, at `load1` 7 rising to 30 with
+  E5 beside me). Both runs on this tree drew 518/518, and the line is in four other tasks' logs:
+  E5/F1's flake, not this diff's.
+- Tooling: a gate whose child is killed after its summary was written appends a `fail` line over
+  the recorded `pass`, and `need` reads the newest. Leave a finished harness run's Metro alone and
+  it goes by itself (~2 min); `stopOwnMetro` never reaches it while the wrapper waits.
+- `Menu.harness.tsx`'s `sizingKey` mirror and `Menu.tsx`'s `sizingVariantFor` are two copies of one
+  key format; a shared helper would make the poisoning self-updating.
+- `example/__tests__/Button.harness.tsx:1693` still says "the top two are the same control" where
+  `button.md` measures three rungs at one height; a comment only, left alone by scope.
+- Carried from part A's brief, unchanged: OTA `file://` bundles, `..` in dev URLs, `URI()` on paths
+  with spaces, a release-bundle content check, the root `android:alpha`, iOS `pixelProbes` on
+  recycle.
