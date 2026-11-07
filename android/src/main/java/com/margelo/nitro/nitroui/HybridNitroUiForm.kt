@@ -135,8 +135,29 @@ internal class HybridNitroUiForm(
       "heights=$heights",
       "taps=${rows.sumOf { it.taps }}",
       "pressed=${rows.count { it.pressed }}",
+      "scroll=${String.format("%.1f", scrollOffsetDp())}",
       "keyboard=${if (avoidsKeyboard) "rn" else "off"}",
     ).joinToString(";")
+  }
+
+  /**
+   * How far the Form's own `ScrollView` has scrolled, in dp.
+   *
+   * S6b question 4 needs this number to be read rather than assumed: React Native's
+   * `measure` walks the shadow tree and subtracts no scroll offset (0.88's
+   * `UIManagerBinding.cpp` calls the shared `dom::measureInWindow`, which sums Yoga
+   * origins and never looks at a view), so a row in this `ScrollView` measures where it
+   * was laid out, not where it is drawn. The `E7` case adds this back on Android and
+   * asserts it is the whole difference.
+   */
+  private fun scrollOffsetDp(): Double {
+    val density = view.resources.displayMetrics.density
+    var parent: Any? = view.parent
+    while (parent is View) {
+      if (parent is ScrollView) return parent.scrollY / density
+      parent = parent.parent
+    }
+    return 0.0
   }
 
   override fun nuiTestScrollTo(y: Double) {
