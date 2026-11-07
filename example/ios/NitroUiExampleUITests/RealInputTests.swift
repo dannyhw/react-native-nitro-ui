@@ -5619,12 +5619,19 @@ final class RealInputTests: XCTestCase {
         + "in its lower half, so this cannot see the keyboard covering it."
     )
 
-    XCTAssertEqual(try read(Echo.formFieldFocus), "no", "the field should not be focused before it is tapped")
-    field.fingerTap()
+    XCTAssertEqual(
+      try read(Echo.formFieldFocus),
+      "no",
+      "the field should not be focused before it is tapped"
+    )
+    // `focusByTap` retries a dropped delivery (three taps, like every other control here),
+    // because question 5 is about the keyboard, not about the tap rate: a single tap that the
+    // InputManager swallowed would otherwise be reported as a field the keyboard covered.
+    try focusByTap(field, echo: Echo.formFieldFocus, as: "the note field at the bottom of the form")
     if !waitUntil({ self.echoText(Echo.formFieldFocus) == "yes" }, window: reactTimeout) {
-      dumpHierarchy("the note field never took focus")
+      dumpHierarchy("the note field's focus never reached React")
       XCTFail(
-        "a real tap on \(identifier) did not focus it: \"\(Echo.formFieldFocus)\" still reads "
+        "the field took the keyboard focus but \"\(Echo.formFieldFocus)\" still reads "
           + "\"\(echoText(Echo.formFieldFocus))\" after \(Int(reactTimeout))s, so question 5 has "
           + "nothing to measure."
       )

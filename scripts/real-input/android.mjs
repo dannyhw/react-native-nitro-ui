@@ -4098,10 +4098,17 @@ const CHECKS = {
         t.requireEcho(ECHO.formFieldFocus),
         'no'
       );
-      await t.tapNode(field);
+      // `tapUntilValue` retries a tap the InputManager dropped, the way every other
+      // control here does: question 5 is about the keyboard, not about the tap rate, and a
+      // single swallowed tap would be reported as a field the keyboard covered.
       t.log.checkEquals(
         'a real tap focuses the field at the bottom of a long Form',
-        t.waitForEcho(ECHO.formFieldFocus, 'yes', 'the focus'),
+        await t.tapUntilValue(
+          () => field,
+          ECHO.formFieldFocus,
+          'yes',
+          'a real tap on the note field at the bottom of the Form'
+        ),
         'yes'
       );
       t.log.check('the IME says its input view is on screen', t.imeShown());
