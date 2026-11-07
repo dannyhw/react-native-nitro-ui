@@ -28,6 +28,26 @@ function runPatch(root) {
   });
 }
 
+/**
+ * The views `patch-nitrogen.mjs` lists as content-children views, read out of its source.
+ *
+ * Read rather than imported: the script is an ESM module that touches `import.meta`, which
+ * jest's CommonJS transform refuses, and a fixture that hardcoded the list would pass while
+ * the real patch failed on a view it never wrote.
+ */
+function contentChildrenViews() {
+  const source = readFileSync(script, 'utf8');
+  const list = /export const CONTENT_CHILDREN_VIEWS = \[([\s\S]*?)\];/.exec(
+    source
+  );
+  if (list == null) {
+    throw new Error(
+      'patch-nitrogen.mjs no longer writes CONTENT_CHILDREN_VIEWS as an array literal.'
+    );
+  }
+  return [...list[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+}
+
 function withFixture(name, fn) {
   const workDir = mkdtempSync(join(tmpdir(), 'patch-nitrogen-'));
   try {
@@ -363,10 +383,12 @@ describe('patch-nitrogen: intrinsic sizing', () => {
 describe('patch-nitrogen: content children (G14)', () => {
   const MM =
     'nitrogen/generated/ios/c++/views/HybridNitroUiBottomSheetComponent.mm';
+  const mmPath = (view) =>
+    `nitrogen/generated/ios/c++/views/${view}Component.mm`;
   /** A generated iOS component view, cut down to what the patch reads. */
-  const generated = () =>
+  const generated = (view = 'HybridNitroUiBottomSheet') =>
     [
-      '@implementation HybridNitroUiBottomSheetComponent {',
+      `@implementation ${view}Component {`,
       '}',
       '- (void) updateView {',
       '  [self setContentView:view];',
@@ -375,20 +397,37 @@ describe('patch-nitrogen: content children (G14)', () => {
       '',
     ].join('\n');
 
-  /** A scratch tree that declares the BottomSheet, with `mm` as its generated view. */
+  /**
+   * A scratch tree that declares every listed view, with `mm` as the BottomSheet's
+   * generated view and a valid one for each of the others. The list grew with the
+   * Popover (G22), and a fixture that declares only the first entry would fail every run
+   * for a view it never wrote.
+   */
   function withSheetTree(mm, fn, { declare = true } = {}) {
     const root = mkdtempSync(join(tmpdir(), 'patch-nitrogen-sheet-'));
     try {
       mkdirSync(join(root, 'nitrogen/generated/ios/c++/views'), {
         recursive: true,
       });
+      const listed = contentChildrenViews();
+      const declared = {};
+      for (const view of listed) {
+        declared[view.replace(/^Hybrid/, '')] = {};
+      }
       writeFileSync(
         join(root, 'nitro.json'),
         JSON.stringify({
-          autolinking: declare ? { NitroUiBottomSheet: {} } : {},
+          autolinking: declare ? declared : {},
         })
       );
-      if (mm != null) writeFileSync(join(root, MM), mm);
+      for (const view of listed) {
+        const file = join(root, mmPath(view));
+        if (view === 'HybridNitroUiBottomSheet') {
+          if (mm != null) writeFileSync(file, mm);
+        } else {
+          writeFileSync(file, generated(view));
+        }
+      }
       return fn(root);
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -483,5 +522,17 @@ describe('patch-nitrogen: content children (G14)', () => {
     expect(mm).toContain(
       '[content insertSubview:childComponentView atIndex:index];'
     );
+  });
+
+  it('is applied to every listed view the repo generates', () => {
+    // A view added to the list whose generated `.mm` the repo never re-patched is the
+    // failure this catches: its React Native children would mount beside the content view
+    // and stay in the app's window, which no unit test can see.
+    for (const view of contentChildrenViews()) {
+      const mm = readFileSync(join(repoRoot, mmPath(view)), 'utf8');
+      expect(`${view}: ${mm.includes('// nitro-ui: content children')}`).toBe(
+        `${view}: true`
+      );
+    }
   });
 });
