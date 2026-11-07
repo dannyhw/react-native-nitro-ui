@@ -36,6 +36,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import org.xmlpull.v1.XmlPullParser
 
 /*
  * `androidIcon`: how a nitro-ui control draws one of the app's own drawable
@@ -598,10 +599,24 @@ internal fun loadIconArtwork(
     ?: NitroUiIconContent.Absent
 }
 
+/** How far [isVectorDrawable] will walk a drawable's XML looking for its root tag. */
+private const val MAX_TAGS_TO_REACH_THE_ROOT = 8
+
+/** The one drawable root tag whose artwork is geometry rather than a picture. */
+internal const val NITRO_UI_VECTOR_DRAWABLE_TAG = "vector"
+
 /**
  * Whether the drawable [resId] names is a `<vector>` — decided the way
  * `painterResource` decides it: by the root tag of the drawable's own XML, with
  * nothing decoded and nothing kept.
+ *
+ * Walked with `next()`, not `nextTag()`. Measured on the emulator: `nextTag()` throws
+ * `XmlPullParserException: Binary XML file line #-1: expected start or end tag` on an
+ * AAPT2-compiled drawable — the first event it reports is not a tag — so a strict walk
+ * answers "not a vector" for every drawable in the app, the parsed door never opens, and
+ * the icons go back to being bitmaps without a word said about it. That is the exact
+ * failure the `xxlarge` probe in `example/__tests__/Button.harness.tsx` measures, and it
+ * is why this function walks instead of asking once.
  *
  * Everything else answers no and takes the rasterising branch: a PNG (whose id has no
  * XML to read, so this throws first), a `layer-list`, an `<adaptive-icon>`, and an
@@ -619,9 +634,27 @@ private fun isVectorDrawable(
   var xml: android.content.res.XmlResourceParser? = null
   try {
     xml = context.resources.getXml(resId)
-    xml.nextTag()
-    return xml.name == "vector"
+    var event = xml.eventType
+    // Bounded, because the answer needs the first tag and nothing else: a parser that
+    // never reaches one is treated as "not a vector", which is the safe answer.
+    var tagsToRead = MAX_TAGS_TO_REACH_THE_ROOT
+    while (event != XmlPullParser.START_TAG &&
+      event != XmlPullParser.END_DOCUMENT &&
+      tagsToRead > 0
+    ) {
+      val next = xml.next()
+      if (next == event && tagsToRead < MAX_TAGS_TO_REACH_THE_ROOT) {
+        // A parser that reports the same event twice is not making progress; stop asking.
+        break
+      }
+      event = next
+      tagsToRead -= 1
+    }
+    return event == XmlPullParser.START_TAG && xml.name == NITRO_UI_VECTOR_DRAWABLE_TAG
   } catch (error: Throwable) {
+    // A PNG has no compiled XML to read and answers with `NotFoundException`, and asking
+    // is how a drawable's kind is decided without decoding it. Anything else is the same
+    // safe answer; the rasterising half warns if it cannot draw either.
     return false
   } finally {
     // `getXml` hands out a parser the caller owns, and the answer needs one tag of it.

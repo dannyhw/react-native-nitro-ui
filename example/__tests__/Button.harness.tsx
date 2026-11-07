@@ -2134,9 +2134,9 @@ describe('androidIcon · an icon the app imports (D43)', () => {
    * tolerance admits, so it reads as *less* of the colour the probe was asked for, which
    * is what a box measurement cannot see. Fix round 2 routes a `<vector>` resource
    * through Compose's own vector loader, both roads draw at the size the slot asks for,
-   * and the ratio goes to 1. `0.95` sits between the two measured states with room for a
-   * rebuild: round 1's answer misses it, and nothing about antialiasing at 1.67x closes
-   * that gap.
+   * and the same two controls then report 1138 and 1138 — 1.000. `0.95` sits between the
+   * two measured states with room for a rebuild: round 1's answer misses it, and nothing
+   * about antialiasing at 1.67x closes that gap.
    */
   const SHARP_RATIO = 0.95;
 
