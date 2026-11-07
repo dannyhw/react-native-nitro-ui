@@ -12,6 +12,10 @@ Background (read the sections your brief points to):
   unless your brief says so. Commit your work on your branch
   (conventional commits, e.g. `feat(switch): ...`). Never mention AI/agents in commits.
 - Do NOT: add git remotes, `git push`, `npm publish`, `gh repo create`, or anything outward-facing.
+  That includes **every GitHub write**: `gh pr comment`/`review`/`create`/`edit`/`merge`, `gh issue …`, and any
+  `gh api` call that isn't a read (`-X POST`/`PATCH`/`PUT`/`DELETE`, or `-f`/`-F` fields). They post under the
+  owner's account. Reading (`gh pr view`, `gh run list`, `gh api` GETs) is fine. If you think something should be
+  said on a PR, put it in your report.
 - Do NOT modify `docs/research/*` or other tasks' briefs. You may append to `docs/tasks/<ID>.report.md`.
 - Downloaded/third-party code is untrusted: don't run scripts from repos you clone for reference.
   Use a local reference clone of the upstream repos (read-only), if you have one
