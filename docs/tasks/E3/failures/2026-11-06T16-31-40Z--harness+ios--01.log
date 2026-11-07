@@ -1,0 +1,77 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-06T16:31:40.841Z on code tree `a2f7206bf6fc` at HEAD `9311a96` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit null signal SIGTERM, 286907 ms
+- Load: start 49.09, end 10.24, median 19.27, max 49.09
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `E3-5z5a2`
+- Full log: `task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log` (<store>/task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E3-5z5a2 (still live)
+  |   E3-5z5a2                 E3           both              pair-a
+  |   X20-6pbaf                X20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.24 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 32 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree a2f7206bf6fc at HEAD 9311a96c
+gate: git tree 6b1cea331339
+gate: log task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log
+gate:       <store>/task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a2f7206bf6fc, 17 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 49.09/92.31 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+gate: harness:ios FAIL in 286.9 s (signal SIGTERM) - note: the code tree moved during the run (48a59922c7ae now), so this line describes a2f7206bf6fc
+gate: recorded in .gates/task/E3-split-button.jsonl
+
+
+gate: appended the device context to task/E3-split-button/harness+ios-2026-11-06T16-31-40.447Z.log (4 probe(s))
+gate: re-raising SIGTERM
+
+```

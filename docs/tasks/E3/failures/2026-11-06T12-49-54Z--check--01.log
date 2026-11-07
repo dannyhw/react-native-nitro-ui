@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T12:49:54.337Z on code tree `37f052865161` at HEAD `d5b0f67` (branch `task/E3-split-button`)
+- Command: `bun run check`
+- Result: fail, exit 1, 148867 ms
+- Load: start 2.54, end 4.08, median 4.46, max 6.15
+- Device: none recorded (not a device gate)
+- Full log: `task/E3-split-button/check-2026-11-06T12-49-54.069Z.log` (<store>/task/E3-split-button/check-2026-11-06T12-49-54.069Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/ci-workflows.test.js (74.839 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check`
+- `expect(received).toEqual(expected) // deep equality`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2869 — the rest is in the full log above)
+
+```
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (47.413 s)
+PASS scripts/__tests__/gate.test.js (54.978 s)
+PASS scripts/__tests__/gate-logs.test.js (57.198 s)
+FAIL scripts/__tests__/ci-workflows.test.js (74.839 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2123,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+PASS scripts/__tests__/bench-baseline-merge.test.js (80.457 s)
+PASS scripts/__tests__/bench-gate.test.js (144.179 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/ci-workflows.test.js (74.839 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2123,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+
+Test Suites: 1 failed, 69 passed, 70 total
+Tests:       1 failed, 1773 passed, 1774 total
+Snapshots:   0 total
+Time:        144.56 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 148.9 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+
+```

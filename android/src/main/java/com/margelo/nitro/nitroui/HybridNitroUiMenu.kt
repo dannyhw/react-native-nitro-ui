@@ -97,12 +97,14 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
   var rawRows: Array<NitroUiMenuRow> = emptyArray()
 
   /**
-   * Whether a `primaryAction` was passed. Stored, never used.
+   * Whether a `primaryAction` was passed - the flag that chooses the trigger's layout.
    *
-   * iOS reads it to choose `Menu`'s other `init` - tap acts, long-press opens. On
-   * Android a tap opens and the callback is never called, so the flag has no
-   * Compose-side meaning; keeping it costs one field and keeps the prop's round-trip
-   * honest.
+   * Observed, because it is drawn: iOS reads it to choose `Menu`'s other `init` (tap
+   * runs the action, a long-press opens), and since E3 Android draws
+   * [MenuSplitButton] - Material's split button - whenever it is set, and a plain
+   * button when it is not (`docs/components/menu.md`, "Primary action"). That is why
+   * the flag is a prop of its own rather than a test for a non-null callback: a
+   * callback prop is always sent (D7b), so its presence cannot be the flag.
    */
   var hasPrimaryAction by mutableStateOf(false)
 
@@ -123,8 +125,41 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
   /** Whether the menu closed. Android calls this; iOS cannot (see its `onOpen`). */
   var onClose: (() -> Unit)? = null
 
-  /** Never called on Android. See [hasPrimaryAction]. */
+  /**
+   * The app's primary action, fired by the leading half of the split trigger on
+   * Android and by a tap on iOS (DECISIONS D29, as E3 lifts it for Android).
+   *
+   * Only ever called through [applyPrimaryAction], which is also what refuses it while
+   * the control is disabled.
+   */
   var primaryAction: (() -> Unit)? = null
+
+  // --- Split-trigger geometry, for `nuiTestMenuReport`'s `split` / `leading` /
+  // `trailing`. None of it is rendered from: the halves render themselves. ---
+
+  /**
+   * Whether this mount's composition drew the split trigger ([MenuSplitButton] reports
+   * it in and out).
+   *
+   * Deliberately not `hasPrimaryAction`: that answers "what did JS send", this answers
+   * "what did Android compose", and the harness assertion "with `primaryAction` set the
+   * trigger *is* a split button" is about the second one. A recycle disposes the
+   * composition, which clears it, so a reused control cannot report a layout its next
+   * owner never asked for.
+   */
+  private var splitDrawn = false
+
+  /** The leading half's box in the composition's own view, in px, or -1 unread. */
+  private var leadingLeft = -1f
+  private var leadingTop = -1f
+  private var leadingRight = -1f
+  private var leadingBottom = -1f
+
+  /** The trailing half's box, same space, same unread marker. */
+  private var trailingLeft = -1f
+  private var trailingTop = -1f
+  private var trailingRight = -1f
+  private var trailingBottom = -1f
 
   // --- Popup geometry, for `nuiTestMenuReport`. None of it is rendered from. ---
 
@@ -321,13 +356,17 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
   }
 
   /**
-   * `expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>`.
+   * `expanded=<0|1>;live=<n>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n>` +
+   * `;drawn=<tree>;split=<0|1>;leading=<l>,<t>,<r>,<b>;trailing=<l>,<t>,<r>,<b>`.
    *
    * The anchor half is the composition-relative box plus the composition's own place on
-   * screen, summed here rather than stored. Formatted under a lock because the seam may
-   * be called from the JS thread while the UI thread writes the fields; the `live` half
-   * is process-wide because a mount dropped mid-menu has nothing left to ask (`Q3` §2 is
-   * why a harness assertion then reads a *delta* of it, not a number).
+   * screen, summed here rather than stored - and the two halves are summed the same way,
+   * so all three rects are screen pixels and a harness can press one. `split` is whether
+   * the composition drew the split trigger (see [splitDrawn] for why that is not
+   * [hasPrimaryAction]). Formatted under a lock because the seam may be called from the JS
+   * thread while the UI thread writes the fields; the `live` half is process-wide because
+   * a mount dropped mid-menu has nothing left to ask (`Q3` §2 is why a harness assertion
+   * then reads a *delta* of it, not a number).
    */
   fun readMenuReport(): String {
     val open = expanded
@@ -350,9 +389,34 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
         } +
         ";menu=$menuLeft,$menuTop,$menuRight,$menuBottom;rows=$menuRowCount" +
         // The popup's own semantics tree, as it was last laid out (E2).
-        ";drawn=${drawn ?: "-1"}"
+        ";drawn=${drawn ?: "-1"}" +
+        // The split trigger, and where its two halves landed (E3). A control with no
+        // `primaryAction` answers `split=0` with two unread boxes - "not drawn", which is
+        // a different claim from the `-1` iOS answers for all three because iOS cannot
+        // measure a layout it does not have (see its `nuiTestMenuReport`).
+        ";split=${if (splitDrawn) 1 else 0}" +
+        ";leading=${halfBox(leadingLeft, leadingTop, leadingRight, leadingBottom)}" +
+        ";trailing=${halfBox(trailingLeft, trailingTop, trailingRight, trailingBottom)}"
     }
   }
+
+  /**
+   * One half's composition-relative box as screen pixels, or `-1,-1,-1,-1` unread - the
+   * same sum [readMenuReport] does for the anchor, and refused the same way: an unread
+   * half must not read as a box at the origin.
+   */
+  private fun halfBox(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+  ): String =
+    if (left >= 0f && compositionLeft >= 0) {
+      "${(left + compositionLeft).toInt()},${(top + compositionTop).toInt()}," +
+        "${(right + compositionLeft).toInt()},${(bottom + compositionTop).toInt()}"
+    } else {
+      "-1,-1,-1,-1"
+    }
 
   /**
    * A row was picked, however it was picked.
@@ -390,6 +454,84 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     setOpen(false)
   }
 
+  /**
+   * The leading half was pressed: run the app's primary action, and open nothing.
+   *
+   * The one entry point for "the action half was pressed", so a real press and the
+   * semantics action restated on the half cannot diverge. It never touches `expanded`:
+   * on Android the split exists precisely so that a press on the action is not a press
+   * on the list (`docs/components/menu.md`), and an `onOpen` here would be the app
+   * watching a menu it did not open come up. A disabled control refuses, the same way
+   * [applyPick] does - Material also keeps a disabled button inert, so this is the
+   * model's own rule rather than a second line of defence.
+   */
+  fun applyPrimaryAction() {
+    if (enabled) {
+      primaryAction?.invoke()
+    }
+  }
+
+  /**
+   * The list half was reached through its accessibility action: open the list if it is
+   * down, close it if it is up.
+   *
+   * A finger on the same half already toggles, because Material's trailing button is a
+   * *checked* button whose `checked` is [expanded] (`MenuSplitButton.kt`), so the value
+   * it reports back is `!expanded`. The semantics action the half restates is a separate
+   * arm and does not go through Material at all, so it has to ask for the same
+   * transition itself: a bare `setOpen(true)` there left TalkBack unable to dismiss the
+   * list it had just opened (`docs/components/menu.md`, "Primary action"). A disabled
+   * control refuses, the same rule [applyPrimaryAction] has.
+   */
+  fun applyListAction() {
+    if (enabled) {
+      setOpen(!expanded)
+    }
+  }
+
+  /** Record that this mount's composition drew, or stopped drawing, the split trigger. */
+  fun noteSplitDrawn(drawn: Boolean) {
+    splitDrawn = drawn
+  }
+
+  /** Record where the leading half ended up, inside the composition's own view. */
+  fun noteLeadingBox(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+  ) {
+    leadingLeft = left
+    leadingTop = top
+    leadingRight = right
+    leadingBottom = bottom
+  }
+
+  /** Record where the trailing half - the one the popup hangs off - ended up. */
+  fun noteTrailingBox(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+  ) {
+    trailingLeft = left
+    trailingTop = top
+    trailingRight = right
+    trailingBottom = bottom
+  }
+
+  /** Forget both halves: no split trigger of this mount is composed any more. */
+  fun clearSplitBoxes() {
+    leadingLeft = -1f
+    leadingTop = -1f
+    leadingRight = -1f
+    leadingBottom = -1f
+    trailingLeft = -1f
+    trailingTop = -1f
+    trailingRight = -1f
+    trailingBottom = -1f
+  }
+
   override fun reset() {
     // First, ahead of the rows and the trigger (`docs/tasks/Q1-menu-design.md` §5): a
     // popup that survived a recycle would hang over the next row's content, and the
@@ -406,6 +548,18 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     rawRows = emptyArray()
     hasPrimaryAction = false
     accessibilityLabel = null
+    // The split trigger's own layout witness. `hasPrimaryAction` above is the prop; this
+    // is the layout, and a recycled control that kept it would report a second hit target
+    // its next owner never asked for.
+    //
+    // Two paths clear the same pair, this line and the split composition's own `onDispose`,
+    // so neither is visible alone: `Menu.harness.tsx`'s remount gate went red only with
+    // *both* removed, and `MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` is the
+    // test that guards this line by itself (rows 7, 9 and 10 of
+    // `docs/tasks/E3/mutations.json`). Belt and braces is the point - the belt is just not
+    // what the device sees.
+    splitDrawn = false
+    clearSplitBoxes()
     clearMenuFrame()
     anchorLeft = -1f
     anchorTop = -1f
@@ -483,10 +637,6 @@ private class MenuHost(
     val entries = model.entries
     val expanded = model.expanded
     val enabled = model.enabled
-    val accessibilityLabel = model.accessibilityLabel
-    // The trigger's name: an explicit `accessibilityLabel`, else the visible
-    // `title`. The rows are in a window of their own, so the label belongs here.
-    val spokenLabel = accessibilityLabel ?: model.title
     // The view that owns *this composition*: the control's own when it is mounted
     // alone, the `<Host>`'s `AndroidComposeView` when it is hosted. Everything the
     // popup has to agree with is read relative to it, which is why one reading
@@ -507,6 +657,67 @@ private class MenuHost(
       placedView.addOnLayoutChangeListener(listener)
       onDispose { placedView.removeOnLayoutChangeListener(listener) }
     }
+    // One callback for both triggers: where the *popup* is composed decides what the
+    // list hangs off (see `PlainTrigger` and `MenuSplitButton`), and everything else
+    // about the list - its rows, its witness, its dismissal - is one call site.
+    val anchorModifier =
+      Modifier.onGloballyPositioned { coordinates ->
+        // Where the trigger ended up, inside the composition's own view: the
+        // space a popup is positioned in. A layout callback, so it costs no
+        // recomposition and writes no observed state.
+        val box = coordinates.boundsInRoot()
+        model.noteAnchorBox(box.left, box.top, box.right, box.bottom)
+      }
+    val popup: @Composable () -> Unit = {
+      // The list is as wide as its rows need: Material's rows keep their own 112 dp
+      // floor and 280 dp cap, and a group label is capped the same way, which is what
+      // iOS's menu does. `expanded && enabled`, so a disabled trigger never composes a
+      // list even for the frame before `disabled`'s close lands.
+      NitroUiMenuPopup(
+        expanded = expanded && enabled,
+        onDismissRequest = {
+          // Everything that closes a popup without a choice: outside tap, the
+          // system back gesture, the composition going away.
+          model.setOpen(false)
+        },
+        witness = model,
+      ) {
+        MenuGroups(
+          entries = entries,
+          menuTitle = null,
+          enabled = enabled,
+          onPick = { id -> choose(id) },
+          onRowsComposed = model::noteMenuRows,
+        )
+      }
+    }
+    if (model.hasPrimaryAction) {
+      // Material 3 Expressive's split button: the leading half runs `primaryAction`,
+      // the trailing half opens this list. iOS's answer to the same prop is the other
+      // `Menu` init - tap acts, long-press opens - and each is the platform's own
+      // idiom for one button with two jobs (DECISIONS D29, as E3 lifts it here).
+      MenuSplitButton(model = model, popup = popup, modifier = anchorModifier)
+    } else {
+      PlainTrigger(model = model, popup = popup, modifier = anchorModifier)
+    }
+  }
+
+  /**
+   * The single-button trigger: what a Menu with no `primaryAction` draws, and the box
+   * `docs/components/menu.md` measures against a `Button`'s. Split out so the two
+   * triggers of one Menu read as the two components they are, each with its own popup
+   * placement - which is the whole anchor difference between them.
+   */
+  @Composable
+  private fun PlainTrigger(
+    model: MenuModel,
+    popup: @Composable () -> Unit,
+    modifier: Modifier,
+  ) {
+    val enabled = model.enabled
+    // The trigger's name: an explicit `accessibilityLabel`, else the visible
+    // `title`. The rows are in a window of their own, so the label belongs here.
+    val spokenLabel = model.accessibilityLabel ?: model.title
     // The trigger and the popup share one `Box`, and the box *is* the trigger: a
     // Compose `Popup` is positioned against the layout it is composed in, so this is
     // what anchors the list to the button rather than to whatever contains it - the
@@ -516,15 +727,8 @@ private class MenuHost(
     // `Menu.harness.tsx` bounds the gap between the button and the window, and the
     // G7b mutant (a 64 dp offset) is the recipe that shows the bound is live.
     Box {
-      val anchorModifier =
-        Modifier
-          .onGloballyPositioned { coordinates ->
-            // Where the trigger ended up, inside the composition's own view: the
-            // space a popup is positioned in. A layout callback, so it costs no
-            // recomposition and writes no observed state.
-            val box = coordinates.boundsInRoot()
-            model.noteAnchorBox(box.left, box.top, box.right, box.bottom)
-          }
+      val triggerModifier =
+        modifier
           // One accessibility node, carrying name, value, role and state - the
           // `clearAndSetSemantics` fix, not `semantics`, for the reason
           // `HybridNitroUiPicker` records from `uiautomator dump` (G6 review M3):
@@ -551,33 +755,12 @@ private class MenuHost(
         scale = model.scale,
         enabled = enabled,
         tint = model.tintColor,
-        modifier = anchorModifier,
-        // A tap opens the list. With a `primaryAction` passed, iOS runs that on tap
-        // and opens on a long-press; Material 3 has no such split, so Android always
-        // opens and never calls the callback (`docs/components/menu.md`).
+        modifier = triggerModifier,
+        // No `primaryAction`, so a tap opens the list. With one, Android draws the
+        // split trigger above instead - the two idioms never share a box.
         onClick = { model.setOpen(true) },
       )
-      // The list is as wide as its rows need: Material's rows keep their own 112 dp
-      // floor and 280 dp cap, and a group label is capped the same way, which is what
-      // iOS's menu does. `expanded && enabled`, so a disabled trigger never composes a
-      // list even for the frame before `disabled`'s close lands.
-      NitroUiMenuPopup(
-        expanded = expanded && enabled,
-        onDismissRequest = {
-          // Everything that closes a popup without a choice: outside tap, the
-          // system back gesture, the composition going away.
-          model.setOpen(false)
-        },
-        witness = model,
-      ) {
-        MenuGroups(
-          entries = entries,
-          menuTitle = null,
-          enabled = enabled,
-          onPick = { id -> choose(id) },
-          onRowsComposed = model::noteMenuRows,
-        )
-      }
+      popup()
     }
   }
 
@@ -766,10 +949,16 @@ class HybridNitroUiMenu(
   override var hasPrimaryAction: Boolean
     get() = model.hasPrimaryAction
     set(next) {
-      // Stored, never used: iOS chooses `Menu`'s other `init` from it (tap acts,
-      // long-press opens). Material 3 has no such split, so on Android a tap opens
-      // and the callback is never called.
+      if (next == model.hasPrimaryAction) {
+        return
+      }
+      // Drawn, not bookkeeping: iOS chooses `Menu`'s other `init` from it (tap acts,
+      // long-press opens) and Android chooses its trigger's *layout* - a split button
+      // with a second hit target, which is wider than the single button it replaces.
+      // Compose's next measure reports that new box, so - like `title`, whose label is
+      // the other thing that moves it - the batch is marked dirty.
       model.hasPrimaryAction = next
+      host.markDirty()
     }
 
   override var testID: Variant_NullType_String
@@ -852,7 +1041,8 @@ class HybridNitroUiMenu(
   override var primaryAction: (() -> Unit)?
     get() = model.primaryAction
     set(next) {
-      // Stored, never called: see [hasPrimaryAction].
+      // Stored, and run only by the leading half: see [hasPrimaryAction] and
+      // [MenuModel.applyPrimaryAction].
       model.primaryAction = next
     }
 
