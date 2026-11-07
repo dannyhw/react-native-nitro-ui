@@ -5648,7 +5648,7 @@ final class RealInputTests: XCTestCase {
     // is there and the inset is used when it is not. Neither is assumed.
     _ = waitUntil({ self.echoText(Echo.formKeyboardInset) != "-" }, window: 4)
     let insetText = echoText(Echo.formKeyboardInset)
-    let inset = Double(insetText) ?? 0
+    let inset = CGFloat(Double(insetText) ?? 0)
     let keyboard = app.keyboards.firstMatch
     let keyboardTop: CGFloat
     let from: String
@@ -5664,10 +5664,10 @@ final class RealInputTests: XCTestCase {
     } else {
       dumpHierarchy("no keyboard window and no keyboard inset after focusing \(identifier)")
       throw XCTSkip(
-        "nothing says a keyboard came up: the simulator shows no keyboard window (its hardware "
-          + "keyboard is connected) and the Form's own report reads keyboard=\(insetText), so "
-          + "there is no keyboard for the field to stay above. Not a pass: iOS question 5 is "
-          + "unmeasured on this host."
+        "nothing says a keyboard came up: XCUITest sees no keyboard window (a simulator with "
+          + "its hardware keyboard connected shows none) and the Form's own report reads "
+          + "keyboard=\(insetText), so there is no keyboard for the field to stay above. Not a "
+          + "pass: iOS question 5 is unmeasured on this host."
       )
     }
     let frame = field.frame
