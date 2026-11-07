@@ -1,0 +1,88 @@
+# Failure excerpt — real-input:android:--control:button
+
+- Ran: 2026-11-07T06:31:20.156Z on code tree `ea6e7f333968` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node scripts/real-input/android.mjs --control button`
+- Result: fail, exit 1, 99342 ms
+- Load: start 3.80, end 2.24, median 3.41, max 3.80
+- Device: android / device `emulator-5574` / lease `X21-znj7u`
+- Full log: `task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log` (<store>/task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X21-znj7u (still live)
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.24 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:button
+gate: node scripts/real-input/android.mjs --control button (cwd .)
+gate: code tree ea6e7f333968 at HEAD 9019f302
+gate: git tree 05a1de15a4bf with a DIRTY worktree (not reusable)
+gate: log task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log
+gate:       <store>/task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  button: real tap presses the Button, and a disabled one stays pressed-out
+
+real-input (android): Error: real-input: nitroui.example stopped running while navigating to the "Button" tab, so no press can bring up its screen. Not retried. The app's log ends:
+(no nitroui.example process is running)
+Crash buffer:
+(the crash buffer is empty)
+gate: real-input:android:--control:button FAIL in 99.3 s
+gate: recorded in .gates/task/X21-recurring-flakes.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X21-recurring-flakes/real-input+android+--control+button-2026-11-07T06-31-19.737Z.log (5 probe(s))
+
+```

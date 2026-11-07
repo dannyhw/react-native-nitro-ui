@@ -1,0 +1,63 @@
+# Failure excerpt — real-input:ios:--control:text-field
+
+- Ran: 2026-11-07T06:47:32.322Z on code tree `25940392b212` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node scripts/real-input/ios.mjs --control text-field`
+- Result: fail, exit 1, 139790 ms
+- Load: start 23.14, end 37.28, median 25.18, max 37.28
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `X21-znj7u`
+- Full log: `task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log` (<store>/task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X21-znj7u (still live)
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 37.28 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 20 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:text-field
+gate: node scripts/real-input/ios.mjs --control text-field (cwd .)
+gate: code tree 25940392b212 at HEAD 9019f302
+gate: git tree 05a1de15a4bf with a DIRTY worktree (not reusable)
+gate: log task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log
+gate:       <store>/task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+gate: real-input:ios:--control:text-field FAIL in 139.8 s
+gate: recorded in .gates/task/X21-recurring-flakes.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X21-recurring-flakes/real-input+ios+--control+text-field-2026-11-07T06-47-31.804Z.log (4 probe(s))
+
+```

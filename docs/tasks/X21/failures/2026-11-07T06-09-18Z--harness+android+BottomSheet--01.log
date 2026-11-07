@@ -1,0 +1,131 @@
+# Failure excerpt — harness:android:BottomSheet
+
+- Ran: 2026-11-07T06:09:18.371Z on code tree `81b94ad8d553` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android BottomSheet`
+- Result: fail, exit 1, 168847 ms
+- Load: start 3.89, end 5.50, median 4.00, max 5.50
+- Device: android / device `emulator-5574` / lease `X21-znj7u`
+- Full log: `task/X21-recurring-flakes/harness+android+BottomSheet-2026-11-07T06-09-18.371Z.log` (<store>/task/X21-recurring-flakes/harness+android+BottomSheet-2026-11-07T06-09-18.371Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/BottomSheet.harness.tsx`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 1)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 2)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 3)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 4)`
+- `● BottomSheet · 50 cycles › cycles 10 more times (round 5)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/harness+android+BottomSheet-2026-11-07T06-09-18.371Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X21-znj7u (still live)
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.50 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 81 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android BottomSheet
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 81b94ad8d553, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.89/14.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X21-recurring-flakes/harness+android+BottomSheet-2026-11-07T06-09-18.371Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/BottomSheet.harness.tsx
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 1)
+
+    "cycle" never counted ten mounts and ten unmounts in round 1: mounts=10, unmounts=9
+
+      [0m [90m 358 |[39m         [33m:[39m [36mnull[39m[33m,[39m
+       [90m 359 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 360 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 361 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 362 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 363 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+
+    "cycle" never counted ten mounts and ten unmounts in round 2: mounts=20, unmounts=9
+
+      [0m [90m 358 |[39m         [33m:[39m [36mnull[39m[33m,[39m
+       [90m 359 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 360 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 361 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 362 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 363 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 3)
+
+    "cycle" never counted ten mounts and ten unmounts in round 3: mounts=30, unmounts=9
+
+      [0m [90m 358 |[39m         [33m:[39m [36mnull[39m[33m,[39m
+       [90m 359 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 360 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 361 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 362 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 363 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 4)
+
+    "cycle" never counted ten mounts and ten unmounts in round 4: mounts=40, unmounts=9
+
+      [0m [90m 358 |[39m         [33m:[39m [36mnull[39m[33m,[39m
+       [90m 359 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 360 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 361 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 362 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 363 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 5)
+
+    "cycle" never counted ten mounts and ten unmounts in round 5: mounts=50, unmounts=9
+
+      [0m [90m 358 |[39m         [33m:[39m [36mnull[39m[33m,[39m
+       [90m 359 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 360 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 361 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 362 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 363 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       5 failed, 22 passed, 27 total
+Snapshots:   0 total
+Time:        167.467 s
+Ran all test suites matching BottomSheet.
+
+
+
+```
