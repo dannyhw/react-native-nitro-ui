@@ -69,6 +69,7 @@ export {
 
 export {
   Progress,
+  type ProgressAppearance,
   type ProgressProps,
   type ProgressVariant,
 } from './components/Progress/Progress';

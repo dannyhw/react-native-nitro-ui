@@ -22,6 +22,8 @@ namespace margelo::nitro::nitroui::views {
                                                          const react::RawProps& rawProps):
     react::ViewProps(context, sourceProps, rawProps, filterObjectKeys),
     variant(nitro::ReactProp<std::string>::fromRawValue("NitroUiProgress", "variant", rawProps, sourceProps.variant)),
+    appearance(nitro::ReactProp<std::string>::fromRawValue("NitroUiProgress", "appearance", rawProps, sourceProps.appearance)),
+    contained(nitro::ReactProp<bool>::fromRawValue("NitroUiProgress", "contained", rawProps, sourceProps.contained)),
     value(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiProgress", "value", rawProps, sourceProps.value)),
     tintColor(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiProgress", "tintColor", rawProps, sourceProps.tintColor)),
     trackColor(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiProgress", "trackColor", rawProps, sourceProps.trackColor)),
@@ -38,6 +40,8 @@ namespace margelo::nitro::nitroui::views {
   bool HybridNitroUiProgressProps::filterObjectKeys(const std::string& propName) {
     switch (hashString(propName)) {
       case hashString("variant"): return true;
+      case hashString("appearance"): return true;
+      case hashString("contained"): return true;
       case hashString("value"): return true;
       case hashString("tintColor"): return true;
       case hashString("trackColor"): return true;
