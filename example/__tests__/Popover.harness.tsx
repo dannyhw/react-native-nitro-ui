@@ -358,11 +358,11 @@ const nothingLeft = (baseline: Report) => (report: Report) =>
   report.live === '0' &&
   (IOS
     ? report.windows === '0' &&
-      report.controllers <= baseline.controllers &&
-      report.touchRoots <= baseline.touchRoots
+      num(report, 'controllers') <= num(baseline, 'controllers') &&
+      num(report, 'touchRoots') <= num(baseline, 'touchRoots')
     : report.roots === '0' &&
-      (report.lifecycleObservers ?? baseline.lifecycleObservers) ===
-        baseline.lifecycleObservers);
+      num(report, 'lifecycleObservers') ===
+        num(baseline, 'lifecycleObservers'));
 
 /** No popover window is left anywhere, read through a live mount. */
 async function waitForNothingLeft(testId: string, what: string) {
@@ -384,9 +384,11 @@ type Rect = { x: number; y: number; width: number; height: number };
 /** `x,y,w,h` from a report field, or `null` for `-`. */
 function rectOf(field: string | undefined): Rect | null {
   if (field == null || field === '-') return null;
-  const parts = field.split(',').map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return null;
-  return { x: parts[0], y: parts[1], width: parts[2], height: parts[3] };
+  const [x, y, width, height] = field.split(',').map(Number);
+  if ([x, y, width, height].some((n) => n == null || Number.isNaN(n))) {
+    return null;
+  }
+  return { x: x!, y: y!, width: width!, height: height! };
 }
 
 function reset() {
@@ -441,8 +443,8 @@ function isSize(value: string, w: number, h: number): boolean {
   const parts = value.split('x').map(Number);
   return (
     parts.length === 2 &&
-    Math.abs(parts[0] - w) <= 1 &&
-    Math.abs(parts[1] - h) <= 1
+    Math.abs(parts[0]! - w) <= 1 &&
+    Math.abs(parts[1]! - h) <= 1
   );
 }
 
@@ -489,6 +491,11 @@ describe('Popover', () => {
         );
         const up = await waitForUp(id);
         const scale = scaleOf(up);
+        // The content lives where the popover is, not where the anchor is: the node
+        // stays behind as the anchor's neighbour and its one child is what native moves.
+        expect(num(up, 'children')).toBe(1);
+        expect(IOS ? up.inPopover : up.inPopup).toBe('1');
+        if (IOS) expect(up.hidden).toBe('1');
         const asked = askedPx(up);
         // What native asked for *is* what Yoga laid out: no measuring, no guessing, and
         // no platform default in between.
@@ -504,7 +511,7 @@ describe('Popover', () => {
         // One size, from the first frame to the last, and it is the box.
         const seen = drawn(up);
         expect(seen.distinct).toHaveLength(1);
-        expect(isSize(seen.distinct[0], asked.w, asked.h)).toBe(true);
+        expect(isSize(seen.distinct[0] ?? '', asked.w, asked.h)).toBe(true);
         expect(isSize(seen.first, asked.w, asked.h)).toBe(true);
         expect(isSize(seen.last, asked.w, asked.h)).toBe(true);
         // The witness saw more than the one frame it asserts on, so "one size" is a

@@ -7,7 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { act, render, type RenderResult } from '@testing-library/react-native';
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Dimensions, Text } from 'react-native';
 
 import { Popover } from '../components/Popover/Popover';
@@ -68,7 +68,7 @@ function nodeOf(view: RenderResult): Json {
     if (json.type === 'NitroUiPopover') found.push(json);
   });
   expect(found).toHaveLength(1);
-  return found[0];
+  return found[0]!;
 }
 
 /** The content box: the node's one element child, which native measures the popover from. */
@@ -304,7 +304,7 @@ describe('Popover · the handshake (D33)', () => {
 describe('Popover · onDismiss and the content', () => {
   it('reports a dismissal only when a presentation really ended', async () => {
     const dismissed = jest.fn();
-    const shown = (presented: boolean): ReactNode => (
+    const shown = (presented: boolean): ReactElement => (
       <Popover
         isPresented={presented}
         onDismiss={dismissed}
