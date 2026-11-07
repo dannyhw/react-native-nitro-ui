@@ -102,6 +102,6 @@
 | X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merged (1 impl + 1 fix round; merge gates 5/5 first run) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
 | FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
-| E4 | Material 3 Expressive pass 2: Progress `variant="loading"` (+ `contained`) and `appearance="wavy"` (Q8 C10, D40) | Apex | Opus | merge round (fix round 1 accepted at `62bb79ec`: sizing id per shape, wave stopped off-window, claims corrected) |
+| E4 | Material 3 Expressive pass 2: Progress `variant="loading"` (+ `contained`) and `appearance="wavy"` (Q8 C10, D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, Android real-input needed 3 runs for the Slider drag flake E5 is fixing) |
 | E5 | Slider: a real drag start on Android (Q8 C9), and the real-input `hosted-slider` drag flake | Apex | Opus | running |
-| FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | running |
+| FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | merge round on mac-1 (fix round 1 accepted at `277a2e75`: glyph test widened, stale comment fixed) |
