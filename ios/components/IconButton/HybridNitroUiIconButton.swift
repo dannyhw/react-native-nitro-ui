@@ -366,16 +366,21 @@ final class HybridNitroUiIconButton: HybridNitroUiIconButtonSpec, RecyclableView
   ///
   /// The engine's fallback is keyed by component alone, so this is one number for
   /// every configuration (`HybridNitroUiButton.swift` explains why): here it is
-  /// the medium `.bordered` control at its own glyph, and `docs/components/icon-button.md`
-  /// carries the measured rung table. Unlike Button, no configuration of this
-  /// control is *much* wider than this - the glyph is the whole content - so one
-  /// number is a fair first frame for every rung rather than a compromise between
-  /// a title and a paragraph.
+  /// the default configuration - the **press** form at `medium`/`uniform` with the
+  /// variant and shape defaults - and `docs/components/icon-button.md` carries the
+  /// measured rung table. Unlike Button, no configuration of this control is *much*
+  /// wider than this - the glyph is the whole content - so one number is a fair
+  /// first frame for every rung rather than a compromise between a title and a
+  /// paragraph.
   ///
-  /// Measured on iOS 27 (iPhone 17 simulator): `medium` + `standard` + a 24 pt
-  /// symbol is 32.0 x 32.0 pt, and the bordered variants land on the same box at
-  /// the same rung. See the table in the docs page for every rung.
-  private static let fallbackSize = (width: 32.0, height: 32.0)
+  /// Measured on the device (`harness:ios`'s Conformance run compares this row
+  /// against the control's own measurement): `standard` + `medium` with a 24 pt
+  /// `xmark` is 25 x 23 pt - the glyph plus whatever the `.borderless` style adds,
+  /// which is the least of the four variants. The first version of this row said
+  /// 32 x 32 from an off-device estimate and went red against the real 25 x 23, and
+  /// the same control measured 15.33 x 15 before the rung sized the symbol at all.
+  /// See the table in the docs page for every rung.
+  private static let fallbackSize = (width: 25.0, height: 23.0)
 
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.intrinsic.rawValue)
