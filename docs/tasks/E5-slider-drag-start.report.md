@@ -209,3 +209,17 @@ need: merge against .gates/task/E5-merge.jsonl; code diff base 2ed9415 touches i
   note: treated as both platforms (outside the known prefixes): example/__tests__/HostControls.harness.tsx, example/__tests__/Slider.harness.tsx, example/src/HostScreen.tsx, example/src/SliderScreen.tsx, scripts/real-input/android.mjs, scripts/real-input/report.mjs, …
 need: 1 gate(s) missing for merge: real-input:ios
 ```
+
+## Questions for orchestrator
+
+`real-input:ios` cannot go green on this tree, and the choice is yours, not mine.
+
+- **Land X21 first, then re-run this round (recommended).** X21's `8fcdd714` rewrites exactly
+  the failing check — one keystroke per witness, plus the retry the check never had. Merging
+  their branch moves the iOS tree, so budget a fresh `real-input:ios` and `harness:ios` at
+  minimum.
+- **Merge E5 with this line documented.** `need --for merge` stays unsatisfied on
+  `real-input:ios`. The failure is X21 item 1, hit by X19, E2, E3, G16 and E5; three runs here
+  (26 m, 26 m and a 7 m targeted probe) failed one assertion at `RealInputTests.swift:3721`.
+- **Have me relax the check instead.** It sits in `RealInputTests.swift`, which X21 is editing
+  right now — two branches in that file is how the next conflict starts, so I did not.
