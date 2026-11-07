@@ -83,6 +83,36 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
    */
   var systemImage by mutableStateOf<String?>(null)
 
+  /**
+   * The trigger's Android glyph, in the wire form the wrapper built: a resource name,
+   * or a `url:` string for a file to read (`NitroUiIconSource`).
+   *
+   * The same string `Button` is sent and resolved the same way, because the trigger
+   * *is* a [NitroUiM3Button] — `docs/components/menu.md` promises a Menu's box is a
+   * Button's box, and the glyph is the one thing about that box a Menu used to be
+   * unable to ask for. Stored, not observed: the composition reads [androidIconContent].
+   */
+  var androidIcon: String? = null
+
+  /**
+   * Everything derived from [androidIcon] — the same [NitroUiIconSlot] `ButtonModel`
+   * uses, so the rules about when an icon is resolved, when its slot is reserved, and
+   * when a late answer has been retired by a recycle are written once for both
+   * controls. See that class for the rules.
+   */
+  val iconSlot = NitroUiIconSlot()
+
+  /** What the trigger lays its label next to. Observed, through [iconSlot]. */
+  val androidIconContent: NitroUiIconContent
+    get() = iconSlot.content
+
+  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
+  fun resolveAndroidIcon(
+    artwork: NitroUiIconArtwork,
+  ) {
+    iconSlot.resolve(androidIcon, artwork)
+  }
+
   /** The items, as the popup draws them. Observed: writing them recomposes the list. */
   var entries by mutableStateOf<List<MenuEntry>>(emptyList())
 
@@ -544,6 +574,11 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     enabled = true
     tintColor = null
     systemImage = null
+    androidIcon = null
+    // Clears the resolved source, retires any file load the previous owner started,
+    // and puts the slot back to "nothing asked for" — the same reset `ButtonModel`
+    // does, from the same class.
+    iconSlot.reset()
     entries = emptyList()
     rawRows = emptyArray()
     hasPrimaryAction = false
@@ -755,6 +790,10 @@ private class MenuHost(
         scale = model.scale,
         enabled = enabled,
         tint = model.tintColor,
+        // The same slot, painter and empty-but-reserved `Pending` box a Button draws —
+        // [NitroUiM3Button] is shared, which is what keeps `docs/components/menu.md`'s
+        // "a Menu's box is a Button's box" true for a control with a glyph in it.
+        icon = model.androidIconContent,
         modifier = triggerModifier,
         // No `primaryAction`, so a tap opens the list. With one, Android draws the
         // split trigger above instead - the two idioms never share a box.
@@ -773,6 +812,16 @@ class HybridNitroUiMenu(
 
   private val model = MenuModel()
   private val host = MenuHost(reactContext, reactContext.currentActivity, model)
+
+  /**
+   * The control's half of icon resolution, exactly as `HybridNitroUiButton` holds it:
+   * the app's resources and the shared file cache, bound to this control's `Context`
+   * ([NitroUiIconArtwork]).
+   *
+   * Held rather than built per commit — a prop commit is not a place to allocate, and
+   * the `Context` it captures is the one [host] already holds.
+   */
+  private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
   /** The Nitro `view` - created once here and never replaced. */
   override val view: View
@@ -946,6 +995,20 @@ class HybridNitroUiMenu(
       model.systemImage = next.asSecondOrNull()
     }
 
+  override var androidIcon: Variant_NullType_String
+    get() =
+      model.androidIcon?.let { Variant_NullType_String.Second(it) }
+        ?: Variant_NullType_String.First(NullType.NULL)
+    set(next) {
+      val name = next.asSecondOrNull()
+      if (name == model.androidIcon) {
+        return
+      }
+      // Stored only: the glyph is resolved in `afterUpdate()`, never here, and the
+      // width it changes is reported by Compose's next measure.
+      model.androidIcon = name
+    }
+
   override var hasPrimaryAction: Boolean
     get() = model.hasPrimaryAction
     set(next) {
@@ -1049,6 +1112,12 @@ class HybridNitroUiMenu(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
+    // The trigger's icon first, if it changed — the same order Button keeps, for the
+    // same reason: a resource resolved here is drawn in this commit, and a file that
+    // has to be read reserves its slot in this commit and fills it later. Doing it in
+    // the setter would repeat a resource lookup or a socket read for every prop of the
+    // batch (AGENTS' perf contract).
+    model.resolveAndroidIcon(iconArtwork)
     // No controlled value and no handshake, so there is nothing to reconcile: one
     // commit per React commit (`docs/architecture/core.md` section 12). A pick
     // changes no rendered box either, so no size report is held against a batch.

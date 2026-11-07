@@ -239,6 +239,88 @@ class NitroUiIconReleasePathTest {
    * the two lines around it and is covered on the emulator, in
    * `example/__tests__/Button.harness.tsx`.
    */
+  /**
+   * The same rules on the Menu's trigger (G19 fix round 2, item 4).
+   *
+   * A Menu that gained the prop but resolved it differently from `Button` would draw
+   * a glyph with a different lifecycle than the control it is documented to be the
+   * same as: resolved in the wrong place, reserved too late, or — the one a device
+   * cannot show you — answered into a recycled control by its previous owner's load.
+   * Both models read [NitroUiIconSlot], so these three lines are the proof that Menu
+   * really goes through it rather than past it.
+   */
+  @Test
+  fun aMenuTriggerResolvesTheNameExactlyAsAButtonDoes() {
+    val artwork = FakeArtwork(drawables = setOf(bundledShare))
+    val menu = MenuModel().apply { androidIcon = bundledShare }
+
+    menu.resolveAndroidIcon(artwork)
+
+    assertEquals(listOf(bundledShare), artwork.asked)
+    assertTrue(
+      "and the trigger has artwork to draw",
+      menu.androidIconContent is NitroUiIconContent.Vector
+    )
+
+    // The trigger is Button's box, so it has Button's no-icon answer when the name is
+    // not in the table: nothing drawn, nothing reserved.
+    val missing = MenuModel().apply { androidIcon = bundledStar }
+    missing.resolveAndroidIcon(artwork)
+    assertEquals(NitroUiIconContent.Absent, missing.androidIconContent)
+  }
+
+  /** A Menu with no glyph asks for nothing at all, prop or file. */
+  @Test
+  fun aMenuWithNoIconAsksForNothing() {
+    val artwork = FakeArtwork(drawables = setOf(bundledShare))
+    val menu = MenuModel()
+
+    menu.resolveAndroidIcon(artwork)
+
+    assertEquals(NitroUiIconContent.Absent, menu.androidIconContent)
+    assertEquals(emptyList<String>(), artwork.asked)
+    assertEquals(emptyList<String>(), artwork.read)
+  }
+
+  /**
+   * The recycle rule, on the control that did not have an icon until now.
+   *
+   * A Menu is recycled by the same sizing engine as everything else, and its file
+   * load answers frames later — by which time the trigger may belong to a row with a
+   * different glyph. [NitroUiIconSlot.reset] is what retires the old answer, and the
+   * generation counter means the row shows its own icon or none, never the last
+   * owner's.
+   */
+  @Test
+  fun aMenuRecycleRetiresThePreviousOwnersFileLoad() {
+    val old = "http://10.0.2.2:8081/old.xml"
+    val artwork = FakeArtwork(drawables = setOf(bundledShare))
+    val menu = MenuModel().apply { androidIcon = "url:$old" }
+
+    menu.resolveAndroidIcon(artwork)
+    assertEquals(NitroUiIconContent.Pending, menu.androidIconContent)
+
+    menu.reset()
+    menu.androidIcon = bundledShare
+    menu.resolveAndroidIcon(artwork)
+    assertTrue(menu.androidIconContent is NitroUiIconContent.Vector)
+
+    artwork.answerWith(artwork.image)
+    assertTrue(
+      "the retired load cannot overwrite the recycled Menu's own glyph",
+      menu.androidIconContent is NitroUiIconContent.Vector
+    )
+    assertEquals(
+      "and a recycled Menu clears the prop it was given, like every other field",
+      null,
+      MenuModel().apply {
+        androidIcon = bundledShare
+        resolveAndroidIcon(artwork)
+        reset()
+      }.androidIcon
+    )
+  }
+
   private class FakeArtwork(
     private val drawables: Set<String>,
   ) : NitroUiIconArtwork {

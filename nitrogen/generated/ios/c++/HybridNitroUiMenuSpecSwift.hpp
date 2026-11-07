@@ -120,6 +120,13 @@ namespace margelo::nitro::nitroui {
     inline void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) noexcept override {
       _swiftPart.setSystemImage(systemImage);
     }
+    inline std::variant<nitro::NullType, std::string> getAndroidIcon() noexcept override {
+      auto __result = _swiftPart.getAndroidIcon();
+      return __result;
+    }
+    inline void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) noexcept override {
+      _swiftPart.setAndroidIcon(androidIcon);
+    }
     inline bool getHasPrimaryAction() noexcept override {
       return _swiftPart.hasPrimaryAction();
     }

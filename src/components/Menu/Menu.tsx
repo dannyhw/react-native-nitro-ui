@@ -1,6 +1,13 @@
 import { type ColorValue, type ViewProps } from 'react-native';
 
 import type { ButtonSize, ButtonVariant } from '../Button/Button';
+import { warnAndroidIconName } from '../../iconName';
+import {
+  androidIconUrl,
+  androidIconResourceName,
+  resolveAndroidIcon,
+  type AndroidIconProp,
+} from '../../iconSource';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
@@ -39,6 +46,26 @@ export interface MenuProps extends ViewProps {
   disabled?: boolean | undefined;
   /** Leading SF Symbol name on the trigger. iOS only in v0.1. */
   systemImage?: string | undefined;
+  /**
+   * Leading glyph on the trigger for Android: the same artwork {@link
+   * ButtonProps.androidIcon} takes, in the same two forms — a Metro asset
+   * (`androidIcon={require('./icons/share.xml')}`) or an Android resource name
+   * (`'share'`). **Android only** — iOS draws {@link systemImage} and ignores this,
+   * so a Menu with a glyph on both platforms sends both and needs no
+   * `Platform.select`.
+   *
+   * The trigger is a Button, so every rule the Button's icon has is this prop's
+   * too: the glyph is sized by the size ladder and never by the file, it takes the
+   * control's own text colour, and artwork that cannot be resolved draws nothing
+   * and reserves nothing. When `primaryAction` makes Android draw the split button,
+   * the glyph goes on the leading half, where the label is.
+   *
+   * `docs/components/button.md`, "Android icons", is the shared reference.
+   *
+   * Like {@link systemImage} this affects the control's width, so it is part of the
+   * size configuration.
+   */
+  androidIcon?: AndroidIconProp | undefined;
   /** Trigger colour: SwiftUI `.tint()` / the variant's container colour. */
   tintColor?: ColorValue | undefined;
   /**
@@ -131,7 +158,13 @@ const VARIANTS: readonly ButtonVariant[] = [
   'text',
   'elevated',
 ];
-const SIZES: readonly ButtonSize[] = ['small', 'medium', 'large'];
+const SIZES: readonly ButtonSize[] = [
+  'small',
+  'medium',
+  'large',
+  'xlarge',
+  'xxlarge',
+];
 
 const FIELD_SEPARATOR = '|';
 
@@ -143,9 +176,10 @@ function escapeField(value: string): string {
 /**
  * The size configuration of one Menu, as the sizing engine sees it.
  *
- * The trigger is a Button, so its key is Button's (`variant|size|systemImage|title`,
- * `Button.tsx`) with one field added: `variant|size|action|systemImage|title`, where
- * `action` is `'action'` when `primaryAction` is set and `'plain'` when it is not.
+ * The trigger is a Button, so its key is Button's (`variant|size|systemImage|
+ * androidIcon|title`, `Button.tsx`) with one field added:
+ * `variant|size|action|systemImage|androidIcon|title`, where `action` is `'action'`
+ * when `primaryAction` is set and `'plain'` when it is not.
  * That fifth decides the box because on Android it changes the *layout* - a split
  * button is two containers beside a gap, so it is wider than the single button it
  * replaces (E3). iOS ignores the field and pays for it with one extra cache entry per
@@ -161,6 +195,7 @@ function sizingVariantFor(
   size: ButtonSize,
   hasPrimaryAction: boolean,
   systemImage: string | undefined,
+  androidIcon: string | undefined,
   title: string
 ): string {
   return [
@@ -168,6 +203,7 @@ function sizingVariantFor(
     size,
     hasPrimaryAction ? 'action' : 'plain',
     escapeField(systemImage ?? ''),
+    escapeField(androidIcon ?? ''),
     escapeField(title),
   ].join(FIELD_SEPARATOR);
 }
@@ -234,6 +270,7 @@ export function Menu({
   size = 'medium',
   disabled = false,
   systemImage,
+  androidIcon,
   tintColor,
   onSelect,
   onOpen,
@@ -248,6 +285,22 @@ export function Menu({
 }: MenuProps) {
   const resolvedVariant = resolveVariant(variant);
   const resolvedSize = resolveSize(size);
+  // One string for native whichever form the caller used, exactly as `Button`
+  // builds it: an asset becomes a dev-server URL or the drawable Metro files it
+  // under, and a plain name is normalised. Resolved before the sizing key below,
+  // because the key has to hold what native was sent, not what the caller wrote —
+  // two Menus naming one drawable must share one cached size.
+  const resolvedAndroidIcon = resolveAndroidIcon(androidIcon);
+  if (
+    resolvedAndroidIcon != null &&
+    androidIconUrl(resolvedAndroidIcon) == null &&
+    androidIconResourceName(resolvedAndroidIcon) == null
+  ) {
+    // A name that cannot be a resource name is a typo the developer can fix now;
+    // native's answer to it is indistinguishable from a file that was not shipped.
+    // Neither marked form is checked: see `Button.tsx`, same rule, same reason.
+    warnAndroidIconName('Menu', 'androidIcon', resolvedAndroidIcon);
+  }
   const processedTint = useProcessedColor(tintColor);
   const rows = useMenuRows(group);
   // Always functions, so every callback prop is always sent - see
@@ -280,6 +333,7 @@ export function Menu({
       rows={rows}
       tintColor={processedTint}
       systemImage={systemImage ?? null}
+      androidIcon={resolvedAndroidIcon ?? null}
       hasPrimaryAction={primaryAction != null}
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
@@ -293,6 +347,7 @@ export function Menu({
         resolvedSize,
         primaryAction != null,
         systemImage,
+        resolvedAndroidIcon ?? undefined,
         title
       )}
       nuiSizingId={sizingId}
