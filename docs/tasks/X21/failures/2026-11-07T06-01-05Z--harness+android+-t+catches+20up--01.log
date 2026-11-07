@@ -1,0 +1,109 @@
+# Failure excerpt — harness:android:-t:catches%20up
+
+- Ran: 2026-11-07T06:01:05.367Z on code tree `34eb539768ec` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android -t catches up`
+- Result: fail, exit 1, 53675 ms
+- Load: start 123.56, end 52.10, median 76.38, max 123.56
+- Device: android / device `emulator-5574` / lease `X21-znj7u`
+- Full log: `task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log` (<store>/task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › steps up twice when a reader presses again before the a11y tree catches up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X21-znj7u (still live)
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 52.10 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 62 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:-t:catches%20up
+gate: node ../scripts/harness.mjs --harnessRunner android -t catches up (cwd example)
+gate: code tree 34eb539768ec at HEAD 9019f302
+gate: git tree 05a1de15a4bf with a DIRTY worktree (not reusable)
+gate: log task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log
+gate:       <store>/task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android -t catches up
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 34eb539768ec, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 114.14/54.58 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+  ● Slider › steps up twice when a reader presses again before the a11y tree catches up
+
+    Wanted 2 onSlidingComplete(s), have 1 after 5000ms (start=[0] change=[3] complete=[3]).
+
+      [0m [90m 281 |[39m     }
+       [90m 282 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 283 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 284 |[39m         [32m`Wanted ${String(completions)} onSlidingComplete(s), have `[39m [33m+[39m
+       [90m 285 |[39m           [32m`${String(events.complete.length)} after ${String(budgetMs)}ms `[39m [33m+[39m
+       [90m 286 |[39m           [32m`(start=${JSON.stringify(events.start)} change=${JSON.stringify([39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › steps up twice when a reader presses again before the a11y tree catches up
+
+    Wanted 2 onSlidingComplete(s), have 1 after 5000ms (start=[0] change=[3] complete=[3]).
+
+      [0m [90m 281 |[39m     }
+       [90m 282 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 283 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 284 |[39m         [32m`Wanted ${String(completions)} onSlidingComplete(s), have `[39m [33m+[39m
+       [90m 285 |[39m           [32m`${String(events.complete.length)} after ${String(budgetMs)}ms `[39m [33m+[39m
+       [90m 286 |[39m           [32m`(start=${JSON.stringify(events.start)} change=${JSON.stringify([39m[0m
+
+
+Test Suites: 1 failed, 24 skipped, 1 of 25 total
+Tests:       1 failed, 504 skipped, 505 total
+Snapshots:   0 total
+Time:        52.693 s
+Ran all test suites with tests matching "catches up".
+gate: harness:android:-t:catches%20up FAIL in 53.7 s
+gate: recorded in .gates/task/X21-recurring-flakes.jsonl
+
+
+gate: appended the device context to task/X21-recurring-flakes/harness+android+-t+catches+20up-2026-11-07T06-01-04.967Z.log (5 probe(s))
+
+```
