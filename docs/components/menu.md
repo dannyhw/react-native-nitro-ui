@@ -225,11 +225,11 @@ inside a 48 dp box, and a split trigger would sit shorter than the plain trigger
 replaced. The floor is therefore enforced on the layout, at the same number E1's ladder
 uses.
 
-The chevron is drawn, not imported: it is the geometry of Material's
-`Icons.Filled.ExpandMore` written out as an inline `ImageVector`, the same choice
-`ChipLeadingCheck` and `MenuRows.kt` record — the library bundles no icon set (D40 item
-2). It turns half a turn while the list is up, on `MaterialTheme.motionScheme`'s own
-effects spec rather than a duration written here.
+The chevron is Google's Material Symbols `keyboard_arrow_down` — the icon Material's own
+split button uses — shipped unchanged as the `nitroui_keyboard_arrow_down` drawable, like
+every icon the library draws itself (D43; `scripts/icons/fetch-material-symbols.mjs`).
+It turns half a turn while the list is up, on `MaterialTheme.motionScheme`'s own effects
+spec rather than a duration written here.
 
 **Setting it is a size statement.** `primaryAction` is in Menu's sizing key, as
 `action`/`plain`, because on Android the second container really does make the box
