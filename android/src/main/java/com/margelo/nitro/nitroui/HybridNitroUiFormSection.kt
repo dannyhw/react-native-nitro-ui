@@ -74,8 +74,15 @@ import kotlin.math.roundToInt
  *
  * The header and footer are Compose text in the same layer, at the section's top and bottom.
  * The space they take is measured *in Compose* and reported through `onMetrics`, so Yoga
- * reserves exactly what the text needed at the current font scale - a Dynamic Type change
- * re-reports it.
+ * reserves exactly what they need at the current font scale - a Dynamic Type change
+ * re-reports it. "Exactly" includes each band's own padding: S6 reserved only the glyph
+ * box, so the 16 dp the header is pushed down by left its lower half under the first row
+ * (visible in S6's `form-android.png`). The owner's answer was "give the header its own
+ * Compose layer sized to the header band"; S6b sized the band instead and left the text
+ * where it is, because a second composition per section is the exact cost this file exists
+ * to avoid (2.75x mount UI CPU against a shared one, `docs/components/host.md`) and rows
+ * only painted over the header because the reservation was short, not because of the
+ * layer's place in the z-order. The report carries the screenshot that shows it.
  */
 internal class HybridNitroUiFormSection(
   private val reactContext: ThemedReactContext,
@@ -187,6 +194,8 @@ internal class HybridNitroUiFormSection(
       "shapes=${view.model.rects.size}",
       "pressed=${if (view.model.pressedIndex >= 0) 1 else 0}",
       "header=${String.format("%.1f", view.model.headerPx / density)}",
+      "headerText=${String.format("%.1f", view.model.headerTextPx / density)}",
+      "footerText=${String.format("%.1f", view.model.footerTextPx / density)}",
       "rects=${rects.ifEmpty { "-" }}",
     ).joinToString(";")
   }
@@ -210,6 +219,14 @@ internal class FormSectionModel : NitroUiModel() {
 
   /** What the header and footer text took, in px, as Compose measured them. */
   var headerPx = 0f
+  /**
+   * The header glyphs alone, without the band’s padding — reported beside `headerPx` so a
+   * test can tell “the band is roomy” from “the band includes its padding”, which are the
+   * same number only once the padding is inside it. That is exactly the S6 bug.
+   */
+  var headerTextPx = 0f
+  /** As [headerTextPx], for the footer. */
+  var footerTextPx = 0f
   var footerPx = 0f
 
   /** Leaves those numbers for JavaScript. Set by the Hybrid View, which owns the Fabric node. */
@@ -218,6 +235,8 @@ internal class FormSectionModel : NitroUiModel() {
   override fun reset() {
     rects = emptyList()
     headerText = null
+    headerTextPx = 0f
+    footerTextPx = 0f
     footerText = null
     pressedIndex = -1
   }
@@ -527,8 +546,15 @@ internal fun FormSegmentedLayer(
         modifier =
           Modifier
             .align(Alignment.TopStart)
+            // `onSizeChanged` sits *outside* the padding on purpose, so what goes to Yoga
+            // is the whole band the header draws into - padding and text. With it inside,
+            // `headerPx` was the glyphs alone, Yoga reserved only that, and the 16 dp the
+            // text is pushed down by drew the lower half of every header under the first
+            // row of its own section (S6's form-android.png, and the reason this line reads
+            // the band and not the text).
+            .onSizeChanged { model.headerPx = it.height.toFloat() }
             .padding(start = inset, end = inset, top = FormListMetrics.HeaderTopPadding)
-            .onSizeChanged { model.headerPx = it.height.toFloat() },
+            .onSizeChanged { model.headerTextPx = it.height.toFloat() }
       )
     }
     model.footerText?.takeIf { it.isNotEmpty() }?.let { text ->
@@ -541,8 +567,11 @@ internal fun FormSegmentedLayer(
         modifier =
           Modifier
             .align(Alignment.BottomStart)
+            // The footer band, same as the header's: measured with its padding, or the
+            // last row paints up over the footer text.
+            .onSizeChanged { model.footerPx = it.height.toFloat() }
             .padding(start = inset, end = inset, bottom = FormListMetrics.FooterBottomPadding)
-            .onSizeChanged { model.footerPx = it.height.toFloat() },
+            .onSizeChanged { model.footerTextPx = it.height.toFloat() }
       )
     }
   }
