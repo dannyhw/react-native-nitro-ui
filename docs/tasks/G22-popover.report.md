@@ -37,12 +37,17 @@ and ContextMenu.
 provider's `remember` on it, so the popup re-places above the keyboard and stays focusable
 enough for a `TextInput` inside to raise it; iOS leaves the move to UIKit. Documented as API 30+.
 
-**What the gates found.** Three bugs only a device run showed: three of the example
+**What the gates found.** Five bugs only a device run showed: three of the example
 screen's anchors rendered without an `onPress`, so no real tap could open their popover
 (`3ec7d8af`, found by `real-input:ios` before it had ever run green); the publish manifest did
 not list the built popover files, which `check`'s package step caught (`26aad5b5`); and two
 fixtures read their "nothing up" baseline in the same commit as the presentation they measure
-from, which reads as a leak under load (`6c1b82ff` opens them later instead).
+from, which reads as a leak under load (`6c1b82ff` opens them later instead). The last two were
+in the keyboard check itself: it asserted the event log *ends* with `typed:ab`, which the
+screen's own record of the popover's close makes impossible (`494dced2` reads the order
+instead), and its IME probes compared `[object Object]` — `shell()` returns `{ stdout }` — and
+knew only a dump shape API 34+ no longer prints, so the keyboard was never seen at all
+(`3aa02ef1`, `f817fcc6`).
 
 ## Gates
 
@@ -74,6 +79,20 @@ from, which reads as a leak under load (`6c1b82ff` opens them later instead).
   -> `Popover`'s manifest `realInput: false`
 - `scripts/__tests__/component-coverage.test.js` "every manifest is covered, or has a stated
   reason" -> `selfSizing: false` removed from the Popover fixture -> that test
+- `scripts/real-input/ime-frame.mjs` -> the API 34+ frame shape removed from `SHAPES` ->
+  `scripts/__tests__/real-input-ime-frame.test.js` "reads the API 34+ window dump, which has no
+  mFrame= anywhere" and "will not take a parent frame for the window's own" red,
+  `Expected: 1480 / Received: null`
+- the keyboard check as shipped -> both real-input runs red on a claim that cannot be true:
+  `real-input:ios` at "real keystrokes reach the field inside the popover: ... typed:a >
+  typed:ab > field:presented:false" (the log it demanded *ends* with `typed:ab`, which the
+  screen's record of the close it was told to do forbids), and the same line in
+  `scripts/real-input/android.mjs` -> `494dced2` reads the order instead
+- `scripts/real-input/android.mjs`'s IME probes -> `shell()` returns `{ stdout }` ->
+  `real-input:android -- --control popover` red at "a real tap on the TextInput inside the
+  popover brings up the keyboard - expected true, saw false" and then
+  `TypeError: text.match is not a function`; with that fixed, red again on "nothing reported the
+  keyboard frame" until the API 34+ dump shape was learned -> `3aa02ef1`, `f817fcc6`
 - `HybridNitroUiPopover.swift` `present()` -> `preferredContentSize = CGSize(width: 320, height: 480)`
   (what UIKit picks when nothing is asked for) -> all five "the first frame is the final size"
   fixtures red at the drawn-size check, plus "opens below its anchor":

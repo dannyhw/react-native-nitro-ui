@@ -46,3 +46,34 @@ export function imeFrameTop(text) {
   }
   return null;
 }
+
+/**
+ * The keyboard's top edge from one `Window #` block for the IME window.
+ *
+ * `imeFrameTop` alone is not enough, and the difference is a whole release's worth of
+ * wrong answers: the IME window exists whether or not a keyboard is on screen, and while
+ * it is *not* being displayed it is laid out over the app - on the API 35 image,
+ * `mViewVisibility=0x8`, `isReadyForDisplay()=false`, and `frame=[0,142][1080,2424]`. That
+ * is a real parseable frame, and the top of it is the status bar. Read once, as the
+ * keyboard's own `mInputShown` flips true but before the window is drawn, it turns into a
+ * check that says the field is 1,400 px under a keyboard that is not there. So a block that
+ * says it is not displayed is treated as saying nothing, and the caller waits for a block
+ * that does.
+ *
+ * A block that carries neither marker is parsed anyway: the two are what this release
+ * prints, not a contract, and a dump that stops printing them should fall through to the
+ * frame rather than silently fail a rule.
+ *
+ * @param {string} block one `Window #` block, IME window expected
+ * @returns {number | null}
+ */
+export function imeWindowTop(block) {
+  const text = String(block);
+  if (
+    /isReadyForDisplay\(\)=false/.test(text) ||
+    /mViewVisibility=0x[1-9a-f]/.test(text)
+  ) {
+    return null;
+  }
+  return imeFrameTop(text);
+}
