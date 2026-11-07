@@ -3717,9 +3717,29 @@ final class RealInputTests: XCTestCase {
 
     let frozen = try textField(labelled: "Frozen field")
     try focusByTap(frozen, echo: nil, as: "the frozen field")
-    frozen.typeText("xy")
+    // One key at a time, each with its own witness and its own re-type, because a
+    // key that never arrived is a delivery failure and not a revert that lost an
+    // edit (`typeKey`). Counting a whole blind string assumed both apart.
+    try typeKey(
+      "x",
+      into: frozen,
+      echo: Echo.textFrozen,
+      expected: "frozen: 1 edits refused",
+      resting: "frozen",
+      named: "key \"x\" into the frozen field",
+      waitingFor: "the first refused edit to be reported"
+    )
+    try typeKey(
+      "y",
+      into: frozen,
+      echo: Echo.textFrozen,
+      expected: "frozen: 2 edits refused",
+      resting: "frozen",
+      named: "key \"y\" into the frozen field",
+      waitingFor: "the second refused edit to be reported"
+    )
     XCTAssertEqual(
-      readUntil(Echo.textFrozen) { $0 == "frozen: 2 edits refused" },
+      echoText(Echo.textFrozen),
       "frozen: 2 edits refused",
       "every key into the frozen field should be reported to JS"
     )
@@ -3869,15 +3889,38 @@ final class RealInputTests: XCTestCase {
 
     let frozen = try searchField(labelled: "Frozen search field")
     try focusByTap(frozen, echo: nil, as: "the frozen field")
-    frozen.typeText("xy")
+    // Burst typing, kept here on purpose. `testRealInputTextField` types its frozen
+    // field one key at a time, which is what a dropped keystroke needs in order to stay
+    // a delivery failure; this site keeps the *burst* — two keys delivered before JS has
+    // answered the first, both edits in flight at once — so that ordering is still
+    // covered somewhere (X21). The burst is a press sequence like every other one: one
+    // `typeText` of "xy", its own witness waited for, and a re-typed key that is counted
+    // and reported when the witness says an edit is missing. A refused edit leaves the
+    // field back at `frozen` whether the key arrived and JS lost it or never arrived at
+    // all (`typeKey`'s note on what this control cannot witness), so the retry gives up
+    // no evidence that one key at a time would have kept.
+    _ = try pressUntil(
+      named: "keys \"xy\" into the frozen search field",
+      waitingFor: "both refused edits to be reported",
+      pressNoun: "key",
+      press: { attempt in frozen.typeText(attempt == 1 ? "xy" : "y") },
+      reading: { self.echoText(Echo.searchFrozen) },
+      nativeState: {
+        let shown = (frozen.value as? String) ?? ""
+        return shown == "frozen" ? "at rest" : "holds \"\(shown)\""
+      },
+      { $0 == "frozen: 2 edits refused" }
+    )
     XCTAssertEqual(
-      readUntil(Echo.searchFrozen) { $0 == "frozen: 2 edits refused" },
+      echoText(Echo.searchFrozen),
       "frozen: 2 edits refused",
       "every key into the frozen field should be reported to JS"
     )
-    XCTAssertEqual(
-      frozen.value as? String,
-      "frozen",
+    // Read the revert for rather than race it: with two keys in one delivery the last
+    // one can still be landing when the echo matches, a window one key at a time does
+    // not have. What is asserted is unchanged — the field shows what JS kept.
+    XCTAssertTrue(
+      waitUntil({ ((frozen.value as? String) ?? "") == "frozen" }, window: reactTimeout),
       "and each one reverted: the field should still show what JS kept"
     )
 
@@ -3985,6 +4028,82 @@ final class RealInputTests: XCTestCase {
     dumpHierarchy("\(what) never took the keyboard focus")
     XCTFail("\(what) never took the keyboard focus after three real taps")
     throw RealInputCheckAborted(identifier: what)
+  }
+
+  /// Poll `check` until it says yes or `window` runs out.
+  private func waitUntil(_ check: () -> Bool, window: TimeInterval) -> Bool {
+    if check() { return true }
+    let deadline = Date().addingTimeInterval(window)
+    while Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      if check() { return true }
+    }
+    return false
+  }
+
+  /// Type one character into a focused field, and insist that *this character's*
+  /// witness arrives before the next character is typed.
+  ///
+  /// A key event is synthesised input on the same path as a touch, and this machine
+  /// drops those (`pressUntil`'s comment; `FOLLOWUPS.md:58`). The frozen-field check
+  /// used to type a whole string blind and then wait for the count, which rested on
+  /// two claims nobody verified: that every character of the string reached the
+  /// field, and that a field reports exactly one edit per character. When one key of
+  /// `typeText("xy")` went missing the echo stayed at `frozen: 1 edits refused` and
+  /// the check reported a *delivery* failure as a broken revert - the same line on
+  /// five branches (X19, G16, E2, E3, E5), green on every re-run, because the
+  /// assertion had no way to tell "one key was never typed" from "one edit was never
+  /// emitted". Typing one key and waiting for that key's own echo is what makes the
+  /// two visible apart, and the retry is the same one every other delivery in this
+  /// suite gets.
+  ///
+  /// `pressUntil`'s `nativeState` is the field's own text, which catches the version
+  /// of a lost event that leaves a trace: a key the field is still showing while its
+  /// echo never moved is a stuck edit, and it fails instead of being re-typed into a
+  /// green (F1 M3). Reading only a snapshot would report the ordinary revert of a
+  /// delivered key as that bug, which is why the witness is a state that persists
+  /// rather than a text caught mid-flight.
+  ///
+  /// What it cannot see is a lost event that leaves no trace, and this control is one:
+  /// with the screen's `refuseEdit` emptied out, the field went back to `frozen`
+  /// anyway and the case failed as "never delivered" after three keys - not retried
+  /// into a green, but not named as a lost event either. A field the app puts back
+  /// whatever JS did with the edit has nothing left for a witness read from out here.
+  ///
+  /// - Parameter resting: the text the app forces this field to show, which a
+  ///   refused edit has to return to once the echo arrives.
+  private func typeKey(
+    _ char: String,
+    into field: XCUIElement,
+    echo: String,
+    expected wanted: String,
+    resting: String,
+    named what: String,
+    waitingFor: String
+  ) throws {
+    func fieldText() -> String { (field.value as? String) ?? "" }
+    // The previous key's revert has to have landed before this one is typed:
+    // `pressUntil` reads the control's state once, before its first press, and a
+    // reading taken mid-revert is a text this key cannot be blamed for leaving
+    // behind - it would be reported as a lost event the app never got.
+    if !waitUntil({ fieldText() == resting }, window: reactTimeout) {
+      dumpHierarchy("\(what): the field did not return to its value between keys")
+      XCTFail(
+        "\(waitingFor): \(what), but the field never came back to \"\(resting)\" - it "
+          + "shows \"\(fieldText())\" \(Int(reactTimeout))s later, so the next key "
+          + "would be typed into an edit the app has not put back."
+      )
+      throw RealInputCheckAborted(identifier: what)
+    }
+    _ = try pressUntil(
+      named: what,
+      waitingFor: waitingFor,
+      pressNoun: "key",
+      press: { _ in field.typeText(char) },
+      reading: { self.echoText(echo) },
+      nativeState: { fieldText() == resting ? "at rest" : "holds \"\(fieldText())\"" },
+      { $0 == wanted }
+    )
   }
 
   /// A real tap on the `compact` field must open SwiftUI's own presentation, and a
@@ -4657,7 +4776,10 @@ final class RealInputTests: XCTestCase {
   ///   that never happened (F1 M3). When this is given and it has moved while the
   ///   witness has not, the helper stops and says "delivered, but the change never
   ///   reached JS". Pass it wherever the control publishes its own state.
-  /// - Parameter raised: whether the witness has arrived.
+  /// - Parameter pressNoun: what to call one delivery in the log lines. Every press
+  ///   in this file is a touch, so the default is "tap"; `typeKey` types instead, and
+  ///   a report that said "answered on tap 2/3" about a keystroke would name the
+  ///   wrong event in the one place a human reads what a run had to re-send.
   /// - Parameter attemptWindow: how long one press gets to show its witness. The
   ///   default is `reactTimeout` - the same budget the blind `readUntil` it replaces
   ///   already gave a control - so a check gets that wait *plus* the retries rather
@@ -4670,6 +4792,7 @@ final class RealInputTests: XCTestCase {
     waitingFor: String,
     attempts: Int = 3,
     attemptWindow: TimeInterval? = nil,
+    pressNoun: String = "tap",
     press: (_ attempt: Int) throws -> Void,
     reading: () -> String,
     nativeState: (() -> String?)? = nil,
@@ -4699,7 +4822,9 @@ final class RealInputTests: XCTestCase {
         if raised(shown) {
           if attempt > 1 {
             print(
-              "real-input (ios): \(waitingFor): \(what) answered on tap \(attempt)/\(attempts) - the earlier tap(s) were never delivered"
+              "real-input (ios): \(waitingFor): \(what) answered on \(pressNoun) "
+                + "\(attempt)/\(attempts) - the earlier \(pressNoun)(s) were never "
+                + "delivered"
             )
           }
           return shown
@@ -4728,7 +4853,9 @@ final class RealInputTests: XCTestCase {
           shown = reading()
           if raised(shown) {
             print(
-              "real-input (ios): \(waitingFor): \(what) answered \(Int(window))s after its press, late enough that the control had already changed - a slow JS thread, not a lost event"
+              "real-input (ios): \(waitingFor): \(what) answered \(Int(window))s after "
+                + "its \(pressNoun), late enough that the control had already changed - "
+                + "a slow JS thread, not a lost event"
             )
             return shown
           }
@@ -4736,7 +4863,8 @@ final class RealInputTests: XCTestCase {
         }
         dumpHierarchy("\(waitingFor): \(what) changed natively but its echo did not")
         XCTFail(
-          "\(waitingFor): \(what) took the touch and lost the event - the control's own "
+          "\(waitingFor): \(what) took the \(pressNoun) and lost the event - the "
+            + "control's own "
             + "state moved from \"\(startedAt)\" to \"\(moved)\" and its echo is still "
             + "\"\(shown)\", the value it had before any press, \(Int(window * 2))s "
             + "later. Not retried: a further press would land the event and make a lost "
@@ -4745,7 +4873,8 @@ final class RealInputTests: XCTestCase {
         throw RealInputCheckAborted(identifier: what)
       }
       print(
-        "real-input (ios): \(waitingFor): tap \(attempt)/\(attempts) left \(what) at \"\(shown)\""
+        "real-input (ios): \(waitingFor): \(pressNoun) \(attempt)/\(attempts) left "
+          + "\(what) at \"\(shown)\""
       )
     }
     dumpHierarchy("\(attempts) presses on \(what) raised no witness")

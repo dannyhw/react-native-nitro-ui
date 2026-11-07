@@ -1,0 +1,77 @@
+# Failure excerpt — harness:android:before%20the%20a11y%20tree%20catches%20up:--background
+
+- Ran: 2026-11-07T06:00:11.297Z on code tree `34eb539768ec` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android before the a11y tree catches up --background`
+- Result: fail, exit 1, 1463 ms
+- Load: start 109.36, end 109.36, median 109.36, max 109.36
+- Device: android / device `emulator-5574`
+- Full log: `task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up+--background-2026-11-07T06-00-11.297Z.log` (<store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up+--background-2026-11-07T06-00-11.297Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up+--background-2026-11-07T06-00-11.297Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     iPhone 17 (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 109.36 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 31 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android before the a11y tree catches up --background
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp ad928357 at 9019f302923557498aea2a60487e27eb6205442d, now 34eb5397 at 9019f302923557498aea2a60487e27eb6205442d)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp ad928357 at 9019f302923557498aea2a60487e27eb6205442d, now 34eb5397 at 9019f302923557498aea2a60487e27eb6205442d)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+
+
+
+```

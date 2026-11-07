@@ -283,10 +283,19 @@ export class Suite {
         console.log(`    failed: ${failure}`);
       }
     }
-    const totalRetries = done.reduce(
+    // Auxiliary checks press too: the a11y sweep reaches its screens through the same
+    // tabs the controls do, and on a full run that is most of the run's navigations. A
+    // retry counted only on the control side was a retry the summary denied (X21), so
+    // the one number a reader compares against "no retries" is the sum of both sides.
+    const controlRetries = done.reduce(
       (sum, entry) => sum + (entry.log?.retries.length ?? 0),
       0
     );
+    const auxiliaryRetries = this.auxiliary.reduce(
+      (sum, entry) => sum + (entry.log.retries.length ?? 0),
+      0
+    );
+    const totalRetries = controlRetries + auxiliaryRetries;
     // The auxiliary checks, printed after the controls so the control table's totals stay
     // readable and their own failures still decide the exit code below.
     const auxFailed = this.auxiliary.filter((entry) => !entry.log.passed);
@@ -319,6 +328,9 @@ export class Suite {
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
         ` · ${String(totalRetries)} input sequence(s) needed a retry` +
+        (auxiliaryRetries === 0
+          ? ''
+          : ` (${String(auxiliaryRetries)} of them on an auxiliary check)`) +
         (totalRetries === 0 ? '' : ' - see the retried notes above for which') +
         (this.auxiliary.length === 0
           ? ''

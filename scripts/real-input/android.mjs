@@ -86,6 +86,14 @@ const KEY_BACK = 4;
 const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
 
 /**
+ * How many times navigation presses a tab it is waiting to arrive.
+ *
+ * `pressUntil`'s number, for the same reason: a synthesised touch can be dropped by
+ * the OS at any load (`FOLLOWUPS.md:58`), and a tab tap is a synthesised touch.
+ */
+const TAB_TAPS = 3;
+
+/**
  * How apart the reads of a *gesture in flight* are spaced, in ms.
  *
  * Every read this suite makes is a `uiautomator dump`, and a dump is not free for
@@ -5050,7 +5058,7 @@ async function main() {
 
     for (const control of toRun) {
       const log = suite.begin(control);
-      await harness.goToScreen(control.screen);
+      await harness.goToScreen(control.screen, log);
       // `runCheck` moves on after an abort the log recorded, and fails the control for one
       // it did not (X20 item 1): swallowing every `AbortedCheck` here is how a bare throw
       // reported PASS on a check that never ran.
@@ -5063,7 +5071,11 @@ async function main() {
     // no in-app query can see a Compose control's name, and a dedicated gate is a gate
     // nobody runs.
     await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
-      goToScreen: (screen) => harness.goToScreen(screen),
+      // The sweep's log travels with the navigation: `goToScreen` re-presses a tab
+      // until its screen arrives, and every one of those re-presses used to land on an
+      // absent `log` argument, where `log?.retried?.()` prints nothing and the run's
+      // totals could not see them. Half of a run's tab navigations are these.
+      goToScreen: (screen, log) => harness.goToScreen(screen, log),
       dump: () => harness.hierarchy(),
       scrollToTop: () => harness.scrollToTop(),
       scrollPage: async (pixels) => {
@@ -5376,10 +5388,8 @@ class DeviceHarness {
    * @returns {string}
    */
   tailAppLog() {
-    const pid = this.shell(`pidof ${this.bundleId}`)
-      .stdout.trim()
-      .split(/\s+/)[0];
-    if (pid == null || pid === '') {
+    const pid = this.appPid();
+    if (pid == null) {
       return `(no ${this.bundleId} process is running)`;
     }
     // By pid and unfiltered: RN reports the real reason ("Unable to load
@@ -5406,9 +5416,29 @@ class DeviceHarness {
    * off to poll an echo called `undefined`; iOS never noticed, because it taps a tab by
    * its `testID`, which Android's accessibility tree does not carry.
    *
+   * The tab is pressed until its screen arrives, and the app's own life is checked
+   * between the presses.
+   *
+   * This used to press once and then wait out `REACT_TIMEOUT` for the anchor, and a
+   * wait that only looks at the answer cannot tell three things apart: a tap the OS
+   * dropped, a screen that is merely slow, and an app that stopped existing. All three
+   * threw the same line - `tapping the "Host" tab did not bring up its screen` - and
+   * the throw left the loop over the controls, so one dropped tab tap ended a run that
+   * had twenty minutes of checks to go (X4 "Dates", M2 "Switch" and "Host", G16
+   * "Picker" and "Segments", E5 "Host"; every one of them green on the re-run, which is
+   * how it stayed a flake). Navigation is a press like every press in this suite, so it
+   * gets the same treatment: press again while the witness is absent, count the retry,
+   * and when nothing will ever answer, say which of the three it was.
+   *
    * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet' | 'tooltip'} screen
+   * @param {{ retried?: (line: string) => void, note?: (line: string) => void }} [log]
+   *   the case's log, so a re-press is reported the way `pressUntil` reports one. Every
+   *   caller has one to give — a control passes its own, and the a11y sweep now hands
+   *   over the auxiliary log it opened for the case (X21: it used to navigate without
+   *   one, and the re-presses it counted were invisible in the run it was counted in).
+   *   Optional in the signature only so a fake that models neither channel still works.
    */
-  async goToScreen(screen) {
+  async goToScreen(screen, log) {
     const { anchor } = screenTab(screen);
     const tab = this.tabs.find((entry) => entry.id === screen);
     if (tab == null) {
@@ -5424,26 +5454,112 @@ class DeviceHarness {
     if (findByTestId(this.hierarchy(), anchor) != null) {
       return;
     }
-    const target = await this.revealTab(tab);
-    if (target == null) {
-      throw new Error(
-        `real-input: the "${tab.label}" tab could not be scrolled wholly onto the ` +
-          'screen, so the screen this check needs cannot be reached reliably.'
-      );
-    }
-    this.tap(target);
-    const deadline = Date.now() + REACT_TIMEOUT;
-    for (;;) {
-      if (findByTestId(this.hierarchy(), anchor) != null) {
-        return;
-      }
-      if (Date.now() > deadline) {
+    const anchorOnScreen = () => findByTestId(this.hierarchy(), anchor) != null;
+    for (let attempt = 1; attempt <= TAB_TAPS; attempt += 1) {
+      // Re-revealed on every attempt, not reused: the dump the last one came from is
+      // as old as the window that just expired, and a tab the bar has since scrolled
+      // is a box a tap can only miss.
+      const target = await this.revealTab(tab);
+      if (target == null) {
         throw new Error(
-          `real-input: tapping the "${tab.label}" tab did not bring up its screen.`
+          `real-input: the "${tab.label}" tab could not be scrolled wholly onto the ` +
+            'screen, so the screen this check needs cannot be reached reliably. ' +
+            (this.appPid() == null
+              ? `${this.bundleId} is not running — see the app log below.`
+              : `The screen still answers to its own anchor: ${this.screenSummary()}.`) +
+            `\n${this.tailAppLog()}`
         );
       }
-      await sleep(300);
+      this.tap(target);
+      const deadline = Date.now() + REACT_TIMEOUT;
+      for (;;) {
+        if (anchorOnScreen()) {
+          if (attempt > 1) {
+            log?.retried?.(
+              `navigation: the "${tab.label}" tab answered on tap ${String(attempt)}/` +
+                `${String(TAB_TAPS)} - the earlier tap(s) were never delivered`
+            );
+          }
+          return;
+        }
+        if (Date.now() > deadline) {
+          break;
+        }
+        await sleep(DUMP_POLL_MS);
+      }
+      // The window expired. Before pressing a dead app, ask whether there is one.
+      // `pidof` answers nothing when the process is gone, and then no number of
+      // presses can bring a screen up: saying so is the difference between a 40-minute
+      // run that names its cause and one that blames a tab (`FOLLOWUPS.md:56` called
+      // this a slow tab arrival for two years; two of the captured runs show no app
+      // process at all).
+      if (this.appPid() == null) {
+        throw new Error(
+          `real-input: ${this.bundleId} stopped running while navigating to the ` +
+            `"${tab.label}" tab, so no press can bring up its screen. Not retried. ` +
+            `The app's log ends:\n${this.tailAppLog()}\nCrash buffer:\n${this.crashTail()}`
+        );
+      }
+      log?.note?.(
+        `navigation: tap ${String(attempt)}/${String(TAB_TAPS)} on the ` +
+          `"${tab.label}" tab left ${this.screenSummary()} - tapping again`
+      );
     }
+    throw new Error(
+      `real-input: tapping the "${tab.label}" tab ${String(TAB_TAPS)} times did not ` +
+        `bring up its screen (looking for "${anchor}"; ${this.screenSummary()}). ` +
+        `The app's log ends:\n${this.tailAppLog()}`
+    );
+  }
+
+  /**
+   * The app's pid, or null when it is not running.
+   *
+   * `pidof` prints nothing and succeeds for a dead app, which is the whole signal.
+   *
+   * @returns {string | null}
+   */
+  appPid() {
+    const pid = this.shell(`pidof ${this.bundleId}`)
+      .stdout.trim()
+      .split(/\s+/)[0];
+    return pid == null || pid === '' ? null : pid;
+  }
+
+  /**
+   * What the screen actually holds, as one line: the tabs it answers to and whether
+   * the app is still there. Cheap enough to put in a failure message, and the message
+   * used to be the only place a wrong-screen failure could be described.
+   *
+   * @returns {string}
+   */
+  screenSummary() {
+    let nodes;
+    try {
+      nodes = this.hierarchy();
+    } catch (error) {
+      return `the accessibility tree could not be dumped (${String(error)})`;
+    }
+    const onScreen = this.tabs
+      .filter((entry) => findTab(nodes, entry.label, this.tabBandY) != null)
+      .map((entry) => entry.label);
+    const pid = this.appPid();
+    return (
+      `pid=${pid ?? 'gone'}, tab bar shows ` +
+      `${onScreen.length === 0 ? 'no example tabs' : onScreen.slice(0, 6).join(', ')}`
+    );
+  }
+
+  /**
+   * The tail of the crash buffer, which is where a native death leaves its trace and
+   * the pid-filtered log is the first thing to go quiet when the process dies.
+   *
+   * @returns {string}
+   */
+  crashTail() {
+    const crash = this.adb(['logcat', '-d', '-b', 'crash', '-t', '120']);
+    const text = crash.stdout.trim();
+    return text === '' ? '(the crash buffer is empty)' : text;
   }
 
   /**

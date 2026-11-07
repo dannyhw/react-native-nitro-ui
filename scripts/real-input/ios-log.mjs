@@ -29,12 +29,19 @@ export function realInputLine(line) {
   }
   return {
     text: `real-input (ios): ${match[1].trim()}`,
-    // Only "answered on tap n/N" says a press was delivered and had to be
+    // Only "answered on tap|key n/N" says an input was delivered and had to be
     // repeated. The "tap n/N left ..." lines say an attempt was not answered,
     // and belong to the notes rather than to the count: a run where every
     // control needed one retry and a run where every control's first press was
     // simply slow are different facts, and the number has to mean one of them.
-    isRetry: / answered on tap \d+\/\d+/.test(match[1]),
+    //
+    // `key` is in here because `typeKey` re-types a keystroke the field never
+    // received, and a keystroke is the same synthesised-input drop as a touch
+    // (X21 flake 1: five branches lost a run to `frozen: 1 edits refused`). A
+    // matcher that knew only "tap" would file those lines under notes and print
+    // `0 press sequence(s) needed a retry` over a run that re-typed its way to
+    // green - which is exactly the silence this parser was written for (F1 M2).
+    isRetry: / answered on (?:tap|key) \d+\/\d+/.test(match[1]),
   };
 }
 
