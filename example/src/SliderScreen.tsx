@@ -93,17 +93,35 @@ export default function SliderScreen() {
   const [completes, setCompletes] = useState(0);
   const [phaseValue, setPhaseValue] = useState<number | null>(null);
 
+  // The three phases in the order the app was told them, as one short string
+  // (`SC`, `SVC`).
+  //
+  // The counters above say *how many* of each phase a gesture produced; they
+  // cannot say `S C V`, which is the order an app is allowed to see and the one a
+  // drag can get wrong in a way no count reveals. A `V` is written once per run of
+  // changes rather than once per sample because a gesture's samples are coalesced
+  // to one per frame and the string has to stay short enough to read out of an
+  // accessibility dump. Capped at a gesture and a half: the check reads what the
+  // last gesture did, and an unbounded string would scroll its own answer off the
+  // node.
+  const [phaseOrder, setPhaseOrder] = useState('');
+
   const noteStart = useCallback((value: number) => {
     setStarts((count) => count + 1);
     setPhaseValue(value);
+    setPhaseOrder((order) => `${order}S`.slice(-6));
   }, []);
   const noteChange = useCallback((value: number) => {
     setChanges((count) => count + 1);
     setPhaseValue(value);
+    setPhaseOrder((order) =>
+      order.endsWith('V') ? order : `${order}V`.slice(-6)
+    );
   }, []);
   const noteComplete = useCallback((value: number) => {
     setCompletes((count) => count + 1);
     setPhaseValue(value);
+    setPhaseOrder((order) => `${order}C`.slice(-6));
   }, []);
 
   const list = useMemo(
@@ -206,6 +224,14 @@ export default function SliderScreen() {
             {phaseValue === null
               ? 'value=none'
               : `value=${phaseValue.toFixed(3)}`}
+          </Text>
+        </Row>
+        <Row label="phases in order">
+          <Text
+            testID="slider-phase-order"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {`order=${phaseOrder === '' ? 'none' : phaseOrder}`}
           </Text>
         </Row>
 

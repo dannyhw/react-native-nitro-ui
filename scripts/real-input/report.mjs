@@ -43,10 +43,14 @@ export class CheckLog {
      */
     this.warns = [];
     /**
-     * Presses this control needed more than once to get an answer. Kept apart
-     * from `notes` because a run where every control needed a second press is
-     * the regression `FOLLOWUPS.md:58` describes, and it must be countable
+     * Input sequences this control needed more than once to get an answer. Kept
+     * apart from `notes` because a run where every control needed a second press
+     * is the regression `FOLLOWUPS.md:58` describes, and it must be countable
      * rather than one line among forty.
+     *
+     * A retried *drag* belongs here too (E5): the count is about the runner having
+     * to inject something twice, and a run that silently re-dragged a control would
+     * be hiding the same fact a silently re-pressed one hides.
      *
      * @type {string[]}
      */
@@ -272,7 +276,7 @@ export class Suite {
       console.log(
         `${entry.control.id}: ${label}` +
           (retries > 0
-            ? ` (retried ${String(retries)} press sequence(s))`
+            ? ` (retried ${String(retries)} input sequence(s))`
             : ' (no retries)')
       );
       for (const failure of entry.log?.failures ?? []) {
@@ -314,10 +318,8 @@ export class Suite {
     }
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
-        ` · ${String(totalRetries)} press sequence(s) needed a retry` +
-        (totalRetries === 0
-          ? ''
-          : ' - see the "answered on tap" notes above for which') +
+        ` · ${String(totalRetries)} input sequence(s) needed a retry` +
+        (totalRetries === 0 ? '' : ' - see the retried notes above for which') +
         (this.auxiliary.length === 0
           ? ''
           : ` · ${String(this.auxiliary.length - auxFailed.length)}/` +

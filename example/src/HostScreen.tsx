@@ -35,7 +35,8 @@ import {
  * `host-switch-*` / `host-slider` / `host-button*` / `host-mixed-*` are how a check
  * aims a real touch (Android reads the labels, iOS the identifiers), and
  * `host-controlled-value`, `host-events-count`, `host-slider-value`,
- * `host-button-presses` and `host-mixed-state` are the echoes it reads back. Renaming
+ * `host-slider-gesture`, `host-button-presses` and `host-mixed-state` are the echoes
+ * it reads back. Renaming
  * one fails a suite on two platforms. The harness cases for the same behaviour are in
  * `example/__tests__/Host.harness.tsx`.
  */
@@ -127,6 +128,25 @@ export default function HostScreen() {
   // given `onPress`, which is what makes the disabled half of the real-input check
   // mean something: a library that let a disabled control press would move the number.
   const [hostSlider, setHostSlider] = useState(0.4);
+  // The hosted Slider's gesture phases, counted.
+  //
+  // The value echo says where a drag ended; it cannot say whether the drag is
+  // *over*, which is the question a real-input check has to ask before it reads
+  // the number. A check that instead waits for the number to stop moving can be
+  // answered by a drag that is merely slow — which is what made `hosted-slider`
+  // the one drag check that had ever failed alone on a loaded machine (E5). Every
+  // other drag check on either platform reads a phase echo for exactly this
+  // reason; the hosted control was the exception.
+  const [hostSliderGestures, setHostSliderGestures] = useState({
+    start: 0,
+    complete: 0,
+  });
+  const noteHostSliderStart = useCallback(() => {
+    setHostSliderGestures((seen) => ({ ...seen, start: seen.start + 1 }));
+  }, []);
+  const noteHostSliderComplete = useCallback(() => {
+    setHostSliderGestures((seen) => ({ ...seen, complete: seen.complete + 1 }));
+  }, []);
   const [buttonPresses, setButtonPresses] = useState(0);
   const countHostPress = useCallback(() => {
     setButtonPresses((count) => count + 1);
@@ -286,6 +306,16 @@ export default function HostScreen() {
             {hostSlider.toFixed(2)}
           </Text>
         </Row>
+        <Row label="hosted Slider gestures">
+          <Text
+            testID="host-slider-gesture"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {`start=${String(hostSliderGestures.start)} complete=${String(
+              hostSliderGestures.complete
+            )}`}
+          </Text>
+        </Row>
         <Row label="presses the hosted Buttons share">
           <Text
             testID="host-button-presses"
@@ -299,6 +329,8 @@ export default function HostScreen() {
             <Slider
               value={hostSlider}
               onValueChange={setHostSlider}
+              onSlidingStart={noteHostSliderStart}
+              onSlidingComplete={noteHostSliderComplete}
               testID="host-slider"
               accessibilityLabel="Hosted slider"
             />
