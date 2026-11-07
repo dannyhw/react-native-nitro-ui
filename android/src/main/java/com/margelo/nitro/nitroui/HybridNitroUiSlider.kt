@@ -6,6 +6,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.gestures.GestureCancellationException
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +23,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -271,7 +276,15 @@ internal class SliderModel(
    */
   var accessibilityStepCount = 0
 
-  /** A drag began. Reports the value it began from. */
+  /**
+   * A drag began, and reports the value it began from.
+   *
+   * Two things open a drag: [sliderPressWatcher] when a finger goes down on the
+   * control - a touch owns a gesture whether or not it ever moves the thumb - and
+   * [dragTo] for a value that arrives without one, which is how a hardware-keyboard
+   * arrow step and anything else that writes a value without a touch still get the
+   * gesture's opening callback.
+   */
   fun beginDrag() {
     if (dragging) {
       return
@@ -290,6 +303,9 @@ internal class SliderModel(
    * the next recomposition reads back.
    */
   fun dragTo(raw: Double) {
+    // The value can arrive with no finger on the control (a keyboard step), so a
+    // drag opens here too. A touch opened its own in [sliderPressWatcher], and
+    // [beginDrag] is guarded, so the two are one start and not two.
     if (!dragging) {
       beginDrag()
     }
@@ -303,10 +319,11 @@ internal class SliderModel(
    * The finger lifted. The final value always reaches JS.
    *
    * Idempotent, and the guard is the event contract: only a drag that started may
-   * end. Material 3 calls [onValueChangeFinished] for a tap that changed nothing
-   * and Compose infers the start from the first value change ([dragTo]), so
-   * without this a complete can arrive with no start; a late end after a
-   * [cancelDrag] would deliver one to the next owner of a recycled instance.
+   * end, so a late end after a [cancelDrag] cannot deliver a complete to the next
+   * owner of a recycled instance. Three things call it, and the first two of them
+   * race by design: Material 3 calls its `onValueChangeFinished` for both a tap and
+   * a drag, and [sliderPressWatcher] calls it when the finger leaves, which is what
+   * reports the end of a touch that never reached the control's own gesture.
    */
   fun endDrag() {
     if (!dragging) {
@@ -557,22 +574,25 @@ private fun SliderTrack(
   // scroll forward lands (`performActionHelper` divides it into strides), so it
   // has to be this Slider's real range and current value.
   Box(
+    // The watcher is on the control's own box, so the gesture it reports is exactly
+    // the box the control draws - 48 dp of touch target included.
     modifier =
-      Modifier.clearAndSetSemantics {
-        if (label != null) {
-          contentDescription = label
-        }
-        progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
-        setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
-        // M3's `sliderSemantics` is where `disabled()` lived, and the line above
-        // clears that subtree, so a disabled Slider has to restate it. Without it
-        // TalkBack reads an inert control - the action is refused - as a live,
-        // adjustable one. iOS marks the same element `.notEnabled`
-        // (`HybridNitroUiSlider.swift`).
-        if (!enabled) {
-          disabled()
-        }
-      },
+      Modifier.sliderPressWatcher(model = model, enabled = enabled)
+        .clearAndSetSemantics {
+          if (label != null) {
+            contentDescription = label
+          }
+          progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
+          setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
+          // M3's `sliderSemantics` is where `disabled()` lived, and the line above
+          // clears that subtree, so a disabled Slider has to restate it. Without it
+          // TalkBack reads an inert control - the action is refused - as a live,
+          // adjustable one. iOS marks the same element `.notEnabled`
+          // (`HybridNitroUiSlider.swift`).
+          if (!enabled) {
+            disabled()
+          }
+        },
   ) {
     // The state-based overload (material3 1.5 deprecates the value-based one), set up
     // exactly as that deprecated overload did internally, so nothing a user can see or
@@ -586,11 +606,95 @@ private fun SliderTrack(
       state = sliderState,
       onValueChange = { position -> model.dragTo(position.toDouble()) },
       enabled = enabled,
-      // Compose has no drag-start callback, so the first value change is the start
-      // (`docs/architecture/core.md` §11) - `SliderModel.dragTo` opens the drag.
+      // The end of the control's own gesture. The watcher opened the drag when the
+      // finger went down, so this is the end of a touch whether or not its value
+      // moved, and [SliderModel.endDrag] reports it exactly once.
       onValueChangeFinished = { model.endDrag() },
       colors = colors,
     )
+  }
+}
+
+/**
+ * Watch the control's own touch stream, so a gesture is reported for a touch that
+ * never moves the thumb.
+ *
+ * `onSlidingStart` used to come from the first value change, because Material 3 has
+ * no drag-start callback. The cost was the touch that changes nothing: M3's tap path
+ * only calls `onValueChange` when the value it computed differs
+ * (`SliderState.dispatchRawDeltaInternal`), so a tap on the thumb - the most obvious
+ * thing a person can do to a Slider - reported neither a start nor an end, since the
+ * end was guarded on a drag having started.
+ *
+ * The observer is the control's own pointer input, which is the one signal that says
+ * "a finger is on this control" without waiting for a value:
+ *
+ * - the down is read on [PointerEventPass.Initial], the pass before the one Material
+ *   3 handles its tap and drag in, so no `onValueChange` can be emitted for a gesture
+ *   whose start has not been emitted yet;
+ * - the up is read on [PointerEventPass.Final], the pass after it, so by the time the
+ *   watcher may still owe an end, the control has already applied the last value of
+ *   this gesture and called its own `onValueChangeFinished`. [SliderModel.endDrag] is
+ *   idempotent, so whoever gets there first is the one that reports it;
+ * - nothing is consumed: this observes the stream, it does not join the gesture.
+ *
+ * A touch that never reaches the control's own gesture - a scroll that takes the
+ * stream over, or an `ACTION_CANCEL` - is closed here too: [awaitPointerEvent]
+ * reports the pointer as raised either way, and an app told `onSlidingStart` is owed
+ * its `onSlidingComplete`. A *cancelled coroutine* (the composition going away) is
+ * [SliderModel.cancelDrag]'s business and reports nothing, which is also why this
+ * does not need a `finally`.
+ *
+ * The interaction source was the other candidate, and it is what the two signals
+ * beside it are not: `DragInteraction.Start` and `SliderState.isDragging` both appear
+ * only once a drag passes the touch slop (Material 3's tap path emits a press and
+ * sets no drag state), so neither can report a touch-down; `PressInteraction.Press`
+ * can, but it reaches an observer through a collector coroutine, so its order
+ * against the control's own end callback is a dispatcher detail - and a start that
+ * arrives after its end leaves a drag open for the life of the instance.
+ */
+@Composable
+private fun Modifier.sliderPressWatcher(
+  model: SliderModel,
+  enabled: Boolean,
+): Modifier {
+  if (!enabled) {
+    // A disabled control takes no gestures, and Material 3 removes its own tap and
+    // drag modifiers for exactly that reason. A watcher left installed would report
+    // a start for a touch the control refuses.
+    return this
+  }
+  // `model` never changes for the life of the view, so the block is installed once.
+  return this.pointerInput(model) {
+    awaitEachGesture {
+      try {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // A finger is on the control. That is the gesture, whether or not the thumb
+        // ever moves: `onSlidingStart` opens here and nothing else opens a touch.
+        model.beginDrag()
+        var pointersDown = true
+        while (pointersDown) {
+          val event = awaitPointerEvent(PointerEventPass.Final)
+          pointersDown = event.changes.any { change -> change.pressed }
+        }
+        // The finger left. The control's own `onValueChangeFinished` has normally
+        // reported this already - it runs in the pass before the one this watcher
+        // reads the release in - and [SliderModel.endDrag] reports at most once, so
+        // the two cannot double-report.
+        model.endDrag()
+      } catch (taken: GestureCancellationException) {
+        // A parent that took the stream over - a scroll that claimed this touch -
+        // cancels the gesture instead of raising the pointer here. A control that had
+        // reported a start still owes its complete, so the gesture is closed here, and
+        // the exception is rethrown because [awaitEachGesture] owns recovering the
+        // stream. A cancelled *composition* cancels this coroutine from outside, which
+        // no path here reports on: `prepareForRecycle`/`onDropView` cancel the drag
+        // themselves and report nothing, because a callback into whatever is mounted
+        // next is not ours to send.
+        model.endDrag()
+        throw taken
+      }
+    }
   }
 }
 

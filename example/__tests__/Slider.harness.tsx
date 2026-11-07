@@ -36,7 +36,7 @@ import {
   render,
   waitFor,
 } from 'react-native-harness';
-import { screen } from '@react-native-harness/ui';
+import { screen, userEvent } from '@react-native-harness/ui';
 import { Slider, nitroUiCore } from 'react-native-nitro-ui';
 import { expectTimingBudget } from './timingGate';
 
@@ -332,6 +332,47 @@ async function drag(
   // One frame past the release, so a late coalesced change (it is emitted before
   // the complete event, but on JS's clock) has had its turn.
   await sleep(60);
+}
+
+/**
+ * Press the middle of a control's own height, at `fraction` of its width.
+ *
+ * The point is in dp, which is what the harness' `queryByTestId` reports and what
+ * `userEvent.pressAt` wants - the same pair `Menu.harness.tsx` presses with.
+ */
+async function pressInBox(
+  box: ViewInfo,
+  fraction: number,
+  durationMs?: number
+): Promise<void> {
+  const x = box.x + box.width * fraction;
+  const y = box.y + box.height / 2;
+  if (durationMs == null) {
+    await userEvent.pressAt(x, y);
+  } else {
+    await userEvent.longPressAt(x, y, durationMs);
+  }
+}
+
+/**
+ * Wait for the callback stream to hold still, so a count asserted after it cannot
+ * have been read while a late event was still on its way.
+ */
+async function settleEvents(events: SlideEvents, ms = 400): Promise<void> {
+  const seen = () =>
+    events.start.length + events.change.length + events.complete.length;
+  let quietSince = nitroUiCore.now();
+  let last = seen();
+  for (;;) {
+    await sleep(50);
+    const now = seen();
+    if (now !== last) {
+      last = now;
+      quietSince = nitroUiCore.now();
+    } else if (nitroUiCore.now() - quietSince >= ms) {
+      return;
+    }
+  }
 }
 
 afterEach(() => {
@@ -828,6 +869,162 @@ describe('Slider', () => {
     expect(handle.nuiTestFramePumpArmed()).toBe(false);
     expect(events.change.length).toBe(delivered);
   });
+
+  if (Platform.OS === 'android') {
+    /**
+     * E5: on Android a gesture begins when a finger goes down on the control.
+     *
+     * These three presses are the harness' own touch injector - `MotionEvent`s
+     * dispatched at the decor view, which is how the Host suite has pressed hosted
+     * Compose controls since H1 - and a Slider's own view *is* its Compose host, so a
+     * point inside the box is inside the control's own 48 dp touch target. iOS is not
+     * here: the harness' iOS touch has no HID event behind it and SwiftUI's gesture
+     * refuses it (`Button.harness.tsx` and `Checkbox.harness.tsx` measured that wall),
+     * and the iOS control ignores a touch beside its thumb anyway (`T15`). The iOS
+     * half of this rule is `real-input:ios`'s.
+     *
+     * The control is stepped and pressed where its own ticks are: for `0..4 step 1`
+     * Material 3 draws ticks at a quarter, a half and three quarters of the track, and
+     * it snaps a touch to the nearest one *before* deciding whether the value changed.
+     * So "this touch moved nothing" is the control's answer rather than a lucky pixel,
+     * which is the whole case E5 had to make report anything: the tap path calls
+     * `onValueChange` only when the snapped value differs
+     * (`SliderState.dispatchRawDeltaInternal`), and `onSlidingStart` used to be
+     * inferred from that call.
+     */
+    it('reports a gesture for a touch that never moves the thumb, in drag order', async () => {
+      const events = newEvents();
+      // The order the app is allowed to see, not just the counts: an `s` before the
+      // `v`s of a gesture and a `c` after them. A `v` is recorded once per run of
+      // changes, because a gesture's samples are coalesced to one per frame.
+      const order: string[] = [];
+      await render(
+        <Slider
+          minimumValue={0}
+          maximumValue={4}
+          step={1}
+          defaultValue={2}
+          onValueChange={(value) => {
+            events.change.push(value);
+            if (order[order.length - 1] !== 'v') order.push('v');
+          }}
+          onSlidingStart={(value) => {
+            events.start.push(value);
+            order.push('s');
+          }}
+          onSlidingComplete={(value) => {
+            events.complete.push(value);
+            order.push('c');
+          }}
+          testID="press-order"
+          hybridRef={captureFor('press-order')}
+        />
+      );
+      const box = await waitForBox('press-order');
+      const handle = await handleFor('press-order');
+      console.log(`press-order: box=${describeBox(box)}`);
+
+      // 1. Dead centre: the thumb sits on that tick, so the control computes the
+      //    value it already had and no `onValueChange` is called. This gesture used to
+      //    report nothing at all - not a start, and not a complete either, because the
+      //    end was guarded on a drag having started.
+      await pressInBox(box, 0.5);
+      await settleEvents(events);
+      expect(order).toEqual(['s', 'c']);
+      expect(events.start).toEqual([2]);
+      expect(events.complete).toEqual([2]);
+      expect(events.change).toEqual([]);
+
+      // 2. A quarter of the way along: the value moves, so this gesture has all
+      //    three, in the order an app may rely on. Material 3 emits its press before
+      //    the tap applies its value, so a start taken from the interaction and an end
+      //    taken from the control could have crossed over in here; this line is what
+      //    says they cannot.
+      await pressInBox(box, 0.25);
+      await settleEvents(events);
+      expect(order).toEqual(['s', 'c', 's', 'v', 'c']);
+      expect(events.start).toEqual([2, 2]);
+      expect(events.change).toEqual([1]);
+      expect(events.complete).toEqual([2, 1]);
+
+      // 3. The same press again, where nothing moves: the gesture *after* a reported
+      //    one still reports. That is what a drag left half-open would break, and the
+      //    pump check below is the same claim from the other side.
+      await pressInBox(box, 0.25);
+      await settleEvents(events);
+      expect(order).toEqual(['s', 'c', 's', 'v', 'c', 's', 'c']);
+      expect(events.start).toEqual([2, 2, 1]);
+      expect(events.complete).toEqual([2, 1, 1]);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+      await sleep(150);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+      expect(order.length).toBe(7);
+    });
+
+    it('reconciles a write from JS while a real finger is down', async () => {
+      // The mid-drag write (`finishes a drag that a write from JS lands inside`) is
+      // driven through the seam. This is the same handshake with an actual finger held
+      // down on the control, which is the case E5 changes: the drag is open from the
+      // touch-down, so the write arrives inside a gesture that has no samples at all.
+      // The write is newer than the last event native emitted, so the app takes the
+      // thumb, and the release - which is the only thing the touch produced - reports
+      // the app's number.
+      const events = newEvents();
+      const order: string[] = [];
+      const held = (value: number) => (
+        <Slider
+          value={value}
+          step={0.1}
+          onValueChange={(v) => {
+            events.change.push(v);
+            if (order[order.length - 1] !== 'v') order.push('v');
+          }}
+          onSlidingStart={(v) => {
+            events.start.push(v);
+            order.push('s');
+          }}
+          onSlidingComplete={(v) => {
+            events.complete.push(v);
+            order.push('c');
+          }}
+          testID="held-write"
+          hybridRef={captureFor('held-write')}
+        />
+      );
+      const { rerender } = await render(held(0.2));
+      const box = await waitForBox('held-write');
+      const handle = await handleFor('held-write');
+
+      // Held at the tick the thumb is already on, so the only thing the touch does is
+      // begin and end. 700 ms is long enough to write into the middle of it.
+      const holding = pressInBox(box, 0.2, 700);
+      await pollUntil(
+        () => (events.start.length > 0 ? true : null),
+        () =>
+          new Error(
+            'a touch-down reported no onSlidingStart (order=' +
+              `${order.join('')}).`
+          ),
+        3000
+      );
+      expect(events.complete).toEqual([]);
+      await rerender(held(0.5));
+      await holding;
+      await settleEvents(events);
+
+      expect(order).toEqual(['s', 'c']);
+      expect(events.start).toEqual([0.2]);
+      expect(events.complete).toEqual([0.5]);
+      expect(handle.value).toBe(0.5);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+      // And it is still an ordinary control: the next gesture reports itself once,
+      // from the value the write left on the thumb.
+      await pressInBox(box, 0.5);
+      await settleEvents(events);
+      expect(events.start).toEqual([0.2, 0.5]);
+      expect(events.complete).toEqual([0.5, 0.5]);
+    });
+  }
 
   it('coalesces a drag to at most one onValueChange per frame', async () => {
     const events = newEvents();
