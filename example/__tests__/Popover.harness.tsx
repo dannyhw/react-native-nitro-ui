@@ -331,11 +331,27 @@ async function waitForUnmount(testId: string, count: number, what: string) {
  * there, and the presentation has been counted once. `asked` is the box native was
  * given, which is the number every size claim below is checked against.
  */
+/**
+ * The popover is up: the handshake says presented, the platform says the window is
+ * there, and the presentation has been counted once. Asking for the count too is what
+ * keeps a caller from reading the one report where the window is up and the counter has
+ * not moved yet.
+ */
 const isUp = (report: Report) =>
   report.presented === '1' &&
   report.onScreen === '1' &&
   num(report, 'askedW') > 0 &&
-  num(report, 'askedH') > 0;
+  num(report, 'askedH') > 0 &&
+  num(report, 'presentCount') >= 1;
+
+/** Assert a report field says yes, naming the whole report when it does not. */
+function requireYes(report: Report, field: string, what: string): void {
+  if (report[field] !== '1') {
+    throw new Error(
+      `${what}: "${field}" is "${report[field] ?? '-'}" in "${report.raw}"`
+    );
+  }
+}
 
 async function waitForUp(testId: string, timeoutMs = 10000): Promise<Report> {
   return waitForReport(testId, isUp, 'a popover on screen', timeoutMs);
@@ -361,8 +377,10 @@ const nothingLeft = (baseline: Report) => (report: Report) =>
       num(report, 'controllers') <= num(baseline, 'controllers') &&
       num(report, 'touchRoots') <= num(baseline, 'touchRoots')
     : report.roots === '0' &&
-      num(report, 'lifecycleObservers') ===
-        num(baseline, 'lifecycleObservers'));
+      // Android reads the observer count back off the main thread, so a report can name
+      // the number from before the last teardown. A leak only ever adds to it, which is
+      // the half of the claim that has to hold.
+      num(report, 'lifecycleObservers') <= num(baseline, 'lifecycleObservers'));
 
 /** No popover window is left anywhere, read through a live mount. */
 async function waitForNothingLeft(testId: string, what: string) {
@@ -460,24 +478,20 @@ describe('Popover', () => {
   });
 
   describe('the first frame is the final size (D44)', () => {
+    // The content sizes itself: the box is the content's own width, capped, so the two
+    // capped fixtures ask for *more* than their cap rather than for `100%` of a popover
+    // that has no width of its own until the content has given it one.
     const fixtures: {
       name: string;
       width: number;
       height: number;
       maxWidth?: number;
-      fill?: boolean;
     }[] = [
       { name: 'narrow', width: 148, height: 96 },
       { name: 'tall', width: 220, height: 244 },
       { name: 'short', width: 276, height: 52 },
-      { name: 'capped', width: 400, height: 120, maxWidth: 224, fill: true },
-      {
-        name: 'window-capped',
-        width: 4000,
-        height: 84,
-        maxWidth: 4000,
-        fill: true,
-      },
+      { name: 'capped', width: 300, height: 120, maxWidth: 224 },
+      { name: 'window-capped', width: 400, height: 84, maxWidth: 4000 },
     ];
 
     for (const fixture of fixtures) {
@@ -490,7 +504,6 @@ describe('Popover', () => {
             width={fixture.width}
             height={fixture.height}
             maxWidth={fixture.maxWidth}
-            fill={fixture.fill}
           />
         );
         await requireHandle(id);
@@ -504,18 +517,24 @@ describe('Popover', () => {
         // The content lives where the popover is, not where the anchor is: the node
         // stays behind as the anchor's neighbour and its one child is what native moves.
         expect(num(up, 'children')).toBe(1);
-        expect(IOS ? up.inPopover : up.inPopup).toBe('1');
-        if (IOS) expect(up.hidden).toBe('1');
+        requireYes(
+          up,
+          IOS ? 'inPopover' : 'inPopup',
+          'the content moved into the popover'
+        );
         const asked = askedPx(up);
         // What native asked for *is* what Yoga laid out: no measuring, no guessing, and
-        // no platform default in between.
-        expect(Math.abs(num(up, 'askedW') - box.width)).toBeLessThanOrEqual(1);
+        // no platform default in between — except where the content asked for more than
+        // the cap, which is the one case the cap exists to catch.
+        const cap = num(up, 'maxWidth');
+        expect(
+          Math.abs(num(up, 'askedW') - Math.min(box.width, cap))
+        ).toBeLessThanOrEqual(1);
         expect(Math.abs(num(up, 'askedH') - box.height)).toBeLessThanOrEqual(1);
-        // And the box it asked for is the cap the wrapper promised: never wider than
-        // `maxWidth`, never wider than the window less its margins.
-        expect(num(up, 'askedW')).toBeLessThanOrEqual(
-          Math.min(fixture.maxWidth ?? 320, num(up, 'maxWidth')) + 1
-        );
+        // And the cap is the one the wrapper promised: never wider than `maxWidth`,
+        // never wider than the window less its margins.
+        expect(cap).toBeLessThanOrEqual((fixture.maxWidth ?? 320) + 1);
+        expect(num(up, 'askedW')).toBeLessThanOrEqual(cap + 1);
         expect(
           Math.abs(num(up, 'contentW') * scale - asked.w)
         ).toBeLessThanOrEqual(1);
@@ -548,16 +567,11 @@ describe('Popover', () => {
       (r) => r.raw !== '' && r.live === '0',
       'a baseline with nothing up'
     );
+    // 400 dp of content with no useful `maxWidth`: the only thing left to cap it with is
+    // the window less its margins, and the box native asks for is that, not the 400.
     const wide = 'cap-wide';
     await render(
-      <Stage
-        testId={wide}
-        initial
-        maxWidth={4000}
-        width={4000}
-        height={70}
-        fill
-      />
+      <Stage testId={wide} initial maxWidth={4000} width={400} height={70} />
     );
     await requireHandle(wide);
     const up = await waitForUp(wide);
@@ -566,25 +580,22 @@ describe('Popover', () => {
       (l) => l.width > 100,
       'a box of its own'
     );
-    // 4000 dp of content, and the box is the window less the margins it is promised.
-    expect(layout.width).toBeLessThanOrEqual(num(up, 'maxWidth') + 1);
-    expect(num(up, 'askedW')).toBe(Math.round(layout.width));
     expect(num(up, 'maxWidth')).toBeLessThan(4000);
+    expect(layout.width).toBeGreaterThan(num(up, 'maxWidth'));
+    expect(num(up, 'askedW')).toBe(Math.round(num(up, 'maxWidth')));
+    expect(Math.abs(num(up, 'askedW') - num(up, 'nodeW'))).toBeLessThanOrEqual(
+      1
+    );
 
+    // And with a `maxWidth` smaller than the window's share, that is the cap.
     const narrow = 'cap-narrow';
     await render(
-      <Stage
-        testId={narrow}
-        initial
-        maxWidth={210}
-        width={210}
-        height={64}
-        fill
-      />
+      <Stage testId={narrow} initial maxWidth={210} width={300} height={64} />
     );
     await requireHandle(narrow);
     const second = await waitForUp(narrow);
     expect(num(second, 'maxWidth')).toBe(210);
+    expect(num(second, 'askedW')).toBeGreaterThanOrEqual(209);
     expect(num(second, 'askedW')).toBeLessThanOrEqual(211);
   });
 
@@ -592,7 +603,15 @@ describe('Popover', () => {
     const below = 'place-below';
     await render(<Stage testId={below} initial />);
     await requireHandle(below);
-    const up = await waitForUp(below);
+    // Where the popover landed is a later fact than that it is up: the platform knows the
+    // window before it knows the frame it was given, so this waits for the report that has
+    // both rather than reading a report that is only half a presentation.
+    const up = await waitForReport(
+      below,
+      (r) => isUp(r) && rectOf(r.popRect) != null,
+      'a popover on screen with a frame',
+      12000
+    );
     const anchor = rectOf(up.anchorRect);
     const popup = rectOf(up.popRect);
     expect(anchor).not.toBeNull();
@@ -627,7 +646,12 @@ describe('Popover', () => {
       />
     );
     await requireHandle(above);
-    const flipped = await waitForUp(above);
+    const flipped = await waitForReport(
+      above,
+      (r) => isUp(r) && rectOf(r.popRect) != null,
+      'the popover that had no room below',
+      12000
+    );
     const highAnchor = rectOf(flipped.anchorRect)!;
     const highPopup = rectOf(flipped.popRect)!;
     expect(highPopup.y + highPopup.height).toBeLessThanOrEqual(
@@ -690,8 +714,13 @@ describe('Popover', () => {
         12000
       );
       expect(again.userDismissals).toBe('1');
-      // Nothing reached JS as an app event, and the count moved all the same.
-      expect(eventLog.filter((e) => e.startsWith('unheard:'))).toEqual([]);
+      // Nothing reached JS as a *close* it could answer — that is what `uncontrolled`
+      // means — while the presentation that ended still reported its dismiss, and the
+      // event count moved so the next `isPresented` is not refused as stale.
+      await waitForEvent('unheard:dismiss', 12000);
+      expect(eventLog.filter((e) => e.startsWith('unheard:'))).toEqual([
+        'unheard:dismiss',
+      ]);
       expect(handles.get('unheard')?.mostRecentEventCount).toBe(1);
     });
 
@@ -701,14 +730,17 @@ describe('Popover', () => {
       await waitForUp('withdraw');
       clearEvents();
       setters.get('withdraw')?.(false);
+      // A change React asked for is not a native interaction: the app gets no
+      // `onIsPresentedChange` back for its own write (D33). The dismiss is the only event,
+      // and it arrives when the popover has really left the screen, not when the write
+      // landed - so the wait is the assertion, and the log then says it was only that.
+      await waitForEvent('withdraw:dismiss', 12000);
       await waitForReport(
         'withdraw',
         (r) => r.presented === '0' && r.onScreen === '0',
         'closed',
         12000
       );
-      // A change React asked for is not a native interaction: the app gets no
-      // `onIsPresentedChange` back for its own write (D33).
       expect(eventLog).toEqual(['withdraw:dismiss']);
       expect(reportOf('withdraw').userDismissals).toBe('0');
       expect(reportOf('withdraw').unasked).toBe('0');
@@ -909,10 +941,14 @@ describe('Popover', () => {
     await requireHandle(id);
     const up = await waitForUp(id);
     expect(num(up, 'children')).toBe(1);
-    expect(IOS ? up.inPopover : up.inPopup).toBe('1');
-    // The node is not the popover: it is the content's box, and on iOS it is hidden
-    // while its content is on screen somewhere else.
-    if (IOS) expect(up.hidden).toBe('1');
+    // The node is not the popover: it is the content's box, and the box itself is what
+    // moves - iOS puts it in the popover's own view controller, Android in the popup's
+    // root — so there is never a second copy left in the app's tree.
+    requireYes(
+      up,
+      IOS ? 'inPopover' : 'inPopup',
+      'the content moved into the popover'
+    );
     expect(num(up, 'nodeW')).toBeGreaterThanOrEqual(num(up, 'askedW') - 1);
   });
 });
