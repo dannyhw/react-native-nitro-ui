@@ -5939,7 +5939,7 @@ class DeviceHarness {
    * @returns {boolean}
    */
   imeShown() {
-    return /mInputShown=true/.test(this.shell('dumpsys input_method'));
+    return /mInputShown=true/.test(this.shell('dumpsys input_method').stdout);
   }
 
   /**
@@ -5970,11 +5970,11 @@ class DeviceHarness {
       const bottom = Number(frame[4]);
       return bottom > top ? top : null;
     };
-    const fromService = topOf(this.shell('dumpsys input_method'));
+    const fromService = topOf(this.shell('dumpsys input_method').stdout);
     if (fromService != null) {
       return fromService;
     }
-    for (const block of this.shell('dumpsys window windows').split(
+    for (const block of this.shell('dumpsys window windows').stdout.split(
       'Window #'
     )) {
       if (!/InputMethod/.test(block.slice(0, 220))) {
@@ -6006,7 +6006,7 @@ class DeviceHarness {
   /** @returns {boolean} the current `show_ime_with_hard_keyboard`, as written. */
   imeWithHardKeyboard() {
     return /1/.test(
-      this.shell('settings get secure show_ime_with_hard_keyboard')
+      this.shell('settings get secure show_ime_with_hard_keyboard').stdout
     );
   }
 
