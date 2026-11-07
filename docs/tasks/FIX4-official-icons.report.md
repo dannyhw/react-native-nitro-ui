@@ -51,13 +51,15 @@ split button.
 
 ## Gates
 
+Refreshed for fix round 1 (code tree `288374fe4fff`); the iOS and `real-input` rows are round 1's.
+
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1819 tests / 72 suites | `c865893c76dd` | 1 m 59 s | start 2.2 / med 6.2 / max 7.3 |
+| `check` | **PASS** | 1819 tests / 72 suites | `288374fe4fff` | 1 m 55 s | start 6.1 / med 12.3 / max 14.2 |
 | `harness:ios` | **PASS** | 450 tests / 25 suites + isolated 4 tests / 2 suites | `c865893c76dd` (ios tree) | 10 m 43 s | start 23.0 / med 6.9 / max 26.2 |
-| `harness:android` | **PASS** | 499 tests / 25 suites + isolated 4 tests / 2 suites | `c865893c76dd` (android tree) | 14 m 46 s | start 4.5 / med 3.6 / max 6.2 |
+| `harness:android` | **PASS** | 499 tests / 25 suites + isolated 4 tests / 2 suites | `288374fe4fff` (android tree) | 14 m 48 s | start 2.9 / med 3.0 / max 4.0 |
 | `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **PASS** | — | `c865893c76dd` (android tree) | 40 m 29 s | start 2.6 / med 2.7 / max 5.0 |
+| `real-input:android` | stale | — | c865893c76dd (not this tree) | 40 m 29 s | start 2.6 / med 2.7 / max 5.0 |
 | `harness:android:SearchField` | stale | 1 failed of 15 tests / 1 suites | 8f25de914898 (not this tree) | 14.4 s | start 4.3 / med 5.1 / max 5.9 |
 
 `need --for review`: `need: review is satisfied on this code tree.` `harness:ios` ran because the diff edits
@@ -89,3 +91,29 @@ flake E2 also re-ran; the re-run passed.
 - `gate.mjs need`: on this clone it diffs against the stale local `main` (`a760514`), so its "both platforms" note lists files this branch never touched.
 - Harness: `BottomSheet · 50 cycles` flaked again (mount 9 of 10), as in E2.
 - G19: when `NitroUiPixelProbe` merges, the SearchField glyph probe could move onto it and off the example app's Compose dependency.
+- `nitroUiIcon(id)`: the `Int` resource id is boxed into the `ConcurrentHashMap` lookup on every composition.
+- `example/android/app/build.gradle` repeats the library's Compose BOM version (`2026.09.00`); nothing keeps the two in step.
+- `fetch-material-symbols.mjs --verify` runs only by hand; a scheduled CI job could re-check the pinned files against Google's.
+- The no-hand-built rule catches path code, not raster glyphs or arbitrary `DrawScope` shapes.
+- `SearchField.harness.tsx` glyph test: its final `expect` can't fail, because the `throw` before it already covers every mismatch.
+- `NitroUiProbe.searchGlyphPixels`: `answer` is written on the UI thread and read after a 5 s latch wait with no synchronisation (a timeout reads a stale value).
+
+## Fix round 1
+
+- **Wider rule** (`scripts/__tests__/android-icons.test.js`). It now also fails on `PathNode.`, Compose
+  `relative{Move,Line,Cubic,Quadratic(Bezier)}To(`, `cubicTo`/`quadraticTo`/`quadraticBezierTo(`,
+  `android.graphics.Path`'s `r{Move,Line,Cubic,Quad}To(`, and `materialPath` with or without `(`. The header
+  lists them. "catches a hand-built glyph" gains a fixture file `B.kt` with one line for each form.
+  Red proof: the fixture against round 1's patterns → `Expected - 8`, every new line missing (`B.kt:1: PathNode` …
+  `B.kt:8: materialPath`). With the new patterns, "builds no glyph by hand" finds nothing in `android/src/main`.
+- **False comment.** `MenuSplitButton.kt`'s label KDoc cited D40 item 2's "bundles no icon set"; it now names
+  only the string catalogue. Nothing else in `android/src` or `docs/` makes that claim; DECISIONS records its
+  withdrawal.
+- **`NitroUiIcons.kt` KDoc** now says the cached vector's intrinsic tint is the first parsing theme's, so callers
+  tint through `Icon` or a colour filter, never a bare `Image`. It also says parsing needs
+  `?attr/colorControlNormal`, which React Native's AppCompat theme provides.
+
+The Kotlin comment edits changed the Android tree, so `need` asked for `harness:android`. Its first run failed
+only the `BottomSheet · 50 cycles` flake; the rerun passed. The Gates table above is this round's.
+
+`need --for review`: `need: review is satisfied on this code tree.`
