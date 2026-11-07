@@ -213,4 +213,11 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G19 review: an icon added in an over-the-air update (`file://` bundle, expo-updates/CodePush) has no drawable resource to resolve; document it or send `url:file://…`.
 - G19 review: `URI(url)` throws on asset paths with spaces, so such an icon draws nothing; a dev URL with `/assets/../..` is sent as-is, unverified against Metro.
 - G19 review: nothing checks that a release bundle actually contains the imported icon drawables (`drawable-mdpi/…`).
+- G19 re-review: `NitroUiIcons` keeps every app vector it is asked for, unbounded and keyed by resource id alone, so a `-ldrtl` or `-night` variant of that id is never read after the first parse; `NitroUiIconBitmaps` is keyed by id the same way.
+- G19 re-review: an app's own vector resource is parsed on the main thread the first time its id is seen (`loadIconArtwork` runs inside `afterUpdate()`); only the dev-server road is off-main.
+- G19 re-review: nothing tests the fallback it ships — a `<vector>` whose `ImageVector` parse throws should draw a rasterised copy instead of nothing, and no test makes it throw.
+- G19 re-review: a `require`d `.xml` that is not a `<vector>` draws a bitmap in a release build and nothing in development, while the changeset says such an asset "draws nothing".
+- G19 re-review: fixture provenance walks `example/src/assets/icons`, `res/drawable` and `res/drawable-nodpi` only, so a `drawable-v24` or `drawable-anydpi` folder is unchecked.
+- G19 re-review: `isVectorDrawable` catches `Throwable` where `Exception` would do, swallowing `Error` with the "not a vector" answer.
+- G19 re-review: that function's comment misdescribes why `nextTag()` failed: the binary parser reports `START_DOCUMENT` twice, it does not report a non-tag as its first event.
 - X21 review: Slider screen-reader step, if a stale tree is published at a bound and the platform clamps the target to that bound, a press away from it is dropped (target equals published progress); check whether the delegate clamps.
