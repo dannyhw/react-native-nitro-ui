@@ -464,43 +464,50 @@ parse-check.
 
 Two claims the tests did not keep.
 
-**The parser exemption never kept inline `pathData` strings illegal.** `HAND_BUILT` matched builders and path commands, no string literal, so `PathParser().parsePathString("M480-269 …")` in the exempt file was silent. The pattern matches nothing in `android/src/main` today and not `"M3 Expressive"`; the fixture gained a line 4 it must report.
+**The parser exemption never kept inline `pathData` strings illegal.** `HAND_BUILT` matched builders and path commands, no string literal, so `PathParser().parsePathString("M480-269 …")` in the exempt file was silent. It matches nothing in `android/src/main` today, not `"M3 Expressive"`; the fixture gained a line 4 it must report.
 
-**The raster branch did not test drawing.** Its Buttons were `filled`, so the probe counted the pill's own paint — 208267 pixels, and it would pass with no artwork at all. They are `text` variants under the probe title now; `namedHits >= 2 * mediumHits`, which round 1's stretched raster cleared at 3.7×, is labelled a floor, `SHARP_RATIO` the guard.
+**The raster branch did not test drawing.** Its Buttons were `filled`, so the probe counted the pill's own paint — 208267 pixels — and would pass with none. Now `text` variants under the probe title; `namedHits >= 2 * mediumHits`, which round 1's stretched raster cleared at 3.7×, is labelled a floor, `SHARP_RATIO` the guard.
 
 Red proofs:
 - `android-icons.test.js` -> quoted-path pattern deleted -> `- …NitroUiVectorDrawable.kt:4: a typed pathData string` missing (1 failed of 6).
 - `Button.harness.tsx` -> `rememberIconPainter`'s `Bitmap` arm answers `null` -> only `expected 0 to be greater than 0` at `rasterHits`; boxes and 22 other Button tests green.
 
-Seven other findings went to `FOLLOWUPS.md`, one line each. Four gates are green on `bd721c07f5fa`; `real-input:ios` is not, and see the question below. One `harness:ios` also died with SIGSEGV in react-native-worklets' worklet teardown mid-suite; its re-run passed.
+Seven others went to `FOLLOWUPS.md`. On `bd721c07f5fa` four gates were green and `real-input:ios` was not; one `harness:ios` died in react-native-worklets' teardown; its re-run passed. `origin/main` then brought X21's fix for that check and E5's Slider; every gate re-ran on `d0d432cddf00`, the tree below.
 
 ### Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1863 tests / 75 suites | `bd721c07f5fa` | 2 m 55 s | start 5.0 / med 10.5 / max 26.4 |
-| `harness:ios` | **PASS** | 467 tests / 25 suites + isolated 4 tests / 2 suites | `bd721c07f5fa` (ios tree) | 11 m 08 s | start 31.4 / med 5.2 / max 31.4 |
-| `harness:android` | **PASS** | 518 tests / 25 suites + isolated 4 tests / 2 suites | `bd721c07f5fa` (android tree) | 16 m 51 s | start 4.0 / med 4.2 / max 10.9 |
-| `real-input:ios` | **FAIL** | — | `bd721c07f5fa` (ios tree) | 25 m 55 s | start 3.9 / med 7.1 / max 40.9 |
-| `real-input:android` | **PASS** | — | `bd721c07f5fa` (android tree) | 42 m 06 s | start 4.8 / med 4.8 / max 54.4 |
+| `check` | **PASS** | 1877 tests / 76 suites | `d0d432cddf00` | 3 m 08 s | start 6.3 / med 15.9 / max 31.6 |
+| `harness:ios` | **PASS** | 468 tests / 25 suites + isolated 4 tests / 2 suites | `d0d432cddf00` (ios tree) | 11 m 09 s | start 4.0 / med 4.9 / max 19.3 |
+| `harness:android` | **PASS** | 524 tests / 25 suites + isolated 4 tests / 2 suites | `d0d432cddf00` (android tree) | 15 m 43 s | start 6.0 / med 4.4 / max 10.8 |
+| `real-input:ios` | **PASS** | — | `d0d432cddf00` (ios tree) | 28 m 31 s | start 13.6 / med 6.7 / max 41.1 |
+| `real-input:android` | **PASS** | — | `d0d432cddf00` (android tree) | 43 m 23 s | start 3.4 / med 4.0 / max 17.6 |
 | `harness:android:Button` | stale | 1 failed of 23 tests / 1 suites | 6d436d28dfad (not this tree) | 1 m 21 s | start 6.2 / med 5.4 / max 6.2 |
-| `real-input:ios:--control:text-field` | **FAIL** | — | `bd721c07f5fa` (ios tree) | 6 m 60 s | start 10.5 / med 8.3 / max 14.0 |
+| `real-input:ios:--control:text-field` | stale | — | bd721c07f5fa (not this tree) | 6 m 60 s | start 10.5 / med 8.3 / max 14.0 |
 
 ### need --for merge
 
 ```
-need: merge against .gates/task/G19-merge.jsonl; code diff base 6b47c08 touches ios + android
+need: merge against .gates/task/G19-merge.jsonl; code diff base d532b1b touches ios + android
   ✓ check — green
   ✓ harness:ios — green
   ✓ harness:android — green
-  ✗ real-input:ios — red (exit 1 on tree bd721c07f5fa, task/G19-merge/real-input+ios-2026-11-07T17-41-37.095Z.log)
+  ✓ real-input:ios — green
   ✓ real-input:android — green
-  note: no check line was borrowed for this tree: no other ledger has a check line on tree 955a9c8bfde5
+  note: no check line was borrowed for this tree: no other ledger has a check line on tree 1963eb60ab78
   note: treated as both platforms (outside the known prefixes): example/__tests__/Button.harness.tsx, example/__tests__/Menu.harness.tsx, example/src/ButtonScreen.tsx, example/src/assets/icons/close_24px.xml, example/src/assets/icons/not-a-vector.xml, example/src/assets/icons/share_24px.xml, …
-need: 1 gate(s) missing for merge: real-input:ios
+need: merge is satisfied on this code tree.
 ```
 
 ## Questions for orchestrator (merge round)
+
+**Resolved before this round was handed in:** X21's fix and E5 landed on `main`, this branch
+merged them (`9bed70bc`) and the whole bar re-ran green on `d0d432cddf00`. The retry note
+X21 added is the answer, printed in the run that went green: `key 1/3 left keys "xy" into
+the frozen search field at "frozen: 1 edits refused"`, re-typed and answered on key 2/3 -
+the keystroke is really dropped, and is now counted and retried. What follows is kept as the
+record of the eleven red runs that made it worth asking.
 
 **`real-input:ios` will not go green on `bd721c07f5fa`; the other four gates are.** Eleven runs — ten
 full, one `--control text-field` probe — each red on one check: `frozen: 1 edits refused` where
