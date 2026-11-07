@@ -1,0 +1,180 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-07T12:22:19.648Z on code tree `bd721c07f5fa` at HEAD `915ad2e` (branch `task/G19-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 833376 ms
+- Load: start 6.28, end 94.56, median 10.24, max 222.17
+- Device: ios
+- Full log: `task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log` (<store>/task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Recycling.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   X21-8ilbt                X21          both              pair-b
+  |   G19-cj5oa                G19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 94.56 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 136 log line(s)
+
+```
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree bd721c07f5fa at HEAD 915ad2e2
+gate: git tree b3756b87c7e2
+gate: log task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log
+gate:       <store>/task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree bd721c07f5fa, 17 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.28/5.09 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+FAIL __tests__/Recycling.harness.tsx
+  ● Test suite failed to run
+
+    The native app crashed during test execution.
+    Harness extracted the crash log: .harness/crash-reports/2026-11-07T12-22-21-058Z/ios/__tests__-HostControls.harness.tsx/ios--ios-crash-report--NitroUiExample-2026-11-07-122803.ips
+    Signal: SIGSEGV
+    Exception: EXC_BAD_ACCESS
+    Process: NitroUiExample (pid 62322)
+
+      0 facebook::jsi::Value::~Value() (+ 36)
+      1 worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)::operator()(bool) const (Serializable.h:45)
+      2 void worklets::WorkletRuntimeRegistry::runWhileLocked<worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)>(facebook::jsi::Runtime*, worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)&&) (WorkletRuntimeRegistry.h:39)
+      3 worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&) (Serializable.h:43)
+      4 worklets::RetainingSerializableStore<worklets::SerializableWorklet>::~RetainingSerializableStore() (RetainingSerializable.h:77)
+      5 worklets::RetainingSerializableStore<worklets::SerializableWorklet>::~RetainingSerializableStore() (RetainingSerializable.h:75)
+      6 std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>::operator()[abi:dee220106](worklets::RetainingSerializableStore<worklets::SerializableWorklet>*) const (unique_ptr.h:75)
+      7 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::reset[abi:dee220106](worklets::RetainingSerializableStore<worklets::SerializableWorklet>*) (unique_ptr.h:291)
+      8 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::~unique_ptr[abi:dee220106]() (unique_ptr.h:257)
+      9 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::~unique_ptr[abi:dee220106]() (unique_ptr.h:257)
+      10 worklets::RetainingSerializable<worklets::SerializableWorklet>::~RetainingSerializable() (RetainingSerializable.h:105)
+      11 worklets::RetainingSerializable<worklets::SerializableWorklet>::~RetainingSerializable() (RetainingSerializable.h:105)
+      12 void std::__1::__destroy_at[abi:dee220106]<worklets::RetainingSerializable<worklets::SerializableWorklet>>(worklets::RetainingSerializable<worklets::SerializableWorklet>*) (construct_at.h:67)
+      13 void std::__1::allocator_traits<std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::destroy[abi:dee220106]<worklets::RetainingSerializable<worklets::SerializableWorklet>, 0>(std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>&, worklets::RetainingSerializable<worklets::SerializableWorklet>*) (allocator_traits.h:313)
+      14 void std::__1::__shared_ptr_emplace<worklets::RetainingSerializable<worklets::SerializableWorklet>, std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::__on_zero_shared_impl[abi:dee220106]<std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>, 0>() (shared_ptr.h:180)
+      15 std::__1::__shared_ptr_emplace<worklets::RetainingSerializable<worklets::SerializableWorklet>, std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::__on_zero_shared() (shared_ptr.h:183)
+      16 std::__1::__shared_count::__release_shared[abi:dee220106]() (shared_count.h:65)
+      17 std::__1::__shared_weak_count::__release_shared[abi:dee220106]() (shared_count.h:100)
+      18 std::__1::shared_ptr<worklets::Serializable>::~shared_ptr[abi:dee220106]() (shared_ptr.h:503)
+      19 std::__1::shared_ptr<worklets::Serializable>::~shared_ptr[abi:dee220106]() (shared_ptr.h:501)
+      20 worklets::SerializableJSRef::~SerializableJSRef() (Serializable.cpp:127)
+      21 worklets::SerializableJSRef::~SerializableJSRef() (Serializable.cpp:127)
+      22 void std::__1::__destroy_at[abi:dee220106]<worklets::SerializableJSRef>(worklets::SerializableJSRef*) (construct_at.h:67)
+      23 void std::__1::allocator_traits<std::__1::allocator<worklets::SerializableJSRef>>::destroy[abi:dee220106]<worklets::SerializableJSRef, 0>(std::__1::allocator<worklets::SerializableJSRef>&, worklets::SerializableJSRef*) (allocator_traits.h:313)
+      24 void std::__1::__shared_ptr_emplace<worklets::SerializableJSRef, std::__1::allocator<worklets::SerializableJSRef>>::__on_zero_shared_impl[abi:dee220106]<std::__1::allocator<worklets::SerializableJSRef>, 0>() (shared_ptr.h:180)
+      25 std::__1::__shared_ptr_emplace<worklets::SerializableJSRef, std::__1::allocator<worklets::SerializableJSRef>>::__on_zero_shared() (shared_ptr.h:183)
+      26 void llvh::unique_function<void ()>::CallImpl<facebook::hermes::(anonymous namespace)::HermesRuntimeImpl::NativeStateContext::finalize(hermes::vm::HadesGC&, hermes::vm::NativeState*)::'lambda'()>(void*) (+ 80)
+      27 hermes::SerialExecutor::run() (+ 408)
+      28 hermes::SerialExecutor::threadMain(void*) (+ 112)
+      29 _pthread_start (+ 104)
+      30 thread_start (+ 8)
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+Summary of all failing tests
+FAIL __tests__/Recycling.harness.tsx
+  ● Test suite failed to run
+
+    The native app crashed during test execution.
+    Harness extracted the crash log: .harness/crash-reports/2026-11-07T12-22-21-058Z/ios/__tests__-HostControls.harness.tsx/ios--ios-crash-report--NitroUiExample-2026-11-07-122803.ips
+    Signal: SIGSEGV
+    Exception: EXC_BAD_ACCESS
+    Process: NitroUiExample (pid 62322)
+
+      0 facebook::jsi::Value::~Value() (+ 36)
+      1 worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)::operator()(bool) const (Serializable.h:45)
+      2 void worklets::WorkletRuntimeRegistry::runWhileLocked<worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)>(facebook::jsi::Runtime*, worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&)::'lambda'(bool)&&) (WorkletRuntimeRegistry.h:39)
+      3 worklets::cleanupRuntimeAware(facebook::jsi::Runtime*, facebook::jsi::Value&) (Serializable.h:43)
+      4 worklets::RetainingSerializableStore<worklets::SerializableWorklet>::~RetainingSerializableStore() (RetainingSerializable.h:77)
+      5 worklets::RetainingSerializableStore<worklets::SerializableWorklet>::~RetainingSerializableStore() (RetainingSerializable.h:75)
+      6 std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>::operator()[abi:dee220106](worklets::RetainingSerializableStore<worklets::SerializableWorklet>*) const (unique_ptr.h:75)
+      7 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::reset[abi:dee220106](worklets::RetainingSerializableStore<worklets::SerializableWorklet>*) (unique_ptr.h:291)
+      8 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::~unique_ptr[abi:dee220106]() (unique_ptr.h:257)
+      9 std::__1::unique_ptr<worklets::RetainingSerializableStore<worklets::SerializableWorklet>, std::__1::default_delete<worklets::RetainingSerializableStore<worklets::SerializableWorklet>>>::~unique_ptr[abi:dee220106]() (unique_ptr.h:257)
+      10 worklets::RetainingSerializable<worklets::SerializableWorklet>::~RetainingSerializable() (RetainingSerializable.h:105)
+      11 worklets::RetainingSerializable<worklets::SerializableWorklet>::~RetainingSerializable() (RetainingSerializable.h:105)
+      12 void std::__1::__destroy_at[abi:dee220106]<worklets::RetainingSerializable<worklets::SerializableWorklet>>(worklets::RetainingSerializable<worklets::SerializableWorklet>*) (construct_at.h:67)
+      13 void std::__1::allocator_traits<std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::destroy[abi:dee220106]<worklets::RetainingSerializable<worklets::SerializableWorklet>, 0>(std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>&, worklets::RetainingSerializable<worklets::SerializableWorklet>*) (allocator_traits.h:313)
+      14 void std::__1::__shared_ptr_emplace<worklets::RetainingSerializable<worklets::SerializableWorklet>, std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::__on_zero_shared_impl[abi:dee220106]<std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>, 0>() (shared_ptr.h:180)
+      15 std::__1::__shared_ptr_emplace<worklets::RetainingSerializable<worklets::SerializableWorklet>, std::__1::allocator<worklets::RetainingSerializable<worklets::SerializableWorklet>>>::__on_zero_shared() (shared_ptr.h:183)
+      16 std::__1::__shared_count::__release_shared[abi:dee220106]() (shared_count.h:65)
+      17 std::__1::__shared_weak_count::__release_shared[abi:dee220106]() (shared_count.h:100)
+      18 std::__1::shared_ptr<worklets::Serializable>::~shared_ptr[abi:dee220106]() (shared_ptr.h:503)
+      19 std::__1::shared_ptr<worklets::Serializable>::~shared_ptr[abi:dee220106]() (shared_ptr.h:501)
+      20 worklets::SerializableJSRef::~SerializableJSRef() (Serializable.cpp:127)
+      21 worklets::SerializableJSRef::~SerializableJSRef() (Serializable.cpp:127)
+      22 void std::__1::__destroy_at[abi:dee220106]<worklets::SerializableJSRef>(worklets::SerializableJSRef*) (construct_at.h:67)
+      23 void std::__1::allocator_traits<std::__1::allocator<worklets::SerializableJSRef>>::destroy[abi:dee220106]<worklets::SerializableJSRef, 0>(std::__1::allocator<worklets::SerializableJSRef>&, worklets::SerializableJSRef*) (allocator_traits.h:313)
+      24 void std::__1::__shared_ptr_emplace<worklets::SerializableJSRef, std::__1::allocator<worklets::SerializableJSRef>>::__on_zero_shared_impl[abi:dee220106]<std::__1::allocator<worklets::SerializableJSRef>, 0>() (shared_ptr.h:180)
+      25 std::__1::__shared_ptr_emplace<worklets::SerializableJSRef, std::__1::allocator<worklets::SerializableJSRef>>::__on_zero_shared() (shared_ptr.h:183)
+      26 void llvh::unique_function<void ()>::CallImpl<facebook::hermes::(anonymous namespace)::HermesRuntimeImpl::NativeStateContext::finalize(hermes::vm::HadesGC&, hermes::vm::NativeState*)::'lambda'()>(void*) (+ 80)
+      27 hermes::SerialExecutor::run() (+ 408)
+      28 hermes::SerialExecutor::threadMain(void*) (+ 112)
+      29 _pthread_start (+ 104)
+      30 thread_start (+ 8)
+
+
+Test Suites: 1 failed, 1 skipped, 23 passed, 24 of 25 total
+Tests:       1 skipped, 462 passed, 463 total
+Snapshots:   0 total
+Time:        783.255 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree bd721c07f5fa, 17 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.57/14.03 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        47.553 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 833.4 s
+gate: recorded in .gates/task/G19-merge.jsonl
+
+
+gate: appended the device context to task/G19-merge/harness+ios-2026-11-07T12-22-18.907Z.log (4 probe(s))
+
+```

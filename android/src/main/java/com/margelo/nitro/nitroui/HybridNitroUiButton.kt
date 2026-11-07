@@ -1,6 +1,7 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.Button
@@ -34,6 +35,7 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -65,13 +67,28 @@ internal enum class ButtonVariant(val wireName: String) {
 }
 
 /**
- * `small` / `medium` / `large`: which Material 3 container height the control's
- * padding, label style and corner are read from.
+ * The five rungs, and which Material 3 container height the control's padding,
+ * label style and corner are read from.
+ *
+ * The names are the library's, the numbers are Material's (D42 item 4): the
+ * Expressive ladder is indexed by a container height, and Material publishes five
+ * of them, so the ladder has five rungs. `small` / `medium` / `large` keep the
+ * heights they had; `xlarge` and `xxlarge` are the two taller tokens, which is how
+ * Material names its own XS–XL button row lines up with this one:
+ *
+ * | Material | XS | S | M | L | XL |
+ * | -------- | -- | - | - | - | -- |
+ * | nitro-ui | `small` | `medium` | `large` | `xlarge` | `xxlarge` |
+ *
+ * IconButton (G19) is documented in Material's names because its tokens are
+ * Material's own, and this table is the bridge between the two spellings.
  */
 internal enum class ButtonScale(val wireName: String) {
   Small("small"),
   Medium("medium"),
-  Large("large");
+  Large("large"),
+  XLarge("xlarge"),
+  XXLarge("xxlarge");
 
   companion object {
     /** The scale for a wire string; anything unrecognised is `medium`. */
@@ -102,6 +119,8 @@ internal enum class ButtonScale(val wireName: String) {
         Small -> ButtonDefaults.ExtraSmallContainerHeight
         Medium -> ButtonDefaults.MinHeight
         Large -> ButtonDefaults.MediumContainerHeight
+        XLarge -> ButtonDefaults.LargeContainerHeight
+        XXLarge -> ButtonDefaults.ExtraLargeContainerHeight
       }
 
   /**
@@ -201,6 +220,39 @@ internal class ButtonModel : NitroUiModel() {
   var systemImage: String? = null
 
   /**
+   * The icon React asked for, verbatim: a resource name, or a `url:` string for a
+   * file to read (`NitroUiIconSource`).
+   *
+   * The wire form is kept rather than the parsed source because it is what
+   * `hybridRef` reports back and what a test compares against the string the
+   * wrapper built; [iconSlot] holds the parsed half.
+   */
+  var androidIcon: String? = null
+
+  /**
+   * Everything derived from [androidIcon], shared with `Menu`'s trigger.
+   *
+   * The rules live in [NitroUiIconSlot]: resolve once per change from
+   * `afterUpdate()`, reserve a file's slot before the bytes arrive, retire an answer
+   * whose generation has moved, and treat unresolvable artwork as no icon at all.
+   * Read it here as a property because the composition reads *this* model, and the
+   * state behind it is observed — so a glyph arriving is a recomposition of this
+   * control and nothing else.
+   */
+  val iconSlot = NitroUiIconSlot()
+
+  /** What the composition lays the label next to. Observed, through [iconSlot]. */
+  val androidIconContent: NitroUiIconContent
+    get() = iconSlot.content
+
+  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
+  fun resolveAndroidIcon(
+    artwork: NitroUiIconArtwork,
+  ) {
+    iconSlot.resolve(androidIcon, artwork)
+  }
+
+  /**
    * The size configuration React sent. The sizing engine reads the key out of Fabric
    * state itself; the host only needs to hear that it changed (see
    * [NitroComposeHost.noteSizingKeyChanged]).
@@ -213,6 +265,38 @@ internal class ButtonModel : NitroUiModel() {
    */
   var onPress: (() -> Unit)? = null
 
+  /**
+   * What the last `nuiTestPixelProbe` saw, as one line, or empty before the first.
+   *
+   * Plain rather than observed - nothing may recompose because a test reading moved -
+   * and stored behind a lock because the probe is posted to the main thread while
+   * `nuiTestPixelReport` answers from whichever thread Nitro called it on. The `n=`
+   * prefix counts probes, which is the only way a harness can tell its own answer
+   * from the previous control's. Cleared with everything else: a recycled Button that
+   * still reported another owner's pixels would let a test credit a hit that is not
+   * its control's.
+   */
+  var pixelReport = ""
+    private set
+
+  private val pixelReportLock = Any()
+
+  /** How many probes have reported, under [pixelReportLock]. */
+  private var pixelProbes = 0
+
+  /** Store what a probe found, numbered. Safe from any thread. */
+  fun publishPixelReport(report: String) {
+    synchronized(pixelReportLock) {
+      pixelProbes += 1
+      pixelReport = "n=$pixelProbes $report"
+    }
+  }
+
+  /** The last published probe, or empty before the first one. */
+  fun readPixelReport(): String {
+    synchronized(pixelReportLock) { return pixelReport }
+  }
+
   override fun reset() {
     title = ""
     variant = ButtonVariant.Filled
@@ -222,8 +306,12 @@ internal class ButtonModel : NitroUiModel() {
     tintColor = null
     accessibilityLabel = null
     systemImage = null
+    androidIcon = null
+    iconSlot.reset()
     sizingKey = ""
     onPress = null
+    pixelReport = ""
+    pixelProbes = 0
   }
 }
 
@@ -585,6 +673,7 @@ private class ButtonHost(
       tint = model.tintColor,
       modifier = labelModifier,
       onClick = { press?.invoke() },
+      icon = model.androidIconContent,
     )
   }
 }
@@ -612,16 +701,43 @@ internal fun NitroUiM3Button(
   tint: Int?,
   modifier: Modifier,
   onClick: () -> Unit,
+  icon: NitroUiIconContent = NitroUiIconContent.Absent,
 ) {
   // No height is set: the scale picks Material's padding, label style and corner,
   // and Material itself lays the box out at no less than MinTouchTargetHeight, so
   // the ladder reaches down to the XS token (32 dp of padding and type) without
   // shipping a control a thumb cannot hit. Measured box: 48 / 48 / 56 dp.
   val colors = buttonColors(variant, tint)
-  val padding = contentPaddingFor(variant, scale)
+  // `hasStartIcon` is Material's own input to the padding, and it is the difference
+  // between a row of two things and a row of one: the ladder widens the leading
+  // edge so the glyph does not sit where the label's own inset used to be. Passing
+  // it unconditionally is how an icon and a no-icon Button end up the same width
+  // when the name resolves to nothing.
+  // `Pending` takes the slot too. That is the point of it: the box the ladder
+  // describes is the box the first frame draws, and the glyph arriving later
+  // changes what is in the slot and not the size of it.
+  val padding =
+    if (icon == NitroUiIconContent.Absent) {
+      contentPaddingFor(variant, scale)
+    } else {
+      ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
+    }
   val labelStyle = buttonLabelStyle(scale)
   val shapes = buttonShapes(cornerFor(variant, shape), scale)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+    // The glyph goes in the slot Material's `Button` would use, in the one helper
+    // Menu's split trigger uses too - [NitroUiIconSlotContent]. It draws the artwork
+    // tinted with `LocalContentColor` (not [buttonColors]' resting `contentColor`,
+    // which ignores `enabled` and would leave a disabled control's glyph at full
+    // strength - the harness's disabled probe catches that), and it paints an empty
+    // slot for `Pending`, which is the whole of D43's sizing rule: the box comes from
+    // `iconSizeFor(scale)`, the same rung that sets the control's height, so the
+    // frame before a dev-server file and the frame after it are one box.
+    NitroUiIconSlotContent(
+      icon = icon,
+      size = ButtonDefaults.iconSizeFor(scale.height),
+      spacing = ButtonDefaults.iconSpacingFor(scale.height),
+    )
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
     // label truncates instead of painting outside its box (the iOS content does
@@ -695,6 +811,15 @@ class HybridNitroUiButton(
 
   private val model = ButtonModel()
   private val host = ButtonHost(reactContext, reactContext.currentActivity, model)
+
+  /**
+   * The control's half of icon resolution: the app's resources and the shared
+   * file cache, bound to this control's `Context` ([NitroUiIconArtwork]).
+   *
+   * Held rather than built per commit — a prop commit is not a place to allocate,
+   * and the `Context` it captures is the one [host] already holds.
+   */
+  private val iconArtwork = NitroUiAppIconArtwork(reactContext)
 
   /** The Nitro `view` - created once here and never replaced. */
   override val view: View
@@ -851,6 +976,34 @@ class HybridNitroUiButton(
       model.systemImage = next.asSecondOrNull()
     }
 
+  /**
+   * `androidIcon`: the icon to draw before the label - an app drawable's resource
+   * name, or a `url:` string naming a file to read (G19 fix round 1, D43).
+   *
+   * Stores and marks dirty, nothing else. Resolving is the expensive half - a
+   * resource lookup takes a lock on a shared table, and the file form starts a
+   * network read - so it happens once per commit in [afterUpdate], behind
+   * [ButtonModel.resolveAndroidIcon]'s comparison, and never in composition, which
+   * runs again for reasons that have nothing to do with icons.
+   *
+   * The string is stored as React sent it. The wrapper has already normalised a
+   * name and marked a URL ([NitroUiIconSource] reads the marker), and the getter is
+   * what `hybridRef` reports back - a harness comparing it against the string it
+   * built wants the answer verbatim, not a third spelling of it.
+   */
+  override var androidIcon: Variant_NullType_String
+    get() =
+      model.androidIcon?.let { Variant_NullType_String.Second(it) }
+        ?: Variant_NullType_String.First(NullType.NULL)
+    set(next) {
+      val name = next.asSecondOrNull()
+      if (name == model.androidIcon) {
+        return
+      }
+      model.androidIcon = name
+      host.markDirty()
+    }
+
   override var testID: Variant_NullType_String
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
@@ -919,6 +1072,11 @@ class HybridNitroUiButton(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
+    // The icon first, if it changed: a resource resolved here is drawn in this
+    // commit, and a file that has to be read reserves its slot in this commit and
+    // fills it later. Both are cheaper here than in the setter, which may run for
+    // every prop of the commit (AGENTS' perf contract).
+    model.resolveAndroidIcon(iconArtwork)
     // No controlled value, so nothing to reconcile: one commit per React commit
     // (`docs/architecture/core.md` §12).
     host.commit()
@@ -950,4 +1108,24 @@ class HybridNitroUiButton(
     val size = host.contentSize ?: return NitroUiButtonSize(0.0, 0.0)
     return NitroUiButtonSize(size.width, size.height)
   }
+
+  /**
+   * Sample what this Button is drawing for [color], and store the answer.
+   *
+   * Posted rather than run inline: reading pixels needs the view drawn, and a Nitro
+   * method may not block for the UI thread. Same shape as SegmentedControl's pair and
+   * the same sampler (`nitroUiSamplePixels`), so the harness reads one report format
+   * from either control.
+   */
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { model.publishPixelReport(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  /** The last probe's line - see [ButtonModel.pixelReport]. */
+  override fun nuiTestPixelReport(): String = model.readPixelReport()
 }

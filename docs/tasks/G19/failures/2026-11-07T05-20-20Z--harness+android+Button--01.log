@@ -1,0 +1,80 @@
+# Failure excerpt — harness:android:Button
+
+- Ran: 2026-11-07T05:20:20.131Z on code tree `3eea3e3af80f` at HEAD `be57090` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Button`
+- Result: fail, exit 1, 37436 ms
+- Load: start 14.28, end 10.29, median 11.53, max 14.28
+- Device: android / device `emulator-5570` / lease `G19-w2v9t`
+- Full log: `task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-20-20.131Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-20-20.131Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive`
+- `expected 'only the imported icon published 57.9…' to deeply equal 'every box the imported icon published…'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-20-20.131Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-w2v9t (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   G19-w2v9t                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.29 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Button
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 3eea3e3af80f, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 14.28/6.96 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-20-20.131Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive
+
+    expected 'only the imported icon published 57.9…' to deeply equal 'every box the imported icon published…'
+
+      [0m [90m 1960 |[39m [32m              ', '[39m
+       [90m 1961 |[39m [32m            )}; the named icon published ${nameBoxes.join(', ')}`[39m
+      [31m[1m>[22m[39m[90m 1962 |[39m       )[33m.[39mtoEqual([33mSHARED_BOXES[39m)[33m;[39m
+       [90m      |[39m                [31m[1m^[22m[39m
+       [90m 1963 |[39m       [90m// 4. And the one box both of them ended on is the ladder's, not the file's.[39m
+       [90m 1964 |[39m       expect(sameSize(named[33m,[39m first))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1965 |[39m     } [36melse[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 20 passed, 21 total
+Snapshots:   0 total
+Time:        35.831 s, estimated 46 s
+Ran all test suites matching Button.
+
+
+
+```

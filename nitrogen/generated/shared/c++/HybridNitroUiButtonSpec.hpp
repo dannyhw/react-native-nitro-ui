@@ -64,6 +64,8 @@ namespace margelo::nitro::nitroui {
       virtual void setTintColor(const std::variant<nitro::NullType, double>& tintColor) = 0;
       virtual std::variant<nitro::NullType, std::string> getSystemImage() = 0;
       virtual void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) = 0;
+      virtual std::variant<nitro::NullType, std::string> getAndroidIcon() = 0;
+      virtual void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) = 0;
       virtual std::variant<nitro::NullType, std::string> getTestID() = 0;
       virtual void setTestID(const std::variant<nitro::NullType, std::string>& testID) = 0;
       virtual std::variant<nitro::NullType, std::string> getAccessibilityLabel() = 0;
@@ -80,6 +82,8 @@ namespace margelo::nitro::nitroui {
     public:
       // Methods
       virtual NitroUiButtonSize measureContent() = 0;
+      virtual void nuiTestPixelProbe(double color) = 0;
+      virtual std::string nuiTestPixelReport() = 0;
 
     protected:
       // Hybrid Setup

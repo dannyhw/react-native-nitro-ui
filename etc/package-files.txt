@@ -33,8 +33,10 @@ android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiBottomSheetViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
@@ -43,6 +45,7 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
 android/src/main/res/drawable/nitroui_check.xml
 android/src/main/res/drawable/nitroui_close.xml
@@ -246,6 +249,10 @@ lib/module/core/useSizingId.js
 lib/module/core/useSizingId.js.map
 lib/module/core/useStableCallback.js
 lib/module/core/useStableCallback.js.map
+lib/module/iconName.js
+lib/module/iconName.js.map
+lib/module/iconSource.js
+lib/module/iconSource.js.map
 lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
@@ -410,6 +417,10 @@ lib/typescript/src/core/useSizingId.d.ts
 lib/typescript/src/core/useSizingId.d.ts.map
 lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
+lib/typescript/src/iconName.d.ts
+lib/typescript/src/iconName.d.ts.map
+lib/typescript/src/iconSource.d.ts
+lib/typescript/src/iconSource.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
 licenses/material-symbols/LICENSE
@@ -899,4 +910,6 @@ src/core/useControlled.ts
 src/core/useProcessedColor.ts
 src/core/useSizingId.ts
 src/core/useStableCallback.ts
+src/iconName.ts
+src/iconSource.ts
 src/index.ts

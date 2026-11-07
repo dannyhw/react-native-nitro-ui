@@ -113,6 +113,21 @@ export function SaveButton() {
 }
 // #endregion
 
+// #region button-icon
+export function ShareButton({ onShare }: { onShare: () => void }) {
+  // iOS draws the SF Symbol; Android draws the `.xml` the app imports. Each
+  // platform ignores the other's prop, so one Button reads the same on both.
+  return (
+    <Button
+      title="Share"
+      systemImage="square.and.arrow.up"
+      androidIcon={require('./assets/icons/share_24px.xml')}
+      onPress={onShare}
+    />
+  );
+}
+// #endregion
+
 // #region segmented-control
 export function ViewToggle() {
   const [index, setIndex] = useState(0);
