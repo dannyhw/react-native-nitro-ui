@@ -61,7 +61,7 @@ gate is asked for. The first `check` run in the ledger failed in 5 s because the
 ## Files changed
 
 - `docs/tasks/Q10-form-list-research.report.md` (this report)
-- `docs/tasks/Q10/gates.jsonl` (exported ledger)
+- `docs/tasks/Q10/gates.jsonl` (exported ledger) and `docs/tasks/Q10/failures/2026-11-07T11-34-42Z--check--01.log` (the failed first run)
 
 ## Follow-ups
 
