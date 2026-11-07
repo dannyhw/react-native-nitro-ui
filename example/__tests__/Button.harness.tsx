@@ -2190,19 +2190,18 @@ describe('androidIcon · an icon the app imports (D43)', () => {
       const content = await waitForMeasured(id, id);
       await waitForBox(id, content, id);
     }
-    const metro = await probeUntilDrawn('sharp-metro', TINT);
-    const named = await probeUntilDrawn('sharp-name', TINT);
-    const medium = await probeUntilDrawn('sharp-medium', TINT);
-    const metroHits = probeHits(metro.report);
-    const namedHits = probeHits(named.report);
-    const mediumHits = probeHits(medium.report);
-    console.log(
-      `sharp: named@xxlarge=${named.report} metro@xxlarge=${metro.report} ` +
-        `named@medium=${medium.report} ` +
-        `ratio=${(namedHits / Math.max(1, metroHits)).toFixed(3)}`
-    );
-
     if (Platform.OS === 'android') {
+      const metro = await probeUntilDrawn('sharp-metro', TINT);
+      const named = await probeUntilDrawn('sharp-name', TINT);
+      const medium = await probeUntilDrawn('sharp-medium', TINT);
+      const metroHits = probeHits(metro.report);
+      const namedHits = probeHits(named.report);
+      const mediumHits = probeHits(medium.report);
+      console.log(
+        `sharp: named@xxlarge=${named.report} metro@xxlarge=${metro.report} ` +
+          `named@medium=${medium.report} ` +
+          `ratio=${(namedHits / Math.max(1, metroHits)).toFixed(3)}`
+      );
       expect(namedHits).toBeGreaterThan(0);
       expect(metroHits).toBeGreaterThan(0);
       expect(
@@ -2223,10 +2222,23 @@ describe('androidIcon · an icon the app imports (D43)', () => {
               'expected at least double, and a stretched 24 dp raster is well under'
       ).toEqual('the top rung carries its share of ink for a 40 dp slot');
     } else {
-      // iOS draws `systemImage`, and ignores `androidIcon` from either road — the
-      // round-1 contract, restated for the new fixture pair.
-      expect(named.report).toContain('no pixels');
-      expect(metro.report).toContain('no pixels');
+      // iOS draws `systemImage` and ignores `androidIcon` from either road — the
+      // round-1 contract, restated for the new fixture pair. Probed once each, not
+      // through `probeUntilDrawn`: that helper waits 15 s for ink iOS is never going
+      // to paint, and three of them overrun the test's own 30 s budget before the
+      // first assertion is reached.
+      expect(
+        await pixelProbe('sharp-name', TINT, 'the shipped glyph')
+      ).toContain('no pixels');
+      expect(
+        await pixelProbe('sharp-metro', TINT, 'the imported glyph')
+      ).toContain('no pixels');
+      expect(
+        sameSize(
+          measured('sharp-name') as Size,
+          measured('sharp-metro') as Size
+        )
+      ).toBe(true);
     }
   });
 
