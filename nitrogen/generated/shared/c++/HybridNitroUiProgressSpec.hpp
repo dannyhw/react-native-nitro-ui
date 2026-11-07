@@ -50,6 +50,10 @@ namespace margelo::nitro::nitroui {
       // Properties
       virtual std::string getVariant() = 0;
       virtual void setVariant(const std::string& variant) = 0;
+      virtual std::string getAppearance() = 0;
+      virtual void setAppearance(const std::string& appearance) = 0;
+      virtual bool getContained() = 0;
+      virtual void setContained(bool contained) = 0;
       virtual std::variant<nitro::NullType, double> getValue() = 0;
       virtual void setValue(const std::variant<nitro::NullType, double>& value) = 0;
       virtual std::variant<nitro::NullType, double> getTintColor() = 0;

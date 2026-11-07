@@ -73,6 +73,19 @@ namespace margelo::nitro::nitroui {
     inline void setVariant(const std::string& variant) noexcept override {
       _swiftPart.setVariant(variant);
     }
+    inline std::string getAppearance() noexcept override {
+      auto __result = _swiftPart.getAppearance();
+      return __result;
+    }
+    inline void setAppearance(const std::string& appearance) noexcept override {
+      _swiftPart.setAppearance(appearance);
+    }
+    inline bool getContained() noexcept override {
+      return _swiftPart.getContained();
+    }
+    inline void setContained(bool contained) noexcept override {
+      _swiftPart.setContained(std::forward<decltype(contained)>(contained));
+    }
     inline std::variant<nitro::NullType, double> getValue() noexcept override {
       auto __result = _swiftPart.getValue();
       return __result;

@@ -59,6 +59,16 @@ void JHybridNitroUiProgressStateUpdater::updateViewProps(jni::alias_ref<jni::JCl
     hybridView->setVariant(newProps->variant.get());
   }
   if (oldProps == nullptr
+        ? newProps->appearance.isProvided()
+        : !newProps->appearance.hasSameValue(oldProps->appearance)) {
+    hybridView->setAppearance(newProps->appearance.get());
+  }
+  if (oldProps == nullptr
+        ? newProps->contained.isProvided()
+        : !newProps->contained.hasSameValue(oldProps->contained)) {
+    hybridView->setContained(newProps->contained.get());
+  }
+  if (oldProps == nullptr
         ? newProps->value.isProvided()
         : !newProps->value.hasSameValue(oldProps->value)) {
     hybridView->setValue(newProps->value.get());

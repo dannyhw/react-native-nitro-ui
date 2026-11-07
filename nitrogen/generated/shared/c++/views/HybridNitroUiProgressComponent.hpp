@@ -47,6 +47,8 @@ namespace margelo::nitro::nitroui::views {
 
   public:
     nitro::ReactProp<std::string> variant;
+    nitro::ReactProp<std::string> appearance;
+    nitro::ReactProp<bool> contained;
     nitro::ReactProp<std::variant<nitro::NullType, double>> value;
     nitro::ReactProp<std::variant<nitro::NullType, double>> tintColor;
     nitro::ReactProp<std::variant<nitro::NullType, double>> trackColor;
@@ -60,6 +62,8 @@ namespace margelo::nitro::nitroui::views {
     [[nodiscard]]
     bool hasSameProps(const HybridNitroUiProgressProps& other) const noexcept {
       return variant.hasSameValue(other.variant) &&
+             appearance.hasSameValue(other.appearance) &&
+             contained.hasSameValue(other.contained) &&
              value.hasSameValue(other.value) &&
              tintColor.hasSameValue(other.tintColor) &&
              trackColor.hasSameValue(other.trackColor) &&
@@ -74,6 +78,8 @@ namespace margelo::nitro::nitroui::views {
     [[nodiscard]]
     bool hasAnyProvidedProps() const noexcept {
       return variant.isProvided() ||
+             appearance.isProvided() ||
+             contained.isProvided() ||
              value.isProvided() ||
              tintColor.isProvided() ||
              trackColor.isProvided() ||

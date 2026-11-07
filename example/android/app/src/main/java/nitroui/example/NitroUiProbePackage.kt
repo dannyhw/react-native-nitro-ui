@@ -1,6 +1,10 @@
 package nitroui.example
 
+import android.graphics.Bitmap
 import android.os.Debug
+import android.view.PixelCopy
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.ui.semantics.getOrNull
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
@@ -174,9 +178,160 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     }
   }
 
+  /**
+   * What one hosted control's box actually **paints**, for `Progress.harness.tsx` (E4).
+   *
+   * The question no other witness answers: `variant="loading"` and a wavy ring both
+   * measure 48 dp, and both publish one semantics node with the same
+   * `ProgressBarRangeInfo`, so a size, a node tree and a prop read all agree while the
+   * canvas may be drawing either of them. So this copies the control's own rectangle out
+   * of the window with `PixelCopy` - the platform's readback of what was composited, not
+   * a re-render of the view - and counts the pixels that are the colour the app asked
+   * for. G19 owns the general pixel probe for the library; until it merges, this is the
+   * example app's version of one question, for the one row that needs it.
+   *
+   * The answer is deliberately coarse - a count and a bounding box, not a frame: a
+   * fingerprint of one animated frame is not an assertion, while a shape's *fill
+   * density* is. A 4 dp ring is roughly a third of its own box; a filled loading shape
+   * is most of it. A flat 4 dp bar is 11 whole pixels tall and a wavy one is the 10 dp
+   * wave, which is the other half of what E4 claims to draw.
+   *
+   * [colorArgb] is what `processColor` produced, as a double (D10: the bits, not a
+   * saturated int); a pixel counts when every channel is within [tolerance] of it, which
+   * is what antialiased edges need and what a scheme colour must not be allowed to fake.
+   */
+  @ReactMethod
+  fun paintedInk(testTag: String, colorArgb: Double, tolerance: Double, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    val window = activity?.window
+    if (activity == null || window == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity to copy from")
+      return
+    }
+    val target: View? = activity.window.decorView.findViewWithTag(testTag)
+    if (target == null) {
+      promise.reject("NO_VIEW", "no view in the tree is tagged \"$testTag\"")
+      return
+    }
+    val width = target.width
+    val height = target.height
+    if (width <= 0 || height <= 0) {
+      promise.reject("NO_SIZE", "\"$testTag\" is $width x $height - it has not laid out")
+      return
+    }
+    val location = IntArray(2)
+    target.getLocationInWindow(location)
+    val source =
+      android.graphics.Rect(
+        location[0],
+        location[1],
+        location[0] + width,
+        location[1] + height
+      )
+    if (source.left < 0 || source.top < 0) {
+      // PixelCopy reads the window, so a control scrolled out of it has no pixels to
+      // read. Saying so is better than an ERROR_TIMEOUT three seconds later.
+      promise.reject("OFF_WINDOW", "\"$testTag\" is at ${source.left},${source.top} in the window")
+      return
+    }
+    val rgb = colorArgb.toLong().toInt()
+    val red = android.graphics.Color.red(rgb)
+    val green = android.graphics.Color.green(rgb)
+    val blue = android.graphics.Color.blue(rgb)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    val done = java.util.concurrent.CountDownLatch(1)
+    var copyResult = PixelCopy.ERROR_UNKNOWN
+    var attempts = 0
+    lateinit var listener: PixelCopy.OnPixelCopyFinishedListener
+    listener =
+      PixelCopy.OnPixelCopyFinishedListener { result ->
+        copyResult = result
+        if (result != PixelCopy.SUCCESS && attempts < PIXEL_COPY_ATTEMPTS - 1) {
+          attempts += 1
+          // A window that has not composited this frame yet answers without data, and
+          // the next frame normally has it. Few retries: a control that is off window
+          // never will have one, and the harness has its own timeout.
+          handler.postDelayed({ PixelCopy.request(window, source, bitmap, listener, handler) }, 120)
+        } else {
+          done.countDown()
+        }
+      }
+    activity.runOnUiThread { PixelCopy.request(window, source, bitmap, listener, handler) }
+    if (!done.await(6, java.util.concurrent.TimeUnit.SECONDS)) {
+      bitmap.recycle()
+      promise.reject("PIXEL_COPY_TIMEOUT", "PixelCopy did not answer for \"$testTag\"")
+      return
+    }
+    if (copyResult != PixelCopy.SUCCESS) {
+      bitmap.recycle()
+      promise.reject("PIXEL_COPY_FAILED", "PixelCopy result $copyResult after $attempts retries")
+      return
+    }
+
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    bitmap.recycle()
+    var count = 0
+    var minX = width
+    var maxX = -1
+    var minY = height
+    var maxY = -1
+    // Two numbers about the copy itself, so a zero ink count is diagnosable from the
+    // failure message instead of from a rebuild: how much of the box drew *anything*,
+    // and which colour it drew most. A probe that only answers "not your colour"
+    // cannot tell a wrong composable from a black bitmap.
+    var opaqueCount = 0
+    val histogram = HashMap<Int, Int>()
+    for (y in 0 until height) {
+      for (x in 0 until width) {
+        val pixel = pixels[y * width + x]
+        if (android.graphics.Color.alpha(pixel) > 8) {
+          opaqueCount += 1
+          histogram[pixel] = (histogram[pixel] ?: 0) + 1
+        }
+        if (
+          kotlin.math.abs(android.graphics.Color.red(pixel) - red) <= tolerance &&
+            kotlin.math.abs(android.graphics.Color.green(pixel) - green) <= tolerance &&
+            kotlin.math.abs(android.graphics.Color.blue(pixel) - blue) <= tolerance
+        ) {
+          count += 1
+          if (x < minX) minX = x
+          if (x > maxX) maxX = x
+          if (y < minY) minY = y
+          if (y > maxY) maxY = y
+        }
+      }
+    }
+    val topColor = histogram.maxByOrNull { it.value }
+    promise.resolve(
+      Arguments.createMap().apply {
+        putDouble("width", width.toDouble())
+        putDouble("height", height.toDouble())
+        putDouble("inkCount", count.toDouble())
+        // -1 when nothing matched: "drew nothing" has to be a number a test can assert
+        // on, not a zero-sized box that reads as a one-pixel control.
+        putDouble("inkWidth", if (maxX >= 0) (maxX - minX + 1).toDouble() else -1.0)
+        putDouble("inkHeight", if (maxY >= 0) (maxY - minY + 1).toDouble() else -1.0)
+        putDouble("attempts", attempts.toDouble())
+        putDouble("opaqueCount", opaqueCount.toDouble())
+        // Unsigned, and widened: JS sees an ARGB as the number `processColor` gave
+        // it, and a negative one here would have to be fixed up with a bit op.
+        putDouble(
+          "topColor",
+          ((topColor?.key ?: 0).toLong() and 0xFFFFFFFFL).toDouble()
+        )
+        putDouble("topColorCount", (topColor?.value ?: 0).toDouble())
+      }
+    )
+  }
+
   private companion object {
     /** The name JS asks the module registry for. */
     const val MODULE_NAME = "NitroUiProbe"
+
+    /** How often [paintedInk] asks the window again before giving up. */
+    private const val PIXEL_COPY_ATTEMPTS = 4
 
     /** How long to let the collectors settle before reading the heap. */
     const val GC_SETTLE_MS = 250L
@@ -370,6 +525,112 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     }
     return null
   }
+
+  /**
+   * Take one control out of the view tree, and put it back exactly where it was.
+   *
+   * The rule this exists for is the off-window one in `HybridNitroUiProgress.kt`: a
+   * control that leaves the window may not animate, and it is the *detach* that says
+   * so - not the unmount. `unmount()` in a test removes the whole subtree through RN,
+   * which runs `onDropView` as well, so the detach path is invisible from JS. Here the
+   * view really is taken out of its parent and really is put back, which is what a
+   * ScrollView recycling a row does, and nothing else about the mount changes: the
+   * composition stays alive, the props stay applied, and the same `nuiTest*` handle
+   * keeps answering.
+   *
+   * Two calls rather than one `detachFor(ms)`: the assertion belongs to JS, which is
+   * where the handle is, so the detached window has to stay open until the test has
+   * read it. What is held between the calls is one view plus the slot it came from,
+   * which the second call puts back and forgets.
+   *
+   * Answers the shape it found (`"<view class>|<parent class>|index=<n>"`) so a failure
+   * says whether the tag found the control at all - a probe that silently detached the
+   * wrong view would report a satisfying `false` for a view that was never animating.
+   */
+  @ReactMethod
+  fun detachTaggedView(testTag: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    val decor = activity?.window?.decorView
+    if (decor == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no window to detach from")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var failure = ""
+    var answer = ""
+    activity.runOnUiThread {
+      val target = decor.findViewWithTag<View>(testTag)
+      val parent = target?.parent as? ViewGroup
+      if (target == null || parent == null) {
+        failure = "no-view"
+      } else if (detachedSlot?.tag == testTag) {
+        failure = "already-detached"
+      } else {
+        val index = parent.indexOfChild(target)
+        parent.removeViewAt(index)
+        detachedSlot = Slot(testTag, target, parent, index)
+        answer =
+          "${target.javaClass.simpleName}|${parent.javaClass.simpleName}|" +
+            "index=$index|attached=${target.isAttachedToWindow}"
+      }
+      done.countDown()
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    if (failure.isNotEmpty()) {
+      promise.reject("NO_VIEW", "$failure: cannot detach a view tagged \"$testTag\"")
+    } else {
+      promise.resolve(answer)
+    }
+  }
+
+  /**
+   * Put back what [detachTaggedView] took out, at the same index in the same parent.
+   *
+   * The re-attach is the second half of the assertion - a control that answers `false`
+   * because it was destroyed rather than because it left the window would pass the
+   * first half - and it is also what leaves the app's tree intact for the next test.
+   */
+  @ReactMethod
+  fun attachTaggedView(testTag: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no window to attach to")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var failure = ""
+    var answer = ""
+    activity.runOnUiThread {
+      val slot = detachedSlot?.takeIf { it.tag == testTag }
+      if (slot == null) {
+        failure = "nothing-detached"
+      } else {
+        slot.parent.addView(slot.view, slot.index)
+        detachedSlot = null
+        answer =
+          "${slot.view.javaClass.simpleName}|index=${slot.index}|" +
+            "attached=${slot.view.isAttachedToWindow}"
+      }
+      done.countDown()
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    if (failure.isNotEmpty()) {
+      promise.reject("NO_SLOT", "$failure: no detached view tagged \"$testTag\"")
+    } else {
+      promise.resolve(answer)
+    }
+  }
+
+  /** One [detachTaggedView] waiting for its [attachTaggedView]. */
+  private class Slot(
+    val tag: String,
+    val view: View,
+    val parent: ViewGroup,
+    val index: Int
+  )
+
+  /** Only one control is off-window at a time; a second detach is a test bug. */
+  private var detachedSlot: Slot? = null
 
   /** Depth-first count of every view under [view], including it. */
   private fun countViews(view: android.view.View): Int {
