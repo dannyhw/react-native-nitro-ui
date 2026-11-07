@@ -571,10 +571,18 @@ function sizingKey(
   size: string,
   title: string,
   systemImage = '',
-  action: 'action' | 'plain' = 'plain'
+  action: 'action' | 'plain' = 'plain',
+  androidIcon = ''
 ): string {
   const escape = (value: string): string => value.replace(/[\\|]/g, '\\$&');
-  return [variant, size, action, escape(systemImage), escape(title)].join('|');
+  return [
+    variant,
+    size,
+    action,
+    escape(systemImage),
+    escape(androidIcon),
+    escape(title),
+  ].join('|');
 }
 
 /** A size that is *not* any menu's size, planted as the engine's first answer. */
@@ -801,9 +809,18 @@ afterEach(() => {
 // MARK: - The box
 
 describe('Menu · G7a', () => {
-  /** The five Button variants a trigger can be, plus two of its three sizes. */
+  /** The five Button variants a trigger can be, plus four of its five sizes. */
   const VARIANTS = ['filled', 'tonal', 'outlined', 'text', 'elevated'] as const;
-  const TRIGGER_SIZES = ['small', 'large'] as const;
+  /**
+   * Four of the five rungs - `medium` is every other configuration's size. The two
+   * G19 fix round 2 added to Menu are in here because "the trigger has the whole
+   * ladder" is a claim about each rung's configuration, not about one: a rung whose
+   * key the engine has never seen is laid out at the declared fallback until it
+   * earns its own entry, and that is a per-rung failure. The rung *boxes* - the
+   * heights that are the actual promise - are measured by the ladder suite at the
+   * end of this file.
+   */
+  const TRIGGER_SIZES = ['small', 'large', 'xlarge', 'xxlarge'] as const;
 
   it('lays each configuration out at the size the control measured', async () => {
     // The control is its own oracle: nothing below is a constant, and every
@@ -3037,5 +3054,279 @@ describe('Menu · inside a Host', () => {
     // for the rows is SwiftUI's own naming, and
     // nothing here can open the menu to hear it. `docs/components/menu.md` keeps the list
     // of what is and is not stood behind.
+  });
+});
+
+// MARK: - The glyph and the top of the ladder (G19 fix round 2)
+
+/**
+ * `androidIcon` on the trigger, and the two rungs the trigger was missing.
+ *
+ * Both come from one review finding: `ButtonSize` and `ButtonProps.androidIcon` grew
+ * in this task and Menu — whose trigger *is* a Button, in the docs and in the
+ * composition — was left behind. `size="xlarge"` type-checked and drew `medium`;
+ * a glyph was not offerable at all.
+ *
+ * What a device adds over `src/__tests__/menuSizingKey.test.tsx` (which reads the key
+ * and the prop directly) is the box. A key can carry a field and a prop can arrive and
+ * still be drawn wrong: the icon can miss its slot, an unresolved name can reserve one
+ * anyway, and a rung can be sent to native and laid out at the declared fallback. So
+ * every case here measures, poisons first so nothing is inherited, and compares
+ * against a real `Button` rather than against a constant — the same rule the parity
+ * gate above runs on.
+ *
+ * **The drawn glyph is proven by width, not by pixels.** Menu has no pixel probe
+ * (Button's `nuiTestPixelProbe` is its own spec, and D43's tint rule is proven there),
+ * and a Menu's node tree does not show the glyph either: it carries no
+ * `contentDescription`, because the trigger's own node names the control. What is
+ * measurable is that the slot Material's `Button` reserves was taken — which only
+ * happens when the composition was handed artwork — and that the box it produced is
+ * the *same box* a Button with the same asset produced, drawn by the same
+ * [NitroUiM3Button]. That comparison is what a Menu-specific pixel probe would add
+ * nothing to.
+ */
+describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
+  /**
+   * The Material Symbols file the example app imports, required the way an app does.
+   *
+   * `share_24px.xml`, not `star_24px.xml`: Button's D43 suite loads the star in its
+   * own gates and this suite wants the file read fresh here. It does not change a
+   * single assertion below — every box in this file is a *settled* box — but a cold
+   * read is the state a developer's first frame is in, and `Pending` taking the slot
+   * is half of what the second case proves.
+   */
+  const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
+
+  /** A name the example app does not ship, so the resource table answers 0. */
+  const NOT_SHIPPED = 'nitroui_test_never_built';
+
+  const RUNGS = ['small', 'medium', 'large', 'xlarge', 'xxlarge'] as const;
+
+  /** Measure, in the order given, and refuse a control that never reported a box. */
+  async function measureAll(
+    testIds: readonly string[]
+  ): Promise<Map<string, Size>> {
+    const boxes = new Map<string, Size>();
+    for (const testId of testIds) {
+      await waitForTestId(testId);
+      const content = await waitForMeasured(testId, testId);
+      boxes.set(testId, await waitForBox(testId, content, testId));
+    }
+    return boxes;
+  }
+
+  const logged = (boxes: Map<string, Size>, prefix?: string): string =>
+    [...boxes.entries()]
+      .map(([id, size]) => `${prefix ?? ''}${id}=${describeSize(size)}`)
+      .join(' ');
+
+  it('takes the glyph the Button takes, into the box the Button takes', async () => {
+    // The claim `docs/components/menu.md` makes about a control it could not make
+    // until now: an icon makes a trigger wider, and by exactly the amount it makes a
+    // Button wider, because they are the same composition. Four configurations, both
+    // components, poisoned in both caches — and no constant anywhere, so the ladder
+    // and Material's `hasStartIcon` padding can move and this stays true.
+    const menuKeys = ['', 'icon'].map((icon) =>
+      sizingKey('filled', 'medium', 'Share', '', 'plain', icon)
+    );
+    poisonConfigurations(menuKeys);
+    poisonConfigurations(menuKeys, BUTTON_COMPONENT);
+    const before = stats();
+    await render(
+      <View style={columnStyle}>
+        <Menu
+          title="Share"
+          group={GROUP}
+          testID="menu-plain"
+          hybridRef={captureHybrid('menu-plain')}
+        />
+        <Menu
+          title="Share"
+          group={GROUP}
+          androidIcon={SHARE_ASSET}
+          testID="menu-icon"
+          hybridRef={captureHybrid('menu-icon')}
+        />
+        <Button
+          title="Share"
+          androidIcon={SHARE_ASSET}
+          testID="button-icon"
+          hybridRef={captureButton('button-icon')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = await measureAll(['menu-plain', 'menu-icon', 'button-icon']);
+    console.log(`menu glyph boxes: ${logged(boxes)}`);
+    await settle(300);
+    const cold = delta(before, stats());
+
+    const plain = boxes.get('menu-plain')!;
+    const icon = boxes.get('menu-icon')!;
+    const twin = boxes.get('button-icon')!;
+    // The wire the wrapper built, read back off the trigger: an asset has to arrive as
+    // the dev-server URL (or, in a release build, the drawable Metro filed it under),
+    // not as the number `require` evaluated to.
+    if (Platform.OS === 'android') {
+      expect(handles.get('menu-icon')?.androidIcon ?? '').toMatch(
+        /^url:.*share_24px\.xml/
+      );
+      // Material's slot, taken: the ladder's glyph plus its spacing, and not one
+      // pixel of it decided by the file.
+      expect(icon.width).toBeGreaterThan(plain.width + 1);
+      expect(Math.abs(icon.height - plain.height)).toBeLessThan(0.6);
+      // The Box the Button's icon produced, to the tenth of a dp: same slot, same
+      // painter, same padding call. A Menu that resolved the icon and never passed it
+      // to its trigger, or passed it to a slot of its own making, fails here rather
+      // than in a screenshot nobody compares.
+      expect(sameSize(icon, twin)).toBe(true);
+    } else {
+      // iOS draws `systemImage` and ignores `androidIcon` — the same contract Button
+      // keeps, now measured on the second control that offers the prop.
+      expect(sameSize(icon, plain)).toBe(true);
+      expect(handles.get('menu-icon')?.androidIcon ?? '').toContain(
+        'share_24px'
+      );
+    }
+    // Every configuration had to earn its box: two poisoned Menu entries (three on
+    // Android, where the Button's key is poisoned too).
+    expect(cold.corrections).toBeGreaterThanOrEqual(2);
+  });
+
+  it('draws no slot for a glyph that cannot be resolved', async () => {
+    // Round 1's contract, on the new control: an unresolvable name is *no icon*, not a
+    // smaller icon. Reserved-but-empty artwork is the failure a release build hides
+    // and a user sees as a gap beside a label.
+    const keys = ['', 'icon'].map((icon) =>
+      sizingKey('filled', 'medium', 'Share', '', 'plain', icon)
+    );
+    poisonConfigurations(keys);
+    await render(
+      <View style={columnStyle}>
+        <Menu
+          title="Share"
+          group={GROUP}
+          testID="missing-plain"
+          hybridRef={captureHybrid('missing-plain')}
+        />
+        <Menu
+          title="Share"
+          group={GROUP}
+          androidIcon={NOT_SHIPPED}
+          testID="missing-icon"
+          hybridRef={captureHybrid('missing-icon')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = await measureAll(['missing-plain', 'missing-icon']);
+    console.log(`menu missing-glyph boxes: ${logged(boxes)}`);
+    expect(
+      sameSize(boxes.get('missing-icon')!, boxes.get('missing-plain')!)
+    ).toBe(true);
+  });
+
+  it('puts the glyph on the leading half of a split trigger', async () => {
+    // `primaryAction` gives Android a second container, and the label — with its
+    // glyph — goes in the leading one while the chevron holds the trailing one. iOS
+    // has one button for both jobs, so this is an Android measurement, like E3's.
+    const keys = ['', 'icon'].map((icon) =>
+      sizingKey('filled', 'medium', 'Publish', '', 'action', icon)
+    );
+    poisonConfigurations(keys);
+    await render(
+      <View style={columnStyle}>
+        <Menu
+          title="Publish"
+          group={GROUP}
+          primaryAction={() => {}}
+          testID="split-noicon"
+          hybridRef={captureHybrid('split-noicon')}
+        />
+        <Menu
+          title="Publish"
+          group={GROUP}
+          primaryAction={() => {}}
+          androidIcon={SHARE_ASSET}
+          testID="split-icon"
+          hybridRef={captureHybrid('split-icon')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = await measureAll(['split-noicon', 'split-icon']);
+    console.log(`menu split-glyph boxes: ${logged(boxes)}`);
+    if (Platform.OS === 'android') {
+      const plain = boxes.get('split-noicon')!;
+      const icon = boxes.get('split-icon')!;
+      expect(icon.width).toBeGreaterThan(plain.width + 1);
+      // The same glyph the plain trigger draws at this rung: the split is a wider
+      // box, not a taller one.
+      expect(Math.abs(icon.height - plain.height)).toBeLessThan(0.6);
+    } else {
+      expect(
+        sameSize(boxes.get('split-icon')!, boxes.get('split-noicon')!)
+      ).toBe(true);
+    }
+  });
+
+  it('lays the five rungs out in order, and reaches the top two', async () => {
+    // The half of item 4 a JS test cannot see: `xlarge` reaching native is one thing,
+    // being *laid out* at 96 dp another. Before this round the wrapper rewrote the
+    // rung to `medium`, so this measured a 48 dp box for a name whose box is 96 — and
+    // nothing else in the suite noticed, because every other gate asks a box to be
+    // earned rather than to be a particular height.
+    poisonConfigurations(
+      RUNGS.map((size) => sizingKey('filled', size, 'Rung'))
+    );
+    const before = stats();
+    await render(
+      <View style={columnStyle}>
+        {RUNGS.map((size) => (
+          <Menu
+            key={size}
+            title="Rung"
+            group={GROUP}
+            size={size}
+            testID={`rung-${size}`}
+            hybridRef={captureHybrid(`rung-${size}`)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = await measureAll(RUNGS.map((size) => `rung-${size}`));
+    const heightOf = (size: string): number => {
+      const box = boxes.get(`rung-${size}`);
+      if (box == null) {
+        throw new Error(`"${size}" never produced a box.`);
+      }
+      return box.height;
+    };
+    console.log(`menu rung boxes: ${logged(boxes)}`);
+    await settle(300);
+    const cold = delta(before, stats());
+    expect(cold.corrections).toBeGreaterThanOrEqual(RUNGS.length);
+
+    if (Platform.OS === 'android') {
+      // Material's own container heights: 48 / 48 / 56 / 96 / 136, the first two
+      // sharing a box because the 48 dp touch target floors both. The top two numbers
+      // only exist if the rung reached Compose: `medium` is 48 dp, which is what this
+      // control drew for `xlarge` until this round.
+      expect(heightOf('medium')).toBeLessThan(heightOf('large'));
+      expect(heightOf('large')).toBeLessThan(heightOf('xlarge'));
+      expect(heightOf('xlarge')).toBeLessThan(heightOf('xxlarge'));
+      expect(heightOf('xlarge')).toBeGreaterThanOrEqual(95.5);
+      expect(heightOf('xxlarge')).toBeGreaterThanOrEqual(135.5);
+    } else {
+      // iOS has fewer `.controlSize` values than the ladder has rungs, so the top of
+      // the ladder collapses there — documented in `docs/components/menu.md` as the
+      // same collapse `docs/components/button.md` measures for Button. Asserted, so a
+      // future SDK that stops collapsing it is a change someone notices.
+      expect(heightOf('xlarge')).toBeGreaterThanOrEqual(heightOf('medium'));
+      expect(Math.abs(heightOf('xlarge') - heightOf('xxlarge'))).toBeLessThan(
+        0.6
+      );
+    }
   });
 });

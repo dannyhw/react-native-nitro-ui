@@ -55,6 +55,7 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<std::vector<NitroUiMenuRow>> rows;
     nitro::ReactProp<std::variant<nitro::NullType, double>> tintColor;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> systemImage;
+    nitro::ReactProp<std::variant<nitro::NullType, std::string>> androidIcon;
     nitro::ReactProp<bool> hasPrimaryAction;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> testID;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
@@ -76,6 +77,7 @@ namespace margelo::nitro::nitroui::views {
              rows.hasSameValue(other.rows) &&
              tintColor.hasSameValue(other.tintColor) &&
              systemImage.hasSameValue(other.systemImage) &&
+             androidIcon.hasSameValue(other.androidIcon) &&
              hasPrimaryAction.hasSameValue(other.hasPrimaryAction) &&
              testID.hasSameValue(other.testID) &&
              accessibilityLabel.hasSameValue(other.accessibilityLabel) &&
@@ -98,6 +100,7 @@ namespace margelo::nitro::nitroui::views {
              rows.isProvided() ||
              tintColor.isProvided() ||
              systemImage.isProvided() ||
+             androidIcon.isProvided() ||
              hasPrimaryAction.isProvided() ||
              testID.isProvided() ||
              accessibilityLabel.isProvided() ||
