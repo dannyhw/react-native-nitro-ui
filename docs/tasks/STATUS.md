@@ -103,6 +103,6 @@
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
 | FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
 | E4 | Material 3 Expressive pass 2: Progress `variant="loading"` (+ `contained`) and `appearance="wavy"` (Q8 C10, D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, Android real-input needed 3 runs for the Slider drag flake E5 is fixing) |
-| E5 | Slider: a real drag start on Android (Q8 C9), and the real-input `hosted-slider` drag flake | Apex | Opus | in review (PR #46 @ `a9b36961`, 5/5 gates) |
+| E5 | Slider: a real drag start on Android (Q8 C9), and the real-input `hosted-slider` drag flake | Apex | Opus | fix round 1 (review: drag end ordered before M3's, so a fast real drag splits in two; disable mid-gesture leaves the drag open; stale real-input echo) |
 | FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | merge round on mac-1 (fix round 1 accepted at `277a2e75`: glyph test widened, stale comment fixed) |
 | X21 | The four recurring device-gate flakes (iOS "edits refused", BottomSheet 50 cycles, `goToScreen`, Slider screen-reader step): cause and fix | Apex | Opus | running |
