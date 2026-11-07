@@ -1737,6 +1737,10 @@ describe('androidIcon · an icon the app imports (D43)', () => {
    */
   /** Round 1's form, for the control beside this one: a name, not a file. */
   const DRAWABLE_NAME = 'nitroui_test_star';
+
+  /** The passing message of the box-set comparison, which doubles as its sentinel. */
+  const SHARED_BOXES =
+    'every box the imported icon published is one the named icon published too';
   const STAR_ASSET = require('../src/assets/icons/star_24px.xml');
   const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
 
@@ -1791,6 +1795,36 @@ describe('androidIcon · an icon the app imports (D43)', () => {
   }
 
   /**
+   * Read the sizing trace until the engine goes quiet, not just until the buffer
+   * happens to be empty.
+   *
+   * `collectTrace` returns on its predicate, which is right for "wait for a
+   * correction" and wrong for "nothing else was published": an assertion that the
+   * engine published exactly one box has to wait long enough to see a second one.
+   * `quietMs` is that patience, `timeoutMs` the ceiling on it.
+   */
+  async function collectTraceUntilQuiet(
+    quietMs = 400,
+    timeoutMs = 2000
+  ): Promise<NitroUiSizingTraceEvent[]> {
+    const started = nitroUiCore.now();
+    const events: NitroUiSizingTraceEvent[] = [];
+    let lastSeen = started;
+    for (;;) {
+      const drained = nitroUiCore.drainSizingTrace();
+      if (drained.length > 0) {
+        events.push(...drained);
+        lastSeen = nitroUiCore.now();
+      }
+      const now = nitroUiCore.now();
+      if (now - lastSeen >= quietMs || now - started >= timeoutMs) {
+        return events;
+      }
+      await sleep(25);
+    }
+  }
+
+  /**
    * A `text` Button with no label, so the tint can only be on the glyph.
    *
    * Round 1's reason, unchanged: the variant has no container and no border, and an
@@ -1802,22 +1836,52 @@ describe('androidIcon · an icon the app imports (D43)', () => {
   const TINT = processColor(TINT_CSS) as number;
   const PROBE_TITLE = Platform.OS === 'android' ? '' : 'Share';
 
+  /**
+   * The imported icon draws, and the bytes arriving moves nothing.
+   *
+   * The sizing claim cannot be "this control published one box", and the first run
+   * on a device is what said so: every Button in this repo publishes its declared
+   * fallback on the cold mount and is corrected by the first measure, so two boxes
+   * are normal and say nothing about the icon. What D43 promises is narrower and
+   * comparative - **the file arriving changes nothing about what the engine
+   * publishes** - so the control beside this one has the same icon by resource
+   * name, which is never in flight, and the two must publish the same set of boxes.
+   * A slot held only once the bytes land, or sized from the file's own viewport,
+   * gives the Metro control a box the named control never had.
+   */
   it('draws the imported icon, and does not move the box when the bytes arrive', async () => {
     nitroUiCore.setSizingTraceEnabled(true);
+    // One global buffer, and the suite's earlier tests drain it only until their own
+    // predicate is satisfied, so whatever they left behind would be read here as a
+    // box these two Buttons published.
+    nitroUiCore.drainSizingTrace();
+    const mountedAt = nitroUiCore.now();
     await render(
-      <Button
-        title={PROBE_TITLE}
-        variant="text"
-        tintColor={TINT_CSS}
-        androidIcon={STAR_ASSET}
-        testID="metro-star"
-        hybridRef={captureHybrid('metro-star')}
-      />,
+      <View style={rowStyle}>
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={STAR_ASSET}
+          testID="metro-star"
+          hybridRef={captureHybrid('metro-star')}
+        />
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={DRAWABLE_NAME}
+          testID="name-star"
+          hybridRef={captureHybrid('name-star')}
+        />
+      </View>,
       { timeout: 20000 }
     );
     await waitForTestId('metro-star');
     const first = await waitForMeasured('metro-star', 'the imported icon');
     await waitForBox('metro-star', first, 'the imported icon');
+    const named = await waitForMeasured('name-star', 'the named icon');
+    await waitForBox('name-star', named, 'the named icon');
 
     // What crossed the bridge. In a development build this is a Metro URL with the
     // marker in front of it; the asset's numeric id would mean nothing to native,
@@ -1833,41 +1897,76 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     const glyph = await probeUntilDrawn('metro-star', TINT);
     const drawn = glyph.report;
     const after = await waitForMeasured('metro-star', 'the imported icon');
-    const trace = await collectTrace(() => true, 500);
-    const widths = new Set(
-      trace.map((event) => (Math.round(event.width * 100) / 100).toFixed(2))
+    const collected = await collectTraceUntilQuiet();
+    // These two Buttons are the last two sizing ids allocated, and `render()` tears
+    // the previous test's tree down while mounting them, so events for older ids are
+    // in this window too and belong to controls this test never mounted.
+    const since = collected.filter((event) => event.time >= mountedAt);
+    const ids = [...new Set(since.map((event) => event.instanceId))].sort(
+      (a, b) => a - b
     );
-    const heights = new Set(
-      trace.map((event) => (Math.round(event.height * 100) / 100).toFixed(2))
-    );
+    const ours = ids.slice(-2);
+    const box = (size: { width: number; height: number }) =>
+      `${size.width.toFixed(2)}x${size.height.toFixed(2)}`;
+    const boxesOf = (id: number) =>
+      [...new Set(since.filter((e) => e.instanceId === id).map(box))].sort();
+    const [metroId, nameId] = ours;
+    const metroBoxes = metroId === undefined ? [] : boxesOf(metroId);
+    const nameBoxes = nameId === undefined ? [] : boxesOf(nameId);
     console.log(
       `metro: hitsBefore=${String(probeHits(before))} hitsAfter=${String(
         probeHits(drawn)
       )} drawnInMs=${String(glyph.ms)} first=${describeSize(first)} after=${describeSize(
         after
-      )} ` +
-        `traceEvents=${String(trace.length)} widths=${JSON.stringify([
-          ...widths,
-        ])} heights=${JSON.stringify([...heights])}`
+      )} named=${describeSize(named)} ids=${JSON.stringify(
+        ours
+      )} droppedForeign=${String(
+        collected.length - since.length
+      )} metroBoxes=${JSON.stringify(metroBoxes)} nameBoxes=${JSON.stringify(
+        nameBoxes
+      )}`
     );
 
     if (Platform.OS === 'android') {
-      // 1. It drew. `hitsBefore` is the interesting half of the log line: when it
-      // is 0, this test also watched the control *without* the glyph at the same
-      // box, which is the in-flight state the sizing rule is about. When it is not
-      // 0 the dev server won the race with the first layout and the trace below is
-      // the whole claim - it is the reading that does not depend on timing.
+      // 1. It drew. `hitsBefore` is the interesting half of the log line: when it is
+      // 0, this test also watched the control *without* the glyph at the same box,
+      // which is the in-flight state the sizing rule is about.
       expect(probeHits(drawn)).toBeGreaterThan(0);
       // 2. The box the control measured before the glyph and after it are one box.
       expect(sameSize(first, after)).toBe(true);
-      // 3. And every box the sizing engine published for this mount is that box.
-      //    A control that reserves the slot only once the file has arrived, or that
-      //    sizes the slot from the file's own box, publishes two widths here -
-      //    the label jumps sideways, which is the thing D43's sizing rule exists to
-      //    prevent. A file that is 960 units of viewport inside a 24 dp box is the
-      //    case that would make a file-sized slot visibly wrong.
-      expect([...widths]).toEqual([first.width.toFixed(2)]);
-      expect([...heights]).toEqual([first.height.toFixed(2)]);
+      // 3. Every box the imported icon published must be one the named icon published
+      // too. Not "the same set": each Button starts on the component's declared
+      // fallback and the engine corrects it, and how many steps that takes belongs to
+      // the sizing cache's state, not to D43 - the named control here took one more
+      // step than the imported one, on the same code. What must never happen is the
+      // file adding a layout state of its own: a slot held only once the bytes land,
+      // or sized from the file's viewport, publishes a box the resource form has
+      // never published. One string, because this harness prints one line per failure.
+      // Whose boxes are whose is not an assumption: the two ids are consecutive, in
+      // the order this render mounted them - the imported icon's first - and each
+      // published its own control's final box.
+      if (metroId === undefined || nameId === undefined) {
+        throw new Error(
+          `this render expected two Button sizing ids, saw ${JSON.stringify(ids)}`
+        );
+      }
+      expect({ metroId, nameId, gap: nameId - metroId }).toEqual({
+        metroId: nameId - 1,
+        nameId,
+        gap: 1,
+      });
+      expect(metroBoxes.includes(box(first))).toBe(true);
+      expect(nameBoxes.includes(box(named))).toBe(true);
+      const extra = metroBoxes.filter((b) => !nameBoxes.includes(b));
+      expect(
+        extra.length === 0
+          ? SHARED_BOXES
+          : `only the imported icon published ${extra.join(
+              ', '
+            )}; the named icon published ${nameBoxes.join(', ')}`
+      ).toEqual(SHARED_BOXES);
+      // 4. And the one box both of them ended on is the ladder's, not the file's.
+      expect(sameSize(named, first)).toBe(true);
     } else {
       // iOS draws no Android icon, at any size, from any source.
       expect(drawn).toContain('no pixels');
