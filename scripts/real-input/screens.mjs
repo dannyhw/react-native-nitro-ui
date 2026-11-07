@@ -148,6 +148,12 @@ export function gestureCounts(text) {
  * to the screen, which is what a value settled on it would be a sample of. Both
  * numbers missing is `false` because "the echo has not been drawn" is not an answer.
  *
+ * The two counters are read together rather than one after the other, because the
+ * screen lags the app: a `complete` that has advanced is only this gesture's if the
+ * echo does not also show a `start` with no `complete` after it. `{1, 0} -> {2, 1}`
+ * advances both and still shows a gesture that has not closed — the shape of the
+ * retry path, where an injection reported its start and lost its end.
+ *
  * `seen` is the same echo read before the gesture was injected; a `null` in it means
  * the echo read zero at the time, not that it was missing, so the pair is compared
  * loosely in that direction only.
@@ -164,7 +170,11 @@ export function gestureReported(seen, now) {
     return previous == null ? current > 0 : current > previous;
   };
   return (
-    advanced(seen.starts, now.starts) && advanced(seen.completes, now.completes)
+    advanced(seen.starts, now.starts) &&
+    advanced(seen.completes, now.completes) &&
+    // Every start on the screen is closed, so the `complete` above cannot be an
+    // older gesture's: an open one would leave a start with nothing after it.
+    now.completes >= now.starts
   );
 }
 

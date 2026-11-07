@@ -5889,9 +5889,11 @@ function makeContext(harness, log) {
    * control said `onSlidingComplete` and the app drew it. A stopwatch on the value
    * cannot give that answer — see [dragAndSettle] for what pretending otherwise cost.
    *
-   * Both phases have to advance, and in that order: a `complete` with no `start` is
-   * the *previous* gesture still on its way to the screen, and settling on that is
-   * how a check reads a value the current touch never produced.
+   * Both phases have to advance *and* the screen has to show no gesture left open:
+   * a `complete` with no `start` behind it is the previous gesture still on its way
+   * to the screen, and a `start` with no `complete` after it is this one not yet
+   * closed. Either read as "over" is how a check ends up settling on a value the
+   * current touch never produced — the rule is [gestureReported], not a timestamp.
    *
    * Deliberately not [until]: a gesture whose end never came is the case the caller
    * has a plan for, and aborting here would take the rest of the control's checks
