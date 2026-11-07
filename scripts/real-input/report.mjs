@@ -43,10 +43,14 @@ export class CheckLog {
      */
     this.warns = [];
     /**
-     * Presses this control needed more than once to get an answer. Kept apart
-     * from `notes` because a run where every control needed a second press is
-     * the regression `FOLLOWUPS.md:58` describes, and it must be countable
+     * Input sequences this control needed more than once to get an answer. Kept
+     * apart from `notes` because a run where every control needed a second press
+     * is the regression `FOLLOWUPS.md:58` describes, and it must be countable
      * rather than one line among forty.
+     *
+     * A retried *drag* belongs here too (E5): the count is about the runner having
+     * to inject something twice, and a run that silently re-dragged a control would
+     * be hiding the same fact a silently re-pressed one hides.
      *
      * @type {string[]}
      */
@@ -272,17 +276,26 @@ export class Suite {
       console.log(
         `${entry.control.id}: ${label}` +
           (retries > 0
-            ? ` (retried ${String(retries)} press sequence(s))`
+            ? ` (retried ${String(retries)} input sequence(s))`
             : ' (no retries)')
       );
       for (const failure of entry.log?.failures ?? []) {
         console.log(`    failed: ${failure}`);
       }
     }
-    const totalRetries = done.reduce(
+    // Auxiliary checks press too: the a11y sweep reaches its screens through the same
+    // tabs the controls do, and on a full run that is most of the run's navigations. A
+    // retry counted only on the control side was a retry the summary denied (X21), so
+    // the one number a reader compares against "no retries" is the sum of both sides.
+    const controlRetries = done.reduce(
       (sum, entry) => sum + (entry.log?.retries.length ?? 0),
       0
     );
+    const auxiliaryRetries = this.auxiliary.reduce(
+      (sum, entry) => sum + (entry.log.retries.length ?? 0),
+      0
+    );
+    const totalRetries = controlRetries + auxiliaryRetries;
     // The auxiliary checks, printed after the controls so the control table's totals stay
     // readable and their own failures still decide the exit code below.
     const auxFailed = this.auxiliary.filter((entry) => !entry.log.passed);
@@ -314,10 +327,11 @@ export class Suite {
     }
     console.log(
       `\nreal-input (${this.platform}): ${String(passed.length)}/${String(expected)} controls passed` +
-        ` · ${String(totalRetries)} press sequence(s) needed a retry` +
-        (totalRetries === 0
+        ` · ${String(totalRetries)} input sequence(s) needed a retry` +
+        (auxiliaryRetries === 0
           ? ''
-          : ' - see the "answered on tap" notes above for which') +
+          : ` (${String(auxiliaryRetries)} of them on an auxiliary check)`) +
+        (totalRetries === 0 ? '' : ' - see the retried notes above for which') +
         (this.auxiliary.length === 0
           ? ''
           : ` · ${String(this.auxiliary.length - auxFailed.length)}/` +

@@ -1,0 +1,73 @@
+# Failure excerpt — harness:android:before%20the%20a11y%20tree%20catches%20up
+
+- Ran: 2026-11-07T06:00:41.121Z on code tree `34eb539768ec` at HEAD `9019f30` (branch `task/X21-recurring-flakes`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android before the a11y tree catches up`
+- Result: fail, exit 1, 1128 ms
+- Load: start 170.92, end 170.92, median 170.92, max 170.92
+- Device: android / device `emulator-5574` / lease `X21-znj7u`
+- Full log: `task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log` (<store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: X21-znj7u (still live)
+  |   G19-w2v9t                G19          both              pair-b
+  |   X21-znj7u                X21          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 170.92 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 28 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:before%20the%20a11y%20tree%20catches%20up
+gate: node ../scripts/harness.mjs --harnessRunner android before the a11y tree catches up (cwd example)
+gate: code tree 34eb539768ec at HEAD 9019f302
+gate: git tree 05a1de15a4bf with a DIRTY worktree (not reusable)
+gate: log task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log
+gate:       <store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android before the a11y tree catches up
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 34eb539768ec, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 170.92/58.96 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  260 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 25 matches
+  testPathIgnorePatterns: \.(ios)\.harness\.(?:[mc]?[jt]sx?)$ - 260 matches
+  testRegex:  - 0 matches
+Pattern: before the a11y tree catches up - 0 matches
+gate: harness:android:before%20the%20a11y%20tree%20catches%20up FAIL in 1.1 s
+gate: recorded in .gates/task/X21-recurring-flakes.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/X21-recurring-flakes/harness+android+before+20the+20a11y+20tree+20catches+20up-2026-11-07T06-00-40.781Z.log (5 probe(s))
+
+```

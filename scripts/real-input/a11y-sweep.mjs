@@ -67,7 +67,14 @@ const SCROLL_PROBE_PX = 320;
  *   log line for one case, in the shape the control checks use
  * @param {object} navigation what the pass needs from the device, declared rather than
  *   imported so it can be driven by a fake
- * @param {(screen: import('./a11y.mjs').ScreenId) => Promise<void>} navigation.goToScreen
+ * @param {(
+ *   screen: import('./a11y.mjs').ScreenId,
+ *   log: import('./report.mjs').CheckLog
+ * ) => Promise<void>} navigation.goToScreen
+ *   gets the case's log, not just the screen. Getting there is a tab press like every
+ *   other press in this suite, and on a run that walks the whole table it is *most* of
+ *   them: a re-press it does not report is a retry no log carries and no summary counts
+ *   (X21, where the sweep's navigations were the silent half of the run's tab taps).
  * @param {() => import('./uiautomator.mjs').UiautomatorNode[]} navigation.dump
  * @param {(pixels: number) => Promise<void>} navigation.scrollPage
  * @param {() => Promise<void>} navigation.scrollToTop
@@ -91,7 +98,7 @@ export async function runA11ySweep(
   for (const control of controls) {
     const log = begin(`a11y:${control.id}`, `${control.component} a11y`);
     if (screen !== control.screen) {
-      await navigation.goToScreen(control.screen);
+      await navigation.goToScreen(control.screen, log);
       screen = control.screen;
     }
     const tree = await treeShowing(navigation, control.label);

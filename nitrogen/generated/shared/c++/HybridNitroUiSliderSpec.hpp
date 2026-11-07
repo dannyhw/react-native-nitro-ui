@@ -90,6 +90,8 @@ namespace margelo::nitro::nitroui {
       virtual void nuiTestAccessibilityStep(double direction) = 0;
       virtual std::string nuiTestAccessibilityStepReport() = 0;
       virtual bool nuiTestFramePumpArmed() = 0;
+      virtual void nuiTestPointerStream(double mode) = 0;
+      virtual std::string nuiTestPointerStreamReport() = 0;
 
     protected:
       // Hybrid Setup

@@ -1,0 +1,176 @@
+# Failure excerpt — harness:android:PopoverProto
+
+- Ran: 2026-11-06T03:32:06.579Z on code tree `98ed9e59ac92` at HEAD `7b654ef` (branch `task/S5-popover-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android PopoverProto`
+- Result: fail, exit 1, 82645 ms
+- Load: start 4.74, end 3.33, median 3.67, max 4.74
+- Device: android / device `emulator-5574` / lease `S5-bp78g`
+- Full log: `task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log` (<store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/PopoverProto.harness.tsx`
+- `● PopoverProto · Q5 lifetime › leaves live=0 after 50 present/dismiss cycles, and no LifecycleRegistry growth`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 0 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 50 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 100 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 150 ms into its entry`
+- `● PopoverProto · Q5 lifetime › gives a recycled view none of the open popover it came from`
+- `● PopoverProto · evidence › prints every number the tests above measured (red by design)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S5-bp78g (still live)
+  |   S5-bp78g                 S5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.33 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 127 log line(s)
+
+```
+gate: claimed avd:nitroui_t03 for this run
+gate: harness:android:PopoverProto
+gate: node ../scripts/harness.mjs --harnessRunner android PopoverProto (cwd example)
+gate: code tree 98ed9e59ac92 at HEAD 7b654efe
+gate: git tree fcd5b984c8ea with a DIRTY worktree (not reusable)
+gate: log task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log
+gate:       <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log
+harness: ~/.local/share/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android PopoverProto
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 98ed9e59ac92, 18 components registered)
+lease: nitroui_t03 boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.74/6.21 over 14 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/PopoverProto.harness.tsx
+  ● PopoverProto · Q5 lifetime › leaves live=0 after 50 present/dismiss cycles, and no LifecycleRegistry growth
+
+    "cycles" never reached nothing left after 50 cycles; report "seq=494;presented=0;js=0;live=0;presentCount=50;onScreen=0;roots=61;contentW=227;contentH=74;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=63,525,315,105;draws=2;firstDraw=596x193;lastDraw=596x193;drawSizes=596x193;trace=596x193/r596x193/a1.00,596x193/r596x193/a1.00;firstDrawMs=7;popRect=63,641,596,193;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=11;recycles=11;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 0 ms into its entry
+
+    "probe-381416708.494872" never reached nothing left after a drop 0 ms into the entry; report "seq=727;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=62;contentW=0;contentH=0;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=63,525,315,105;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;trace=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=13;recycles=13;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 50 ms into its entry
+
+    "probe-381425835.407043" never reached nothing left after a drop 50 ms into the entry; report "seq=957;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=63;contentW=0;contentH=0;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=63,525,315,105;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;trace=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=15;recycles=15;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 100 ms into its entry
+
+    "probe-381434986.315297" never reached nothing left after a drop 100 ms into the entry; report "seq=1190;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=64;contentW=0;contentH=0;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=63,525,315,105;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;trace=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=17;recycles=17;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 150 ms into its entry
+
+    "probe-381444173.169718" never reached nothing left after a drop 150 ms into the entry; report "seq=1424;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=65;contentW=0;contentH=0;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=63,525,315,105;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;trace=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=19;recycles=19;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · Q5 lifetime › gives a recycled view none of the open popover it came from
+
+    "recycled" never reached round 1 closed; report "seq=1659;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=66;contentW=0;contentH=0;nodeW=0;nodeH=0;rootW=0;rootH=0;children=0;inPopup=0;density=2.625;anchorRect=105,525,105,105;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;trace=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=21;recycles=21;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 92 |[39m     }[33m,[39m
+       [90m 93 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 94 |[39m       [36mnew[39m [33mError[39m([32m`"${id}" never reached ${what}; report "${reportOf(id).raw}"`[39m)[33m,[39m
+       [90m    |[39m                [31m[1m^[22m[39m
+       [90m 95 |[39m     timeoutMs
+       [90m 96 |[39m   )[33m;[39m
+       [90m 97 |[39m }[0m
+
+  ● PopoverProto · evidence › prints every number the tests above measured (red by design)
+
+    S5 evidence (red by design):
+
+      S5 Q1 10/10
+      k=0 ok=1 firstDraw=334x96 lastDraw=334x96 drawSizes=334x96 yoga=127.23809814453125x36.57142639160156dp density=2.625 draws=3 firstDrawMs=21 trace=334x96/r334x96/a1.00,334x96/r334x96/a1.00,334x96/r334x96/a1.00
+      k=1 ok=1 firstDraw=596x193 lastDraw=596x193 drawSizes=596x193 yoga=227.04762268066406x73.5238037109375dp density=2.625 draws=3 firstDrawMs=14 trace=596x193/r596x193/a1.00,596x193/r596x193/a1.00,596x193/r596x193/a1.00
+      k=2 ok=1 firstDraw=729x246 lastDraw=729x246 drawSizes=729x246 yoga=277.71429443359375x93.71429443359375dp density=2.625 draws=3 firstDrawMs=12 trace=729x246/r729x246/a1.00,729x246/r729x246/a1.00,729x246/r729x246/a1.00
+      k=3 ok=1 firstDraw=840x359 lastDraw=840x359 drawSizes=840x359 yoga=320x136.76190185546875dp density=2.625 draws=3 firstDrawMs=18 trace=840x359/r840x359/a1.00,840x359/r840x359/a1.00,840x359/r840x359/a1.00
+      k=4 ok=1 firstDraw=708x117 lastDraw=708x117 drawSizes=708x117 yoga=269.71429443359375x44.57142639160156dp density=2.625 draws=3 firstDrawMs=21 trace=708x117/r708x117/a1.00,708x117/r708x117/a1.00,708x117/r708x117/a1.00
+      k=5 ok=1 firstDraw=840x271 lastDraw=840x271 drawSizes=840x271 yoga=320x103.23809814453125dp density=2.625 draws=3 firstDrawMs=17 trace=840x271/r840x271/a1.00,840x271/r840x271/a1.00,840x271/r840x271/a1.00
+      k=6 ok=1 firstDraw=487x204 lastDraw=487x204 drawSizes=487x204 yoga=185.5238037109375x77.71429443359375dp density=2.625 draws=3 firstDrawMs=24 trace=487x204/r487x204/a1.00,487x204/r487x204/a1.00,487x204/r487x204/a1.00
+      k=7 ok=1 firstDraw=835x323 lastDraw=835x323 drawSizes=835x323 yoga=318.0952453613281x123.047607421875dp density=2.625 draws=3 firstDrawMs=17 trace=835x323/r835x323/a1.00,835x323/r835x323/a1.00,835x323/r835x323/a1.00
+      k=8 ok=1 firstDraw=840x279 lastDraw=840x279 drawSizes=840x279 yoga=320x106.28570556640625dp density=2.625 draws=3 firstDrawMs=17 trace=840x279/r840x279/a1.00,840x279/r840x279/a1.00,840x279/r840x279/a1.00
+      k=9 ok=1 firstDraw=840x400 lastDraw=840x400 drawSizes=840x400 yoga=320x152.38095092773438dp density=2.625 draws=3 firstDrawMs=13 trace=840x400/r840x400/a1.00,840x400/r840x400/a1.00,840x400/r840x400/a1.00
+      S5 Q1 red arm: ok=0 firstDraw=840x126 lastDraw=840x359 drawSizes=840x126,840x359 yoga=320x136.76190185546875dp density=2.625 draws=5 firstDrawMs=22 trace=840x126/r840x126/a1.00,840x126/r840x126/a1.00,840x126/r840x126/a1.00,840x359/r840x359/a1.00,840x359/r840x359/a1.00
+      [0m [90m 449 |[39m   [90m// each with its own pass or fail.[39m
+       [90m 450 |[39m   it([32m'prints every number the tests above measured (red by design)'[39m[33m,[39m () [33m=>[39m {
+      [31m[1m>[22m[39m[90m 451 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`S5 evidence (red by design):\n${evidence.join('\n')}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 452 |[39m   })[33m;[39m
+       [90m 453 |[39m })[33m;[39m
+       [90m 454 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       7 failed, 2 passed, 9 total
+Snapshots:   0 total
+Time:        81.649 s
+Ran all test suites matching PopoverProto.
+gate: harness:android:PopoverProto FAIL in 82.6 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+
+gate: appended the device context to task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T03-32-06.225Z.log (5 probe(s))
+
+```

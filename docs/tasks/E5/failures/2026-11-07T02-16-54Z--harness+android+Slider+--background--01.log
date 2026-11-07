@@ -1,0 +1,60 @@
+# Failure excerpt — harness:android:Slider:--background
+
+- Ran: 2026-11-07T02:16:54.743Z on code tree `6c1a1d4ed8a4` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider --background`
+- Result: fail, exit 1, 580 ms
+- Load: start 10.05, end 10.05, median 10.05, max 10.05
+- Device: android
+- Full log: `task/E5-slider-drag-start/harness+android+Slider+--background-2026-11-07T02-16-54.743Z.log` (<store>/task/E5-slider-drag-start/harness+android+Slider+--background-2026-11-07T02-16-54.743Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android+Slider+--background-2026-11-07T02-16-54.743Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.05 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 15 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider --background
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 6c1a1d4ed8a4, 18 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.05/12.05 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E5-slider-drag-start/harness+android+Slider+--background-2026-11-07T02-16-54.743Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```
