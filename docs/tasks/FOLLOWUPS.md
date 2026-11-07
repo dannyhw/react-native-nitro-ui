@@ -202,3 +202,5 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - Gate ledgers commit simulator UDIDs in their `device` field (about 50 on main). Decide whether D25's scrub should cover them.
 - X20: `gate.mjs export --task <ID>` on a merge branch overwrites `docs/tasks/<ID>/gates.jsonl` with that branch's lines only; it should append across the task's branches.
 - X20: `task-ready` on `task/<ID>-merge` looks only for `<ID>-merge.report.md` or `<ID>.report.md`, not the task's real report name.
+- E4 review: `NitroUiProbePackage.paintedInk` calls `findViewWithTag`/`getLocationInWindow` off the UI thread (test-only code).
+- E4 review: Progress's TalkBack and VoiceOver readings in `progress.md` are inferred, not observed on a device.
