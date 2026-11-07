@@ -338,6 +338,12 @@ a run, lease `G19-w2v9t`):
   one changes the harness file, so it belongs with the IconButton task that opens it next.
 - `check`'s `ci-workflows` step failed once on `-accel-check` under load and passed on retry and
   standalone; owned by X20's tooling, not by this diff.
+- FIX4 is moving the library's own glyphs to `res/drawable/nitroui_*` in `android/`. This round
+  touched none of them: its named-drawable fixtures are `nitroui_test_*` in
+  `example/android/app/src/main/res/drawable/`, the app's folder, and no name is shared. A merge
+  that renames one side should still not rename the other.
+- Tooling: `gate.mjs` could refuse a device gate outright when `NITRO_UI_LEASE_ID` is absent,
+  rather than starting a run whose preflight cannot find a device and leaving a FAIL row behind.
 
 ### Questions for orchestrator
 
