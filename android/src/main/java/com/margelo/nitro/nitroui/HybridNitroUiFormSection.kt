@@ -28,12 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -398,7 +394,20 @@ internal class NitroUiFormSectionView(
     return null
   }
 
-  /** Insert at Fabric's index, with the host kept last. */
+  /**
+   * Insert at Fabric's index, with the host kept *first*.
+   *
+   * Last is where a child that must not disturb Fabric's indices usually goes, and it is
+   * where a ContextMenu's host belongs - but this host is a full-size Compose layer that
+   * drives a ripple, and last in a `ViewGroup` means top of the z-order: it stood between a
+   * finger and every row, so a `Pressable` in a row got nothing and a row's own press never
+   * began (S6 question 7: 0 of 10 taps on the row and on its content, 43 of 10 on the same
+   * `Pressable` placed outside the Form). At index 0 it draws the shapes and the ripple
+   * under React Native's content, which is what the file header always said it did.
+   *
+   * Fabric's index `n` is therefore this view's index `n + 1`. [reactChildAt] and
+   * [reactChildCount] skip the host wherever it sits, so they need no counterpart.
+   */
   fun addReactChild(
     child: View,
     index: Int,
@@ -408,11 +417,11 @@ internal class NitroUiFormSectionView(
       addView(child, index.coerceAtMost(childCount))
       return
     }
-    var target = index
-    for (existing in 0 until childCount) {
-      if (getChildAt(existing) === host && existing <= target) target++
+    if (indexOfChild(host) != 0) {
+      removeViewAt(indexOfChild(host))
+      addView(host, 0)
     }
-    addView(child, target.coerceAtMost(childCount))
+    addView(child, (index + 1).coerceAtMost(childCount))
   }
 
   fun removeReactChild(child: View) {
@@ -500,16 +509,14 @@ internal fun FormSegmentedLayer(
           ),
       )
     }
-    // 3. The accessories: `UICellAccessory`'s Android twin, in the same layer, so a row
-    //    holding a Switch keeps its own layout untouched.
-    Canvas(Modifier.fillMaxSize()) {
-      rows.forEachIndexed { _, rect ->
-        if (rect.accessory != NitroUiFormRowView.ACCESSORY_NONE) {
-          drawRowAccessory(rect, colors.contentColor(enabled = true, selected = rect.selected, dragged = false))
-        }
-      }
-    }
-    // 4. The header and footer, measured here so their space can be reserved by Yoga.
+    // 3. The header and footer, measured here so their space can be reserved by Yoga.
+    //
+    // No accessory is drawn. iOS gets one from `UICellAccessory`; the Android twin here was a
+    // caret written out as `Path` line commands, and D43's guard is right to refuse it -
+    // hand-typed geometry in `android/src/main` is what shipped SearchField's wrong search
+    // icon once. A chevron or a check has to arrive as one of Google's drawables through
+    // `scripts/icons/fetch-material-symbols.mjs`; `FormListMetrics.TrailingPadding` already
+    // reserves the room for it. That is G-Form's work, not the spike's.
     model.headerText?.takeIf { it.isNotEmpty() }?.let { text ->
       Text(
         text = text,
@@ -586,39 +593,6 @@ private fun DrawScope.drawRowContainer(
     color = colors.containerColor(enabled = true, selected = rect.selected, dragged = false),
     alpha = 1f,
   )
-}
-
-/** The trailing accessory, in the row's trailing padding: a chevron or a check. */
-private fun DrawScope.drawRowAccessory(
-  rect: FormRowRect,
-  color: Color,
-) {
-  val trailing = rect.right - FormListMetrics.TrailingPadding
-  val centreY = rect.top + rect.height / 2f
-  val stroke = Stroke(width = 1.6f * density, cap = StrokeCap.Round)
-  if (rect.accessory == NitroUiFormRowView.ACCESSORY_DISCLOSURE) {
-    val size = 7f * density
-    drawPath(
-      Path().apply {
-        moveTo(trailing - size, centreY - size)
-        lineTo(trailing, centreY)
-        lineTo(trailing - size, centreY + size)
-      },
-      color,
-      style = stroke,
-    )
-  } else {
-    val size = 9f * density
-    drawPath(
-      Path().apply {
-        moveTo(trailing - size, centreY)
-        lineTo(trailing - size * 0.45f, centreY + size * 0.55f)
-        lineTo(trailing, centreY - size * 0.65f)
-      },
-      color,
-      style = stroke,
-    )
-  }
 }
 
 /**

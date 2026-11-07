@@ -74,7 +74,12 @@ function componentDirs() {
  * A test that listed these by name went red the day a new control landed, which is the
  * operation the registry exists to make cheap, so nothing here hardcodes the roster.
  */
-const NON_COMPONENT_DIRS = ['Host'];
+const NON_COMPONENT_DIRS = ['Host', 'Form'];
+// `Form` is S6's spike prototype (Q10 Appendix C1): three Hybrid Views with no manifest,
+// so it reaches no list the registry writes - no control, no example tab, no bench arm,
+// no README row - and it is named here rather than skipped by a rule, exactly as `<Host>`
+// is. Its own half lives in `NON_CONTROL_AUTOLINKING`; G-Form replaces these two names
+// with three manifests, and the spike branch is never merged (D19).
 
 /**
  * A control name this tree does not use, for the tests that add one on the fly.

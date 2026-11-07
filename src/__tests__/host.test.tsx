@@ -7,7 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { fireEvent, render } from '@testing-library/react-native';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Component, Fragment, createElement, type ReactNode } from 'react';
 import { ScrollView, Switch as RNCoreSwitch, Text, View } from 'react-native';
@@ -568,6 +568,14 @@ describe('Host children · tables cover the library', () => {
     // one native view), or its own name - the same rule the registry uses.
     const controls = readdirSync(componentsDir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory() && entry.name !== 'Host')
+      // A directory with no manifest declares no control, so it belongs to no table here.
+      // *Which* directories may lack one is the registry's question, and
+      // `scripts/__tests__/registry.test.js` answers it as a hard list - `Form` is on it
+      // (S6's spike prototype, no manifest by design). Naming the names twice is how a
+      // skip becomes a hole.
+      .filter((entry) =>
+        existsSync(join(componentsDir, entry.name, 'component.json'))
+      )
       .flatMap((entry) => {
         const manifest = JSON.parse(
           readFileSync(

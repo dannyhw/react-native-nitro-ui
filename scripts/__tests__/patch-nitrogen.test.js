@@ -18,6 +18,23 @@ import { join, resolve } from 'node:path';
 
 const repoRoot = resolve(process.cwd());
 const script = join(repoRoot, 'scripts/patch-nitrogen.mjs');
+
+/**
+ * The views the content-children step is configured for, read out of the script itself.
+ *
+ * Importing would be nicer, but `patch-nitrogen.mjs` uses `import.meta` and so cannot be
+ * imported from a Jest suite. Reading the list keeps this fixture honest when the list
+ * grows, which is the failure that landed here: a fixture holding only the BottomSheet
+ * became a tree the step was right to refuse the day the list stopped being one long.
+ */
+const contentChildrenViews = () => {
+  const list = /export const CONTENT_CHILDREN_VIEWS = \[([\s\S]*?)\]/.exec(
+    readFileSync(script, 'utf8')
+  );
+  return [...(list?.[1] ?? '').matchAll(/'(Hybrid\w+)'/g)].map(
+    (match) => match[1]
+  );
+};
 const fixtures = join(repoRoot, 'scripts/__tests__/fixtures');
 const VIEWS = 'nitrogen/generated/shared/c++/views';
 
@@ -363,10 +380,12 @@ describe('patch-nitrogen: intrinsic sizing', () => {
 describe('patch-nitrogen: content children (G14)', () => {
   const MM =
     'nitrogen/generated/ios/c++/views/HybridNitroUiBottomSheetComponent.mm';
+  const viewsDirOf = (className) =>
+    `nitrogen/generated/ios/c++/views/${className}Component.mm`;
   /** A generated iOS component view, cut down to what the patch reads. */
-  const generated = () =>
+  const generated = (className = 'HybridNitroUiBottomSheet') =>
     [
-      '@implementation HybridNitroUiBottomSheetComponent {',
+      `@implementation ${className}Component {`,
       '}',
       '- (void) updateView {',
       '  [self setContentView:view];',
@@ -382,13 +401,32 @@ describe('patch-nitrogen: content children (G14)', () => {
       mkdirSync(join(root, 'nitrogen/generated/ios/c++/views'), {
         recursive: true,
       });
+      // The step reads its own list, so a tree that declares the BottomSheet has to
+      // declare and generate every other view on that list too - refusing a listed
+      // view that is missing is the guard (see the case below), and a fixture that is
+      // a fragment of the real tree would be red for the wrong reason.
+      const declaredViews = declare ? contentChildrenViews() : [];
       writeFileSync(
         join(root, 'nitro.json'),
         JSON.stringify({
-          autolinking: declare ? { NitroUiBottomSheet: {} } : {},
+          autolinking: Object.fromEntries(
+            declaredViews.map((className) => [
+              className.replace(/^Hybrid/, ''),
+              {},
+            ])
+          ),
         })
       );
-      if (mm != null) writeFileSync(join(root, MM), mm);
+      if (mm != null) {
+        writeFileSync(join(root, MM), mm);
+        for (const className of contentChildrenViews()) {
+          if (className === 'HybridNitroUiBottomSheet') continue;
+          writeFileSync(
+            join(root, viewsDirOf(className)),
+            generated(className)
+          );
+        }
+      }
       return fn(root);
     } finally {
       rmSync(root, { recursive: true, force: true });

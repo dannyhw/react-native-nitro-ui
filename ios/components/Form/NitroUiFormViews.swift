@@ -135,9 +135,13 @@ final class NitroUiFormRowHostView: UIView {
 ///
 /// The background, the separator, the highlight and the accessory are all UIKit's. The
 /// `contentConfiguration` is `nil`, because the content is a view, not a configuration.
-final class NitroUiFormRowCell: UICollectionViewListCell {
+final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDelegate {
   private let container = NitroUiFormRowContainer()
   private var height: NSLayoutConstraint!
+  /// The row's press, delivered by ``pressGesture`` instead of by UIKit's cell selection.
+  var onPressTap: (() -> Void)?
+  /// Whether the finger is down on this row right now, which is what makes it look pressed.
+  private var pressed = false
   /// The row this cell is showing.
   private(set) weak var row: UIView?
   /// What to do with a row this cell is finished with - back to its section.
@@ -183,12 +187,66 @@ final class NitroUiFormRowCell: UICollectionViewListCell {
     height.isActive = true
     configurationUpdateHandler = { [weak self] _, state in
       guard let self, var background = self.backgroundConfiguration else { return }
-      let pressed = self.isPressable && (state.isHighlighted || state.isSelected)
+      let pressed = self.isPressable && (self.pressed || state.isHighlighted || state.isSelected)
       background.backgroundColor =
         pressed ? .quaternarySystemFill
         : (self.isSelectedRow ? .systemFill : .secondarySystemGroupedBackground)
       self.backgroundConfiguration = background
     }
+    addGestureRecognizer(pressGesture)
+  }
+
+  /// UIKit's own selection recognises at touch-down, and React Native's touch handler
+  /// will not share a touch with a recognizer it did not create: `RCTSurfaceTouchHandler`
+  /// answers `NO` to `shouldRecognizeSimultaneouslyWithGestureRecognizer:`. With selection
+  /// on, the list wins every touch inside a row and the React content in it never sees the
+  /// release - S6 question 4 measured that as 0 of 10 taps on a `Pressable` in a row.
+  ///
+  /// So the list does not select at all (`allowsSelection = false` on the Form), and a
+  /// row's press comes from this recognizer instead: it starts at touch-down (which is what
+  /// makes the row look pressed), accepts simultaneous recognition, and never cancels
+  /// touches in views - so the React content inside the row keeps the same touch.
+  private lazy var pressGesture: UILongPressGestureRecognizer = {
+    let gesture = UILongPressGestureRecognizer(
+      target: self,
+      action: #selector(pressChanged(_:))
+    )
+    gesture.minimumPressDuration = 0
+    gesture.cancelsTouchesInView = false
+    gesture.delaysTouchesBegan = false
+    gesture.delaysTouchesEnded = false
+    gesture.delegate = self
+    return gesture
+  }()
+
+  @objc private func pressChanged(_ gesture: UILongPressGestureRecognizer) {
+    switch gesture.state {
+      case .began:
+        pressed = true
+      case .ended:
+        pressed = false
+        onPressTap?()
+      default:
+        // Cancelled or failed: a scroll that turned out to be a scroll, say.
+        pressed = false
+    }
+    setNeedsUpdateConfiguration()
+  }
+
+  // MARK: UIGestureRecognizerDelegate
+
+  override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    // A row that answers no tap should not track one at all.
+    isPressable
+  }
+
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer,
+    shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+  ) -> Bool {
+    // React Native's touch handler above the surface, and the list's own pan. Neither is
+    // made worse by this row also being pressed.
+    true
   }
 
   @available(*, unavailable)
@@ -227,6 +285,7 @@ final class NitroUiFormRowCell: UICollectionViewListCell {
   override func prepareForReuse() {
     // A row is never in two cells: whatever this one had goes back before anything else.
     super.prepareForReuse()
+    pressed = false
     giveBack()
   }
 }
@@ -324,21 +383,15 @@ final class NitroUiFormSupplementaryCell: UICollectionViewListCell {
 /// `UICollectionView`'s delegate for a Form.
 ///
 /// A Nitro Hybrid View is not an `NSObject`, so the `@objc` protocol it needs cannot live on
-/// the Hybrid itself — the same reason `NitroUiTooltipPopoverDelegate` exists. One message
-/// each way, forwarded to the Form.
+/// the Hybrid itself — the same reason `NitroUiTooltipPopoverDelegate` exists. The list does
+/// not select (`allowsSelection = false`), so the only message it sends is the one that says
+/// a cell has stopped being shown; the row's press comes from the cell's own recognizer.
 final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
   private weak var form: HybridNitroUiForm?
 
   init(form: HybridNitroUiForm) {
     self.form = form
     super.init()
-  }
-
-  func collectionView(
-    _ collectionView: UICollectionView,
-    didSelectItemAt indexPath: IndexPath
-  ) {
-    form?.listDidSelectItem(indexPath, in: collectionView)
   }
 
   func collectionView(
