@@ -123,80 +123,125 @@ tint goes to the label there — the same trade the Switch's `tintColor` makes.
 
 ## Android icons
 
-iOS draws `systemImage` from SF Symbols. Android has no system icon set, so you
-ship the icons you use and name them with `androidIcon`:
+iOS draws `systemImage` from SF Symbols. Android has no system icon set, so the
+app owns the artwork and `androidIcon` points at it:
 
 ```tsx
-<Button title="Share" systemImage="square.and.arrow.up" androidIcon="share" onPress={share} />
+<Button
+  title="Share"
+  systemImage="square.and.arrow.up"
+  androidIcon={require('./icons/share.xml')}
+  onPress={share}
+/>
 ```
 
 Each platform takes its own prop and ignores the other, so one Button reads the
-same on both without a `Platform.select`.
+same on both without a `Platform.select`. iOS draws `square.and.arrow.up` and
+never looks at `androidIcon`; Android draws your `.xml` and never looks at
+`systemImage`.
 
-1. Download the icon as an **Android vector drawable**, for example from Material
-   Symbols (Google Fonts → Icons → pick one → *Android*). You get an `.xml` file.
-   Material Symbols are Apache 2.0.
-2. **Bare React Native:** put it in `android/app/src/main/res/drawable/`, named
-   in lower case with underscores (`share.xml`), then rebuild the app. A JS reload
-   cannot add resources.
-3. `androidIcon` is the file name without `.xml`. `-` and `.` are accepted and
-   read as `_`, so `share-24px` finds `share_24px.xml` — but `aapt` will not
-   accept a file named with either, so the file has to be renamed anyway.
-4. The icon is tinted to the control's text colour and sized by the control, so
-   any 24 dp vector works. It is the colour the label itself paints with, so the
-   glyph fades with the label when the control is disabled and follows
-   `tintColor` when it is not. A multicolour drawable draws in one colour
-   (`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt`).
+### Getting the artwork
 
-**Expo (prebuild / CNG):** put the files in a folder of their own — say
-`assets/android-icons/` — and name the plugin in `app.json`:
+Material Symbols is the set most apps reach for, and it is Apache 2.0. On
+[fonts.google.com/icons](https://fonts.google.com/icons), pick an icon, open the
+download panel and choose the **Android** format — you get one `.xml` file per
+icon, an Android *vector drawable*. The iOS and Flutter formats are different
+files; this prop wants the Android one.
 
-```json
-{
-  "plugins": [
-    ["react-native-nitro-ui/plugin", { "androidIcons": "./assets/android-icons" }]
-  ]
+**Expo apps** can skip the download:
+[`@expo/material-symbols`](https://www.npmjs.com/package/@expo/material-symbols)
+publishes the set (outlined style, one file per icon) as `.xml` files in a package, so
+`androidIcon={require('@expo/material-symbols/share.xml')}` works with nitro-ui.
+It is an option, not a dependency of this library — nothing here imports it, and
+an app that ships its own icons should not have to carry the whole set.
+
+Put the files somewhere inside your app's source, next to the screen that uses
+them or in one `assets/icons/` folder, and `require` them. That is the whole
+setup: there is no plugin to register, no folder to keep in step with
+`prebuild`, and nothing to add to a Gradle file. Metro already knows how to
+carry an `.xml` asset (`xml` is one of its default asset extensions), and in a
+release build it becomes an ordinary drawable resource with the name Metro
+derives from its path — `src/assets/icons/share.xml` ships as
+`src_assets_icons_share`.
+
+A TypeScript project needs an ambient declaration for the import, the same one
+an app writes for its images:
+
+```ts
+// react-native-xml.d.ts
+declare module '*.xml' {
+  const assetId: number;
+  export default assetId;
 }
 ```
 
-`expo prebuild` then copies every `.xml` in that folder into
-`android/app/src/main/res/drawable/` and writes the `res/raw/keep.xml` entries
-below for you, so a shrink-enabled release build cannot drop them. It is opt-in:
-an app that never uses `androidIcon` needs no plugin, and installing the library
-does not add one. Names `aapt` would reject (`Share.xml`, `share-24px.xml`) are
-skipped with a warning rather than copied into a build that cannot compile them,
-and a file that is not a `<vector>` is copied with a warning, because a control
-may not be able to draw it at an icon's size. Expo Go cannot load app resources,
-so this needs a development build. Running prebuild twice changes nothing: the
-copy overwrites identical bytes and `keep.xml` is merged, not rewritten, so
-entries you added by hand for something else survive.
+### The drawable-name form
 
-**A name that is not found draws no icon and leaves the Button exactly as if
-`androidIcon` were not set** — no slot is reserved and no padding changes, the
-same way iOS treats an SF Symbol name that does not exist (measured: on iOS all
-five configurations — no icon, a shipped name, a 32 × 12 slab, an unresolvable
-name, a name that resolves to something with no intrinsic size — land on the
-identical 68.00 × 34.33 pt box, because iOS draws none of them). One warning is logged
-per name (`adb logcat -s NitroUi`), and a name that could never be a resource
-name (`Share Icon`, `24px`, an empty string) is reported from JavaScript in
-development, where you can still fix it.
+An app that already ships drawables can keep naming them, with no `require`:
 
-**If your release build shrinks resources** (`shrinkResources true`, or Expo's
-`enableShrinkResourcesInReleaseBuilds`), keep the icons. The shrinker cannot see
-names that arrive from JavaScript:
-
-```xml
-<!-- android/app/src/main/res/raw/keep.xml -->
-<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@drawable/share,@drawable/send" />
+```tsx
+<Button title="Share" androidIcon="share" onPress={share} />
 ```
 
-(The Expo plugin above writes exactly this file and merges with one you have
-already written.)
+That is `res/drawable/share.xml`, named without the extension — an Android
+resource name, so lower case, digits and underscores, starting with a letter.
+`-` and `.` are accepted and read as `_`, so `share-24px` finds `share_24px.xml`;
+`aapt` will not accept a file named with either, so the file has to be renamed
+anyway. Under `expo prebuild` the `res/drawable/` folder is generated, so with
+that workflow the `require` form above is the one that survives a `--clean`.
 
-A `layer-list`, an adaptive icon or a shape with no intrinsic size is treated as
-not found for the same reason — it cannot be drawn at an icon's size — and says
-so once in the same log.
+Whichever form you use, the icon is tinted to the control's text colour and
+sized by the control, so any 24 dp vector works. It is the colour the label
+itself paints with, so the glyph fades with the label when the control is
+disabled and follows `tintColor` when it is not. A multicolour drawable draws in
+one colour
+(`android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt`).
 
+### What an icon costs, and what it does not
+
+**The icon's size comes from the size ladder, never from the file.** The slot is
+`iconSizeFor(size)` wide and the label sits beside it, both read from the same
+rung that sets the control's height — so a 24 dp star and a 32 × 12 slab widen
+the Button by the same amount, and the box never waits for bytes. In development
+the file is still being read while the first frame is laid out: the slot is
+reserved and empty, and the glyph appears in it when it arrives. Nothing moves.
+
+**An icon that cannot be resolved draws nothing and reserves nothing**, so the
+Button is exactly its no-icon self — no slot, no padding change, the same way
+iOS treats an SF Symbol name that does not exist. That covers every failure the
+same way:
+
+| What happened                                    | What you see                                          |
+| ------------------------------------------------ | ----------------------------------------------------- |
+| `res/drawable/share.xml` is not in the build     | nothing drawn, one line in `adb logcat -s NitroUi`    |
+| The `.xml` Metro serves is a 404 or unreadable   | nothing drawn, one line in the same log               |
+| The file is XML but not a `<vector>`             | the same, and the log says the file is not a drawable |
+| `androidIcon` is a `.png` or other asset         | nothing drawn, and a development warning says why     |
+| A name that could not be a resource name         | a development warning from JavaScript, where it is fixable |
+
+A failed file is remembered, so a renamed icon costs the app one request rather
+than one request per frame. A `layer-list`, an adaptive icon or a shape with no
+intrinsic size counts as not found for the same reason — it cannot be drawn at an
+icon's size — and says so once in the same log.
+
+**Release builds read the drawable; development reads the file.** In a release
+build the `require`d `.xml` is a resource in the APK and goes through the
+resource table, loaded once per process and shared across every control that
+names it. In development the file is not in the APK — it is the copy Metro
+serves — and React Native deliberately will not load Android `.xml` assets from
+the dev server (`assetSupportsNetworkLoads` in `AssetSourceResolver.js`), so
+nitro-ui asks for that file itself: it builds the URL the dev server would
+answer, reads it on a worker thread off the main thread, parses it into a Compose
+`ImageVector`, caches it per URL for the process, and draws it through the same
+`VectorPainter` as any Material icon. It does **not** patch React Native's global
+asset resolver to make `.xml` loadable: registering a transformer would change
+how every `Image` in your app resolves its sources, for a decision that belongs
+to one prop (DECISIONS D43).
+
+A gradient fill — a `<gradient>` inside an `<aapt:attr>` — is the one thing in the
+format nitro-ui does not read in development: the parser refuses it rather than
+draw it as one flat colour, so the icon appears in a release build and not in a
+development one, and the log says which of the two happened.
 ## Sizing
 
 Button is the library's first control whose size comes from its **props**, so it
