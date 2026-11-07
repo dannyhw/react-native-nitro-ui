@@ -109,3 +109,4 @@
 | Q10 | Form, List and Section: how @expo/ui and other libraries do it, and a design (Form/Section and a virtualized List separately) | Opus | orchestrator | done (report merged, PR #48): Form/Section GO after a one-round spike (UIKit inset-grouped list on iOS, M3 segmented rows on Android, any RN row with no wrapper); virtualized List with React rows NO-GO; questions A–C to the owner |
 | S6 | Form and Section spike: React Native rows in native grouped lists (Q10 Appendix C1, E) | Apex | Opus | running |
 | G22 | Popover with React Native content (S5, D44) | Apex | Opus | running |
+| G23 | IconButton (Q9 C4 on G19's icon path, D43) | Apex | Opus | running |
