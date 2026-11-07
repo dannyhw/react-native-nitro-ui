@@ -8,7 +8,6 @@ import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.IconButtonColors
 import androidx.compose.material3.IconButtonDefaults
@@ -23,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.Shape
@@ -119,6 +117,11 @@ internal enum class IconButtonScale(val wireName: String) {
    * A `DpSize`, not a square - Material's own table gives each rung a height and
    * then three widths for it (`Q9` C4's table), so `narrow` costs width and never
    * height. `docs/components/icon-button.md` prints the measured grid.
+   *
+   * It has to be asked for on the control's own modifier: each of the eight
+   * composables below already applies `IconButtonDefaults.smallContainerSize()` to
+   * its own Box, and a size asked for inside that is coerced into it. See
+   * [Component]'s `controlModifier`.
    */
   @Composable
   fun containerSize(width: IconButtonWidth): DpSize =
@@ -706,24 +709,32 @@ private class IconButtonHost(
     val scale = model.scale
     val corner = model.corner
     val glyphSize = scale.iconSize()
+    // The rung goes on the *control's* modifier, not inside its content, and that
+    // placement is not a style choice: each of these eight composables builds its Box
+    // as `modifier.minimumInteractiveComponentSize().size(IconButtonDefaults.
+    // smallContainerSize())` (read off the artifact's bytecode), so a container asked
+    // for *inside* the content is measured under the `small` token's constraints —
+    // and `Modifier.size` coerces into the constraints it is given, so all five rungs
+    // come back 48 x 48. The first device run measured exactly that:
+    // `small narrow=48.00x48.00 … xxlarge wide=48.00x48.00`.
+    //
+    // The caller's modifier is the outermost of the chain, so the order inside it
+    // stays Material's own: the minimum interactive size *outside* the container
+    // token, so a 40 dp control is still a 48 dp target while the painted container
+    // stays the token. Swapping the two would clip the target — `Modifier.size(40.dp)
+    // .minimumInteractiveComponentSize()` cannot grow past what the child asked for.
+    val containerSize = scale.containerSize(model.width)
+    val controlModifier =
+      labelModifier.minimumInteractiveComponentSize().size(containerSize)
     val content: @Composable () -> Unit = {
-      // Material's own chain, rung for rung: the minimum interactive size *outside*
-      // the container token, so a 40 dp control is still a 48 dp target and the
-      // painted container stays the token. Swapping the two would clip the target
-      // (`Modifier.size(40.dp).minimumInteractiveComponentSize()` cannot grow past
-      // what the child asked for), which is what
-      // `IconButtonKeepsTouchTargetForSmallRung` checks.
-      Box(
-        modifier = Modifier.minimumInteractiveComponentSize().size(scale.containerSize(model.width)),
-        contentAlignment = Alignment.Center,
-      ) {
-        NitroUiIconGlyph(
-          painter = rememberIconPainter(model.androidIconContent),
-          size = glyphSize,
-          tint = LocalContentColor.current,
-          contentDescription = null,
-        )
-      }
+      // The glyph alone: the composable's own Box centres its content, and the
+      // container's size and shape are the composable's business now.
+      NitroUiIconGlyph(
+        painter = rememberIconPainter(model.androidIconContent),
+        size = glyphSize,
+        tint = LocalContentColor.current,
+        contentDescription = null,
+      )
     }
     if (toggle) {
       val colors = iconToggleColors(variant, tint)
@@ -735,7 +746,7 @@ private class IconButtonHost(
           androidx.compose.material3.IconToggleButton(
             checked = selected,
             onCheckedChange = onCheckedChange,
-            modifier = labelModifier,
+            modifier = controlModifier,
             enabled = enabled,
             colors = colors,
             shapes = shapes,
@@ -745,7 +756,7 @@ private class IconButtonHost(
           androidx.compose.material3.FilledIconToggleButton(
             checked = selected,
             onCheckedChange = onCheckedChange,
-            modifier = labelModifier,
+            modifier = controlModifier,
             enabled = enabled,
             colors = colors,
             shapes = shapes,
@@ -755,7 +766,7 @@ private class IconButtonHost(
           androidx.compose.material3.FilledTonalIconToggleButton(
             checked = selected,
             onCheckedChange = onCheckedChange,
-            modifier = labelModifier,
+            modifier = controlModifier,
             enabled = enabled,
             colors = colors,
             shapes = shapes,
@@ -765,7 +776,7 @@ private class IconButtonHost(
           androidx.compose.material3.OutlinedIconToggleButton(
             checked = selected,
             onCheckedChange = onCheckedChange,
-            modifier = labelModifier,
+            modifier = controlModifier,
             enabled = enabled,
             colors = colors,
             shapes = shapes,
@@ -782,7 +793,7 @@ private class IconButtonHost(
       IconButtonVariant.Standard ->
         androidx.compose.material3.IconButton(
           onClick = onClick,
-          modifier = labelModifier,
+          modifier = controlModifier,
           enabled = enabled,
           colors = colors,
           shapes = shapes,
@@ -791,7 +802,7 @@ private class IconButtonHost(
       IconButtonVariant.Filled ->
         androidx.compose.material3.FilledIconButton(
           onClick = onClick,
-          modifier = labelModifier,
+          modifier = controlModifier,
           enabled = enabled,
           colors = colors,
           shapes = shapes,
@@ -800,7 +811,7 @@ private class IconButtonHost(
       IconButtonVariant.Tonal ->
         androidx.compose.material3.FilledTonalIconButton(
           onClick = onClick,
-          modifier = labelModifier,
+          modifier = controlModifier,
           enabled = enabled,
           colors = colors,
           shapes = shapes,
@@ -809,7 +820,7 @@ private class IconButtonHost(
       IconButtonVariant.Outlined ->
         androidx.compose.material3.OutlinedIconButton(
           onClick = onClick,
-          modifier = labelModifier,
+          modifier = controlModifier,
           enabled = enabled,
           colors = colors,
           shapes = shapes,

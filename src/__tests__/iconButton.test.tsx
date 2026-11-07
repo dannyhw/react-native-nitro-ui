@@ -122,7 +122,7 @@ describe('IconButton · the size configuration', () => {
       <IconButton accessibilityLabel="Search" testID="key-default" />
     );
     expect(nativeProps(view, 'key-default').nuiSizingKey).toBe(
-      'standard|medium|uniform||'
+      'standard|medium|uniform|press||'
     );
   });
 
@@ -136,7 +136,7 @@ describe('IconButton · the size configuration', () => {
     // iOS ignores `width`, and a key trimmed to what iOS acts on would hand a wide
     // Android box to the next narrow control of every other configuration.
     expect(nativeProps(wide, 'key-wide').nuiSizingKey).toBe(
-      'standard|medium|wide||'
+      'standard|medium|wide|press||'
     );
     expect(nativeProps(wide, 'key-wide').nuiSizingKey).not.toBe(
       nativeProps(uniform, 'key-uniform').nuiSizingKey
@@ -183,7 +183,7 @@ describe('IconButton · the size configuration', () => {
       nativeProps(one, 'key-glyph').nuiSizingKey
     );
     expect(nativeProps(androidIcon, 'key-drawable').nuiSizingKey).toBe(
-      'standard|medium|uniform||star'
+      'standard|medium|uniform|press||star'
     );
     expect(nativeProps(rung, 'key-rung').nuiSizingKey).toContain('|xxlarge|');
     expect(nativeProps(variant, 'key-variant').nuiSizingKey).toContain(
@@ -219,6 +219,8 @@ describe('IconButton · the size configuration', () => {
     const square = await render(
       <IconButton
         accessibilityLabel="Bookmark"
+        checked={false}
+        onCheckedChange={() => {}}
         shape="square"
         testID="key-square"
       />
@@ -227,6 +229,10 @@ describe('IconButton · the size configuration', () => {
     expect(nativeProps(on, 'key-on').nuiSizingKey).toBe(base);
     expect(nativeProps(disabled, 'key-disabled').nuiSizingKey).toBe(base);
     expect(nativeProps(square, 'key-square').nuiSizingKey).toBe(base);
+    // All four are the *same form*: `form` is in the key (see the test below), so a
+    // press button of the same variant/size/glyph is deliberately a different key, and
+    // comparing across the two forms here would test that instead.
+    expect(base).toBe('standard|medium|uniform|toggle||');
   });
 
   it('escapes a glyph name that contains the field separator', async () => {
@@ -240,7 +246,39 @@ describe('IconButton · the size configuration', () => {
     // A symbol name is free-form text. Unescaped, it would make two different
     // configurations read as one (Button's rule, and its escape).
     expect(nativeProps(forged, 'key-forged').nuiSizingKey).toBe(
-      'standard|medium|uniform|a\\|filled\\|large|'
+      'standard|medium|uniform|press|a\\|filled\\|large|'
+    );
+  });
+
+  it('keys the form, because iOS draws two controls with two boxes', async () => {
+    const press = await render(
+      <IconButton
+        accessibilityLabel="Bookmark"
+        onPress={() => {}}
+        size="large"
+        testID="key-press-form"
+        variant="tonal"
+      />
+    );
+    const toggle = await render(
+      <IconButton
+        accessibilityLabel="Bookmark"
+        checked={false}
+        onCheckedChange={() => {}}
+        size="large"
+        testID="key-toggle-form"
+        variant="tonal"
+      />
+    );
+    // Measured on iOS in `IconButton.harness.tsx`: the same `tonal`/`large`
+    // configuration is 31.67 x 30.00 pt as a `Button` and 41.67 x 30.00 pt as a
+    // `Toggle(.button)`. One cached size cannot serve both, so the two forms must not
+    // read one key.
+    expect(nativeProps(toggle, 'key-toggle-form').nuiSizingKey).toBe(
+      'tonal|large|uniform|toggle||'
+    );
+    expect(nativeProps(press, 'key-press-form').nuiSizingKey).not.toBe(
+      nativeProps(toggle, 'key-toggle-form').nuiSizingKey
     );
   });
 });

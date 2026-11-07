@@ -213,11 +213,18 @@ function escapeField(value: string): string {
 
 /**
  * The size configuration of one IconButton, as the sizing engine sees it:
- * `variant|size|width|systemImage|androidIcon`.
+ * `variant|size|width|form|systemImage|androidIcon`.
  *
  * - `size` and `width` are the box on Android (Material's container tokens), and
  *   `size` is the box on iOS;
  * - `variant` changes the style, and on iOS the style's own padding;
+ * - `form` is `press` or `toggle`, which of the two native controls this is. Not
+ *   the *value* — see `checked` below — the form, and it is in the key because on
+ *   iOS the two forms are two controls with two boxes: the same `tonal`/`large`
+ *   configuration measured 31.67 × 30.00 pt as a `Button` and 41.67 × 30.00 pt as a
+ *   `Toggle(.button)` in the first device run, and one cached size cannot be both.
+ *   Android composes the same container for the two and is unaffected; it shares the
+ *   field because the platforms read one key.
  * - `systemImage` is iOS's width — symbols differ, so the symbol is in the key;
  *   `androidIcon` cannot change an Android box (the glyph is sized by the rung),
  *   and it is here so both platforms read one key (Q9 C4);
@@ -232,6 +239,7 @@ function sizingVariantFor(
   variant: IconButtonVariant,
   size: IconButtonSize,
   width: IconButtonWidth,
+  isToggle: boolean,
   systemImage: string | undefined,
   androidIcon: string | undefined
 ): string {
@@ -239,6 +247,7 @@ function sizingVariantFor(
     variant,
     size,
     width,
+    isToggle ? 'toggle' : 'press',
     escapeField(systemImage ?? ''),
     escapeField(androidIcon ?? ''),
   ].join(FIELD_SEPARATOR);
@@ -429,6 +438,7 @@ export function IconButton({
         resolvedVariant,
         resolvedSize,
         resolvedWidth,
+        isToggle,
         systemImage,
         resolvedAndroidIcon ?? undefined
       )}

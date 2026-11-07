@@ -41,6 +41,16 @@ enum IconButtonVariant: String {
 /// is the honest mapping: there is no sixth button size to point at, and
 /// `docs/components/icon-button.md` states it beside Android's five distinct
 /// Material containers.
+///
+/// What it does *not* do here is size the control. On a titled `Button`,
+/// `.controlSize` moves the label's font and the button with it — measured on
+/// `Button` at 28 / 34.3 / 50.3 pt. This control has no title: its label is a
+/// symbol under `.labelStyle(.iconOnly)`, and the first device run of this suite
+/// measured `.mini` and `.small` at one 15.33 × 15.00 pt box and `.regular`,
+/// `.large` and `.extraLarge` at one 17.67 × 16.00 pt box — two boxes for a ladder
+/// with five rungs, i.e. a `size` prop that does almost nothing. So the rung also
+/// sets the symbol's point size, below, and `.controlSize` is left to what it does
+/// control: the style's own padding, corner and press feedback.
 enum IconButtonScale: String {
   case small
   case medium
@@ -59,6 +69,26 @@ enum IconButtonScale: String {
         return .extraLarge
       }
       return .large
+    }
+  }
+
+  /// The symbol's point size for the rung.
+  ///
+  /// Material's own icon-button glyph tokens — the same five numbers Android draws
+  /// its glyph at (`IconButtonScale.iconSize()`, read from `IconButtonDefaults`):
+  /// XS 20, S 24, M 24, L 32, XL 40. One ladder, two platforms, so `size="large"`
+  /// draws the same 24 pt / 24 dp artwork on either side; what differs is the
+  /// container around it, which Android takes from Material and iOS takes from the
+  /// button style. Note `medium` and `large` share Material's 24: the rung that
+  /// separates them on Android is a *container* difference (40 → 56 dp), and iOS has
+  /// no icon-button containers to make it — `docs/components/icon-button.md` prints
+  /// both measured grids rather than pretending they agree.
+  var symbolPointSize: CGFloat {
+    switch self {
+    case .small: return 20
+    case .medium, .large: return 24
+    case .xlarge: return 32
+    case .xxlarge: return 40
     }
   }
 }
@@ -286,7 +316,13 @@ struct IconButtonContent: NitroUIContent {
       Text(model.accessibilityLabel)
     } icon: {
       if let systemImage = model.systemImage {
+        // The rung's point size, spelled: a symbol-only label does not follow
+        // `.controlSize` the way a title does (the measurement is on `IconButtonScale`),
+        // so the glyph is sized directly and `.controlSize` keeps styling the control
+        // around it. A symbol image sizes with its font, which is what makes this the
+        // lever rather than a `scaleEffect` that would lie to the measurement.
         Image(systemName: systemImage)
+          .font(.system(size: model.scale.symbolPointSize))
       }
     }
     .labelStyle(.iconOnly)
