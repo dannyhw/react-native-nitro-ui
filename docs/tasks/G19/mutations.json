@@ -472,6 +472,40 @@
         "separates two assets and refuses to key on an asset id (25 ms)",
         "Button · sizing key › separates two assets and refuses to key on an asset id"
       ]
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "a file that loaded is thrown away, so an imported icon never draws",
+      "before": "              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent",
+      "after": "              image?.let { NitroUiIconContent.Absent } ?: NitroUiIconContent.Absent",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-w2v9t), rebuilt app",
+      "redTests": [
+        "Button.harness.tsx › androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive: expected 0 to be greater than 0",
+        "androidIcon · an icon the app imports (D43) › widens the control by the ladder, not by the file it loaded: expected 28.19047619047619 to be less than 0.6"
+      ]
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the empty slot is not held while the file is in flight, so the label jumps when it lands",
+      "before": "    } else if (icon != NitroUiIconContent.Absent) {\n      // `Pending`: nothing has arrived to paint, and the slot is painted anyway -",
+      "after": "    } else if (false) {\n      // `Pending`: nothing has arrived to paint, and the slot is painted anyway -",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-w2v9t), rebuilt app",
+      "redTests": [
+        "androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive: only the imported icon published 57.90x48.00 - the named icon published 12.50x71.50, 12.57x72.00, 60.19x48.00"
+      ]
+    },
+    {
+      "test": "example/__tests__/Button.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "a failed load keeps the slot it reserved instead of answering round 1's missing-name answer",
+      "before": "              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent",
+      "after": "              image?.let { NitroUiIconContent.Vector(it) } ?: androidIconContent",
+      "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-w2v9t), rebuilt app",
+      "redTests": [
+        "androidIcon · an icon the app imports (D43) › draws nothing for a file the dev server does not have, and keeps the no-icon box: expected false to be true"
+      ]
     }
   ]
 }
