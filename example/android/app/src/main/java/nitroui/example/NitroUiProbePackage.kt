@@ -5,6 +5,7 @@ import android.os.Debug
 import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.semantics.getOrNull
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.NativeModule
@@ -334,6 +335,9 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
 
     /** How long to let the collectors settle before reading the heap. */
     const val GC_SETTLE_MS = 250L
+
+    /** `SEARCH_FIELD_GLYPH_TAG` in the library's `HybridNitroUiSearchField.kt`. */
+    const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
   }
 
   /**
@@ -416,6 +420,110 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     }
     done.await(5, java.util.concurrent.TimeUnit.SECONDS)
     promise.resolve(answer)
+  }
+
+  /**
+   * What SearchField's search glyph paints at four points of its icon box, for
+   * `SearchField.harness.tsx`'s "draws a magnifier" test (FIX4).
+   *
+   * 0.7.0 shipped a hand-typed copy of Material's search path that filled the lens - a
+   * key, not a magnifier - and every prop, size and event test passed, because none of
+   * them looks at pixels. This one does: it finds the glyph's box by its test tag
+   * (`SEARCH_FIELD_GLYPH_TAG` in `HybridNitroUiSearchField.kt`) in the hosted
+   * composition's unmerged semantics tree, draws the host into a bitmap, and answers the
+   * colour at four points given as fractions of the 960-unit viewport Material Symbols
+   * draws in:
+   *
+   * - `bg` (40, 40): a corner of the box no search glyph paints - the backdrop;
+   * - `centre` (380, 380): the lens centre, which a magnifier leaves unpainted;
+   * - `ring` (160, 380) and `ringTop` (380, 160): the middle of the ring's stroke, left
+   *   of and above the centre, which a magnifier paints.
+   *
+   * The old path paints the centre (its lens is a filled disc around (9.5, 9.5) of 24)
+   * and leaves both ring points bare, so either half of the assertion catches it.
+   * `draw(Canvas)` on the host, as `nitroUiSamplePixels` does in the library: a hybrid
+   * view has no surface of its own to copy.
+   */
+  @ReactMethod
+  fun searchGlyphPixels(promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    val decor = activity?.window?.decorView
+    if (activity == null || decor == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no activity to walk")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var answer = "no-host"
+    activity.runOnUiThread {
+      try {
+        answer = sampleSearchGlyph(decor)
+      } finally {
+        done.countDown()
+      }
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    promise.resolve(answer)
+  }
+
+  private fun sampleSearchGlyph(decor: android.view.View): String {
+    val host = findHost(decor) ?: return "no-host"
+    val root = findComposeRoot(host) ?: return "no-compose-root|host=${host.javaClass.simpleName}"
+    val glyph =
+      findTagged(root.semanticsOwner.unmergedRootSemanticsNode, SEARCH_FIELD_GLYPH_TAG)
+        ?: return "no-glyph|host=${host.javaClass.simpleName}"
+    val bounds = glyph.boundsInWindow
+    val hostOrigin = IntArray(2)
+    host.getLocationInWindow(hostOrigin)
+    val left = bounds.left - hostOrigin[0]
+    val top = bounds.top - hostOrigin[1]
+    val size = bounds.width
+    if (size < 8f || host.width < 2 || host.height < 2) {
+      return "too-small|box=${bounds.width}x${bounds.height}|host=${host.width}x${host.height}"
+    }
+    val bitmap =
+      android.graphics.Bitmap.createBitmap(host.width, host.height, android.graphics.Bitmap.Config.ARGB_8888)
+    try {
+      val canvas = android.graphics.Canvas(bitmap)
+      canvas.drawColor(0xFF808080.toInt())
+      host.draw(canvas)
+      fun at(x: Float, y: Float): String {
+        val column = (left + size * x / 960f).toInt().coerceIn(0, host.width - 1)
+        val row = (top + bounds.height * y / 960f).toInt().coerceIn(0, host.height - 1)
+        return "#%06X".format(bitmap.getPixel(column, row) and 0xFFFFFF)
+      }
+      return "box=${bounds.width.toInt()}x${bounds.height.toInt()}" +
+        "|bg=${at(40f, 40f)}|centre=${at(380f, 380f)}" +
+        "|ring=${at(160f, 380f)}|ringTop=${at(380f, 160f)}"
+    } finally {
+      bitmap.recycle()
+    }
+  }
+
+  /** The Compose view under [view], as the public [androidx.compose.ui.node.RootForTest]. */
+  private fun findComposeRoot(view: android.view.View): androidx.compose.ui.node.RootForTest? {
+    if (view is androidx.compose.ui.node.RootForTest) {
+      return view
+    }
+    if (view is android.view.ViewGroup) {
+      for (index in 0 until view.childCount) {
+        findComposeRoot(view.getChildAt(index))?.let { return it }
+      }
+    }
+    return null
+  }
+
+  /** The first node at or under [node] whose test tag is [tag], unmerged. */
+  private fun findTagged(
+    node: androidx.compose.ui.semantics.SemanticsNode,
+    tag: String,
+  ): androidx.compose.ui.semantics.SemanticsNode? {
+    if (node.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) == tag) {
+      return node
+    }
+    for (child in node.children) {
+      findTagged(child, tag)?.let { return it }
+    }
+    return null
   }
 
   /**

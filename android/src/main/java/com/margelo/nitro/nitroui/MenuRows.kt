@@ -23,9 +23,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -37,7 +34,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import com.margelo.nitro.nitroui.core.nitroUiIcon
 import java.util.concurrent.atomic.AtomicInteger
 
 /*
@@ -209,36 +206,13 @@ internal fun menuGroupsOf(entries: List<MenuEntry>): List<MenuGroupItem> {
 }
 
 /**
- * Material's `Icons.Filled.Check` (Apache 2.0, the 24-unit viewport), the leading check
- * of a checked menu row and of Picker's selected row.
- *
- * Written out because this library does not depend on `material-icons-core` for one
- * glyph - the geometry `HybridNitroUiChip.kt` writes out for its own check. Built once
- * per process and shared, because a hosted control is its own composition and
- * `remember` cannot share anything between two of them.
+ * The leading check of a checked menu row and of Picker's selected row, at Material's
+ * leading-icon size: Google's Material Symbols `check` (`nitroui_check`,
+ * `core/NitroUiIcons.kt`), parsed once per process. One lambda for the process.
  */
-private val MenuCheckIcon: ImageVector by lazy {
-  ImageVector.Builder(
-    name = "NitroUiMenuCheck",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-  ).path(fill = SolidColor(ComposeColor.Black)) {
-    moveTo(9f, 16.17f)
-    lineTo(4.83f, 12f)
-    lineToRelative(-1.42f, 1.41f)
-    lineTo(9f, 19f)
-    lineTo(21f, 7f)
-    lineToRelative(-1.41f, -1.41f)
-    close()
-  }.build()
-}
-
-/** The check, at Material's leading-icon size. One lambda for the process. */
 internal val MenuLeadingCheck: @Composable () -> Unit = {
   Icon(
-    imageVector = MenuCheckIcon,
+    imageVector = nitroUiIcon(R.drawable.nitroui_check),
     contentDescription = null,
     modifier = Modifier.size(MenuDefaults.LeadingIconSize),
   )

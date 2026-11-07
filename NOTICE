@@ -1,0 +1,12 @@
+react-native-nitro-ui
+Copyright (c) 2026 Daniel Williams. Licensed under the MIT License (LICENSE).
+
+This package includes icons from Material Symbols by Google
+(https://github.com/google/material-design-icons), licensed under the
+Apache License, Version 2.0. A copy of that licence is in
+licenses/material-symbols/LICENSE.
+
+The icons are the Android vector drawables in android/src/main/res/drawable/
+named nitroui_*.xml, copied unchanged from that repository by
+scripts/icons/fetch-material-symbols.mjs; the source URL and SHA-256 of each
+file are recorded in scripts/icons/material-symbols.lock.json.
