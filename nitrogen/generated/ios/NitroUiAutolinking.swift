@@ -215,4 +215,16 @@ public final class NitroUiAutolinking {
   public static func isNitroUiTooltipRecyclable() -> Bool {
     return HybridNitroUiTooltip.self is any RecyclableView.Type
   }
+  
+  public static func createNitroUiPopover() -> bridge.std__shared_ptr_HybridNitroUiPopoverSpec_ {
+    let hybridObject = HybridNitroUiPopover()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiPopoverSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiPopoverRecyclable() -> Bool {
+    return HybridNitroUiPopover.self is any RecyclableView.Type
+  }
 }

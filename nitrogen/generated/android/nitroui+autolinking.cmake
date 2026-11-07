@@ -55,6 +55,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiPopoverSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiPopoverComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
@@ -94,6 +96,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiPopoverSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiPopoverStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp
