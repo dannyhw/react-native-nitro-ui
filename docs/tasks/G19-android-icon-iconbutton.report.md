@@ -368,7 +368,7 @@ time — the provenance is a script and a hash, not a README.
 
 **Lease:** `G19-3ttma` (`emulator-5570` + iPhone Air · Metro 8293). Part A `4c08f16e`, accepted;
 part B merges `origin/main` (FIX4, E3, X20) at `c487d84b`. 13 mutations in `docs/tasks/G19/mutations.json`,
-plus 3 organic reds.
+plus 4 organic reds.
 
 **Part A.** A bundler-derived asset name crosses with its own `res:` marker and is looked up
 verbatim: `__node_modules_expo_materialsymbols_star` obeys no rule for typed names. An asset's
@@ -415,7 +415,7 @@ row above is the 10:14 re-run, which ran to its own end; both lines are in the e
 
 ### Red proofs (fix round 2)
 
-Part A's nine mutations, then part B's four plus the three that went red on a device or in `tsc`
+Part A's nine mutations, then part B's four plus the four that went red on a device or in `tsc`
 without a mutation. `->` separates test, mutation and the line that went red.
 
 - `iconSource.test.ts` -> release name sent bare -> `sends a bundled asset as that name, marked as the bundler's`: Expected `res:src_assets_icons_share_24px`, Received `src_assets_icons_share_24px` (+3 more).
@@ -432,8 +432,9 @@ without a mutation. `->` separates test, mutation and the line that went red.
 - `android-icons.test.js` -> one vertex of the fetched `star_24px.xml` moved by a unit -> `star_24px.xml: sha256 b60478e6fe5c5584…, recorded 49d8cf2a439f18bc… - edited by hand? Rerun scripts/icons/fetch-material-symbols.mjs`.
 - `android-icons.test.js` -> a hand-typed `nitroui_sneaky.xml` dropped into the example's icons folder -> `neither fetched from Material Symbols by fetch-material-symbols.mjs nor declared in EXAMPLE_FIXTURES with the reason it cannot be upstream`.
 - `tsc` -> not a mutation: part A shipped the prop and the spec handle but left the inline copy on `MenuProps.hybridRef` behind -> `Menu.harness.tsx: Property 'androidIcon' does not exist on type …` (fixed by `06e1ef10`).
-- `Button.harness.tsx` -> not a mutation, a device: round 1's rasterising loader put back in the APK -> `close_24px` in the 40 dp slot reported 957 tinted pixels against the Metro-drawn file's 1138 (0.841, under the 0.95 line); the vector branch with `nextTag()` as its peek measured the same 957, because AAPT2's compiled XML makes `nextTag()` throw and every drawable answered "not a vector".
-- `Menu.harness.tsx` -> not a mutation either: three of the four new cases measured on their first device run; the fourth died with `"button-icon" (button-icon) never reported a measured size`, because the parity case asked the Menu handle map about a Button (`9feb4290`).
+- `Button.harness.tsx` -> not a mutation, a device: the vector branch as first shipped, peeking with `nextTag()` -> `draws the shipped drawable as sharply as the imported one, at the top rung`: the `xxlarge` probe read 957 pixels of the tint against the Metro-drawn file's 1138 (0.841), because AAPT2's compiled XML makes `nextTag()` throw and every drawable answered "not a vector". Round 1's loader, put back the same way, measured the same 957 — and the 0.8 line the probe shipped with let that PASS, so the line moved to 0.95, between two states read off a device (`d79c107e`, fixed by `aa281f11`).
+- `Button.harness.tsx` on iOS -> not a mutation: three 15 s probe polls running on the platform that ignores `androidIcon` -> `Test timed out after 30000ms … Pending promises at timeout: 3`, all three inside `probeUntilDrawn`, so the case died before one assertion (`8dfdb787`).
+- `Menu.harness.tsx` -> not a mutation either: on the first device run these four cases ever had, three measured and the fourth died with `"button-icon" (button-icon) never reported a measured size`, because the parity case asked the Menu handle map about a Button (`9feb4290`).
 
 Green without a mutation: 1863 JS tests / 75 suites, 144 JVM tests, `nitrogen:check`,
 `registry:check`, `autolinking:check`, `manifest:check`, `readme:check`, eslint, prettier, and
