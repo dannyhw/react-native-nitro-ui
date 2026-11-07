@@ -94,7 +94,9 @@ function Pin({ testId }: { testId: string }) {
         setOpen(next);
       }}
       onDismiss={() => eventLog.push(`${testId}:dismiss`)}
-      anchor={<View style={{ width: 120, height: 40, backgroundColor: '#e5e5ea' }} />}
+      anchor={
+        <View style={{ width: 120, height: 40, backgroundColor: '#e5e5ea' }} />
+      }
     >
       <View style={{ width: 170, height: 96, backgroundColor: '#9ec5fe' }} />
     </Popover>
@@ -158,7 +160,9 @@ describe('Popover · the stranded-Modal hazard (own app instance)', () => {
         (r) =>
           r.live === '0' &&
           (IOS
-            ? r.modalHosts === '0' && r.topPresented === '-' && r.windows === '0'
+            ? r.modalHosts === '0' &&
+              r.topPresented === '-' &&
+              r.windows === '0'
             : r.roots === '0'),
         'nothing of the popover or the Modal left'
       );

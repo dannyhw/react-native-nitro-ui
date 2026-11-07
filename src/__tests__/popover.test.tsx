@@ -195,7 +195,9 @@ describe('Popover · the box native measures', () => {
         </Popover>
       );
     });
-    expect((nodeOf(view).props as unknown as NativeProps).presented).toBe(false);
+    expect((nodeOf(view).props as unknown as NativeProps).presented).toBe(
+      false
+    );
     expect(boxOf(view)).not.toBeNull();
     // Native says it is gone, and the content goes with it.
     await act(async () => {
@@ -214,7 +216,9 @@ describe('Popover · the props Nitro receives', () => {
     );
     const props = nodeOf(view).props as unknown as NativeProps;
     expect(
-      Object.keys(props).filter((key) => key !== 'children').sort()
+      Object.keys(props)
+        .filter((key) => key !== 'children')
+        .sort()
     ).toEqual([
       'hybridRef',
       'maxWidth',
@@ -266,7 +270,10 @@ function Parent({ refuse }: { refuse: boolean }) {
 
 /** Play native: the user closed the popover, and this is native event `count`. */
 function nativeDismissal(view: RenderResult, count: number): void {
-  (nodeOf(view).props as unknown as NativeProps).onPresentedChange.f(false, count);
+  (nodeOf(view).props as unknown as NativeProps).onPresentedChange.f(
+    false,
+    count
+  );
 }
 
 describe('Popover · the handshake (D33)', () => {

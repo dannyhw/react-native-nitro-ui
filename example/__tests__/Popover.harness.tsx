@@ -423,7 +423,11 @@ function askedPx(report: Report): { w: number; h: number } {
 }
 
 /** The first and last drawn sizes, in the same units. */
-function drawn(report: Report): { first: string; last: string; distinct: string[] } {
+function drawn(report: Report): {
+  first: string;
+  last: string;
+  distinct: string[];
+} {
   if (IOS) {
     return {
       first: `${report.firstW}x${report.firstH}`,
@@ -467,7 +471,13 @@ describe('Popover', () => {
       { name: 'tall', width: 220, height: 244 },
       { name: 'short', width: 276, height: 52 },
       { name: 'capped', width: 400, height: 120, maxWidth: 224, fill: true },
-      { name: 'window-capped', width: 4000, height: 84, maxWidth: 4000, fill: true },
+      {
+        name: 'window-capped',
+        width: 4000,
+        height: 84,
+        maxWidth: 4000,
+        fill: true,
+      },
     ];
 
     for (const fixture of fixtures) {
@@ -506,8 +516,12 @@ describe('Popover', () => {
         expect(num(up, 'askedW')).toBeLessThanOrEqual(
           Math.min(fixture.maxWidth ?? 320, num(up, 'maxWidth')) + 1
         );
-        expect(Math.abs(num(up, 'contentW') * scale - asked.w)).toBeLessThanOrEqual(1);
-        expect(Math.abs(num(up, 'contentH') * scale - asked.h)).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(num(up, 'contentW') * scale - asked.w)
+        ).toBeLessThanOrEqual(1);
+        expect(
+          Math.abs(num(up, 'contentH') * scale - asked.h)
+        ).toBeLessThanOrEqual(1);
         // One size, from the first frame to the last, and it is the box.
         const seen = drawn(up);
         expect(seen.distinct).toHaveLength(1);
@@ -527,14 +541,22 @@ describe('Popover', () => {
 
   it('caps the content at the smaller of maxWidth and the window less its margins', async () => {
     const probeId = await probe();
-    const baseline = await waitForReport(
+    await waitForReport(
       probeId,
       (r) => r.raw !== '' && r.live === '0',
       'a baseline with nothing up'
     );
-    void baseline;
     const wide = 'cap-wide';
-    await render(<Stage testId={wide} initial maxWidth={4000} width={4000} height={70} fill />);
+    await render(
+      <Stage
+        testId={wide}
+        initial
+        maxWidth={4000}
+        width={4000}
+        height={70}
+        fill
+      />
+    );
     await requireHandle(wide);
     const up = await waitForUp(wide);
     const layout = await settledLayout(
@@ -549,7 +571,14 @@ describe('Popover', () => {
 
     const narrow = 'cap-narrow';
     await render(
-      <Stage testId={narrow} initial maxWidth={210} width={210} height={64} fill />
+      <Stage
+        testId={narrow}
+        initial
+        maxWidth={210}
+        width={210}
+        height={64}
+        fill
+      />
     );
     await requireHandle(narrow);
     const second = await waitForUp(narrow);
@@ -575,8 +604,9 @@ describe('Popover', () => {
         ? popup!.y + popup!.height <= anchor!.y + 2
         : popup!.y >= anchor!.y + anchor!.height - 2;
       expect(expected).toBe(true);
-      expect(Math.abs(popup!.x + popup!.width / 2 - (anchor!.x + anchor!.width / 2)))
-        .toBeLessThan(Math.max(anchor!.width, 40) + 24);
+      expect(
+        Math.abs(popup!.x + popup!.width / 2 - (anchor!.x + anchor!.width / 2))
+      ).toBeLessThan(Math.max(anchor!.width, 40) + 24);
     } else {
       // Our own provider: below the anchor, start-aligned.
       expect(popup!.y).toBeGreaterThanOrEqual(anchor!.y + anchor!.height - 2);
@@ -664,7 +694,7 @@ describe('Popover', () => {
     });
 
     it('takes a close JS asked for without an event of its own', async () => {
-      await render(<Stage testId='withdraw' initial />);
+      await render(<Stage testId="withdraw" initial />);
       await requireHandle('withdraw');
       await waitForUp('withdraw');
       clearEvents();
@@ -708,7 +738,11 @@ describe('Popover', () => {
         await waitForEvent(`cycles:dismiss`, 12000);
         // The unmount has to commit before the next open, or the two updates are one
         // batch and the content is never dropped at all (BottomSheet's E2 lesson).
-        await waitForUnmount('cycles', cycle + 1, `unmounted ${cycle + 1} times`);
+        await waitForUnmount(
+          'cycles',
+          cycle + 1,
+          `unmounted ${cycle + 1} times`
+        );
         eventLog.length = 0;
       }
       expect(mounts.get('cycles') ?? 0).toBe(50);
@@ -869,9 +903,7 @@ describe('Popover', () => {
     // popover's own window. A popover that leaves the content behind draws an empty
     // bubble, which the size checks above would still pass.
     const id = 'moved';
-    await render(
-      <Stage testId={id} initial width={190} height={110} />
-    );
+    await render(<Stage testId={id} initial width={190} height={110} />);
     await requireHandle(id);
     const up = await waitForUp(id);
     expect(num(up, 'children')).toBe(1);

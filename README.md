@@ -33,7 +33,7 @@ the layout engine, and React never sees a native node.
 | `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
-| `Popover`            | `UIPopoverPresentationController` with React Native content    | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                 | next  | [popover.md](docs/components/popover.md)                      |
+| `Popover`            | `UIPopoverPresentationController` with React Native content    | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls

@@ -2996,9 +2996,9 @@ const CHECKS = {
         // close the popover decided for itself does (DECISIONS D44 item 2).
         t.log.checkEquals(
           'the press inside reports, then the dismiss its own close causes',
-          t.requireEcho(ECHO.popoverLog).endsWith(
-            'press:popover-short > short:dismiss'
-          ),
+          t
+            .requireEcho(ECHO.popoverLog)
+            .endsWith('press:popover-short > short:dismiss'),
           true
         );
       }
@@ -3023,7 +3023,9 @@ const CHECKS = {
       );
       const beforeField = t.nodeByTestId('popover-inner-field');
       if (beforeField == null) {
-        t.log.abort('the field popover is up without its TextInput in the tree');
+        t.log.abort(
+          'the field popover is up without its TextInput in the tree'
+        );
       }
       await t.tapNode(beforeField);
       const imeDeadline = Date.now() + REACT_TIMEOUT;
@@ -3038,7 +3040,9 @@ const CHECKS = {
       const imeTop = t.imeTopPx();
       const afterField = t.nodeByTestId('popover-inner-field');
       if (afterField == null) {
-        t.log.abort('the TextInput vanished from the tree with the keyboard up');
+        t.log.abort(
+          'the TextInput vanished from the tree with the keyboard up'
+        );
       }
       if (imeTop == null) {
         t.log.abort(
@@ -5963,7 +5967,9 @@ class DeviceHarness {
     if (fromService != null) {
       return fromService;
     }
-    for (const block of this.shell('dumpsys window windows').split('Window #')) {
+    for (const block of this.shell('dumpsys window windows').split(
+      'Window #'
+    )) {
       if (!/InputMethod/.test(block.slice(0, 220))) {
         continue;
       }

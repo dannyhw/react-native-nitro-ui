@@ -442,8 +442,8 @@ export const A11Y_PRESENTATIONS = Object.freeze([
     component: 'Popover',
     hybridView: 'NitroUiPopover',
     assertedBy:
-      '`testRealInputPopover` (RealInputTests.swift) and `CHECKS[\'popover\']` ' +
-      '(scripts/real-input/android.mjs): the popover\'s React Native content is read ' +
+      "`testRealInputPopover` (RealInputTests.swift) and `CHECKS['popover']` " +
+      "(scripts/real-input/android.mjs): the popover's React Native content is read " +
       'and pressed through the accessibility tree, and its content carries <testID>-popover',
   },
 ]);
