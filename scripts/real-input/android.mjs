@@ -39,7 +39,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
-import { imeFrameTop } from './ime-frame.mjs';
+import { imeFrameTop, imeWindowTop } from './ime-frame.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -3038,7 +3038,19 @@ const CHECKS = {
         t.imeShown(),
         true
       );
-      const imeTop = t.imeTopPx();
+      // The keyboard's frame only becomes the keyboard's once the IME window is drawn.
+      // `mInputShown` flips at the *start* of the show, and until the window is on screen
+      // its block reports a real, parseable frame laid out over the app - `[0,142][1080,2424]`
+      // on the API 35 image, whose top is the status bar. One read there is how a check
+      // comes to claim a field sits 1,400 px under a keyboard that is not there, so this
+      // waits for a frame from a window that says it is displayed, and reads the field
+      // afterwards: both ends of the comparison then describe one settled moment.
+      let imeTop = t.imeTopPx();
+      const frameDeadline = Date.now() + REACT_TIMEOUT;
+      while (imeTop == null && Date.now() < frameDeadline) {
+        await t.settle(250);
+        imeTop = t.imeTopPx();
+      }
       const afterField = t.nodeByTestId('popover-inner-field');
       if (afterField == null) {
         t.log.abort(
@@ -3055,11 +3067,16 @@ const CHECKS = {
         afterField.bounds.y1 < beforeField.bounds.y1,
         true
       );
+      const aboveIme = afterField.bounds.y2 <= imeTop;
       t.log.checkEquals(
+        // A wrong number here has always been a measurement problem rather than a popover
+        // one, so the failure names the two dumps the number came from.
         `the field stays above the keyboard (field bottom ${String(
           afterField.bounds.y2
-        )}, keyboard top ${String(imeTop)})`,
-        afterField.bounds.y2 <= imeTop,
+        )}, keyboard top ${String(imeTop)})${
+          aboveIme ? '' : ` - ${t.imeFrameSample()}`
+        }`,
+        aboveIme,
         true
       );
       // And the keystrokes reach the field: the log, read once the popover is down,
@@ -5969,7 +5986,7 @@ class DeviceHarness {
       if (!/InputMethod/.test(block.slice(0, 220))) {
         continue;
       }
-      const top = imeFrameTop(block);
+      const top = imeWindowTop(block);
       if (top != null) {
         return top;
       }
