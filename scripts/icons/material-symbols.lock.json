@@ -1,0 +1,45 @@
+{
+  "note": "Written by scripts/icons/fetch-material-symbols.mjs; do not edit by hand.",
+  "source": "https://github.com/google/material-design-icons",
+  "commit": "10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "android/src/main/res/drawable/nitroui_search.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/search/materialsymbolsoutlined/search_24px.xml",
+      "sha256": "e99d075e9867ec5347fc850eb629a6bbef1819cf393c39eaa06b43251f96ecd3",
+      "symbol": "search",
+      "style": "materialsymbolsoutlined",
+      "why": "SearchField's leading glyph (the M3 search bar's leading icon)"
+    },
+    {
+      "path": "android/src/main/res/drawable/nitroui_close.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/close/materialsymbolsoutlined/close_24px.xml",
+      "sha256": "31644025d94b5a5637d75660ebdcb93c398f2620bfc12f7a7a9362965e271288",
+      "symbol": "close",
+      "style": "materialsymbolsoutlined",
+      "why": "SearchField's clear button (the M3 search bar's trailing icon)"
+    },
+    {
+      "path": "android/src/main/res/drawable/nitroui_check.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/check/materialsymbolsoutlined/check_24px.xml",
+      "sha256": "b38c518aa15e88cb9f2eda91aa5617427530ae9359a1b2c8ab96f7d16bffabe7",
+      "symbol": "check",
+      "style": "materialsymbolsoutlined",
+      "why": "the leading check of a selected filter Chip, a checked Menu row and Picker's selected row"
+    },
+    {
+      "path": "android/src/main/res/drawable/nitroui_keyboard_arrow_down.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/keyboard_arrow_down/materialsymbolsoutlined/keyboard_arrow_down_24px.xml",
+      "sha256": "25c502082d201a6223f4ab6418918218a864e73f75d1d734984e648c55eccba3",
+      "symbol": "keyboard_arrow_down",
+      "style": "materialsymbolsoutlined",
+      "why": "the split button's trailing chevron (the icon Material's split button uses)"
+    },
+    {
+      "path": "licenses/material-symbols/LICENSE",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/LICENSE",
+      "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
+    }
+  ]
+}
