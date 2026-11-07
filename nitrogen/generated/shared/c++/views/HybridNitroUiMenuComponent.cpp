@@ -28,6 +28,7 @@ namespace margelo::nitro::nitroui::views {
     rows(nitro::ReactProp<std::vector<NitroUiMenuRow>>::fromRawValue("NitroUiMenu", "rows", rawProps, sourceProps.rows)),
     tintColor(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiMenu", "tintColor", rawProps, sourceProps.tintColor)),
     systemImage(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiMenu", "systemImage", rawProps, sourceProps.systemImage)),
+    androidIcon(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiMenu", "androidIcon", rawProps, sourceProps.androidIcon)),
     hasPrimaryAction(nitro::ReactProp<bool>::fromRawValue("NitroUiMenu", "hasPrimaryAction", rawProps, sourceProps.hasPrimaryAction)),
     testID(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiMenu", "testID", rawProps, sourceProps.testID)),
     accessibilityLabel(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiMenu", "accessibilityLabel", rawProps, sourceProps.accessibilityLabel)),
@@ -52,6 +53,7 @@ namespace margelo::nitro::nitroui::views {
       case hashString("rows"): return true;
       case hashString("tintColor"): return true;
       case hashString("systemImage"): return true;
+      case hashString("androidIcon"): return true;
       case hashString("hasPrimaryAction"): return true;
       case hashString("testID"): return true;
       case hashString("accessibilityLabel"): return true;

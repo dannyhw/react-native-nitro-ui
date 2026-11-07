@@ -26,6 +26,7 @@ export const NitroUiMenuConfig: ViewConfig<NativeNitroUiMenuProps> = {
     rows: true,
     tintColor: true,
     systemImage: true,
+    androidIcon: true,
     hasPrimaryAction: true,
     testID: true,
     accessibilityLabel: true,

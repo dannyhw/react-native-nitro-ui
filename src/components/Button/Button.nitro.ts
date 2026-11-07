@@ -59,10 +59,23 @@ export interface NitroUiButtonProps
    */
   tintColor: number | null;
   /**
-   * Leading SF Symbol name, or `null`. Ignored on Android in v0.1 — documented
-   * on `docs/components/button.md`.
+   * Leading SF Symbol name, or `null`. iOS only: Android has no SF Symbols, and
+   * the drawable lookup that would stand in for it is the separate `androidIcon`
+   * prop below. Documented on `docs/components/button.md`.
    */
   systemImage: string | null;
+  /**
+   * Leading app drawable, named by its Android resource name, or `null`.
+   *
+   * Android only: iOS draws `systemImage` and ignores this, so a caller writes
+   * both names on one Button and each platform takes its own
+   * (`docs/components/button.md`, "Android icons"). Already normalised by the
+   * wrapper, so the native side looks up exactly what it is given.
+   *
+   * It joins `nuiSizingKey`: a glyph before the label makes the control wider, so
+   * two Buttons that differ only in this prop must not share a cached size.
+   */
+  androidIcon: string | null;
   /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
   /**
@@ -88,6 +101,45 @@ export interface NitroUiButtonMethods extends HybridViewMethods {
    * this is safe to call from the JS thread (core-architecture §1.4).
    */
   measureContent(): NitroUiButtonSize;
+
+  /**
+   * TEMPORARY, test-only: ask the platform whether `color` (an ARGB `processColor`
+   * int) is among the pixels this control is drawing. Answer stored for
+   * {@link nuiTestPixelReport}.
+   *
+   * It exists because `androidIcon`'s contract is a *drawing* contract. Every other
+   * reading of the prop is an echo: the handle's `androidIcon` answers what React
+   * sent, `measureContent()` answers that a slot was taken — and a glyph painted in
+   * a hard-coded colour instead of the control's content colour would satisfy both
+   * while being wrong on screen (Q9 Appendix C's tint rule, and G4 F1's lesson that
+   * only drawn pixels know whether a colour arrived).
+   *
+   * Android is the platform with something to probe: it draws `androidIcon`. The
+   * sampling needs the UI thread and a Nitro method may not block for it, so the
+   * answer is stored and read back, the way SegmentedControl's pair and the Slider's
+   * `nuiTestAccessibilityStep` pair work. **iOS answers `no pixels`** — it draws
+   * `systemImage` and no `androidIcon` at all, so there is no glyph to sample and a
+   * probe on iOS is a test that should not be running there.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last {@link nuiTestPixelProbe} found, as one
+   * line — `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>` on Android, `n=<probes> no pixels` on iOS. Empty before the
+   * first probe.
+   *
+   * `n=` counts probes so a test can tell its own answer from the previous
+   * control's, and `size=`/`hits=` are in the line because a probe that sampled
+   * nothing and a probe that found nothing are different failures with the same
+   * verdict. Shape shared with SegmentedControl's report, which the harness helper
+   * that reads both asserts on.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPixelReport(): string;
 }
 
 /**

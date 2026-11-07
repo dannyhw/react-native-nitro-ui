@@ -41,10 +41,16 @@ export interface NitroUiButtonHandle {
   readonly tintColor: number | null;
   /** The SF Symbol name, or `null`. */
   readonly systemImage: string | null;
+  /** The normalised Android drawable name, or `null`. */
+  readonly androidIcon: string | null;
   /** The control's accessibility label, or `null` when it falls back to `title`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
   measureContent(): NitroUiButtonSize;
+  /** Test-only: ask whether `color` is among the pixels this Button drew. */
+  nuiTestPixelProbe(color: number): void;
+  /** Test-only: the last probe's line (see the spec). */
+  nuiTestPixelReport(): string;
 }
 
 /**
@@ -71,6 +77,7 @@ export interface NativeNitroUiButtonProps
   disabled: boolean;
   tintColor: number | null;
   systemImage: string | null;
+  androidIcon: string | null;
   testID: string | null;
   accessibilityLabel: string | null;
   nuiPerfId: number | null;

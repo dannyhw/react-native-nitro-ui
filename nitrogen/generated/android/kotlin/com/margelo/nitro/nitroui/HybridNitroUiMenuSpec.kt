@@ -74,6 +74,12 @@ abstract class HybridNitroUiMenuSpec: HybridView() {
   @get:Keep
   @set:DoNotStrip
   @set:Keep
+  abstract var androidIcon: Variant_NullType_String
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
   abstract var hasPrimaryAction: Boolean
   
   @get:DoNotStrip
