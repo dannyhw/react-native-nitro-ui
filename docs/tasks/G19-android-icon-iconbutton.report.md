@@ -391,19 +391,19 @@ round 1's open fixture-provenance question closes with that lock.
 
 ### Gates (fix round 2)
 
-| Gate | Result | Counts | Code tree | Duration | Load |
+| Gate (fix round 2) | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1863 tests / 75 suites | `829a6e682e46` | 2 m 45 s | start 3.5 / med 6.9 / max 13.6 |
-| `harness:ios` | **PASS** | 467 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (ios tree) | 11 m 21 s | start 4.7 / med 8.4 / max 33.1 |
-| `harness:android` | **PASS** | 518 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (android tree) | 15 m 36 s | start 30.2 / med 10.1 / max 53.8 |
-| `real-input:ios` | **PASS** | — | `829a6e682e46` (ios tree) | 28 m 40 s | start 2.5 / med 7.1 / max 219.6 |
-| `real-input:android` | **PASS** | — | `829a6e682e46` (android tree) | 41 m 26 s | start 5.5 / med 4.4 / max 25.0 |
-| `harness:android:-t:sharp` | stale | 1 failed of 518 tests / 25 suites | 977e600cbe93 (not this tree) | 45.3 s | start 5.1 / med 5.5 / max 5.6 |
-| `harness:android:Button` | stale | 1 failed of 21 tests / 1 suites | 2f7adac9a84f (not this tree) | 37.0 s | start 5.5 / med 4.7 / max 5.5 |
-| `harness:android:draws%20the%20glyph:--background` | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
-| `harness:android:glyph` | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
-| `harness:android:sharp` | stale | — | 72182da36f76 (not this tree) | 1.8 s | start 18.0 / med 18.0 / max 18.0 |
-| `harness:ios:Button` | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
+| `check` (fix round 2) | **PASS** | 1863 tests / 75 suites | `829a6e682e46` | 2 m 45 s | start 3.5 / med 6.9 / max 13.6 |
+| `harness:ios` (fix round 2) | **PASS** | 467 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (ios tree) | 11 m 21 s | start 4.7 / med 8.4 / max 33.1 |
+| `harness:android` (fix round 2) | **PASS** | 518 tests / 25 suites + isolated 4 tests / 2 suites | `829a6e682e46` (android tree) | 15 m 36 s | start 30.2 / med 10.1 / max 53.8 |
+| `real-input:ios` (fix round 2) | **PASS** | — | `829a6e682e46` (ios tree) | 28 m 40 s | start 2.5 / med 7.1 / max 219.6 |
+| `real-input:android` (fix round 2) | **PASS** | — | `829a6e682e46` (android tree) | 41 m 26 s | start 5.5 / med 4.4 / max 25.0 |
+| `harness:android:-t:sharp` (fix round 2) | stale | 1 failed of 518 tests / 25 suites | 977e600cbe93 (not this tree) | 45.3 s | start 5.1 / med 5.5 / max 5.6 |
+| `harness:android:Button` (fix round 2) | stale | 1 failed of 21 tests / 1 suites | 2f7adac9a84f (not this tree) | 37.0 s | start 5.5 / med 4.7 / max 5.5 |
+| `harness:android:draws%20the%20glyph:--background` (fix round 2) | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
+| `harness:android:glyph` (fix round 2) | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
+| `harness:android:sharp` (fix round 2) | stale | — | 72182da36f76 (not this tree) | 1.8 s | start 18.0 / med 18.0 / max 18.0 |
+| `harness:ios:Button` (fix round 2) | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
 
 `need --for review` and `need --for merge` are both satisfied on this code tree, so the whole bar
 — `check`, both harnesses, both real-input runs — ran at `829a6e682e46`.
