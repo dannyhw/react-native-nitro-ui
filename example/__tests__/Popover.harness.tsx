@@ -533,8 +533,10 @@ describe('Popover', () => {
         expect(num(up, IOS ? 'visibleFrames' : 'draws')).toBeGreaterThan(1);
         expect(num(up, 'presentCount')).toBe(1);
         // Native waited for a layout, and got one at once: a present that went out before
-        // Yoga had sized anything is the regression this number is here to catch.
-        expect(num(up, 'contentWaits')).toBeLessThan(12);
+        // Yoga had sized anything is the regression this number is here to catch. iOS
+        // counts its polling turns and stops asking at 60; Android counts the compositions
+        // it refused to build a popup from, which a healthy mount needs none or one of.
+        expect(num(up, 'contentWaits')).toBeLessThan(IOS ? 12 : 24);
       });
     }
   });
