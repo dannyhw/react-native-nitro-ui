@@ -154,7 +154,7 @@ internal class HybridNitroUiForm(
     val density = view.resources.displayMetrics.density
     var parent: Any? = view.parent
     while (parent is View) {
-      if (parent is ScrollView) return parent.scrollY / density
+      if (parent is ScrollView) return (parent.scrollY / density).toDouble()
       parent = parent.parent
     }
     return 0.0
