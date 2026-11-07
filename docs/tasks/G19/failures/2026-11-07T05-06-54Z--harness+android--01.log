@@ -1,0 +1,168 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T05:06:54.299Z on code tree `34bbc3eb53af` at HEAD `be57090` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 177932 ms
+- Load: start 10.04, end 3.69, median 5.14, max 10.66
+- Device: android / device `emulator-5570` / lease `G19-w2v9t`
+- Full log: `task/G19-android-icon-iconbutton/harness+android-2026-11-07T05-06-54.299Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T05-06-54.299Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● Console`
+- `● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive`
+- `expected [ '12.50', '60.19' ] to deeply equal [ '60.19' ]`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T05-06-54.299Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-w2v9t (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   G19-w2v9t                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.69 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 118 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 34bbc3eb53af, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.04/5.45 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T05-06-54.299Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      variants: filled=76.57x48.00 tonal=76.57x48.00 outlined=76.57x48.00 text=68.95x48.00 elevated=76.57x48.00 corrections=5 immediate=1 cached=5
+
+
+    console.log
+      presses after three enabled taps: ["press-me","press-me"]
+
+
+    console.log
+      title R3: short=57.90x48.00 long=153.90x48.00 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      size R3: small=58.67x48.00 large=88.76x56.00 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      same-size key change (android): box=70.86x48.00 measured=70.86x48.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      notify: short=57.90x48.00 long=153.90x48.00 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      cache key: OK=57.90x48.00 long=180.19x48.00 tonal=57.90x48.00
+
+
+    console.log
+      epoch: first=110.48x48.00 second=223.62x48.00 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} drawn=[]
+
+
+    console.log
+      200 buttons: corrections=200 immediate=1 cached=200
+
+
+    console.log
+      trace: drawn=["75.0x48.0"] real=75.05x48.00
+
+
+    console.log
+      shape ladder (square corners): small=57.90x48.00 medium=62.48x48.00 large=84.19x56.00
+
+
+    console.log
+      androidIcon boxes: plain=68.19x48.00 star=96.38x48.00 wide=96.38x48.00 missing=68.19x48.00 shape=68.19x48.00 corrections=5
+
+
+    console.log
+      androidIcon probes: [["probe-icon","n=1 size=158x126 want=#FF00A0 hits=641 mean=#847B81 closest=#FF00A0"],["probe-missing","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-shape","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-bare","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-disabled","n=1 size=158x126 want=#FF00A0 hits=0 mean=#7F7F7F closest=#808080"]]
+
+
+    console.log
+      key trace: key="filled|medium||nitroui_test_star|TracedKey" laidOut=["12.5x71.5"] real=126.10x48.00
+
+
+    console.log
+      rung boxes: small=57.90x48.00 medium=64.38x48.00 large=85.71x56.00 xlarge=150.86x96.00 xxlarge=200.76x136.00
+
+
+    console.log
+      metro wire: url:http://localhost:8293/assets/src/assets/icons/star_24px.xml?platform=android&hash=af48588bf76164f691007603b8188c42
+
+
+    console.log
+      metro: hitsBefore=442 hitsAfter=442 drawnInMs=31.30466604232788 first=60.19x48.00 after=60.19x48.00 traceEvents=3 widths=["12.50","60.19"] heights=["71.50","48.00"]
+
+
+    console.log
+      metro width probe: hits=0 drawnInMs=15026.731923997402
+
+
+    console.log
+      widths: metro=96.38x48.00 drawable=96.38x48.00 plain=68.19x48.00
+
+
+    console.log
+      404: hits=0 box=57.90x48.00 plainBox=57.90x48.00 plainHits=0
+
+  ● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive
+
+    expected [ '12.50', '60.19' ] to deeply equal [ '60.19' ]
+
+      [0m [90m 1867 |[39m       [90m//    prevent. A file that is 960 units of viewport inside a 24 dp box is the[39m
+       [90m 1868 |[39m       [90m//    case that would make a file-sized slot visibly wrong.[39m
+      [31m[1m>[22m[39m[90m 1869 |[39m       expect([[33m...[39mwidths])[33m.[39mtoEqual([first[33m.[39mwidth[33m.[39mtoFixed([35m2[39m)])[33m;[39m
+       [90m      |[39m                                  [31m[1m^[22m[39m
+       [90m 1870 |[39m       expect([[33m...[39mheights])[33m.[39mtoEqual([first[33m.[39mheight[33m.[39mtoFixed([35m2[39m)])[33m;[39m
+       [90m 1871 |[39m     } [36melse[39m {
+       [90m 1872 |[39m       [90m// iOS draws no Android icon, at any size, from any source.[39m[0m
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was disposed before the test file finished running.
+
+
+
+
+```

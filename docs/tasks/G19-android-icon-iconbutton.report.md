@@ -243,6 +243,11 @@ nothing further from this round. Round 1's table above is labelled as round 1's:
 this report once, with the numbers the ledger holds for the tree being handed in, and every run of
 both rounds lives in `docs/tasks/G19/gates.jsonl` after the export below.
 
+`gate.mjs export --task G19` carried 34 lines to 65 and lost none: the exported file is the ledger,
+line for line, with a scrubbed excerpt of every failed run beside it — including one
+`real-input:android` run of 0.5 s that is this round's own mistake, started before the lease
+environment was sourced, so its preflight found no emulator. The passing 42 m 13 s run follows it.
+
 **Measured** — the `Button` suite's console block on the API 35 emulator at 420 dpi, in dp. The
 imported icon painted **442** probed pixels **31.3 ms** after its URL was asked, and the control's
 box was `60.19x48.00` before the glyph and `60.19x48.00` after it. The ladder, not the file, sizes
