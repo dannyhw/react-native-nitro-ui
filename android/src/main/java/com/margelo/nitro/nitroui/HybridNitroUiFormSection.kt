@@ -193,7 +193,13 @@ internal class HybridNitroUiFormSection(
       "gap=${String.format("%.1f", view.model.gapPx / density)}",
       "shapes=${view.model.rects.size}",
       "pressed=${if (view.model.pressedIndex >= 0) 1 else 0}",
-      "header=${String.format("%.1f", view.model.headerPx / density)}",
+      // `*Band` is what the layer draws into and what Yoga is asked to reserve; `*Text` is
+      // the glyphs inside it. The difference is the band's own padding, and the S6b case for
+      // question 2's Android half is exactly that difference - so both are reported, under
+      // names that say which is which. `footer=` above is the footer's *text*, which is why
+      // no height here is called plain `footer`.
+      "headerBand=${String.format("%.1f", view.model.headerPx / density)}",
+      "footerBand=${String.format("%.1f", view.model.footerPx / density)}",
       "headerText=${String.format("%.1f", view.model.headerTextPx / density)}",
       "footerText=${String.format("%.1f", view.model.footerTextPx / density)}",
       "rects=${rects.ifEmpty { "-" }}",
