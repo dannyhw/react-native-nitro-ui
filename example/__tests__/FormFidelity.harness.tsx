@@ -227,10 +227,10 @@ describe('Form fidelity (S6 spike, question 2)', () => {
       // the padding itself is FormListMetrics' (16 dp / 12 dp), and what this insists on
       // is that the reservation is not the glyph box: revert `onSizeChanged` to sit inside
       // the padding and both lines below go red at once.
-      const band = (field: string, text: string) =>
-        num(proto, field) - num(proto, text);
-      expect(band('header', 'headerText')).toBeGreaterThanOrEqual(8);
-      expect(band('footer', 'footerText')).toBeGreaterThanOrEqual(4);
+      const padding = (band: string, text: string) =>
+        num(proto, band) - num(proto, text);
+      expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
+      expect(padding('footerBand', 'footerText')).toBeGreaterThanOrEqual(4);
       return;
     }
 
