@@ -30,19 +30,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -66,67 +63,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 
 /**
- * The two glyphs, as `ImageVector`s built once per process from Material's own geometry
- * (Apache 2.0, the 24-unit viewport), because this library does not depend on
- * `material-icons-core` for two icons (Chip's precedent, `HybridNitroUiChip.kt`).
+ * The test tag on the search glyph, so the example app's pixel probe can find the icon's
+ * box (`NitroUiProbe.searchGlyphPixels`) and check it draws a magnifier's ring rather than
+ * a filled disc - the shape the hand-typed path 0.7.0 shipped got wrong.
  *
- * The search glyph is decorative - the field next to it says what it is - and the close
- * glyph carries the localized "clear" label instead.
+ * Both glyphs are Google's Material Symbols (`nitroui_search`, `nitroui_close`; see
+ * `core/NitroUiIcons.kt`). The search glyph is decorative - the field next to it says
+ * what it is - and the close glyph carries the localized "clear" label instead.
  */
-private val SearchGlyph: ImageVector by lazy {
-  ImageVector.Builder(
-    name = "NitroUiSearch",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-  ).path(fill = SolidColor(ComposeColor.Black)) {
-    moveTo(15.5f, 14f)
-    lineToRelative(-0.79f, 0f)
-    lineToRelative(-0.28f, -0.27f)
-    curveToRelative(0.48f, -0.55f, 0.77f, -1.27f, 0.77f, -2.06f)
-    curveToRelative(0f, -1.83f, -1.49f, -3.32f, -3.32f, -3.32f)
-    reflectiveCurveToRelative(-3.32f, 1.49f, -3.32f, 3.32f)
-    reflectiveCurveToRelative(1.49f, 3.32f, 3.32f, 3.32f)
-    curveToRelative(0.79f, 0f, 1.51f, -0.29f, 2.06f, -0.77f)
-    lineToRelative(0.28f, 0.28f)
-    lineToRelative(0f, 0.79f)
-    lineToRelative(5f, 4.99f)
-    lineToRelative(1.49f, -1.49f)
-    lineToRelative(-4.99f, -5f)
-    close()
-    moveTo(9.5f, 14f)
-    curveToRelative(-2.48f, 0f, -4.5f, -2.02f, -4.5f, -4.5f)
-    reflectiveCurveToRelative(2.02f, -4.5f, 4.5f, -4.5f)
-    reflectiveCurveToRelative(4.5f, 2.02f, 4.5f, 4.5f)
-    reflectiveCurveToRelative(-2.02f, 4.5f, -4.5f, 4.5f)
-    close()
-  }.build()
-}
-
-private val CloseGlyph: ImageVector by lazy {
-  ImageVector.Builder(
-    name = "NitroUiClose",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-  ).path(fill = SolidColor(ComposeColor.Black)) {
-    moveTo(19f, 6.41f)
-    lineToRelative(-1.41f, -1.41f)
-    lineToRelative(-5.59f, 5.59f)
-    lineToRelative(-5.59f, -5.59f)
-    lineToRelative(-1.41f, 1.41f)
-    lineToRelative(5.59f, 5.59f)
-    lineToRelative(-5.59f, 5.59f)
-    lineToRelative(1.41f, 1.41f)
-    lineToRelative(5.59f, -5.59f)
-    lineToRelative(5.59f, 5.59f)
-    lineToRelative(1.41f, -1.41f)
-    lineToRelative(-5.59f, -5.59f)
-    close()
-  }.build()
-}
+internal const val SEARCH_FIELD_GLYPH_TAG = "nitroui.searchfield.glyph"
 
 /**
  * The platform's own localized words for a search field.
@@ -353,7 +298,7 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
           // system's localized "Clear text".
           modifier = Modifier.semantics { contentDescription = SearchFieldStrings.clear },
         ) {
-          Icon(imageVector = CloseGlyph, contentDescription = null)
+          Icon(imageVector = nitroUiIcon(R.drawable.nitroui_close), contentDescription = null)
         }
       }
     } else {
@@ -390,7 +335,11 @@ private fun SearchFieldHost.SearchFieldContent(model: TextFieldModel) {
         // own localized prompt, not a literal written here.
         placeholder = { Text(model.placeholder ?: SearchFieldStrings.hint) },
         leadingIcon = {
-          Icon(imageVector = SearchGlyph, contentDescription = null)
+          Icon(
+            imageVector = nitroUiIcon(R.drawable.nitroui_search),
+            contentDescription = null,
+            modifier = Modifier.testTag(SEARCH_FIELD_GLYPH_TAG),
+          )
         },
         trailingIcon = trailing,
         inputTransformation = limit,

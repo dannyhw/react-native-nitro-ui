@@ -23,6 +23,8 @@
     "nitro.json",
     "nitro-ui.sizing.json",
     "CHANGELOG.md",
+    "NOTICE",
+    "licenses",
     "*.podspec",
     "!ios/build",
     "!android/build",
