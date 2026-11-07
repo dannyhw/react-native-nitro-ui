@@ -202,3 +202,32 @@ call, and the summary read `0 press sequence(s) needed a retry` against the old 
 
 Flake 1 now reads "consistent with". Burst typing stays on the SearchField frozen field. Round 1's
 GitHub write is recorded above; this round made none.
+
+## Merge round
+
+`origin/main` (`2a6502aa`) then `origin/task/E5-merge` (`6ff3d626`) are merged in: E5's Slider drag
+start ships on this tree, so its gates are X21's.
+
+**Conflicts.** `HybridNitroUiSlider.kt` — E5's `Modifier.sliderPressWatcher(...).clearAndSetSemantics {`
+kept, with X21's `setProgress { … publishedProgress = displayed }` moved inside it;
+`accessibilityStepToward`, `stepped` and `val displayed` are untouched, so a reader step during an
+open drag still folds into the drag through `dragTo`. `android.mjs` — both constant blocks kept
+(`TAB_TAPS`; `GESTURE_POLL_MS`, `DRAG_ATTEMPTS`), `goToScreen` unchanged. `report.mjs` — E5's
+"input sequence(s) … retried notes" wording with the auxiliary-retry total inside it.
+`STATUS.md`/`FOLLOWUPS.md` — main's version, both sides' appended lines verified present.
+
+**One retry total**, now tested: E5's re-drag plus a re-pressed control (2) and one swept re-tap (1)
+must print `3 input sequence(s) needed a retry (1 of them on an auxiliary check)` — red first, at
+`2`, with the auxiliary half dropped. 166 unit tests pass across both sides' real-input suites.
+
+**Hygiene.** Two harness attempts started before the lease env was exported and used CI-default
+devices (AVD `nitroui`, iPhone 17, both shut down again — no other task's device); both re-ran under
+`X21-gs2yz`. No GitHub writes, no push.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1840 tests / 74 suites | `057b93130335` | 2 m 56 s | start 12.6 / med 16.9 / max 35.5 |
+| `harness:ios` | **PASS** | 455 tests / 25 suites + isolated 4 tests / 2 suites | `057b93130335` | 25 m 44 s | start 8.9 / med 5.2 / max 30.9 |
+| `harness:android` | **PASS** | 511 tests / 25 suites + isolated 4 tests / 2 suites | `057b93130335` | 26 m 06 s | start 9.4 / med 5.2 / max 33.4 |
+| `real-input:ios` | **PASS** | 22/22 controls, 20/20 auxiliary, 0 retries | `057b93130335` | 28 m 58 s | start 6.0 / med 8.6 / max 86.4 |
+| `real-input:android` | **PASS** | 22/22 controls, 20/20 auxiliary, 0 retries | `057b93130335` | 42 m 47 s | start 5.7 / med 4.5 / max 10.8 |
