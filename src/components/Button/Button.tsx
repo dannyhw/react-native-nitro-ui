@@ -1,11 +1,24 @@
 import { type ColorValue, type ViewProps } from 'react-native';
 
-import { normalizeAndroidIconName, warnAndroidIconName } from '../../iconName';
+import { warnAndroidIconName } from '../../iconName';
+import {
+  androidIconUrl,
+  resolveAndroidIcon,
+  type AndroidIconProp,
+} from '../../iconSource';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
 import { useProcessedColor } from '../../core/useProcessedColor';
 import { useSizingId } from '../../core/useSizingId';
 import { useStableCallback } from '../../core/useStableCallback';
 import { NativeNitroUiButton } from './NativeNitroUiButton';
+
+/**
+ * What {@link ButtonProps.androidIcon} accepts.
+ *
+ * Named here because it is app API — a caller writes the `require` or the name it
+ * is given — even though the code that reads it is internal (`src/iconSource.ts`).
+ */
+export type { AndroidIconProp } from '../../iconSource';
 
 /**
  * The button's visual style, named after the Material 3 roles.
@@ -102,19 +115,26 @@ export interface ButtonProps extends ViewProps {
    */
   systemImage?: string | undefined;
   /**
-   * Leading app drawable, named by its Android resource name (`'share'` for
+   * Leading icon on Android: a vector drawable the app owns, passed as a Metro
+   * asset (`androidIcon={require('./icons/share.xml')}`) or, for an app that
+   * already ships drawables, as its Android resource name (`'share'` for
    * `res/drawable/share.xml`). **Android only** — iOS draws {@link systemImage}
    * and ignores this.
    *
-   * The app ships the artwork: see `docs/components/button.md`, "Android icons",
-   * for the file, the Expo config plugin, and the resource-shrinking keep file.
-   * A name that does not resolve draws nothing and reserves no space, so the
+   * Metro carries the file, so there is no setup step: a release build turns the
+   * `.xml` into an ordinary drawable, and development loads it from the dev
+   * server. The icon's *size* comes from the size ladder and never from the file,
+   * which is why the box is laid out in development before the bytes arrive.
+   * Artwork that cannot be resolved draws nothing and reserves no space, so the
    * Button is exactly its no-icon self.
+   *
+   * `docs/components/button.md`, "Android icons", has the file, where to get
+   * Material Symbols, and `@expo/material-symbols` for Expo apps.
    *
    * Like {@link systemImage} this affects the control's width, so it is part of
    * the size configuration.
    */
-  androidIcon?: string | undefined;
+  androidIcon?: AndroidIconProp | undefined;
   /**
    * Access to the native Hybrid Object, for this repo's harness and benchmarks.
    *
@@ -275,9 +295,18 @@ export function Button({
 }: ButtonProps) {
   // A name that cannot be a resource name is a typo the developer can fix right
   // now, and native's answer to it is indistinguishable from a missing file.
-  // See `warnAndroidIconName` for why this is development-only and once per name.
-  if (androidIcon != null) {
-    warnAndroidIconName('Button', 'androidIcon', androidIcon);
+  // See `warnAndroidIconName` for why this is development-only and once per name,
+  // and why a URL is not checked here: a URL that fails says so itself.
+  // One string for native whichever form the caller used: an asset becomes a
+  // dev-server URL or the drawable Metro files it under, and a name is
+  // normalised. Resolved before the size configuration below, because the two
+  // spellings of one icon must not be two configurations.
+  const resolvedAndroidIcon = resolveAndroidIcon(androidIcon);
+  if (
+    resolvedAndroidIcon != null &&
+    androidIconUrl(resolvedAndroidIcon) == null
+  ) {
+    warnAndroidIconName('Button', 'androidIcon', resolvedAndroidIcon);
   }
   const resolvedVariant = resolveVariant(variant);
   const resolvedSize = resolveSize(size);
@@ -305,9 +334,7 @@ export function Button({
       disabled={disabled}
       tintColor={processedTint}
       systemImage={systemImage ?? null}
-      androidIcon={
-        androidIcon == null ? null : normalizeAndroidIconName(androidIcon)
-      }
+      androidIcon={resolvedAndroidIcon}
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
@@ -316,7 +343,7 @@ export function Button({
         resolvedVariant,
         resolvedSize,
         systemImage,
-        androidIcon == null ? undefined : normalizeAndroidIconName(androidIcon),
+        resolvedAndroidIcon ?? undefined,
         title
       )}
       nuiSizingId={sizingId}

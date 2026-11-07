@@ -55,6 +55,9 @@ export {
   type ButtonShape,
   type ButtonSize,
   type ButtonVariant,
+  // The type of `ButtonProps.androidIcon`, which an app writes directly, so it is
+  // app API even though the code behind it is not (DECISIONS D14).
+  type AndroidIconProp,
 } from './components/Button/Button';
 
 export {
