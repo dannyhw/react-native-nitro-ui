@@ -210,3 +210,7 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E5: real-input `goToScreen` aborts a run when a tab arrival is slow (seen at `hosted-date-picker`) instead of looking again.
 - E5: the `frozen: N edits refused` real-input checks assume one edit per typed character and never retry keystrokes (the recurring "1 edits refused" iOS flake).
 - E5: `gate.mjs`'s `pidof` probe can report a live app as dead.
+- G19 review: an icon added in an over-the-air update (`file://` bundle, expo-updates/CodePush) has no drawable resource to resolve; document it or send `url:file://…`.
+- G19 review: `URI(url)` throws on asset paths with spaces, so such an icon draws nothing; a dev URL with `/assets/../..` is sent as-is, unverified against Metro.
+- G19 review: nothing checks that a release bundle actually contains the imported icon drawables (`drawable-mdpi/…`).
+- X21 review: Slider screen-reader step, if a stale tree is published at a bound and the platform clamps the target to that bound, a press away from it is dropped (target equals published progress); check whether the delegate clamps.
