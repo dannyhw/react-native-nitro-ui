@@ -1,6 +1,6 @@
 {
   "task": "G19",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it, so `before` is findable verbatim in `file`). The 16 Jest and JVM rows were run on 2026-11-06 on this checkout at code tree cb51a5a30283, in the gap between the two real-input gates, and each file was restored by the driver (`git status` clean afterwards). Rows marked `organic` are not mutations: they are the test going red against the real bug before the fix landed. The `harness:android:Button` / `harness:ios:Button` runs are filtered, so they satisfy nothing but their own name, and each was made against an app rebuilt for that mutation (`node scripts/build-app.mjs --platform android`). Every `harness:android:Button` / `harness:ios:Button` row below has its failing run committed as a scrubbed excerpt in this directory's `failures/` folder, next to `gates.jsonl`. The last row is not a proof either: it is a mutation the suite does NOT catch, recorded so the coverage hole is data rather than an omission.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it, so `before` is findable verbatim in `file`). The 16 Jest and JVM rows were run on 2026-11-06 on this checkout at code tree cb51a5a30283, in the gap between the two real-input gates, and each file was restored by the driver (`git status` clean afterwards). The 15 rows added by fix round 1 (the Metro-icon work) were run on 2026-11-07 on this checkout at code tree 34bbc3eb53af, the tree the round ships at, the same way. Rows marked `organic` are not mutations: they are the test going red against the real bug before the fix landed. The `harness:android:Button` / `harness:ios:Button` runs are filtered, so they satisfy nothing but their own name, and each was made against an app rebuilt for that mutation (`node scripts/build-app.mjs --platform android`). Every `harness:android:Button` / `harness:ios:Button` row below has its failing run committed as a scrubbed excerpt in this directory's `failures/` folder, next to `gates.jsonl`. The last row is not a proof either: it is a mutation the suite does NOT catch, recorded so the coverage hole is data rather than an omission.",
   "mutations": [
     {
       "test": "src/__tests__/iconName.test.tsx",
@@ -10,10 +10,10 @@
       "after": "  return name.toLowerCase();",
       "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 4 of 10",
       "redTests": [
-        "androidIcon name rules \u203a reads a name the way the file had to be renamed to build: Expected: \"share_24px\" / Received: \"share-24px\"",
-        "androidIcon name rules \u203a accepts every name a resource table could hold",
-        "Button \u00b7 androidIcon \u203a sends the normalised name, not the one that was typed",
-        "Button \u00b7 androidIcon \u203a says nothing about a name that is merely unusual"
+        "androidIcon name rules › reads a name the way the file had to be renamed to build: Expected: \"share_24px\" / Received: \"share-24px\"",
+        "androidIcon name rules › accepts every name a resource table could hold",
+        "Button · androidIcon › sends the normalised name, not the one that was typed",
+        "Button · androidIcon › says nothing about a name that is merely unusual"
       ]
     },
     {
@@ -24,9 +24,9 @@
       "after": "  if (false) {",
       "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 3 of 10",
       "redTests": [
-        "androidIcon name rules \u203a names the reason a name can never resolve: Received has value: null",
-        "androidIcon name rules \u203a warns once per bad name, and never about a good one",
-        "Button \u00b7 androidIcon \u203a warns in development about a name the app can never ship"
+        "androidIcon name rules › names the reason a name can never resolve: Received has value: null",
+        "androidIcon name rules › warns once per bad name, and never about a good one",
+        "Button · androidIcon › warns in development about a name the app can never ship"
       ]
     },
     {
@@ -37,7 +37,7 @@
       "after": "  if (false) {",
       "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
       "redTests": [
-        "androidIcon name rules \u203a warns once per bad name, and never about a good one: Expected number of calls: 1 / Received number of calls: 3"
+        "androidIcon name rules › warns once per bad name, and never about a good one: Expected number of calls: 1 / Received number of calls: 3"
       ]
     },
     {
@@ -48,7 +48,7 @@
       "after": "    /* mutated: the call site is gone */",
       "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
       "redTests": [
-        "Button \u00b7 androidIcon \u203a warns in development about a name the app can never ship: Expected number of calls: 1 / Received number of calls: 0"
+        "Button · androidIcon › warns in development about a name the app can never ship: Expected number of calls: 1 / Received number of calls: 0"
       ]
     },
     {
@@ -59,7 +59,7 @@
       "after": "    androidIcon ?? '',",
       "run": "npx jest src/__tests__/iconName.test.tsx - FAIL, 1 of 10",
       "redTests": [
-        "Button \u00b7 androidIcon \u203a escapes a pipe in the drawable name, spelled out: Expected: \"filled|medium||a\\\\|b|c\" / Received: \"filled|medium||a|b|c\""
+        "Button · androidIcon › escapes a pipe in the drawable name, spelled out: Expected: \"filled|medium||a\\\\|b|c\" / Received: \"filled|medium||a|b|c\""
       ]
     },
     {
@@ -70,10 +70,10 @@
       "after": "    escapeField(systemImage ?? ''),",
       "run": "npx jest src/__tests__/buttonSizingKey.test.tsx src/__tests__/iconName.test.tsx - FAIL, 5 of 14",
       "redTests": [
-        "Button \u00b7 androidIcon \u203a is part of the size configuration, because a glyph makes the control wider: Expected: not \"filled|medium||Share\"",
-        "Button \u00b7 sizing key \u203a is the variant, the scale, both icon fields and the title: Expected: \"tonal|small|square.and.arrow.down||Save\" / Received: \"tonal|small|square.and.arrow.down|Save\"",
-        "Button \u00b7 sizing key \u203a separates a pipe in the icon from a pipe in the title",
-        "Button \u00b7 sizing key \u203a escapes a backslash too, so the escape cannot be forged"
+        "Button · androidIcon › is part of the size configuration, because a glyph makes the control wider: Expected: not \"filled|medium||Share\"",
+        "Button · sizing key › is the variant, the scale, both icon fields and the title: Expected: \"tonal|small|square.and.arrow.down||Save\" / Received: \"tonal|small|square.and.arrow.down|Save\"",
+        "Button · sizing key › separates a pipe in the icon from a pipe in the title",
+        "Button · sizing key › escapes a backslash too, so the escape cannot be forged"
       ],
       "note": "the same mutation on the device, where it is a wrong size rather than a wrong string, is the dev-sizing-key row below"
     },
@@ -153,8 +153,8 @@
       "after": "    void sourceFile;",
       "run": "npx jest plugin/ - FAIL, 2 of 10",
       "redTests": [
-        "react-native-nitro-ui/plugin \u203a copies the vectors and names them in the shrinker keep file (the copied-file list is empty)",
-        "react-native-nitro-ui/plugin \u203a leaves out what aapt would reject, and says why"
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file (the copied-file list is empty)",
+        "react-native-nitro-ui/plugin › leaves out what aapt would reject, and says why"
       ]
     },
     {
@@ -165,9 +165,9 @@
       "after": "    if (false) {",
       "run": "npx jest plugin/ - FAIL, 3 of 10",
       "redTests": [
-        "react-native-nitro-ui/plugin \u203a copies the vectors and names them in the shrinker keep file",
-        "react-native-nitro-ui/plugin \u203a leaves out what aapt would reject, and says why: Not_A_Valid_Name.xml is copied and named",
-        "react-native-nitro-ui/plugin \u203a adds the tools namespace to a keep file that has none"
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file",
+        "react-native-nitro-ui/plugin › leaves out what aapt would reject, and says why: Not_A_Valid_Name.xml is copied and named",
+        "react-native-nitro-ui/plugin › adds the tools namespace to a keep file that has none"
       ]
     },
     {
@@ -178,11 +178,11 @@
       "after": "    result.keepPath = null;",
       "run": "npx jest plugin/ - FAIL, 5 of 10",
       "redTests": [
-        "react-native-nitro-ui/plugin \u203a copies the vectors and names them in the shrinker keep file",
-        "react-native-nitro-ui/plugin \u203a is a no-op the second time prebuild runs it",
-        "react-native-nitro-ui/plugin \u203a keeps the app\u2019s own keep rules when it merges: Expected substring: \"@drawable/share\" against a keep file that was never written",
-        "react-native-nitro-ui/plugin \u203a adds the tools namespace to a keep file that has none",
-        "react-native-nitro-ui/plugin \u203a refuses to overwrite a keep file it cannot read"
+        "react-native-nitro-ui/plugin › copies the vectors and names them in the shrinker keep file",
+        "react-native-nitro-ui/plugin › is a no-op the second time prebuild runs it",
+        "react-native-nitro-ui/plugin › keeps the app’s own keep rules when it merges: Expected substring: \"@drawable/share\" against a keep file that was never written",
+        "react-native-nitro-ui/plugin › adds the tools namespace to a keep file that has none",
+        "react-native-nitro-ui/plugin › refuses to overwrite a keep file it cannot read"
       ]
     },
     {
@@ -193,7 +193,7 @@
       "after": "    for (const entry of ours.join(',').split(',')) {",
       "run": "npx jest plugin/ - FAIL, 1 of 10",
       "redTests": [
-        "react-native-nitro-ui/plugin \u203a keeps the app\u2019s own keep rules when it merges: Expected substring: \"@font/brand\""
+        "react-native-nitro-ui/plugin › keeps the app’s own keep rules when it merges: Expected substring: \"@font/brand\""
       ]
     },
     {
@@ -204,8 +204,8 @@
       "after": "    if (false && painter != null) {",
       "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7), rebuilt app",
       "redTests": [
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a draws the glyph in the control content colour, and nothing at all without it: expected 0 to be greater than 0",
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a takes the icon slot for a name that resolves, and no slot for one that does not: expected 68.19047619047619 to be greater than 68.79047619047618"
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: expected 0 to be greater than 0",
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: expected 68.19047619047619 to be greater than 68.79047619047618"
       ],
       "note": "device row from the round; the 16 Jest and JVM rows above were re-run line for line at the end of the round"
     },
@@ -217,7 +217,7 @@
       "after": "    }\n    return android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)\n  }\n  NitroUiIconCache.get(resId)?.let { return it }",
       "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7), rebuilt app",
       "redTests": [
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a takes the icon slot for a name that resolves, and no slot for one that does not: sameSize(boxOf('missing'), plain) - expected false to be true"
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: sameSize(boxOf('missing'), plain) - expected false to be true"
       ],
       "note": "device row from the round"
     },
@@ -241,7 +241,7 @@
       "after": "        tint = LocalContentColor.current,",
       "run": "harness:android:Button - FAIL on emulator-5570 (lease G19-8d0j7) against the pre-fix app",
       "redTests": [
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a draws the glyph in the control content colour, and nothing at all without it: expected 641 to be +0 (the disabled probe's report was byte-identical to the enabled control's)",
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: expected 641 to be +0 (the disabled probe's report was byte-identical to the enabled control's)",
         "after the fix the same probe reads probe-icon hits=641 ... probe-disabled hits=0 mean=#7F7F7F"
       ],
       "organic": true,
@@ -267,7 +267,7 @@
       "after": "(reverted before the next run)",
       "run": "harness:ios:Button - FAIL on nitro-ui B / iPhone Air 27.0",
       "redTests": [
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a takes the icon slot for a name that resolves, and no slot for one that does not: iOS drew an Android icon: star=98.00x35.00 vs plain=68.00x34.33 - expected false to be true"
+        "androidIcon · the drawable the app ships (G19) › takes the icon slot for a name that resolves, and no slot for one that does not: iOS drew an Android icon: star=98.00x35.00 vs plain=68.00x34.33 - expected false to be true"
       ],
       "note": "device row from the round"
     },
@@ -279,7 +279,7 @@
       "after": "    return \"n=\\(probes) sampled pixels platform=ios\"",
       "run": "harness:ios:Button - FAIL on nitro-ui B / iPhone Air 27.0",
       "redTests": [
-        "androidIcon \u00b7 the drawable the app ships (G19) \u203a draws the glyph in the control content colour, and nothing at all without it: the pixel probe for \"probe-icon\" reported a line that is neither a sample nor a refusal: n=1 sampled pixels platform=ios"
+        "androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it: the pixel probe for \"probe-icon\" reported a line that is neither a sample nor a refusal: n=1 sampled pixels platform=ios"
       ],
       "note": "this row proves the JS -> Swift -> JS wiring is live rather than the assertion reading a constant"
     },
@@ -289,9 +289,9 @@
       "mutation": "the same-icon guard is dropped, so every prop commit re-asks the resource table",
       "before": "    if (source == androidIconResolved) {\n      return\n    }\n    androidIconResolved = source",
       "after": "    androidIconResolved = source",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test(s)",
       "redTests": [
-        "NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce FAILED - java.lang.AssertionError: expected:<[src_assets_icons_share_24px]> but was:<[src_assets_icons_share_24px, src_assets_icons_share_24px, src_assets_icons_share_24px]>"
+        "NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce FAILED - java.lang.AssertionError: expected:<[src_assets_icons_share_24px]> but was:<[src_assets_icons_share_24px, src_assets_icons_share_24px, src_assets_icon"
       ]
     },
     {
@@ -300,13 +300,13 @@
       "mutation": "the release path stops asking for the drawable at all, so a bundled asset draws nothing",
       "before": "      is NitroUiIconSource.Name -> androidIconContent = artwork.forName(source.name)",
       "after": "      is NitroUiIconSource.Name -> androidIconContent = NitroUiIconContent.Absent",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 5 tests",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 5 test(s)",
       "redTests": [
-        "NitroUiIconReleasePathTest > aBundledAssetIsLookedUpUnderTheNameMetroFiledItUnder FAILED - the resource table is asked for the name the wrapper built, character for character expected:<[src_assets_icons_share_24px]> but was:<[]>",
-        "NitroUiIconReleasePathTest > aBundledNameThatIsNotInTheTableDrawsNothingAndReservesNothing FAILED - a miss is still a question that was asked expected:<[src_assets_icons_gone_24px]> but was:<[]>",
+        "NitroUiIconReleasePathTest > aBundledAssetIsLookedUpUnderTheNameMetroFiledItUnder FAILED - java.lang.AssertionError: the resource table is asked for the name the wrapper built, character for character expected:<[src_assets_icons_share_24px]>",
+        "NitroUiIconReleasePathTest > aBundledNameThatIsNotInTheTableDrawsNothingAndReservesNothing FAILED - java.lang.AssertionError: a miss is still a question that was asked expected:<[src_assets_icons_gone_24px]> but was:<[]>",
         "NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce FAILED - java.lang.AssertionError: expected:<[src_assets_icons_share_24px]> but was:<[]>",
         "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - java.lang.AssertionError",
-        "NitroUiIconReleasePathTest > noIconAsksForNothing FAILED - reset, then the same name written again, is still one lookup expected:<[src_assets_icons_share_24px]> but was:<[]>"
+        "NitroUiIconReleasePathTest > noIconAsksForNothing FAILED - java.lang.AssertionError: reset, then the same name written again, is still one lookup expected:<[src_assets_icons_share_24px]> but was:<[]>"
       ]
     },
     {
@@ -315,14 +315,14 @@
       "mutation": "the marker's scheme test asks the whole URL to be a scheme, so no dev-server icon is ever a file",
       "before": "        return if (SCHEME.containsMatchIn(url)) Url(url) else null",
       "after": "        return if (SCHEME.matches(url)) Url(url) else null",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 6 tests",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 6 test(s)",
       "redTests": [
-        "NitroUiIconSourceTest > aMarkedStringIsAFileAndItsUrlIsUntouched FAILED - expected:<Url(url=http://10.0.2.2:8081/src/assets/icons/share_24px.xml?platform=android&hash=AbC123)> but was:<null>",
-        "NitroUiIconSourceTest > twoDifferentSourcesAreNeverEqual FAILED - java.lang.AssertionError",
-        "NitroUiIconReleasePathTest > aDevServerIconIsNeverAskedOfTheResourceTable FAILED - the slot is reserved while the file is read expected:<Pending> but was:<Absent>",
-        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - expected:<Pending> but was:<Absent>",
+        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - java.lang.AssertionError: expected:<Pending> but was:<Absent>",
+        "NitroUiIconReleasePathTest > aDevServerIconIsNeverAskedOfTheResourceTable FAILED - java.lang.AssertionError: the slot is reserved while the file is read expected:<Pending> but was:<Absent>",
         "NitroUiIconReleasePathTest > anAlreadyReadFileIsDrawnWithoutWaiting FAILED - java.lang.AssertionError",
-        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - expected:<Pending> but was:<Absent>"
+        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - java.lang.AssertionError: expected:<Pending> but was:<Absent>",
+        "NitroUiIconSourceTest > aMarkedStringIsAFileAndItsUrlIsUntouched FAILED - java.lang.AssertionError: expected:<Url(url=http://10.0.2.2:8081/src/assets/icons/share_24px.xml?platform=android&hash=AbC123)> but was:<null>",
+        "NitroUiIconSourceTest > twoDifferentSourcesAreNeverEqual FAILED - java.lang.AssertionError"
       ]
     },
     {
@@ -331,9 +331,9 @@
       "mutation": "the generation guard is dropped, so a load retired by recycle paints the recycled control",
       "before": "          if (generation == androidIconGeneration) {",
       "after": "          if (generation >= 0) {",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test(s)",
       "redTests": [
-        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - the retired load cannot overwrite the recycled Button's own icon"
+        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - java.lang.AssertionError: the retired load cannot overwrite the recycled Button's own icon"
       ]
     },
     {
@@ -342,9 +342,9 @@
       "mutation": "a failed load leaves the slot reserved instead of answering round 1's missing-name answer",
       "before": "              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent",
       "after": "              image?.let { NitroUiIconContent.Vector(it) } ?: androidIconContent",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test(s)",
       "redTests": [
-        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - a 404 is round 1's missing-name answer, not a permanently empty box expected:<Absent> but was:<Pending>"
+        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - java.lang.AssertionError: a 404 is round 1's missing-name answer, not a permanently empty box expected:<Absent> but was:<Pending>"
       ]
     },
     {
@@ -353,9 +353,9 @@
       "mutation": "the per-URL cache is keyed wrong, so a file this process already read is read again",
       "before": "        val cached = artwork.cached(source.url)",
       "after": "        val cached = artwork.cached(source.url + \"?\")",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test(s)",
       "redTests": [
-        "java.lang.AssertionError"
+        "NitroUiIconReleasePathTest > anAlreadyReadFileIsDrawnWithoutWaiting FAILED - java.lang.AssertionError"
       ]
     },
     {
@@ -364,10 +364,10 @@
       "mutation": "a file with no <vector> element is accepted instead of refused",
       "before": "      if (!seenRoot) {\n        throw NitroUiVectorUnsupported(\"has no <vector> element\")\n      }",
       "after": "      if (false) {\n        throw NitroUiVectorUnsupported(\"has no <vector> element\")\n      }",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 2 tests",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 2 test(s)",
       "redTests": [
-        "NitroUiVectorDrawableTest > wellFormedXmlThatIsNotAVectorIsRefusedNotDrawn FAILED - \"has no <path> to draw\" does not say \"no <vector> element\"",
-        "NitroUiVectorDrawableTest > theBrokenFixtureInTheExampleAppIsRefusedToo FAILED - java.lang.AssertionError"
+        "NitroUiVectorDrawableTest > theBrokenFixtureInTheExampleAppIsRefusedToo FAILED - java.lang.AssertionError",
+        "NitroUiVectorDrawableTest > wellFormedXmlThatIsNotAVectorIsRefusedNotDrawn FAILED - java.lang.AssertionError: \"has no <path> to draw\" does not say \"no <vector> element\""
       ]
     },
     {
@@ -376,11 +376,11 @@
       "mutation": "the viewport is taken to be the 24 dp box instead of the 960-unit grid the paths are written in",
       "before": "          viewportWidth = attrs.float(\"viewportWidth\")",
       "after": "          viewportWidth = 24f",
-      "run": "bash scripts/native-tests-android.sh - FAIL, 3 tests",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 3 test(s)",
       "redTests": [
-        "NitroUiVectorDrawableTest > googlesOwnMaterialSymbolsFileIsReadAsItIsWritten FAILED - expected:<960.0> but was:<24.0>",
-        "NitroUiVectorDrawableTest > theRealFileBecomesAnImageVectorOfTheSameDrawing FAILED - expected:<960.0> but was:<24.0>",
-        "NitroUiVectorDrawableTest > sizesLoseTheirUnitsAndTheirAbsenceFallsBackToTheViewport FAILED - expected:<48.0> but was:<24.0>"
+        "NitroUiVectorDrawableTest > googlesOwnMaterialSymbolsFileIsReadAsItIsWritten FAILED - java.lang.AssertionError: expected:<960.0> but was:<24.0>",
+        "NitroUiVectorDrawableTest > sizesLoseTheirUnitsAndTheirAbsenceFallsBackToTheViewport FAILED - java.lang.AssertionError: expected:<48.0> but was:<24.0>",
+        "NitroUiVectorDrawableTest > theRealFileBecomesAnImageVectorOfTheSameDrawing FAILED - java.lang.AssertionError: expected:<960.0> but was:<24.0>"
       ]
     },
     {
@@ -389,11 +389,14 @@
       "mutation": "the leading slash of the asset path survives into the drawable name",
       "before": "    ? asset.httpServerLocation.slice(1)\n    : asset.httpServerLocation;\n  return (basePath + '/' + asset.name)",
       "after": "    ? asset.httpServerLocation\n    : asset.httpServerLocation;\n  return (basePath + '/' + asset.name)",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 3 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 6 test(s)",
       "redTests": [
-        "Expected: \"src_assets_icons_share_24px\" / Received: \"_src_assets_icons_share_24px\"",
-        "androidIcon \u00b7 the release build \u203a sends a bundled asset as that name, with no marker on it: Expected: \"src_assets_icons_share_24px\" / Received: \"_src_assets_icons_share_24px\"",
-        "androidIcon \u00b7 the release build \u203a files the same glyph under two paths as two drawables: Expected: \"src_assets_icons_v2_share_24px\" / Received: \"_src_assets_icons_v2_share_24px\""
+        "names a bundled asset exactly the way React Native files it (3 ms)",
+        "sends a bundled asset as that name, with no marker on it (1 ms)",
+        "files the same glyph under two paths as two drawables",
+        "androidIcon · the release build › names a bundled asset exactly the way React Native files it",
+        "androidIcon · the release build › sends a bundled asset as that name, with no marker on it",
+        "androidIcon · the release build › files the same glyph under two paths as two drawables"
       ]
     },
     {
@@ -402,10 +405,12 @@
       "mutation": "every asset URL carries a scale suffix, including the single-scale ones Metro 404s on",
       "before": "  const scaleSuffix = scale === 1 ? '' : `@${scale}x`;",
       "after": "  const scaleSuffix = `@${scale}x`;",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 4 test(s)",
       "redTests": [
-        "androidIcon \u00b7 the development build \u203a asks Metro for the file React Native refuses to load",
-        "androidIcon \u00b7 the development build \u203a builds the URL React Native would build for the same asset"
+        "asks Metro for the file React Native refuses to load (2 ms)",
+        "builds the URL React Native would build for the same asset (1 ms)",
+        "androidIcon · the development build › asks Metro for the file React Native refuses to load",
+        "androidIcon · the development build › builds the URL React Native would build for the same asset"
       ]
     },
     {
@@ -414,9 +419,10 @@
       "mutation": "the forbidden fix: teach React Native to load .xml by registering a global source transformer",
       "before": "    const deviceScale = env.deviceScale ?? PixelRatio.get();",
       "after": "    const deviceScale = env.deviceScale ?? PixelRatio.get();\n    (\n      require('react-native/Libraries/Image/resolveAssetSource') as {\n        default: { addCustomSourceTransformer(t: unknown): void };\n      }\n    ).default.addCustomSourceTransformer(() => null);",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 test(s)",
       "redTests": [
-        "androidIcon \u00b7 the development build \u203a never registers a transformer with React Native: expect(jest.fn()).not.toHaveBeenCalled() / Expected number of calls: 0 / Received number of calls: 2"
+        "never registers a transformer with React Native (1 ms)",
+        "androidIcon · the development build › never registers a transformer with React Native"
       ]
     },
     {
@@ -425,9 +431,10 @@
       "mutation": "the asset's type stops being checked, so a .png asset is asked of the vector parser",
       "before": "    if (asset.type !== 'xml') {",
       "after": "    if (false) {",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 test(s)",
       "redTests": [
-        "androidIcon \u00b7 the development build \u203a refuses an asset that is not a vector drawable"
+        "refuses an asset that is not a vector drawable",
+        "androidIcon · the development build › refuses an asset that is not a vector drawable"
       ]
     },
     {
@@ -436,9 +443,10 @@
       "mutation": "the once-per-source guard is dropped, so a rejected prop is repeated on every render",
       "before": "  if (!__DEV__ || warnedSources.has(detail)) {",
       "after": "  if (!__DEV__) {",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 test(s)",
       "redTests": [
-        "androidIcon \u00b7 the forms a caller can write \u203a refuses the sources that cannot name artwork, and says why once each"
+        "refuses the sources that cannot name artwork, and says why once each (2 ms)",
+        "androidIcon · the forms a caller can write › refuses the sources that cannot name artwork, and says why once each"
       ]
     },
     {
@@ -447,9 +455,10 @@
       "mutation": "the wrapper stops asking the dev server, so a development build falls back to a drawable that is not in the APK",
       "before": "    if (__DEV__) {\n      const origin =",
       "after": "    if (false) {\n      const origin =",
-      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 test(s)",
       "redTests": [
-        "androidIcon \u00b7 the development build \u203a asks Metro for the file React Native refuses to load"
+        "asks Metro for the file React Native refuses to load (1 ms)",
+        "androidIcon · the development build › asks Metro for the file React Native refuses to load"
       ]
     },
     {
@@ -458,9 +467,10 @@
       "mutation": "the icon leaves the size configuration, so two different assets share one measurement",
       "before": "        resolvedAndroidIcon ?? undefined,\n        title",
       "after": "        undefined,\n        title",
-      "run": "npx jest src/__tests__/buttonSizingKey.test.tsx - FAIL, 1 of 5",
+      "run": "npx jest src/__tests__/buttonSizingKey.test.tsx - FAIL, 2 test(s)",
       "redTests": [
-        "Button \u00b7 sizing key \u203a separates two assets and refuses to key on an asset id: Expected: not \"filled|medium|||Save\""
+        "separates two assets and refuses to key on an asset id (25 ms)",
+        "Button · sizing key › separates two assets and refuses to key on an asset id"
       ]
     }
   ]
