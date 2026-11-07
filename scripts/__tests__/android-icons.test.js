@@ -9,8 +9,9 @@
  * keep it that way:
  *
  *   1. `android/src/main` builds no glyph by hand: no `ImageVector.Builder`, no path
- *      builder or path parser, no path commands, and no vector drawable or `pathData`
- *      outside the files the script wrote.
+ *      builder or path parser, no path commands - the `ImageVector` builder's, Compose
+ *      `PathNode`s and `Path` calls, and `android.graphics.Path`'s - and no vector
+ *      drawable or `pathData` outside the files the script wrote.
  *   2. Every `nitroui_*.xml` drawable, and the Apache 2.0 text beside them, matches the
  *      SHA-256 the script recorded, and the script recorded nothing that is not shipped.
  *      A hand edit to one coordinate fails here.
@@ -55,14 +56,16 @@ function walk(dir) {
  * The builder (`ImageVector.Builder`, `materialIcon`/`materialPath` from
  * material-icons-core, `PathBuilder`, `addPathNodes`), the parsers that turn a typed
  * `pathData` string into one (`PathParser`, `PathParser.createPathFromPathData`), and
- * the path commands a builder block is written in. A `Canvas`/`DrawScope` drawing of
+ * the path commands a glyph is written in: the `ImageVector` builder's, Compose's
+ * `PathNode`s and `Path` calls (`relativeLineTo`, `cubicTo`, …) and
+ * `android.graphics.Path`'s (`rLineTo`, …). A `Canvas`/`DrawScope` drawing of
  * something that is not an icon would trip the last pattern too, and that is the
  * point: it is the same hand-typed geometry, and it should be a deliberate exemption.
  */
 const HAND_BUILT = [
   [/ImageVector\.Builder\b/, 'ImageVector.Builder'],
   [/\bmaterialIcon\s*\(/, 'materialIcon('],
-  [/\bmaterialPath\s*\(/, 'materialPath('],
+  [/\bmaterialPath\b/, 'materialPath'],
   [/\bPathBuilder\b/, 'PathBuilder'],
   [/\baddPathNodes\s*\(/, 'addPathNodes('],
   [/\bPathParser\b/, 'PathParser'],
@@ -74,6 +77,13 @@ const HAND_BUILT = [
     /\b(?:moveTo|lineTo|curveTo|quadTo|arcTo|reflectiveCurveTo|horizontalLineTo|verticalLineTo)(?:Relative)?\s*\(/,
     'a path command',
   ],
+  [/\bPathNode\./, 'PathNode'],
+  [
+    /\brelative(?:Move|Line|Cubic|Quadratic(?:Bezier)?)To\s*\(/,
+    'a relative path command',
+  ],
+  [/\b(?:cubicTo|quadraticTo|quadraticBezierTo)\s*\(/, 'a curve command'],
+  [/\br(?:Move|Line|Cubic|Quad)To\s*\(/, 'an android.graphics.Path command'],
 ];
 
 /** Problems with `android/src/main`'s sources, one line each. */
@@ -120,6 +130,19 @@ describe('Android icons (D43)', () => {
     const sources = {
       'android/src/main/java/A.kt':
         'private val G = ImageVector.Builder(name = "g").path { moveTo(1f, 2f) }.build()',
+      // One line per other way to type a glyph out (FIX4 review): Compose's path
+      // nodes, its `Path` calls, `android.graphics.Path`, and material-icons-core's
+      // builder block.
+      'android/src/main/java/B.kt': [
+        'val p = Path(pathData = listOf(PathNode.MoveTo(1f, 2f)))',
+        'path.relativeMoveTo(1f, 2f)',
+        'path.relativeLineTo(1f, 2f)',
+        'path.cubicTo(1f, 2f, 3f, 4f, 5f, 6f)',
+        'path.quadraticTo(1f, 2f, 3f, 4f)',
+        'path.rMoveTo(1f, 2f)',
+        'path.rLineTo(1f, 2f)',
+        'val icon = materialIcon(name = "g") { materialPath { } }',
+      ].join('\n'),
       'android/src/main/res/drawable/nitroui_typed.xml':
         '<vector><path android:pathData="M0,0L1,1Z"/></vector>',
     };
@@ -128,6 +151,15 @@ describe('Android icons (D43)', () => {
     ).toEqual([
       'android/src/main/java/A.kt:1: ImageVector.Builder',
       'android/src/main/java/A.kt:1: a path command',
+      'android/src/main/java/B.kt:1: PathNode',
+      'android/src/main/java/B.kt:2: a relative path command',
+      'android/src/main/java/B.kt:3: a relative path command',
+      'android/src/main/java/B.kt:4: a curve command',
+      'android/src/main/java/B.kt:5: a curve command',
+      'android/src/main/java/B.kt:6: an android.graphics.Path command',
+      'android/src/main/java/B.kt:7: an android.graphics.Path command',
+      'android/src/main/java/B.kt:8: materialIcon(',
+      'android/src/main/java/B.kt:8: materialPath',
       'android/src/main/res/drawable/nitroui_typed.xml: a vector drawable that fetch-material-symbols.mjs did not write',
     ]);
   });
