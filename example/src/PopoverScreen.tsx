@@ -54,22 +54,30 @@ function Opener({
   );
 }
 
-/** The element a popover points at: a box the app lays out, sized in dp. */
+/**
+ * The element a popover points at: a box the app lays out, sized in dp. It opens its
+ * popover on press, because the anchor is the app's own view and the popover is
+ * controlled - `Popover` adds nothing to it and takes no touch from it.
+ */
 function Anchor({
   label,
   testID,
   width,
   height,
+  onPress,
 }: {
   label: string;
   testID: string;
   width?: number;
   height?: number;
+  onPress?: () => void;
 }) {
   const ink = useInk();
   return (
-    <View
+    <Pressable
+      accessibilityRole="button"
       testID={testID}
+      onPress={onPress}
       style={[
         styles.anchor,
         { backgroundColor: ink.button, borderColor: ink.muted },
@@ -78,7 +86,7 @@ function Anchor({
       ]}
     >
       <Text style={{ color: ink.ink }}>{label}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -287,6 +295,7 @@ export default function PopoverScreen() {
               label="Near the bottom"
               testID="popover-near-anchor"
               height={64}
+              onPress={() => setBottomOpen(true)}
             />
           }
         >
