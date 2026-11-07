@@ -90,6 +90,8 @@ namespace margelo::nitro::nitroui {
     void nuiTestAccessibilityStep(double direction) override;
     std::string nuiTestAccessibilityStepReport() override;
     bool nuiTestFramePumpArmed() override;
+    void nuiTestPointerStream(double mode) override;
+    std::string nuiTestPointerStreamReport() override;
 
   private:
     jni::global_ref<JHybridNitroUiSliderSpec::JavaPart> _javaPart;

@@ -1,0 +1,117 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T02:09:10.975Z on code tree `64c41436f8d2` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 893 ms
+- Load: start 3.84, end 4.73, median 4.28, max 4.73
+- Device: android / device `emulator-5574` / lease `E5-onhkl`
+- Full log: `task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log` (<store>/task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-onhkl (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.73 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 72 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 64c41436f8d2 at HEAD a9c5c9bc
+gate: git tree 910424044844 with a DIRTY worktree (not reusable)
+gate: log task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log
+gate:       <store>/task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 0.9 s
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android-2026-11-07T02-09-10.634Z.log (5 probe(s))
+
+```
