@@ -357,6 +357,29 @@ async function waitForUp(testId: string, timeoutMs = 10000): Promise<Report> {
   return waitForReport(testId, isUp, 'a popover on screen', timeoutMs);
 }
 
+/**
+ * A report whose *drawn-size witness has finished*: iOS runs its display-link sampler for
+ * a second after the present and publishes once more when it stops, and Android has seen
+ * its popup draw twice. The report that first says "up" is built before either platform
+ * has sampled a frame, so sizes read off it describe no witness at all — the failure that
+ * came back as `expected [] to have a length of 1`.
+ */
+async function waitForDrawnSample(
+  testId: string,
+  timeoutMs = 20000
+): Promise<Report> {
+  await waitForUp(testId, timeoutMs);
+  return waitForFreshReport(
+    testId,
+    (r) =>
+      isUp(r) &&
+      num(r, IOS ? 'visibleFrames' : 'draws') > 1 &&
+      (IOS ? r.sampling === '0' : num(r, 'firstDrawMs') >= 0),
+    IOS ? 'a finished frame sample' : 'two drawn frames',
+    timeoutMs
+  );
+}
+
 /** A plain mount whose only job is to read the process-wide counts. */
 async function probe(): Promise<string> {
   const probeId = `probe-${String(nitroUiCore.now())}`;
@@ -512,7 +535,7 @@ describe('Popover', () => {
           (l) => l.width > 0 && l.height > 0,
           'a box at all'
         );
-        const up = await waitForUp(id);
+        const up = await waitForDrawnSample(id);
         const scale = scaleOf(up);
         // The content lives where the popover is, not where the anchor is: the node
         // stays behind as the anchor's neighbour and its one child is what native moves.
@@ -756,38 +779,64 @@ describe('Popover', () => {
   });
 
   describe('lifetime', () => {
-    it('leaves nothing after 50 open/close cycles', async () => {
-      const probeId = await probe();
-      const baseline = await waitForReport(
-        probeId,
-        (r) => r.raw !== '' && r.live === '0',
-        'a baseline with nothing up'
-      );
-      await render(<Stage testId="cycles" />);
-      await requireHandle('cycles');
-      for (let cycle = 0; cycle < 50; cycle += 1) {
-        setters.get('cycles')?.(true);
-        await waitForUp('cycles', 12000);
-        setters.get('cycles')?.(false);
-        await waitForEvent(`cycles:dismiss`, 12000);
-        // The unmount has to commit before the next open, or the two updates are one
-        // batch and the content is never dropped at all (BottomSheet's E2 lesson).
-        await waitForUnmount(
-          'cycles',
-          cycle + 1,
-          `unmounted ${cycle + 1} times`
+    // Fifty open/close cycles in five tests of ten. react-native-harness 1.6 has one
+    // timeout for every test — `it` takes no third argument and `testTimeout` is one
+    // global number — and fifty animated popover cycles do not fit in it: the single-test
+    // version of this loop died with "Test timed out after 30000ms" with four open
+    // promises left behind. BottomSheet split the same loop the same way.
+    let cyclesBaseline: Report | null = null;
+    let cycles = 0;
+
+    for (let round = 0; round < 5; round += 1) {
+      it(`cycles 10 more times (round ${String(round + 1)})`, async () => {
+        // Probe and cycling popover in one tree: the probe has to be a view of *this*
+        // test's app, or it reports a tree that was torn down before the round started.
+        await render(
+          <>
+            <Stage testId="cycles-probe" />
+            <Stage testId="cycles" />
+          </>
         );
-        eventLog.length = 0;
-      }
-      expect(mounts.get('cycles') ?? 0).toBe(50);
-      expect(unmounts.get('cycles') ?? 0).toBe(50);
-      await waitForFreshReport(
-        probeId,
-        nothingLeft(baseline),
-        'nothing left after 50 cycles',
-        12000
-      );
-    });
+        await requireHandle('cycles-probe');
+        await requireHandle('cycles');
+        if (cyclesBaseline == null) {
+          cyclesBaseline = await waitForReport(
+            'cycles-probe',
+            (r) => r.raw !== '' && r.live === '0',
+            'a baseline with nothing up'
+          );
+        }
+        // Read rather than assumed: a round whose predecessor failed mid-loop inherits
+        // its counters, and has to fail naming its own ten cycles.
+        const unmountBase = unmounts.get('cycles') ?? 0;
+        for (let cycle = 0; cycle < 10; cycle += 1) {
+          eventLog.length = 0;
+          setters.get('cycles')?.(true);
+          await waitForUp('cycles', 12000);
+          setters.get('cycles')?.(false);
+          await waitForEvent('cycles:dismiss', 12000);
+          // The unmount has to commit before the next open, or the two updates are one
+          // batch and the content is never dropped at all (BottomSheet's E2 lesson).
+          await waitForUnmount(
+            'cycles',
+            unmountBase + cycle + 1,
+            `unmounted ${String(unmountBase + cycle + 1)} times`
+          );
+          cycles += 1;
+        }
+        expect(mounts.get('cycles') ?? 0).toBe(10);
+        expect(unmounts.get('cycles') ?? 0).toBe(10);
+        if (round === 4) {
+          expect(cycles).toBe(50);
+          await waitForFreshReport(
+            'cycles-probe',
+            nothingLeft(cyclesBaseline ?? reportOf('cycles-probe')),
+            'nothing left after 50 cycles',
+            12000
+          );
+        }
+      });
+    }
 
     for (const delay of [0, 80, 150]) {
       it(`leaves nothing when dropped ${delay} ms into the entry`, async () => {
