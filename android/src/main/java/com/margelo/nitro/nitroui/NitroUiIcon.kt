@@ -5,9 +5,14 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -17,6 +22,8 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import com.facebook.react.views.imagehelper.ResourceDrawableIdHelper
@@ -204,26 +211,39 @@ internal object NitroUiIconCache {
  * What an `androidIcon` string asks for, once the wrapper's marker has been read.
  *
  * The prop crosses into native as one plain string (D43: never an AnyMap), and
- * one prefix tells native which of the two sources it names:
+ * one prefix tells native which of the three sources it names:
  *
  *  - **no prefix — [Name]**: a drawable in the app's resources, which is what
  *    round 1 sent and what a release build turns a `require()`'d `.xml` into. The
- *    resource table answers for it, so it can be resolved on the spot.
+ *    resource table answers for it, so it can be resolved on the spot. Checked
+ *    against [NitroUiIconNames] first, because a name somebody typed is a thing a
+ *    rule can judge.
+ *  - **`res:` — [Name]**: the same kind of drawable, named by the *bundler* from
+ *    the asset's path instead of by a person. Looked up verbatim, with no name rule
+ *    applied: an asset hoisted out of a workspace root is named
+ *    `__node_modules_expo_materialsymbols_star`, which `aapt` accepted and the
+ *    resource table finds. See [RESOURCE_PREFIX].
  *  - **`url:` — [Url]**: a file to read, which is what a development build turns
  *    the same `require()` into, because React Native will not serve `.xml` assets
  *    itself. Reading a file cannot be answered on the spot, so this half is where
  *    the async machinery lives.
  *
- * A colon cannot appear in a resource name, so the prefix cannot be mistaken for
- * one and round 1's strings keep their meaning — which is why there is no
- * `drawable:` prefix to go with the other one.
+ * Neither prefix can be mistaken for a typed name, because a resource name is
+ * `[a-z][a-z0-9_]*` and so contains no colon at all: round 1's strings keep their
+ * meaning exactly, and `res:` is only ever written by `src/iconSource.ts` for a name
+ * it derived itself.
  *
  * The Kotlin twin of `src/iconSource.ts`, which writes these strings; the two are
  * pinned to each other by `src/__tests__/iconSource.test.ts` and
- * `android/src/test/.../NitroUiIconTest.kt`.
+ * `android/src/test/.../NitroUiIconSourceTest.kt`.
  */
 internal sealed interface NitroUiIconSource {
-  /** A drawable in the app's resources, already normalised by [NitroUiIconNames]. */
+  /**
+   * A drawable in the app's resources, under the name the resource table knows.
+   *
+   * Normalised from a typed name, or taken verbatim from a `res:` string: the two
+   * prefixes below are the only difference between those two ways of getting here.
+   */
   data class Name(
     val name: String,
   ) : NitroUiIconSource
@@ -236,6 +256,18 @@ internal sealed interface NitroUiIconSource {
   companion object {
     /** The marker [Url] carries. See the class doc for why only it needs one. */
     const val URL_PREFIX = "url:"
+
+    /**
+     * The marker a name derived from an asset's path carries.
+     *
+     * React Native builds that name by turning `/` into `_` and dropping what a
+     * resource table cannot hold — including the `..` of a path that leaves the
+     * project root, which is how a hoisted `node_modules` icon is named. The result
+     * is a real, working resource name that no rule for hand-typed input would let
+     * through, so the marker tells [parse] to skip the check rather than refuse an
+     * icon that is sitting in the APK.
+     */
+    const val RESOURCE_PREFIX = "res:"
 
     /** A scheme, and therefore a URL rather than a resource name. */
     private val SCHEME = Regex("^[a-zA-Z][a-zA-Z0-9+.\\-]*://")
@@ -260,6 +292,14 @@ internal sealed interface NitroUiIconSource {
         // with `matches` it asks the whole URL to be a scheme, answers no to every
         // real one, and development builds draw no icon at all.
         return if (SCHEME.containsMatchIn(url)) Url(url) else null
+      }
+      if (raw.startsWith(RESOURCE_PREFIX)) {
+        // Verbatim, and no name rule: this is the name the bundler filed the file
+        // under, character for character, and `getIdentifier` is a lookup rather
+        // than a spell-check. Normalising it here would ask for a resource that was
+        // never written.
+        val derived = raw.substring(RESOURCE_PREFIX.length)
+        return if (derived.isEmpty()) null else Name(derived)
       }
       val name = NitroUiIconNames.normalize(raw)
       // A name the resource table could never hold is not a lookup waiting to fail,
@@ -365,6 +405,101 @@ internal class NitroUiAppIconArtwork(
     onLoaded: (ImageVector?) -> Unit,
   ) {
     NitroUiIconFiles.load(url, onLoaded)
+  }
+}
+
+/**
+ * One control's `androidIcon`: what it was sent, what that resolved to, and which
+ * in-flight file load still counts.
+ *
+ * [resolve] holds the rules every control with an icon needs, and holds them once
+ * because `Menu`'s trigger *is* a [NitroUiM3Button] — the same box, the same ladder,
+ * and now the same glyph — so a second copy of this logic in `MenuModel` would be a
+ * second place for the rules G19 proved on Button to be wrong. The rules:
+ *
+ *  - resolve **once per change**, from `afterUpdate()`, never from a prop setter and
+ *    never in composition: a resource lookup reads a `synchronized` table and a file
+ *    load opens a socket (AGENTS' perf contract);
+ *  - a **file reserves its slot before it arrives**, because the slot's size comes
+ *    from the size ladder and never from the bytes — the frame before the file and
+ *    the frame after it are one box;
+ *  - an answer is applied only if it belongs to the **current generation**, so a
+ *    recycled control cannot be painted by its previous owner's load;
+ *  - artwork that cannot be resolved is [NitroUiIconContent.Absent]: nothing drawn,
+ *    nothing reserved.
+ *
+ * The model owns the wire string — `hybridRef` reports what React sent, and that is
+ * the prop's own round trip — and this class owns everything derived from it.
+ */
+internal class NitroUiIconSlot {
+  /** What the composition draws: artwork, an empty reserved slot, or nothing. Observed. */
+  var content by mutableStateOf<NitroUiIconContent>(NitroUiIconContent.Absent)
+    private set
+
+  /** The source [content] was resolved for, so a commit that re-sends it costs one comparison. */
+  var resolved: NitroUiIconSource? = null
+    private set
+
+  /** Bumped every time the requested icon changes, including by recycle. */
+  var generation: Int = 0
+    private set
+
+  /**
+   * Resolve [raw] — the wire string from [NitroUiIconSource.parse] — against [artwork].
+   *
+   * [artwork] is the seam: the production answer is [NitroUiAppIconArtwork], and
+   * `android/src/test` hands a map so the release path — the resource lookup for the
+   * name Metro filed a bundled asset under — is a JVM test rather than only an
+   * emulator run.
+   */
+  fun resolve(
+    raw: String?,
+    artwork: NitroUiIconArtwork,
+  ) {
+    val source = NitroUiIconSource.parse(raw)
+    if (source == resolved) {
+      return
+    }
+    resolved = source
+    val started = ++generation
+    when (source) {
+      null -> content = NitroUiIconContent.Absent
+
+      is NitroUiIconSource.Name -> content = artwork.forName(source.name)
+
+      is NitroUiIconSource.Url -> {
+        val cached = artwork.cached(source.url)
+        if (cached != null) {
+          // A recycled control asking for an icon this process already read draws
+          // it in the same frame it mounted.
+          content = NitroUiIconContent.Vector(cached)
+          return
+        }
+        if (artwork.knownBad(source.url)) {
+          content = NitroUiIconContent.Absent
+          return
+        }
+        content = NitroUiIconContent.Pending
+        artwork.read(source.url) { image ->
+          // On the main thread, which is the only thread allowed to write this.
+          if (started == generation) {
+            // The answer to a load that failed is the answer to a name that does
+            // not resolve: nothing drawn, nothing reserved.
+            content =
+              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent
+          }
+        }
+      }
+    }
+  }
+
+  /** Hand this control's slot to the next owner of the view. */
+  fun reset() {
+    content = NitroUiIconContent.Absent
+    resolved = null
+    // Bump rather than reset: a load started by the previous owner is still in
+    // flight, and this is what retires it.
+    generation += 1
   }
 }
 
@@ -510,13 +645,14 @@ internal fun rememberIconPainter(
  *    parsing off-main too: it is Compose data structures, not `Bitmap`s, and
  *    touches no `Context`, so there is nothing to gain by doing it on the UI
  *    thread and a frame to lose.
- *  - **It can fail for reasons the resource table has no equivalent for.** A 404
- *    (the file was deleted, or Metro restarted and the hash moved), a refused
- *    connection (the dev server is not running), a malformed file. All three are
- *    one line in the log per URL and then silence, and all three answer
- *    [Absent] — the size round 1 gives a name that does not resolve. A failed
- *    load is *remembered*: retrying it per frame is how a deleted icon turns a
- *    screen into a request loop.
+ *  - **It can fail for reasons the resource table has no equivalent for**, and the
+ *    failures are not all the same answer. A 404 or a file that is not a `<vector>`
+ *    is a statement about the *file* and is remembered, so a deleted icon costs one
+ *    read per process; a refused connection or a timeout is a statement about the
+ *    *route* — Metro restarting while a developer edits a file is exactly that — and
+ *    is not, because remembering it left the icon undrawable until the app was
+ *    killed. Both draw [Absent] and log one line per URL either way. See
+ *    [NitroUiIconRead] and [NitroUiIconBadList].
  *  - **Many controls can ask for one URL at once.** A toolbar with three buttons
  *    and a list row with an icon each all mount in the same frame. The waiters are
  *    kept per URL and woken together, so twenty rows read the file once, which is
@@ -544,8 +680,15 @@ internal object NitroUiIconFiles {
 
   private val loaded = NitroUiIconStore<String, ImageVector>(MAX_CACHED)
 
-  /** URLs already reported as unreadable, so a broken icon costs one attempt, not one per frame. */
-  private val failed = NitroUiIconStore<String, Unit>(MAX_CACHED)
+  /**
+   * URLs that have been *answered* as not-an-icon, so a broken file costs one
+   * attempt per process instead of one per mount.
+   *
+   * Only a definite answer goes in here — [NitroUiIconBadList.note] is where that is
+   * decided, and the reason it is a decision at all is that round 1 remembered every
+   * failure, including a connection refused while the dev server was restarting.
+   */
+  private val badList = NitroUiIconBadList(MAX_CACHED)
 
   /** Callbacks waiting on an in-flight URL, under [lock]. */
   private val waiters = HashMap<String, MutableList<(ImageVector?) -> Unit>>()
@@ -563,6 +706,10 @@ internal object NitroUiIconFiles {
    * the bundle. The keep-alive is so a screen that changes icons keeps its thread
    * rather than paying for a new one, and the daemon flag is so a process that
    * stops asking never holds a thread open.
+   *
+   * [ThreadPoolExecutor] does not time core threads out, so with a core size of one
+   * the keep-alive alone would never end anything: `allowCoreThreadTimeOut` is what
+   * makes "gone when idle" true rather than a comment.
    */
   private val executor: ExecutorService =
     ThreadPoolExecutor(1, 1, 30L, TimeUnit.SECONDS, LinkedBlockingQueue()) { runnable ->
@@ -570,17 +717,23 @@ internal object NitroUiIconFiles {
         isDaemon = true
         priority = Thread.MIN_PRIORITY
       }
-    }
+    }.apply { allowCoreThreadTimeOut(true) }
 
   /** Artwork already read for [url], or `null` if nothing has arrived yet. */
   fun cached(
     url: String,
   ): ImageVector? = synchronized(lock) { loaded.get(url) }
 
-  /** Whether [url] has already been reported unreadable. */
+  /**
+   * Whether [url] has been *answered* as not-an-icon by this process.
+   *
+   * Deliberately narrower than "was ever failed": a load that could not be reached
+   * is not a known-bad URL, so the next control to ask reads it again — which is how
+   * a JS reload after a Metro restart draws the icon again without a kill.
+   */
   fun knownBad(
     url: String,
-  ): Boolean = synchronized(lock) { failed.get(url) != null }
+  ): Boolean = badList.isKnownBad(url)
 
   /**
    * Read [url] and call [onLoaded] on the main thread with the image, or `null`.
@@ -607,20 +760,23 @@ internal object NitroUiIconFiles {
       executor.execute { read(url) }
     } catch (rejected: RejectedExecutionException) {
       // Only reachable if the executor were ever shut down, which nothing does.
-      // Answering `null` keeps the caller's slot from being reserved forever.
-      finish(url, null)
+      // Answering `Temporary` keeps the caller's slot from being reserved forever,
+      // and says what is actually known: nothing about the file.
+      finish(url, NitroUiIconRead.Temporary)
     }
   }
 
-  /** Read and parse [url] on the worker thread. */
+  /** Read and parse [url] on the worker thread, then report what the attempt said. */
   private fun read(url: String) {
-    val image =
+    val attempt =
       try {
         parse(url)
       } catch (error: Throwable) {
         // Socket timeouts, `UnknownHostException`, `FileNotFoundException` from a
-        // `file:` URL, an OutOfMemoryError from a monster file. The answer to all
-        // of them is the same as to a name that is not in the resource table.
+        // `file:` URL, an OutOfMemoryError from a monster file. The answer *to the
+        // control* is the same as to a name that is not in the resource table; the
+        // answer *to the memory* is [classifyIconReadFailure]'s question, and it is
+        // not the same one.
         if (NitroUiIconNames.shouldWarn(url)) {
           Log.w(
             "NitroUi",
@@ -630,14 +786,14 @@ internal object NitroUiIconFiles {
               "see docs/components/button.md, \"Android icons\".",
           )
         }
-        null
+        classifyIconReadFailure(error)
       }
-    finish(url, image)
+    finish(url, attempt)
   }
 
   private fun parse(
     url: String,
-  ): ImageVector? {
+  ): NitroUiIconRead {
     val connection = URI(url).toURL().openConnection()
     var stream: java.io.InputStream? = null
     try {
@@ -654,7 +810,7 @@ internal object NitroUiIconFiles {
                 "A deleted or renamed asset answers like this in development.",
             )
           }
-          return null
+          return classifyIconHttpStatus(status)
         }
       }
       val declared = connection.contentLength
@@ -668,14 +824,19 @@ internal object NitroUiIconFiles {
       if (bytes.size > MAX_BYTES) {
         return tooLarge(url, bytes.size.toLong())
       }
-      return NitroUiVectorDrawableReader
-        .read(java.io.ByteArrayInputStream(bytes))
-        .toImageVector(url)
+      return NitroUiIconRead.Loaded(
+        NitroUiVectorDrawableReader
+          .read(java.io.ByteArrayInputStream(bytes))
+          .toImageVector(url)
+      )
     } catch (unsupported: NitroUiVectorUnsupported) {
+      // Caught here only for its one-line message: the outcome is
+      // [classifyIconReadFailure]'s answer, `Rejected`, because bytes that are not a
+      // vector drawable will not become one on a second read.
       if (NitroUiIconNames.shouldWarn(url)) {
         Log.w("NitroUi", "androidIcon \"$url\" $unsupported; nothing is drawn for it.")
       }
-      return null
+      return NitroUiIconRead.Rejected
     } finally {
       stream?.close()
       if (connection is HttpURLConnection) {
@@ -687,30 +848,32 @@ internal object NitroUiIconFiles {
   private fun tooLarge(
     url: String,
     bytes: Long,
-  ): Nothing? {
+  ): NitroUiIconRead {
     if (NitroUiIconNames.shouldWarn(url)) {
       Log.w(
         "NitroUi",
         "androidIcon \"$url\" is $bytes bytes, too large to be an icon; nothing is drawn for it.",
       )
     }
-    return null
+    // Definite: the ceiling is a rule about the file's size, which a retry cannot
+    // change.
+    return NitroUiIconRead.Rejected
   }
 
   /** Cache the answer and wake every control that asked for this URL, on the main thread. */
   private fun finish(
     url: String,
-    image: ImageVector?,
+    read: NitroUiIconRead,
   ) {
-    val waiting =
-      synchronized(lock) {
-        if (image != null) {
-          loaded.put(url, image)
-        } else {
-          failed.put(url, Unit)
-        }
-        waiters.remove(url)?.toList()
-      }
+    val image = (read as? NitroUiIconRead.Loaded)?.image
+    if (image != null) {
+      synchronized(lock) { loaded.put(url, image) }
+    }
+    // The bad-list write is the one line this round exists to change: round 1 put
+    // every `null` in here, so a connection refused while Metro restarted was kept
+    // for the life of the process and a JS reload could not get the icon back.
+    badList.note(url, read)
+    val waiting = synchronized(lock) { waiters.remove(url)?.toList() }
     val callbacks = waiting ?: emptyList()
     if (callbacks.isEmpty()) {
       return
@@ -726,9 +889,103 @@ internal object NitroUiIconFiles {
   fun clearForTests() {
     synchronized(lock) {
       loaded.clear()
-      failed.clear()
       waiters.clear()
     }
+    badList.clear()
+  }
+}
+
+/**
+ * What one read of a dev-server URL ended with, and whether that answer is worth
+ * keeping.
+ *
+ * The distinction is [Temporary]: the server is a separate process that comes and
+ * goes while an app is running, and a load that never reached it learned nothing
+ * about the file. Round 1 had two answers — artwork or "bad" — and so kept the URL
+ * in [NitroUiIconFiles]'s bad list on a refused connection, which is the state a
+ * developer sees as "my icon never draws again, even after a reload, until I kill
+ * the app".
+ */
+internal sealed interface NitroUiIconRead {
+  /** The bytes arrived and parsed into a vector drawable. */
+  data class Loaded(
+    val image: ImageVector,
+  ) : NitroUiIconRead
+
+  /** The file was judged and is not an icon. Worth remembering. */
+  data object Rejected : NitroUiIconRead
+
+  /** The file was never reached. Not worth remembering. */
+  data object Temporary : NitroUiIconRead
+}
+
+/**
+ * What a thrown answer says about the file.
+ *
+ * Only [NitroUiVectorUnsupported] is a verdict on the file: the bytes arrived and
+ * are not a vector drawable, and no retry changes that. A refused connection, a
+ * socket timeout, an `UnknownHostException`, a `file:` URL whose file is not where
+ * the app said, an `OutOfMemoryError` — all of those describe the route or the
+ * machine, and a dev server mid-restart answers every one of them. This is a pure
+ * function for the same reason [NitroUiIconBadList] is a class: the rule is the bug
+ * this round fixes, and it has to be a JVM test rather than an emulator run against
+ * a killed dev server.
+ */
+internal fun classifyIconReadFailure(error: Throwable): NitroUiIconRead =
+  if (error is NitroUiVectorUnsupported) NitroUiIconRead.Rejected else NitroUiIconRead.Temporary
+
+/**
+ * What an HTTP status outside 2xx says about the file.
+ *
+ * A 4xx is a verdict: the server was reached, looked for that path, and has nothing
+ * for it — which is what a deleted or renamed asset looks like. A 5xx is not: Metro
+ * answers those while it is compiling, which is precisely what it is doing when a
+ * file was just edited, and the same URL answers 200 a second later. Anything else
+ * (a 3xx that survived redirects, a status this HTTP stack invented) is treated as
+ * no answer, which is the safe side of the same rule.
+ */
+internal fun classifyIconHttpStatus(status: Int): NitroUiIconRead =
+  if (status in 400..499) NitroUiIconRead.Rejected else NitroUiIconRead.Temporary
+
+/**
+ * The dev URLs this process has stopped asking for.
+ *
+ * [note] is the whole policy, and the policy is "only a verdict on the file is
+ * remembered". A class rather than a [NitroUiIconStore] field so the policy sits
+ * beside the answer it reads and can be tested without a `Handler`, a socket or the
+ * main `Looper` — see [classifyIconReadFailure] for why that mattered this round.
+ */
+internal class NitroUiIconBadList(
+  maxEntries: Int,
+) {
+  // [NitroUiIconStore] is `@Synchronized` per method and no rule here spans two
+  // calls, so the list needs no lock of its own.
+  private val store = NitroUiIconStore<String, Unit>(maxEntries)
+
+  /** Whether [url] has been answered as not-an-icon. */
+  fun isKnownBad(
+    url: String,
+  ): Boolean = store.get(url) != null
+
+  /** Remember [url] if [read] judged the file; say nothing if it did not. */
+  fun note(
+    url: String,
+    read: NitroUiIconRead,
+  ) {
+    if (read == NitroUiIconRead.Rejected) {
+      store.put(url, Unit)
+    }
+  }
+
+  /**
+   * Forget every URL, so the next read of any of them goes out again.
+   *
+   * For tests only. Nothing in an app calls it: the point of this round is that a
+   * *running* app has no reason to forget a verdict, and every reason not to forget
+   * a route problem — which is handled by never writing one down.
+   */
+  fun clear() {
+    store.clear()
   }
 }
 
@@ -765,4 +1022,44 @@ internal fun NitroUiIconGlyph(
     contentScale = ContentScale.Fit,
     modifier = modifier.size(size),
   )
+}
+
+/**
+ * The glyph slot in front of a control's label, for the controls that share
+ * [NitroUiM3Button]'s composition rules: the artwork if there is any, an empty box of
+ * exactly the same size while a file is on its way, and nothing at all when no icon
+ * was asked for.
+ *
+ * Extracted from the Button because Menu's split trigger has the same label and now
+ * the same glyph, and the [NitroUiIconContent.Pending] rule — the box comes from the
+ * size ladder, never from the file — is the one thing that must not be reimplemented
+ * per control. Getting it wrong is invisible in a release build, where an icon is a
+ * resource and is never in flight, and in development it is a control that grows
+ * sideways a few frames after the screen appears.
+ *
+ * Tinted with `LocalContentColor`, read inside the control's content: see the note in
+ * [NitroUiM3Button] for why the variant's resting `contentColor` is the wrong colour
+ * here (it ignores `enabled`, so a disabled control dims its label and not its glyph).
+ *
+ * Carries no content description of its own: the control's own node names it, and a
+ * second description would be read twice by TalkBack.
+ */
+@Composable
+internal fun NitroUiIconSlotContent(
+  icon: NitroUiIconContent,
+  size: Dp,
+  spacing: Dp,
+) {
+  val painter = rememberIconPainter(icon)
+  if (painter != null) {
+    NitroUiIconGlyph(
+      painter = painter,
+      size = size,
+      tint = LocalContentColor.current,
+      contentDescription = null,
+      modifier = Modifier.padding(end = spacing),
+    )
+  } else if (icon != NitroUiIconContent.Absent) {
+    Spacer(modifier = Modifier.padding(end = spacing).size(size))
+  }
 }
