@@ -318,6 +318,7 @@ export interface MenuGroup {
 
 // @public
 export interface MenuProps extends ViewProps {
+    androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;
     group: MenuGroup;
     // @internal
