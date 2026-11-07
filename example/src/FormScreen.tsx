@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Platform,
   Pressable,
@@ -15,6 +15,10 @@ import { Switch, TextField } from 'react-native-nitro-ui';
 // because `real-input` can only prove what the example app actually renders - and
 // S6's iOS taps had nothing to tap. See docs/tasks/S6b-form-spike-ios.md.
 import { Form } from '../../src/components/Form/Form';
+import type { NitroUiFormMethods } from '../../src/components/Form/Form.nitro';
+
+/** How often the screen asks the Form's own report for its keyboard inset. */
+const REPORT_POLL_MS = 150;
 
 /**
  * Text colours for the current appearance, like every other example screen: `Text` gets
@@ -96,6 +100,28 @@ export default function FormScreen() {
   const [airplane, setAirplane] = useState(false);
   const [note, setNote] = useState('');
   const [focused, setFocused] = useState(false);
+  const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
+  const formRef = useRef<NitroUiFormMethods | null>(null);
+
+  // Question 5 needs the keyboard's own number, not a guess at it. UIKit tells the Form
+  // how tall the keyboard is (it sets its list's bottom inset from
+  // `keyboardWillChangeFrame`), and the Form says so in `nuiTestFormReport()` - which is
+  // a test seam on a spike screen, so polling it from here is the cheapest way to put the
+  // number where the runner can read it. It is also the only witness that survives a
+  // simulator with a connected hardware keyboard: XCUITest sees no keyboard *window* in
+  // that case, but UIKit still says what it thinks the keyboard's height is.
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+    const timer = setInterval(() => {
+      const line = formRef.current?.nuiTestFormReport() ?? '';
+      const field = line.match(/(?:^|;)keyboard=(-?[\d.]+)/);
+      const value = field == null ? null : Number(field[1]);
+      if (Number.isFinite(value ?? Number.NaN)) {
+        setKeyboardInset((previous) => (previous === value ? previous : value));
+      }
+    }, REPORT_POLL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   // The counter is the evidence, so it counts what the platform reported and
   // nothing else: no clamping, no de-duping, no "already counted this frame".
@@ -164,6 +190,16 @@ export default function FormScreen() {
             testID="form-field-value"
             value={note === '' ? '-' : note}
           />
+          {Platform.OS === 'ios' ? (
+            // The keyboard inset the Form's own list is reserving, straight from UIKit.
+            // `-` until the first report comes back, `0.0` for "no keyboard is up".
+            <Echo
+              ink={ink}
+              label="kb"
+              testID="form-keyboard-inset"
+              value={keyboardInset == null ? '-' : keyboardInset.toFixed(1)}
+            />
+          ) : null}
         </View>
         <Pressable
           accessibilityLabel="Outside the form"
@@ -177,7 +213,7 @@ export default function FormScreen() {
         </Pressable>
       </View>
 
-      <Form style={styles.form}>
+      <Form hybridRef={(view) => (formRef.current = view)} style={styles.form}>
         <Form.Section
           footer="These settings apply to this device only."
           title="Connectivity"

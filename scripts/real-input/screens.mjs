@@ -124,6 +124,8 @@ export const ECHO = Object.freeze({
   formSwitchChanges: 'form-switch-changes',
   formSwitchValue: 'form-switch-value',
   formFieldFocus: 'form-field-focus',
+  // iOS only: the keyboard inset the Form's list is reserving, as UIKit told it.
+  formKeyboardInset: 'form-keyboard-inset',
   formFieldValue: 'form-field-value',
 });
 
