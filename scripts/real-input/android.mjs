@@ -4933,7 +4933,11 @@ async function main() {
     // no in-app query can see a Compose control's name, and a dedicated gate is a gate
     // nobody runs.
     await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
-      goToScreen: (screen) => harness.goToScreen(screen),
+      // The sweep's log travels with the navigation: `goToScreen` re-presses a tab
+      // until its screen arrives, and every one of those re-presses used to land on an
+      // absent `log` argument, where `log?.retried?.()` prints nothing and the run's
+      // totals could not see them. Half of a run's tab navigations are these.
+      goToScreen: (screen, log) => harness.goToScreen(screen, log),
       dump: () => harness.hierarchy(),
       scrollToTop: () => harness.scrollToTop(),
       scrollPage: async (pixels) => {
@@ -5290,8 +5294,11 @@ class DeviceHarness {
    *
    * @param {import('./screens.mjs').ScreenId | 'dialog' | 'sheet' | 'tooltip'} screen
    * @param {{ retried?: (line: string) => void, note?: (line: string) => void }} [log]
-   *   the control's log, so a re-press is reported the way `pressUntil` reports one.
-   *   Optional because the a11y sweep navigates without one.
+   *   the case's log, so a re-press is reported the way `pressUntil` reports one. Every
+   *   caller has one to give — a control passes its own, and the a11y sweep now hands
+   *   over the auxiliary log it opened for the case (X21: it used to navigate without
+   *   one, and the re-presses it counted were invisible in the run it was counted in).
+   *   Optional in the signature only so a fake that models neither channel still works.
    */
   async goToScreen(screen, log) {
     const { anchor } = screenTab(screen);

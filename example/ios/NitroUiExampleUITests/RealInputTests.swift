@@ -3889,33 +3889,38 @@ final class RealInputTests: XCTestCase {
 
     let frozen = try searchField(labelled: "Frozen search field")
     try focusByTap(frozen, echo: nil, as: "the frozen field")
-    // As in `testRealInputTextField`: the same key path, the same witness per key.
-    try typeKey(
-      "x",
-      into: frozen,
-      echo: Echo.searchFrozen,
-      expected: "frozen: 1 edits refused",
-      resting: "frozen",
-      named: "key \"x\" into the frozen search field",
-      waitingFor: "the first refused edit to be reported"
-    )
-    try typeKey(
-      "y",
-      into: frozen,
-      echo: Echo.searchFrozen,
-      expected: "frozen: 2 edits refused",
-      resting: "frozen",
-      named: "key \"y\" into the frozen search field",
-      waitingFor: "the second refused edit to be reported"
+    // Burst typing, kept here on purpose. `testRealInputTextField` types its frozen
+    // field one key at a time, which is what a dropped keystroke needs in order to stay
+    // a delivery failure; this site keeps the *burst* — two keys delivered before JS has
+    // answered the first, both edits in flight at once — so that ordering is still
+    // covered somewhere (X21). The burst is a press sequence like every other one: one
+    // `typeText` of "xy", its own witness waited for, and a re-typed key that is counted
+    // and reported when the witness says an edit is missing. A refused edit leaves the
+    // field back at `frozen` whether the key arrived and JS lost it or never arrived at
+    // all (`typeKey`'s note on what this control cannot witness), so the retry gives up
+    // no evidence that one key at a time would have kept.
+    _ = try pressUntil(
+      named: "keys \"xy\" into the frozen search field",
+      waitingFor: "both refused edits to be reported",
+      pressNoun: "key",
+      press: { attempt in frozen.typeText(attempt == 1 ? "xy" : "y") },
+      reading: { self.echoText(Echo.searchFrozen) },
+      nativeState: {
+        let shown = (frozen.value as? String) ?? ""
+        return shown == "frozen" ? "at rest" : "holds \"\(shown)\""
+      },
+      { $0 == "frozen: 2 edits refused" }
     )
     XCTAssertEqual(
       echoText(Echo.searchFrozen),
       "frozen: 2 edits refused",
       "every key into the frozen field should be reported to JS"
     )
-    XCTAssertEqual(
-      frozen.value as? String,
-      "frozen",
+    // Read the revert for rather than race it: with two keys in one delivery the last
+    // one can still be landing when the echo matches, a window one key at a time does
+    // not have. What is asserted is unchanged — the field shows what JS kept.
+    XCTAssertTrue(
+      waitUntil({ ((frozen.value as? String) ?? "") == "frozen" }, window: reactTimeout),
       "and each one reverted: the field should still show what JS kept"
     )
 

@@ -62,6 +62,7 @@ import {
 } from '../real-input/a11y.mjs';
 import { runA11ySweep, SCROLL_PROBE_LIMIT } from '../real-input/a11y-sweep.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
+import { Suite } from '../real-input/report.mjs';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -1881,6 +1882,19 @@ describe('the a11y sweep, against a fake device', () => {
     };
   }
 
+  /** What `fn` printed, for a claim about the summary line a human reads. */
+  async function capturePrint(fn) {
+    const lines = [];
+    const original = console.log;
+    console.log = (...args) => lines.push(args.join(' '));
+    try {
+      await fn();
+    } finally {
+      console.log = original;
+    }
+    return lines.join('\n');
+  }
+
   /** A node with a box, in the shape `parseHierarchy` produces. */
   function node(contentDesc, overrides = {}) {
     const width = overrides.width ?? 100;
@@ -2087,5 +2101,40 @@ describe('the a11y sweep, against a fake device', () => {
       expect(logs[0].log.failures).toEqual([]);
       expect(logs[0].log.notes).toEqual([]);
     });
+  });
+
+  it('hands its log to the navigation, so a re-tapped tab reaches the summary', async () => {
+    // The sweep reaches every screen by tapping a tab, and on a run over the whole table
+    // those are the majority of the run's navigations. `goToScreen` re-presses a tab
+    // until its screen arrives and reports each re-press through the log it is *given*
+    // (`log?.retried?.()`), so a sweep that hands it nothing records the retry nowhere
+    // and `Suite.finish` reports a run that never retried — the brief's "a retry is
+    // allowed only if it is counted and reported", failing on the silent half (X21).
+    const suite = new Suite('android', []);
+    const navigation = fakeNavigation(() => [node('Controlled switch')]);
+    navigation.goToScreen = async (screen, log) => {
+      navigation.screens.push(screen);
+      log?.retried?.(
+        'navigation: the "Switch" tab answered on tap 2/3 - the earlier tap(s) were ' +
+          'never delivered'
+      );
+    };
+    const printed = await capturePrint(async () => {
+      await runA11ySweep(
+        (id, title) => suite.beginAuxiliary(id, title),
+        navigation,
+        switchCase()
+      );
+      return suite.finish();
+    });
+    // The retry has to be in the auxiliary check's own log — that is the log the sweep
+    // opened for the case, and the only one the fake could have been handed.
+    expect(suite.auxiliary[0].log.retries).toEqual([
+      'navigation: the "Switch" tab answered on tap 2/3 - the earlier tap(s) were ' +
+        'never delivered',
+    ]);
+    // ...and in the one line a reader of the run looks at first.
+    expect(printed).toContain('1 press sequence(s) needed a retry');
+    expect(printed).toContain('1 of them by an auxiliary check');
   });
 });
