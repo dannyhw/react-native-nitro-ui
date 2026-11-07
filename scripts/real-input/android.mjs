@@ -3062,14 +3062,16 @@ const CHECKS = {
         true
       );
       // And the keystrokes reach the field: the log, read once the popover is down,
-      // carries what JS received.
+      // carries what JS received. Asserted on the committed value rather than on one
+      // entry per character, because `input text` can deliver both characters in one
+      // commit and RN then reports the field's text once.
       await t.type('ab');
       await t.hideKeyboard();
       await tapOutside();
       await waitGone(FIELD, 'the outside tap to take the field popover down');
       t.log.checkEquals(
         'real keystrokes reach the field inside the popover',
-        t.requireEcho(ECHO.popoverLog).endsWith('typed:a > typed:ab'),
+        t.requireEcho(ECHO.popoverLog).endsWith('typed:ab'),
         true
       );
     } finally {
