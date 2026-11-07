@@ -4,7 +4,9 @@ import android.app.Activity
 import android.os.Looper
 import android.view.View
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -820,6 +822,16 @@ internal fun NitroUiM3Button(
         contentDescription = null,
         modifier = Modifier.padding(end = iconSpacing),
       )
+    } else if (icon != NitroUiIconContent.Absent) {
+      // `Pending`: nothing has arrived to paint, and the slot is painted anyway -
+      // as an empty one. This is the whole of D43's sizing rule at the one place it
+      // could be broken: the box comes from `iconSizeFor(scale)`, the same rung
+      // that sets the control's height, so the frame before the file and the frame
+      // after it are one box and the label beside the slot never moves. Skipping
+      // the empty case is invisible in a release build, where an icon is a
+      // resource and is never in flight, and in development it is a Button that
+      // grows sideways a few frames after the screen appears.
+      Spacer(modifier = Modifier.padding(end = iconSpacing).size(iconSize))
     }
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the

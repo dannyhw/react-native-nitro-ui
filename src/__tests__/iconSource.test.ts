@@ -45,7 +45,7 @@ import {
   androidIconDrawableName,
   androidIconUrl,
   metroAssetUrl,
-  resetAndroidIconSourceWarningsForTests,
+  resetAndroidIconSourceForTests,
   resolveAndroidIcon,
 } from '../iconSource';
 
@@ -126,7 +126,7 @@ beforeEach(() => {
     .mockImplementation((...args: unknown[]) => {
       warnings.push(args.join(' '));
     });
-  resetAndroidIconSourceWarningsForTests();
+  resetAndroidIconSourceForTests();
 });
 
 afterEach(() => {
