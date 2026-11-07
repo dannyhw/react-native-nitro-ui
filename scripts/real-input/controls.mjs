@@ -193,9 +193,26 @@ const HOST_CONTROL_ROWS = Object.freeze([
 ]);
 
 /** Every control the suite proves, in the order it proves them. */
+/**
+ * The `Form` scenario: hand-written like `<Host>`’s, because `Form` is the S6 spike
+ * prototype - no manifest, so no generated row could ever name it. S6b added it
+ * because a row that React Native re-parents into a `UICollectionViewListCell` only
+ * has to satisfy UIKit’s own hit-testing, and the harness delivers touches by tag.
+ */
+const FORM_CONTROL_ROWS = Object.freeze([
+  {
+    id: 'form',
+    title:
+      'real tap presses a form row, its own Pressable and its hosted Switch once each, leaves a row without onPress alone, and keeps a field near the bottom visible over the keyboard',
+    screen: 'form',
+  },
+]);
+
+/** Every control the suite proves, in the order it proves them. */
 export const REAL_INPUT_CONTROLS = Object.freeze([
   ...REAL_INPUT_CONTROL_ROWS,
   ...HOST_CONTROL_ROWS,
+  ...FORM_CONTROL_ROWS,
 ]);
 
 /**
