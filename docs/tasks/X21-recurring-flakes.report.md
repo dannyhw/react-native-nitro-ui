@@ -81,6 +81,8 @@ comes from the published progress, the destination from the model.
 - `harness:android -- Slider` (new a11y double-press case) -> old `accessibilityStepToward(target)` -> `Wanted 2 onSlidingComplete(s), have 1 after 5000ms (start=[0] change=[3] complete=[3])`.
 - `real-input:android -- --control button` -> first tab tap swallowed -> `navigation: the "Button" tab answered on tap 2/3 …` and `1 press sequence(s) needed a retry`.
 - `real-input:android -- --control button` -> `am force-stop` before the first tap -> `real-input: nitroui.example stopped running while navigating to the "Button" tab … Not retried.`
+- `conformance.test.js › hands its log to the navigation, so a re-tapped tab reaches the summary` -> `a11y-sweep.mjs` back to `navigation.goToScreen(control.screen)` -> `expect(suite.auxiliary[0].log.retries).toEqual([…])` received `[]`: the fake's re-press had no log to report to, so the sweep's own case log never saw it.
+- same test -> `report.mjs` back to its exact pre-fix total (control entries only, no auxiliary clause) -> the case log printed `· navigation: the "Switch" tab answered on tap 2/3 …` two lines above a summary that read `0 press sequence(s) needed a retry`.
 
 ## Files changed
 
