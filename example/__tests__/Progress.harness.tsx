@@ -380,9 +380,28 @@ type ProbeModule = {
     colorArgb: number,
     tolerance: number
   ): Promise<Ink>;
+  /** Take one control out of its parent, and put it back where it came from. */
+  detachTaggedView(testTag: string): Promise<string>;
+  attachTaggedView(testTag: string): Promise<string>;
 };
 
-let inkProbe: ProbeModule | null = null;
+let probe: ProbeModule | null = null;
+
+/**
+ * The example app's instrumentation module, fetched lazily.
+ *
+ * Android-only: `TurboModuleRegistry.getEnforcing` throws on iOS, so every caller sits
+ * behind the `Platform.OS === 'android'` guard (or the module was already proven
+ * present by another Android row).
+ */
+async function probeModule(): Promise<ProbeModule> {
+  if (probe == null) {
+    probe = TurboModuleRegistry.getEnforcing(
+      'NitroUiProbe'
+    ) as unknown as ProbeModule;
+  }
+  return probe;
+}
 
 /**
  * The pixels of one control's box that are `colorArgb`, within a channel tolerance.
@@ -393,16 +412,12 @@ let inkProbe: ProbeModule | null = null;
  * as the red or blue the test asked for.
  */
 async function probeInk(testId: string, colorArgb: number): Promise<Ink> {
-  if (inkProbe == null) {
-    inkProbe = TurboModuleRegistry.getEnforcing(
-      'NitroUiProbe'
-    ) as unknown as ProbeModule;
-  }
+  const inkModule = await probeModule();
   const box = await waitForBox(testId);
   // Settle first: a determinate indicator is static, but the frame that has just been
   // composited may be the one before its props landed.
   await sleep(250);
-  const ink = await inkProbe.paintedInk(testId, colorArgb, 26);
+  const ink = await inkModule.paintedInk(testId, colorArgb, 26);
   // The tree reports dp, the window reports pixels; one device density apart, and a
   // probe of the wrong rectangle would answer every shape in the file identically.
   const px = PixelRatio.get();
@@ -1555,10 +1570,12 @@ describe('Progress', () => {
 
   it('animates every new configuration while it is on screen and stops when it is gone', async () => {
     // The invariant `nuiTestIsAnimating()` exists for, per configuration: an
-    // indeterminate indicator may only draw itself while something can see it. The
-    // four rows are the new ones - a wavy bar, a wavy ring, and the two loading
-    // shapes - and each is the *indeterminate* case, because a determinate one is
-    // not allowed to animate at all.
+    // indicator may only animate while something can see it. The four rows are the
+    // new ones - a wavy bar, a wavy ring, and the two loading shapes - and each is
+    // the *indeterminate* case, which is the one every row animates for. A
+    // determinate row animates too when it is wavy: Material's determinate wave
+    // *travels* (`waveSpeed` moves an offset along the track), so `true` there is
+    // not a bug - see the detach/attach row below, which is what pins it.
     for (const configuration of CONFIGURATIONS.filter(
       (candidate) =>
         candidate.variant === 'loading' || candidate.appearance === 'wavy'
@@ -1786,6 +1803,55 @@ describe('Progress', () => {
         LOADING_SIZE * px * 0.75
       );
       expect(contained.inkCount).toBeGreaterThan(0);
+      cleanup();
+    });
+
+    it('stops the travelling wave when the control leaves the window', async () => {
+      // The off-window rule, on the path that actually reaches it. The animation row
+      // above can only `unmount()`, and unmounting runs `onDropView` and recycles the
+      // host, so it proves the *drop* gate and never the *detach* one - which is the
+      // gate a scrolling list leans on, and the one the wavy determinate form needs:
+      // Material keeps an attached wavy node moving on its own (`waveSpeed` drives an
+      // `infiniteRepeatable` offset), and only a `waveSpeed` of zero stops it.
+      //
+      // `NitroUiProbe.detachTaggedView` really takes the control out of its parent and
+      // `attachTaggedView` really puts it back at the same index, so the mount, its
+      // props and its composition all survive and the same handle keeps answering.
+      // A determinate wavy bar is the row: in the window it is allowed to animate
+      // (that is the travelling wave, not a bug), detached it is not, and the answer
+      // has to come back on its own rather than because the host was thrown away.
+      const testId = 'anim-detach-wavy';
+      const { unmount } = await render(
+        <Progress
+          appearance="wavy"
+          value={0.4}
+          testID={testId}
+          hybridRef={captureFor(testId)}
+        />
+      );
+      await waitForBox(testId);
+      const handle = await handleFor(testId);
+      await waitForDisplayed(handle, 'displayed=0.4');
+      const viewProbe = await probeModule();
+      await waitFor(() => expect(handle.nuiTestIsAnimating()).toBe(true), {
+        timeout: 5000,
+      });
+
+      const detached = await viewProbe.detachTaggedView(testId);
+      console.log(`detach ${testId}: ${detached}`);
+      // No timer: the gate closes inside `onDetachedFromWindow`, before the view is
+      // even finished being taken out, so the answer is already wrong if it is wrong.
+      expect(handle.nuiTestIsAnimating()).toBe(false);
+
+      const reattached = await viewProbe.attachTaggedView(testId);
+      console.log(`attach ${testId}: ${reattached}`);
+      // Second half of the proof - a control that answered `false` because it had been
+      // destroyed would pass the first half and fail here.
+      await waitFor(() => expect(handle.nuiTestIsAnimating()).toBe(true), {
+        timeout: 5000,
+      });
+      expect(handle.nuiTestDisplayedValue()).toBe('displayed=0.4');
+      unmount();
       cleanup();
     });
   }

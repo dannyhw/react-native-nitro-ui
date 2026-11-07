@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.os.Debug
 import android.view.PixelCopy
 import android.view.View
+import android.view.ViewGroup
 import com.facebook.react.ReactPackage
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.NativeModule
@@ -416,6 +417,112 @@ class NitroUiProbeModule(reactContext: ReactApplicationContext) :
     done.await(5, java.util.concurrent.TimeUnit.SECONDS)
     promise.resolve(answer)
   }
+
+  /**
+   * Take one control out of the view tree, and put it back exactly where it was.
+   *
+   * The rule this exists for is the off-window one in `HybridNitroUiProgress.kt`: a
+   * control that leaves the window may not animate, and it is the *detach* that says
+   * so - not the unmount. `unmount()` in a test removes the whole subtree through RN,
+   * which runs `onDropView` as well, so the detach path is invisible from JS. Here the
+   * view really is taken out of its parent and really is put back, which is what a
+   * ScrollView recycling a row does, and nothing else about the mount changes: the
+   * composition stays alive, the props stay applied, and the same `nuiTest*` handle
+   * keeps answering.
+   *
+   * Two calls rather than one `detachFor(ms)`: the assertion belongs to JS, which is
+   * where the handle is, so the detached window has to stay open until the test has
+   * read it. What is held between the calls is one view plus the slot it came from,
+   * which the second call puts back and forgets.
+   *
+   * Answers the shape it found (`"<view class>|<parent class>|index=<n>"`) so a failure
+   * says whether the tag found the control at all - a probe that silently detached the
+   * wrong view would report a satisfying `false` for a view that was never animating.
+   */
+  @ReactMethod
+  fun detachTaggedView(testTag: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    val decor = activity?.window?.decorView
+    if (decor == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no window to detach from")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var failure = ""
+    var answer = ""
+    activity.runOnUiThread {
+      val target = decor.findViewWithTag<View>(testTag)
+      val parent = target?.parent as? ViewGroup
+      if (target == null || parent == null) {
+        failure = "no-view"
+      } else if (detachedSlot?.tag == testTag) {
+        failure = "already-detached"
+      } else {
+        val index = parent.indexOfChild(target)
+        parent.removeViewAt(index)
+        detachedSlot = Slot(testTag, target, parent, index)
+        answer =
+          "${target.javaClass.simpleName}|${parent.javaClass.simpleName}|" +
+            "index=$index|attached=${target.isAttachedToWindow}"
+      }
+      done.countDown()
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    if (failure.isNotEmpty()) {
+      promise.reject("NO_VIEW", "$failure: cannot detach a view tagged \"$testTag\"")
+    } else {
+      promise.resolve(answer)
+    }
+  }
+
+  /**
+   * Put back what [detachTaggedView] took out, at the same index in the same parent.
+   *
+   * The re-attach is the second half of the assertion - a control that answers `false`
+   * because it was destroyed rather than because it left the window would pass the
+   * first half - and it is also what leaves the app's tree intact for the next test.
+   */
+  @ReactMethod
+  fun attachTaggedView(testTag: String, promise: Promise) {
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("NO_ACTIVITY", "the example app has no window to attach to")
+      return
+    }
+    val done = java.util.concurrent.CountDownLatch(1)
+    var failure = ""
+    var answer = ""
+    activity.runOnUiThread {
+      val slot = detachedSlot?.takeIf { it.tag == testTag }
+      if (slot == null) {
+        failure = "nothing-detached"
+      } else {
+        slot.parent.addView(slot.view, slot.index)
+        detachedSlot = null
+        answer =
+          "${slot.view.javaClass.simpleName}|index=${slot.index}|" +
+            "attached=${slot.view.isAttachedToWindow}"
+      }
+      done.countDown()
+    }
+    done.await(5, java.util.concurrent.TimeUnit.SECONDS)
+    if (failure.isNotEmpty()) {
+      promise.reject("NO_SLOT", "$failure: no detached view tagged \"$testTag\"")
+    } else {
+      promise.resolve(answer)
+    }
+  }
+
+  /** One [detachTaggedView] waiting for its [attachTaggedView]. */
+  private class Slot(
+    val tag: String,
+    val view: View,
+    val parent: ViewGroup,
+    val index: Int
+  )
+
+  /** Only one control is off-window at a time; a second detach is a test bug. */
+  private var detachedSlot: Slot? = null
 
   /** Depth-first count of every view under [view], including it. */
   private fun countViews(view: android.view.View): Int {

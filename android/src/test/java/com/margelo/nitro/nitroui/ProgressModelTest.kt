@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import androidx.compose.ui.unit.dp
 
 /**
  * JVM unit test for the two rules a Progress has that are worth testing without a
@@ -90,6 +91,52 @@ class ProgressModelTest {
     assertNull(model.drawnValue)
     model.inWindow = false
     assertEquals(0.0, model.drawnValue!!, 0.0)
+  }
+
+  // MARK: - waveSpeed
+
+  @Test
+  fun anOffWindowWaveIsPinnedWhileAnInWindowOneKeepsMaterialsSpeed() {
+    // Material's determinate wave *travels*: the wavy nodes run an
+    // `infiniteRepeatable` offset animation whenever the node is attached and the
+    // speed is above zero, and the determinate indicators default that speed to the
+    // wavelength. So swapping to an empty determinate indicator off-window did not
+    // stop anything - the control animated a wave nobody could see while
+    // `nuiTestIsAnimating()` answered `false`. Zero is what stops it; `null` is the
+    // in-window answer, which passes nothing and leaves Material's tuning alone.
+    val model = ProgressModel().apply {
+      appearance = ProgressModel.APPEARANCE_WAVY
+      value = 0.4
+    }
+    assertEquals(0.dp, model.waveSpeed)
+
+    model.inWindow = true
+    assertNull(model.waveSpeed)
+  }
+
+  @Test
+  fun aDeterminateWaveInAWindowCountsAsAnimatingBecauseMaterialMovesIt() {
+    // The rule `isAnimating` has to tell the truth about: an indeterminate spinner
+    // animates, *and so does a determinate wave*. Reporting only the first let the
+    // off-window animation hide behind a `false` that was wrong in both directions.
+    val model = ProgressModel().apply {
+      appearance = ProgressModel.APPEARANCE_WAVY
+      value = 0.4
+      inWindow = true
+    }
+    model.recordDrawn(model.drawnValue)
+    assertTrue(model.isAnimating)
+
+    // The same draw with the flat bar is not animating, so this is not "on screen".
+    model.appearance = ProgressModel.APPEARANCE_FLAT
+    model.recordDrawn(model.drawnValue)
+    assertFalse(model.isAnimating)
+
+    // And a wavy control that left the window may not animate at all.
+    model.appearance = ProgressModel.APPEARANCE_WAVY
+    model.inWindow = false
+    model.recordDrawn(model.drawnValue)
+    assertFalse(model.isAnimating)
   }
 
   // MARK: - the test-only mirrors

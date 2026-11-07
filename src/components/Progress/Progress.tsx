@@ -251,13 +251,20 @@ export function Progress({
   // keeps a JS caller that bypasses the union
   // (`variant={'round' as ProgressVariant}`) from minting an id - and leaking an
   // engine entry - without a remount; see
-  // `Progress · sizing id follows the key` in `src/__tests__/useSizingId.test.tsx`.
+  // `Progress · sizing id follows the view key` in
+  // `src/__tests__/useSizingId.test.tsx`.
   const shape = resolveVariant(variant);
   const look: ProgressAppearance =
     appearance === 'wavy' && shape !== 'loading' ? 'wavy' : 'flat';
   const hasContainer = shape === 'loading' && contained;
   const sizingKey = progressSizingKey(shape, look, hasContainer);
-  const sizingId = useSizingId(sizingKey);
+  // The id belongs to the *mount*, so it follows `key={shape}` below rather than
+  // the sizing key. `appearance` and `contained` move the sizing configuration
+  // under a view that stays mounted, and an id swapped in place has no
+  // `onDropView` coming to end the engine entry behind it (`core/useSizingId.ts`
+  // is the rule). Those two travel on `nuiSizingKey`, the channel that
+  // re-measures the live view.
+  const sizingId = useSizingId(shape);
 
   return (
     <NativeNitroUiProgress

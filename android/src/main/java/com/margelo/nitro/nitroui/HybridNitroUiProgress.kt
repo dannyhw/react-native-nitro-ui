@@ -24,6 +24,8 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
@@ -121,9 +123,11 @@ internal class ProgressModel : NitroUiModel() {
   var inWindow by mutableStateOf(false)
 
   /**
-   * The size configuration React sent (`''` / `'circular'`). Stored for symmetry
-   * with the other props; the sizing engine reads the key out of Fabric state
-   * itself, so nothing native looks at this.
+   * The size configuration React sent: `''`, `'wavy'`, `'circular'`,
+   * `'circular|wavy'`, `'loading'` or `'loading|contained'`
+   * (`progressSizingKey` in `src/components/Progress/Progress.tsx` writes it).
+   * Stored for symmetry with the other props; the sizing engine reads the key out
+   * of Fabric state itself, so nothing native looks at this.
    */
   var sizingKey = ""
 
@@ -169,7 +173,7 @@ internal class ProgressModel : NitroUiModel() {
   fun recordDrawn(drawn: Double?) {
     synchronized(mirrorLock) {
       drawnReport = drawn?.let { "displayed=$it" } ?: "displayed=indeterminate"
-      animating = drawn == null && inWindow
+      animating = inWindow && (drawn == null || drawsWavy)
     }
   }
 
@@ -182,7 +186,15 @@ internal class ProgressModel : NitroUiModel() {
   val displayedReport: String
     get() = synchronized(mirrorLock) { drawnReport }
 
-  /** Whether the control is allowed to be animating. Thread-safe. */
+  /**
+   * Whether the control is allowed to be animating. Thread-safe.
+   *
+   * Two things animate it, and only one of them is the indeterminate spinner:
+   * Material's *determinate* wavy indicators travel too ([waveSpeed]), so a wavy
+   * configuration counts while it is in the window, value or not. Away from a
+   * window neither may animate - the indeterminate one is drawn as an empty
+   * determinate indicator and the wave is pinned at zero.
+   */
   val isAnimating: Boolean
     get() = synchronized(mirrorLock) { animating }
 
@@ -203,6 +215,23 @@ internal class ProgressModel : NitroUiModel() {
   /** Whether the loading indicator is drawn inside its container. */
   val drawsContainer: Boolean
     get() = contained && variant == VARIANT_LOADING
+
+  /**
+   * `waveSpeed` for a wavy composable, or `null` to leave it at Material's own.
+   *
+   * Material's determinate wave *travels*: `BaseLinearWavyProgressNode` and
+   * `BaseCircularWavyProgressNode` run an `infiniteRepeatable` offset animation
+   * whenever the node is attached and the speed is above zero, and the determinate
+   * indicators default that speed to the wavelength. So the off-window swap to an
+   * empty determinate indicator (`[drawnValue]`) never ended the animation - it
+   * left a wave nobody could see asking for frames while [isAnimating] reported
+   * `false`. Zero is the one value that stops that animation, and it is asked for
+   * exactly when [inWindow] is false, which is also the only time the indicator is
+   * forced determinate; in the window nothing is passed at all, so Material's own
+   * tuning stays Material's.
+   */
+  val waveSpeed: Dp?
+    get() = if (inWindow) null else 0.dp
 
   override fun reset() {
     variant = VARIANT_LINEAR
@@ -356,18 +385,51 @@ private fun ProgressContent(model: ProgressModel) {
 
     circular && wavy -> {
       val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
+      // Material's wavy indicators share one track default across both states,
+      // and it is the visible one (`ProgressIndicatorTokens.TrackColor`), which
+      // is why a wavy ring keeps its track while indeterminate and the flat ring
+      // - whose own default for that state is transparent - does not.
+      val trackTint =
+        track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
+      // `null` means "Material's own speed", which is the travelling wave. A value
+      // arrives only off-window - `drawnValue` forces the determinate form there -
+      // and the one value that stops the wave is the zero it sends.
+      val speed = model.waveSpeed
       if (drawn == null) {
-        // Material's wavy indicators share one track default across both states,
-        // and it is the visible one (`ProgressIndicatorTokens.TrackColor`), which
-        // is why a wavy ring keeps its track while indeterminate and the flat ring
-        // - whose own default for that state is transparent - does not.
-        val trackTint =
-          track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
         CircularWavyProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
+      } else if (speed == null) {
+        CircularWavyProgressIndicator(
+          progress = { drawn.toFloat() },
+          modifier = semantics,
+          color = color,
+          trackColor = trackTint,
+        )
+      } else {
+        CircularWavyProgressIndicator(
+          progress = { drawn.toFloat() },
+          modifier = semantics,
+          color = color,
+          trackColor = trackTint,
+          waveSpeed = speed,
+        )
+      }
+    }
+
+    circular -> {
+      val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
+      if (drawn == null) {
+        // Material 3 has separate track defaults for the two states, so each branch
+        // falls back to its own - `circularTrackColor` is the deprecated alias of one
+        // of them, and an app that sets `trackColor` overrides both.
+        val trackTint =
+          track?.let { ComposeColor(it) }
+            ?: ProgressIndicatorDefaults.circularIndeterminateTrackColor
+        CircularProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
       } else {
         val trackTint =
-          track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
-        CircularWavyProgressIndicator(
+          track?.let { ComposeColor(it) }
+            ?: ProgressIndicatorDefaults.circularDeterminateTrackColor
+        CircularProgressIndicator(
           progress = { drawn.toFloat() },
           modifier = semantics,
           color = color,
@@ -376,44 +438,32 @@ private fun ProgressContent(model: ProgressModel) {
       }
     }
 
-    circular -> {
-    val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.circularColor
-    if (drawn == null) {
-      // Material 3 has separate track defaults for the two states, so each branch
-      // falls back to its own - `circularTrackColor` is the deprecated alias of one
-      // of them, and an app that sets `trackColor` overrides both.
-      val trackTint =
-        track?.let { ComposeColor(it) }
-          ?: ProgressIndicatorDefaults.circularIndeterminateTrackColor
-      CircularProgressIndicator(modifier = semantics, color = color, trackColor = trackTint)
-    } else {
-      val trackTint =
-        track?.let { ComposeColor(it) }
-          ?: ProgressIndicatorDefaults.circularDeterminateTrackColor
-      CircularProgressIndicator(
-        progress = { drawn.toFloat() },
-        modifier = semantics,
-        color = color,
-        trackColor = trackTint,
-      )
-    }
-    }
-
     wavy -> {
       // Material's own defaults for amplitude, wavelength and speed: the brief's
       // rule, and the right one - they are the numbers in Material's spec for the
-      // wavy form, and a component that passed its own would own tuning them.
+      // wavy form, and a component that passed its own would own tuning them. The
+      // one speed this does pass is the off-window zero, which is a stop rather
+      // than a tuning ([ProgressModel.waveSpeed]).
       val color = tint?.let { ComposeColor(it) } ?: ProgressIndicatorDefaults.linearColor
       val trackTint =
         track?.let { ComposeColor(it) } ?: WavyProgressIndicatorDefaults.trackColor
+      val speed = model.waveSpeed
       if (drawn == null) {
         LinearWavyProgressIndicator(modifier = barModifier, color = color, trackColor = trackTint)
+      } else if (speed == null) {
+        LinearWavyProgressIndicator(
+          progress = { drawn.toFloat() },
+          modifier = barModifier,
+          color = color,
+          trackColor = trackTint,
+        )
       } else {
         LinearWavyProgressIndicator(
           progress = { drawn.toFloat() },
           modifier = barModifier,
           color = color,
           trackColor = trackTint,
+          waveSpeed = speed,
         )
       }
     }
@@ -591,7 +641,6 @@ class HybridNitroUiProgress(
   override var variant: String
     get() = model.variant
     set(next) {
-      // The wrapper is the only writer and sends one of two names; anything else
       // The wrapper is the only writer and sends one of the three names; anything
       // else behaves as `'linear'`, which is what the spec documents.
       val normalized =

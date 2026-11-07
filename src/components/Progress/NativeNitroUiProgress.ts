@@ -28,7 +28,7 @@ type HybridRefHandler = (view: NitroUiProgressHandle) => void;
  * `hybridRef` can be typed for this repo's harness and benchmarks.
  */
 export interface NitroUiProgressHandle {
-  /** `'linear'` or `'circular'`. */
+  /** `'linear'`, `'circular'` or `'loading'`. */
   readonly variant: string;
   /** `'flat'` or `'wavy'` - stored on iOS, where nothing draws it. */
   readonly appearance: string;
