@@ -490,10 +490,17 @@ export function prewarm(componentNames: readonly string[]): number;
 export function Progress(input: ProgressProps): JSX.Element;
 
 // @public
+export type ProgressAppearance = 'flat' | 'wavy';
+
+// @public
 export interface ProgressProps extends ViewProps {
+    appearance?: ProgressAppearance | undefined;
+    contained?: boolean | undefined;
     // @internal
     hybridRef?: ((view: {
         readonly variant: string;
+        readonly appearance: string;
+        readonly contained: boolean;
         readonly value: number | null;
         readonly tintColor: number | null;
         readonly trackColor: number | null;
@@ -514,7 +521,7 @@ export interface ProgressProps extends ViewProps {
 }
 
 // @public
-export type ProgressVariant = 'linear' | 'circular';
+export type ProgressVariant = 'linear' | 'circular' | 'loading';
 
 // @public
 export function SearchField(input: SearchFieldProps): JSX.Element;

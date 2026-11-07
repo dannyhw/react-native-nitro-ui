@@ -132,6 +132,28 @@ open class HybridNitroUiProgressSpec_cxx {
     }
   }
   
+  public final var appearance: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.appearance)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.appearance = String(newValue)
+    }
+  }
+  
+  public final var contained: Bool {
+    @inline(__always)
+    get {
+      return self.__implementation.contained
+    }
+    @inline(__always)
+    set {
+      self.__implementation.contained = newValue
+    }
+  }
+  
   public final var value: bridge.std__variant_nitro__NullType__double_ {
     @inline(__always)
     get {

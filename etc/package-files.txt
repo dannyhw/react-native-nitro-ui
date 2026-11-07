@@ -1,5 +1,6 @@
 CHANGELOG.md
 LICENSE
+NOTICE
 NitroUi.podspec
 README.md
 android/CMakeLists.txt
@@ -39,12 +40,17 @@ android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiDeclaredFallbacks.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiHost.kt
+android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiIcons.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiLifetimeGate.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
+android/src/main/res/drawable/nitroui_check.xml
+android/src/main/res/drawable/nitroui_close.xml
+android/src/main/res/drawable/nitroui_keyboard_arrow_down.xml
+android/src/main/res/drawable/nitroui_search.xml
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
 cpp/NitroUiIntrinsic.hpp
@@ -417,6 +423,7 @@ lib/typescript/src/iconSource.d.ts
 lib/typescript/src/iconSource.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
+licenses/material-symbols/LICENSE
 nitro-ui.sizing.json
 nitro.json
 nitrogen/generated/android/c++/JFunc_void.hpp

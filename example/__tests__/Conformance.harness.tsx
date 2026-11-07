@@ -2308,7 +2308,11 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         'a control - and both platforms’ own read-out of it is a stub: ' +
         '`nuiTestDisplayedValue()` answers `-1` on iOS and `-1;animating=-1` on ' +
         'Android, so any assertion written against it would be a tautology. Its ' +
-        'value, tint and variant are props the wrapper re-sends.',
+        'value, tint, variant and - since E4 - `appearance` and `contained` are all ' +
+        'props the wrapper re-sends on every mount, so a recycled view cannot keep ' +
+        'the previous owner’s wave or container; both platforms’ reset clears them ' +
+        'anyway as the belt, which `ProgressModelTest.aResetClearsTheConfigurationToo` ' +
+        'is where forgetting is proved to matter.',
     },
   },
   {

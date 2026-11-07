@@ -61,11 +61,25 @@ type ProbeModule = {
     kind: 'commit' | 'compose' | 'finish' | 'cancel' | 'action' | 'connect',
     text: string
   ): Promise<string>;
+  /** Android only: `NitroUiProbeModule.searchGlyphPixels`. */
+  searchGlyphPixels(): Promise<string>;
 };
 const probe = (): ProbeModule =>
   TurboModuleRegistry.getEnforcing('NitroUiProbe') as unknown as ProbeModule;
 
 const iOS = Platform.OS === 'ios';
+
+/** Per-channel-sum distance between two `#RRGGBB` colours. */
+const colourDistance = (a: string, b: string) => {
+  let total = 0;
+  for (const offset of [1, 3, 5]) {
+    total += Math.abs(
+      Number.parseInt(a.slice(offset, offset + 2), 16) -
+        Number.parseInt(b.slice(offset, offset + 2), 16)
+    );
+  }
+  return total;
+};
 
 /** What the field reports about itself (`NitroUiSearchFieldTestState`). */
 type FieldState = {
@@ -632,6 +646,47 @@ describe('SearchField', () => {
       expect(unprompted?.placeholder ?? '').not.toBe('');
     }
     expect(unprompted?.placeholder).not.toBe('Search recipes');
+  });
+
+  it('draws its search glyph as a magnifier: a painted ring around an unpainted lens', async () => {
+    // Android only. 0.7.0 drew this glyph from a hand-typed copy of Material's path with
+    // a mistake in it, which filled the lens and drew a key; every other test passed,
+    // because none looks at pixels. The glyph is now Google's Material Symbols `search`
+    // (D43), and this reads what it paints. iOS draws UIKit's own glyph.
+    if (iOS) return;
+    render(<Controlled id="glyph" initial="" />);
+    await waitForTestId('glyph');
+    await measuredBox('glyph');
+    // Until the composition has laid the icon out the probe answers why it found nothing;
+    // only that is retried, never a reading.
+    const deadline = nitroUiCore.now() + 5000;
+    let answer = await probe().searchGlyphPixels();
+    while (!answer.startsWith('box=') && nitroUiCore.now() < deadline) {
+      await sleep(50);
+      answer = await probe().searchGlyphPixels();
+    }
+    const point = (name: string) => {
+      const match = new RegExp(`\\|${name}=(#[0-9A-F]{6})`).exec(answer);
+      if (match == null) throw new Error(`no ${name} in "${answer}"`);
+      return match[1]!;
+    };
+    const bg = point('bg');
+    // The lens centre is the backdrop; both points on the ring's stroke are the glyph.
+    // A distance under 40 is the backdrop and over 120 is the glyph: the icon's
+    // onSurfaceVariant and the field's container are far apart in both schemes, and the
+    // sampled points sit at least 1 dp inside an edge, clear of antialiasing.
+    const painted = (name: string) => {
+      const distance = colourDistance(point(name), bg);
+      if (distance < 40) return 'clear';
+      return distance > 120 ? 'painted' : `between(${distance})`;
+    };
+    const verdict = `lens=${painted('centre')} ring=${painted('ring')} ringTop=${painted('ringTop')}`;
+    if (verdict !== 'lens=clear ring=painted ringTop=painted') {
+      throw new Error(
+        `the search glyph is not a magnifier: ${verdict} (${answer})`
+      );
+    }
+    expect(verdict).toBe('lens=clear ring=painted ringTop=painted');
   });
 
   it('comes back from the pool with none of its previous owner', async () => {
