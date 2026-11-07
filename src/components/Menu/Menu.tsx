@@ -116,6 +116,8 @@ export interface MenuProps extends ViewProps {
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
+        /** The Android icon string the wrapper built, or `null` (G19). */
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
         /**
