@@ -68,6 +68,13 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     let view = UICollectionView(frame: .zero, collectionViewLayout: layout)
     view.backgroundColor = .systemGroupedBackground
     view.keyboardDismissMode = .interactive
+    // UIKit's own selection recognises at touch-down, and React Native will not share a
+    // touch with a recognizer it did not create - `RCTSurfaceTouchHandler` answers `NO` to
+    // `shouldRecognizeSimultaneouslyWithGestureRecognizer:` - so with selection on, the
+    // list wins every touch inside a row and the React content in it never sees the
+    // release (S6 question 4: 0 of 10 taps on a `Pressable` in a row). A row's press is its
+    // own recognizer's job instead: `NitroUiFormRowCell.pressGesture`.
+    view.allowsSelection = false
     if #available(iOS 16.0, *) {
       // A row's height constraint is the cell's height; this is what tells the layout that
       // it changed, instead of a hand-rolled invalidation for every text reflow.
@@ -385,6 +392,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // Fabric unmounted this row out of the cell it was showing.
       self?.rowUnmounted(removed, in: model)
     }
+    cell.onPressTap = { [weak self, weak cell] in
+      // Read the row out of the cell when the finger lifts, not the one handed over here:
+      // a cell is reused, and a press that reaches a recycled cell belongs to its new row.
+      guard let shown = cell?.row, let owner = HybridNitroUiForm.rowOwner(of: shown) else {
+        return
+      }
+      self?.rowPressed(owner)
+    }
     cell.apply(row)
     reparents += 1
     knownRows.add(row)
@@ -463,16 +478,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
 
   private lazy var listDelegate = NitroUiFormListDelegate(form: self)
 
-  /// UIKit's cell selection reached a row.
-  func listDidSelectItem(
-    _ indexPath: IndexPath,
-    in collectionView: UICollectionView
-  ) {
-    collectionView.deselectItem(at: indexPath, animated: true)
-    guard let item = dataSource?.itemIdentifier(for: indexPath),
-      case let .row(view) = item,
-      let row = HybridNitroUiForm.rowOwner(of: view),
-      row.pressable else { return }
+  /// A row's own recognizer reported a completed press. `pressGesture` only begins for a
+  /// pressable row, so the `pressable` check the old selection path did is the gesture's.
+  func rowPressed(_ row: HybridNitroUiFormRow) {
     taps += 1
     row.cellPressed()
   }
@@ -760,11 +768,25 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       out.append("headerY=\(Self.number(header.frame.minY))")
       out.append("headerH=\(Self.number(header.frame.height))")
     }
-    if let footer = list.layoutAttributesForSupplementaryElement(
-      ofKind: footerKind,
-      at: IndexPath(item: 0, section: max(0, list.numberOfSections - 1))
-    ) {
+    // Ask every section, and take the first footer the layout has: the last section of a
+    // form usually has none, and asking only it is how the reference came back with no
+    // `footerH` at all while the prototype - whose sections all have one - had a number.
+    // The two are then measured at the same place, which is the whole point of the seam.
+    var footer: UICollectionViewLayoutAttributes?
+    var footerSection = -1
+    for section in 0..<max(1, list.numberOfSections) {
+      if let attrs = list.layoutAttributesForSupplementaryElement(
+        ofKind: footerKind,
+        at: IndexPath(item: 0, section: section)
+      ) {
+        footer = attrs
+        footerSection = section
+        break
+      }
+    }
+    if let footer {
       out.append("footerH=\(Self.number(footer.frame.height))")
+      out.append("footerSection=\(footerSection)")
     }
     if let cell = list.visibleCells.first {
       // The rounding of a grouped cell lives on the background configuration's own view, not

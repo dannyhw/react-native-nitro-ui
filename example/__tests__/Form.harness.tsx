@@ -61,10 +61,10 @@ function parse(line: string): Record<string, string> {
 }
 
 function num(report: Record<string, string>, key: string): number {
-  const raw = report[key];
-  if (raw == null)
+  const value = report[key];
+  if (value == null)
     throw new Error(`report has no "${key}": ${JSON.stringify(report)}`);
-  return Number(raw);
+  return Number(value);
 }
 
 function raw(report: Record<string, string>, key: string): string {
@@ -531,7 +531,7 @@ describe('Form (S6 spike)', () => {
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     const pressable = await boxOf('inner-press');
     const toggle = await boxOf('switch-silent');
-    // eslint-disable-next-line no-console
+
     console.log(
       `S6 TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
@@ -597,7 +597,7 @@ describe('Form (S6 spike)', () => {
       await boxOf(`c${count - 1}`);
       const plain = Date.now() - plainStart;
       cleanup();
-      // eslint-disable-next-line no-console
+
       console.log(
         `S6 COST N=${count} form=${native}ms plain=${plain}ms ${raw(report, 'applies')}`
       );
