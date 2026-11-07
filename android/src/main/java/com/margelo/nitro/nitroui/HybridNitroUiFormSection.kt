@@ -463,11 +463,16 @@ internal fun FormSegmentedLayer(
   val gap = ListItemDefaults.SegmentedGap
   val inset = FormListMetrics.ContainerInset
   val colors = ListItemDefaults.segmentedColors()
-  val count = model.rects.size
+  // Read the model once, here. React Native writes `rects` from the UI thread between a
+  // composition and the draw that follows it, so a draw lambda that read `model.rects` again
+  // would index this composition's `shapes` with a newer list - an `IndexOutOfBounds` in
+  // `DrawBackgroundModifier.draw` on the first mount of a section, which is what it did.
+  val rows = model.rects
+  val count = rows.size
   val pressed = model.pressedIndex
   // `segmentedShapes` and `ripple` are @Composable, so the shapes resolve here and the two
   // canvases below only draw what this list already resolved.
-  val shapes = model.rects.indices.map { ListItemDefaults.segmentedShapes(it, count) }
+  val shapes = rows.indices.map { ListItemDefaults.segmentedShapes(it, count) }
 
   Box(Modifier.fillMaxSize()) {
     // 1. The row containers. Drawn rather than composed: a row's shape is
@@ -475,14 +480,14 @@ internal fun FormSegmentedLayer(
     //    material3's own `InteractiveListItem` resolves it.
     Canvas(Modifier.fillMaxSize()) {
       if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
-      model.rects.forEachIndexed { index, rect ->
+      rows.forEachIndexed { index, rect ->
         drawRowContainer(rect, resolvedShape(shapes[index], rect.selected, index == pressed), colors)
       }
     }
     // 2. The press indication. material3's clickable `SegmentedListItem` draws
     //    `ripple(focusRingShape = shape)`, and the finger is on a React Native view, so the
     //    row feeds the interaction into a source it holds here.
-    model.rects.forEachIndexed { index, rect ->
+    rows.forEachIndexed { index, rect ->
       val source = sources.getOrPut(index) { MutableInteractionSource() }
       Box(
         Modifier
@@ -498,7 +503,7 @@ internal fun FormSegmentedLayer(
     // 3. The accessories: `UICellAccessory`'s Android twin, in the same layer, so a row
     //    holding a Switch keeps its own layout untouched.
     Canvas(Modifier.fillMaxSize()) {
-      model.rects.forEachIndexed { _, rect ->
+      rows.forEachIndexed { _, rect ->
         if (rect.accessory != NitroUiFormRowView.ACCESSORY_NONE) {
           drawRowAccessory(rect, colors.contentColor(enabled = true, selected = rect.selected, dragged = false))
         }

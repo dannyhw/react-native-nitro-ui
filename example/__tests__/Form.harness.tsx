@@ -277,6 +277,36 @@ const styles = StyleSheet.create({
   columnRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
 });
 
+/**
+ * The same `Pressable` and `Switch` with no Form in sight - E4's positive control. On iOS
+ * the copies inside a row receive nothing from the test's press channel, and these have to
+ * receive everything, or the finding would only say that pressing is broken on this device.
+ */
+function Loose({
+  onPressablePress,
+  onSwitchChange,
+}: {
+  onPressablePress: () => void;
+  onSwitchChange: (value: boolean) => void;
+}) {
+  return (
+    <View style={styles.column}>
+      <Pressable
+        onPress={onPressablePress}
+        style={styles.pressable}
+        testID="loose-press"
+      >
+        <Text>Press me</Text>
+      </Pressable>
+      <Switch
+        onValueChange={onSwitchChange}
+        testID="loose-switch"
+        value={false}
+      />
+    </View>
+  );
+}
+
 /** A handle, printed without assuming it is plain data. */
 function describeBox(box: unknown): string {
   try {
@@ -346,7 +376,11 @@ describe('Form (S6 spike)', () => {
     } else {
       expect(num(report, 'inCells')).toBe(num(report, 'rows'));
       // Question 2's Android half: one shape per row, so the count is the row count.
-      const section = parse(need(sections.first).nuiTestSectionReport());
+      const section = await reportUntil(
+        () => sections.first?.nuiTestSectionReport(),
+        (r) => r.shapes != null,
+        'the first section to count its shapes'
+      );
       expect(num(section, 'shapes')).toBe(4);
     }
     const wifi = await reportUntil(
@@ -363,17 +397,9 @@ describe('Form (S6 spike)', () => {
     );
     expect(num(second, 'rows')).toBe(3);
     expect(num(second, 'index')).toBe(1);
-    // Every row the Form holds is a row this tree rendered - no phantom from a recycled
-    // view. iOS-only: on Android the section's children *are* its rows, in place.
-    if (IOS) {
-      const first = await reportUntil(
-        () => sections.first?.nuiTestSectionReport(),
-        (r) => r.subviews != null,
-        'the first section to count its children'
-      );
-      expect(num(first, 'rows')).toBe(4);
-      expect(num(first, 'subviews')).toBe(num(first, 'rows'));
-    }
+    // Every row view in a section is a row the Form was told about. The shape a phantom
+    // takes - a recycled component view registered by a recovery scan - is exactly this.
+    if (IOS) expect(num(report, 'stale')).toBe(0);
   });
 
   it('keeps the tree intact through an insert, a removal and 50 scrolls (E1)', async () => {
@@ -395,7 +421,11 @@ describe('Form (S6 spike)', () => {
     );
     if (!IOS) {
       // Question 2 again: the shapes follow the new index/count, not the old ones.
-      const section = parse(need(sections.first).nuiTestSectionReport());
+      const section = await reportUntil(
+        () => sections.first?.nuiTestSectionReport(),
+        (r) => r.shapes != null,
+        'the first section to recount its shapes'
+      );
       expect(num(section, 'shapes')).toBe(3);
     }
 
@@ -422,11 +452,20 @@ describe('Form (S6 spike)', () => {
     // Nothing was left behind by the churn or by 50 cycles of cell reuse.
     expect(num(after, 'alive')).toBe(num(beforeCycles, 'alive'));
     if (IOS) {
-      // The witness that cells actually handed rows back rather than dropping them.
+      // Cells really did take rows and really did hand them back. The two are not compared
+      // with each other: UIKit keeps a cell across a snapshot apply, so a row can be given
+      // back and re-adopted without the provider running again.
       expect(num(after, 'reclaims')).toBeGreaterThan(0);
-      expect(num(after, 'reparents')).toBeGreaterThanOrEqual(
-        num(after, 'reclaims')
+      expect(num(after, 'reparents')).toBeGreaterThan(0);
+      // The question the counters cannot answer, and the one this case exists for: after
+      // fifty give-backs, is the row on screen sitting in a cell? A give-back with no
+      // re-adopt looks like a blank row, not like a wrong count.
+      const home = await reportUntil(
+        () => rows.wifi?.nuiTestRowReport(),
+        (r) => r.where != null,
+        'Wi-Fi to say where it lives'
       );
+      expect(home.where).toBe('cell');
     }
   });
 
@@ -453,14 +492,22 @@ describe('Form (S6 spike)', () => {
     // The delta between what the list says an item is and what Yoga says its row is is the
     // cell's own chrome. It must be the same for every row - that is "the cell follows
     // Yoga", and it is a comparison rather than a threshold.
+    // iOS: the delta is the cell's own chrome, and it is not zero. Android has no cell -
+    // the section draws behind rows Yoga laid out - so its delta is zero by construction,
+    // and the case proves only that the number tracks the row. That asymmetry is the
+    // answer to question 3 for the platform, and the report says it as one.
     const chrome = nth(items, 0) - num(wifi, 'h');
-    expect(chrome).toBeGreaterThan(0);
+    if (IOS) expect(chrome).toBeGreaterThan(0);
+    else expect(Math.abs(chrome)).toBeLessThanOrEqual(1);
     expect(Math.abs(nth(items, 1) - num(bt, 'h') - chrome)).toBeLessThanOrEqual(
       1
     );
 
-    // Grow the wrapped row's text: its cell follows, and its neighbours do not move.
-    await render(<Probe {...probe} mode="grown" />);
+    // Grow the wrapped row's text: its cell follows, and its neighbours do not move. A
+    // rerender of the same tree, not a second mount: a second mount leaves the first tree's
+    // row views behind in recycled holding views, which is not what this measures.
+    const { rerender } = await render(<Probe {...probe} />);
+    await rerender(<Probe {...probe} mode="grown" />);
     const grown = await formReport(
       (r) =>
         Math.abs(Number((r.heights ?? 'x,').split(',')[3]) - nth(items, 3)) > 4,
@@ -479,7 +526,7 @@ describe('Form (S6 spike)', () => {
     ).toBeLessThanOrEqual(1);
   });
 
-  it('delivers taps to a Switch and a Pressable inside a row (E4, in-app events)', async () => {
+  it('aims a row content at its Yoga origin on iOS and presses it on Android (E4)', async () => {
     const probe = await mount({ mode: 'base', ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     const pressable = await boxOf('inner-press');
@@ -488,6 +535,36 @@ describe('Form (S6 spike)', () => {
     console.log(
       `S6 TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
+    if (IOS) {
+      // Question 4, the half that is not a finger. The row view is reparented into a cell,
+      // so the layout tree has it nowhere near where it is drawn (`Form.tsx` therefore lays
+      // iOS rows at `position: absolute, top: 0`, which is what leaves `measure`,
+      // `measureInWindow` and anything that aims at the point they return useless for row
+      // content). Ten presses of the Pressable and ten of the hosted Switch, aimed through
+      // that geometry, reach neither: the counters stay at zero while the same case on
+      // Android counts ten of each. A touch the operating system aims at the screen does
+      // reach them, and that is what FormTouch.harness.tsx + docs/tasks/S6/real-input.md
+      // measure. G-Form must not build anything on a row's measured position on iOS.
+      for (let index = 0; index < 10; index += 1) {
+        await userEvent.press(pressable);
+        await userEvent.press(toggle);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(probe.log.pressable).toBe(0);
+      expect(probe.log.switches).toBe(0);
+      cleanup();
+      render(
+        <Loose
+          onPressablePress={probe.onPressablePress}
+          onSwitchChange={probe.onSwitchChange}
+        />
+      );
+      await userEvent.press(await boxOf('loose-press'));
+      await userEvent.press(await boxOf('loose-switch'));
+      expect(probe.log.pressable).toBe(1);
+      expect(probe.log.switches).toBe(1);
+      return;
+    }
     for (let index = 0; index < 10; index += 1) {
       await userEvent.press(pressable);
       await userEvent.press(toggle);
