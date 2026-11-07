@@ -817,7 +817,9 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     fields.append("firstH=\(Int(sampler.first?.height ?? 0))")
     fields.append("finalW=\(Int(sampler.last?.width ?? 0))")
     fields.append("finalH=\(Int(sampler.last?.height ?? 0))")
-    fields.append("sizes=\(sampler.distinct.map { "\($0.width)x\($0.height)" }.joined(separator: ","))")
+    fields.append(
+      "sizes=\(sampler.distinct.map { "\(Int($0.width))x\(Int($0.height))" }.joined(separator: ","))"
+    )
     fields.append("maxWidth=\(Int(maxWidthValue))")
     fields.append("nodeW=\(Int(container.bounds.width.rounded()))")
     fields.append("nodeH=\(Int(container.bounds.height.rounded()))")

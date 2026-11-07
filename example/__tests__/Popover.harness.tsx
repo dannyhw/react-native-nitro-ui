@@ -27,7 +27,7 @@
  * `__tests__/isolated/PopoverModalHazard.harness.tsx`, which runs in its own app.
  */
 import { useEffect, useState } from 'react';
-import { Modal, Platform, Pressable, TextInput, View } from 'react-native';
+import { Modal, Platform, View } from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -77,10 +77,13 @@ function Content({
   testId,
   width,
   height,
+  fill = false,
 }: {
   testId: string;
   width: number;
   height: number;
+  /** Take the whole width the wrapper allows, rather than a width of its own. */
+  fill?: boolean;
 }) {
   useEffect(() => {
     bump(mounts, testId);
@@ -92,7 +95,11 @@ function Content({
     <View
       testID={`${testId}-content`}
       onLayout={(event) => layouts.set(testId, event.nativeEvent.layout)}
-      style={{ width, height, backgroundColor: '#9ec5fe' }}
+      style={{
+        width: fill ? '100%' : width,
+        height,
+        backgroundColor: '#9ec5fe',
+      }}
     />
   );
 }
@@ -109,6 +116,7 @@ function Stage({
   uncontrolled = false,
   width = 180,
   height = 90,
+  fill = false,
   maxWidth,
   anchorWidth = 72,
   anchorHeight = 36,
@@ -121,6 +129,7 @@ function Stage({
   uncontrolled?: boolean;
   width?: number;
   height?: number;
+  fill?: boolean;
   maxWidth?: number;
   anchorWidth?: number;
   anchorHeight?: number;
@@ -156,7 +165,9 @@ function Stage({
           />
         }
       >
-        {children ?? <Content testId={testId} width={width} height={height} />}
+        {children ?? (
+          <Content testId={testId} width={width} height={height} fill={fill} />
+        )}
       </Popover>
     </View>
   );
@@ -388,7 +399,479 @@ function reset() {
   eventLog.length = 0;
 }
 
-/** Every drawn size the platform saw, as `WxH` entries (deduplicated by the witness). */
-function drawnSizes(report: Report): string {
-  return IOS ? report.sizes ?? '' : report.drawSizes ?? '';
+/** Forget the events so far, without touching the fixtures. */
+function clearEvents() {
+  eventLog.length = 0;
 }
+
+/** The density the report's px fields are in: points on iOS, device px on Android. */
+function scaleOf(report: Report): number {
+  if (IOS) return 1;
+  const density = Number(report.density ?? '0');
+  return density > 0 ? density : 1;
+}
+
+/** The box native asked the platform for, in the same units the draw witness uses. */
+function askedPx(report: Report): { w: number; h: number } {
+  const scale = scaleOf(report);
+  return {
+    w: Math.round(num(report, 'askedW') * scale),
+    h: Math.round(num(report, 'askedH') * scale),
+  };
+}
+
+/** The first and last drawn sizes, in the same units. */
+function drawn(report: Report): { first: string; last: string; distinct: string[] } {
+  if (IOS) {
+    return {
+      first: `${report.firstW}x${report.firstH}`,
+      last: `${report.finalW}x${report.finalH}`,
+      distinct: (report.sizes ?? '').split(',').filter((s) => s !== ''),
+    };
+  }
+  return {
+    first: report.firstDraw ?? '0x0',
+    last: report.lastDraw ?? '0x0',
+    distinct: (report.drawSizes ?? '').split(',').filter((s) => s !== ''),
+  };
+}
+
+/** `WxH`, within one pixel either way. */
+function isSize(value: string, w: number, h: number): boolean {
+  const parts = value.split('x').map(Number);
+  return (
+    parts.length === 2 &&
+    Math.abs(parts[0] - w) <= 1 &&
+    Math.abs(parts[1] - h) <= 1
+  );
+}
+
+describe('Popover', () => {
+  afterEach(async () => {
+    reset();
+    // Let a window a test left behind finish leaving before the next one counts.
+    await sleep(700);
+  });
+
+  describe('the first frame is the final size (D44)', () => {
+    const fixtures: {
+      name: string;
+      width: number;
+      height: number;
+      maxWidth?: number;
+      fill?: boolean;
+    }[] = [
+      { name: 'narrow', width: 148, height: 96 },
+      { name: 'tall', width: 220, height: 244 },
+      { name: 'short', width: 276, height: 52 },
+      { name: 'capped', width: 400, height: 120, maxWidth: 224, fill: true },
+      { name: 'window-capped', width: 4000, height: 84, maxWidth: 4000, fill: true },
+    ];
+
+    for (const fixture of fixtures) {
+      it(`presents "${fixture.name}" at its box, with one drawn size`, async () => {
+        const id = `size-${fixture.name}`;
+        await render(
+          <Stage
+            testId={id}
+            initial
+            width={fixture.width}
+            height={fixture.height}
+            maxWidth={fixture.maxWidth}
+            fill={fixture.fill}
+          />
+        );
+        await requireHandle(id);
+        const box = await settledLayout(
+          id,
+          (l) => l.width > 0 && l.height > 0,
+          'a box at all'
+        );
+        const up = await waitForUp(id);
+        const scale = scaleOf(up);
+        const asked = askedPx(up);
+        // What native asked for *is* what Yoga laid out: no measuring, no guessing, and
+        // no platform default in between.
+        expect(Math.abs(num(up, 'askedW') - box.width)).toBeLessThanOrEqual(1);
+        expect(Math.abs(num(up, 'askedH') - box.height)).toBeLessThanOrEqual(1);
+        // And the box it asked for is the cap the wrapper promised: never wider than
+        // `maxWidth`, never wider than the window less its margins.
+        expect(num(up, 'askedW')).toBeLessThanOrEqual(
+          Math.min(fixture.maxWidth ?? 320, num(up, 'maxWidth')) + 1
+        );
+        expect(Math.abs(num(up, 'contentW') * scale - asked.w)).toBeLessThanOrEqual(1);
+        expect(Math.abs(num(up, 'contentH') * scale - asked.h)).toBeLessThanOrEqual(1);
+        // One size, from the first frame to the last, and it is the box.
+        const seen = drawn(up);
+        expect(seen.distinct).toHaveLength(1);
+        expect(isSize(seen.distinct[0], asked.w, asked.h)).toBe(true);
+        expect(isSize(seen.first, asked.w, asked.h)).toBe(true);
+        expect(isSize(seen.last, asked.w, asked.h)).toBe(true);
+        // The witness saw more than the one frame it asserts on, so "one size" is a
+        // statement about a run of frames rather than about a single sample.
+        expect(num(up, IOS ? 'visibleFrames' : 'draws')).toBeGreaterThan(1);
+        expect(num(up, 'presentCount')).toBe(1);
+        // Native waited for a layout, and got one at once: a present that went out before
+        // Yoga had sized anything is the regression this number is here to catch.
+        expect(num(up, 'contentWaits')).toBeLessThan(12);
+      });
+    }
+  });
+
+  it('caps the content at the smaller of maxWidth and the window less its margins', async () => {
+    const probeId = await probe();
+    const baseline = await waitForReport(
+      probeId,
+      (r) => r.raw !== '' && r.live === '0',
+      'a baseline with nothing up'
+    );
+    void baseline;
+    const wide = 'cap-wide';
+    await render(<Stage testId={wide} initial maxWidth={4000} width={4000} height={70} fill />);
+    await requireHandle(wide);
+    const up = await waitForUp(wide);
+    const layout = await settledLayout(
+      wide,
+      (l) => l.width > 100,
+      'a box of its own'
+    );
+    // 4000 dp of content, and the box is the window less the margins it is promised.
+    expect(layout.width).toBeLessThanOrEqual(num(up, 'maxWidth') + 1);
+    expect(num(up, 'askedW')).toBe(Math.round(layout.width));
+    expect(num(up, 'maxWidth')).toBeLessThan(4000);
+
+    const narrow = 'cap-narrow';
+    await render(
+      <Stage testId={narrow} initial maxWidth={210} width={210} height={64} fill />
+    );
+    await requireHandle(narrow);
+    const second = await waitForUp(narrow);
+    expect(num(second, 'maxWidth')).toBe(210);
+    expect(num(second, 'askedW')).toBeLessThanOrEqual(211);
+  });
+
+  it('opens below its anchor, and above it when there is no room below', async () => {
+    const below = 'place-below';
+    await render(<Stage testId={below} initial />);
+    await requireHandle(below);
+    const up = await waitForUp(below);
+    const anchor = rectOf(up.anchorRect);
+    const popup = rectOf(up.popRect);
+    expect(anchor).not.toBeNull();
+    expect(popup).not.toBeNull();
+    if (IOS) {
+      // UIKit puts the arrow on the anchor's far side and points at it: the popover is
+      // either wholly below or wholly above, and its arrow names which.
+      expect(['up', 'down']).toContain(up.arrow);
+      const pointsDown = up.arrow === 'down';
+      const expected = pointsDown
+        ? popup!.y + popup!.height <= anchor!.y + 2
+        : popup!.y >= anchor!.y + anchor!.height - 2;
+      expect(expected).toBe(true);
+      expect(Math.abs(popup!.x + popup!.width / 2 - (anchor!.x + anchor!.width / 2)))
+        .toBeLessThan(Math.max(anchor!.width, 40) + 24);
+    } else {
+      // Our own provider: below the anchor, start-aligned.
+      expect(popup!.y).toBeGreaterThanOrEqual(anchor!.y + anchor!.height - 2);
+      expect(Math.abs(popup!.x - anchor!.x)).toBeLessThanOrEqual(2);
+      expect(num(up, 'placed')).toBeGreaterThanOrEqual(1);
+    }
+
+    const above = 'place-above';
+    await render(
+      <Stage
+        testId={above}
+        initial
+        height={260}
+        topSpacing={640}
+        anchorHeight={40}
+      />
+    );
+    await requireHandle(above);
+    const flipped = await waitForUp(above);
+    const highAnchor = rectOf(flipped.anchorRect)!;
+    const highPopup = rectOf(flipped.popRect)!;
+    expect(highPopup.y + highPopup.height).toBeLessThanOrEqual(
+      highAnchor.y + 2
+    );
+  });
+
+  describe('the handshake', () => {
+    it('closes like a tap outside does: onIsPresentedChange(false), then onDismiss', async () => {
+      await render(<Stage testId="close" initial />);
+      await requireHandle('close');
+      await waitForUp('close');
+      handles.get('close')?.nuiTestDismiss();
+      await waitForEvent('close:dismiss');
+      await waitForReport(
+        'close',
+        (r) => r.live === '0' && r.presented === '0',
+        'closed',
+        12000
+      );
+      expect(eventLog).toEqual(['close:presented:false', 'close:dismiss']);
+      expect(reportOf('close').userDismissals).toBe('1');
+      expect(reportOf('close').unasked).toBe('0');
+      // The count went up: JS is expected to echo it, and the wrapper's
+      // `mostRecentEventCount` is what native then accepts a `presented` write from.
+      expect(handles.get('close')?.mostRecentEventCount).toBe(1);
+      await waitForUnmount('close', 1, 'its content unmounted');
+    });
+
+    it('presents again when the app refuses the close', async () => {
+      await render(<Stage testId="refuse" initial refuse />);
+      await requireHandle('refuse');
+      await waitForUp('refuse');
+      handles.get('refuse')?.nuiTestDismiss();
+      await waitForEvent('refuse:presented:false');
+      const again = await waitForReport(
+        'refuse',
+        (r) => isUp(r) && r.presentCount === '2',
+        'up again (presentCount=2)',
+        12000
+      );
+      // The content never left: the app never stopped asking for the popover, so the
+      // wrapper had no reason to unmount it.
+      expect(unmounts.get('refuse') ?? 0).toBe(0);
+      expect(again.userDismissals).toBe('1');
+    });
+
+    it('presents again when nothing is listening for the close', async () => {
+      // The same refusal told from the other API: an app that passes no
+      // `onIsPresentedChange` cannot be blamed for the state it was never told about,
+      // and the popover still must not go out of step with `isPresented`.
+      await render(<Stage testId="unheard" initial uncontrolled />);
+      await requireHandle('unheard');
+      await waitForUp('unheard');
+      handles.get('unheard')?.nuiTestDismiss();
+      const again = await waitForReport(
+        'unheard',
+        (r) => isUp(r) && r.presentCount === '2',
+        'up again (presentCount=2)',
+        12000
+      );
+      expect(again.userDismissals).toBe('1');
+      // Nothing reached JS as an app event, and the count moved all the same.
+      expect(eventLog.filter((e) => e.startsWith('unheard:'))).toEqual([]);
+      expect(handles.get('unheard')?.mostRecentEventCount).toBe(1);
+    });
+
+    it('takes a close JS asked for without an event of its own', async () => {
+      await render(<Stage testId='withdraw' initial />);
+      await requireHandle('withdraw');
+      await waitForUp('withdraw');
+      clearEvents();
+      setters.get('withdraw')?.(false);
+      await waitForReport(
+        'withdraw',
+        (r) => r.presented === '0' && r.onScreen === '0',
+        'closed',
+        12000
+      );
+      // A change React asked for is not a native interaction: the app gets no
+      // `onIsPresentedChange` back for its own write (D33).
+      expect(eventLog).toEqual(['withdraw:dismiss']);
+      expect(reportOf('withdraw').userDismissals).toBe('0');
+      expect(reportOf('withdraw').unasked).toBe('0');
+    });
+
+    it('presents at mount once its view is in a window', async () => {
+      await render(<Stage testId="at-mount" initial />);
+      await requireHandle('at-mount');
+      const up = await waitForUp('at-mount');
+      expect(up.presentCount).toBe('1');
+      expect(up.anchored).toBe('1');
+    });
+  });
+
+  describe('lifetime', () => {
+    it('leaves nothing after 50 open/close cycles', async () => {
+      const probeId = await probe();
+      const baseline = await waitForReport(
+        probeId,
+        (r) => r.raw !== '' && r.live === '0',
+        'a baseline with nothing up'
+      );
+      await render(<Stage testId="cycles" />);
+      await requireHandle('cycles');
+      for (let cycle = 0; cycle < 50; cycle += 1) {
+        setters.get('cycles')?.(true);
+        await waitForUp('cycles', 12000);
+        setters.get('cycles')?.(false);
+        await waitForEvent(`cycles:dismiss`, 12000);
+        // The unmount has to commit before the next open, or the two updates are one
+        // batch and the content is never dropped at all (BottomSheet's E2 lesson).
+        await waitForUnmount('cycles', cycle + 1, `unmounted ${cycle + 1} times`);
+        eventLog.length = 0;
+      }
+      expect(mounts.get('cycles') ?? 0).toBe(50);
+      expect(unmounts.get('cycles') ?? 0).toBe(50);
+      await waitForFreshReport(
+        probeId,
+        nothingLeft(baseline),
+        'nothing left after 50 cycles',
+        12000
+      );
+    });
+
+    for (const delay of [0, 80, 150]) {
+      it(`leaves nothing when dropped ${delay} ms into the entry`, async () => {
+        // The probe is mounted before the drop and stays mounted, so it can never be the
+        // view the recycle pool hands back to a later mount (G14's lesson).
+        const id = `drop-${String(delay)}`;
+        await render(<DropScene testId={id} />);
+        await requireHandle(id);
+        const probeId = `${id}-probe`;
+        await requireHandle(probeId);
+        const baseline = await waitForReport(
+          probeId,
+          (r) => r.raw !== '' && r.live === '0',
+          'a baseline with nothing up'
+        );
+        const before = await waitForReport(id, (r) => r.raw !== '', 'a report');
+        setters.get(id)?.(true);
+        if (delay > 0) await sleep(delay);
+        setters.get(`${id}:shown`)?.(false);
+        await waitForDropped(id, before);
+        await waitForFreshReport(
+          probeId,
+          nothingLeft(baseline),
+          `nothing left after a drop at ${String(delay)} ms`,
+          12000
+        );
+      });
+    }
+
+    it('reports nothing for a popover dropped while it is presented (D44 item 2)', async () => {
+      const id = 'drop-open';
+      await render(<DropScene testId={id} initial />);
+      await requireHandle(id);
+      const probeId = `${id}-probe`;
+      await requireHandle(probeId);
+      const baseline = await waitForReport(
+        probeId,
+        (r) => r.raw !== '' && r.live === '0',
+        'a baseline with nothing up'
+      );
+      await waitForUp(id);
+      const before = reportOf(id);
+      clearEvents();
+      setters.get(`${id}:shown`)?.(false);
+      await waitForDropped(id, before);
+      await waitForFreshReport(
+        probeId,
+        nothingLeft(baseline),
+        'nothing left after a drop of an open popover',
+        12000
+      );
+      // BottomSheet's rule, on both platforms: an unmounted popover closes silently.
+      // The app is gone, so a close event could only ever land on a dead handler - and
+      // on iOS it used to be worse than nothing, because the close it *did* send
+      // arrived as the app's next screen was being installed.
+      expect(eventLog).toEqual([]);
+    });
+
+    it('gives a recycled view none of its previous popover', async () => {
+      await render(<Stage testId="old" initial width={260} height={180} />);
+      await requireHandle('old');
+      await waitForUp('old');
+      reset();
+      await render(<Stage testId="new" />);
+      await requireHandle('new');
+      const fresh = await waitForReport(
+        'new',
+        (r) => r.presented === '0',
+        'closed'
+      );
+      expect(fresh.presentCount).toBe('0');
+      expect(fresh.askedW).toBe('0');
+      expect(fresh.askedH).toBe('0');
+      expect(fresh.contentW).toBe('0');
+      setters.get('new')?.(true);
+      const up = await waitForUp('new');
+      expect(up.presentCount).toBe('1');
+      await settledLayout(
+        'new',
+        (l) => Math.abs(l.height - 90) <= 1,
+        'at its own 90'
+      );
+      // Whether the pool really handed the old view back is reported, not asserted: the
+      // claims above hold either way, and this is the line that says which world the run
+      // was in (F6's rule).
+      console.log(
+        `recycle: new view drops=${up.drops ?? '?'} recycles=${up.recycles ?? '?'}`
+      );
+    });
+  });
+
+  describe('over an RN Modal', () => {
+    it('presents inside a Modal and closes cleanly before the Modal does', async () => {
+      function InModal() {
+        const [modal, setModal] = useState(true);
+        setters.set('modal-host', setModal);
+        return (
+          <Modal visible={modal} animationType="none">
+            <View style={{ flex: 1 }}>
+              <Stage testId="in-modal" />
+            </View>
+          </Modal>
+        );
+      }
+      // The probe is on the screen under the Modal from the start, so it is never a view
+      // the recycle pool hands back after the popover went.
+      await render(
+        <>
+          <Stage testId="modal-probe" />
+          <InModal />
+        </>
+      );
+      await requireHandle('modal-probe');
+      const baseline = await waitForReport(
+        'modal-probe',
+        (r) => r.raw !== '' && r.live === '0',
+        'a baseline with nothing up'
+      );
+      await requireHandle('in-modal');
+      const up = await waitForUp('in-modal', 15000);
+      expect(up.presentCount).toBe('1');
+      expect(up.anchored).toBe('1');
+      if (IOS) {
+        // A popover in the app's own presentation chain is what UIKit takes down when
+        // the `Modal` closes - and the thing that makes the next `Modal` be refused.
+        expect(up.ownWindow).toBe('1');
+        expect(num(up, 'modalHosts')).toBeGreaterThanOrEqual(1);
+      }
+      handles.get('in-modal')?.nuiTestDismiss();
+      await waitForEvent('in-modal:dismiss');
+      await waitForFreshReport(
+        'modal-probe',
+        nothingLeft(baseline),
+        'nothing left after the popover closed inside the Modal',
+        12000
+      );
+      // And the Modal still works: closing it now is an ordinary thing to do.
+      setters.get('modal-host')?.(false);
+      await sleep(700);
+      await waitForNothingLeft('modal-probe', 'after the Modal closed');
+    });
+  });
+
+  it('puts the content where the popover is, not where the anchor is', async () => {
+    // The redirect is the design: the node stays in the app's tree as the anchor's
+    // neighbour, and its one child - the content box - is what native moves into the
+    // popover's own window. A popover that leaves the content behind draws an empty
+    // bubble, which the size checks above would still pass.
+    const id = 'moved';
+    await render(
+      <Stage testId={id} initial width={190} height={110} />
+    );
+    await requireHandle(id);
+    const up = await waitForUp(id);
+    expect(num(up, 'children')).toBe(1);
+    expect(IOS ? up.inPopover : up.inPopup).toBe('1');
+    // The node is not the popover: it is the content's box, and on iOS it is hidden
+    // while its content is on screen somewhere else.
+    if (IOS) expect(up.hidden).toBe('1');
+    expect(num(up, 'nodeW')).toBeGreaterThanOrEqual(num(up, 'askedW') - 1);
+  });
+});
