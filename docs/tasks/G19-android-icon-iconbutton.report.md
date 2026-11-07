@@ -267,8 +267,8 @@ Device — Android (`emulator-5570`, `harness:android:Button`, the app rebuilt p
 a run, lease `G19-w2v9t`):
 
 - `androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive` -> a file that loaded is thrown away -> `expected 0 to be greater than 0` on the pixel probe, and `widens the control by the ladder, not by the file it loaded` red with it at `expected 28.19047619047619 to be less than 0.6`
-- `… draws the imported icon, and does not move the box when the bytes arrive` -> the empty slot is not held while the file is in flight -> `only the imported icon published 57.90x48.00 - the named icon published 12.50x71.50, 12.57x72.00, 60.19x48.00` — the control grew sideways when the bytes landed
-- `androidIcon · an icon the app imports (D43) › draws nothing for a file the dev server does not have, and keeps the no-icon box` -> a failed load keeps its slot -> `expected false to be true` on `sameSize(boxOf('missing-file'), plain)`
+- `… draws the imported icon, and does not move the box when the bytes arrive` -> the empty slot is not held while the file is in flight -> `expected 'only the imported icon published 57.9…' to deeply equal 'every box the imported icon published…'`: the file alone published `57.90x48.00`, a box the named icon never measured (`12.50x71.50`, `12.57x72.00`, `60.19x48.00`) — the control grew sideways when the bytes landed
+- `androidIcon · an icon the app imports (D43) › draws nothing for a file the dev server does not have, and keeps the no-icon box` -> a failed load keeps its slot -> `expected false to be true` on `sameSize(box404, boxPlain)` (`example/__tests__/Button.harness.tsx:2105`)
 
 ### Files changed
 
