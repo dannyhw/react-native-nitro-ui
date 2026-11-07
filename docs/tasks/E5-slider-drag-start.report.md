@@ -166,3 +166,46 @@ Red proofs (`test -> mutation -> line`):
 - `closes the drag when the control goes inert mid-press` -> `afterUpdate` guard removed -> `expected [s] to equal [s,c]`.
 - `closes a stream that is taken over` -> launched `endDrag()` removed -> same line.
 - `refuses a start ahead of every complete on the screen` -> `completes >= starts` removed -> `Received: true`.
+
+## Merge round
+
+`origin/main` merged into `task/E5-merge` (E4 Progress, FIX4 icons, E3, X20 — 37 commits). One
+file overlapped, the generated API report; `bun install`'s codegen plus `bun run api-extractor`
+settle it, and nitrogen, registry, manifest and lock checks then pass with nothing committed —
+no generated drift. Both apps built from `459e2c830a8a`; lease `E5-5qnlx` (pair-a) after a
+25-minute queue behind X21 and G19.
+
+Four gates green. `real-input:ios` is not, and the sanctioned re-run did not help: both runs,
+and a targeted `--control text-field` probe after them, fail the same line —
+`RealInputTests.swift:3721`, `frozen: 1 edits refused` where the check wants `2`. That is X21
+item 1, seen in X19, E2, E3, G16 and E5; X21's fix (one keystroke per witness, plus a retry —
+`8fcdd714`) is in review, not on `main`, so this branch cannot go green while `main` carries the
+check as written. E5's iOS diff is Slider's hybrid and its generated spec: nothing reaches a
+`UITextField`. (`real-input:ios:text-field`, 0.2 s, is my own filter written without
+`--control`, recorded under its own name.)
+
+### Merge gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1837 tests / 74 suites | `459e2c830a8a` | 3 m 16 s | start 9.9 / med 66.3 / max 183.6 |
+| `harness:ios` | **PASS** | 454 tests / 25 suites + isolated 4 tests / 2 suites | `459e2c830a8a` (ios tree) | 10 m 57 s | start 9.1 / med 5.9 / max 19.8 |
+| `harness:android` | **PASS** | 510 tests / 25 suites + isolated 4 tests / 2 suites | `459e2c830a8a` (android tree) | 15 m 27 s | start 34.3 / med 7.4 / max 34.3 |
+| `real-input:ios` | **FAIL** | — | `459e2c830a8a` (ios tree) | 26 m 14 s | start 6.0 / med 4.5 / max 22.0 |
+| `real-input:android` | **PASS** | — | `459e2c830a8a` (android tree) | 43 m 55 s | start 5.3 / med 5.8 / max 218.1 |
+| `real-input:ios:--control:text-field` | **FAIL** | — | `459e2c830a8a` (ios tree) | 7 m 22 s | start 4.6 / med 10.1 / max 30.5 |
+| `real-input:ios:text-field` | **FAIL** | — | `459e2c830a8a` (ios tree) | 0.2 s | start 5.0 / med 5.0 / max 5.0 |
+
+### need --for merge
+
+```
+need: merge against .gates/task/E5-merge.jsonl; code diff base 2ed9415 touches ios + android
+  ✓ check — green
+  ✓ harness:ios — green
+  ✓ harness:android — green
+  ✗ real-input:ios — red (exit 1 on tree 459e2c830a8a, task/E5-merge/real-input+ios-2026-11-07T10-40-20.187Z.log)
+  ✓ real-input:android — green
+  note: no check line was borrowed for this tree: no other ledger has a check line on tree 841f7788404d
+  note: treated as both platforms (outside the known prefixes): example/__tests__/HostControls.harness.tsx, example/__tests__/Slider.harness.tsx, example/src/HostScreen.tsx, example/src/SliderScreen.tsx, scripts/real-input/android.mjs, scripts/real-input/report.mjs, …
+need: 1 gate(s) missing for merge: real-input:ios
+```
