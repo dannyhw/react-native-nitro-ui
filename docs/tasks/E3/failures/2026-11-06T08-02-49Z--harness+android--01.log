@@ -1,0 +1,110 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-06T08:02:49.734Z on code tree `069f39d2144e` at HEAD `d229140` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 277 ms
+- Load: start 4.89, end 4.89, median 4.89, max 4.89
+- Device: android
+- Full log: `task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log` (<store>/task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   E3-o7x7a                 E3           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.89 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 67 log line(s)
+
+```
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 069f39d2144e at HEAD d2291402
+gate: git tree 36b1b502a7b2
+gate: log task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log
+gate:       <store>/task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: no app to test.
+       build it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp, which is what this check reads)
+       an app built another way has no stamp and is refused too -
+       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check
+       at all, against whatever the device already has installed.
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: no app to test.
+       build it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp, which is what this check reads)
+       an app built another way has no stamp and is refused too -
+       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check
+       at all, against whatever the device already has installed.
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 0.3 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E3-split-button/harness+android-2026-11-06T08-02-49.381Z.log (5 probe(s))
+
+```

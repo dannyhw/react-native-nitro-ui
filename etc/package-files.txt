@@ -28,6 +28,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTooltip.kt
 android/src/main/java/com/margelo/nitro/nitroui/MenuRows.kt
+android/src/main/java/com/margelo/nitro/nitroui/MenuSplitButton.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiBottomSheetViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt

@@ -1,0 +1,96 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-06T16:42:01.487Z on code tree `3db3f1315eae` at HEAD `8d996f0` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 558301 ms
+- Load: start 16.09, end 4.02, median 5.74, max 16.09
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `E3-5z5a2`
+- Full log: `task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log` (<store>/task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/TextField.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E3-5z5a2 (still live)
+  |   E3-5z5a2                 E3           both              pair-a
+  |   X20-6pbaf                X20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.02 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 52 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 3db3f1315eae at HEAD 8d996f03
+gate: git tree 43f4b67fc80a with a DIRTY worktree (not reusable)
+gate: log task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log
+gate:       <store>/task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 3db3f1315eae, 17 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 16.09/41.92 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/TextField.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 3db3f1315eae, 17 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.03/11.78 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        24.483 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 558.3 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+
+
+gate: appended the device context to task/E3-split-button/harness+ios-2026-11-06T16-42-00.908Z.log (4 probe(s))
+
+```

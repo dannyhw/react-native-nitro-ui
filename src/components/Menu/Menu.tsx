@@ -57,8 +57,15 @@ export interface MenuProps extends ViewProps {
    */
   onClose?: (() => void) | undefined;
   /**
-   * Tap runs this, long-press opens the menu. **iOS only** (DECISIONS D29):
-   * Android always opens on tap and never calls it.
+   * A second job for the trigger, so the control carries both an action and a list.
+   * Each platform draws its own idiom for that (DECISIONS D29, E3):
+   *
+   * - iOS: a plain button - a tap runs this and a long-press opens the menu.
+   * - Android: a Material 3 Expressive split button - the left half runs this, the
+   *   right half (the chevron) opens the menu. The control is wider than the plain
+   *   trigger, and `variant="text"` draws the outlined split button.
+   *
+   * Setting it is also a size statement, so the sizing key changes with it.
    */
   primaryAction?: (() => void) | undefined;
   /**
@@ -92,9 +99,11 @@ export interface MenuProps extends ViewProps {
         nuiTestSelectRow(id: string): void;
         /**
          * Test-only popup witness (G7a): `expanded=...;live=...;anchor=...;` +
-         * `menu=...;rows=...;drawn=...`. Android measures the first five; iOS
-         * answers `-1` in every field but `rows` and `drawn`, because a SwiftUI
-         * `Menu` keeps its open state and its window to itself. `@internal` (D14) -
+         * `menu=...;rows=...;drawn=...;split=...;leading=...;trailing=...`. Android
+         * measures the first five and the split trigger's two halves; iOS answers
+         * `-1` in every field but `rows` and `drawn`, because a SwiftUI `Menu` keeps
+         * its open state and its window to itself - and its `primaryAction` is a
+         * gesture on one button, not a second hit target. `@internal` (D14) -
          * see `NitroUiMenuHandle`.
          */
         nuiTestMenuReport(): string;
@@ -135,21 +144,29 @@ function escapeField(value: string): string {
  * The size configuration of one Menu, as the sizing engine sees it.
  *
  * The trigger is a Button, so its key is Button's (`variant|size|systemImage|title`,
- * `Button.tsx`): those four decide the box. `group` is *not* in the key - the items
- * live in a popup and never change the trigger's size, and free-form text in a key
- * fragments the cache (Q1 §5). `disabled` and `tintColor` repaint, they do not
- * resize, and the environment (text size, density, OS control size) reaches native
- * through the epoch rather than through here.
+ * `Button.tsx`) with one field added: `variant|size|action|systemImage|title`, where
+ * `action` is `'action'` when `primaryAction` is set and `'plain'` when it is not.
+ * That fifth decides the box because on Android it changes the *layout* - a split
+ * button is two containers beside a gap, so it is wider than the single button it
+ * replaces (E3). iOS ignores the field and pays for it with one extra cache entry per
+ * (variant, size, icon, title) pair, which is cheaper than a platform-specific key.
+ *
+ * `group` is *not* in the key - the items live in a popup and never change the
+ * trigger's size, and free-form text in a key fragments the cache (Q1 §5).
+ * `disabled` and `tintColor` repaint, they do not resize, and the environment (text
+ * size, density, OS control size) reaches native through the epoch rather than here.
  */
 function sizingVariantFor(
   variant: ButtonVariant,
   size: ButtonSize,
+  hasPrimaryAction: boolean,
   systemImage: string | undefined,
   title: string
 ): string {
   return [
     variant,
     size,
+    hasPrimaryAction ? 'action' : 'plain',
     escapeField(systemImage ?? ''),
     escapeField(title),
   ].join(FIELD_SEPARATOR);
@@ -274,6 +291,7 @@ export function Menu({
       nuiSizingKey={sizingVariantFor(
         resolvedVariant,
         resolvedSize,
+        primaryAction != null,
         systemImage,
         title
       )}

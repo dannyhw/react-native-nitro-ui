@@ -1,0 +1,170 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T09:00:50.981Z on code tree `05d118b7ee49` at HEAD `0dbb267` (branch `task/E3-split-button`)
+- Command: `bun run check`
+- Result: fail, exit 1, 15555 ms
+- Load: start 6.43, end 6.40, median 6.40, max 6.43
+- Device: none recorded (not a device gate)
+- Full log: `task/E3-split-button/check-2026-11-06T09-00-50.508Z.log` (<store>/task/E3-split-button/check-2026-11-06T09-00-50.508Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: script "test" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "test:native" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 358 — the rest is in the full log above)
+
+```
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 19/19 HybridObjects in 0.6s!
+💡  Your code is in <tmp>/nitrogen-check-W6ncgE/nitrogen/generated
+‼️   Added 616 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: no drift (404 generated files match, 54 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (16 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.4s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — pass, 0.0s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 18 blocks match example/src/readme-examples.tsx
+check: 10 passed, 2 failed, 5 skipped in 15.4s
+check: failed step(s): test, test:native
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: test ──────────────────────────────────────────────────────────
+$ jest
+error: script "test" was terminated by signal SIGTERM (Polite quit request)
+──────── full log: test:native ───────────────────────────────────────────────────
+$ bash scripts/native-tests.sh
+── sizing state-update captures by value
+── sizing flush requests its draw
+compiling (host clang/swiftc, into <tmp>//nitro-ui-native-tests-88863)
+── clock.test (C++ / Objective-C++)
+NitroUiClock
+  ok    nowNs() matches CACurrentMediaTime() (CADisplayLink base) (off by 0 us)
+  ok    nowNs() matches NSProcessInfo.systemUptime (off by 10 us)
+  ok    nowNs() is CLOCK_UPTIME_RAW (off by 11 us)
+  ok    nowNs() is not CLOCK_MONOTONIC_RAW (= steady_clock on Apple)
+        sleep gap vs CLOCK_MONOTONIC_RAW: 0.0 h
+  ok    nowNs() is monotonic
+  ok    nowMs() is the same base
+NitroUiPerf
+  ok    a disabled ring records nothing
+  ok    drain() returns every mark
+  ok    drain() is oldest first
+  ok    marks keep instanceId and kind
+  ok    drain() clears the ring
+  ok    mark() timestamps with the same clock as nowNs()
+  ok    the ring keeps at most CAPACITY marks
+  ok    a wrapped ring drops the oldest and stays ordered
+clock.test: all checks passed
+── handshake.test (Swift)
+NitroUiControlledValue
+  ok    starts at the displayed default
+  ok    uncontrolled has no pending React write
+  ok    uncontrolled reconcile changes nothing
+  ok    no events yet
+  ok    user() returns the event count to emit
+  ok    user() updates the displayed value immediately
+  ok    rapid interaction keeps counting
+  ok    the last interaction wins
+  ok    uncontrolled native keeps what the user did
+  ok    optimistic while JS thinks
+  ok    a write is stale until JS echoes this many events
+  ok    the echo lets the rejected write revert
+  ok    the rejected change reverted
+  ok    reconciling twice changes nothing
+  ok    a stale write is dropped, not queued
+  ok    the next write after catching up applies
+  ok    first tap
+  ok    second tap before JS has seen the first
+  ok    native shows the newest interaction
+  ok    a write is still stale before the echo
+  ok    the newest write applies once JS has seen every event
+  ok    uncontrolled interactions leave JS behind
+  ok    uncontrolled native keeps what the user did
+  ok    the first controlled write after a mode switch applies
+  ok    doubles count events
+  ok    an unchanged value is not reported as a change
+  ok    a new value applies
+  ok    a different double is a change
+  ok    a drag emits its first change
+  ok    the counts look caught up
+  ok    a write is refused while native holds an un-emitted sample
+  ok    what was last emitted is still what is shown
+  ok    once the sample is emitted, the write is judged by the count alone
+  ok    an interaction is not blocked by an un-emitted sample
+  ok    with nothing from React there is still nothing to apply
+  ok    an un-emitted sample still refuses the write
+  ok    and clearing it lets the write through
+handshake.test: all checks passed
+── sizing.test (C++)
+error: script "test:native" was terminated by signal SIGTERM (Polite quit request)
+error: script "check" exited with code 1
+gate: check FAIL in 15.6 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+gate: re-raising SIGTERM
+
+```
