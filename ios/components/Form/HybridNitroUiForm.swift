@@ -621,12 +621,24 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     let inCells = list.visibleCells.compactMap { ($0 as? NitroUiFormRowCell)?.row }.count
     let heights = visibleHeights()
+    // A row view sitting in a section's holding view that this Form was never told about:
+    // the shape a recycled component view left behind by a careless registration takes.
+    var stale = 0
+    for section in sections {
+      for subview in section.holding?.subviews ?? []
+      where HybridNitroUiForm.isRowView(subview)
+        && !section.rows.contains(where: { $0 === subview })
+      {
+        stale += 1
+      }
+    }
     return ([
       "sections=\(sections.count)",
       "rows=\(rows)",
       "items=\(dataSource?.snapshot().numberOfItems ?? -1)",
       "inCells=\(inCells)",
       "orphans=\(orphans)",
+      "stale=\(stale)",
       "alive=\(knownRows.count)",
       "reparents=\(reparents)",
       "reclaims=\(reclaims)",
