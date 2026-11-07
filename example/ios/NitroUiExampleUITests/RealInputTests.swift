@@ -3634,9 +3634,16 @@ final class RealInputTests: XCTestCase {
     field.typeText("ab")
     outside.tap()
     waitUntilOptionGone(fieldContent, "the outside tap to take the field popover down")
+    // The screen records the field popover's own close after that outside tap, so what this
+    // can claim is the order the log carries - the keystrokes, then the close. A bare
+    // `hasSuffix("typed:ab")` could only ever fail on a popover that closed as told.
+    let typedLog = try read(Echo.popoverLog)
+    let typedAt = typedLog.range(of: "typed:ab")
+    let closedAt = typedLog.range(of: "field:presented:false", options: .backwards)
     XCTAssertTrue(
-      try read(Echo.popoverLog).hasSuffix("typed:ab"),
-      "real keystrokes reach the field inside the popover: \(echoText(Echo.popoverLog))"
+      typedAt != nil && closedAt != nil && typedAt!.lowerBound < closedAt!.lowerBound,
+      "real keystrokes reach the field inside the popover, before its own close: "
+        + "\(echoText(Echo.popoverLog))"
     )
 
     // 6. Nothing left up for the next control.

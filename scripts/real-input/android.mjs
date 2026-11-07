@@ -3064,14 +3064,19 @@ const CHECKS = {
       // And the keystrokes reach the field: the log, read once the popover is down,
       // carries what JS received. Asserted on the committed value rather than on one
       // entry per character, because `input text` can deliver both characters in one
-      // commit and RN then reports the field's text once.
+      // commit and RN then reports the field's text once. The screen also records the
+      // field popover's own close from that outside tap, so the claim is the order the log
+      // carries - the keystrokes, then the close - which a bare suffix can never see.
       await t.type('ab');
       await t.hideKeyboard();
       await tapOutside();
       await waitGone(FIELD, 'the outside tap to take the field popover down');
+      const typedLog = t.requireEcho(ECHO.popoverLog);
       t.log.checkEquals(
-        'real keystrokes reach the field inside the popover',
-        t.requireEcho(ECHO.popoverLog).endsWith('typed:ab'),
+        `real keystrokes reach the field inside the popover, before its own close (${typedLog.slice(-70)})`,
+        typedLog.includes('typed:ab') &&
+          typedLog.indexOf('typed:ab') <
+            typedLog.lastIndexOf('field:presented:false'),
         true
       );
     } finally {
