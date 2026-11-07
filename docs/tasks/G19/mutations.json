@@ -282,6 +282,186 @@
         "androidIcon \u00b7 the drawable the app ships (G19) \u203a draws the glyph in the control content colour, and nothing at all without it: the pixel probe for \"probe-icon\" reported a line that is neither a sample nor a refusal: n=1 sampled pixels platform=ios"
       ],
       "note": "this row proves the JS -> Swift -> JS wiring is live rather than the assertion reading a constant"
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the same-icon guard is dropped, so every prop commit re-asks the resource table",
+      "before": "    if (source == androidIconResolved) {\n      return\n    }\n    androidIconResolved = source",
+      "after": "    androidIconResolved = source",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce FAILED - java.lang.AssertionError: expected:<[src_assets_icons_share_24px]> but was:<[src_assets_icons_share_24px, src_assets_icons_share_24px, src_assets_icons_share_24px]>"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the release path stops asking for the drawable at all, so a bundled asset draws nothing",
+      "before": "      is NitroUiIconSource.Name -> androidIconContent = artwork.forName(source.name)",
+      "after": "      is NitroUiIconSource.Name -> androidIconContent = NitroUiIconContent.Absent",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 5 tests",
+      "redTests": [
+        "NitroUiIconReleasePathTest > aBundledAssetIsLookedUpUnderTheNameMetroFiledItUnder FAILED - the resource table is asked for the name the wrapper built, character for character expected:<[src_assets_icons_share_24px]> but was:<[]>",
+        "NitroUiIconReleasePathTest > aBundledNameThatIsNotInTheTableDrawsNothingAndReservesNothing FAILED - a miss is still a question that was asked expected:<[src_assets_icons_gone_24px]> but was:<[]>",
+        "NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce FAILED - java.lang.AssertionError: expected:<[src_assets_icons_share_24px]> but was:<[]>",
+        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - java.lang.AssertionError",
+        "NitroUiIconReleasePathTest > noIconAsksForNothing FAILED - reset, then the same name written again, is still one lookup expected:<[src_assets_icons_share_24px]> but was:<[]>"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconSourceTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "the marker's scheme test asks the whole URL to be a scheme, so no dev-server icon is ever a file",
+      "before": "        return if (SCHEME.containsMatchIn(url)) Url(url) else null",
+      "after": "        return if (SCHEME.matches(url)) Url(url) else null",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 6 tests",
+      "redTests": [
+        "NitroUiIconSourceTest > aMarkedStringIsAFileAndItsUrlIsUntouched FAILED - expected:<Url(url=http://10.0.2.2:8081/src/assets/icons/share_24px.xml?platform=android&hash=AbC123)> but was:<null>",
+        "NitroUiIconSourceTest > twoDifferentSourcesAreNeverEqual FAILED - java.lang.AssertionError",
+        "NitroUiIconReleasePathTest > aDevServerIconIsNeverAskedOfTheResourceTable FAILED - the slot is reserved while the file is read expected:<Pending> but was:<Absent>",
+        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - expected:<Pending> but was:<Absent>",
+        "NitroUiIconReleasePathTest > anAlreadyReadFileIsDrawnWithoutWaiting FAILED - java.lang.AssertionError",
+        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - expected:<Pending> but was:<Absent>"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the generation guard is dropped, so a load retired by recycle paints the recycled control",
+      "before": "          if (generation == androidIconGeneration) {",
+      "after": "          if (generation >= 0) {",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped FAILED - the retired load cannot overwrite the recycled Button's own icon"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "a failed load leaves the slot reserved instead of answering round 1's missing-name answer",
+      "before": "              image?.let { NitroUiIconContent.Vector(it) } ?: NitroUiIconContent.Absent",
+      "after": "              image?.let { NitroUiIconContent.Vector(it) } ?: androidIconContent",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "redTests": [
+        "NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt FAILED - a 404 is round 1's missing-name answer, not a permanently empty box expected:<Absent> but was:<Pending>"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt",
+      "mutation": "the per-URL cache is keyed wrong, so a file this process already read is read again",
+      "before": "        val cached = artwork.cached(source.url)",
+      "after": "        val cached = artwork.cached(source.url + \"?\")",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 1 test",
+      "redTests": [
+        "java.lang.AssertionError"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiVectorDrawableTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt",
+      "mutation": "a file with no <vector> element is accepted instead of refused",
+      "before": "      if (!seenRoot) {\n        throw NitroUiVectorUnsupported(\"has no <vector> element\")\n      }",
+      "after": "      if (false) {\n        throw NitroUiVectorUnsupported(\"has no <vector> element\")\n      }",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 2 tests",
+      "redTests": [
+        "NitroUiVectorDrawableTest > wellFormedXmlThatIsNotAVectorIsRefusedNotDrawn FAILED - \"has no <path> to draw\" does not say \"no <vector> element\"",
+        "NitroUiVectorDrawableTest > theBrokenFixtureInTheExampleAppIsRefusedToo FAILED - java.lang.AssertionError"
+      ]
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/NitroUiVectorDrawableTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt",
+      "mutation": "the viewport is taken to be the 24 dp box instead of the 960-unit grid the paths are written in",
+      "before": "          viewportWidth = attrs.float(\"viewportWidth\")",
+      "after": "          viewportWidth = 24f",
+      "run": "bash scripts/native-tests-android.sh - FAIL, 3 tests",
+      "redTests": [
+        "NitroUiVectorDrawableTest > googlesOwnMaterialSymbolsFileIsReadAsItIsWritten FAILED - expected:<960.0> but was:<24.0>",
+        "NitroUiVectorDrawableTest > theRealFileBecomesAnImageVectorOfTheSameDrawing FAILED - expected:<960.0> but was:<24.0>",
+        "NitroUiVectorDrawableTest > sizesLoseTheirUnitsAndTheirAbsenceFallsBackToTheViewport FAILED - expected:<48.0> but was:<24.0>"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the leading slash of the asset path survives into the drawable name",
+      "before": "    ? asset.httpServerLocation.slice(1)\n    : asset.httpServerLocation;\n  return (basePath + '/' + asset.name)",
+      "after": "    ? asset.httpServerLocation\n    : asset.httpServerLocation;\n  return (basePath + '/' + asset.name)",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 3 of 14",
+      "redTests": [
+        "Expected: \"src_assets_icons_share_24px\" / Received: \"_src_assets_icons_share_24px\"",
+        "androidIcon \u00b7 the release build \u203a sends a bundled asset as that name, with no marker on it: Expected: \"src_assets_icons_share_24px\" / Received: \"_src_assets_icons_share_24px\"",
+        "androidIcon \u00b7 the release build \u203a files the same glyph under two paths as two drawables: Expected: \"src_assets_icons_v2_share_24px\" / Received: \"_src_assets_icons_v2_share_24px\""
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "every asset URL carries a scale suffix, including the single-scale ones Metro 404s on",
+      "before": "  const scaleSuffix = scale === 1 ? '' : `@${scale}x`;",
+      "after": "  const scaleSuffix = `@${scale}x`;",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 2 of 14",
+      "redTests": [
+        "androidIcon \u00b7 the development build \u203a asks Metro for the file React Native refuses to load",
+        "androidIcon \u00b7 the development build \u203a builds the URL React Native would build for the same asset"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the forbidden fix: teach React Native to load .xml by registering a global source transformer",
+      "before": "    const deviceScale = env.deviceScale ?? PixelRatio.get();",
+      "after": "    const deviceScale = env.deviceScale ?? PixelRatio.get();\n    (\n      require('react-native/Libraries/Image/resolveAssetSource') as {\n        default: { addCustomSourceTransformer(t: unknown): void };\n      }\n    ).default.addCustomSourceTransformer(() => null);",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "redTests": [
+        "androidIcon \u00b7 the development build \u203a never registers a transformer with React Native: expect(jest.fn()).not.toHaveBeenCalled() / Expected number of calls: 0 / Received number of calls: 2"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the asset's type stops being checked, so a .png asset is asked of the vector parser",
+      "before": "    if (asset.type !== 'xml') {",
+      "after": "    if (false) {",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "redTests": [
+        "androidIcon \u00b7 the development build \u203a refuses an asset that is not a vector drawable"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the once-per-source guard is dropped, so a rejected prop is repeated on every render",
+      "before": "  if (!__DEV__ || warnedSources.has(detail)) {",
+      "after": "  if (!__DEV__) {",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "redTests": [
+        "androidIcon \u00b7 the forms a caller can write \u203a refuses the sources that cannot name artwork, and says why once each"
+      ]
+    },
+    {
+      "test": "src/__tests__/iconSource.test.ts",
+      "file": "src/iconSource.ts",
+      "mutation": "the wrapper stops asking the dev server, so a development build falls back to a drawable that is not in the APK",
+      "before": "    if (__DEV__) {\n      const origin =",
+      "after": "    if (false) {\n      const origin =",
+      "run": "npx jest src/__tests__/iconSource.test.ts - FAIL, 1 of 14",
+      "redTests": [
+        "androidIcon \u00b7 the development build \u203a asks Metro for the file React Native refuses to load"
+      ]
+    },
+    {
+      "test": "src/__tests__/buttonSizingKey.test.tsx",
+      "file": "src/components/Button/Button.tsx",
+      "mutation": "the icon leaves the size configuration, so two different assets share one measurement",
+      "before": "        resolvedAndroidIcon ?? undefined,\n        title",
+      "after": "        undefined,\n        title",
+      "run": "npx jest src/__tests__/buttonSizingKey.test.tsx - FAIL, 1 of 5",
+      "redTests": [
+        "Button \u00b7 sizing key \u203a separates two assets and refuses to key on an asset id: Expected: not \"filled|medium|||Save\""
+      ]
     }
   ]
 }
