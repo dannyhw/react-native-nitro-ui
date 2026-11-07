@@ -65,17 +65,17 @@ export interface ButtonProps { androidIcon?: string }
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
+| Gate (round 1) | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1794 tests / 72 suites | `cb51a5a30283` | 2 m 50 s | start 87.1 / med 38.9 / max 100.4 |
-| `harness:ios` | **PASS** | 448 tests / 25 suites + isolated 4 tests / 2 suites | `cb51a5a30283` (ios tree) | 10 m 56 s | start 12.8 / med 5.7 / max 67.4 |
-| `harness:android` | **PASS** | 497 tests / 25 suites + isolated 4 tests / 2 suites | `cb51a5a30283` (android tree) | 14 m 58 s | start 6.4 / med 4.9 / max 13.3 |
-| `real-input:ios` | **PASS** | — | `cb51a5a30283` (ios tree) | 29 m 03 s | start 13.3 / med 8.0 / max 60.6 |
-| `real-input:android` | **PASS** | — | `cb51a5a30283` (android tree) | 40 m 41 s | start 6.6 / med 4.2 / max 18.5 |
-| `harness:android:Button` | stale | 18 tests / 1 suites | 3c9ad09176b0 (not this tree) | 19.3 s | start 12.0 / med 10.4 / max 12.0 |
-| `harness:android:draws%20the%20glyph:--background` | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
-| `harness:android:glyph` | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
-| `harness:ios:Button` | **PASS** | 18 tests / 1 suites | `cb51a5a30283` (ios tree) | 20.3 s | start 7.1 / med 12.7 / max 14.3 |
+| `check` (round 1) | **PASS** | 1794 tests / 72 suites | `cb51a5a30283` | 2 m 50 s | start 87.1 / med 38.9 / max 100.4 |
+| `harness:ios` (round 1) | **PASS** | 448 tests / 25 suites + isolated 4 tests / 2 suites | `cb51a5a30283` (ios tree) | 10 m 56 s | start 12.8 / med 5.7 / max 67.4 |
+| `harness:android` (round 1) | **PASS** | 497 tests / 25 suites + isolated 4 tests / 2 suites | `cb51a5a30283` (android tree) | 14 m 58 s | start 6.4 / med 4.9 / max 13.3 |
+| `real-input:ios` (round 1) | **PASS** | — | `cb51a5a30283` (ios tree) | 29 m 03 s | start 13.3 / med 8.0 / max 60.6 |
+| `real-input:android` (round 1) | **PASS** | — | `cb51a5a30283` (android tree) | 40 m 41 s | start 6.6 / med 4.2 / max 18.5 |
+| `harness:android:Button` (round 1) | stale | 18 tests / 1 suites | 3c9ad09176b0 (not this tree) | 19.3 s | start 12.0 / med 10.4 / max 12.0 |
+| `harness:android:draws%20the%20glyph:--background` (round 1) | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
+| `harness:android:glyph` (round 1) | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
+| `harness:ios:Button` (round 1) | **PASS** | 18 tests / 1 suites | `cb51a5a30283` (ios tree) | 20.3 s | start 7.1 / med 12.7 / max 14.3 |
 
 `need --for review`: `need: review is satisfied on this code tree.` — and `need --for merge` says
 the same, so the ledger needs nothing further from this round. Both `real-input:*` gates were run
@@ -86,7 +86,9 @@ filters spelled wrong enough to become their own gate name); filtered runs satis
 their own name, which is why the five unfiltered rows above are the evidence.
 
 Ledger exported to `docs/tasks/G19/gates.jsonl` (34 lines, none dropped) with the scrubbed excerpt
-of every failed run beside it in `docs/tasks/G19/failures/`.
+of every failed run beside it in `docs/tasks/G19/failures/`. The rows above are labelled as
+round 1's because a gate appears in this report once, with the ledger's numbers for the tree
+being handed in — see Fix round 1.
 
 ## Red proofs
 
