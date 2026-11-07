@@ -330,7 +330,9 @@ the point of drawing the platform's own control rather than a copy.
 - **The Material 3 Expressive call sites are `@OptIn`.** `LoadingIndicator` and
   `ContainedLoadingIndicator` are `@ExperimentalMaterial3ExpressiveApi` in material3
   1.5.0-beta02, so `HybridNitroUiProgress.kt` opts in at one private composable —
-  the only `@OptIn` in the library. The risk is the one the annotation is for:
+  the only `ExperimentalMaterial3ExpressiveApi` opt-in in the library. (It is not
+  the only `@OptIn`: Dialog, BottomSheet, DatePicker, SearchField and Tooltip all
+  opt into `ExperimentalMaterial3Api`.) The risk is the one the annotation is for:
   an experimental member can change shape or vanish at a *minor* version without a
   deprecation cycle, and this library pins material3. When that happens it will
   compile red in that one file, with the four call sites, rather than misbehave at
