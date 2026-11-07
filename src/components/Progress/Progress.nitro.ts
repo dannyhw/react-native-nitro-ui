@@ -23,14 +23,46 @@ import type { NitroUiSize } from '../Switch/Switch.nitro';
 export interface NitroUiProgressProps
   extends HybridViewProps, NitroUiIntrinsicProps {
   /**
-   * `'linear'` or `'circular'`.
+   * `'linear'`, `'circular'` or `'loading'`.
    *
    * A plain `string` rather than a union because it is also the sizing key (see
    * `nuiSizingKey`), and because a string prop costs one comparison per commit.
-   * The wrapper is the only thing that writes it, so the two names it accepts are
-   * the only two that reach here; anything else behaves as `'linear'`.
+   * The wrapper is the only thing that writes it, so the three names it accepts
+   * are the only three that reach here; anything else behaves as `'linear'`.
+   *
+   * `'loading'` is Material 3 Expressive's morphing loading indicator on Android
+   * and a circular `ProgressView` on iOS, and it is a third *shape*: like the ring
+   * it is `intrinsic`, and like a variant change, arriving or leaving it remounts
+   * the native view.
    */
   variant: string;
+  /**
+   * `'flat'` (the default) or `'wavy'`.
+   *
+   * **Android only, as a drawing.** `'wavy'` asks Material 3's
+   * `LinearWavyProgressIndicator` / `CircularWavyProgressIndicator` for their
+   * defaults of amplitude, wavelength and speed; SwiftUI has no wavy indicator, so
+   * iOS stores the value, answers it back through the handle and paints flat
+   * (`docs/components/progress.md`). It says nothing about a `'loading'`
+   * indicator, which has no wavy form either, so it is ignored there too.
+   *
+   * Both platforms treat it as part of the control's **size configuration**: the
+   * Android wavy bar is thicker, and its wavy ring larger, than the flat ones, so
+   * the key carries it and a change re-measures.
+   */
+  appearance: string;
+  /**
+   * Whether a `'loading'` indicator is drawn inside Material's tonal container
+   * (`ContainedLoadingIndicator`) instead of on its own.
+   *
+   * Only `'loading'` reads it: the flat bar and the ring have no container, and
+   * iOS has neither loading indicator, so elsewhere it is stored, answered back
+   * and otherwise ignored. It is part of the size configuration like the other two
+   * props, even though both loading boxes measure the same 48 dp - the engine has
+   * no way to know that, and a shared entry is how one configuration ends up laid
+   * out at another's size.
+   */
+  contained: boolean;
   /**
    * The fraction shown, 0...1, or `null` for an **indeterminate** indicator.
    *

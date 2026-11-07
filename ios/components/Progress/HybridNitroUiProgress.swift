@@ -19,9 +19,26 @@ import UIKit
 
 /// State of one Progress. See ``NitroUiModel`` for why this is not `@Published`.
 final class ProgressModel: NitroUiModel {
-  /// `'linear'` or `'circular'`. Rendered (it picks the style), so the body reads
-  /// it.
+  /// `'linear'`, `'circular'` or `'loading'`. Rendered (it picks the style), so the
+  /// body reads it.
+  ///
+  /// `'loading'` has no SwiftUI counterpart: iOS draws it as a circular
+  /// `ProgressView`, the closest native control
+  /// (`docs/components/progress.md`), which is also why it is `intrinsic` like the
+  /// ring rather than a third size.
   var variant = "linear"
+  /// `'flat'` or `'wavy'`.
+  ///
+  /// Stored and **not painted**: SwiftUI has no wavy progress indicator and this
+  /// library does not fake one, so iOS draws the flat bar/ring whatever this says
+  /// (`docs/components/progress.md`). It is a prop on both platforms anyway so the
+  /// JS API means one thing, and the value round-trips through the handle - the
+  /// same treatment `track` gets, and for the same reason.
+  var appearance = "flat"
+  /// Whether a `'loading'` indicator was asked to have Material's tonal container.
+  ///
+  /// Stored and not painted, for the same reason: no iOS control has that form.
+  var contained = false
   /// The fraction React sent, unclamped, or `nil` for an indeterminate indicator.
   /// Clamping happens where it is drawn (``drawnValue``), because the drawing code
   /// is what has to stay in range while the prop getter has to answer what was
@@ -115,6 +132,15 @@ final class ProgressModel: NitroUiModel {
     "\(Int((min(max(value, 0), 1) * 100).rounded()))%"
   }
 
+  /// Whether the shape measures its own square: a ring, or the loading indicator
+  /// that iOS draws as one.
+  ///
+  /// `appearance` and `contained` deliberately do not appear here - neither moves
+  /// a box on this platform, which is the difference between them and `variant`.
+  var isIntrinsicShape: Bool {
+    variant == "circular" || variant == "loading"
+  }
+
   override init() {
     super.init()
   }
@@ -152,7 +178,12 @@ private struct ProgressVariantStyle: ViewModifier {
 
   @ViewBuilder
   func body(content: Content) -> some View {
-    if variant == "circular" {
+    // `loading` joins the ring here because SwiftUI has no morphing loading
+    // indicator: a circular `ProgressView` is the closest native control, and
+    // drawing something else (a `TimelineView` of our own arc, say) would stop
+    // being "the platform's drawing", which is what this library trades in
+    // (`docs/components/progress.md`, Platform mapping).
+    if variant == "circular" || variant == "loading" {
       content.progressViewStyle(.circular)
     } else {
       content.progressViewStyle(.linear)
@@ -319,18 +350,49 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
   var variant: String {
     get { model.variant }
     set {
-      // The wrapper is the only writer and sends one of two names; anything else
+      // The wrapper is the only writer and sends one of three names; anything else
       // behaves as `'linear'`, which is what the spec documents.
-      let next = newValue == "circular" ? "circular" : "linear"
+      let next: String
+      if newValue == "circular" || newValue == "loading" {
+        next = newValue
+      } else {
+        next = "linear"
+      }
       guard next != model.variant else { return }
       model.variant = next
       // The one prop that changes the control's *size* - and the question the
       // toolkit is asked (an `intrinsic` square vs a bar at the box's width), so
       // the policy has to move with it and the fitting size has to be taken again
       // (`docs/architecture/sizing.md` §5 point 5).
-      host.sizingPolicy = next == "circular" ? .intrinsic : .fillWidth
+      // A loading indicator is drawn as a ring here, so it asks the ring's question.
+      host.sizingPolicy = model.isIntrinsicShape ? .intrinsic : .fillWidth
       host.markDirty()
       host.noteContentSizeMayHaveChanged()
+    }
+  }
+
+  var appearance: String {
+    get { model.appearance }
+    set {
+      // Stored, not rendered: SwiftUI has nothing wavy to draw, so this does not
+      // repaint anything and does not even mark the host dirty - the same treatment
+      // `trackColor` gets, and round-tripping the prop is what makes the documented
+      // platform difference observable rather than mysterious.
+      //
+      // What *does* move on a change is the sizing key, and that arrives in the
+      // same props batch as its own write (`nuiSizingKey` below). On Android
+      // `'wavy'` is a different composable with a bigger box; here the box is the
+      // flat one, and the engine learns that by measuring this configuration once.
+      model.appearance = newValue == "wavy" ? "wavy" : "flat"
+    }
+  }
+
+  var contained: Bool {
+    get { model.contained }
+    set {
+      // Stored, not rendered - no iOS control has a contained loading form. See
+      // `appearance` for why that still costs the caller a re-measure.
+      model.contained = newValue
     }
   }
 
@@ -410,7 +472,17 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
 
   var nuiSizingKey: String {
     get { model.sizingKey }
-    set { model.sizingKey = newValue }
+    set {
+      guard newValue != model.sizingKey else { return }
+      model.sizingKey = newValue
+      // `appearance` and `contained` change the configuration without a remount
+      // (the shape, and with it the sizing policy, is unchanged), and the engine has
+      // no answer for a key it has not seen. iOS reads the key live, so this is the
+      // one thing that has to happen; Button's `nuiSizingKey` documents why it has
+      // to be *asked for* rather than waited for (review F1), and the guard is for
+      // the same reason - React re-sends an unchanged key on every render.
+      host.noteSizingKeyChanged()
+    }
   }
 
   var nuiSizingId: Double {
@@ -428,6 +500,8 @@ final class HybridNitroUiProgress: HybridNitroUiProgressSpec, RecyclableView {
 
   func prepareForRecycle() {
     model.variant = "linear"
+    model.appearance = "flat"
+    model.contained = false
     model.value = nil
     model.tint = nil
     model.track = nil

@@ -16,6 +16,10 @@ namespace margelo::nitro::nitroui {
     registerHybrids(this, [](Prototype& prototype) {
       prototype.registerHybridGetter("variant", &HybridNitroUiProgressSpec::getVariant);
       prototype.registerHybridSetter("variant", &HybridNitroUiProgressSpec::setVariant);
+      prototype.registerHybridGetter("appearance", &HybridNitroUiProgressSpec::getAppearance);
+      prototype.registerHybridSetter("appearance", &HybridNitroUiProgressSpec::setAppearance);
+      prototype.registerHybridGetter("contained", &HybridNitroUiProgressSpec::getContained);
+      prototype.registerHybridSetter("contained", &HybridNitroUiProgressSpec::setContained);
       prototype.registerHybridGetter("value", &HybridNitroUiProgressSpec::getValue);
       prototype.registerHybridSetter("value", &HybridNitroUiProgressSpec::setValue);
       prototype.registerHybridGetter("tintColor", &HybridNitroUiProgressSpec::getTintColor);

@@ -286,14 +286,15 @@ describe('useSizingId(configuration)', () => {
 });
 
 /**
- * The call-site half of the same contract: `Progress` keys its native view on the
- * *normalised* variant, so the value it hands `useSizingId` must be that same
- * normalised value. `variant` is a plain `string` on the native spec, so a JS
- * caller that bypasses the union (`variant={'round' as ProgressVariant}`) must not
- * be able to change the sizing configuration - or mint an id, or remount the view
- * - without also changing the key.
+ * The call-site half of the same contract: `Progress` hands `useSizingId` the same
+ * value it keys the native view on - the *normalised shape* - and not the wider
+ * sizing key. `variant` is a plain `string` on the native spec, so a JS caller that
+ * bypasses the union (`variant={'round' as ProgressVariant}`) must not be able to
+ * change the sizing configuration - or mint an id, or remount the view - without
+ * also changing the key. And `appearance` / `contained`, which move the sizing key
+ * under a view that stays mounted, must not move the id at all.
  */
-describe('Progress · sizing id follows the key', () => {
+describe('Progress · sizing id follows the view key', () => {
   function progressProps(tree: ReactTestRenderer): Record<string, unknown> {
     return onlyHost(tree, 'NitroUiProgress').props as unknown as Record<
       string,
@@ -349,5 +350,62 @@ describe('Progress · sizing id follows the key', () => {
     expect(circular.nuiSizingKey).toBe('circular');
     expect(circular.nuiSizingId).not.toBe(linear.nuiSizingId);
     expect(mints).toHaveLength(2);
+  });
+
+  /**
+   * `appearance` and `contained` are the two props that change the *configuration*
+   * without replacing the view: `key={shape}` keeps this view mounted, so an id
+   * swapped for either of them has no `onDropView` coming, and the entry filed
+   * under the id it drops is never forgotten. The configuration still moves - it
+   * rides `nuiSizingKey`, which is the channel built for exactly that.
+   */
+  it('keeps the id when only appearance or contained moves, and re-ids for the shape', () => {
+    let tree!: ReactTestRenderer;
+    act(() => {
+      tree = create(createElement(Progress, { variant: 'circular' }));
+    });
+    const ring = progressProps(tree);
+    expect(ring.nuiSizingKey).toBe('circular');
+    const firstId = mints.length;
+
+    act(() => {
+      tree.update(
+        createElement(Progress, { variant: 'circular', appearance: 'wavy' })
+      );
+    });
+    const wavyRing = progressProps(tree);
+    expect(wavyRing.nuiSizingKey).toBe('circular|wavy');
+    expect(wavyRing.nuiSizingId).toBe(ring.nuiSizingId);
+    expect(mints).toHaveLength(firstId);
+
+    act(() => {
+      tree.update(
+        createElement(Progress, {
+          variant: 'loading',
+          appearance: 'wavy',
+          contained: true,
+        })
+      );
+    });
+    const contained = progressProps(tree);
+    // A shape change replaces the view, and a replaced view mints.
+    expect(contained.nuiSizingKey).toBe('loading|contained');
+    expect(contained.nuiSizingId).not.toBe(wavyRing.nuiSizingId);
+    const afterRemount = mints.length;
+    expect(afterRemount).toBe(firstId + 1);
+
+    act(() => {
+      tree.update(
+        createElement(Progress, {
+          variant: 'loading',
+          appearance: 'wavy',
+          contained: false,
+        })
+      );
+    });
+    const uncontained = progressProps(tree);
+    expect(uncontained.nuiSizingKey).toBe('loading');
+    expect(uncontained.nuiSizingId).toBe(contained.nuiSizingId);
+    expect(mints).toHaveLength(afterRemount);
   });
 });

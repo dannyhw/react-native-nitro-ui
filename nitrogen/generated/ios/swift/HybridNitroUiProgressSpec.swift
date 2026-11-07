@@ -11,6 +11,8 @@ import NitroModules
 public protocol HybridNitroUiProgressSpec_protocol: HybridObject, HybridView {
   // Properties
   var variant: String { get set }
+  var appearance: String { get set }
+  var contained: Bool { get set }
   var value: Variant_NullType_Double { get set }
   var tintColor: Variant_NullType_Double { get set }
   var trackColor: Variant_NullType_Double { get set }
