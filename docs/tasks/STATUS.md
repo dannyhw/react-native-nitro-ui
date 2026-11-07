@@ -104,4 +104,4 @@
 | FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
 | E4 | Material 3 Expressive pass 2: Progress `variant="loading"` (+ `contained`) and `appearance="wavy"` (Q8 C10, D40) | Apex | Opus | merge round (fix round 1 accepted at `62bb79ec`: sizing id per shape, wave stopped off-window, claims corrected) |
 | E5 | Slider: a real drag start on Android (Q8 C9), and the real-input `hosted-slider` drag flake | Apex | Opus | running |
-| FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | in review (PR #45 @ `07c7e2fc`; 4 gates green, real-input:ios left for merge) |
+| FIX4 | The library's own Android icons from official Material Symbols files (D43 item 1; fixes the SearchField search glyph) | Opus (on mac-1) | Opus | fix round 1 (review: the hand-built-glyph test misses PathNode/relative*/r*To/materialPath forms; a stale D40 comment) |
