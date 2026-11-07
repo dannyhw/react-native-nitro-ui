@@ -191,7 +191,13 @@ export default function PopoverScreen() {
             setShortOpen(next);
           }}
           onDismiss={() => record('short:dismiss')}
-          anchor={<Anchor label="Share" testID="popover-short-anchor" />}
+          anchor={
+            <Anchor
+              label="Share"
+              testID="popover-short-anchor"
+              onPress={() => setShortOpen(true)}
+            />
+          }
         >
           {pressContent('popover-short')}
         </Popover>
@@ -207,7 +213,13 @@ export default function PopoverScreen() {
             setWideOpen(next);
           }}
           maxWidth={260}
-          anchor={<Anchor label="Row actions" testID="popover-wide-anchor" />}
+          anchor={
+            <Anchor
+              label="Row actions"
+              testID="popover-wide-anchor"
+              onPress={() => setWideOpen(true)}
+            />
+          }
         >
           {/* No width: this content asks for more than the cap, so the box is the cap. */}
           <View style={styles.content}>
@@ -231,7 +243,13 @@ export default function PopoverScreen() {
             record(`field:presented:${String(next)}`);
             setFieldOpen(next);
           }}
-          anchor={<Anchor label="Rename" testID="popover-field-anchor" />}
+          anchor={
+            <Anchor
+              label="Rename"
+              testID="popover-field-anchor"
+              onPress={() => setFieldOpen(true)}
+            />
+          }
         >
           <View style={[styles.content, styles.fieldBox]}>
             <Text style={[styles.contentTitle, { color: ink.ink }]}>
@@ -341,7 +359,13 @@ export default function PopoverScreen() {
               setInModalOpen(next);
             }}
             onDismiss={() => record('modal:dismiss')}
-            anchor={<Anchor label="More" testID="popover-in-modal-anchor" />}
+            anchor={
+              <Anchor
+                label="More"
+                testID="popover-in-modal-anchor"
+                onPress={() => setInModalOpen(true)}
+              />
+            }
           >
             {pressContent('popover-in-modal')}
           </Popover>
