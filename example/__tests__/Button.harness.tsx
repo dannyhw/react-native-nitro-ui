@@ -26,6 +26,7 @@
  * component in a process), which G1 found the hard way on another suite.
  */
 import {
+  NativeModules,
   Platform,
   Pressable,
   processColor,
@@ -1695,6 +1696,301 @@ describe('the top of the ladder (D42 item 4)', () => {
       expect(Math.abs(heightOf('xlarge') - heightOf('xxlarge'))).toBeLessThan(
         0.6
       );
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------------------
+ */
+
+/**
+ * The `androidIcon` an app *imports* (G19 fix round 1, DECISIONS D43 item 2).
+ *
+ * Round 1's suite above covers the form that was already there: a drawable the app
+ * ships in `res/drawable/`, named from JS, resolved by the resource table on the
+ * thread that applies props. This covers the form D43 adds - the `.xml` the app
+ * `require`s - and the two behave differently in one way that matters to a test:
+ * a resource is there or it isn't, and a file arrives *later*. So:
+ *
+ *  - it **draws**: the glyph reached the screen through Metro, the parser and a
+ *    `VectorPainter`, which the pixel probe is the only reading of;
+ *  - the **box does not wait for it**: the slot's size comes from the size ladder,
+ *    so the frame before the bytes arrive is the frame after them. Asserted from the
+ *    sizing trace, not from a race - see the test for why;
+ *  - a file that **is not there** draws nothing and leaves the no-icon box, which is
+ *    round 1's rule for a name the resource table does not know, and the answer a
+ *    404 has to give for the same reason: a slot for artwork that never comes is a
+ *    layout bug the developer cannot dismiss.
+ *
+ * iOS runs through the same three tests and must do nothing in all of them: it draws
+ * `systemImage`, ignores `androidIcon`, and this suite is where "ignores" is measured
+ * for the new form too.
+ */
+describe('androidIcon · an icon the app imports (D43)', () => {
+  /**
+   * Google's Material Symbols, required the way an app requires them.
+   *
+   * `star_24px` is loaded by no other test in this file, deliberately: nitro-ui
+   * caches a parsed file per URL for the process, so a second test asking for the
+   * same URL would draw it in its first frame and quietly turn "the box did not wait
+   * for the file" into a statement about a warm cache.
+   */
+  /** Round 1's form, for the control beside this one: a name, not a file. */
+  const DRAWABLE_NAME = 'nitroui_test_star';
+  const STAR_ASSET = require('../src/assets/icons/star_24px.xml');
+  const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
+
+  /**
+   * The dev server this app's bundle was served from, as React Native sees it.
+   *
+   * The same `SourceCode.scriptURL` the wrapper reads (`src/iconSource.ts`), read
+   * here rather than imported so that asking for a file Metro does not have does not
+   * depend on the code under test to say where Metro is.
+   */
+  const devServerOrigin = (): string => {
+    const constants = (
+      NativeModules as unknown as {
+        SourceCode?: { getConstants?(): { scriptURL?: string } };
+      }
+    ).SourceCode;
+    const scriptURL = constants?.getConstants?.()?.scriptURL ?? '';
+    const match = scriptURL.match(/^https?:\/\/.*?\//);
+    if (match == null) {
+      throw new Error(
+        `this suite needs a bundle served over http to ask a dev server for a ` +
+          `missing file; scriptURL was "${scriptURL}".`
+      );
+    }
+    return match[0];
+  };
+
+  /** Probe until the glyph shows up, and say whether it ever did. */
+  async function probeUntilDrawn(
+    testId: string,
+    color: number,
+    timeoutMs = 15000
+  ): Promise<string> {
+    const deadline = nitroUiCore.now() + timeoutMs;
+    let report = '';
+    for (;;) {
+      report = await pixelProbe(testId, color, testId);
+      if (probeHits(report) > 0 || nitroUiCore.now() > deadline) {
+        return report;
+      }
+      await sleep(50);
+    }
+  }
+
+  /**
+   * A `text` Button with no label, so the tint can only be on the glyph.
+   *
+   * Round 1's reason, unchanged: the variant has no container and no border, and an
+   * empty title draws no label, so `hits` means "the icon is painted" rather than
+   * "something this colour is on screen". iOS needs a label to sample at all, and
+   * only ever asserts that it *refuses* to draw.
+   */
+  const TINT_CSS = '#FF00A0';
+  const TINT = processColor(TINT_CSS) as number;
+  const PROBE_TITLE = Platform.OS === 'android' ? '' : 'Share';
+
+  it('draws the imported icon, and does not move the box when the bytes arrive', async () => {
+    nitroUiCore.setSizingTraceEnabled(true);
+    await render(
+      <Button
+        title={PROBE_TITLE}
+        variant="text"
+        tintColor={TINT_CSS}
+        androidIcon={STAR_ASSET}
+        testID="metro-star"
+        hybridRef={captureHybrid('metro-star')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('metro-star');
+    const first = await waitForMeasured('metro-star', 'the imported icon');
+    await waitForBox('metro-star', first, 'the imported icon');
+
+    // What crossed the bridge. In a development build this is a Metro URL with the
+    // marker in front of it; the asset's numeric id would mean nothing to native,
+    // and a bare name would be a resource lookup for a file that is not in the APK.
+    const sent = handles.get('metro-star')?.androidIcon ?? '';
+    console.log(`metro wire: ${sent}`);
+    if (Platform.OS === 'android') {
+      expect(sent.startsWith('url:')).toBe(true);
+      expect(sent).toContain('star_24px.xml');
+    }
+
+    const before = await pixelProbe('metro-star', TINT, 'before the load');
+    const drawn = await probeUntilDrawn('metro-star', TINT);
+    const after = await waitForMeasured('metro-star', 'the imported icon');
+    const trace = await collectTrace(() => true, 500);
+    const widths = new Set(
+      trace.map((event) => (Math.round(event.width * 100) / 100).toFixed(2))
+    );
+    const heights = new Set(
+      trace.map((event) => (Math.round(event.height * 100) / 100).toFixed(2))
+    );
+    console.log(
+      `metro: hitsBefore=${String(probeHits(before))} hitsAfter=${String(
+        probeHits(drawn)
+      )} first=${describeSize(first)} after=${describeSize(after)} ` +
+        `traceEvents=${String(trace.length)} widths=${JSON.stringify([
+          ...widths,
+        ])} heights=${JSON.stringify([...heights])}`
+    );
+
+    if (Platform.OS === 'android') {
+      // 1. It drew. `hitsBefore` is the interesting half of the log line: when it
+      // is 0, this test also watched the control *without* the glyph at the same
+      // box, which is the in-flight state the sizing rule is about. When it is not
+      // 0 the dev server won the race with the first layout and the trace below is
+      // the whole claim - it is the reading that does not depend on timing.
+      expect(probeHits(drawn)).toBeGreaterThan(0);
+      // 2. The box the control measured before the glyph and after it are one box.
+      expect(sameSize(first, after)).toBe(true);
+      // 3. And every box the sizing engine published for this mount is that box.
+      //    A control that reserves the slot only once the file has arrived, or that
+      //    sizes the slot from the file's own box, publishes two widths here -
+      //    the label jumps sideways, which is the thing D43's sizing rule exists to
+      //    prevent. A file that is 960 units of viewport inside a 24 dp box is the
+      //    case that would make a file-sized slot visibly wrong.
+      expect([...widths]).toEqual([first.width.toFixed(2)]);
+      expect([...heights]).toEqual([first.height.toFixed(2)]);
+    } else {
+      // iOS draws no Android icon, at any size, from any source.
+      expect(drawn).toContain('no pixels');
+    }
+  });
+
+  it('widens the control by the ladder, not by the file it loaded', async () => {
+    // Three controls, one row: an imported icon, a `res/drawable/` icon, and no
+    // icon. The first two reach the same slot by different roads - one through
+    // Metro and our parser, one through the resource table - and the ladder says
+    // both are `iconSizeFor(scale)` wide, so they must be the same width as each
+    // other. The third is what they both have to be wider than.
+    //
+    // `share_24px` is a second real file on purpose: its viewport is 960 units like
+    // `star`'s and its path fills that box differently, so a slot sized from the
+    // artwork would land on a different width for one of the two.
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title="Share"
+          androidIcon={SHARE_ASSET}
+          testID="metro-width"
+          hybridRef={captureHybrid('metro-width')}
+        />
+        <Button
+          title="Share"
+          androidIcon={DRAWABLE_NAME}
+          testID="drawable-width"
+          hybridRef={captureHybrid('drawable-width')}
+        />
+        <Button
+          title="Share"
+          testID="plain-width"
+          hybridRef={captureHybrid('plain-width')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = new Map<string, Size>();
+    for (const id of ['metro-width', 'drawable-width', 'plain-width']) {
+      await waitForTestId(id);
+      const content = await waitForMeasured(id, id);
+      await waitForBox(id, content, id);
+      boxes.set(id, content);
+    }
+    // The Metro icon has to have actually arrived before the widths are compared:
+    // an empty slot and a drawn one are the same size, which is the point of the
+    // other test, and would let this one pass with nothing loading at all.
+    if (Platform.OS === 'android') {
+      const drawn = await probeUntilDrawn(
+        'metro-width',
+        processColor('#000000') as number
+      );
+      console.log(`metro width probe: ${drawn}`);
+    }
+    const metro = boxes.get('metro-width') as Size;
+    const drawable = boxes.get('drawable-width') as Size;
+    const plain = boxes.get('plain-width') as Size;
+    console.log(
+      `widths: metro=${describeSize(metro)} drawable=${describeSize(
+        drawable
+      )} plain=${describeSize(plain)}`
+    );
+
+    if (Platform.OS === 'android') {
+      expect(Math.abs(metro.width - drawable.width)).toBeLessThan(0.6);
+      expect(Math.abs(metro.height - drawable.height)).toBeLessThan(0.6);
+      expect(metro.width).toBeGreaterThan(plain.width + 0.6);
+    } else {
+      // iOS ignores both icon props, so all three are one box.
+      expect(sameSize(metro, plain)).toBe(true);
+      expect(sameSize(drawable, plain)).toBe(true);
+    }
+  });
+
+  it('draws nothing for a file the dev server does not have, and keeps the no-icon box', async () => {
+    // A 404 is the failure an app actually hits: the file was renamed, or Metro
+    // restarted and the asset's hash moved with it. The answer has to be round 1's
+    // answer for a name the resource table does not know - nothing drawn, nothing
+    // reserved - because a slot held for a file that never arrives moves the label
+    // for a bug that only exists while you are developing.
+    const missing = {
+      uri: `${devServerOrigin()}src/assets/icons/never-built_24px.xml?platform=android&hash=00000000`,
+    };
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          tintColor={TINT_CSS}
+          androidIcon={missing}
+          testID="missing-404"
+          hybridRef={captureHybrid('missing-404')}
+        />
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          tintColor={TINT_CSS}
+          testID="missing-plain"
+          hybridRef={captureHybrid('missing-plain')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    for (const id of ['missing-404', 'missing-plain']) {
+      await waitForTestId(id);
+      const content = await waitForMeasured(id, id);
+      await waitForBox(id, content, id);
+    }
+    // Give a request that *did* start time to answer: the assertion is that nothing
+    // ever arrives, and a probe taken too early cannot tell "no glyph yet" from
+    // "no glyph ever".
+    await settle(1500);
+    const fourOhFour = await pixelProbe('missing-404', TINT, 'the 404 icon');
+    const plain = await pixelProbe(
+      'missing-plain',
+      TINT,
+      'the no-icon control'
+    );
+    const box404 = measured('missing-404') as Size;
+    const boxPlain = measured('missing-plain') as Size;
+    console.log(
+      `404: hits=${String(probeHits(fourOhFour))} box=${describeSize(
+        box404
+      )} plainBox=${describeSize(boxPlain)} plainHits=${String(
+        probeHits(plain)
+      )}`
+    );
+
+    if (Platform.OS === 'android') {
+      expect(probeHits(fourOhFour)).toBe(0);
+      expect(sameSize(box404, boxPlain)).toBe(true);
+    } else {
+      expect(fourOhFour).toContain('no pixels');
+      expect(sameSize(box404, boxPlain)).toBe(true);
     }
   });
 });

@@ -82,7 +82,7 @@ class NitroUiIconTest {
    */
   @Test
   fun theStoreHandsBackWhatWasLoadedForThatId() {
-    val store = NitroUiIconStore<String>(4)
+    val store = NitroUiIconStore<Int, String>(4) { resId -> resId == 0 }
     assertNull(store.get(101))
     store.put(101, "share")
     assertEquals("share", store.get(101))
@@ -99,7 +99,7 @@ class NitroUiIconTest {
    */
   @Test
   fun theStoreStopsGrowingAtItsBoundAndDropsTheLeastRecentlyUsedFirst() {
-    val store = NitroUiIconStore<String>(3)
+    val store = NitroUiIconStore<Int, String>(3)
     store.put(1, "a")
     store.put(2, "b")
     store.put(3, "c")
@@ -119,7 +119,7 @@ class NitroUiIconTest {
 
   @Test
   fun clearingTheStoreLeavesNothingBehind() {
-    val store = NitroUiIconStore<String>(3)
+    val store = NitroUiIconStore<Int, String>(3)
     store.put(7, "x")
     store.clear()
     assertEquals(0, store.size())
