@@ -51,16 +51,15 @@ split button.
 
 ## Gates
 
-Refreshed for fix round 1 (code tree `288374fe4fff`); the iOS and `real-input` rows are round 1's.
+The merge tree (`task/FIX4-merge`, code tree `c5390cb8f7a7`) with all five merge gates; earlier rounds' runs are in `docs/tasks/FIX4/gates.jsonl`.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1819 tests / 72 suites | `288374fe4fff` | 1 m 55 s | start 6.1 / med 12.3 / max 14.2 |
-| `harness:ios` | **PASS** | 450 tests / 25 suites + isolated 4 tests / 2 suites | `c865893c76dd` (ios tree) | 10 m 43 s | start 23.0 / med 6.9 / max 26.2 |
-| `harness:android` | **PASS** | 499 tests / 25 suites + isolated 4 tests / 2 suites | `288374fe4fff` (android tree) | 14 m 48 s | start 2.9 / med 3.0 / max 4.0 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | stale | — | c865893c76dd (not this tree) | 40 m 29 s | start 2.6 / med 2.7 / max 5.0 |
-| `harness:android:SearchField` | stale | 1 failed of 15 tests / 1 suites | 8f25de914898 (not this tree) | 14.4 s | start 4.3 / med 5.1 / max 5.9 |
+| `check` | **PASS** | 1826 tests / 73 suites | `c5390cb8f7a7` | 1 m 59 s | start 7.0 / med 8.9 / max 12.4 |
+| `harness:ios` | **PASS** | 454 tests / 25 suites + isolated 4 tests / 2 suites | `c5390cb8f7a7` (ios tree) | 10 m 39 s | start 2.7 / med 3.1 / max 4.5 |
+| `harness:android` | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `c5390cb8f7a7` (android tree) | 14 m 54 s | start 6.4 / med 3.2 / max 6.4 |
+| `real-input:ios` | **PASS** | — | `c5390cb8f7a7` (ios tree) | 22 m 17 s | start 3.1 / med 3.5 / max 5.3 |
+| `real-input:android` | **PASS** | — | `c5390cb8f7a7` (android tree) | 40 m 08 s | start 3.3 / med 2.8 / max 4.9 |
 
 `need --for review`: `need: review is satisfied on this code tree.` `harness:ios` ran because the diff edits
 `SearchField.harness.tsx` (AGENTS.md: a harness file runs on both platforms); the new test returns early on iOS.
@@ -117,3 +116,23 @@ The Kotlin comment edits changed the Android tree, so `need` asked for `harness:
 only the `BottomSheet · 50 cycles` flake; the rerun passed. The Gates table above is this round's.
 
 `need --for review`: `need: review is satisfied on this code tree.`
+
+## Merge round
+
+`task/FIX4-merge` is `task/FIX4-official-icons` (`277a2e75`) with `origin/main` merged in, which brings E4
+(Progress loading/wavy), E3 (SplitButton) and X20 (tooling).
+
+- **One conflict, `NitroUiProbePackage.kt`.** Both sides added imports and probe methods. Kept both:
+  - the imports are main's `PixelCopy`/`View`/`ViewGroup` plus this branch's `getOrNull`;
+  - this branch's `searchGlyphPixels` (with `findComposeRoot`/`findTagged`) comes first, then main's
+    `detachTaggedView`/`attachTaggedView` and their `Slot`;
+  - the companion keeps both sides' constants, and no method name is duplicated.
+- **Generated files.** `bun run regen` and `bun run manifest:update` (after `prepare`) left no diff:
+  `etc/package-files.txt` merged cleanly to the same 902 entries.
+- **Gates.** All five ran on the merge tree; the table is in Gates above. `real-input:ios` failed once on
+  the known `frozen: 1 edits refused` SearchField flake, and the rerun passed.
+- **`need --for merge`:** `need: merge is satisfied on this code tree.`
+- **Ledger.** `gate.mjs export` wrote the 6 merge-branch lines. The 12 task-branch lines are restored
+  ahead of them, and all six failure-excerpt links resolve.
+- **`task-ready` on a merge branch** looks only for `FIX4-merge.report.md` or `FIX4.report.md`. Its two report
+  checks were done by hand instead: the gate table is `gate.mjs table` verbatim, and coverage passes.
