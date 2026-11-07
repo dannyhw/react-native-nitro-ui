@@ -25,6 +25,13 @@ import { NitroUiTooltipConfig } from '../components/Tooltip/NitroUiTooltipConfig
 // registry writes no row for it. The "covers every generated config" test below is
 // what fails if a Hybrid View arrives without a manifest, or without its row here.
 import { NitroUiHostConfig } from '../components/Host/NitroUiHostConfig';
+// S6's Form prototype: three Hybrid Views with no manifest, so the registry writes no
+// row for them either (`NON_CONTROL_AUTOLINKING` in scripts/registry-core.mjs).
+import {
+  NitroUiFormConfig,
+  NitroUiFormRowConfig,
+  NitroUiFormSectionConfig,
+} from '../components/Form/NativeFormViews';
 
 const generatedDir = join(
   __dirname,
@@ -61,6 +68,10 @@ const copies: Record<string, unknown> = {
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.
   'NitroUiHostConfig.json': NitroUiHostConfig,
+  // S6's Form prototype, same reason.
+  'NitroUiFormConfig.json': NitroUiFormConfig,
+  'NitroUiFormSectionConfig.json': NitroUiFormSectionConfig,
+  'NitroUiFormRowConfig.json': NitroUiFormRowConfig,
 };
 
 describe('hand-written view configs', () => {

@@ -1,0 +1,12 @@
+{
+  "uiViewClassName": "NitroUiForm",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "keyboardAvoidance": true,
+    "nuiPerfId": true,
+    "onContentBox": true,
+    "hybridRef": true
+  }
+}

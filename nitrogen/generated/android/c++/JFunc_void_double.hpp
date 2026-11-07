@@ -18,7 +18,7 @@ namespace margelo::nitro::nitroui {
   using namespace facebook;
 
   /**
-   * Represents the Java/Kotlin callback `(index: Double) -> Unit`.
+   * Represents the Java/Kotlin callback `(width: Double) -> Unit`.
    * This can be passed around between C++ and Java/Kotlin.
    */
   struct JFunc_void_double: public jni::JavaClass<JFunc_void_double> {
@@ -29,9 +29,9 @@ namespace margelo::nitro::nitroui {
     /**
      * Invokes the function this `JFunc_void_double` instance holds through JNI.
      */
-    void invoke(double index) const {
-      static const auto method = javaClassStatic()->getMethod<void(double /* index */)>("invoke");
-      method(self(), index);
+    void invoke(double width) const {
+      static const auto method = javaClassStatic()->getMethod<void(double /* width */)>("invoke");
+      method(self(), width);
     }
   };
 
@@ -40,7 +40,7 @@ namespace margelo::nitro::nitroui {
    */
   class JFunc_void_double_cxx final: public jni::HybridClass<JFunc_void_double_cxx, JFunc_void_double> {
   public:
-    static jni::local_ref<JFunc_void_double::javaobject> fromCpp(const std::function<void(double /* index */)>& func) {
+    static jni::local_ref<JFunc_void_double::javaobject> fromCpp(const std::function<void(double /* width */)>& func) {
       return JFunc_void_double_cxx::newObjectCxxArgs(func);
     }
 
@@ -48,13 +48,13 @@ namespace margelo::nitro::nitroui {
     /**
      * Invokes the C++ `std::function<...>` this `JFunc_void_double_cxx` instance holds.
      */
-    void invoke_cxx(double index) {
-      _func(index);
+    void invoke_cxx(double width) {
+      _func(width);
     }
 
   public:
     [[nodiscard]]
-    inline const std::function<void(double /* index */)>& getFunction() const {
+    inline const std::function<void(double /* width */)>& getFunction() const {
       return _func;
     }
 
@@ -65,11 +65,11 @@ namespace margelo::nitro::nitroui {
     }
 
   private:
-    explicit JFunc_void_double_cxx(const std::function<void(double /* index */)>& func): _func(func) { }
+    explicit JFunc_void_double_cxx(const std::function<void(double /* width */)>& func): _func(func) { }
 
   private:
     friend HybridBase;
-    std::function<void(double /* index */)> _func;
+    std::function<void(double /* width */)> _func;
   };
 
 } // namespace margelo::nitro::nitroui

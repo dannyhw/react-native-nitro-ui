@@ -1,0 +1,13 @@
+{
+  "uiViewClassName": "NitroUiFormSection",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "title": true,
+    "footer": true,
+    "nuiPerfId": true,
+    "onMetrics": true,
+    "hybridRef": true
+  }
+}
