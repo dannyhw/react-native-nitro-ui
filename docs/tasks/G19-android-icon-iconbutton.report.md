@@ -459,3 +459,69 @@ parse-check.
 - Carried from part A's brief, unchanged: OTA `file://` bundles, `..` in dev URLs, `URI()` on paths
   with spaces, a release-bundle content check, the root `android:alpha`, iOS `pixelProbes` on
   recycle.
+
+## Merge round
+
+Two claims the tests did not keep.
+
+**The parser exemption never kept inline `pathData` strings illegal.** `HAND_BUILT` matched builders and path commands, no string literal, so `PathParser().parsePathString("M480-269 …")` in the exempt file was silent. The pattern matches nothing in `android/src/main` today and not `"M3 Expressive"`; the fixture gained a line 4 it must report.
+
+**The raster branch did not test drawing.** Its Buttons were `filled`, so the probe counted the pill's own paint — 208267 pixels, and it would pass with no artwork at all. They are `text` variants under the probe title now; `namedHits >= 2 * mediumHits`, which round 1's stretched raster cleared at 3.7×, is labelled a floor, `SHARP_RATIO` the guard.
+
+Red proofs:
+- `android-icons.test.js` -> quoted-path pattern deleted -> `- …NitroUiVectorDrawable.kt:4: a typed pathData string` missing (1 failed of 6).
+- `Button.harness.tsx` -> `rememberIconPainter`'s `Bitmap` arm answers `null` -> only `expected 0 to be greater than 0` at `rasterHits`; boxes and 22 other Button tests green.
+
+Seven other findings went to `FOLLOWUPS.md`, one line each. Four gates are green on `bd721c07f5fa`; `real-input:ios` is not, and see the question below. One `harness:ios` also died with SIGSEGV in react-native-worklets' worklet teardown mid-suite; its re-run passed.
+
+### Gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1863 tests / 75 suites | `bd721c07f5fa` | 2 m 55 s | start 5.0 / med 10.5 / max 26.4 |
+| `harness:ios` | **PASS** | 467 tests / 25 suites + isolated 4 tests / 2 suites | `bd721c07f5fa` (ios tree) | 11 m 08 s | start 31.4 / med 5.2 / max 31.4 |
+| `harness:android` | **PASS** | 518 tests / 25 suites + isolated 4 tests / 2 suites | `bd721c07f5fa` (android tree) | 16 m 51 s | start 4.0 / med 4.2 / max 10.9 |
+| `real-input:ios` | **FAIL** | — | `bd721c07f5fa` (ios tree) | 25 m 55 s | start 3.9 / med 7.1 / max 40.9 |
+| `real-input:android` | **PASS** | — | `bd721c07f5fa` (android tree) | 42 m 06 s | start 4.8 / med 4.8 / max 54.4 |
+| `harness:android:Button` | stale | 1 failed of 23 tests / 1 suites | 6d436d28dfad (not this tree) | 1 m 21 s | start 6.2 / med 5.4 / max 6.2 |
+| `real-input:ios:--control:text-field` | **FAIL** | — | `bd721c07f5fa` (ios tree) | 6 m 60 s | start 10.5 / med 8.3 / max 14.0 |
+
+### need --for merge
+
+```
+need: merge against .gates/task/G19-merge.jsonl; code diff base 6b47c08 touches ios + android
+  ✓ check — green
+  ✓ harness:ios — green
+  ✓ harness:android — green
+  ✗ real-input:ios — red (exit 1 on tree bd721c07f5fa, task/G19-merge/real-input+ios-2026-11-07T17-41-37.095Z.log)
+  ✓ real-input:android — green
+  note: no check line was borrowed for this tree: no other ledger has a check line on tree 955a9c8bfde5
+  note: treated as both platforms (outside the known prefixes): example/__tests__/Button.harness.tsx, example/__tests__/Menu.harness.tsx, example/src/ButtonScreen.tsx, example/src/assets/icons/close_24px.xml, example/src/assets/icons/not-a-vector.xml, example/src/assets/icons/share_24px.xml, …
+need: 1 gate(s) missing for merge: real-input:ios
+```
+
+## Questions for orchestrator (merge round)
+
+**`real-input:ios` will not go green on `bd721c07f5fa`; the other four gates are.** Eleven runs — ten
+full, one `--control text-field` probe — each red on one check: `frozen: 1 edits refused` where
+`RealInputTests.swift:3721` (TextField) and `:3874` (SearchField) want `2`. Every run is 21/22 or
+20/22 controls, 20/20 auxiliary checks; none of the ten was clean — the text field red in six of
+them, the search field in seven, one not predicting the other.
+
+Ruled out: load (one run sat at `load1` median 4.7, max 9.1), ordering (the isolated control run
+fails alone), device state (a released lease, a fresh one and a reset changed nothing), and this diff
+— the same test's five-keystroke assertion, `typed: abc12 (5)`, passes every run, so JS is not
+dropping events; only the *refused* edit, where JS writes the old value back, comes short. X21 item 1
+is this assertion (X19, E2, E3, G16, E5; red today on E3-merge and E5-merge too); its fix
+(`8fcdd714`) is in review, not on `main`. **For X21:** this task's two `real-input:ios` passes today
+were both on pair-b, its eleven reds all on pair-a — worth a look at the `nitro-ui A` simulator
+itself; only `simctl erase` goes beyond what a task may do to a device it did not start.
+
+Options, in my order: (1) **land X21, then re-run this round** — the only change that removes the
+cause; their branch moves the iOS tree, so budget `real-input:ios` and `harness:ios`. (2) **Re-run on
+pair-b** when S6 or X21 frees it: same tree, ~26 min an attempt. (3) **Merge with the line
+documented red** — `need --for merge` stays unsatisfied, so that is your call; E5's precedent is a
+re-run, not a red line.
+
+Nothing else is outstanding: both review fixes are in with red proofs, `FOLLOWUPS.md` carries the
+other seven, and the exported ledger keeps this branch's lines beside the earlier ones.
