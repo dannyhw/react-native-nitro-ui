@@ -131,6 +131,12 @@ internal class PopoverModel : NitroUiModel() {
   @Volatile var windowFocused = 0
   @Volatile var placed = 0
   @Volatile var placedAt = "-"
+  /**
+   * How often a composition asked for the popup before Yoga had laid the content box
+   * out: Android's version of iOS's `contentWaits`, and the same honest number - a
+   * present that went out at no size never counts here, it draws a wrong first frame.
+   */
+  @Volatile var contentWaits = 0
 
   /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
@@ -189,6 +195,7 @@ internal class PopoverModel : NitroUiModel() {
     popupRect = "-"
     placed = 0
     placedAt = "-"
+    contentWaits = 0
   }
 
   /** A tap outside, or Back: the close the user caused. */
@@ -461,6 +468,7 @@ internal class PopoverHost(
     // The popup is composed only once Yoga has laid the content box out, and at that box's
     // size: composing before then is the first-frame jump D44 exists to prevent.
     if (model.contentWpx <= 0 || model.contentHpx <= 0) {
+      model.contentWaits += 1
       return
     }
     key(model.generation) {
@@ -856,6 +864,7 @@ class HybridNitroUiPopover(
       ";onScreen=${if (model.presented) 1 else 0};roots=${PopoverModel.liveRoots.get()}" +
       ";askedW=${Math.round(model.contentWpx / density)};askedH=${Math.round(model.contentHpx / density)}" +
       ";maxWidth=${Math.round(model.maxWidth)};imePx=${model.imeBottomPx}" +
+      ";contentWaits=${model.contentWaits}" +
       ";placed=${model.placed};placedAt=${model.placedAt}" +
       ";${host.facts()}" +
       ";draws=${model.draws};firstDraw=${model.firstDraw};lastDraw=${model.lastDraw}" +

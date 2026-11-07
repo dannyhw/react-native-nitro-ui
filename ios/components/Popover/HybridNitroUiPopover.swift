@@ -845,7 +845,7 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     fields.append("controllers=\(NitroUiPopoverController.alive.value)")
     fields.append("touchRoots=\(NitroUiTouchRoot.attached)")
     fields.append("userDismissals=\(userDismissals)")
-    fields.append("unaskedExits=\(unaskedExits)")
+    fields.append("unasked=\(unaskedExits)")
     fields.append("anchored=\(anchor.window != nil ? 1 : 0)")
     fields.append("drops=\(lifetimeDrops)")
     fields.append("recycles=\(lifetimeRecycles)")
