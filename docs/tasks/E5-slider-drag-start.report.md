@@ -183,6 +183,8 @@ item 1, seen in X19, E2, E3, G16 and E5; X21's fix (one keystroke per witness, p
 check as written. E5's iOS diff is Slider's hybrid and its generated spec: nothing reaches a
 `UITextField`. (`real-input:ios:text-field`, 0.2 s, is my own filter written without
 `--control`, recorded under its own name.)
+**One more `real-input:ios` on this tree, on a fresh lease, passed**: `testRealInputTextField`
+read `frozen: 2 edits refused`, and `need --for merge` is satisfied.
 
 ### Merge gates
 
@@ -191,7 +193,7 @@ check as written. E5's iOS diff is Slider's hybrid and its generated spec: nothi
 | `check` | **PASS** | 1837 tests / 74 suites | `459e2c830a8a` | 3 m 16 s | start 9.9 / med 66.3 / max 183.6 |
 | `harness:ios` | **PASS** | 454 tests / 25 suites + isolated 4 tests / 2 suites | `459e2c830a8a` (ios tree) | 10 m 57 s | start 9.1 / med 5.9 / max 19.8 |
 | `harness:android` | **PASS** | 510 tests / 25 suites + isolated 4 tests / 2 suites | `459e2c830a8a` (android tree) | 15 m 27 s | start 34.3 / med 7.4 / max 34.3 |
-| `real-input:ios` | **FAIL** | — | `459e2c830a8a` (ios tree) | 26 m 14 s | start 6.0 / med 4.5 / max 22.0 |
+| `real-input:ios` | **PASS** | — | `459e2c830a8a` (ios tree) | 27 m 27 s | start 4.8 / med 9.5 / max 35.5 |
 | `real-input:android` | **PASS** | — | `459e2c830a8a` (android tree) | 43 m 55 s | start 5.3 / med 5.8 / max 218.1 |
 | `real-input:ios:--control:text-field` | **FAIL** | — | `459e2c830a8a` (ios tree) | 7 m 22 s | start 4.6 / med 10.1 / max 30.5 |
 | `real-input:ios:text-field` | **FAIL** | — | `459e2c830a8a` (ios tree) | 0.2 s | start 5.0 / med 5.0 / max 5.0 |
@@ -203,14 +205,18 @@ need: merge against .gates/task/E5-merge.jsonl; code diff base 2ed9415 touches i
   ✓ check — green
   ✓ harness:ios — green
   ✓ harness:android — green
-  ✗ real-input:ios — red (exit 1 on tree 459e2c830a8a, task/E5-merge/real-input+ios-2026-11-07T10-40-20.187Z.log)
+  ✓ real-input:ios — green
   ✓ real-input:android — green
-  note: no check line was borrowed for this tree: no other ledger has a check line on tree 841f7788404d
+  note: no check line was borrowed for this tree: no other ledger has a check line on tree 065245a7baf2
   note: treated as both platforms (outside the known prefixes): example/__tests__/HostControls.harness.tsx, example/__tests__/Slider.harness.tsx, example/src/HostScreen.tsx, example/src/SliderScreen.tsx, scripts/real-input/android.mjs, scripts/real-input/report.mjs, …
-need: 1 gate(s) missing for merge: real-input:ios
+need: merge is satisfied on this code tree.
 ```
 
+
 ## Questions for orchestrator
+
+**Resolved by the re-run above:** the orchestrator confirmed the red as X21's, asked for one
+more run instead of relaxing the assertion, and it passed. Nothing here needs a decision.
 
 `real-input:ios` cannot go green on this tree, and the choice is yours, not mine.
 
