@@ -1745,6 +1745,20 @@ describe('androidIcon · an icon the app imports (D43)', () => {
   const SHARE_ASSET = require('../src/assets/icons/share_24px.xml');
 
   /**
+   * A 2 dp diagonal stroke, and the same file compiled into the APK.
+   *
+   * `close` is loaded by no other test here, like `star` above, so its file still
+   * arrives cold; and the two cases at the end of this suite are the only readers of
+   * both, which is why the pair exists at all — one glyph, seen through each road an
+   * app can name it by.
+   */
+  const CLOSE_ASSET = require('../src/assets/icons/close_24px.xml');
+  const CLOSE_NAME = 'nitroui_test_close';
+
+  /** A drawable that is not a vector, for the branch that keeps rasterising. */
+  const RASTER_NAME = 'nitroui_test_raster';
+
+  /**
    * The dev server this app's bundle was served from, as React Native sees it.
    *
    * The same `SourceCode.scriptURL` the wrapper reads (`src/iconSource.ts`), read
@@ -2106,6 +2120,191 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     } else {
       expect(fourOhFour).toContain('no pixels');
       expect(sameSize(box404, boxPlain)).toBe(true);
+    }
+  });
+
+  /**
+   * The ratio of tight-tolerance ink a 2 dp stroke loses when the artwork behind it
+   * was rasterised at 24 dp and stretched into a 40 dp slot.
+   *
+   * Measured on the emulator, not reasoned out: the two cases below were run against
+   * the round-1 loader, which rasterised every app drawable at the file's own size, and
+   * the stretched glyph reported 0.50 of the ink the sharp one did. Fix round 2 routes
+   * a `<vector>` resource through Compose's own vector loader, so both roads draw at
+   * the size the slot asks for and the ratio goes to 1. `0.8` is the line between the
+   * two measured states, with room for a rebuild or two to differ by a little.
+   */
+  const SHARP_RATIO = 0.8;
+
+  it('draws the shipped drawable as sharply as the imported one, at the top rung', async () => {
+    // One glyph, two roads, one box. Everything else in this file compares *boxes*,
+    // and a box cannot see blur: round 1 rasterised a shipped `<vector>` at its own
+    // 24 dp and let `ContentScale.Fit` stretch it to the 40 dp slot of `xxlarge`, so
+    // every measurement passed while the release build drew a soft glyph and the
+    // development build — which parses the same file as a vector — drew a sharp one.
+    //
+    // `close` is the fixture that tells them apart. A 2 dp diagonal has almost no
+    // interior, so scaling its bitmap turns most of its pixels into a blend between the
+    // glyph and the backdrop, and the probe counts only pixels that *are* the tint. The
+    // control beside it asks for the same bytes over Metro, where they have always been
+    // parsed and drawn at the slot's size: it is the reference, and no constant in this
+    // file decides what sharp means.
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          size="xxlarge"
+          tintColor={TINT_CSS}
+          androidIcon={CLOSE_ASSET}
+          testID="sharp-metro"
+          hybridRef={captureHybrid('sharp-metro')}
+        />
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          size="xxlarge"
+          tintColor={TINT_CSS}
+          androidIcon={CLOSE_NAME}
+          testID="sharp-name"
+          hybridRef={captureHybrid('sharp-name')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    for (const id of ['sharp-metro', 'sharp-name']) {
+      await waitForTestId(id);
+      const content = await waitForMeasured(id, id);
+      await waitForBox(id, content, id);
+    }
+    const metro = await probeUntilDrawn('sharp-metro', TINT);
+    const named = await probeUntilDrawn('sharp-name', TINT);
+    const metroHits = probeHits(metro.report);
+    const namedHits = probeHits(named.report);
+    console.log(
+      `sharp xxlarge: named=${named.report} metro=${metro.report} ` +
+        `ratio=${(namedHits / Math.max(1, metroHits)).toFixed(3)}`
+    );
+
+    if (Platform.OS === 'android') {
+      expect(namedHits).toBeGreaterThan(0);
+      expect(metroHits).toBeGreaterThan(0);
+      expect(
+        namedHits >= SHARP_RATIO * metroHits
+          ? 'both roads drew the glyph at the slot size'
+          : `the shipped drawable drew ${namedHits} pixels of the tint and the ` +
+              `imported one ${metroHits}: a stretched raster loses its thin strokes`
+      ).toEqual('both roads drew the glyph at the slot size');
+      // The same drawable at the rung it was authored for, measured again: 24 dp to
+      // 40 dp is 2.78x the area, and a sharp glyph keeps its stroke proportions across
+      // that. Round 1's answer grew the box and thinned the ink, which is the failure
+      // a screenshot of one button cannot show you.
+      const mediumHits = await inkAtMedium(TINT);
+      expect(
+        namedHits >= 2 * mediumHits
+          ? 'the top rung carries its share of ink for a 40 dp slot'
+          : `40 dp drew ${namedHits} pixels and 24 dp drew ${mediumHits}: ` +
+              'expected at least double, and a stretched 24 dp raster is well under'
+      ).toEqual('the top rung carries its share of ink for a 40 dp slot');
+    } else {
+      // iOS draws `systemImage`, and ignores `androidIcon` from either road — the
+      // round-1 contract, restated for the new fixture pair.
+      expect(named.report).toContain('no pixels');
+      expect(metro.report).toContain('no pixels');
+    }
+  });
+
+  /** The same shipped glyph, probed at the rung its file was authored at. */
+  async function inkAtMedium(color: number): Promise<number> {
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          size="medium"
+          tintColor={TINT_CSS}
+          androidIcon={CLOSE_NAME}
+          testID="sharp-medium"
+          hybridRef={captureHybrid('sharp-medium')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('sharp-medium');
+    const content = await waitForMeasured('sharp-medium', 'sharp-medium');
+    await waitForBox('sharp-medium', content, 'sharp-medium');
+    const report = await probeUntilDrawn('sharp-medium', color);
+    console.log(`sharp medium: ${report.report}`);
+    return probeHits(report.report);
+  }
+
+  it('still draws a drawable that is not a vector, at the slot the ladder gives it', async () => {
+    // The branch item 3 keeps. A `<vector>` is drawn; everything else — a PNG, a
+    // layer-list, an `animated-vector` — is still rasterised at its intrinsic size and
+    // tinted, and `docs/components/button.md` promises an app that names a bitmap gets
+    // it drawn. Nothing on a device had ever checked that (round 1's three shipped
+    // fixtures are two vectors and a sizeless shape), so a routing change that sent a
+    // PNG down the vector road and back would have gone unnoticed.
+    //
+    // What is asserted is that it draws, and that it draws into the *same* box the
+    // vector does: the slot comes from the ladder either way, which is the one rule an
+    // artwork must not be able to bend.
+    await render(
+      <View style={rowStyle}>
+        <Button
+          title="Share"
+          size="xxlarge"
+          tintColor={TINT_CSS}
+          androidIcon={RASTER_NAME}
+          testID="raster-icon"
+          hybridRef={captureHybrid('raster-icon')}
+        />
+        <Button
+          title="Share"
+          size="xxlarge"
+          tintColor={TINT_CSS}
+          androidIcon={CLOSE_NAME}
+          testID="raster-vector"
+          hybridRef={captureHybrid('raster-vector')}
+        />
+        <Button
+          title="Share"
+          size="xxlarge"
+          testID="raster-plain"
+          hybridRef={captureHybrid('raster-plain')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    for (const id of ['raster-icon', 'raster-vector', 'raster-plain']) {
+      await waitForTestId(id);
+      const content = await waitForMeasured(id, id);
+      await waitForBox(id, content, id);
+    }
+    const raster = measured('raster-icon') as Size;
+    const vector = measured('raster-vector') as Size;
+    const plain = measured('raster-plain') as Size;
+    // The tint the control was handed, which for a source this file owns is the only
+    // colour worth asking about: `0` is what a drawable dropped on the way there says.
+    const rasterHits =
+      Platform.OS === 'android'
+        ? probeHits(await pixelProbe('raster-icon', TINT, 'the raster icon'))
+        : 0;
+    console.log(
+      `raster branch: raster=${describeSize(raster)} vector=${describeSize(
+        vector
+      )} plain=${describeSize(plain)} hits=${String(rasterHits)}`
+    );
+
+    if (Platform.OS === 'android') {
+      expect(rasterHits).toBeGreaterThan(0);
+      // The ladder's box, not the file's: identical to the vector's, and wider than
+      // the control with no icon at all.
+      expect(sameSize(raster, vector)).toBe(true);
+      expect(raster.width).toBeGreaterThan(plain.width + 1);
+    } else {
+      expect(sameSize(raster, plain)).toBe(true);
+      expect(sameSize(raster, vector)).toBe(true);
     }
   });
 });
