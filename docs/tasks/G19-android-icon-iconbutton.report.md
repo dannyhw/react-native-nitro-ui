@@ -188,7 +188,8 @@ Android. Fixed in `bf046323` (Android keeps the empty title, iOS gets a label) a
 
 ## Fix round 1
 
-**Lease:** `G19-PLACEHOLDER` · **Design change (D43 item 2), not a review fix.**
+**Lease:** `G19-w2v9t` (pair-b — `nitro-ui B` / iPhone Air 27.0 + `emulator-5570` / API 35 ·
+Metro 8293) · **Design change (D43 item 2), not a review fix.**
 
 `androidIcon` now takes the `.xml` the app *imports* —
 `androidIcon={require('./icons/share.xml')}` — beside round 1's drawable-name string.
