@@ -807,9 +807,17 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
   /// cannot see, so it answers the model's count. Picker says the same about its menu
   /// (`HybridNitroUiPicker.swift:555-565`). `drawn` is the other half: what UIKit
   /// actually built from those rows, as ``nuiTestMenuProbe()`` last read it.
+  ///
+  /// `split`, `leading` and `trailing` (E3) answer `-1` too, and for the same reason
+  /// stated twice above: iOS has no second hit target to measure. A `primaryAction`
+  /// here is a *gesture* on one button - tap acts, long-press opens - so "did the
+  /// composition draw a split trigger" is not a question this platform can answer, and
+  /// `split=0` would claim a layout iOS chose. Android answers all three for real
+  /// (`MenuSplitButton.kt`), which is what the harness compares against.
   func nuiTestMenuReport() throws -> String {
     return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1"
       + ";rows=\(host.model.actionableRowCount);drawn=\(readDrawn())"
+      + ";split=-1;leading=-1,-1,-1,-1;trailing=-1,-1,-1,-1"
   }
 
   /// Open the menu, copy the tree UIKit built for it, and close it - from a test.

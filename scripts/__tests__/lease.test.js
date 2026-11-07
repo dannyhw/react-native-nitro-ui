@@ -45,6 +45,7 @@ import {
   decideAcquire,
   emulatorSerial,
   identifiersFor,
+  iosRuntimeKey,
   isReservedSerial,
   normalizeDevices,
   pruneExpired,
@@ -751,6 +752,165 @@ describe('the reserved serial', () => {
   });
 });
 
+/**
+ * X20 item 3 (D42 item 1): simulators on the machine's other iOS runtimes, for look checks.
+ *
+ * They join the pool's pairs so the reaper and an exclusive lease see them, which is exactly why
+ * the selection rule has to be tested both ways: an ordinary acquire must never land on one (a
+ * merge gate on iOS 26.5 would be evidence about the wrong OS), and `--ios-runtime` must never
+ * land on a default pair (a "26.5 look check" on 27.0 is the question unanswered).
+ */
+describe('iOS-runtime simulators', () => {
+  const POOL = normalizeDevices({
+    pairs: [
+      {
+        id: 'pair-a',
+        ios: { udid: 'AAAA', name: 'iPhone 17', system: '27.0' },
+        android: { avd: 'avd_a', emulatorPort: 5574, adbPort: 5043 },
+        metroPort: 8295,
+      },
+    ],
+    iosRuntimes: [
+      {
+        id: 'ios-26.5',
+        ios: { udid: 'R265', name: 'nitro-ui iOS 26.5', system: '26.5' },
+        metroPort: 8297,
+      },
+      {
+        id: 'ios-27.1',
+        ios: { udid: 'R271', name: 'nitro-ui iOS 27.1', system: '27.1' },
+        metroPort: 8298,
+      },
+    ],
+  });
+  const decide = (overrides = {}) =>
+    decideAcquire({
+      active: [],
+      pairs: POOL.pairs,
+      maxDeviceLeases: 2,
+      exclusive: false,
+      platform: 'ios',
+      task: 'G20',
+      ...overrides,
+    });
+
+  it('folds them into the pool as iOS-only entries tagged with their runtime', () => {
+    expect(
+      POOL.pairs.map((pair) => [pair.id, pair.iosRuntime ?? null])
+    ).toEqual([
+      ['pair-a', null],
+      ['ios-26.5', '26.5'],
+      ['ios-27.1', '27.1'],
+    ]);
+    expect(POOL.pairs[1].android).toBeNull();
+  });
+
+  it('hands out the simulator on the runtime asked for', () => {
+    const decision = decide({ iosRuntime: '26.5' });
+    expect(decision.ok && decision.pair.id).toBe('ios-26.5');
+    expect(decide({ iosRuntime: '27.1' }).pair?.id).toBe('ios-27.1');
+  });
+
+  it('never hands one out to an ordinary acquire, even with the default pair taken', () => {
+    expect(decide({ platform: 'both' }).pair?.id).toBe('pair-a');
+    const busy = decide({ active: [lease('G6', ['pair-a'])] });
+    expect(busy.ok).toBe(false);
+    expect(busy.reason).toContain('every pair is already leased');
+  });
+
+  it('never hands a default pair to --ios-runtime', () => {
+    const decision = decide({ iosRuntime: '27.0' });
+    expect(decision.ok).toBe(false);
+    expect(decision.reason).toContain('no simulator on iOS 27.0 is configured');
+    expect(decision.reason).toContain('26.5, 27.1');
+    expect(decision.reason).toContain('doctor.mjs --setup');
+  });
+
+  it('waits for a runtime simulator another task holds, and says whose', () => {
+    const decision = decide({
+      iosRuntime: '26.5',
+      active: [lease('G21', ['ios-26.5'])],
+    });
+    expect(decision.ok).toBe(false);
+    expect(decision.reason).toContain(
+      'every iOS 26.5 simulator is already leased'
+    );
+    expect(decision.waiting).toEqual(['G21 (G21-1)']);
+  });
+
+  it('counts a look-check lease against the machine limit like any device lease', () => {
+    // D13: a simulator boot is the load spike the limit exists for, whatever the runtime.
+    const decision = decide({
+      iosRuntime: '27.1',
+      active: [lease('G6', ['pair-a']), lease('G21', ['ios-26.5'])],
+    });
+    expect(decision.ok).toBe(false);
+    expect(decision.reason).toContain('limit is 2');
+  });
+
+  it('reads 26.5, "26.5.0" and 26.5.1 as one runtime, and refuses what is not a version', () => {
+    expect(iosRuntimeKey('26.5')).toBe('26.5');
+    expect(iosRuntimeKey('26.5.1')).toBe('26.5');
+    expect(iosRuntimeKey(27)).toBe('27.0');
+    expect(iosRuntimeKey('latest')).toBeNull();
+    expect(iosRuntimeKey('')).toBeNull();
+  });
+
+  it('refuses an entry with no version, an android half, or an id a pair already has', () => {
+    expect(() =>
+      normalizeDevices({
+        pairs: [
+          {
+            id: 'pair-a',
+            ios: { udid: 'AAAA' },
+            metroPort: 8295,
+          },
+        ],
+        iosRuntimes: [
+          { id: 'r1', ios: { udid: 'R1' }, metroPort: 8297 },
+          {
+            id: 'r2',
+            ios: { udid: 'R2', system: '26.5' },
+            android: { avd: 'x', emulatorPort: 5580 },
+            metroPort: 8298,
+          },
+          {
+            id: 'pair-a',
+            ios: { udid: 'R3', system: '26.5' },
+            metroPort: 8299,
+          },
+        ],
+      })
+    ).toThrow(
+      /r1: ios\.system must be[^]*r2: an iOS-runtime simulator has no android half[^]*"pair-a" twice/
+    );
+  });
+
+  it('exports the runtime in the env file, which is what the gates refuse on', () => {
+    const env = renderEnvFile(
+      {
+        id: 'G20-1',
+        task: 'G20',
+        platform: 'ios',
+        exclusive: false,
+        iosRuntime: '26.5',
+      },
+      POOL.pairs[1]
+    );
+    expect(env).toContain("export NITRO_UI_LEASE_IOS_RUNTIME='26.5'");
+    expect(env).toContain("export IOS_SIM_UDID='R265'");
+    expect(env).toContain("export IOS_VERSION='26.5'");
+    expect(env).toContain("export METRO_PORT='8297'");
+    expect(env).not.toContain('ANDROID_');
+    expect(
+      renderEnvFile(
+        { id: 'G6-1', task: 'G6', platform: 'ios', exclusive: false },
+        POOL.pairs[0]
+      )
+    ).not.toContain('NITRO_UI_LEASE_IOS_RUNTIME');
+  });
+});
+
 describe('the env file a lease prints', () => {
   const pair = normalizeDevices(
     JSON.parse(readFileSync(EXAMPLE_CONFIG, 'utf8'))
@@ -958,7 +1118,13 @@ describe('the CLI, in a real state directory', () => {
       config,
     ]);
     expect(retried.status).toBe(0);
-    expect(readState().leases[0].holds).toEqual(['pair-a', 'pair-b']);
+    // Every pair, and the example's iOS 26.5 look-check simulator too (X20 item 3): a bench's quiet
+    // machine has no look check booting a simulator under it either.
+    expect(readState().leases[0].holds).toEqual([
+      'pair-a',
+      'pair-b',
+      'ios-26.5',
+    ]);
     // An exclusive holder leaves nothing for anyone else.
     expect(cli(['acquire', '--task', 'G6', '--config', config]).status).toBe(1);
   });
@@ -986,6 +1152,127 @@ describe('the CLI, in a real state directory', () => {
     expect(finished.stdout).toContain('export METRO_PORT=');
     expect(readState().leases.map((entry) => entry.task)).toEqual(['B1']);
   }, 30_000);
+
+  // X20 item 3, at the level a task types it. devices.example.json carries one iOS 26.5 look-check
+  // simulator, so these run against the shipped example rather than a fixture written to agree.
+  it('hands out the iOS 26.5 simulator for --ios-runtime 26.5, and says so in the env and list', () => {
+    const got = cli([
+      'acquire',
+      '--task',
+      'G20',
+      '--ios-runtime',
+      '26.5',
+      '--config',
+      config,
+    ]);
+    expect(got.status).toBe(0);
+    expect(got.stdout).toContain(
+      "export IOS_SIM_UDID='00000000-0000-4000-8000-00000000265A'"
+    );
+    expect(got.stdout).toContain("export NITRO_UI_LEASE_IOS_RUNTIME='26.5'");
+    expect(got.stdout).toContain("export NITRO_UI_LEASE_PLATFORM='ios'");
+    expect(got.stdout).toContain("export METRO_PORT='8297'");
+    expect(got.stdout).not.toContain('ANDROID_');
+    expect(readState().leases[0]).toMatchObject({
+      task: 'G20',
+      platform: 'ios',
+      iosRuntime: '26.5',
+      holds: ['ios-26.5'],
+    });
+    expect(cli(['list', '--config', config]).stdout).toMatch(
+      /G20\s+ios 26\.5\s+ios-26\.5/
+    );
+  });
+
+  it('never hands the look-check simulator to an ordinary acquire', () => {
+    for (const task of ['G6', 'G7']) {
+      const got = cli([
+        'acquire',
+        '--task',
+        task,
+        '--platform',
+        'ios',
+        '--config',
+        config,
+      ]);
+      expect(got.status).toBe(0);
+      expect(got.stdout).not.toContain('NITRO_UI_LEASE_IOS_RUNTIME');
+    }
+    expect(readState().leases.flatMap((entry) => entry.holds)).toEqual([
+      'pair-a',
+      'pair-b',
+    ]);
+  });
+
+  it('refuses a runtime nothing is configured on, naming the ones that are', () => {
+    const got = cli([
+      'acquire',
+      '--task',
+      'G20',
+      '--ios-runtime',
+      '25.0',
+      '--config',
+      config,
+    ]);
+    expect(got.status).toBe(1);
+    expect(got.stderr).toContain('no simulator on iOS 25.0 is configured');
+    expect(got.stderr).toContain('has 26.5');
+    expect(existsSync(stateFile()) ? readState().leases : []).toEqual([]);
+  });
+
+  it('refuses --ios-runtime with android, both, or --exclusive', () => {
+    for (const extra of [
+      ['--platform', 'android'],
+      ['--platform', 'both'],
+      ['--exclusive'],
+    ]) {
+      const got = cli([
+        'acquire',
+        '--task',
+        'G20',
+        '--ios-runtime',
+        '26.5',
+        ...extra,
+        '--config',
+        config,
+      ]);
+      expect(got.status).not.toBe(0);
+      expect(got.stderr).toContain('--ios-runtime');
+    }
+    expect(
+      cli([
+        'acquire',
+        '--task',
+        'G20',
+        '--ios-runtime',
+        'old',
+        '--config',
+        config,
+      ]).stderr
+    ).toContain('needs an iOS version');
+  });
+
+  it('refuses to answer a look-check request with the pair a task already holds', () => {
+    expect(cli(['acquire', '--task', 'G20', '--config', config]).status).toBe(
+      0
+    );
+    const got = cli([
+      'acquire',
+      '--task',
+      'G20',
+      '--ios-runtime',
+      '26.5',
+      '--config',
+      config,
+    ]);
+    expect(got.status).toBe(1);
+    expect(got.stderr).toContain('already holds a default pair (pair-a)');
+    expect(got.stderr).toContain('--task G20-26.5');
+    // And the same request again is still the idempotent re-acquire it always was.
+    const again = cli(['acquire', '--task', 'G20', '--config', config]);
+    expect(again.status).toBe(0);
+    expect(readState().leases).toHaveLength(1);
+  });
 
   it('refuses to hand out a reserved serial', () => {
     writeFileSync(

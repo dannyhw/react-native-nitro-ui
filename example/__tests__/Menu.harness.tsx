@@ -5,8 +5,10 @@
  * halves that read completely differently.
  *
  * **The box** is the Button's story, told again: the sizing configuration is
- * `variant|size|systemImage|title` (`Menu.tsx`'s `sizingVariantFor`), the items are
- * deliberately *not* in it, and every cold configuration is poisoned first
+ * `variant|size|action|systemImage|title` (`Menu.tsx`'s `sizingVariantFor`), the items
+ * are deliberately *not* in it, `action` is in it because a `primaryAction` gives
+ * Android a second container (E3 - see the split suite), and every cold configuration
+ * is poisoned first
  * (`seedSizingSize` with a size no menu has, then an environment bump) so a
  * correction that never arrives leaves a visible wrong box *and* costs a correction
  * the test requires. The `group` half is this control's own claim, and it is the
@@ -27,9 +29,13 @@
  * composition never owns a window to measure (`HybridNitroUiPicker` answers `-1` for
  * the same reason and this control does too), and `userEvent`'s synthesised touch is
  * refused by SwiftUI's button gesture environment (`docs/tasks/G2-button.report.md`
- * measured that for every Button style). So on iOS the open/close counters, the
- * rects, `live` and the inline-vs-nested difference are asserted only as far as the
- * `-1`s and the row count go, and the taps that need a real HID-level event are
+ * measured that for every Button style). One exception, measured by E3's split suite:
+ * a `Menu` built with `primaryAction:` does take the synthesised tap, so the action
+ * half of that prop *is* observable on iOS - opening is not.
+ *
+ * So on iOS the open/close counters, the rects, `live` and the inline-vs-nested
+ * difference are asserted only as far as the `-1`s and the row count go, and the taps
+ * that need a real HID-level event are
  * G7b's real-input case (`docs/components/menu.md` says the same about
  * `onOpen`/`onClose`).
  *
@@ -153,6 +159,19 @@ const recordClose = (testId: string) => (): void => {
   stateLog.push(`${testId}:close`);
 };
 
+/**
+ * Every `primaryAction` the app has reported, in order (E3).
+ *
+ * Its own array rather than a tag inside `stateLog`, because the whole claim is about
+ * the two *not* mixing: a press on the action half must leave `stateLog` empty, and
+ * counting both in one list would make "no open" indistinguishable from "one open".
+ */
+const primaryLog: string[] = [];
+const recordPrimary = (testId: string) => (): void => {
+  orderLog.push(`action:${testId}`);
+  primaryLog.push(`${testId}:action`);
+};
+
 // MARK: - The witness
 
 /** The five numbers a menu is asked about, parsed out of its report line. */
@@ -169,6 +188,16 @@ type MenuReport = {
    * which has no second renderer to ask).
    */
   drawn: string | null;
+  /**
+   * Whether this mount's composition drew the split trigger (E3). `null` means `-1`:
+   * iOS has no second hit target to look for, `true`/`false` is Android looking and
+   * answering. Not the same question as the `primaryAction` prop, which is what React
+   * sent - see `MenuModel.splitDrawn`.
+   */
+  split: boolean | null;
+  /** The two halves' screen rects, in the same space as `anchor`; `-1` unread. */
+  leading: number[];
+  trailing: number[];
 };
 
 function parseMenuReport(line: string): MenuReport {
@@ -185,6 +214,7 @@ function parseMenuReport(line: string): MenuReport {
       .map((part) => Number(part));
   const expandedField = field('expanded');
   const liveField = field('live');
+  const splitField = field('split');
   return {
     // `-1` is this control's own "unanswerable" (Q1 §2: "never a `0` that reads as
     // 'checked'"), so it must not coerce into `false`/`0` here and hide the
@@ -195,6 +225,11 @@ function parseMenuReport(line: string): MenuReport {
     menu: rect('menu'),
     rows: Number(field('rows')),
     drawn: field('drawn') === '-1' ? null : field('drawn'),
+    // The same `-1` is not a `false` argument here either: "Android composed one
+    // button" and "iOS has no such measurement" have to stay two different answers.
+    split: splitField === '-1' ? null : splitField === '1',
+    leading: rect('leading'),
+    trailing: rect('trailing'),
   };
 }
 
@@ -220,6 +255,11 @@ function expectUnanswerable(current: MenuReport): void {
   expect(current.live).toBeNull();
   expect(current.anchor).toEqual([-1, -1, -1, -1]);
   expect(current.menu).toEqual([-1, -1, -1, -1]);
+  // E3's three, for the same reason as the four above: iOS's `primaryAction` is a
+  // gesture on one button, so `split=0` would claim a layout iOS chose.
+  expect(current.split).toBeNull();
+  expect(current.leading).toEqual([-1, -1, -1, -1]);
+  expect(current.trailing).toEqual([-1, -1, -1, -1]);
 }
 
 // MARK: - Waits that refuse a wrong answer
@@ -514,21 +554,27 @@ async function settle(ms = 250): Promise<void> {
 // MARK: - Sizing fixtures
 
 /**
- * The key `Menu.tsx` builds: `variant|size|systemImage|title`, each piece escaped.
+ * The key `Menu.tsx` builds: `variant|size|action|systemImage|title`, each piece
+ * escaped.
  *
  * Written out here rather than imported - a harness that poisoned the cache through
  * the library's own helper could not catch the helper being wrong, and a missing
  * input in that key is the R3 bug class. The absence of `group` is asserted, too
- * (see the "trigger, not the list" test).
+ * (see the "trigger, not the list" test), and the presence of `action` is asserted by
+ * the split sizing gate: a split trigger that shared the plain trigger's entry would be
+ * laid out at the wrong width, and measured that way - the *split* control is the one
+ * left at the other's box, because a shared entry keeps the last correction written to
+ * it. `docs/tasks/E3/mutations.json` carries both directions.
  */
 function sizingKey(
   variant: string,
   size: string,
   title: string,
-  systemImage = ''
+  systemImage = '',
+  action: 'action' | 'plain' = 'plain'
 ): string {
   const escape = (value: string): string => value.replace(/[\\|]/g, '\\$&');
-  return [variant, size, escape(systemImage), escape(title)].join('|');
+  return [variant, size, action, escape(systemImage), escape(title)].join('|');
 }
 
 /** A size that is *not* any menu's size, planted as the engine's first answer. */
@@ -707,6 +753,26 @@ async function pressWitnessed(testId: string): Promise<void> {
   );
 }
 
+/**
+ * Press the middle of a rect the *witness* reports, in device pixels (E3).
+ *
+ * `pressTrigger` presses the middle of the *React Native* frame, which for a split
+ * trigger is the seam between the two halves - a press there belongs to neither and
+ * would make "the leading half fired the action" a coin flip. Everything the split
+ * suite presses goes through the halves' own rects for that reason, and `edges`
+ * refuses a short one so an unread `-1` half cannot press the origin.
+ */
+async function pressRect(rect: number[], what: string): Promise<void> {
+  const [left, top, right, bottom] = edges(rect, what);
+  expect(left).toBeGreaterThanOrEqual(0);
+  expect(right).toBeGreaterThan(left);
+  expect(bottom).toBeGreaterThan(top);
+  await userEvent.pressAt(
+    (left + right) / 2 / PixelRatio.get(),
+    (top + bottom) / 2 / PixelRatio.get()
+  );
+}
+
 /** Pick a row through the seam a real row uses. */
 async function pickRow(testId: string, id: string): Promise<void> {
   const handle = handles.get(testId);
@@ -726,6 +792,9 @@ afterEach(() => {
   selectLog.length = 0;
   stateLog.length = 0;
   orderLog.length = 0;
+  primaryLog.length = 0;
+  splitControl.setAction = undefined;
+  splitControl.setDisabled = undefined;
   nitroUiCore.setSizingTraceEnabled(false);
 });
 
@@ -2140,6 +2209,411 @@ describe('Menu · Expressive rows (E2)', () => {
     expect(fresh).toBe(E2_PLAIN_DRAWN);
     await closeQuietly('e2-reset');
     unmountAgain();
+  });
+});
+
+// MARK: - Split trigger (E3)
+
+/** Mount-time setters for {@link SplitMenu}, so a test can change one prop in place. */
+const splitControl: {
+  setAction?: (on: boolean) => void;
+  setDisabled?: (on: boolean) => void;
+} = {};
+
+/**
+ * The split configuration: a Menu whose `primaryAction` a test can take away and hand
+ * back without remounting (E3).
+ *
+ * The action is passed as `undefined` rather than as a no-op when it is "off", because
+ * `undefined` is what makes `Menu.tsx` send `hasPrimaryAction: false` - the flag that
+ * chooses the trigger's layout. `useStableCallback` keeps one wrapper per mount, so
+ * flipping it is a prop change and not a callback-identity change.
+ */
+function SplitMenu({ testId }: { testId: string }) {
+  const [action, setAction] = useState(true);
+  const [disabled, setDisabled] = useState(false);
+  splitControl.setAction = setAction;
+  splitControl.setDisabled = setDisabled;
+  return (
+    <Menu
+      title="Publish"
+      group={GROUP}
+      disabled={disabled}
+      testID={testId}
+      hybridRef={captureHybrid(testId)}
+      onSelect={recordSelect(testId)}
+      onOpen={recordOpen(testId)}
+      onClose={recordClose(testId)}
+      primaryAction={action ? recordPrimary(testId) : undefined}
+    />
+  );
+}
+
+describe('Menu · Split trigger (E3)', () => {
+  /**
+   * Two hit targets, two jobs.
+   *
+   * The claim under every line here is *two*, not "wider": a trigger that grew a
+   * second container but routed both to the popup, or drew a second container that is
+   * not a hit target at all, would satisfy a width assertion. The two halves are read
+   * from the composition's own layout (`split`/`leading`/`trailing`) and pressed there,
+   * not through the React Native frame - whose middle is the seam between them.
+   */
+  it('is two halves, and each one does only its own job', async () => {
+    await render(<SplitMenu testId="split" />, { timeout: 20000 });
+    await waitForTestId('split');
+    await waitForHandle('split', 'the split menu');
+
+    if (Platform.OS !== 'android') {
+      // iOS is unchanged by E3's *layout*, and the -1s are the answer that says so
+      // ("no second hit target exists here to measure"), not a `0` that would claim a
+      // layout iOS chose. What the prop changes there is the gesture: a SwiftUI `Menu`
+      // built with `primaryAction:` acts on a tap and opens on a long press (D29).
+      //
+      // Measured on this run, the harness's synthesised touch does reach that tap -
+      // unlike a Button's own gesture environment, which refuses it (G2), so this is
+      // the one place the action half of the prop is observable off the real-input
+      // gate. The open half stays unobservable either way (system presentation), which
+      // is what the -1s above and the iOS cases further up are for.
+      const before = report('split');
+      expectUnanswerable(before);
+      expect(before.split).toBeNull();
+      await pressTrigger('split');
+      await settle(400);
+      // One press, one action, and still no second container in the report.
+      expect(primaryLog).toEqual(['split:action']);
+      expect(stateLog).toEqual([]);
+      expect(report('split').split).toBeNull();
+      console.log(
+        "iOS: one button, one gesture - the press reaches SwiftUI's tap and runs the " +
+          'action, while split/leading/trailing stay -1 because there is no second ' +
+          "hit target to measure and opening stays G7b's real-input case"
+      );
+      return;
+    }
+
+    // --- The trigger *is* a split button: two non-degenerate, disjoint rects that
+    // together fill the control's own box.
+    const drawn = await waitForMenu('split', (r) => r.split === true);
+    const [lLeft, lTop, lRight, lBottom] = edges(drawn.leading, 'leading half');
+    const [tLeft, tTop, tRight, tBottom] = edges(
+      drawn.trailing,
+      'trailing half'
+    );
+    expect(lRight).toBeGreaterThan(lLeft);
+    expect(tRight).toBeGreaterThan(tLeft);
+    expect(lBottom).toBeGreaterThan(lTop);
+    expect(lTop).toBe(tTop);
+    expect(lBottom).toBe(tBottom);
+    // Side by side and not overlapping - the seam is where a "single trigger with a
+    // chevron drawn on top" would fail, because it has no second rect to report.
+    expect(lLeft).toBeLessThan(tLeft);
+    expect(lRight).toBeLessThanOrEqual(tLeft + 1);
+    const frame = boxOf('split');
+    expect(frame).not.toBeNull();
+    const ratio = PixelRatio.get();
+    const boxRight = (frame!.x + frame!.width) * ratio;
+    const boxBottom = (frame!.y + frame!.height) * ratio;
+    expect(lLeft).toBeGreaterThanOrEqual(frame!.x * ratio - 2);
+    expect(tRight).toBeLessThanOrEqual(boxRight + 2);
+    expect(tBottom).toBeLessThanOrEqual(boxBottom + 2);
+    console.log(
+      `split halves: leading=${lLeft},${lTop},${lRight},${lBottom} ` +
+        `trailing=${tLeft},${tTop},${tRight},${tBottom} box=${describeSize(frame)}`
+    );
+
+    const liveBefore = drawn.live ?? 0;
+
+    // --- The leading half: the action, and *nothing else*. No open, no close, no
+    // popup, and the list count unmoved.
+    await pressRect(drawn.leading, 'the action half');
+    await waitForLog(primaryLog, 1, 'the action half');
+    await settle(250);
+    expect(primaryLog).toEqual(['split:action']);
+    expect(stateLog).toEqual([]);
+    expect(orderLog).toEqual(['action:split']);
+    const stillShut = report('split');
+    expect(stillShut.expanded).toBe(false);
+    expect(stillShut.live).toBe(liveBefore);
+    expect(stillShut.split).toBe(true);
+
+    // --- The trailing half: the list, exactly once. One press is one `onOpen`, which
+    // is the same funnel the plain trigger relies on - Material's checked button
+    // reports a *request*, and `MenuModel.setOpen` is what keeps it to one event.
+    await pressRect(drawn.trailing, 'the list half');
+    const opened = await waitForMenu(
+      'split',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    expect(stateLog).toEqual(['split:open']);
+    expect(primaryLog).toEqual(['split:action']);
+    expect(orderLog).toEqual(['action:split', 'open:split']);
+
+    // --- And the list hangs off *that* half, not off the whole control: the window's left
+    // edge has to be the trailing half's, not the control's (`lLeft`, well to its left).
+    // E3 measured which of the two placements decides that - composing the list in the
+    // leading half's slot moved this window to 21 px against these 202, while moving the
+    // call out of the half's own wrapper `Box` and staying in this half's slot moved it
+    // nowhere (`docs/tasks/E3/mutations.json`). The slot anchors the list; the `Box` is
+    // `propagateMinConstraints` plumbing.
+    const [mLeft, mTop] = edges(opened.menu, 'menu');
+    expect(mLeft).toBeGreaterThanOrEqual(tLeft - 2);
+    expect(mLeft).toBeLessThanOrEqual(tLeft + 2);
+    expect(mLeft).toBeGreaterThan(lLeft + 8);
+    expect(mTop).toBeGreaterThanOrEqual(tBottom - 2);
+    console.log(
+      `split popup: menu left=${String(mLeft)} top=${String(mTop)} - trailing half ` +
+        `left=${String(tLeft)} bottom=${String(tBottom)} - leading half left=` +
+        `${String(lLeft)}`
+    );
+
+    // One close, after the pick, and the halves are still there underneath.
+    await pickRow('split', 'copy');
+    await waitForMenu(
+      'split',
+      (r) => r.expanded === false && r.live === liveBefore
+    );
+    expect(stateLog).toEqual(['split:open', 'split:close']);
+    expect(orderLog).toEqual([
+      'action:split',
+      'open:split',
+      'select:split:copy',
+      'close:split',
+    ]);
+    const closedAgain = report('split');
+    expect(closedAgain.split).toBe(true);
+    expect(closedAgain.leading).toEqual(drawn.leading);
+  });
+
+  /**
+   * The second half follows the prop, in place.
+   *
+   * E3's layout claim in the direction the old code could not make: taking
+   * `primaryAction` away has to *stop* drawing the split button, not leave a second
+   * hit target that fires nothing. `split` is what the composition drew, so this is the
+   * assertion that says the layout followed, rather than the prop being remembered.
+   */
+  it('takes the second half away with the action, and gives it back', async () => {
+    await render(<SplitMenu testId="split-inplace" />, { timeout: 20000 });
+    await waitForHandle('split-inplace', 'the split menu');
+    if (Platform.OS !== 'android') {
+      // The prop round-trips and iOS has no layout to change - the same statement the
+      // case above makes, with the flag now moving.
+      expectUnanswerable(report('split-inplace'));
+      splitControl.setAction?.(false);
+      await settle(300);
+      expectUnanswerable(report('split-inplace'));
+      expect(handles.get('split-inplace')?.title).toBe('Publish');
+      return;
+    }
+
+    const on = await waitForMenu('split-inplace', (r) => r.split === true);
+    expect(on.leading).not.toEqual([-1, -1, -1, -1]);
+
+    splitControl.setAction?.(false);
+    await settle(400);
+    const off = await waitForMenu('split-inplace', (r) => r.split === false);
+    // Both halves go unread, not stale: a half that kept its box would still hand the
+    // next gate coordinates for a container that is gone.
+    expect(off.leading).toEqual([-1, -1, -1, -1]);
+    expect(off.trailing).toEqual([-1, -1, -1, -1]);
+    // One trigger again, so a press opens like any other Menu's.
+    const liveBefore = off.live ?? 0;
+    await pressTrigger('split-inplace');
+    await waitForMenu(
+      'split-inplace',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+    expect(primaryLog).toEqual([]);
+    expect(stateLog).toEqual(['split-inplace:open']);
+    await pickRow('split-inplace', 'copy');
+    await waitForMenu(
+      'split-inplace',
+      (r) => r.expanded === false && r.live === liveBefore
+    );
+
+    // And back, so "it disappeared" cannot be "it stopped reporting".
+    splitControl.setAction?.(true);
+    await settle(400);
+    const back = await waitForMenu('split-inplace', (r) => r.split === true);
+    expect(back.trailing).not.toEqual([-1, -1, -1, -1]);
+    console.log('split in place: on -> off (one trigger) -> on again');
+  });
+
+  /**
+   * Across a remount, which is the recycle case.
+   *
+   * Fabric may hand the new mount the previous owner's native view, and the previous
+   * owner here had a second hit target. `MenuModel.reset` and the split composition's
+   * own `onDispose` are the two things that stop that layout answering for a control
+   * that never asked for it, and this is the only place either is observed from the
+   * device side (`MenuModelTest.aRecycleClearsTheSplitTriggerAndItsHalves` is the
+   * off-device twin).
+   */
+  it('starts a new mount with one trigger, whatever the last one drew', async () => {
+    const { unmount } = await render(<SplitMenu testId="split-recycle" />, {
+      timeout: 20000,
+    });
+    await waitForHandle('split-recycle', 'the split menu');
+    if (Platform.OS === 'android') {
+      await waitForMenu('split-recycle', (r) => r.split === true);
+    }
+    unmount();
+    await settle(400);
+    handles.delete('split-recycle');
+
+    // Same testID, same title, no `primaryAction` - the shape a recycled view arrives
+    // in, where the only difference from the previous owner is the missing half.
+    const { unmount: unmountAgain } = await render(
+      <Menu
+        title="Publish"
+        group={GROUP}
+        testID="split-recycle"
+        hybridRef={captureHybrid('split-recycle')}
+        onOpen={recordOpen('split-recycle')}
+        onClose={recordClose('split-recycle')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForHandle('split-recycle', 'the remounted plain menu');
+    const fresh = report('split-recycle');
+    if (Platform.OS === 'android') {
+      // Android answers the layout question directly: the recycled view drew one
+      // trigger, so `split` is a `false` and both halves are unread rather than stale.
+      expect(fresh.split).toBe(false);
+      expect(fresh.leading).toEqual([-1, -1, -1, -1]);
+      expect(fresh.trailing).toEqual([-1, -1, -1, -1]);
+      const liveBefore = fresh.live ?? 0;
+      await pressTrigger('split-recycle');
+      await waitForMenu(
+        'split-recycle',
+        (r) => r.expanded === true && r.live === liveBefore + 1
+      );
+      expect(stateLog).toEqual(['split-recycle:open']);
+      await pickRow('split-recycle', 'copy');
+      await waitForMenu(
+        'split-recycle',
+        (r) => r.expanded === false && r.live === liveBefore
+      );
+    } else {
+      // iOS never had a split layout to leak, so the three fields answer -1 before the
+      // remount and after it - the same answer, which is the claim E3 can make there.
+      expectUnanswerable(fresh);
+    }
+    console.log(
+      `split remount: split=${String(report('split-recycle').split)}`
+    );
+    unmountAgain();
+  });
+
+  /**
+   * `disabled` reaches both halves, and ends an open list (D29).
+   *
+   * The close is D29's rule restated for a split trigger; the two refusals are the
+   * half that a plain Menu has no equivalent of, because there is only one press to
+   * refuse there. Material keeps a disabled button inert before the model sees the
+   * press, so the off-device twin of this (`aDisabledControlRefusesThePrimaryAction`)
+   * asks the model directly - this is the real-input-shaped version.
+   */
+  it('disables both halves and closes an open split menu', async () => {
+    await render(<SplitMenu testId="split-disabled" />, { timeout: 20000 });
+    await waitForHandle('split-disabled', 'the split menu');
+    if (Platform.OS !== 'android') {
+      // iOS: the flag round-trips and the presentation is SwiftUI's, exactly as the
+      // non-split disabled case above asserts.
+      splitControl.setDisabled?.(true);
+      await settle(300);
+      expect(handles.get('split-disabled')?.disabled).toBe(true);
+      expectUnanswerable(report('split-disabled'));
+      return;
+    }
+
+    const drawn = await waitForMenu('split-disabled', (r) => r.split === true);
+    const liveBefore = drawn.live ?? 0;
+    await pressRect(drawn.trailing, 'the list half');
+    await waitForMenu(
+      'split-disabled',
+      (r) => r.expanded === true && r.live === liveBefore + 1
+    );
+
+    splitControl.setDisabled?.(true);
+    await settle(400);
+    const shut = await waitForMenu(
+      'split-disabled',
+      (r) => r.expanded === false && r.live === liveBefore
+    );
+    expect(stateLog).toEqual(['split-disabled:open', 'split-disabled:close']);
+    // The halves are still drawn - `disabled` repaints, it does not relayout - but they
+    // answer nothing.
+    expect(shut.split).toBe(true);
+    await pressRect(shut.leading, 'the disabled action half');
+    await pressRect(shut.trailing, 'the disabled list half');
+    await settle(400);
+    expect(primaryLog).toEqual([]);
+    expect(stateLog).toEqual(['split-disabled:open', 'split-disabled:close']);
+    expect(report('split-disabled').expanded).toBe(false);
+    console.log('split disabled: open closed by the flag, both halves inert');
+  });
+
+  /**
+   * The split configuration's size, earned rather than inherited (D17's rule, E3's
+   * configuration).
+   *
+   * Two wrong answers are poisoned and refused: the planted `WRONG_SIZE`, and the
+   * control's *declared fallback* - which is what a split trigger left at the first
+   * frame would sit at. The two boxes are also compared with each other, because the
+   * sizing key carries an `action` field precisely so these two configurations cannot
+   * share a cache entry. A source that dropped the field puts both Menus in one entry,
+   * and this is the case that sees it - on the *split* control, left at the plain
+   * trigger's width. A shared entry holds one answer, the last correction written to it,
+   * and the split control is the holder that no longer matches its own measurement. Both
+   * directions of the mutation are in `docs/tasks/E3/mutations.json`; the field itself,
+   * which no device run can read, is guarded by
+   * `src/__tests__/menuSizingKey.test.tsx`.
+   */
+  it("earns its own box, which is not the plain trigger's", async () => {
+    const splitKey = sizingKey('filled', 'medium', 'Publish', '', 'action');
+    const plainKey = sizingKey('filled', 'medium', 'Publish');
+    expect(splitKey).not.toBe(plainKey);
+    poisonConfigurations([splitKey, plainKey]);
+    const before = stats();
+    await render(
+      <View style={columnStyle}>
+        <SplitMenu testId="split-size" />
+        <Menu
+          title="Publish"
+          group={GROUP}
+          testID="plain-size"
+          hybridRef={captureHybrid('plain-size')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    const lines: string[] = [];
+    for (const testId of ['split-size', 'plain-size']) {
+      await waitForTestId(testId);
+      const content = await waitForMeasured(testId, testId);
+      const box = await waitForBox(testId, content, testId);
+      expect(sameSize(box, WRONG_SIZE)).toBe(false);
+      expect(sameSize(box, DECLARED_FALLBACK)).toBe(false);
+      lines.push(`${testId}=${describeSize(box)}`);
+    }
+    const splitBox = sizeOf('split-size')!;
+    const plainBox = sizeOf('plain-size')!;
+    if (Platform.OS === 'android') {
+      // Material's own answer: the second container makes the control wider. iOS's
+      // `primaryAction` is a gesture, so its box is the same box and this line would be
+      // a lie there - which is the same asymmetry the whole suite is written around.
+      expect(splitBox.width).toBeGreaterThan(plainBox.width + 1);
+    }
+    await settle(300);
+    const cold = delta(before, stats());
+    console.log(
+      `split sizes (declared fallback ${describeSize(DECLARED_FALLBACK)}): ` +
+        `${lines.join(' ')} corrections=${String(cold.corrections)}`
+    );
+    // Two poisoned entries, two corrections - so neither box was inherited.
+    expect(cold.corrections).toBeGreaterThanOrEqual(2);
   });
 });
 

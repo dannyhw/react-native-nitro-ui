@@ -1,0 +1,193 @@
+# Failure excerpt — harness:android:Menu
+
+- Ran: 2026-11-06T16:08:13.015Z on code tree `e955bdb1b9f9` at HEAD `a4d20e4` (branch `task/E3-split-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu`
+- Result: fail, exit 1, 95441 ms
+- Load: start 5.75, end 13.67, median 13.91, max 17.26
+- Device: android / device `emulator-5574` / lease `E3-5z5a2`
+- Full log: `task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log` (<store>/task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · Split trigger (E3) › earns its own box, which is not the plain trigger's`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E3-5z5a2 (still live)
+  |   E3-5z5a2                 E3           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 13.67 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 148 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Menu
+gate: node ../scripts/harness.mjs --harnessRunner android Menu (cwd example)
+gate: code tree e955bdb1b9f9 at HEAD a4d20e4c
+gate: git tree 600e3fbebeb0 with a DIRTY worktree (not reusable)
+gate: log task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log
+gate:       <store>/task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree e955bdb1b9f9, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.75/11.37 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      menu sizes (declared fallback 75.10x52.00): cfg-filled=76.57x48.00 cfg-tonal=76.57x48.00 cfg-outlined=76.57x48.00 cfg-text=68.95x48.00 cfg-elevated=76.57x48.00 cfg-size-small=58.67x48.00 cfg-size-large=88.76x56.00 corrections=7 measurements=14
+
+
+    console.log
+      trigger parity: menu=62.10x48.00 button=62.10x48.00 corrections=2
+
+
+    console.log
+      group is not in the key: 57.90x48.00 -> 57.90x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=64.76x48.00 long=129.90x48.00
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      open/close: ["events:open","events:close","events:open"]
+
+
+    console.log
+      disable-while-open: ["disable:open","disable:close"]
+
+
+    console.log
+      wide list: trigger 174 px, popup 380 px (144.8 dp), floor list 316 px, start 21 vs 0, trigger box 66.29x48.00
+
+
+    console.log
+      long header: popup 735 px (280.0 dp, cap 280 dp)
+
+
+    console.log
+      short list: popup 316 px = 120.4 dp (floor 112), trigger 152 px
+
+
+    console.log
+      untitled group: android drawn=(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)
+
+
+    console.log
+      drop-while-open: live 0 -> 1 -> 0
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: android drawn=(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)
+
+
+    console.log
+      e2 in place: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      e2 remount: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      split halves: leading=0,0,197,126 trailing=202,0,328,126 box=124.95x48.00
+
+
+    console.log
+      split popup: menu left=202 top=142 - trailing half left=202 bottom=126 - leading half left=0
+
+
+    console.log
+      split in place: on -> off (one trigger) -> on again
+
+
+    console.log
+      split remount: split=false
+
+
+    console.log
+      split disabled: open closed by the flag, both halves inert
+
+
+    console.log
+      hosted anchoring: gap=16 -> 0 px at anchor bottom 126 -> 441
+
+
+    console.log
+      hosted anchor move: anchor top 126 -> 147 px, window taken down
+
+
+    console.log
+      read back: variant=outlined size=large tint=-3655765 label=Open the actions
+
+
+    console.log
+      a11y tree: named=null fallback=null plain=null
+
+  ● Menu · Split trigger (E3) › earns its own box, which is not the plain trigger's
+
+    testID "split-size" (split-size) never reached 124.95x48.00 - last box 78.86x48.00, control measured 124.95x48.00.
+
+      [0m [90m 399 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 400 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 401 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 402 |[39m         [32m`testID "${testId}" (${what}) never reached `[39m [33m+[39m
+       [90m 403 |[39m           [32m`${size.width.toFixed(2)}x${size.height.toFixed(2)} - last box `[39m [33m+[39m
+       [90m 404 |[39m           [32m`${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 47 passed, 48 total
+Snapshots:   0 total
+Time:        94.132 s
+Ran all test suites matching Menu.
+gate: harness:android:Menu FAIL in 95.4 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+
+
+gate: appended the device context to task/E3-split-button/harness+android+Menu-2026-11-06T16-08-12.635Z.log (5 probe(s))
+
+```

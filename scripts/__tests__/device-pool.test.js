@@ -1911,7 +1911,7 @@ describe('the between-task reset', () => {
 
   it('clears the example app on the emulator, on its own adb server', () => {
     const { pool, calls } = fakePool({ home });
-    const results = pool.resetPair(PAIR_A);
+    const results = pool.resetPair(PAIR_A, { platform: 'both' });
     expect(calls).toContainEqual([
       'pm',
       'clear',
@@ -1928,7 +1928,9 @@ describe('the between-task reset', () => {
     // `simctl install` *keeps* the container. So the pool printed a satisfied reset while one
     // task's NSUserDefaults and Documents sat on the device for the next one.
     const { pool, calls } = fakePool({ home });
-    const ios = pool.resetPair(PAIR_A).find((r) => r.key === 'ios:UDID-A');
+    const ios = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'ios:UDID-A');
     expect(ios.action).toBe('simctl uninstall');
     expect(ios.ok).toBe(true);
     expect(calls).toContainEqual([
@@ -1952,7 +1954,9 @@ describe('the between-task reset', () => {
       home,
       state: { iosUninstallWorks: false },
     });
-    const ios = pool.resetPair(PAIR_A).find((r) => r.key === 'ios:UDID-A');
+    const ios = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'ios:UDID-A');
     expect(ios.ok).toBe(false);
     expect(ios.answer).toMatch(/Unable to uninstall/);
     // A container still present is a failed reset even if the command had answered `ok`.
@@ -1961,7 +1965,9 @@ describe('the between-task reset', () => {
       ok: true,
       answer: 'uninstalled',
     });
-    const liar = survivor.resetPair(PAIR_A).find((r) => r.key === 'ios:UDID-A');
+    const liar = survivor
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'ios:UDID-A');
     expect(liar.ok).toBe(false);
     expect(liar.answer).toMatch(/data container survived/);
   });
@@ -1971,7 +1977,10 @@ describe('the between-task reset', () => {
     // pool knows where the app is, it leaves the device ready rather than empty.
     const { pool, calls } = fakePool({ home });
     const ios = pool
-      .resetPair(PAIR_A, { reinstallApp: '/tmp/build/NitroUiExample.app' })
+      .resetPair(PAIR_A, {
+        platform: 'both',
+        reinstallApp: '/tmp/build/NitroUiExample.app',
+      })
       .find((r) => r.key === 'ios:UDID-A');
     expect(ios.ok).toBe(true);
     expect(ios.answer).toContain('reinstalled /tmp/build/NitroUiExample.app');
@@ -2032,7 +2041,7 @@ describe('the between-task reset', () => {
     // failed one - the device is fine, it is just busy.
     const { pool, calls } = fakePool({ home, isPidAlive: () => true });
     withClaimedDevices(['avd:nitro-ui-a', 'ios:UDID-A']);
-    const rows = pool.resetPair(PAIR_A);
+    const rows = pool.resetPair(PAIR_A, { platform: 'both' });
     expect(calls.filter((c) => c[0] === 'pm')).toEqual([]);
     expect(calls.filter((c) => c[0] === 'uninstall-app')).toEqual([]);
     expect(rows).toHaveLength(2);
@@ -2049,7 +2058,9 @@ describe('the between-task reset', () => {
     // killed gate would carry the previous task's storage.
     const { pool, calls } = fakePool({ home, isPidAlive: () => false });
     withClaimedDevices(['avd:nitro-ui-a']);
-    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    const row = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'avd:nitro-ui-a');
     expect(row.skipped).toBeUndefined();
     expect(row.ok).toBe(true);
     expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
@@ -2060,7 +2071,9 @@ describe('the between-task reset', () => {
     // clear` answered `Failed` four times - with three sleeps - and the line said "the next run
     // inherits its data" when there was no data to inherit. One ask, and an honest no-op.
     const { pool, calls } = fakePool({ home, state: { appInstalled: false } });
-    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    const row = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'avd:nitro-ui-a');
     expect(row).toMatchObject({
       ok: true,
       noop: 'app not installed',
@@ -2087,7 +2100,10 @@ describe('the between-task reset', () => {
       state: { iosInstalled: false },
     });
     const row = pool
-      .resetPair(PAIR_A, { reinstallApp: '/tmp/build/NitroUiExample.app' })
+      .resetPair(PAIR_A, {
+        platform: 'both',
+        reinstallApp: '/tmp/build/NitroUiExample.app',
+      })
       .find((r) => r.key === 'ios:UDID-A');
     expect(row.ok).toBe(true);
     expect(row.answer).toContain('installed /tmp/build/NitroUiExample.app');
@@ -2109,7 +2125,10 @@ describe('the between-task reset', () => {
       answer: 'Unable to lookup in current state',
     });
     const row = pool
-      .resetPair(PAIR_A, { reinstallApp: '/tmp/build/NitroUiExample.app' })
+      .resetPair(PAIR_A, {
+        platform: 'both',
+        reinstallApp: '/tmp/build/NitroUiExample.app',
+      })
       .find((r) => r.key === 'ios:UDID-A');
     expect(row.ok).toBe(false);
     expect(row.answer).toContain('reinstall FAILED');
@@ -2123,7 +2142,9 @@ describe('the between-task reset', () => {
       home,
       state: { installProbeFails: true },
     });
-    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    const row = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'avd:nitro-ui-a');
     expect(row.noop).toBeUndefined();
     expect(row.ok).toBe(true);
     expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(1);
@@ -2134,7 +2155,9 @@ describe('the between-task reset', () => {
       home,
       state: { appDataCleared: false },
     });
-    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    const row = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'avd:nitro-ui-a');
     expect(row.ok).toBe(false);
     // The device's own word, not just "FAILED": `Failed` and `Error: unknown package` are
     // different problems to whoever reads the line, and both arrive as a nonzero pm clear.
@@ -2153,7 +2176,9 @@ describe('the between-task reset', () => {
       home,
       state: { appDataClearAnswers: ['Failed', 'Failed', 'Success'] },
     });
-    const row = pool.resetPair(PAIR_A).find((r) => r.key === 'avd:nitro-ui-a');
+    const row = pool
+      .resetPair(PAIR_A, { platform: 'both' })
+      .find((r) => r.key === 'avd:nitro-ui-a');
     expect(row).toMatchObject({ ok: true, attempts: 3, answer: 'Success' });
     expect(calls.filter((c) => c[0] === 'pm')).toHaveLength(3);
     // The waits between them are the injected clock, not a wall: three polls, and no real sleeping.
@@ -2162,11 +2187,36 @@ describe('the between-task reset', () => {
 
   it('fails the reset rather than reporting one on a device with no serial', () => {
     const { pool } = fakePool({ home });
-    const results = pool.resetPair({
-      ...PAIR_A,
-      android: { avd: 'nitro-ui-a' },
-    });
+    const results = pool.resetPair(
+      {
+        ...PAIR_A,
+        android: { avd: 'nitro-ui-a' },
+      },
+      { platform: 'both' }
+    );
     expect(results.find((r) => r.key === 'avd:nitro-ui-a').ok).toBe(false);
+  });
+
+  it('refuses to reset without being told which half (X20 fix round 1)', () => {
+    // No default: a `both` by omission is how an iOS lease cleared the emulator, so a caller that
+    // forgets the platform is an error, not a reset of the whole pair - and no device is asked.
+    const { pool, calls } = fakePool({ home });
+    for (const options of [undefined, {}, { platform: 'iOS' }]) {
+      expect(() => pool.resetPair(PAIR_A, options)).toThrow(
+        /resetPair needs \{ platform/
+      );
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it('resets only the half it is told to', () => {
+    const { pool } = fakePool({ home });
+    expect(
+      pool.resetPair(PAIR_A, { platform: 'ios' }).map((r) => r.key)
+    ).toEqual(['ios:UDID-A']);
+    expect(
+      pool.resetPair(PAIR_A, { platform: 'android' }).map((r) => r.key)
+    ).toEqual(['avd:nitro-ui-a']);
   });
 });
 

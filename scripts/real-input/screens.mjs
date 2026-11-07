@@ -68,6 +68,8 @@ export const ECHO = Object.freeze({
   pickerGone: 'real-input-drop-gone',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
+  // E3: the split trigger's own history, so the plain Menu's stays a fixed string.
+  menuSplitEvents: 'real-input-menu-split-events',
   chipValue: 'real-input-chip-value',
   chipEvents: 'real-input-chip-events',
   chipRefusedLast: 'real-input-chip-refused-last',
