@@ -66,7 +66,7 @@ question 5 is untested.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1843 tests / 74 suites | `1d944cc1ca50` | 3 m 23 s | start 10.9 / med 13.1 / max 34.0 |
+| `check` | **PASS** | 1843 tests / 74 suites | `1d944cc1ca50` | 2 m 43 s | start 4.1 / med 6.5 / max 10.2 |
 | `harness:ios` | **PASS** | 462 tests / 28 suites + isolated 4 tests / 2 suites | `6f4a4afe2416` (ios tree) | 15 m 26 s | start 6.0 / med 6.1 / max 26.8 |
 | `harness:android` | **PASS** | 518 tests / 28 suites + isolated 4 tests / 2 suites | `6f4a4afe2416` (android tree) | 19 m 43 s | start 4.5 / med 4.6 / max 8.9 |
 | `real-input:ios` | missing | — | — | — | — |
@@ -170,3 +170,10 @@ undriven run times out instead of reaching its own `if (!driven) return;`.
 3. **Row box 60 pt vs SwiftUI's 52 pt.** Match 52 now by minting the padding constant, or ship the
    prototype's 60 and let the bound move? *Recommend 52* — it is the only number in the fidelity
    table a reader would notice.
+4. **Who draws an Android section header?** The prototype draws it as Compose text inside the same
+   layer as the section shapes, and that layer has to sit under React Native's content or it eats
+   every touch — so the header ends up half-painted-over, as `form-android.png` shows.
+   Options: (a) a second Compose layer added above the rows, sized to the header band only;
+   (b) the header as ordinary React Native content, which loses the one place the spike showed
+   Compose text and Yoga metrics agreeing on a height; (c) keep it where it is and let the first row
+   clip it. *Recommend (a)* — same measured height, nothing above the rows but the rows.
