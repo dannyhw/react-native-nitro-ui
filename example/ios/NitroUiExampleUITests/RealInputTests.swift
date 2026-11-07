@@ -125,6 +125,8 @@ final class RealInputTests: XCTestCase {
     static let formSwitchChanges = "form-switch-changes"
     static let formSwitchValue = "form-switch-value"
     static let formFieldFocus = "form-field-focus"
+    /// iOS only: the keyboard inset the Form's list is reserving, from UIKit's own notice.
+    static let formKeyboardInset = "form-keyboard-inset"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -5638,17 +5640,44 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: identifier)
     }
 
+    // What the keyboard actually is has two possible witnesses, and they do not always both
+    // exist. The Form's own report carries the inset UIKit told it (`keyboardWillChangeFrame`
+    // -> the list's bottom inset), which is the number the avoidance was built from and which
+    // a simulator with a connected hardware keyboard still has. XCUITest's keyboard *window*
+    // is the better witness when the simulator bothers to expose one, so it is used when it
+    // is there and the inset is used when it is not. Neither is assumed.
+    _ = waitUntil({ self.echoText(Echo.formKeyboardInset) != "-" }, window: 4)
+    let insetText = echoText(Echo.formKeyboardInset)
+    let inset = Double(insetText) ?? 0
     let keyboard = app.keyboards.firstMatch
-    guard keyboard.waitForExistence(timeout: 5) else {
-      dumpHierarchy("no keyboard window after focusing \(identifier)")
+    let keyboardTop: CGFloat
+    let from: String
+    if keyboard.waitForExistence(timeout: 5) {
+      keyboardTop = keyboard.frame.minY
+      from = "window"
+    } else if inset > 0 {
+      // A correct avoidance leaves the row above `listBottom - inset`, and the list's bottom
+      // is never below the window's, so `screen.maxY - inset` is a line the field must be
+      // above whenever the keyboard is what UIKit says it is - and cannot be met by accident.
+      keyboardTop = screen.maxY - inset
+      from = "inset"
+    } else {
+      dumpHierarchy("no keyboard window and no keyboard inset after focusing \(identifier)")
       throw XCTSkip(
-        "the simulator shows no software keyboard to a focused field (its hardware keyboard is "
-          + "connected), so there is no keyboard to stay above. Not a pass: iOS question 5 is "
-          + "unmeasured on this host until the simulator is set to hide the hardware keyboard."
+        "nothing says a keyboard came up: the simulator shows no keyboard window (its hardware "
+          + "keyboard is connected) and the Form's own report reads keyboard=\(insetText), so "
+          + "there is no keyboard for the field to stay above. Not a pass: iOS question 5 is "
+          + "unmeasured on this host."
       )
     }
-    let keyboardTop = keyboard.frame.minY
     let frame = field.frame
+    XCTAssertGreaterThan(
+      inset,
+      0,
+      "the Form's report reads keyboard=\(insetText) — UIKit never told it a keyboard is up, "
+        + "so the \(from)-derived line at \(keyboardTop) is not a keyboard's top edge and "
+        + "nothing here has measured question 5."
+    )
     XCTAssertGreaterThanOrEqual(
       frame.maxY,
       screen.minY,
@@ -5658,11 +5687,11 @@ final class RealInputTests: XCTestCase {
       frame.maxY,
       keyboardTop + 1,
       "the keyboard covers the focused field: it is at \(frame) with the keyboard's top edge at "
-        + "\(keyboardTop) — keyboardAvoidance left a field under the keys."
+        + "\(keyboardTop) (from \(from)) — keyboardAvoidance left a field under the keys."
     )
     print(
-      "real-input form keyboard: field=\(frame) keyboardTop=\(keyboardTop) "
-        + "focused=\(echoText(Echo.formFieldFocus))"
+      "real-input form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from \(from)) "
+        + "inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
     )
   }
 
