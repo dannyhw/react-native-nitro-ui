@@ -145,17 +145,15 @@ final class NitroUiFormRowHostView: UIView {
     }
   }
 
-  override func didMoveToSuperview() {
-    super.didMoveToSuperview()
-    // Adopted into a cell (or handed back): the frame Fabric last wrote may predate the move.
-    pinComponentToCell()
-  }
-
   /// Put the row's component view back at the cell's content origin, and only there.
   ///
   /// The guard is the whole check: this is the row's component view, whose superview is the
   /// cell's container, and whose origin is not already zero. In a section's holding view the
-  /// row draws nothing, so a stale origin there costs nothing and is left alone.
+  /// row is inside a hidden view and draws nothing wherever its frame says, so a stale origin
+  /// there costs nothing and is left alone (`NitroUiFormHoldingView.init` hides it).
+  ///
+  /// A cell that has just adopted a row needs no help from here: `NitroUiFormRowContainer`
+  /// zeroes the row's origin when it adopts and on every layout of its own.
   private func pinComponentToCell() {
     guard let component = owner?.componentView,
       component.superview is NitroUiFormRowContainer,
