@@ -155,3 +155,22 @@ survives a fresh `render()` and a full round of polling is a counter that never 
 neither mounted nor unmounted. It is also exactly what `waitForContentCycles` cannot fix — the number
 it now waits for is the number that never arrives, so that run would go red at the wait with
 `mounts=9, unmounts=9` and the flake would still be alive.
+
+## Fix round 1
+
+**E2 was a different cause, and got its own row (2b).** Round 1's `waitForContentCycles` explains the
+G16/X19 late-unmount read, not E2's two runs: those were short on `mounts` and stayed short, which
+means one cycle neither mounted nor unmounted. The loop answered `cycle:dismiss` by opening the next
+sheet, and that open can be batched with `dismissedCallback`'s still-uncommitted
+`setMounted(false)` — `presented && !mounted` mounts the content straight back, and both counters
+lose the cycle for good. `waitForUnmount` now sits between cycles, so a reopen can only follow a
+committed unmount; the exact `toBe(10)` asserts are untouched and `docs/components/bottom-sheet.md`
+now says a sheet reopened inside its own exit keeps its content.
+
+**The sweep's re-taps are counted.** `runA11ySweep` hands its log to `goToScreen`, and `Suite.finish`
+adds auxiliary retries to the total and says how many. Red against the one-argument call
+(`retries` came back `[]`) and against the old total (`0 press sequence(s) needed a retry`).
+
+Flake 1 now reads "consistent with". The SearchField frozen field keeps burst typing — two keys
+before JS answers — while `typeKey` keeps the TextField's. Slider's clamp-at-bound case is a
+follow-up. Round 1's GitHub write is recorded above; this round made none.
