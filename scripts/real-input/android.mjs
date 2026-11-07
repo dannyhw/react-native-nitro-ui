@@ -3969,6 +3969,176 @@ const CHECKS = {
         'kept as evidence, not asserted'
     );
   },
+
+  /**
+   * The `Form` screen (S6b): real taps inside rows that React Native reparents, and the
+   * keyboard over a field near the bottom of a long form.
+   *
+   * Android is the platform where a row *stays where Yoga put it*, so the taps here are the
+   * control group for iOS: a row's own `onPress`, a `Pressable` in the row and a hosted
+   * `Switch` in the row each have to answer ten taps exactly ten times, and a row without
+   * `onPress` has to answer none. S6 measured this screen's Android half with the harness's
+   * own driver; here every tap is `adb shell input tap`, which is what the go line asks for.
+   *
+   * Counters, not values, are the evidence for the press rows: `rows=10` after ten taps says
+   * one press per tap, where a value echo would also be satisfied by a row that pressed twice
+   * and again by one that pressed once in five. Each tap is still confirmed before the next
+   * (`tapUntilValue`), so a delivery the InputManager dropped is retried and logged as a
+   * retry rather than read as a row that refuses a finger (FOLLOWUPS.md:58).
+   *
+   * The keyboard case is last because it is the one that changes the viewport.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'form': async (t) => {
+    const counters = () => ({
+      rows: t.requireEcho(ECHO.formRowPresses),
+      inner: t.requireEcho(ECHO.formInnerPresses),
+      outside: t.requireEcho(ECHO.formOutsidePresses),
+      changes: t.requireEcho(ECHO.formSwitchChanges),
+      value: t.requireEcho(ECHO.formSwitchValue),
+    });
+    const start = counters();
+    t.log.checkEquals(
+      `the Form screen starts with nothing pressed (${JSON.stringify(start)})`,
+      `${start.rows}/${start.inner}/${start.outside}/${start.changes}/${start.value}`,
+      '0/0/0/0/off'
+    );
+
+    // 1. A row with `onPress`: ten taps, ten presses, aimed at the row a person aims at.
+    const pressed = await t.requireControlOnScreen('Row with onPress');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => pressed,
+        ECHO.formRowPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a form row`
+      );
+    }
+    const afterRow = counters();
+    t.log.checkEquals(
+      'ten real taps on a row are ten presses, and nothing else fired',
+      `${afterRow.rows}/${afterRow.inner}/${afterRow.changes}`,
+      '10/0/0'
+    );
+
+    // 2. A `Pressable` inside a row: the row must not steal its content's touch, and the
+    //    content must not press the row on the way out.
+    const inner = await t.requireControlOnScreen('Press me inside a row');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => inner,
+        ECHO.formInnerPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a Pressable inside a row`
+      );
+    }
+    const afterInner = counters();
+    t.log.checkEquals(
+      'ten real taps inside a row are ten presses, and its row stayed put',
+      `${afterInner.inner}/${afterInner.rows}`,
+      '10/10'
+    );
+
+    // 3. A hosted `Switch` inside a row: the value alternates and the change counter says
+    //    each one was one event. `nativeLabel` is what stops a *lost* change event from
+    //    being retried into green (F1 M3): the Switch published its own new state, so a tap
+    //    that arrived without an event is a finding, not a dropped delivery.
+    const toggle = await t.requireControlOnScreen('Airplane mode');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => toggle,
+        ECHO.formSwitchValue,
+        tap % 2 === 1 ? 'on' : 'off',
+        `real tap ${String(tap)} of 10 on the Switch in a row`,
+        { nativeLabel: 'Airplane mode' }
+      );
+    }
+    const afterSwitch = counters();
+    t.log.checkEquals(
+      'ten real taps on the Switch are ten changes and are back where they started',
+      `${afterSwitch.changes}/${afterSwitch.value}`,
+      '10/off'
+    );
+
+    // 4. A row with no `onPress` is inert, and the inertness has to be distinguishable from
+    //    the app having stopped listening - which is what the outside control answers right
+    //    after it. Deliberately not retried: the claim is that a window of taps changes
+    //    nothing, and re-pressing is the one thing that would change it.
+    const plain = await t.requireControlOnScreen('Row with no onPress');
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(plain);
+    }
+    const inert = t.requireEchoToStay(
+      ECHO.formRowPresses,
+      '10',
+      'three taps on a row without onPress to press nothing'
+    );
+    t.log.checkEquals('a row without onPress does not press', inert, '10');
+    t.log.checkEquals(
+      'and input is alive: a tap outside the Form is one press',
+      await t.tapUntilValue(
+        () => t.requireControl('Outside the form'),
+        ECHO.formOutsidePresses,
+        '1',
+        'a real tap outside the Form'
+      ),
+      '1'
+    );
+
+    // 5. Question 5, Android: the note field is below the fold, so getting to it is the
+    //    scroll a person would do, and the keyboard that follows is the *software* one -
+    //    which needs the preference raised, because every AVD has a hardware keyboard and
+    //    Android then shows a focused field nothing (S5 hit the same wall). The claim is
+    //    about two edges: the field's box and the keyboard's top.
+    await t.withFullSoftwareKeyboard(async () => {
+      const field = await t.requireControlOnScreen('Note');
+      t.log.checkEquals(
+        'the note field starts unfocused',
+        t.requireEcho(ECHO.formFieldFocus),
+        'no'
+      );
+      await t.tapNode(field);
+      t.log.checkEquals(
+        'a real tap focuses the field at the bottom of a long Form',
+        t.waitForEcho(ECHO.formFieldFocus, 'yes', 'the focus'),
+        'yes'
+      );
+      t.log.check('the IME says its input view is on screen', t.imeShown());
+      const imeTop = t.imeTopPx();
+      if (imeTop == null) {
+        // A keyboard edge that cannot be read is not a pass: say it is unmeasured, in the
+        // one channel the summary line carries, rather than let a missing window-service
+        // record become a green "visible above the keyboard".
+        t.log.warn(
+          'the window service named no keyboard window, so the field-against-keyboard ' +
+            'edge is UNMEASURED (the focus and the IME being up above are not)'
+        );
+        return;
+      }
+      const { height } = t.screenSize();
+      // A fifth of the window is the loosest reading of "the keyboard" that excludes a
+      // floating toolbar (a strip, not a keyboard): the brief asks for the full software
+      // keyboard, so the band is measured rather than assumed.
+      const band = height - imeTop;
+      t.log.check(
+        `a full software keyboard, not a toolbar: it occupies ${String(band)} px of a ` +
+          `${String(height)} px window`,
+        band > height * 0.2
+      );
+      const visible = t.requireControl('Note');
+      t.log.note(
+        `field box ${String(visible.bounds.y1)}..${String(visible.bounds.y2)} px, ` +
+          `keyboard top ${String(imeTop)} px`
+      );
+      t.log.check(
+        `the focused field is still on screen above the keyboard (field bottom ` +
+          `${String(visible.bounds.y2)}, keyboard top ${String(imeTop)})`,
+        visible.bounds.height > 0 && visible.bounds.y2 <= imeTop
+      );
+    });
+    await t.hideKeyboard();
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -5723,6 +5893,73 @@ class DeviceHarness {
   }
 
   /**
+   * The top edge of the soft keyboard, in screen pixels, or `null` when nothing answers.
+   *
+   * Question 5 asks whether a field is still *above* the keyboard, which is a question about
+   * two edges, and the accessibility tree only carries one of them: `uiautomator dump` walks
+   * the app's window, not the input method's. The keyboard's edge is in the window service -
+   * the IME is a window of its own, `Window #N Window{... u0 InputMethod}`, whose record
+   * prints `mFrame=Rect(left, top - right, bottom)`.
+   *
+   * `null` rather than a guess when the shape is not there: a check that assumed a keyboard
+   * edge would fail a field that is genuinely covered by reporting it as visible.
+   *
+   * @returns {number | null}
+   */
+  imeTopPx() {
+    const dump = this.shell('dumpsys window windows').stdout;
+    let inIme = false;
+    let top = null;
+    const flush = (frame) => {
+      if (inIme && top == null && frame != null) top = frame;
+    };
+    for (const line of dump.split('\n')) {
+      const header = line.match(/^\s*Window #\d+ Window\{([^}]*)\}/);
+      if (header != null) {
+        flush(null);
+        inIme = header[1].includes('InputMethod');
+        if (!inIme) continue;
+      }
+      if (!inIme) continue;
+      const frame = line.match(
+        /mFrame=Rect\((\d+),\s*(\d+)\s*-\s*(\d+),\s*(\d+)\)/
+      );
+      if (frame != null) {
+        // A keyboard that occupies nothing is a keyboard that is animating away; the
+        // caller wants the one that is up, so an empty band is not an answer.
+        const topPx = Number(frame[2]);
+        const bottomPx = Number(frame[4]);
+        if (bottomPx > topPx) flush(topPx);
+      }
+    }
+    flush(null);
+    return top;
+  }
+
+  /**
+   * Whether the IME is asked to show even though this AVD has a hardware keyboard.
+   *
+   * @returns {'0' | '1' | 'unset'}
+   */
+  imeShowsWithHardKeyboard() {
+    const out = this.shell(
+      'settings get secure show_ime_with_hard_keyboard'
+    ).stdout;
+    const value = out.trim();
+    // `settings get` answers `null` for an unset key, and the empty string for nothing.
+    return value === '0' || value === '1' ? value : 'unset';
+  }
+
+  /**
+   * Ask the IME to show on a device that also has a hardware keyboard (every AVD does).
+   *
+   * @param {'0' | '1'} value
+   */
+  setImeShowsWithHardKeyboard(value) {
+    this.shell(`settings put secure show_ime_with_hard_keyboard ${value}`);
+  }
+
+  /**
    * Type real characters through `adb shell input text`: key events injected into the
    * focused window, the same InputManager path `input tap` uses. No target argument,
    * so the field must already have focus. See {@link encodeInputText} for what it can
@@ -6265,6 +6502,67 @@ function makeContext(harness, log) {
      */
     density() {
       return harness.density();
+    },
+
+    /** The window size in pixels, for a check that has to say something about a band of it. */
+    screenSize: () => harness.screenSize(),
+
+    /**
+     * Whether the software keyboard is up, as the input method service says.
+     *
+     * `mInputShown=true` is the service's own answer that it put an input view on screen,
+     * which is the only way a check can tell a real keyboard from the hardware-keyboard
+     * toolbar an emulator shows instead (S6b question 5 is about the keyboard).
+     */
+    imeShown() {
+      return harness.imeShown();
+    },
+
+    /**
+     * The keyboard's top edge in screen pixels, or `null` when the window service does not
+     * say. See [DeviceHarness.imeTopPx].
+     *
+     * @returns {number | null}
+     */
+    imeTopPx() {
+      return harness.imeTopPx();
+    },
+
+    /**
+     * Run `body` on a device that will actually show a software keyboard, and leave the
+     * device as it was found.
+     *
+     * Every AVD in the pool has a hardware keyboard, and Android answers a focused field on
+     * one with no keyboard at all (S5 recorded the same: "this AVD has a hw.keyboard, so
+     * Gboard shows only its floating toolbar"). S6b question 5 asks about the *keyboard*, so
+     * the preference is raised for the duration of the case and put back afterwards — the
+     * pool's device should not keep another task's assumption.
+     *
+     * If the process dies inside `body`, the preference stays raised; that is said here and
+     * in the report rather than pretended away, because a `finally` cannot run on a kill.
+     *
+     * @param {() => Promise<void>} body
+     */
+    async withFullSoftwareKeyboard(body) {
+      const found = harness.imeShowsWithHardKeyboard();
+      if (found !== '1') {
+        harness.setImeShowsWithHardKeyboard('1');
+        log.note(
+          `show_ime_with_hard_keyboard was "${found}" - raised to 1 for the keyboard case ` +
+            'so the software keyboard shows despite the AVD hardware keyboard'
+        );
+      }
+      try {
+        await body();
+      } finally {
+        if (found !== '1') {
+          harness.setImeShowsWithHardKeyboard(found === 'unset' ? '0' : found);
+          log.note(
+            `show_ime_with_hard_keyboard restored to ` +
+              `${found === 'unset' ? '0 (it was unset)' : found}`
+          );
+        }
+      }
     },
 
     /**

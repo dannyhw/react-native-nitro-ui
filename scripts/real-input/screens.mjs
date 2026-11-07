@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'form'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -37,6 +37,8 @@ export const SCREEN_FILE = Object.freeze({
   searchfield: 'example/src/SearchFieldScreen.tsx',
   checkbox: 'example/src/CheckboxScreen.tsx',
   contextmenu: 'example/src/ContextMenuScreen.tsx',
+  // S6b: the spike prototype - no manifest, so nothing generates this line.
+  form: 'example/src/FormScreen.tsx',
 });
 
 /**
@@ -113,6 +115,16 @@ export const ECHO = Object.freeze({
   searchCapped: 'search-capped-echo',
   searchFocus: 'search-focus-echo',
   ctxEcho: 'ctx-echo',
+  // S6b: the Form screen’s counters. Each is a <Text> in the echo bar above the
+  // list, so a tap can be read back without scrolling the form away.
+  formScreenEcho: 'form-screen-echo',
+  formRowPresses: 'form-row-presses',
+  formInnerPresses: 'form-inner-presses',
+  formOutsidePresses: 'form-outside-presses',
+  formSwitchChanges: 'form-switch-changes',
+  formSwitchValue: 'form-switch-value',
+  formFieldFocus: 'form-field-focus',
+  formFieldValue: 'form-field-value',
 });
 
 /**
@@ -219,6 +231,7 @@ export const SCREEN_TAB = Object.freeze({
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
   host: { anchor: ECHO.hostValue },
+  form: { anchor: ECHO.formScreenEcho },
 });
 
 /**
