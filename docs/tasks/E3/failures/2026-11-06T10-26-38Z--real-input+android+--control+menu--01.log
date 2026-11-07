@@ -1,0 +1,66 @@
+# Failure excerpt — real-input:android:--control:menu
+
+- Ran: 2026-11-06T10:26:38.267Z on code tree `113c8d5da725` at HEAD `5547769` (branch `task/E3-split-button`)
+- Command: `node scripts/real-input/android.mjs --control menu`
+- Result: fail, exit 1, 445 ms
+- Load: start 2.05, end 2.05, median 2.05, max 2.05
+- Device: android / device `emulator-5570` / lease `E3-o7x7a`
+- Full log: `task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log` (<store>/task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E3-o7x7a (still live)
+  |   E3-o7x7a                 E3           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 2.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android:--control:menu
+gate: node scripts/real-input/android.mjs --control menu (cwd .)
+gate: code tree 113c8d5da725 at HEAD 55477692
+gate: git tree f7015de53dce with a DIRTY worktree (not reusable)
+gate: log task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log
+gate:       <store>/task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0ed4937d at 554776920c158fbfe42f95c2ed949f300383dbb4, now 113c8d5d at 554776920c158fbfe42f95c2ed949f300383dbb4)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0ed4937d at 554776920c158fbfe42f95c2ed949f300383dbb4, now 113c8d5d at 554776920c158fbfe42f95c2ed949f300383dbb4)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:menu FAIL in 0.4 s
+gate: recorded in .gates/task/E3-split-button.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E3-split-button/real-input+android+--control+menu-2026-11-06T10-26-37.809Z.log (5 probe(s))
+
+```

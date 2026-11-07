@@ -141,9 +141,12 @@ export interface NitroUiMenuProps
    */
   systemImage: string | null;
   /**
-   * Whether `primaryAction` means anything. iOS only (DECISIONS D29): a tap runs
-   * the action and a long-press opens the menu. Android ignores it and always
-   * opens on tap.
+   * Whether `primaryAction` means anything (DECISIONS D29, E3). Both platforms
+   * draw it, each in its own idiom: iOS keeps one button where a tap runs the
+   * action and a long-press opens the menu; Android draws a Material 3 Expressive
+   * split button - the leading half runs the action, the trailing half opens the
+   * menu. Because the second half is a second container, this prop changes the
+   * trigger's box on Android, which is why it is in the sizing key.
    *
    * This is a separate prop because `primaryAction` is *always sent* (D7b: a
    * callback prop can never be removed), so its presence cannot be the flag - the
@@ -189,8 +192,10 @@ export interface NitroUiMenuProps
    */
   onClose?: () => void;
   /**
-   * The primary action: a tap runs it and a long-press opens the menu. **iOS
-   * only** (DECISIONS D29), and only consulted while `hasPrimaryAction` is `true`.
+   * The primary action. On iOS a tap runs it and a long-press opens the menu; on
+   * Android the leading half of the split button runs it and never opens the menu
+   * (DECISIONS D29, E3). Only consulted while `hasPrimaryAction` is `true`, and
+   * never called while `disabled` is set - a disabled control disables both halves.
    */
   primaryAction?: () => void;
 }
@@ -224,7 +229,7 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * side that renders them measured them. One line:
    *
    * ```
-   * expanded=<0|1|-1>;live=<n|-1>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n|-1>;drawn=<tree|-1>
+   * expanded=<0|1|-1>;live=<n|-1>;anchor=<l>,<t>,<r>,<b>;menu=<l>,<t>,<r>,<b>;rows=<n|-1>;drawn=<tree|-1>;split=<0|1|-1>;leading=<l>,<t>,<r>,<b>;trailing=<l>,<t>,<r>,<b>
    * ```
    *
    * `expanded` is the model's own flag. `live` is how many menus this **process**
@@ -236,13 +241,22 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * found in the platform's own menu. `-1` means "this platform cannot measure
    * that".
    *
-   * Android answers all six: `rows` is read from the rows the popup composed, and
+   * `split` is whether the *composition* drew E3's split trigger, which is what
+   * "the trigger is a split button" means on Android - deliberately not
+   * `hasPrimaryAction`, which is only what JS sent. `leading`/`trailing` are the two
+   * halves' screen pixel rects, in the same space as `anchor`, so a harness can press
+   * one; both are `-1,-1,-1,-1` when no split trigger is composed.
+   *
+   * Android answers all nine: `rows` is read from the rows the popup composed, and
    * `drawn` from the open popup's own semantics tree - the rows TalkBack reaches - at
    * its last layout, once any report or probe has been asked for. iOS answers `rows`
-   * from its model, `drawn` from the probe, and `-1` for the other four: SwiftUI keeps
+   * from its model, `drawn` from the probe, and `-1` for the other seven: SwiftUI keeps
    * a `Menu`'s open state and its window to itself, so there is no popup here to
    * measure - the same answer `HybridNitroUiPicker.nuiTestMenuReport` gives, and
-   * never a `0` that would read as "checked".
+   * never a `0` that would read as "checked". iOS answers `split=-1` rather than `0`
+   * for the same reason: its `primaryAction` is a gesture on one button, so the
+   * question "did a second hit target get composed" has no answer there - `0` would
+   * claim a layout iOS chose.
    *
    * `drawn`'s tree, written in the menu's order with `,` between siblings: a row is
    * its title, then `@<subtitle>` when it has one, `+` when it is checked, `=` when it
