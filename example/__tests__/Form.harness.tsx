@@ -722,17 +722,19 @@ function windowOf(
  * read for a recycled row. That is also why the case insists on a minimum count - "all zero
  * rows agree" is a pass that proves nothing.
  *
- * `scrollY` is the Form's own scroll offset in the platform's unit, and it is the one thing
- * the two platforms cannot share here. React Native's `measure` sums Yoga origins and
- * subtracts no scroll offset (0.88: `UIManagerBinding.cpp` -> `dom::measureInWindow`, and
- * the loop in `LayoutableShadowNode.cpp` applies `frame.origin` and nothing else), so inside
- * Android's `ScrollView` it describes where a row was *laid out*. iOS gets `0`: its Form
- * publishes where each cell came to rest, so the shadow tree already carries the screen
- * position - which is the whole point of question 4.
+ * `scrolledBy` is how far the Form has scrolled, and it is the one thing the two platforms
+ * cannot share here. React Native's `measure` sums Yoga origins and subtracts no scroll
+ * offset (0.88: `UIManagerBinding.cpp` -> `dom::measureInWindow`, whose
+ * `getLayoutMetricsFromRoot` reaches `LayoutableShadowNode::computeLayoutMetricsFromRoot`,
+ * a walk over `getAncestors` that applies `frame.origin` and nothing else), so on Android it
+ * still describes where a row was *laid out* while the view has travelled up by the scroll
+ * offset - which is why the case subtracts it from the shadow-tree answer rather than adding
+ * it. iOS gets `0`: its Form publishes where each cell came to rest, so the shadow tree
+ * already carries the screen position - the whole point of question 4.
  */
 async function compareRows(
   what: string,
-  scrollY: number
+  scrolledBy: number
 ): Promise<{ compared: number; bad: string[] }> {
   let compared = 0;
   const bad: string[] = [];
@@ -750,34 +752,59 @@ async function compareRows(
     if (native == null) continue;
     const measured2 = await measureInWindow(id);
     compared += 1;
+    // The view has been drawn `scrolledBy` higher than Yoga laid it out; the shadow-tree
+    // answer does not know that (see above), so it has to be taken off before comparing.
+    const expectY = measured2[1] - scrolledBy;
     const off = Math.max(
       Math.abs(measured2[0] - native[0]),
-      Math.abs(measured2[1] + scrollY - native[1])
+      Math.abs(expectY - native[1])
     );
     if (off > 1) {
       bad.push(
-        `${id}: measureInWindow ${measured2.map(round1).join(',')} (+scroll ` +
-          `${round1(scrollY)} = ${round1(measured2[1] + scrollY)}) vs UIKit ` +
+        `${id}: measureInWindow ${measured2.map(round1).join(',')} (-scroll ` +
+          `${round1(scrolledBy)} = ${round1(expectY)}) vs UIKit ` +
           `${native.map(round1).join(',')} (off by ${round1(off)} pt)`
       );
     }
   }
   console.log(
-    `S6b MEASURE ${what}: compared=${compared} scroll=${round1(scrollY)} ` +
+    `S6b MEASURE ${what}: compared=${compared} scroll=${round1(scrolledBy)} ` +
       `mismatched=${bad.length}` +
       (bad.length > 0 ? ` - ${bad.join(' | ')}` : '')
   );
   return { compared, bad };
 }
 
-/** How far the Form has scrolled, as its own report says - Android only. */
-async function formScrollY(): Promise<number> {
-  const report = await formReport(
-    (r) => r.scroll !== undefined,
-    'the Form to report its scroll offset',
-    'measure'
-  );
-  return num(report, 'scroll');
+/**
+ * How far the Form has scrolled, as its own report says - Android only.
+ *
+ * Asked, not assumed: the case compares a number it read from the device against a number it
+ * read from the device, and a wrong guess here reads as a `measure` bug on the other side.
+ * The report is eventually consistent (a read answers with whatever main published last), so
+ * one read straight after `nuiTestScrollTo` can answer with the offset from *before* it; the
+ * poll waits for an offset that has both moved past `minimum` and stopped moving, which is
+ * the same shape `readReport()` polls in.
+ */
+async function formScrollY(minimum: number): Promise<number> {
+  const deadline = Date.now() + 12000;
+  let previous = Number.NaN;
+  for (;;) {
+    const report = await formReport(
+      (r) => r.scroll !== undefined,
+      'the Form to report its scroll offset',
+      'measure'
+    );
+    const scroll = num(report, 'scroll');
+    if (scroll === previous && scroll >= minimum) return scroll;
+    previous = scroll;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the Form's scroll offset never settled past ${String(minimum)} dp - last reads ` +
+          `were ${String(previous)}`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 }
 
 function round1(value: number): string {
@@ -809,9 +836,9 @@ describe('Form measure (S6b spike, question 4)', () => {
     // number travels native -> JS -> React -> Fabric, and each hop is a turn of a queue.
     const height = 180;
     form.nuiTestScrollTo(height);
-    const scrollY = IOS ? 0 : await formScrollY();
+    const scrolledBy = IOS ? 0 : await formScrollY(height / 2);
     const scrolled = await until(
-      () => compareRows(`after ${height} pt`, scrollY),
+      () => compareRows(`after ${height} pt`, scrolledBy),
       (r) => r.bad.length === 0 && r.compared >= 10,
       20000,
       'every row in a cell to measure where UIKit put it'
