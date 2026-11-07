@@ -1,0 +1,90 @@
+# Failure excerpt — harness:android:Slider
+
+- Ran: 2026-11-07T07:17:34.612Z on code tree `42c59a2c89f1` at HEAD `c54056d` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider`
+- Result: fail, exit 1, 31691 ms
+- Load: start 4.84, end 5.57, median 5.57, max 5.64
+- Device: android / device `emulator-5570` / lease `E5-2fe1c`
+- Full log: `task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log` (<store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › closes the drag when the control goes inert mid-press`
+- `expected [ 's' ] to deeply equal [ 's', 'c' ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-2fe1c (still live)
+  |   X21-znj7u                X21          both              pair-a
+  |   E5-2fe1c                 E5           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.57 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:Slider
+gate: node ../scripts/harness.mjs --harnessRunner android Slider (cwd example)
+gate: code tree 42c59a2c89f1 at HEAD c54056da
+gate: git tree b1ba24e90091 with a DIRTY worktree (not reusable)
+gate: log task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log
+gate:       <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 42c59a2c89f1, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.84/6.69 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › closes the drag when the control goes inert mid-press
+
+    expected [ 's' ] to deeply equal [ 's', 'c' ]
+
+      [0m [90m 1299 |[39m         [90m// silently dropped: an app is owed the complete for the start it was given.[39m
+       [90m 1300 |[39m         [36mawait[39m sleep([35m250[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1301 |[39m         expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1302 |[39m         expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m0.2[39m])[33m;[39m
+       [90m 1303 |[39m         expect(handle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m 1304 |[39m       } [36mfinally[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 28 passed, 29 total
+Snapshots:   0 total
+Time:        30.126 s
+Ran all test suites matching Slider.
+gate: harness:android:Slider FAIL in 31.7 s - note: the code tree moved during the run (255d85cda359 now), so this line describes 42c59a2c89f1
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-17-34.195Z.log (5 probe(s))
+
+```

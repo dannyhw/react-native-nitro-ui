@@ -2,10 +2,15 @@ package com.margelo.nitro.nitroui
 
 import android.app.Activity
 import android.view.Choreographer
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
+import androidx.compose.foundation.gestures.GestureCancellationException
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -17,9 +22,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.SemanticsActions
@@ -40,6 +50,8 @@ import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /*
  * The Slider component: Material 3 `Slider` on the core runtime, with the drag
@@ -271,7 +283,15 @@ internal class SliderModel(
    */
   var accessibilityStepCount = 0
 
-  /** A drag began. Reports the value it began from. */
+  /**
+   * A drag began, and reports the value it began from.
+   *
+   * Two things open a drag: [sliderPressWatcher] when a finger goes down on the
+   * control - a touch owns a gesture whether or not it ever moves the thumb - and
+   * [dragTo] for a value that arrives without one, which is how a hardware-keyboard
+   * arrow step and anything else that writes a value without a touch still get the
+   * gesture's opening callback.
+   */
   fun beginDrag() {
     if (dragging) {
       return
@@ -290,6 +310,9 @@ internal class SliderModel(
    * the next recomposition reads back.
    */
   fun dragTo(raw: Double) {
+    // The value can arrive with no finger on the control (a keyboard step), so a
+    // drag opens here too. A touch opened its own in [sliderPressWatcher], and
+    // [beginDrag] is guarded, so the two are one start and not two.
     if (!dragging) {
       beginDrag()
     }
@@ -303,10 +326,11 @@ internal class SliderModel(
    * The finger lifted. The final value always reaches JS.
    *
    * Idempotent, and the guard is the event contract: only a drag that started may
-   * end. Material 3 calls [onValueChangeFinished] for a tap that changed nothing
-   * and Compose infers the start from the first value change ([dragTo]), so
-   * without this a complete can arrive with no start; a late end after a
-   * [cancelDrag] would deliver one to the next owner of a recycled instance.
+   * end, so a late end after a [cancelDrag] cannot deliver a complete to the next
+   * owner of a recycled instance. Three things call it, and the first two of them
+   * race by design: Material 3 calls its `onValueChangeFinished` for both a tap and
+   * a drag, and [sliderPressWatcher] calls it when the finger leaves, which is what
+   * reports the end of a touch that never reached the control's own gesture.
    */
   fun endDrag() {
     if (!dragging) {
@@ -541,6 +565,19 @@ private fun SliderTrack(
   val label = model.accessibilityLabel
   val range = trackRange(model.minimumValue, model.maximumValue)
   val ticks = model.steppedTicks()
+  // The state-based overload (material3 1.5 deprecates the value-based one), set up
+  // exactly as that deprecated overload did internally, so nothing a user can see or
+  // a test can read moves: one `SliderState` per (steps, range) - not
+  // `rememberSliderState`, which never re-keys, so a new `step` or range prop would
+  // keep the old track - and the displayed value written into it on every
+  // composition, which is what makes the Slider follow the model.
+  //
+  // It is made *here* rather than inside the `Box` because the watcher on the `Box`'s
+  // modifier has to read it: a modifier is built before its content lambda runs, so a
+  // state created in the content would not exist yet. It is also what says whether
+  // Material 3 has taken a touch as a drag - see [sliderPressWatcher].
+  val sliderState = remember(ticks, range) { SliderState(displayed.toFloat(), ticks, range) }
+  sliderState.value = displayed.toFloat()
   // One accessibility node, whose progress action belongs to native.
   //
   // `clearAndSetSemantics` rather than an extra `semantics { }` beside M3's own:
@@ -557,40 +594,171 @@ private fun SliderTrack(
   // scroll forward lands (`performActionHelper` divides it into strides), so it
   // has to be this Slider's real range and current value.
   Box(
+    // The watcher is on the control's own box, so the gesture it reports is exactly
+    // the box the control draws - 48 dp of touch target included.
     modifier =
-      Modifier.clearAndSetSemantics {
-        if (label != null) {
-          contentDescription = label
-        }
-        progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
-        setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
-        // M3's `sliderSemantics` is where `disabled()` lived, and the line above
-        // clears that subtree, so a disabled Slider has to restate it. Without it
-        // TalkBack reads an inert control - the action is refused - as a live,
-        // adjustable one. iOS marks the same element `.notEnabled`
-        // (`HybridNitroUiSlider.swift`).
-        if (!enabled) {
-          disabled()
-        }
-      },
+      Modifier.sliderPressWatcher(
+        model = model,
+        state = sliderState,
+        enabled = enabled,
+      )
+        .clearAndSetSemantics {
+          if (label != null) {
+            contentDescription = label
+          }
+          progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
+          setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
+          // M3's `sliderSemantics` is where `disabled()` lived, and the line above
+          // clears that subtree, so a disabled Slider has to restate it. Without it
+          // TalkBack reads an inert control - the action is refused - as a live,
+          // adjustable one. iOS marks the same element `.notEnabled`
+          // (`HybridNitroUiSlider.swift`).
+          if (!enabled) {
+            disabled()
+          }
+        },
   ) {
-    // The state-based overload (material3 1.5 deprecates the value-based one), set up
-    // exactly as that deprecated overload did internally, so nothing a user can see or
-    // a test can read moves: one `SliderState` per (steps, range) - not
-    // `rememberSliderState`, which never re-keys, so a new `step` or range prop would
-    // keep the old track - and the displayed value written into it on every
-    // composition, which is what makes the Slider follow the model.
-    val sliderState = remember(ticks, range) { SliderState(displayed.toFloat(), ticks, range) }
-    sliderState.value = displayed.toFloat()
     Slider(
       state = sliderState,
       onValueChange = { position -> model.dragTo(position.toDouble()) },
       enabled = enabled,
-      // Compose has no drag-start callback, so the first value change is the start
-      // (`docs/architecture/core.md` §11) - `SliderModel.dragTo` opens the drag.
+      // The end of the control's own gesture - and, for any drag it takes, the *only*
+      // end: Material 3 reaches here from the coroutine that drains its drag channel,
+      // so it is the one callback that is guaranteed to run after the last value of
+      // the gesture. The watcher opened the drag when the finger went down, so this
+      // closes a touch whether or not its value moved, and [SliderModel.endDrag]
+      // reports exactly once however many of them arrive.
       onValueChangeFinished = { model.endDrag() },
       colors = colors,
     )
+  }
+}
+
+/**
+ * Watch the control's own touch stream, so a gesture is reported for a touch that
+ * never moves the thumb.
+ *
+ * `onSlidingStart` used to come from the first value change, because Material 3 has
+ * no drag-start callback. The cost was the touch that changes nothing: M3's tap path
+ * only calls `onValueChange` when the value it computed differs
+ * (`SliderState.dispatchRawDeltaInternal`), so a tap on the thumb - the most obvious
+ * thing a person can do to a Slider - reported neither a start nor an end, since the
+ * end was guarded on a drag having started.
+ *
+ * The observer is the control's own pointer input, which is the one signal that says
+ * "a finger is on this control" without waiting for a value:
+ *
+ * - the down is read on [PointerEventPass.Initial], the pass before the one Material
+ *   3 handles its tap and drag in, so no `onValueChange` can be emitted for a gesture
+ *   whose start has not been emitted yet;
+ * - the up is read on [PointerEventPass.Final], the pass after the one Material 3
+ *   handles its gesture in - which makes the watcher the *first* of the two to see a
+ *   release, not the last: Material 3 does not act on what it reads, it queues it.
+ *   See the release below, and `docs/components/slider.md`.
+ * - nothing is consumed: this observes the stream, it does not join the gesture.
+ *
+ * A touch that never reaches the control's own gesture - a scroll that takes the
+ * stream over, or an `ACTION_CANCEL` - is closed here too: foundation answers both by
+ * delivering the pointer as raised, so [awaitPointerEvent] reports it and an app told
+ * `onSlidingStart` gets the `onSlidingComplete` it is owed. A *cancelled coroutine*
+ * (the composition going away) is [SliderModel.cancelDrag]'s business and reports
+ * nothing, which is also why this does not need a `finally`.
+ *
+ * The interaction source was the other candidate, and it is what the two signals
+ * beside it are not: `DragInteraction.Start` and `SliderState.isDragging` both appear
+ * only once a drag passes the touch slop (Material 3's tap path emits a press and
+ * sets no drag state), so neither can report a touch-down; `PressInteraction.Press`
+ * can, but it reaches an observer through a collector coroutine, so its order
+ * against the control's own end callback is a dispatcher detail - and a start that
+ * arrives after its end leaves a drag open for the life of the instance.
+ */
+@Composable
+private fun Modifier.sliderPressWatcher(
+  model: SliderModel,
+  state: SliderState,
+  enabled: Boolean,
+): Modifier {
+  if (!enabled) {
+    // A disabled control takes no gestures, and Material 3 removes its own tap and
+    // drag modifiers for exactly that reason. A watcher left installed would report
+    // a start for a touch the control refuses. It is also taken away mid-drag, which
+    // cancels the loop below before any release reaches it, so the drag left open is
+    // closed by `afterUpdate` - the only place that still knows the control went
+    // inert.
+    return this
+  }
+  // `remember(ticks, range)` in [SliderTrack] hands back a fresh [SliderState] when a
+  // `step` or range prop moves, while the block below is keyed on `model` and keeps
+  // running through that. Read whichever instance is current.
+  val latestState = rememberUpdatedState(state)
+  // Cancels with the composition, which is the same rule the loop follows: a
+  // composition that goes away reports nothing (see [SliderModel.cancelDrag]).
+  val scope = rememberCoroutineScope()
+  // `model` never changes for the life of the view, so the block is installed once.
+  return this.pointerInput(model) {
+    awaitEachGesture {
+      try {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        // A finger is on the control. That is the gesture, whether or not the thumb
+        // ever moves: `onSlidingStart` opens here and nothing else opens a touch.
+        model.beginDrag()
+        var pointersDown = true
+        while (pointersDown) {
+          val event = awaitPointerEvent(PointerEventPass.Final)
+          // Every pointer is up, not merely the first one: a second finger joining
+          // and leaving does not end the gesture the first one opened, and a stream
+          // that still has a finger in it is not a release.
+          pointersDown = event.changes.fastAny { change -> change.pressed }
+        }
+        // The finger left - and the last thing it did may not have happened yet.
+        //
+        // Material 3 does not apply what it reads. Foundation's `DragGestureNode`
+        // writes `DragStarted`, `DragDelta` and `DragStopped` into an unlimited
+        // channel as the events pass through, and a coroutine on the UI dispatcher
+        // drains that channel *after* the pointer pass has finished. So the `Final`
+        // pass that ends this loop runs before every one of them: at the release,
+        // `isDragging` is still true (only the drained `DragStopped` clears it) and
+        // the value carried by the batch that carried the release has not been
+        // applied. Ending the drag here would report the complete before the last
+        // change - and then the delta arriving behind it would find no drag open,
+        // `dragTo` would call `beginDrag` again, and one gesture would read back
+        // `start, change, complete, start, change, complete`.
+        //
+        // So a drag Material 3 has taken, it ends. Its `onDragStopped` (material3
+        // 1.5) is `setDragging(false)` followed by `onValueChangeFinished()`, both
+        // from that drained coroutine - the value first, the end second, which is the
+        // only order an app can rely on. `processDragCancel` reaches the same end, so
+        // a stream a parent takes over mid-drag is closed too.
+        //
+        // `isDragging == false` at this point means either that Material 3 never took
+        // the touch (a tap on the thumb, which its own tap handler has already ended
+        // synchronously in the `Main` pass) or that the touch slop was crossed in the
+        // very batch that carried the release, where the whole queue - `DragStarted`
+        // included - is still unwritten. The two are indistinguishable from here, so
+        // the end is *launched* rather than called: on plain `Dispatchers.Main`, never
+        // `.immediate`, which would run it inline and lose the race all over again. A
+        // plain dispatch lands behind every coroutine foundation has already queued,
+        // Material 3's drain among them. [SliderModel.endDrag] is idempotent, so it
+        // reports only in the case where nobody else did.
+        if (!latestState.value.isDragging) {
+          scope.launch(Dispatchers.Main) { model.endDrag() }
+        }
+      } catch (taken: GestureCancellationException) {
+        // Not how a parent takes the stream over: foundation answers a hand-over and an
+        // `ACTION_CANCEL` alike with a synthetic event whose pointers are raised, on
+        // all three passes, which the loop above reads as a release and closes the
+        // gesture normally. This is for what is left - a gesture cancelled from inside
+        // the pointer-input machinery rather than reported as lifted - and it is here so
+        // that a control which has reported a start can never leave it open. The
+        // exception is rethrown because [awaitEachGesture] owns recovering the stream.
+        // A cancelled *composition* cancels this coroutine from outside, which no path
+        // here reports on: `prepareForRecycle`/`onDropView` cancel the drag themselves
+        // and report nothing, because a callback into whatever is mounted next is not
+        // ours to send.
+        model.endDrag()
+        throw taken
+      }
+    }
   }
 }
 
@@ -886,6 +1054,18 @@ class HybridNitroUiSlider(
       model.displayed = shown
       host.markDirty()
     }
+    // A control that goes inert mid-drag has to close that drag itself, because
+    // nothing else can: `enabled == false` removes this component's watcher and
+    // Material 3's tap and drag modifiers with it, and removing a `pointerInput`
+    // cancels its loop with a plain cancellation - no release, no `onValueChangeFinished`
+    // either, since a detached `DraggableNode` returns from `onDragStopped` before
+    // reaching it. The drag would stay open, the frame pump would stay armed, and the
+    // next gesture after a re-enable would report a complete with no start behind it.
+    // Last in the batch so an app is told the value before the end, and reported -
+    // not cancelled - because the app asked for this and is still there to hear it.
+    if (!model.enabled && model.dragging) {
+      model.endDrag()
+    }
     host.commit()
   }
 
@@ -1012,6 +1192,183 @@ class HybridNitroUiSlider(
   override fun nuiTestAccessibilityStepReport(): String = model.accessibilityStepReport
 
   override fun nuiTestFramePumpArmed(): Boolean = model.isFramePumpArmed
+
+  /**
+   * What the last [runTestPointerStream] did. Written on the main thread and read by
+   * a synchronous Nitro call that may land on any other, hence the volatile.
+   */
+  @Volatile
+  private var pointerStreamReport = "no pointer stream injected yet"
+
+  /**
+   * Counts the reports the probe has written, so the harness can wait for *this*
+   * stream rather than for the report to be non-empty. The same stream injected twice
+   * answers with a byte-identical line otherwise, and "has it changed yet?" is the only
+   * question a caller that posted the injection can ask (`reportAccessibilityStep`
+   * numbers its reports for the same reason).
+   */
+  private var pointerStreamCount = 0
+
+  override fun nuiTestPointerStream(mode: Double) {
+    android.os.Handler(android.os.Looper.getMainLooper()).post {
+      runTestPointerStream(mode.toInt())
+    }
+  }
+
+  override fun nuiTestPointerStreamReport(): String = pointerStreamReport
+
+  /**
+   * Dispatch one canned pointer stream through this control's own view, so a test can
+   * say **which turn of the main looper** each event lands in.
+   *
+   * That is the whole reason this exists and the harness' press cannot stand in for
+   * it: `View.post` puts one Runnable in the queue per event, so a stream built that
+   * way always gives the app a turn between the last MOVE and the UP. A real finger
+   * on a busy frame does not - the batch that carries the release can carry a MOVE
+   * too, and Material 3 reads that delta into a channel it drains *later*. Which of
+   * the two callbacks wins the race is invisible from outside, and it is the contract
+   * of `onSlidingComplete`: an app told a drag ended must be able to read the value
+   * the drag ended on.
+   *
+   * The events go to `host.dispatchTouchEvent`, the same entry point the window uses,
+   * so the stream passes through the FrameLayout into the Compose view exactly as a
+   * finger's does. Nothing here calls into `SliderModel`: a probe that drove the model
+   * would test the probe (`nuiTestDrag` already does that, and says so).
+   */
+  private fun runTestPointerStream(mode: Int) {
+    val width = host.width
+    val height = host.height
+    if (width <= 0 || height <= 0) {
+      // Without a laid-out view there is no point to touch, and the failure would
+      // otherwise look identical to a control that ignored the stream.
+      pointerStreamReport =
+        "#${++pointerStreamCount} mode=$mode: nothing to touch (${width}x$height)"
+      return
+    }
+    val generation = model.dragGeneration
+    val handler = android.os.Handler(android.os.Looper.getMainLooper())
+    val downTime = android.os.SystemClock.uptimeMillis()
+    val midY = height / 2f
+    var dispatched = 0
+
+    // One post is one turn of the looper; the batches below put two events inside a
+    // single Runnable, which is the shape being asked about. Each turn re-checks the
+    // generation, so a test that unmounts mid-stream does not leave events arriving
+    // at whatever instance is mounted next.
+    val turn: (() -> Unit) -> Unit = { body -> handler.post(Runnable { body() }) }
+    val send = { action: Int, xs: FloatArray, pointerIndex: Int ->
+      if (model.dragGeneration == generation) {
+        // The pointer arrays, not the `float[]` convenience overload: this one says
+        // what each pointer *is*, which is the only way a stream with two fingers in
+        // it says which of them a `POINTER_DOWN`/`POINTER_UP` is about. Position is
+        // identity here, and that matches what the batches below assume - the second
+        // finger is always the last entry, and the events after it leaves carry only
+        // the first.
+        val properties =
+          Array(xs.size) { index ->
+            MotionEvent.PointerProperties().apply {
+              id = index
+              toolType = MotionEvent.TOOL_TYPE_FINGER
+            }
+          }
+        val coordinates =
+          Array(xs.size) { index ->
+            MotionEvent.PointerCoords().apply {
+              x = xs[index]
+              y = midY
+              size = 1f
+              pressure = 1f
+            }
+          }
+        val event =
+          MotionEvent.obtain(
+            downTime,
+            android.os.SystemClock.uptimeMillis(),
+            action or (pointerIndex shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+            xs.size,
+            properties,
+            coordinates,
+            0,
+            0,
+            1f,
+            1f,
+            0,
+            0,
+            InputDevice.SOURCE_TOUCHSCREEN,
+            0,
+          )
+        try {
+          host.dispatchTouchEvent(event)
+          dispatched += 1
+        } finally {
+          event.recycle()
+        }
+      }
+    }
+    val at = { fraction: Double -> width * fraction.toFloat() }
+    val finish = {
+      pointerStreamReport =
+        "#${++pointerStreamCount} mode=$mode: dispatched $dispatched event(s), " +
+          "enabled=${model.enabled}"
+    }
+
+    when (mode) {
+      0 -> {
+        turn { send(MotionEvent.ACTION_DOWN, floatArrayOf(at(0.30)), 0) }
+        for (step in 1..3) {
+          turn { send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.38 + 0.08 * step)), 0) }
+        }
+        // The batch: the last MOVE and the release, in one turn, with no message
+        // between them for the app to draw a frame in.
+        turn {
+          send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.86)), 0)
+          send(MotionEvent.ACTION_UP, floatArrayOf(at(0.86)), 0)
+          finish()
+        }
+      }
+      1 -> {
+        turn { send(MotionEvent.ACTION_DOWN, floatArrayOf(at(0.30)), 0) }
+        turn {
+          send(MotionEvent.ACTION_CANCEL, floatArrayOf(at(0.30)), 0)
+          finish()
+        }
+      }
+      3 -> {
+        // The harder shape: the touch slop is crossed in the very batch that carries
+        // the release, so at the moment the watcher reads the finger up, everything
+        // Material 3 would do with this gesture - `DragStarted` first - is still
+        // unwritten in its channel. One start and one complete, or the deferral in
+        // [sliderPressWatcher] is not deferring far enough.
+        turn {
+          send(MotionEvent.ACTION_DOWN, floatArrayOf(at(0.30)), 0)
+          send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.55)), 0)
+          send(MotionEvent.ACTION_UP, floatArrayOf(at(0.55)), 0)
+          finish()
+        }
+      }
+      2 -> {
+        turn { send(MotionEvent.ACTION_DOWN, floatArrayOf(at(0.30)), 0) }
+        turn {
+          send(MotionEvent.ACTION_POINTER_DOWN, floatArrayOf(at(0.30), at(0.62)), 1)
+        }
+        turn {
+          send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.40), at(0.72)), 0)
+        }
+        turn {
+          send(MotionEvent.ACTION_POINTER_UP, floatArrayOf(at(0.40), at(0.72)), 1)
+        }
+        turn {
+          send(MotionEvent.ACTION_MOVE, floatArrayOf(at(0.44)), 0)
+          send(MotionEvent.ACTION_UP, floatArrayOf(at(0.44)), 0)
+          finish()
+        }
+      }
+      else -> {
+        pointerStreamReport = "#${++pointerStreamCount} mode=$mode: no such canned stream"
+        return
+      }
+    }
+  }
 
   private fun runTestAccessibilityStep(up: Boolean) {
     // A hosted control's semantics live in the *Host's* Compose view (that is what a

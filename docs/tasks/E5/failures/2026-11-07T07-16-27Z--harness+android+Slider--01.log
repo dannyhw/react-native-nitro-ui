@@ -1,0 +1,118 @@
+# Failure excerpt — harness:android:Slider
+
+- Ran: 2026-11-07T07:16:27.997Z on code tree `6c98cf424993` at HEAD `c54056d` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider`
+- Result: fail, exit 1, 32609 ms
+- Load: start 7.77, end 5.29, median 6.18, max 7.77
+- Device: android / device `emulator-5570` / lease `E5-2fe1c`
+- Full log: `task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log` (<store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › reports one gesture when the release shares a batch with the last move`
+- `expected [ 's', 'c', 's', 'v', 'c' ] to deeply equal [ 's', 'v', 'c' ]`
+- `● Slider › closes a stream that is taken over, and one shared by two fingers`
+- `expected 2 to be 1 // Object.is equality`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected 3 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-2fe1c (still live)
+  |   X21-znj7u                X21          both              pair-a
+  |   E5-2fe1c                 E5           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.29 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 67 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:Slider
+gate: node ../scripts/harness.mjs --harnessRunner android Slider (cwd example)
+gate: code tree 6c98cf424993 at HEAD c54056da
+gate: git tree b1ba24e90091 with a DIRTY worktree (not reusable)
+gate: log task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log
+gate:       <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 6c98cf424993, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.31/7.52 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › reports one gesture when the release shares a batch with the last move
+
+    expected [ 's', 'c', 's', 'v', 'c' ] to deeply equal [ 's', 'v', 'c' ]
+
+      [0m [90m 1201 |[39m         [90m// Exactly one gesture: opened by the down, closed once, and the complete[39m
+       [90m 1202 |[39m         [90m// reporting the value the last move landed on rather than the one before it.[39m
+      [31m[1m>[22m[39m[90m 1203 |[39m         expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'v'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1204 |[39m         expect(events[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 1205 |[39m         expect(events[33m.[39mcomplete[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 1206 |[39m         expect(events[33m.[39mcomplete[[35m0[39m])[33m.[39mtoBe([0m
+
+  ● Slider › closes a stream that is taken over, and one shared by two fingers
+
+    expected 2 to be 1 // Object.is equality
+
+      [0m [90m 1241 |[39m       expect(shared[33m.[39morder[[35m0[39m])[33m.[39mtoBe([32m's'[39m)[33m;[39m
+       [90m 1242 |[39m       expect(shared[33m.[39morder[shared[33m.[39morder[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([32m'c'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1243 |[39m       expect(shared[33m.[39mevents[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m      |[39m                                              [31m[1m^[22m[39m
+       [90m 1244 |[39m       expect(shared[33m.[39mevents[33m.[39mcomplete[33m.[39mlength)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 1245 |[39m       expect(shared[33m.[39mhandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m 1246 |[39m     })[33m;[39m[0m
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected 3 to be +0 // Object.is equality
+
+      [0m [90m 2137 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 2138 |[39m     [36mawait[39m drag(alignedHandle[33m,[39m aligned[33m,[39m [35m6[39m[33m,[39m [35m4[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2139 |[39m     expect(aligned[33m.[39mstart[aligned[33m.[39mstart[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                                         [31m[1m^[22m[39m
+       [90m 2140 |[39m     expect(aligned[33m.[39mcomplete[aligned[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m])[33m.[39mtoBe([35m6[39m)[33m;[39m
+       [90m 2141 |[39m     expect(aligned[33m.[39mstart[33m.[39mlength)[33m.[39mtoBe(aligned[33m.[39mcomplete[33m.[39mlength)[33m;[39m
+       [90m 2142 |[39m     expect(alignedHandle[33m.[39mnuiTestFramePumpArmed())[33m.[39mtoBe([36mfalse[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 26 passed, 29 total
+Snapshots:   0 total
+Time:        30.976 s
+Ran all test suites matching Slider.
+gate: harness:android:Slider FAIL in 32.6 s
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android+Slider-2026-11-07T07-16-27.619Z.log (5 probe(s))
+
+```
