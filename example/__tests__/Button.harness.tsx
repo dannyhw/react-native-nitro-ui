@@ -1764,18 +1764,27 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     return match[0];
   };
 
-  /** Probe until the glyph shows up, and say whether it ever did. */
+  /**
+   * Probe until the glyph shows up, and say both whether it ever did and how long
+   * the wait was.
+   *
+   * `ms` is the number the report quotes: the round trip from a Button mounting to
+   * its glyph being on screen, which in development is Metro's response plus our
+   * parse plus the frame - the whole cost of D43's dev-server load, and the only
+   * reading of it anyone can take from a harness.
+   */
   async function probeUntilDrawn(
     testId: string,
     color: number,
     timeoutMs = 15000
-  ): Promise<string> {
-    const deadline = nitroUiCore.now() + timeoutMs;
+  ): Promise<{ report: string; ms: number }> {
+    const started = nitroUiCore.now();
+    const deadline = started + timeoutMs;
     let report = '';
     for (;;) {
       report = await pixelProbe(testId, color, testId);
       if (probeHits(report) > 0 || nitroUiCore.now() > deadline) {
-        return report;
+        return { report, ms: nitroUiCore.now() - started };
       }
       await sleep(50);
     }
@@ -1821,7 +1830,8 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     }
 
     const before = await pixelProbe('metro-star', TINT, 'before the load');
-    const drawn = await probeUntilDrawn('metro-star', TINT);
+    const glyph = await probeUntilDrawn('metro-star', TINT);
+    const drawn = glyph.report;
     const after = await waitForMeasured('metro-star', 'the imported icon');
     const trace = await collectTrace(() => true, 500);
     const widths = new Set(
@@ -1833,7 +1843,9 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     console.log(
       `metro: hitsBefore=${String(probeHits(before))} hitsAfter=${String(
         probeHits(drawn)
-      )} first=${describeSize(first)} after=${describeSize(after)} ` +
+      )} drawnInMs=${String(glyph.ms)} first=${describeSize(first)} after=${describeSize(
+        after
+      )} ` +
         `traceEvents=${String(trace.length)} widths=${JSON.stringify([
           ...widths,
         ])} heights=${JSON.stringify([...heights])}`
@@ -1905,11 +1917,15 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     // an empty slot and a drawn one are the same size, which is the point of the
     // other test, and would let this one pass with nothing loading at all.
     if (Platform.OS === 'android') {
-      const drawn = await probeUntilDrawn(
+      const glyph = await probeUntilDrawn(
         'metro-width',
         processColor('#000000') as number
       );
-      console.log(`metro width probe: ${drawn}`);
+      console.log(
+        `metro width probe: hits=${String(probeHits(glyph.report))} drawnInMs=${String(
+          glyph.ms
+        )}`
+      );
     }
     const metro = boxes.get('metro-width') as Size;
     const drawable = boxes.get('drawable-width') as Size;
