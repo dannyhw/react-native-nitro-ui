@@ -75,7 +75,43 @@ type SliderHandle = {
   nuiTestAccessibilityStepReport(): string;
   /** Whether the control's frame pump is still armed. */
   nuiTestFramePumpArmed(): boolean;
+  /** Inject a canned pointer stream (Android only). See the spec. */
+  nuiTestPointerStream(mode: number): void;
+  /** What the last injected stream did, one line. */
+  nuiTestPointerStreamReport(): string;
 };
+
+/**
+ * Inject pointer stream `mode` and wait for the platform view to have taken it.
+ *
+ * Snapshot-before-post, exactly as `accessibilityStepReport` does it: the injection
+ * belongs to the UI thread, so the only question a caller that posted it can ask is
+ * "has the report changed yet?", and reading the old report after posting loses a race
+ * the runner wins when it is loaded. The probe numbers its reports, so no answer can
+ * be byte-identical to the one before it.
+ */
+async function injectPointerStream(
+  handle: SliderHandle,
+  mode: number
+): Promise<string> {
+  const before = handle.nuiTestPointerStreamReport();
+  handle.nuiTestPointerStream(mode);
+  const report = await pollUntil(
+    () => {
+      const next = handle.nuiTestPointerStreamReport();
+      return next === before ? null : next;
+    },
+    () => new Error(`The pointer stream probe never reported (mode=${mode}).`),
+    8000
+  );
+  if (!report.includes('dispatched ')) {
+    // Thrown rather than matched: a stream that reached no laid-out view looks
+    // exactly like a control that reported nothing, which is the one failure this
+    // suite must never read as a pass.
+    throw new Error(`pointer stream mode=${mode}: ${report}`);
+  }
+  return report;
+}
 
 /** Wait for the queued a11y action to have run, then read its report. */
 async function accessibilityStepReport(
@@ -1086,6 +1122,213 @@ describe('Slider', () => {
       await settleEvents(events);
       expect(events.start.length).toBe(startsAfter + 1);
       expect(events.complete.length).toBe(completesAfter + 1);
+    });
+
+    /**
+     * The three shapes a real finger produces that neither the harness' press nor
+     * `adb shell input swipe` can: an event batch carrying more than one pointer
+     * event. Both inject one event per main-thread turn, which is precisely the
+     * assumption the ordering rule below used to rest on.
+     *
+     * Material 3 does not act on a touch while it reads it. Foundation's
+     * `DragGestureNode` writes what it saw into an unlimited channel and a coroutine
+     * on the UI dispatcher drains it afterwards, so the pass that sees the release is
+     * the pass *before* the last value of the gesture has been applied. A control that
+     * closes the gesture there tells the app the drag ended and then moves the value it
+     * ended on — and because that delta finds no drag open, it opens a second one.
+     * One press would then read back `start, change, complete, start, change,
+     * complete`, which no app can use.
+     */
+    async function streamOrder(
+      testId: string,
+      mode: number
+    ): Promise<{
+      events: SlideEvents;
+      order: string[];
+      handle: SliderHandle;
+    }> {
+      // One control per stream: this helper runs twice inside one `it`, and a tree
+      // left mounted behind it is a second control that answers to the same test ids
+      // the next call queries. `afterEach`'s cleanup is too late for that.
+      cleanup();
+      const events = newEvents();
+      const order: string[] = [];
+      await render(
+        <Slider
+          defaultValue={0.2}
+          onValueChange={(value) => {
+            events.change.push(value);
+            // One `v` per run of changes, because a gesture's samples are coalesced
+            // to one per frame: this records the shape of the gesture, not the count.
+            if (order[order.length - 1] !== 'v') order.push('v');
+          }}
+          onSlidingStart={(value) => {
+            events.start.push(value);
+            order.push('s');
+          }}
+          onSlidingComplete={(value) => {
+            events.complete.push(value);
+            order.push('c');
+          }}
+          testID={testId}
+          hybridRef={captureFor(testId)}
+        />
+      );
+      await waitForBox(testId);
+      const handle = await handleFor(testId);
+      await injectPointerStream(handle, mode);
+      await settleEvents(events);
+      return { events, order, handle };
+    }
+
+    it('reports one gesture when the release shares a batch with the last move', async () => {
+      // Two shapes, because the two ways the last value can arrive behind a complete
+      // are not the same bug. Mode 0 crosses the touch slop a turn earlier, so
+      // Material 3 has this gesture as a drag by the time the release arrives. Mode 3
+      // crosses the slop in the very batch that carries the release, so *nothing* this
+      // gesture will do has happened yet when the release is read.
+      for (const mode of [0, 3]) {
+        const { events, order, handle } = await streamOrder(
+          `batched-${String(mode)}`,
+          mode
+        );
+        console.log(
+          `batched-${String(mode)}: order=${order.join('')} ` +
+            `start=${JSON.stringify(events.start)} ` +
+            `change=${JSON.stringify(events.change)} ` +
+            `complete=${JSON.stringify(events.complete)}`
+        );
+        // Exactly one gesture: opened by the down, closed once, and the complete
+        // reporting the value the last move landed on rather than the one before it.
+        expect(order).toEqual(['s', 'v', 'c']);
+        expect(events.start.length).toBe(1);
+        expect(events.complete.length).toBe(1);
+        expect(events.complete[0]).toBe(
+          events.change[events.change.length - 1]
+        );
+        // And the gesture gave its frame source back, so a second one is not being
+        // kept alive to emit the delta that arrived after the complete.
+        expect(handle.nuiTestFramePumpArmed()).toBe(false);
+        await sleep(150);
+        expect(handle.nuiTestFramePumpArmed()).toBe(false);
+      }
+    });
+
+    it('closes a stream that is taken over, and one shared by two fingers', async () => {
+      // Mode 1: `ACTION_CANCEL`, which is what a parent winning the stream looks like
+      // to this control. Material 3 answers it by delivering the pointer as raised, so
+      // the watcher sees a release, not an exception — and an app that was told
+      // `onSlidingStart` is owed the complete whatever the value did.
+      const cancelled = await streamOrder('stream-cancel', 1);
+      console.log(
+        `stream-cancel: order=${cancelled.order.join('')} ` +
+          `start=${JSON.stringify(cancelled.events.start)} ` +
+          `complete=${JSON.stringify(cancelled.events.complete)}`
+      );
+      expect(cancelled.order).toEqual(['s', 'c']);
+      expect(cancelled.events.complete).toEqual(cancelled.events.start);
+      expect(cancelled.handle.nuiTestFramePumpArmed()).toBe(false);
+
+      // Mode 2: a second finger joins and leaves mid-gesture. The gesture is the
+      // touch that opened it, so the second finger's arrival and its own lift are not
+      // two more gestures and not an early end — one start, one complete.
+      const shared = await streamOrder('stream-two-pointers', 2);
+      console.log(
+        `stream-two-pointers: order=${shared.order.join('')} ` +
+          `start=${JSON.stringify(shared.events.start)} ` +
+          `complete=${JSON.stringify(shared.events.complete)}`
+      );
+      expect(shared.order[0]).toBe('s');
+      expect(shared.order[shared.order.length - 1]).toBe('c');
+      expect(shared.events.start.length).toBe(1);
+      expect(shared.events.complete.length).toBe(1);
+      expect(shared.handle.nuiTestFramePumpArmed()).toBe(false);
+    });
+
+    it('closes the drag when the control goes inert mid-press', async () => {
+      // Disabling a control with a finger on it takes this component's watcher *and*
+      // Material 3's tap and drag modifiers away, and removing a `pointerInput`
+      // cancels its loop with a plain cancellation: no release reaches either of the
+      // two things that can close a gesture, and a detached `DraggableNode` returns
+      // from `onDragStopped` before reaching `onValueChangeFinished`. So the drag is
+      // open with nobody left to end it — and the drag is not merely untidy: it keeps
+      // the frame pump armed, and the next press joins a gesture nobody opened.
+      const events = newEvents();
+      const order: string[] = [];
+      const held = (disabled: boolean) => (
+        <Slider
+          value={0.2}
+          disabled={disabled}
+          onValueChange={(value) => {
+            events.change.push(value);
+            if (order[order.length - 1] !== 'v') order.push('v');
+          }}
+          onSlidingStart={(value) => {
+            events.start.push(value);
+            order.push('s');
+          }}
+          onSlidingComplete={(value) => {
+            events.complete.push(value);
+            order.push('c');
+          }}
+          testID="inert-mid-press"
+          hybridRef={captureFor('inert-mid-press')}
+        />
+      );
+      const { rerender } = await render(held(false));
+      let box = await waitForBox('inert-mid-press');
+      const handle = await handleFor('inert-mid-press');
+
+      const holding = pressInBox(box, 0.5, 2500);
+      try {
+        await pollUntil(
+          () => (order.length > 0 ? true : null),
+          () =>
+            new Error(
+              'a touch-down reported no onSlidingStart (order=' +
+                `${order.join('')}).`
+            ),
+          3000
+        );
+        expect(order).toEqual(['s']);
+
+        await rerender(held(true));
+        await waitFor(() => expect(handle.disabled).toBe(true));
+        // The control went inert with the finger still down, and the batch that says
+        // so is the last thing that will be told about this gesture. Reported, not
+        // silently dropped: an app is owed the complete for the start it was given.
+        await sleep(250);
+        expect(order).toEqual(['s', 'c']);
+        expect(events.complete).toEqual([0.2]);
+        expect(handle.nuiTestFramePumpArmed()).toBe(false);
+      } finally {
+        await holding;
+      }
+      await settleEvents(events);
+      // The release that came after the control went inert reports nothing further:
+      // the gesture was closed by the prop, not deferred to a finger that is no
+      // longer being watched.
+      expect(order).toEqual(['s', 'c']);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+
+      // And the control is still an ordinary one when it comes back: the next press
+      // opens its own gesture and closes it, which is the line that catches a drag
+      // left open here — a press onto an open drag reports a complete with no start.
+      await rerender(held(false));
+      await waitFor(() => expect(handle.disabled).toBe(false));
+      box = await waitForBox('inert-mid-press');
+      await pressInBox(box, 0.5);
+      await settleEvents(events);
+      console.log(
+        `inert-mid-press: order=${order.join('')} ` +
+          `start=${JSON.stringify(events.start)} ` +
+          `change=${JSON.stringify(events.change)} ` +
+          `complete=${JSON.stringify(events.complete)}`
+      );
+      expect(events.start.length).toBe(2);
+      expect(events.complete.length).toBe(2);
+      expect(order[order.length - 1]).toBe('c');
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
     });
   }
 

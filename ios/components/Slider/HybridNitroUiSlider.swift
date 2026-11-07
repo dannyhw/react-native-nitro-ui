@@ -1009,6 +1009,50 @@ final class HybridNitroUiSlider: HybridNitroUiSliderSpec, RecyclableView {
     return model.isFramePumpArmed
   }
 
+  /// See the spec: injecting a canned pointer stream is an Android probe.
+  ///
+  /// There is no iOS equivalent to `View.dispatchTouchEvent` that a hybrid may
+  /// reach for - UIKit touches are produced by the window from real input, and the
+  /// only supported way to synthesise one is `UIControl.sendActions`, which would
+  /// drive the UIKit control rather than the gesture under test. So the probe
+  /// refuses, and says so in the report the harness reads, rather than pretending
+  /// to have laid a finger down; the three rules it covers on Android are
+  /// Android's own (Material 3's drag channel), and the harness runs them there.
+  func nuiTestPointerStream(mode: Double) throws {
+    let run = { [weak self] in
+      self?.notePointerStreamReport("mode=\(Int(mode)): not supported on ios")
+    }
+    if Thread.isMainThread {
+      run()
+    } else {
+      DispatchQueue.main.async { run() }
+    }
+  }
+
+  func nuiTestPointerStreamReport() throws -> String {
+    return pointerStreamReport
+  }
+
+  /// What the last `nuiTestPointerStream` was told. Written on the main thread and
+  /// read by a synchronous Nitro call that may land on any other.
+  private let pointerStreamReportLock = NSLock()
+  private var pointerStreamReportValue = "no pointer stream injected yet"
+  private var pointerStreamCount = 0
+
+  private var pointerStreamReport: String {
+    pointerStreamReportLock.lock()
+    defer { pointerStreamReportLock.unlock() }
+    return pointerStreamReportValue
+  }
+
+  private func notePointerStreamReport(_ report: String) {
+    nitroUiAssertMainThread()
+    pointerStreamReportLock.lock()
+    pointerStreamCount += 1
+    pointerStreamReportValue = "#\(pointerStreamCount) \(report)"
+    pointerStreamReportLock.unlock()
+  }
+
   private func runTestAccessibilityStep(up: Bool) {
     nitroUiAssertMainThread()
     let action = up ? "accessibilityIncrement" : "accessibilityDecrement"
