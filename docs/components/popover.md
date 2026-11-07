@@ -73,6 +73,12 @@ own height. Native reads that box and makes the popover exactly that size:
   one.
 - **Android** composes the `Popup` only once the box has a size, and at that size.
 
+Because the box is sized by its content, the content has to bring a width of its own.
+`width: '100%'` asks a box whose width is still unknown for a share of it, which resolves
+to nothing: native gets a box with no width, and waits for a layout rather than presenting
+a popover of nothing. Say how wide the row is, or let a `Text` decide — `maxWidth` is
+already there to stop it being too wide.
+
 That ordering is the whole reason the first frame is the final size. Present first and
 iOS shows its default 320×480 for a frame before resizing; compose first and Android
 draws one width and then the real one. The device suite counts *distinct drawn sizes*
