@@ -322,6 +322,44 @@ async function staysUp(testId: string, ms: number, what: string) {
   }
 }
 
+/**
+ * Wait until the content's own mount/unmount counters have reached `times` each.
+ *
+ * Both counters are bumped by `Content`'s `useEffect`, which React flushes as a
+ * *passive* effect - after the commit that added or removed the view - and
+ * `BottomSheet` only drops its children in the render that native's dismissal
+ * causes: `dismissedCallback` calls `setMounted(false)` and `onDismiss()` in one
+ * go, so the `dismiss` event a test waits for is pushed before the render that
+ * unmounts anything, and native's `live` reaches 0 on its own side of that hop.
+ * Both witnesses are therefore older than the last unmount's bookkeeping, and a
+ * read taken the moment the sheet is gone can be one behind. That is the whole
+ * shape of the recurring Android failure: `expected 9 to be 10` in one round, then
+ * `20`, `30`, `40` of 10 in the rounds after it, because a thrown expectation skips
+ * `reset()` and the totals carry - the tenth unmount had arrived, late.
+ *
+ * This waits for the number, not for the control: the caller still asserts it
+ * exactly, so content that never unmounts, or unmounts twice, still fails - and
+ * now fails naming both counters instead of one bare `9`.
+ */
+async function waitForContentCycles(
+  testId: string,
+  times: number,
+  what: string
+): Promise<void> {
+  await pollUntil(
+    () =>
+      (mounts.get(testId) ?? 0) >= times && (unmounts.get(testId) ?? 0) >= times
+        ? true
+        : null,
+    () =>
+      new Error(
+        `"${testId}" never counted ${what}: mounts=${String(
+          mounts.get(testId) ?? 0
+        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`
+      )
+  );
+}
+
 async function waitForEvent(entry: string, timeoutMs = 8000) {
   return pollUntil(
     () => (eventLog.includes(entry) ? true : null),
@@ -970,6 +1008,11 @@ describe('BottomSheet · 50 cycles', () => {
         );
         cycles += 1;
       }
+      await waitForContentCycles(
+        'cycle',
+        10,
+        `ten mounts and ten unmounts in round ${String(round + 1)}`
+      );
       expect(mounts.get('cycle')).toBe(10);
       expect(unmounts.get('cycle')).toBe(10);
       if (round === 4) {
