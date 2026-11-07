@@ -245,6 +245,8 @@ lib/module/core/useStableCallback.js
 lib/module/core/useStableCallback.js.map
 lib/module/iconName.js
 lib/module/iconName.js.map
+lib/module/iconSource.js
+lib/module/iconSource.js.map
 lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
@@ -411,6 +413,8 @@ lib/typescript/src/core/useStableCallback.d.ts
 lib/typescript/src/core/useStableCallback.d.ts.map
 lib/typescript/src/iconName.d.ts
 lib/typescript/src/iconName.d.ts.map
+lib/typescript/src/iconSource.d.ts
+lib/typescript/src/iconSource.d.ts.map
 lib/typescript/src/index.d.ts
 lib/typescript/src/index.d.ts.map
 nitro-ui.sizing.json

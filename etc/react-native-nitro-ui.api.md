@@ -6,6 +6,7 @@
 
 import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
+import type { ImageURISource } from 'react-native';
 import { JSX } from 'react';
 import { ReactNode } from 'react';
 import { Ref } from 'react';
@@ -16,6 +17,9 @@ export function AlertDialog(props: AlertDialogProps): JSX.Element;
 
 // @public
 export type AlertDialogProps = DialogProps;
+
+// @public
+export type AndroidIconProp = string | number | ImageURISource;
 
 // @public
 export function BottomSheet(input: BottomSheetProps): JSX.Element;
@@ -59,7 +63,7 @@ export function Button(input: ButtonProps): JSX.Element;
 
 // @public
 export interface ButtonProps extends ViewProps {
-    androidIcon?: string | undefined;
+    androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;
     // @internal
     hybridRef?: ((view: {
