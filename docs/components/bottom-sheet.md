@@ -124,6 +124,9 @@ an iPad's page sheet, a landscape safe area.
 
 - **A refused dismissal presents again**, with one development warning, as a dialog's
   does (D33). The content stays mounted: the app never stopped asking for it.
+  The same holds for a dismissal the app *did* accept and then reversed inside the one
+  exit animation: the content never leaves the tree, so it is one mounted content
+  across the two presentations rather than an unmount and a remount.
 - **An exit the app did not ask for** is recognised on iOS from
   `presentationControllerWillDismiss`/`DidDismiss` (a swipe or an outside tap) and from
   `isBeingDismissed` in `viewDidDisappear` (anything else), never from a view merely
