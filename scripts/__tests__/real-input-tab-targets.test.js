@@ -114,8 +114,9 @@ describe('exampleTabs', () => {
         { id: 'tooltip', label: 'Tooltip' },
       ])
     );
-    // And the hand-written Host entry after the region is still read.
-    expect(tabs.at(-1)?.id).toBe('host');
+    // And the hand-written entries after the region are still read - `host`, and the
+    // spike's `form` tab (`Form` has no manifest, so the generator writes neither).
+    expect(tabs.slice(-2).map((tab) => tab.id)).toEqual(['host', 'form']);
   });
 });
 
