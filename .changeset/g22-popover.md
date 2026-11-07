@@ -5,7 +5,11 @@
 Add `Popover`: a platform popover whose content is React Native views.
 
 ```tsx
-<Popover isPresented={open} onIsPresentedChange={setOpen} anchor={<Text>Share</Text>}>
+<Popover
+  isPresented={open}
+  onIsPresentedChange={setOpen}
+  anchor={<Text>Share</Text>}
+>
   <Text>Anything React Native can render</Text>
 </Popover>
 ```

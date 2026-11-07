@@ -103,10 +103,7 @@ const CLOSED_STYLE = {
  * The widest the content may be: the app's cap, and never more than the window less its
  * margins. Both platforms lay the content out at this and never exceed it.
  */
-function contentCap(
-  maxWidth: number | undefined,
-  windowWidth: number
-): number {
+function contentCap(maxWidth: number | undefined, windowWidth: number): number {
   const wanted =
     typeof maxWidth === 'number' && Number.isFinite(maxWidth) && maxWidth > 0
       ? maxWidth
@@ -210,10 +207,7 @@ export function Popover({
   // gives the popover exactly that size. None of it is on screen: iOS hides the node and
   // moves it into the popover, Android moves it into the popup.
   return (
-    <View
-      collapsable={false}
-      style={[WRAPPER_BASE_STYLE, style]}
-    >
+    <View collapsable={false} style={[WRAPPER_BASE_STYLE, style]}>
       <NativeNitroUiPopover
         presented={presented}
         mostRecentEventCount={controlled.mostRecentEventCount}

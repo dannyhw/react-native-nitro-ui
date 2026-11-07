@@ -10,13 +10,7 @@
  * benchmark handles, not app API (DECISIONS D14).
  */
 import { useCallback, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Popover } from 'react-native-nitro-ui';
 import { fn } from 'storybook/test';
 
@@ -91,7 +85,7 @@ function Opener({ label, onPress }: { label: string; onPress: () => void }) {
 function Anchor({ label }: { label: string }) {
   return (
     <View style={styles.anchor}>
-      <Text style={{ color: '#000' }}>{label}</Text>
+      <Text style={styles.ink}>{label}</Text>
     </View>
   );
 }
@@ -108,7 +102,7 @@ function MenuContent({ onPick }: { onPick: (id: string) => void }) {
           onPress={() => onPick(title)}
           style={styles.row}
         >
-          <Text style={{ color: '#000' }}>{title}</Text>
+          <Text style={styles.ink}>{title}</Text>
         </Pressable>
       ))}
     </View>
@@ -213,8 +207,8 @@ export const Rename: Story = {
           </View>
           <Text style={styles.readout}>name: {name}</Text>
           <Note>
-            It is a popover, not a dialog: a tap outside closes it and the list keeps
-            the name it had.
+            It is a popover, not a dialog: a tap outside closes it and the list
+            keeps the name it had.
           </Note>
         </Column>
       </Showcase>
@@ -259,6 +253,7 @@ export const Placement: Story = {
 };
 
 const styles = StyleSheet.create({
+  ink: { color: '#000' },
   playground: { padding: 24, gap: 16, alignItems: 'flex-start' },
   centred: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   centredAnchor: { alignSelf: 'center' },

@@ -1632,10 +1632,10 @@ function tooltipShows(
   );
 }
 
-const POPOVER_LABEL = 'Conformance popover'
+const POPOVER_LABEL = 'Conformance popover';
 /** The two owners' content heights: different, and neither the other's. */
-const POPOVER_FIRST_HEIGHT = 120
-const POPOVER_SECOND_HEIGHT = 260
+const POPOVER_FIRST_HEIGHT = 120;
+const POPOVER_SECOND_HEIGHT = 260;
 
 /**
  * A Popover owner whose content is a box of a known height.
@@ -1657,19 +1657,16 @@ function popoverOwner(presented: boolean, height: number): ReactElement {
     >
       <View style={{ width: 180, height }} />
     </Popover>
-  )
+  );
 }
 
 /** Whether a popover's report says it is up holding content `height` tall. */
-function popoverShows(
-  report: Record<string, string>,
-  height: number
-): boolean {
+function popoverShows(report: Record<string, string>, height: number): boolean {
   return (
     report.presented === '1' &&
     report.live === '1' &&
     Math.abs(Number(report.contentH) - height) <= 1
-  )
+  );
 }
 
 /**
@@ -3168,12 +3165,12 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     control: (testId, variant) => (
       <Popover
         isPresented={false}
-        anchor={
-          <View style={{ width: variant ? 120 : 90, height: 32 }} />
-        }
+        anchor={<View style={{ width: variant ? 120 : 90, height: 32 }} />}
         testID={testId}
       >
-        <View style={{ width: variant ? 140 : 100, height: variant ? 60 : 40 }} />
+        <View
+          style={{ width: variant ? 140 : 100, height: variant ? 60 : 40 }}
+        />
       </Popover>
     ),
     state: (handle) => [

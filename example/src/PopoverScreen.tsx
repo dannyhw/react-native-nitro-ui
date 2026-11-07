@@ -148,7 +148,7 @@ export default function PopoverScreen() {
       >
         <Text style={{ color: ink.ink }}>Do the thing</Text>
       </Pressable>
-      <Text style={{ color: ink.muted, fontSize: 12 }}>
+      <Text style={[styles.small, { color: ink.muted }]}>
         One line, then one more, so the box has a height of its own.
       </Text>
     </View>
@@ -178,11 +178,7 @@ export default function PopoverScreen() {
         >
           {`inner presses: ${String(presses)}`}
         </Text>
-        <Opener
-          label="Reset"
-          testID="popover-reset"
-          onPress={reset}
-        />
+        <Opener label="Reset" testID="popover-reset" onPress={reset} />
 
         <Text style={[styles.section, { color: ink.ink }]}>
           Content of its own width
@@ -218,7 +214,7 @@ export default function PopoverScreen() {
             <Text style={[styles.contentTitle, { color: ink.ink }]}>
               A long label that reaches the cap
             </Text>
-            <Text style={{ color: ink.muted, fontSize: 12 }}>
+            <Text style={[styles.small, { color: ink.muted }]}>
               This content asks for more than 260 points, so the popover is 260
               wide and never wider, whatever the window says.
             </Text>
@@ -303,7 +299,7 @@ export default function PopoverScreen() {
             <Text style={[styles.contentTitle, { color: ink.ink }]}>
               No room below
             </Text>
-            <Text style={{ color: ink.muted, fontSize: 12 }}>
+            <Text style={[styles.small, { color: ink.muted }]}>
               So the popover sits above its anchor instead.
             </Text>
           </View>
@@ -391,6 +387,7 @@ const styles = StyleSheet.create({
   content: { padding: 14, gap: 8 },
   narrow: { width: 180 },
   fieldBox: { width: 220 },
+  small: { fontSize: 12, lineHeight: 16 },
   contentTitle: { fontSize: 15, fontWeight: '600' },
   item: {
     paddingHorizontal: 12,
