@@ -1,0 +1,173 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-07T11:34:42.971Z on code tree `c5390cb8f7a7` at HEAD `86eb320` (branch `task/Q10-form-list-research`)
+- Command: `bun run check`
+- Result: fail, exit 1, 4836 ms
+- Load: start 5.92, end 5.76, median 5.84, max 5.92
+- Device: none recorded (not a device gate)
+- Full log: `task/Q10-form-list-research/check-2026-11-07T11-34-41.922Z.log` (<store>/task/Q10-form-list-research/check-2026-11-07T11-34-41.922Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error: Cannot find module '~/Library/pnpm/global/5/.pnpm/typescript@5.4.5/node_modules/typescript/bin/tsc'`
+- `error: script "typecheck" exited with code 1`
+- `error: script "bench:typecheck" exited with code 1`
+- `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@eslint/compat' imported from <repo>/eslint.config.mjs`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 153 — the rest is in the full log above)
+
+```
+gate: git tree cd8b7cdf1209
+gate: log task/Q10-form-list-research/check-2026-11-07T11-34-41.922Z.log
+gate:       <store>/task/Q10-form-list-research/check-2026-11-07T11-34-41.922Z.log
+$ node scripts/check.mjs
+check: 17 steps, 4 job(s) of 10 cores
+check: ✓ lock:check          pass        0.1s
+check: ✗ typecheck           fail        0.1s - exit 1
+check: · test                skipped     0.0s - not started - typecheck failed
+check: · test:native         skipped     0.0s - not started - typecheck failed
+check: · test:native:android skipped     0.0s - not started - typecheck failed
+check: · perf:renders        skipped     0.0s - not started - typecheck failed
+check: · nitrogen:check      skipped     0.0s - not started - typecheck failed
+check: · registry:check      skipped     0.0s - not started - typecheck failed
+check: · autolinking:check   skipped     0.0s - not started - typecheck failed
+check: · prepare             skipped     0.0s - not started - typecheck failed
+check: · api-extractor:check skipped     0.0s - not started - typecheck failed
+check: · publint             skipped     0.0s - not started - typecheck failed
+check: · manifest:check      skipped     0.0s - not started - typecheck failed
+check: · readme:check        skipped     0.0s - not started - typecheck failed
+──────── typecheck — fail, 0.1s ──────────────────────────────────────────────────
+──────── lock:check — pass, 0.1s ─────────────────────────────────────────────────
+$ node scripts/sync-example-lock.mjs
+example-lock: example/ios/Podfile.lock locks NitroUi (0.7.0) - in step with package.json.
+check: ✗ bench:typecheck     fail        0.1s - exit 1
+──────── bench:typecheck — fail, 0.1s ────────────────────────────────────────────
+check: ✗ lint                fail        0.3s - exit 2
+──────── lint — fail, 0.3s ───────────────────────────────────────────────────────
+check: ✗ format              fail        4.6s - exit 1
+──────── format — fail, 4.6s ─────────────────────────────────────────────────────
+──────── test — skipped, 0.0s ────────────────────────────────────────────────────
+──────── test:native — skipped, 0.0s ─────────────────────────────────────────────
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 1 passed, 4 failed, 12 skipped in 4.7s
+check: failed step(s): typecheck, bench:typecheck, lint, format
+check: not started after the first failure: test, test:native, test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: typecheck ─────────────────────────────────────────────────────
+$ tsc
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '~/Library/pnpm/global/5/.pnpm/typescript@5.4.5/node_modules/typescript/bin/tsc'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.1
+error: script "typecheck" exited with code 1
+──────── full log: bench:typecheck ───────────────────────────────────────────────
+$ bun --cwd bench typecheck && bun --cwd bench typecheck:android
+$ tsc -p tsconfig.json
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module '~/Library/pnpm/global/5/.pnpm/typescript@5.4.5/node_modules/typescript/bin/tsc'
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47 {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: []
+}
+
+Node.js v24.22.1
+error: script "typecheck" exited with code 1
+error: script "bench:typecheck" exited with code 1
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+Oops! Something went wrong! :(
+
+ESLint: 9.39.1
+
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@eslint/compat' imported from <repo>/eslint.config.mjs
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+    at packageResolve (node:internal/modules/esm/resolve:784:25)
+    at moduleResolve (node:internal/modules/esm/resolve:873:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+    at #resolve (node:internal/modules/esm/loader:687:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)
+    at ModuleJob.syncLink (node:internal/modules/esm/module_job:276:33)
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] bench/modules/bench-probe/src/BenchProbe.nitro.ts
+[warn] bench/src/implementations/shared.ts
+[warn] bench/src/types.ts
+[warn] CHANGELOG.md
+[warn] scripts/pod-install.mjs
+[warn] src/components/BottomSheet/BottomSheet.tsx
+[warn] src/components/Button/Button.nitro.ts
+[warn] src/components/Button/Button.tsx
+[warn] src/components/Button/NativeNitroUiButton.ts
+[warn] src/components/Checkbox/Checkbox.nitro.ts
+[warn] src/components/Checkbox/NativeNitroUiCheckbox.ts
+[warn] src/components/Chip/Chip.nitro.ts
+[warn] src/components/Chip/NativeNitroUiChip.ts
+[warn] src/components/DatePicker/DatePicker.nitro.ts
+[warn] src/components/DatePicker/NativeNitroUiDatePicker.ts
+[warn] src/components/Menu/Menu.nitro.ts
+[warn] src/components/Menu/NativeNitroUiMenu.ts
+[warn] src/components/Picker/NativeNitroUiPicker.ts
+[warn] src/components/Picker/Picker.nitro.ts
+[warn] src/components/Progress/NativeNitroUiProgress.ts
+[warn] src/components/Progress/Progress.nitro.ts
+[warn] src/components/SearchField/NativeNitroUiSearchField.ts
+[warn] src/components/SearchField/SearchField.nitro.ts
+[warn] src/components/SearchField/SearchField.tsx
+[warn] src/components/SegmentedControl/NativeNitroUiSegmentedControl.ts
+[warn] src/components/SegmentedControl/SegmentedControl.nitro.ts
+[warn] src/components/Slider/NativeNitroUiSlider.ts
+[warn] src/components/Slider/Slider.nitro.ts
+[warn] src/components/Switch/NativeNitroUiSwitch.ts
+[warn] src/components/Switch/Switch.nitro.ts
+[warn] src/components/TextField/NativeNitroUiTextField.ts
+[warn] src/components/TextField/TextField.nitro.ts
+[warn] src/components/TextField/TextField.tsx
+[warn] src/NitroUiCore.nitro.ts
+[warn] src/NitroUiMaterialTheme.nitro.ts
+[warn] Code style issues found in 35 files. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 4.8 s
+gate: recorded in .gates/task/Q10-form-list-research.jsonl
+
+```
