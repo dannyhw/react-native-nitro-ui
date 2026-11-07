@@ -226,7 +226,36 @@ form, and iOS using `systemImage`. **IconButton stays out**, as the brief now sa
 
 ### Gates
 
-<!--PLACEHOLDER-GATES-->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1839 tests / 73 suites | `a8a616bb161f` | 2 m 44 s | start 12.4 / med 10.4 / max 14.6 |
+| `harness:ios` | **PASS** | 456 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (ios tree) | 14 m 03 s | start 3.6 / med 11.5 / max 195.2 |
+| `harness:android` | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `a8a616bb161f` (android tree) | 16 m 47 s | start 4.4 / med 5.1 / max 13.4 |
+| `real-input:ios` | **PASS** | — | `a8a616bb161f` (ios tree) | 29 m 25 s | start 6.7 / med 8.6 / max 71.8 |
+| `real-input:android` | **PASS** | — | `a8a616bb161f` (android tree) | 42 m 13 s | start 56.3 / med 5.6 / max 56.3 |
+| `harness:android:Button` | **PASS** | 21 tests / 1 suites | `a8a616bb161f` (android tree) | 39.0 s | start 5.7 / med 11.3 / max 13.9 |
+| `harness:android:draws%20the%20glyph:--background` | stale | — | 1f8981779e76 (not this tree) | 1.0 s | start 8.4 / med 8.4 / max 8.4 |
+| `harness:android:glyph` | stale | — | 1f8981779e76 (not this tree) | 1.3 s | start 9.9 / med 9.9 / max 9.9 |
+| `harness:ios:Button` | stale | 1 failed of 18 tests / 1 suites | 92c648d1da04 (not this tree) | 17.7 s | start 8.1 / med 7.3 / max 8.1 |
+
+`need --for review` and `need --for merge` are both satisfied on this code tree, so the ledger wants
+nothing further from this round. Round 1's table above is labelled as round 1's: a gate appears in
+this report once, with the numbers the ledger holds for the tree being handed in, and every run of
+both rounds lives in `docs/tasks/G19/gates.jsonl` after the export below.
+
+**Measured** — the `Button` suite's console block on the API 35 emulator at 420 dpi, in dp. The
+imported icon painted **442** probed pixels **31.3 ms** after its URL was asked, and the control's
+box was `60.19x48.00` before the glyph and `60.19x48.00` after it. The ladder, not the file, sizes
+the artwork: `title="Share"` is `68.19x48.00` with no icon, `96.38x48.00` through a Metro `.xml`
+and `96.38x48.00` through the drawable name — the two forms land on one box. Titled rung boxes with
+an icon: `small=57.90x48.00`, `medium=64.38x48.00`, `large=85.71x56.00`, `xlarge=150.86x96.00`,
+`xxlarge=200.76x136.00`. The wire for the file form is one string, e.g.
+`url:http://localhost:8293/assets/src/assets/icons/star_24px.xml?platform=android&hash=af48588b…`.
+Those numbers come from the run at `34bbc3eb53af`, because jest prints console output only for a
+failing suite and the shipped tree's run passes; that tree differs from the shipped one by
+`example/__tests__/Button.harness.tsx` alone, so the library and the app under the probe are this
+round's. No bench arm this round either — one needs an `--exclusive` lease, which powers down
+devices other tasks hold.
 
 ### Red proofs
 
