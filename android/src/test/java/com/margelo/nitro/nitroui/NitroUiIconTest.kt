@@ -75,7 +75,7 @@ class NitroUiIconTest {
   /**
    * The store's contract, on `String` artwork: `android.graphics.Bitmap` cannot be
    * built in a plain JVM test, so the type is whatever the policy needs and the
-   * policy is the thing with a bug in it. [NitroUiIconCache] is this class with the
+   * policy is the thing with a bug in it. [NitroUiIconBitmaps] is this class with the
    * one artwork type the library draws, so covering it here covers the loading
    * claim the prop is sold on: an app that puts the same icon on forty rows pays
    * for it once.

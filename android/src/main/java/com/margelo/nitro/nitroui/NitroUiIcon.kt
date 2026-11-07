@@ -27,6 +27,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import com.facebook.react.views.imagehelper.ResourceDrawableIdHelper
+import com.margelo.nitro.nitroui.core.NitroUiIcons
 import java.net.HttpURLConnection
 import java.net.URI
 import java.util.Collections
@@ -43,12 +44,20 @@ import java.util.concurrent.TimeUnit
  * iOS has SF Symbols, so `systemImage` names a symbol and the OS supplies the
  * artwork. Android has no system icon set, so the app ships the vectors and this
  * file is the one place that turns a shipped *name* into pixels: name -> resource
- * id -> bitmap -> painter, with the bitmap shared per name for the life of the
+ * id -> artwork -> painter, with the artwork shared per id for the life of the
  * process.
+ *
+ * The artwork an app drawable gives is whatever the drawable *is*. A `<vector>`
+ * becomes an `ImageVector` through [NitroUiIcons] — the door the library's own
+ * Material Symbols go through (FIX4) — because that is drawn at the size the slot asks
+ * for, and the ladder now reaches 32 dp and 40 dp, where a bitmap rasterised at the
+ * file's own 24 dp and stretched by `ContentScale.Fit` is visibly soft. Only a drawable
+ * that is *not* a vector (a PNG, a layer-list, an animated vector) is rasterised, and
+ * only once per id.
  *
  * The two halves are deliberately split. [NitroUiIconNames] is pure Kotlin — the
  * name rules and the once-per-name warning — so `android/src/test` can cover the
- * parts that decide what an app developer sees when a name is wrong. The bitmap
+ * parts that decide what an app developer sees when a name is wrong. The artwork
  * work below needs a `Context` and is covered on the emulator by the harness.
  *
  * `NitroUiVectorDrawable.kt`, next to this file, is the third half: reading a
@@ -121,7 +130,7 @@ internal object NitroUiIconNames {
  * Generic over both halves — the key (a resource id, or the URL a development
  * load came from) and the artwork (`Bitmap` for a resource, an `ImageVector` for
  * a file) — so the *policy*, the part with a bug in it, is testable on the JVM,
- * where neither `Bitmap` nor a real icon can be built at all. [NitroUiIconCache]
+ * where neither `Bitmap` nor a real icon can be built at all. [NitroUiIconBitmaps]
  * and [NitroUiIconFiles] are this with the key and artwork each one uses.
  *
  * Process-wide rather than `remember`ed because a hosted control is its own
@@ -182,12 +191,20 @@ internal class NitroUiIconStore<Key : Any, Value : Any>(
 }
 
 /**
- * The bitmaps behind every `androidIcon` in this process, keyed by resource id.
+ * The bitmaps behind every `androidIcon` in this process, keyed by resource id — and
+ * only for drawables that are **not** vectors.
+ *
+ * A drawable vector has one cache in this process: [NitroUiIcons]', which the library's
+ * own glyphs share. Routing the app's own `<vector>` resources through it is what
+ * stopped the top two rungs drawing a stretched 24 dp raster, and holding a second
+ * copy of the same parsed shape here would be the same mistake with a different name.
+ * What this map keeps is the artwork that genuinely *is* pixels: a PNG, a layer-list,
+ * an `animated-vector`.
  *
  * The id, not the name: two names can reach one id (the normalising above, and
  * `drawable-hdpi`/`drawable` variants), and the id is what the pixels belong to.
  */
-internal object NitroUiIconCache {
+internal object NitroUiIconBitmaps {
   /** Loaded names to remember before starting over. A handful per app, in practice. */
   private const val MAX_CACHED = 64
 
@@ -329,12 +346,20 @@ internal sealed interface NitroUiIconContent {
   /** Reserve the slot; the file is being read. */
   data object Pending : NitroUiIconContent
 
-  /** A rasterised app drawable — the resource form, resolved by [loadIconBitmap]. */
+  /**
+   * A drawable that is not a vector, rasterised at its intrinsic size by
+   * [loadIconBitmap]: a PNG, a layer-list, an `animated-vector`.
+   */
   class Bitmap(
     val bitmap: android.graphics.Bitmap,
   ) : NitroUiIconContent
 
-  /** A vector read from a file — the development form, parsed by [NitroUiVectorDrawableReader]. */
+  /**
+   * A vector, from either road: the app's own `<vector>` resource, parsed by
+   * [NitroUiIcons], or a file read over the dev server, parsed by
+   * [NitroUiVectorDrawableReader]. Both are drawn at the slot's size, which is the
+   * point of this arm — see [loadIconArtwork].
+   */
   class Vector(
     val image: ImageVector,
   ) : NitroUiIconContent
@@ -355,7 +380,13 @@ internal sealed interface NitroUiIconContent {
  * against a map.
  */
 internal interface NitroUiIconArtwork {
-  /** The artwork for a resource [name], or [NitroUiIconContent.Absent] if there is none. */
+  /**
+   * The artwork for a resource [name], or [NitroUiIconContent.Absent] if there is none.
+   *
+   * Whether that artwork is a [NitroUiIconContent.Vector] or a
+   * [NitroUiIconContent.Bitmap] is the drawable's decision, not the caller's — see
+   * [loadIconArtwork].
+   */
   fun forName(
     name: String,
   ): NitroUiIconContent
@@ -381,7 +412,7 @@ internal interface NitroUiIconArtwork {
  * [NitroUiIconArtwork] as an app runs it: the app's resources, and [NitroUiIconFiles].
  *
  * One per control, holding that control's `Context` — the same lifetime as the
- * view that creates it, and the same `Context` [loadIconBitmap] has always needed
+ * view that creates it, and the same `Context` [loadIconArtwork] has always needed
  * to read a drawable through the activity's theme.
  */
 internal class NitroUiAppIconArtwork(
@@ -389,8 +420,7 @@ internal class NitroUiAppIconArtwork(
 ) : NitroUiIconArtwork {
   override fun forName(
     name: String,
-  ): NitroUiIconContent =
-    loadIconBitmap(context, name)?.let { NitroUiIconContent.Bitmap(it) } ?: NitroUiIconContent.Absent
+  ): NitroUiIconContent = loadIconArtwork(context, name)
 
   override fun cached(
     url: String,
@@ -504,28 +534,35 @@ internal class NitroUiIconSlot {
 }
 
 /**
- * The rasterised artwork for [name], or `null` when it cannot be drawn.
+ * The artwork the app's own drawable [name] gives an icon, or [NitroUiIconContent.Absent].
  *
- * `null` means "draw nothing", and callers must treat it that way: no slot is
- * reserved and no padding changes, so a control with an unresolved name is
- * exactly its no-icon self. That is the same contract iOS already keeps for an
- * SF Symbol name that does not exist, and the alternative — reserving space for
- * an icon that never arrives — shifts the label for a bug the developer cannot
- * see in a debug build.
+ * `Absent` means "draw nothing", and callers must treat it that way: no slot is
+ * reserved and no padding changes, so a control with an unresolved name is exactly its
+ * no-icon self. That is the same contract iOS already keeps for an SF Symbol name that
+ * does not exist, and the alternative — reserving space for an icon that never arrives
+ * — shifts the label for a bug the developer cannot see in a debug build.
  *
- * Loading happens on the calling thread, which for every caller today is the
- * main thread inside `afterUpdate()`. It is not cheap for a vector, and it is
- * not free to move off-main either: `Resources.getDrawable` reads the app's
- * resource table, whose theme is the activity's. Sharing the result makes the
- * cost once-per-name instead of once-per-view, which is the point.
+ * Two kinds of artwork, and the drawable picks which: a `<vector>` becomes an
+ * `ImageVector` through [NitroUiIcons] and is drawn at the slot's size, and anything
+ * else is rasterised at its intrinsic size by [loadIconBitmap]. Round 1 rasterised
+ * both, at the file's own 24 dp, and `ContentScale.Fit` then stretched the result to
+ * the 32 dp and 40 dp slots of `xlarge` and `xxlarge` — a soft glyph on exactly the two
+ * rungs that need the most ink, while the same icon read over the dev server was
+ * sharp. The `xxlarge` case in `example/__tests__/Button.harness.tsx` is the witness.
+ *
+ * Loading happens on the calling thread, which for every caller today is the main
+ * thread inside `afterUpdate()`. It is not free to move off-main either: the resource
+ * table and the theme that resolves a drawable's attributes belong to the activity.
+ * Sharing the result makes the cost once-per-name instead of once-per-view — for
+ * vectors that sharing is [NitroUiIcons]', for bitmaps it is [NitroUiIconBitmaps].
  */
-internal fun loadIconBitmap(
+internal fun loadIconArtwork(
   context: Context,
   name: String,
-): android.graphics.Bitmap? {
+): NitroUiIconContent {
   val normalizedName = NitroUiIconNames.normalize(name)
   if (normalizedName.isEmpty()) {
-    return null
+    return NitroUiIconContent.Absent
   }
   val resId = ResourceDrawableIdHelper.getResourceDrawableId(context, normalizedName)
   if (resId == 0) {
@@ -537,18 +574,89 @@ internal fun loadIconBitmap(
           "See docs/components/button.md, \"Android icons\".",
       )
     }
-    return null
+    return NitroUiIconContent.Absent
   }
-  NitroUiIconCache.get(resId)?.let { return it }
+  if (isVectorDrawable(context, resId)) {
+    try {
+      return NitroUiIconContent.Vector(NitroUiIcons.vector(context, resId))
+    } catch (error: Throwable) {
+      // A `<vector>` the parser refuses — a gradient in an old schema, a malformed
+      // path — is still a picture, and drawing it softly beats drawing nothing. The
+      // key says which half failed, so this line cannot eat the one warning the
+      // rasterising half has to give when *it* fails too.
+      if (NitroUiIconNames.shouldWarn("$normalizedName#vector")) {
+        Log.w(
+          "NitroUi",
+          "androidIcon \"$name\" is a vector drawable nitro-ui could not parse " +
+            "(${error.javaClass.simpleName}: ${error.message}); drawing a rasterised copy instead.",
+        )
+      }
+    }
+  }
+  return loadIconBitmap(context, normalizedName, resId)
+    ?.let { NitroUiIconContent.Bitmap(it) }
+    ?: NitroUiIconContent.Absent
+}
+
+/**
+ * Whether the drawable [resId] names is a `<vector>` — decided the way
+ * `painterResource` decides it: by the root tag of the drawable's own XML, with
+ * nothing decoded and nothing kept.
+ *
+ * Everything else answers no and takes the rasterising branch: a PNG (whose id has no
+ * XML to read, so this throws first), a `layer-list`, an `<adaptive-icon>`, and an
+ * `animated-vector` as well, since `ImageVector` has no keyframes to parse and such a
+ * file is a static picture to nitro-ui either way.
+ *
+ * The read costs one tag of one compiled XML, and only the first time this process
+ * sees the id: [loadIconArtwork] runs when the prop *changes*, and both caches answer
+ * before then. It is not on a draw path.
+ */
+private fun isVectorDrawable(
+  context: Context,
+  resId: Int,
+): Boolean {
+  var xml: android.content.res.XmlResourceParser? = null
+  try {
+    xml = context.resources.getXml(resId)
+    xml.nextTag()
+    return xml.name == "vector"
+  } catch (error: Throwable) {
+    return false
+  } finally {
+    // `getXml` hands out a parser the caller owns, and the answer needs one tag of it.
+    val parser = xml
+    if (parser != null) {
+      try {
+        parser.close()
+      } catch (error: Throwable) {
+        // Nothing is left to release, and the answer has already been made.
+      }
+    }
+  }
+}
+
+/**
+ * The rasterised artwork for the drawable [resId] names, or `null` when it cannot be
+ * drawn — the answer for a drawable that is not a vector, and the second try for one
+ * whose parse failed. [name] is already through [NitroUiIconNames.normalize], which is
+ * also the key every warning here is remembered under.
+ */
+private fun loadIconBitmap(
+  context: Context,
+  name: String,
+  resId: Int,
+): android.graphics.Bitmap? {
+  NitroUiIconBitmaps.get(resId)?.let { return it }
   val drawable =
     try {
-      ResourceDrawableIdHelper.getResourceDrawable(context, normalizedName)
+      ResourceDrawableIdHelper.getResourceDrawable(context, name)
     } catch (error: Throwable) {
       // A layer-list, an adaptive icon or a malformed vector throws here rather
       // than returning null. Q9 C1 calls anything that `painterResource` would
       // throw on "missing", and a control that crashes the app over an icon name
       // is a worse answer than one that draws no icon.
-      if (NitroUiIconNames.shouldWarn(normalizedName)) {
+      if (NitroUiIconNames.shouldWarn(name)) {
         Log.w(
           "NitroUi",
           "androidIcon \"$name\" resolved but cannot be drawn as an icon " +
@@ -558,7 +666,7 @@ internal fun loadIconBitmap(
       return null
     }
   if (drawable == null) {
-    if (NitroUiIconNames.shouldWarn(normalizedName)) {
+    if (NitroUiIconNames.shouldWarn(name)) {
       Log.w("NitroUi", "androidIcon \"$name\" resolved but has no artwork; nothing is drawn for it.")
     }
     return null
@@ -569,7 +677,7 @@ internal fun loadIconBitmap(
     // A shape drawable with no intrinsic size would be rasterised at whatever
     // box the caller gives it, which is a different picture per control and not
     // shareable. Treat it as undrawable and say so once.
-    if (NitroUiIconNames.shouldWarn(normalizedName)) {
+    if (NitroUiIconNames.shouldWarn(name)) {
       Log.w(
         "NitroUi",
         "androidIcon \"$name\" has no intrinsic size, so it cannot be drawn as an icon; " +
@@ -579,7 +687,7 @@ internal fun loadIconBitmap(
     return null
   }
   val bitmap = drawableToBitmap(drawable)
-  NitroUiIconCache.put(resId, bitmap)
+  NitroUiIconBitmaps.put(resId, bitmap)
   return bitmap
 }
 
@@ -607,7 +715,7 @@ private fun drawableToBitmap(drawable: android.graphics.drawable.Drawable): andr
  * Material icon beside it. [remember]ed per artwork identity: building a painter
  * is cheap, and unlike the colours and shapes in [HybridNitroUiButton] it is
  * derived from nothing in the theme, so a per-composition `remember` is enough —
- * the *shared* thing is the artwork, and that is [NitroUiIconCache]'s and
+ * the *shared* thing is the artwork, and that is [NitroUiIconBitmaps]'s and
  * [NitroUiIconFiles]' job.
  */
 @Composable
@@ -637,7 +745,7 @@ internal fun rememberIconPainter(
  *
  * Three things are true of every load here and none of them are true of a
  * resource lookup, which is why it is a separate object rather than another arm
- * of [loadIconBitmap]:
+ * of [loadIconArtwork]:
  *
  *  - **It cannot finish on the caller's thread.** `afterUpdate()` runs on the main
  *    thread and must not wait on a socket, so the bytes are read on one worker
@@ -656,7 +764,7 @@ internal fun rememberIconPainter(
  *  - **Many controls can ask for one URL at once.** A toolbar with three buttons
  *    and a list row with an icon each all mount in the same frame. The waiters are
  *    kept per URL and woken together, so twenty rows read the file once, which is
- *    the same promise [NitroUiIconCache] makes about resource ids.
+ *    the same promise [NitroUiIconBitmaps] makes about resource ids.
  */
 internal object NitroUiIconFiles {
   /** URLs to remember before starting over. Same bound as the resource cache. */
