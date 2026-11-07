@@ -1,0 +1,108 @@
+# Failure excerpt — harness:ios:FormFidelity
+
+- Ran: 2026-11-07T19:27:07.483Z on code tree `0ed5d095bec3` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios FormFidelity`
+- Result: fail, exit 1, 42721 ms
+- Load: start 2.48, end 3.80, median 3.82, max 3.94
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+FormFidelity-2026-11-07T19-27-07.483Z.log` (<store>/task/S6-form-spike/harness+ios+FormFidelity-2026-11-07T19-27-07.483Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormFidelity.harness.tsx`
+- `● Form fidelity (S6 spike, question 2) › measures the prototype and a SwiftUI Form the same way (E2)`
+- `Error: Promise created`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+FormFidelity-2026-11-07T19-27-07.483Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G19-pxe0p                G19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.80 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 63 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios FormFidelity
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 0ed5d095bec3, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 2.48/4.42 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+FormFidelity-2026-11-07T19-27-07.483Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/FormFidelity.harness.tsx
+  ● Form fidelity (S6 spike, question 2) › measures the prototype and a SwiftUI Form the same way (E2)
+
+    Test timed out after 30000ms: Form fidelity (S6 spike, question 2) measures the prototype and a SwiftUI Form the same way (E2)
+
+    Pending promises at timeout: 2
+
+    Promise #49, created 15683ms after test start:
+      Error: Promise created
+
+      at createPromiseStack (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at hold (http:/localhost:8293/__tests__/FormFidelity.harness.bundle/&modulesOnly=true&platform=ios:90075:23)
+      at anonymous (http:/localhost:8293/__tests__/FormFidelity.harness.bundle/&modulesOnly=true&platform=ios:90176:17)
+      at asyncGeneratorStep (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #51, created 16100ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8293/__tests__/FormFidelity.harness.bundle/&modulesOnly=true&platform=ios:90083:24)
+      at asyncGeneratorStep (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8293/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        40.998 s
+Ran all test suites matching FormFidelity.
+
+
+
+```

@@ -1,0 +1,104 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-07T18:01:32.814Z on code tree `d405f0a7857a` at HEAD `5922b8e` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 35608 ms
+- Load: start 24.52, end 16.85, median 19.49, max 24.52
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-01-32.814Z.log` (<store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-01-32.814Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (S6 spike) › mounts every row into the list with none stranded (E1)`
+- `● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `● Form (S6 spike) › gives a wrapping row the height its content needs (E3)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-01-32.814Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   G19-lodjp                G19          both              pair-a
+  |   S6-mpdf2                 S6           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 16.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree d405f0a7857a, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 24.52/19.51 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-01-32.814Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (S6 spike) › mounts every row into the list with none stranded (E1)
+
+    Form report never satisfied "nine rows" - last was sections=3;rows=8;items=8;inCells=8;orphans=0;alive=8;reparents=8;reclaims=0;applies=1;width=420.00;listWidth=420.00;heights=60.00,60.00,60.00,60.00,60.00,60.00;taps=0;keyboard=0.00
+
+      [0m [90m 71 |[39m     }
+       [90m 72 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 73 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 74 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 75 |[39m [32m          forms.form?.nuiTestFormReport()[39m
+       [90m 76 |[39m [32m        )}`[39m[0m
+
+  ● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    Form report never satisfied "nine rows" - last was sections=3;rows=8;items=8;inCells=8;orphans=0;alive=8;reparents=8;reclaims=8;applies=3;width=380.00;listWidth=420.00;heights=60.00,60.00,60.00,60.00,60.00,60.00;taps=0;keyboard=0.00
+
+      [0m [90m 71 |[39m     }
+       [90m 72 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 73 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 74 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 75 |[39m [32m          forms.form?.nuiTestFormReport()[39m
+       [90m 76 |[39m [32m        )}`[39m[0m
+
+  ● Form (S6 spike) › gives a wrapping row the height its content needs (E3)
+
+    Form report never satisfied "nine rows" - last was sections=3;rows=8;items=8;inCells=8;orphans=0;alive=8;reparents=8;reclaims=8;applies=5;width=420.00;listWidth=420.00;heights=60.00,60.00,60.00,60.00,60.00,60.00;taps=0;keyboard=0.00
+
+      [0m [90m 71 |[39m     }
+       [90m 72 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 73 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 74 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 75 |[39m [32m          forms.form?.nuiTestFormReport()[39m
+       [90m 76 |[39m [32m        )}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 total
+Snapshots:   0 total
+Time:        33.278 s
+Ran all test suites matching Form.harness.
+
+
+
+```
