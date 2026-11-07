@@ -59,17 +59,17 @@ deprecation cycle, and the break compiles red in that one file.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1819 tests / 71 suites | `5882b14889d3` | 2 m 43 s | start 4.5 / med 5.5 / max 7.1 |
-| `harness:ios` | **PASS** | 448 tests / 25 suites + isolated 4 tests / 2 suites | `5882b14889d3` (ios tree) | 10 m 49 s | start 5.9 / med 5.5 / max 9.8 |
-| `harness:android` | **PASS** | 499 tests / 25 suites + isolated 4 tests / 2 suites | `5882b14889d3` (android tree) | 15 m 05 s | start 6.4 / med 3.6 / max 13.4 |
-| `real-input:ios` | stale | — | e18a547f0973 (not this tree) | 27 m 54 s | start 4.2 / med 5.3 / max 17.4 |
-| `real-input:android` | stale | — | e18a547f0973 (not this tree) | 41 m 07 s | start 6.6 / med 3.0 / max 8.9 |
-| `harness:android:Progress` | **PASS** | 19 tests / 1 suites | `5882b14889d3` (android tree) | 17.0 s | start 6.5 / med 6.8 / max 6.8 |
-| `harness:android:Progress:--background` | stale | — | 2ac53e423459 (not this tree) | 1.2 s | start 9.4 / med 9.4 / max 9.4 |
-| `harness:ios:Progress` | stale | 17 tests / 1 suites | 6070e0c8701b (not this tree) | 15.8 s | start 3.2 / med 5.1 / max 5.1 |
-| `real-input:android:--control:hosted-slider` | stale | — | e18a547f0973 (not this tree) | 8 m 31 s | start 2.1 / med 3.0 / max 6.9 |
+| `check` | **PASS** | 1822 tests / 72 suites | `fe0d9568819c` | 2 m 44 s | start 4.7 / med 7.6 / max 11.4 |
+| `harness:ios` | **PASS** | 453 tests / 25 suites + isolated 4 tests / 2 suites | `fe0d9568819c` (ios tree) | 10 m 50 s | start 15.4 / med 8.0 / max 19.8 |
+| `harness:android` | **PASS** | 504 tests / 25 suites + isolated 4 tests / 2 suites | `fe0d9568819c` (android tree) | 26 m 45 s | start 6.5 / med 10.5 / max 386.1 |
+| `real-input:ios` | **PASS** | — | `fe0d9568819c` (ios tree) | 28 m 51 s | start 6.1 / med 10.2 / max 25.2 |
+| `real-input:android` | **PASS** | — | `fe0d9568819c` (android tree) | 41 m 16 s | start 3.3 / med 4.1 / max 11.7 |
 
-`need --for review`: need: review is satisfied on this code tree.
+`need --for merge`: need: merge is satisfied on this code tree.
+
+The table is this branch's own ledger: `task/E4-merge` records its runs beside
+`task/E4-progress-loading-wavy`'s, which stay exported in
+`docs/tasks/E4/gates.jsonl`.
 
 **One retry, outside this task's code.** The first `real-input:android` run came
 back 21/22: `hosted-slider`'s real drag stopped at 0.43 where the check wants
@@ -224,3 +224,25 @@ changeset); the belt is `model.reset()` in `prepareForRecycle`, not a disposed
 composition. Stale comment, `sizingKey`/handle docs, the `circular ->` indent and
 fallback wording fixed. Gates re-run green at `5882b14889d3`; the
 `harness:android:Progress:--background` row is my mistyped argument, not a run.
+
+## Merge round
+
+`origin/main` merged into `task/E4-merge` (`b8ea48c5`): E3's SplitButton and Menu,
+X20's real-input tooling, docs. `README.md` and `example/src/readme-examples.tsx`
+auto-merged with both sides kept — Progress' row, import, Usage and two screenshots
+beside Menu's — and `readme:check` agrees on 18 blocks. `regen` leaves no diff;
+`nitrogen:check` and `registry:check` are clean. All five merge gates green on
+`fe0d9568819c`.
+
+Four reds stay in this branch's ledger, all mine. `real-input:ios` ran 0 s with no
+lease environment exported, then I killed its retry at 150 s. That kill left the iOS
+build half-written, so the next isolated `harness:ios` phase correctly refused a
+stale app and its successor died in `worklets::cleanupRuntimeAware`;
+`scripts/build-app.mjs --platform ios --clean` cleared both. What they teach:
+`build-for-testing` writes the directory the harness stamp describes, so harness
+runs go before real-input on a platform — and one device gate per Metro port.
+
+`real-input:android` then failed exactly one short-drag Slider check per run at
+load under 4: `hosted-slider` back-drag, then the controlled forward drag; the
+third run is green (0.4 → 0.89 → 0.11). Same class as E5's own red
+`--control hosted-slider` probe, and this diff names no Slider file.
