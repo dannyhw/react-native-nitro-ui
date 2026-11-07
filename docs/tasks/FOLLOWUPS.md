@@ -206,3 +206,4 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - E4 review: Progress's TalkBack and VoiceOver readings in `progress.md` are inferred, not observed on a device.
 - FIX4 review: G19's `NitroUiIcon.kt` (bitmap cache) and FIX4's `core/NitroUiIcons.kt` (vector cache) are two icon caches with near-identical names; reconcile them when G19 merges after FIX4.
 - FIX4 review: `fetch-material-symbols.mjs --verify` (the only check against Google's files) runs only by hand; consider a scheduled CI job.
+- `bun run task-ready` on a `task/<ID>-merge` branch derives `<ID>-merge.report.md`; `node scripts/task-ready.mjs --task <full task name>` works (E4).
