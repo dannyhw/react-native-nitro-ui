@@ -98,7 +98,7 @@
 | S5 | Popover spike (React Native content; Q7 Appendix F, D38; GO = questions 1, 2, 5 on both platforms) | Opus (on mac-1) | Opus | running |
 | E3 | Material 3 Expressive pass 2: SplitButton (Menu's `primaryAction` on Android) (D40) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5, one known iOS real-input flake re-run) |
 | Q9 | ButtonGroup and IconButton (`androidIcon`) design, with the iOS ControlGroup check (D40) | Opus | orchestrator | done (report merged; D42 adopts it, owner decided C and D) |
-| G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | fix round 1: icon source reworked to Metro assets, plugin removed (D43 item 2); review after it (PR #43) |
+| G19 | `androidIcon` + IconButton, Expo config plugin for drawables, size ladder `xlarge`/`xxlarge` (Q9 Appendix C, D42) | Apex | Opus | in review (PR #43 @ `1c952951`, 5/5 gates; `androidIcon` takes a Metro asset or a drawable name, plugin removed) |
 | X20 | Real-input false green on a bare `AbortedCheck`; iOS-only lease touching the emulator; older iOS runtimes leasable (D42) | Opus | Opus | merged (1 impl + 1 fix round; merge gates 5/5 first run) |
 | S2 | BottomSheet spike: RN children in a presented sheet (Q5 C2, D33) | Apex | Opus | done: GO both platforms (D35); report on main, prototype branch kept |
 | FIX3 | SearchField's Android search glyph drawn wrong (a mistyped Material path draws a key, not a magnifier) | Opus (on mac-1) | Opus | cancelled: superseded by D43 (real Material Symbols files replace hand-drawn glyphs) |
