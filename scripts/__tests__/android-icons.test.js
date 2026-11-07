@@ -122,6 +122,7 @@ const HAND_BUILT = [
   ],
   [/\b(?:cubicTo|quadraticTo|quadraticBezierTo)\s*\(/, 'a curve command'],
   [/\br(?:Move|Line|Cubic|Quad)To\s*\(/, 'an android.graphics.Path command'],
+  [/"\s*[Mm]\s*-?\d*\.?\d+[\s,]*-?\d*\.?\d+/, 'a typed pathData string'],
 ];
 
 /** Problems with `android/src/main`'s sources, one line each. */
@@ -139,10 +140,12 @@ const HAND_BUILT = [
  * feature that needs it.
  *
  * The exemption is two patterns in one path, not a file-level pass. Typed path
- * commands, `PathNode`s and inline `pathData` strings stay illegal *here* too: a
- * glyph authored into the parser is the bug this test exists to catch, and the case
- * below asserts exactly that. The case after it asserts the exemption cannot outlive
- * its reason: if the file stops being a parser, this list has to shrink.
+ * commands, `PathNode`s and inline `pathData` strings stay illegal *here* too: a glyph
+ * authored into the parser is the bug this test exists to catch, and the case below
+ * asserts exactly that — for the strings as well, because the list above matches a
+ * quoted `M\u2026` pair of numbers, so "a typed path stays illegal" is a pattern and not
+ * a sentence. The case after it asserts the exemption cannot outlive its reason: if the
+ * file stops being a parser, this list has to shrink.
  */
 const APP_ICON_PARSER =
   'android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt';
@@ -211,12 +214,15 @@ describe('Android icons (D43)', () => {
       'android/src/main/res/drawable/nitroui_typed.xml':
         '<vector><path android:pathData="M0,0L1,1Z"/></vector>',
       // The exempt file, on its own terms: parsing geometry it was handed is silence
-      // (lines 1-2), and authoring geometry is still reported (line 3). That is what
-      // makes the exemption two patterns wide rather than a file-level pass.
+      // (lines 1-2), and authoring geometry is still reported — the path command on
+      // line 3, and the glyph written as a string on line 4, which is the same bug with
+      // its clothes on: `PathParser` is exempt, a path nobody was handed is not. That is
+      // what makes the exemption two patterns wide rather than a file-level pass.
       [APP_ICON_PARSER]: [
         'val v = ImageVector.Builder(name = "x")',
         'val p = PathParser.createPathFromPathData(bytes)',
         'builder.moveTo(1f, 2f)',
+        'val g = PathParser().parsePathString("M0,0L24,24Z")',
       ].join('\n'),
     };
     expect(
@@ -235,6 +241,7 @@ describe('Android icons (D43)', () => {
       'android/src/main/java/B.kt:8: materialPath',
       'android/src/main/res/drawable/nitroui_typed.xml: a vector drawable that fetch-material-symbols.mjs did not write',
       `${APP_ICON_PARSER}:3: a path command`,
+      `${APP_ICON_PARSER}:4: a typed pathData string`,
     ]);
   });
 
