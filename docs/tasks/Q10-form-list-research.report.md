@@ -136,8 +136,8 @@ version 58.0.23, plus `expo-modules-core`'s SwiftUI and Compose view cores). Cit
     it hosts … corrupting unmounted or recycled React views". Expo hit that in `expo/expo#47706`
     (`expo:packages/expo-modules-core/ios/Core/Views/SwiftUI/SwiftUIViewHost.swift:65-107`).
   - Without `RNHostView` the RN view has no size SwiftUI can read. The docs say to wrap RN content in
-    `RNHostView` and to pass it a single child (`docs/pages/versions/unversioned/sdk/ui/swift-ui/rnhostview.mdx:19`
-    in the expo repo). The universal `ListItem` wraps every accessory in `RNHostView matchContents`
+    `RNHostView` and to pass it a single child (`expo:docs/pages/versions/unversioned/sdk/ui/swift-ui/rnhostview.mdx:19`
+). The universal `ListItem` wraps every accessory in `RNHostView matchContents`
     (`expo:packages/expo-ui/src/universal/ListItem/ListItem.ios.tsx:26-34`).
 - **iOS `RNHostView` sizing is a round trip.** With `matchContents`, Yoga sizes the content and SwiftUI takes
   the frame from the Yoga node. Without it, SwiftUI's proposed size is pushed into Yoga through
@@ -184,7 +184,7 @@ The native list owns scrolling, separators, swipe-to-delete and reorder.
   - SwiftUI controls the frame of hosted UIKit views. "Once you render React Native components, you're
     leaving the SwiftUI context." "Keep SwiftUI layouts self-contained" (`index.mdx`, FAQ).
   - The List rules: stable `children`, carried-over state, a placeholder until a row is ready, set
-    `estimatedItemSize`, and replace `data` rather than mutating it (`swift-ui/list.mdx:140-150`).
+    `estimatedItemSize`, and replace `data` rather than mutating it (`expo:docs/pages/versions/unversioned/sdk/ui/swift-ui/list.mdx:140-150`).
   - There are no published numbers for List or Form performance.
 - **Issues, all 2026:**
   - `expo/expo#52214`: an `RNHostView` in a SwiftUI `List` row renders 0 × 0 (closed 10-25).
