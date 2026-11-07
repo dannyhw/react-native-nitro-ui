@@ -317,7 +317,7 @@ export class Suite {
         ` · ${String(totalRetries)} press sequence(s) needed a retry` +
         (totalRetries === 0
           ? ''
-          : ' - see the "answered on tap" notes above for which') +
+          : ' - see the "answered on tap/key" notes above for which') +
         (this.auxiliary.length === 0
           ? ''
           : ` · ${String(this.auxiliary.length - auxFailed.length)}/` +
