@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T03:26:46.912Z on code tree `671acf7b1370` at HEAD `cc46ed9` (branch `task/S5-popover-spike`)
+- Command: `bun run check`
+- Result: fail, exit 1, 117094 ms
+- Load: start 3.64, end 5.43, median 6.70, max 8.06
+- Device: none recorded (not a device gate)
+- Full log: `task/S5-popover-spike/check-2026-11-06T03-26-46.616Z.log` (<store>/task/S5-popover-spike/check-2026-11-06T03-26-46.616Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "manifest:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2871 — the rest is in the full log above)
+
+```
+| Slider: mount, 3 value changes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+| Switch: mount, 3 flips, 2 unrelated parent renders                              | 6        | 6       | mount+0 redundant[] | ok     |
+| TextField: mount, 3 keystrokes, 2 unrelated parent renders                      | 6        | 6       | mount+0 redundant[] | ok     |
+
+PASS - 8 wrapper(s) render exactly as many times as the baseline says, with no redundant renders.
+──────── nitrogen:check — pass, 2.5s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 19/19 HybridObjects in 1.7s!
+💡  Your code is in <tmp>/nitrogen-check-fR7Cyt/nitrogen/generated
+‼️   Added 601 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiPopoverProtoComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverProtoComponent.mm
+nitrogen-check: no drift (400 generated files match, 52 view(s) patched).
+──────── registry:check — pass, 0.3s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (15 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.5s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        1.8s
+──────── prepare — pass, 1.8s ────────────────────────────────────────────────────
+$ bob build
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [custom] Cleaning up nitrogen
+ℹ [typescript] Generating type definitions with tsc
+ℹ [module] Compiling 103 files in src with babel
+ℹ [custom] Running bun run nitrogen
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+✔ [module] Wrote files to lib/module
+✔ [typescript] Wrote definition files to lib/typescript
+✔ [custom] Ran the nitrogen script succesfully
+check: ✓ publint             pass        1.4s
+check: ✓ api-extractor:check pass        1.6s
+──────── api-extractor:check — pass, 1.6s ────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+
+API Extractor completed successfully
+──────── publint — pass, 1.4s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✗ manifest:check      fail        2.0s - exit 1
+──────── manifest:check — fail, 2.0s ─────────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 17 blocks match example/src/readme-examples.tsx
+check: 16 passed, 1 failed in 116.7s
+check: failed step(s): manifest:check
+──────── full log: manifest:check ────────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPopoverProto.kt would be published (not in the manifest).
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/NitroUiPopoverProtoViewManager.kt would be published (not in the manifest).
+package-files: +ios/spike/PopoverProto/HybridNitroUiPopoverProto.swift would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/NitroUiPopoverProtoConfig.js would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/NitroUiPopoverProtoConfig.js.map would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/PopoverProto.js would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/PopoverProto.js.map would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/PopoverProto.nitro.js would be published (not in the manifest).
+package-files: +lib/module/spike/PopoverProto/PopoverProto.nitro.js.map would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/NitroUiPopoverProtoConfig.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/NitroUiPopoverProtoConfig.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/PopoverProto.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/PopoverProto.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/PopoverProto.nitro.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/spike/PopoverProto/PopoverProto.nitro.d.ts.map would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiPopoverProtoSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiPopoverProtoSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiPopoverProtoStateUpdater.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiPopoverProtoStateUpdater.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPopoverProtoSpec.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverProtoManager.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverProtoStateUpdater.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiPopoverProtoSpecSwift.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiPopoverProtoSpecSwift.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/views/HybridNitroUiPopoverProtoComponent.mm would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiPopoverProtoSpec.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiPopoverProtoSpec_cxx.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiPopoverProtoSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiPopoverProtoSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiPopoverProtoComponent.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiPopoverProtoComponent.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/json/NitroUiPopoverProtoConfig.json would be published (not in the manifest).
+package-files: +src/spike/PopoverProto/NitroUiPopoverProtoConfig.ts would be published (not in the manifest).
+package-files: +src/spike/PopoverProto/PopoverProto.nitro.ts would be published (not in the manifest).
+package-files: +src/spike/PopoverProto/PopoverProto.tsx would be published (not in the manifest).
+package-files: tarball differs from <repo>/etc/package-files.txt (35 added, 0 removed). If intended, run `bun run manifest:update`.
+error: script "manifest:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 117.1 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+```
