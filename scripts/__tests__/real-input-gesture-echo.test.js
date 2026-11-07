@@ -74,6 +74,17 @@ describe('gestureReported', () => {
     ).toBe(false);
   });
 
+  it('refuses a start ahead of every complete on the screen', () => {
+    // Seen `{1, 0}`, now `{2, 1}`: both counters advanced, so the two halves of the
+    // rule each pass on their own — but the only `complete` drawn belongs to the
+    // *previous* gesture, and this touch's has not arrived. Reachable on the retry
+    // path, where a first injection reported its start and lost its end: answering
+    // `true` here settles the drag on a value the retry never produced.
+    expect(
+      gestureReported({ starts: 1, completes: 0 }, { starts: 2, completes: 1 })
+    ).toBe(false);
+  });
+
   it('refuses the same gesture read twice', () => {
     expect(
       gestureReported({ starts: 2, completes: 2 }, { starts: 2, completes: 2 })
