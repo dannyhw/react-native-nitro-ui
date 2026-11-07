@@ -11,12 +11,10 @@
       "types": "./lib/typescript/src/index.d.ts",
       "default": "./lib/module/index.js"
     },
-    "./plugin": "./plugin/index.js",
     "./package.json": "./package.json"
   },
   "files": [
     "src",
-    "plugin",
     "lib",
     "android",
     "ios",

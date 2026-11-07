@@ -79,30 +79,6 @@ export default defineConfig([
     },
   },
   {
-    // The Expo config plugin is Node code that ships as source: no bundler runs
-    // it, `expo prebuild` does, so it gets Node's globals and CommonJS rather than
-    // the React Native environment the rest of the package is written for.
-    files: ['plugin/**/*.js'],
-    extends: fixupConfigRules(compat.extends('@react-native', 'prettier')),
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'commonjs',
-      globals: {
-        require: 'readonly',
-        module: 'writable',
-        exports: 'writable',
-        console: 'readonly',
-        process: 'readonly',
-        __dirname: 'readonly',
-        jest: 'readonly',
-        describe: 'readonly',
-        it: 'readonly',
-        expect: 'readonly',
-        afterEach: 'readonly',
-      },
-    },
-  },
-  {
     // Perf contract for Hybrid Views - see AGENTS.md and
     // docs/research/nitro-patterns.md. Rules live in eslint-rules/index.js.
     files: ['src/**/*.{ts,tsx}', 'example/**/*.tsx', 'bench/**/*.tsx'],
