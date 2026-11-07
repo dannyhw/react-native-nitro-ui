@@ -21,6 +21,7 @@ import {
   DatePicker,
   type DialogAction,
   Host,
+  IconButton,
   Menu,
   type MenuGroup,
   Picker,
@@ -123,6 +124,41 @@ export function ShareButton({ onShare }: { onShare: () => void }) {
       systemImage="square.and.arrow.up"
       androidIcon={require('./assets/icons/share_24px.xml')}
       onPress={onShare}
+    />
+  );
+}
+// #endregion
+
+// #region icon-button
+export function SearchButton({ onSearch }: { onSearch: () => void }) {
+  return (
+    <IconButton
+      accessibilityLabel="Search"
+      systemImage="magnifyingglass"
+      androidIcon={require('./assets/icons/search_24px.xml')}
+      variant="tonal"
+      onPress={onSearch}
+    />
+  );
+}
+// #endregion
+
+// #region icon-button-toggle
+export function BookmarkButton({
+  saved,
+  onSave,
+}: {
+  saved: boolean;
+  onSave: (next: boolean) => void;
+}) {
+  return (
+    <IconButton
+      accessibilityLabel="Bookmark this post"
+      systemImage={saved ? 'bookmark.fill' : 'bookmark'}
+      androidIcon="bookmark"
+      variant="filled"
+      checked={saved}
+      onCheckedChange={onSave}
     />
   );
 }
