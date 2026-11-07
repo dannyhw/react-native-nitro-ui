@@ -1,0 +1,14 @@
+{
+  "uiViewClassName": "NitroUiFormRow",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "accessory": true,
+    "selected": true,
+    "pressable": true,
+    "nuiPerfId": true,
+    "onPress": true,
+    "hybridRef": true
+  }
+}

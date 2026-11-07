@@ -49,6 +49,12 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiDatePickerComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiDialogSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiDialogComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiFormSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiFormComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiFormSectionSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiFormSectionComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiFormRowSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiFormRowComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
@@ -88,6 +94,12 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDatePickerStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiDialogSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDialogStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiFormSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiFormStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiFormSectionSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiFormSectionStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiFormRowSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiFormRowStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp

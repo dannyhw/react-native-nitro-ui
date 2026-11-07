@@ -1066,6 +1066,14 @@ export const NON_CONTROL_AUTOLINKING = [
   'NitroUiCore',
   'NitroUiHost',
   'NitroUiMaterialTheme',
+  // S6's Form/Section/Row prototype (Q10 Appendix C1): three Hybrid Views declared so the
+  // example, harness and screenshots can mount them, with no manifest because the
+  // prototype is not a component - no registry control, no example tab, no bench arm, no
+  // README row, and no export from `src/index.ts`. G-Form replaces these three rows with
+  // three manifests, and the spike branch is never merged (D19).
+  'NitroUiForm',
+  'NitroUiFormSection',
+  'NitroUiFormRow',
 ];
 
 /**

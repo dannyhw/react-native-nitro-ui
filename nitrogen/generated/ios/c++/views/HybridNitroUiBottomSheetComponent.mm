@@ -239,10 +239,15 @@ using namespace margelo::nitro::nitroui::views;
 - (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView
                             index:(NSInteger)index {
   UIView *content = self.contentView;
-  if (content == nil || childComponentView.superview != content) {
+  if (content == nil) {
     [super unmountChildComponentView:childComponentView index:index];
     return;
   }
+  // Detach the child from whatever its parent turns out to be. `super` asserts that it
+  // is mounted in *this* view, which raises twice over here: a native container may
+  // have taken the child (S6's Form holds a row inside its list cell), and an unmount
+  // is also the teardown path for a child already out of the tree. Either way, after
+  // this call the child must simply not be mounted.
   [childComponentView removeFromSuperview];
 }
 @end

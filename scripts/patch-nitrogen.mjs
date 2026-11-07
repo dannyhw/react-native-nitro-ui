@@ -410,7 +410,13 @@ export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
  * view (see the file header). A list here rather than a manifest key: it is a fact
  * about how the generated iOS component mounts, which only this file changes.
  */
-export const CONTENT_CHILDREN_VIEWS = ['HybridNitroUiBottomSheet'];
+export const CONTENT_CHILDREN_VIEWS = [
+  'HybridNitroUiBottomSheet',
+  // S6's spike prototype: a Form's children are its sections and a Section's are its
+  // rows, and on iOS both are models the list reads rather than boxes in the tree.
+  'HybridNitroUiForm',
+  'HybridNitroUiFormSection',
+];
 
 /**
  * Give the generated iOS component view `mountChildComponentView:index:` and
@@ -495,10 +501,15 @@ export function patchContentChildrenObjC(
     '- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView',
     '                            index:(NSInteger)index {',
     '  UIView *content = self.contentView;',
-    '  if (content == nil || childComponentView.superview != content) {',
+    '  if (content == nil) {',
     '    [super unmountChildComponentView:childComponentView index:index];',
     '    return;',
     '  }',
+    '  // Detach the child from whatever its parent turns out to be. `super` asserts that it',
+    '  // is mounted in *this* view, which raises twice over here: a native container may',
+    "  // have taken the child (S6's Form holds a row inside its list cell), and an unmount",
+    '  // is also the teardown path for a child already out of the tree. Either way, after',
+    '  // this call the child must simply not be mounted.',
     '  [childComponentView removeFromSuperview];',
     '}',
     '',

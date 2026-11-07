@@ -22,6 +22,12 @@ namespace margelo::nitro::nitroui { class HybridNitroUiContextMenuSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiDatePickerSpec; }
 // Forward declaration of `HybridNitroUiDialogSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiDialogSpec; }
+// Forward declaration of `HybridNitroUiFormRowSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiFormRowSpec; }
+// Forward declaration of `HybridNitroUiFormSectionSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiFormSectionSpec; }
+// Forward declaration of `HybridNitroUiFormSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiFormSpec; }
 // Forward declaration of `HybridNitroUiHostSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiHostSpec; }
 // Forward declaration of `HybridNitroUiMenuSpec` to properly resolve imports.
@@ -88,6 +94,12 @@ namespace NitroUi { class HybridNitroUiContextMenuSpec_cxx; }
 namespace NitroUi { class HybridNitroUiDatePickerSpec_cxx; }
 // Forward declaration of `HybridNitroUiDialogSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiDialogSpec_cxx; }
+// Forward declaration of `HybridNitroUiFormRowSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiFormRowSpec_cxx; }
+// Forward declaration of `HybridNitroUiFormSectionSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiFormSectionSpec_cxx; }
+// Forward declaration of `HybridNitroUiFormSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiFormSpec_cxx; }
 // Forward declaration of `HybridNitroUiHostSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiHostSpec_cxx; }
 // Forward declaration of `HybridNitroUiMenuSpec_cxx` to properly resolve imports.
@@ -117,6 +129,9 @@ namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 #include "HybridNitroUiContextMenuSpec.hpp"
 #include "HybridNitroUiDatePickerSpec.hpp"
 #include "HybridNitroUiDialogSpec.hpp"
+#include "HybridNitroUiFormRowSpec.hpp"
+#include "HybridNitroUiFormSectionSpec.hpp"
+#include "HybridNitroUiFormSpec.hpp"
 #include "HybridNitroUiHostSpec.hpp"
 #include "HybridNitroUiMenuSpec.hpp"
 #include "HybridNitroUiPickerSpec.hpp"
@@ -712,6 +727,94 @@ namespace margelo::nitro::nitroui::bridge::swift {
   // pragma MARK: std::weak_ptr<HybridNitroUiDialogSpec>
   using std__weak_ptr_HybridNitroUiDialogSpec_ = std::weak_ptr<HybridNitroUiDialogSpec>;
   inline std__weak_ptr_HybridNitroUiDialogSpec_ weakify_std__shared_ptr_HybridNitroUiDialogSpec_(const std::shared_ptr<HybridNitroUiDialogSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: std::optional<std::function<void(double /* width */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * width * /)>>`.
+   */
+  using std__optional_std__function_void_double____width______ = std::optional<std::function<void(double /* width */)>>;
+  inline std::optional<std::function<void(double /* width */)>> create_std__optional_std__function_void_double____width______(const std::function<void(double /* width */)>& value) noexcept {
+    return std::optional<std::function<void(double /* width */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____width______(const std::optional<std::function<void(double /* width */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* width */)> get_std__optional_std__function_void_double____width______(const std::optional<std::function<void(double /* width */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiFormSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiFormSpec_ = std::shared_ptr<HybridNitroUiFormSpec>;
+  std::shared_ptr<HybridNitroUiFormSpec> create_std__shared_ptr_HybridNitroUiFormSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormSpec_(std__shared_ptr_HybridNitroUiFormSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiFormSpec>
+  using std__weak_ptr_HybridNitroUiFormSpec_ = std::weak_ptr<HybridNitroUiFormSpec>;
+  inline std__weak_ptr_HybridNitroUiFormSpec_ weakify_std__shared_ptr_HybridNitroUiFormSpec_(const std::shared_ptr<HybridNitroUiFormSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>
+  /**
+   * Specialized version of `std::function<void(double, double, double, double)>`.
+   */
+  using Func_void_double_double_double_double = std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>;
+  /**
+   * Wrapper class for a `std::function<void(double / * headerHeight * /, double / * footerHeight * /, double / * inset * /, double / * gap * /)>`, this can be used from Swift.
+   */
+  class Func_void_double_double_double_double_Wrapper final {
+  public:
+    explicit Func_void_double_double_double_double_Wrapper(std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>&& func): _function(std::make_unique<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>(std::move(func))) {}
+    inline void call(double headerHeight, double footerHeight, double inset, double gap) const noexcept {
+      _function->operator()(headerHeight, footerHeight, inset, gap);
+    }
+  private:
+    std::unique_ptr<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>> _function;
+  } SWIFT_NONCOPYABLE;
+  Func_void_double_double_double_double create_Func_void_double_double_double_double(void* NON_NULL swiftClosureWrapper) noexcept;
+  inline Func_void_double_double_double_double_Wrapper wrap_Func_void_double_double_double_double(Func_void_double_double_double_double value) noexcept {
+    return Func_void_double_double_double_double_Wrapper(std::move(value));
+  }
+  
+  // pragma MARK: std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * headerHeight * /, double / * footerHeight * /, double / * inset * /, double / * gap * /)>>`.
+   */
+  using std__optional_std__function_void_double____headerHeight_____double____footerHeight_____double____inset_____double____gap______ = std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>;
+  inline std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>> create_std__optional_std__function_void_double____headerHeight_____double____footerHeight_____double____inset_____double____gap______(const std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>& value) noexcept {
+    return std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____headerHeight_____double____footerHeight_____double____inset_____double____gap______(const std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)> get_std__optional_std__function_void_double____headerHeight_____double____footerHeight_____double____inset_____double____gap______(const std::optional<std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormSectionSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiFormSectionSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiFormSectionSpec_ = std::shared_ptr<HybridNitroUiFormSectionSpec>;
+  std::shared_ptr<HybridNitroUiFormSectionSpec> create_std__shared_ptr_HybridNitroUiFormSectionSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormSectionSpec_(std__shared_ptr_HybridNitroUiFormSectionSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiFormSectionSpec>
+  using std__weak_ptr_HybridNitroUiFormSectionSpec_ = std::weak_ptr<HybridNitroUiFormSectionSpec>;
+  inline std__weak_ptr_HybridNitroUiFormSectionSpec_ weakify_std__shared_ptr_HybridNitroUiFormSectionSpec_(const std::shared_ptr<HybridNitroUiFormSectionSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormRowSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiFormRowSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiFormRowSpec_ = std::shared_ptr<HybridNitroUiFormRowSpec>;
+  std::shared_ptr<HybridNitroUiFormRowSpec> create_std__shared_ptr_HybridNitroUiFormRowSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormRowSpec_(std__shared_ptr_HybridNitroUiFormRowSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiFormRowSpec>
+  using std__weak_ptr_HybridNitroUiFormRowSpec_ = std::weak_ptr<HybridNitroUiFormRowSpec>;
+  inline std__weak_ptr_HybridNitroUiFormRowSpec_ weakify_std__shared_ptr_HybridNitroUiFormRowSpec_(const std::shared_ptr<HybridNitroUiFormRowSpec>& strong) noexcept { return strong; }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiHostSpec>
   /**

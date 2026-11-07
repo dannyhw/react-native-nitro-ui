@@ -78,6 +78,12 @@ class NitroUiPackage : BaseReactPackage() {
     // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
     // Fabric's child indices. See `NitroUiContextMenuViewManager`.
     NitroUiContextMenuViewManager(),
+    // S6's Form prototype: Form, Section and Row all take React Native children, so each
+    // needs the `IViewGroupManager` half. The Section's manager also keeps the section's one
+    // Compose layer out of Fabric's child indices. See the three manager files.
+    NitroUiFormViewManager(),
+    NitroUiFormSectionViewManager(),
+    NitroUiFormRowViewManager(),
   )
 
   companion object {
