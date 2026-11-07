@@ -185,6 +185,44 @@ class SliderModelTest {
   }
 
   @Test
+  fun anAccessibilityStepTakesItsDirectionFromTheProgressTheReaderWasShown() {
+    // X21's flake. `ProgressBarRangeInfo` is written by composition and republished a
+    // frame later, so a press can be aimed at the progress the reader was *shown* while
+    // the model has already moved on. `0..12 step 3` gets its ticks from the grid, so
+    // the delegate's stride is one whole step and two presses posted in one frame both
+    // send 3 - up from the published 0. Weighed against the model's own 3 that is "no
+    // direction", which is a reader's second press doing nothing at all; weighed
+    // against a model holding 6 it is "down", which is the recurring
+    // `expected [3, 6, 3] to deeply equal [3, 6, 9]`.
+    val oneBehind = fixture(0.0, 12.0, 3.0, 3.0)
+    assertTrue(
+      "the reader said up from 0, so the value moves up from where it is",
+      oneBehind.model.accessibilityStepToward(3.0, publishedProgress = 0.0)
+    )
+    assertEquals(6.0, oneBehind.model.displayed, 0.0)
+    assertEquals("the gesture starts from the value it really began at", listOf(3.0), oneBehind.events.starts)
+    assertEquals(listOf(6.0), oneBehind.events.completes)
+
+    val twoBehind = fixture(0.0, 12.0, 3.0, 6.0)
+    assertTrue(twoBehind.model.accessibilityStepToward(3.0, publishedProgress = 0.0))
+    assertEquals(
+      "up from the progress that was shown, so up from 6 - never back to 3",
+      9.0,
+      twoBehind.model.displayed,
+      0.0,
+    )
+    assertEquals(listOf(9.0), twoBehind.events.completes)
+
+    // A target equal to the published progress is still no direction, however far the
+    // model has travelled since: the platform asked for a move that is not one.
+    val still = fixture(0.0, 12.0, 3.0, 6.0)
+    assertFalse(still.model.accessibilityStepToward(3.0, publishedProgress = 3.0))
+    assertEquals(6.0, still.model.displayed, 0.0)
+    assertEquals(emptyList<Double>(), still.events.starts)
+    assertEquals(emptyList<Double>(), still.events.completes)
+  }
+
+  @Test
   fun anAccessibilityStepAtABoundMovesNothingAndSaysSo() {
     val world = fixture(0.0, 10.0, 3.0, 10.0)
     assertFalse("nothing above the top of the track", world.model.accessibilityStepToward(10.5))
