@@ -8,37 +8,32 @@
 All four flakes have a cause and a fix, and three of them are not what their message said.
 
 **1 (iOS `frozen: 1 edits refused`) is consistent with the check, not the component.**
-`frozen.typeText("xy")` typed a blind string and then waited for a count of two, which assumes both
-keys arrived and that a field emits exactly one edit per key; a keystroke is synthesised input on
-the same path as a touch, and this machine drops those (`FOLLOWUPS.md:58`), so a lost key reads as a
-revert that lost an edit. What the red proof shows is that a dropped key *can* produce that line —
-not that the five historical runs dropped one. `typeKey` now types one key, waits for that key's own
-echo, and re-types a key the field never received through `pressUntil`, so the retry is counted and
-reported like a press retry; the field's own text stays the witness for a key it *keeps* showing
-with no echo, which fails instead of being re-typed into a green (F1 M3).
+`frozen.typeText("xy")` typed a blind string and waited for a count of two, which assumes every key
+arrived and that a field emits one edit per key; a keystroke is synthesised input, and this machine
+drops those (`FOLLOWUPS.md:58`), so a lost key reads as a revert that lost an edit. The red proof
+shows a dropped key *can* produce that line, not that those runs dropped one.
+`typeKey` types one key, waits for that key's own echo, and re-types an undelivered key through
+`pressUntil`, counted as a retry; a key the field keeps showing with no echo still fails (F1 M3).
+
+**2 (`mounted 9 of 10`) is two causes, and the first fix reached one of them.** The G16/X19 shape is
+a read taken too early: both witnesses (`onDismiss`, native `live=0`) fire before the render that
+unmounts, so `toBe(10)` raced React's passive effect — it waits for the number now and still
+asserts it exactly. E2's runs are the other shape: short on `mounts`, and short for good — one
+cycle that neither mounted nor unmounted, because the next open was batched with the dismissal's `setMounted(false)` and
+`presented && !mounted` put the content straight back. The loop waits for each cycle's unmount
+before the next open (row 2b); a sheet reopened inside its own exit keeping its content mounted is
+accepted behaviour, now in the docs.
+
+**3 (`goToScreen`) was one press and a throw** that aborted a 30-minute run — and two captured runs
+had no app process at all, so "slow tab" was sometimes a dead app. Navigation re-presses like every other
+delivery here, counts the retry and names the cause; the a11y sweep now reports through the same
+log, so its retries reach the total.
 
 **4 (`expected [3, 6, 3] to deeply equal [3, 6, 9]`) is a product bug**, not a flake: Compose
 publishes `ProgressBarRangeInfo` at composition and republishes it a frame later, so a reader's
-`setProgress` target is built from the progress the reader was *shown* while the model decided the
-direction against its own newer value. A tree one press behind turns "up" into "no direction" (a
-press that does nothing on `0..12 step 3`); two behind turns it into "down". The direction now
-comes from the published progress; the destination stays the model's.
-
-**2 (`mounted 9 of 10`) is two causes, and the first fix reached one of them.** The G16/X19 shape is
-a read taken too early: the counters live in `Content`'s passive effect while both witnesses the
-test waited for (`onDismiss`, native `live=0`) fire before the render that unmounts, so the exact
-`toBe(10)` was racing React — it waits for the number now and still asserts it exactly. E2's two
-runs are the other shape: short on `mounts`, and short for good, which a late effect cannot do.
-There one cycle neither mounted nor unmounted — the next open was batched with the dismissal's
-`setMounted(false)`, so `presented && !mounted` put the content straight back before anything
-committed. The loop waits for each cycle's unmount before opening the next sheet (row 2b), and
-closing and reopening a sheet inside one exit animation keeping its content mounted is accepted
-behaviour, now in the component's docs.
-
-**3 (`goToScreen`) was one press and a throw** that aborted a 30-minute run — and two captured
-runs had no app process at all, so "slow tab" was sometimes a dead app. Navigation now re-presses
-the way every other delivery in the suite does, counts the retry, and says which of the three
-causes it is looking at.
+`setProgress` target came from the progress it was *shown* while the model chose a direction from its
+own newer value. One press of lag turns "up" into no direction, two into "down". The direction now
+comes from the published progress, the destination from the model.
 
 ## The four flakes
 
@@ -89,7 +84,7 @@ causes it is looking at.
 
 ## Files changed
 
-- `example/ios/NitroUiExampleUITests/RealInputTests.swift`: `typeKey` (+ `waitUntil`), used at both frozen fields; `pressUntil` gains `pressNoun` so a re-typed key is reported as a key.
+- `example/ios/NitroUiExampleUITests/RealInputTests.swift`: `typeKey` (+ `waitUntil`) at the TextField frozen field, and `pressUntil` gains `pressNoun` so a re-typed key is reported as a key; the SearchField frozen field stays a burst (one `typeText("xy")`) driven through `pressUntil`, so two keys arriving before JS answers is still covered (fix round 1).
 - `scripts/real-input/ios-log.mjs`, `scripts/real-input/report.mjs`, `scripts/__tests__/real-input-ios-log.test.js`: key retries are counted, not filed as notes.
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt`: the a11y step's direction comes from the published progress.
 - `android/src/test/java/com/margelo/nitro/nitroui/SliderModelTest.kt`: JVM test for the stale-tree window.
@@ -131,3 +126,32 @@ change it approves is already merged.
 PR #46 and PR #47, to get the facts above. No push, comment, review, label or `gh api` POST/PUT.
 
 **Not undone.** The comment is still up; deleting or editing it would be another write.
+
+## Appendix — the E2 lines, in full
+
+Round 1 quoted these as its own cause, so the excerpts are kept here for whoever reads row 2 next.
+Both runs fail on the `mounts` assert (`example/__tests__/BottomSheet.harness.tsx:973`), and the
+deficit is the same one cycle all the way through — a round that throws skips `reset()`, so the next
+round inherits the counters and the same missing cycle is counted again:
+
+```text
+docs/tasks/E2/failures/2026-11-05T18-35-04Z--harness+android--01.log
+  ● BottomSheet · 50 cycles › cycles 10 more times (round 2)
+    expected 9 to be 10 // Object.is equality
+  > 973 |       expect(mounts.get('cycle')).toBe(10);
+
+docs/tasks/E2/failures/2026-11-05T21-58-32Z--harness+android--01.log
+  rounds 2, 3, 4, 5:  expected 9, 18, 28, 38 to be 10        (one cycle lost in the first ten)
+```
+
+Reading them as carry-over: in `18-35-04` round 2 lost one cycle out of its ten and rounds 3, 4 and
+5 lost none (their `19`, `29`, `39` are that one deficit, inherited). In `21-58-32` round 2 lost one
+and round 3 lost another — its `18` is round 2's `9` plus its own `9` — and rounds 4 and 5 lost
+none. So two runs, three lost cycles, all of them permanent.
+
+A late `useEffect` cleanup cannot do that. It is late by milliseconds, and a round that polls for up
+to eight seconds passes it every time — which is why round 1 of both runs was green. A deficit that
+survives a fresh `render()` and a full round of polling is a counter that never moved: a cycle that
+neither mounted nor unmounted. It is also exactly what `waitForContentCycles` cannot fix — the number
+it now waits for is the number that never arrives, so that run would go red at the wait with
+`mounts=9, unmounts=9` and the flake would still be alive.
