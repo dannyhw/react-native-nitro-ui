@@ -3,6 +3,7 @@ import { type ColorValue, type ViewProps } from 'react-native';
 import { warnAndroidIconName } from '../../iconName';
 import {
   androidIconUrl,
+  androidIconResourceName,
   resolveAndroidIcon,
   type AndroidIconProp,
 } from '../../iconSource';
@@ -42,10 +43,13 @@ export type ButtonVariant =
  * both spellings.
  *
  * On iOS the rung picks a `.controlSize`, and iOS has fewer of those than the
- * ladder has rungs: `xlarge` and `xxlarge` both land on the largest the platform
- * draws (`.extraLarge` where it exists, `.large` before it), so the two top rungs
- * are the same control on iOS and differ only on Android. Documented rather than
- * invented, because there is no taller iOS button to map to.
+ * ladder has rungs: `xlarge` and `xxlarge` both ask for the largest the platform
+ * offers (`.extraLarge` on iOS 17+, `.large` before it), and iOS draws `.large` and
+ * `.extraLarge` as one box for these controls — so on iOS the top three rungs are
+ * one height where Android gives them three. Documented rather than invented,
+ * because there is no taller iOS button to map to, and
+ * `docs/components/button.md`, "Sizing", prints the five measured boxes on each
+ * platform.
  */
 export type ButtonSize = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
 
@@ -296,7 +300,10 @@ export function Button({
   // A name that cannot be a resource name is a typo the developer can fix right
   // now, and native's answer to it is indistinguishable from a missing file.
   // See `warnAndroidIconName` for why this is development-only and once per name,
-  // and why a URL is not checked here: a URL that fails says so itself.
+  // and why neither of the two answers this file builds is checked here: a URL says
+  // so itself when it is read, and a `res:` name was written by the bundler from
+  // the asset's path, so `..` in a hoisted workspace reads as `__…` to a rule that
+  // was written for names a human typed. Both are looked up as they are.
   // One string for native whichever form the caller used: an asset becomes a
   // dev-server URL or the drawable Metro files it under, and a name is
   // normalised. Resolved before the size configuration below, because the two
@@ -304,7 +311,8 @@ export function Button({
   const resolvedAndroidIcon = resolveAndroidIcon(androidIcon);
   if (
     resolvedAndroidIcon != null &&
-    androidIconUrl(resolvedAndroidIcon) == null
+    androidIconUrl(resolvedAndroidIcon) == null &&
+    androidIconResourceName(resolvedAndroidIcon) == null
   ) {
     warnAndroidIconName('Button', 'androidIcon', resolvedAndroidIcon);
   }
