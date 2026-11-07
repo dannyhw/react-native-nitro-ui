@@ -39,6 +39,10 @@ const RUN = [
   '    real-input (ios): a real tap on a hosted Button: tap 1/3 left "0" - tapping again',
   '    real-input (ios): a real tap on a hosted Button: tap 2/3 left "0" - tapping again',
   "Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' passed (9.100 seconds).",
+  "Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTextField]' started.",
+  '    real-input (ios): the first refused edit to be reported: key "x" into the frozen field key 1/3 left "frozen: 0 edits refused" - typing it again',
+  '    real-input (ios): the first refused edit to be reported: key "x" into the frozen field answered on key 2/3 - the earlier key(s) were never delivered',
+  "Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTextField]' passed (21.400 seconds).",
 ].join('\n');
 
 describe('real-input iOS log', () => {
@@ -100,6 +104,36 @@ describe('real-input iOS log', () => {
         '    real-input (ios): tap 1/3 on "echo" left "off" - tapping again'
       )?.isRetry
     ).toBe(false);
+  });
+
+  it('counts a re-typed keystroke as the retry it is', () => {
+    // X21 flake 1. `typeKey` types one character and waits for that character's
+    // echo, re-typing a key the field never received — the same synthesised-input
+    // drop `pressUntil` was written for, on the keyboard path instead of the touch
+    // path. The matcher used to name only `tap`, so five branches' worth of
+    // `frozen: 1 edits refused` would re-type their way to green while the summary
+    // printed `0 press sequence(s) needed a retry` — F1 M2's silence again, on a
+    // line the fix did print.
+    expect(
+      realInputLine(
+        '    real-input (ios): the first refused edit: key "x" answered on key 2/3 - ' +
+          'the earlier key(s) were never delivered'
+      )?.isRetry
+    ).toBe(true);
+    // An attempt that was not answered is still a note, not a counted retry.
+    expect(
+      realInputLine(
+        '    real-input (ios): key 1/3 left "frozen: 0 edits refused" - typing it again'
+      )?.isRetry
+    ).toBe(false);
+
+    // And it is charged to the case that typed it, which is the whole point of
+    // parsing the log instead of grepping it.
+    const field = parseTestResults(RUN).get('testRealInputTextField');
+    expect(field.retries).toHaveLength(1);
+    expect(field.retries[0]).toContain('answered on key 2/3');
+    expect(field.notes).toHaveLength(1);
+    expect(field.notes[0]).toContain('typing it again');
   });
 
   it('reports the counted line once, not also as a note', () => {

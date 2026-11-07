@@ -221,3 +221,4 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G19 re-review: `isVectorDrawable` catches `Throwable` where `Exception` would do, swallowing `Error` with the "not a vector" answer.
 - G19 re-review: that function's comment misdescribes why `nextTag()` failed: the binary parser reports `START_DOCUMENT` twice, it does not report a non-tag as its first event.
 - X21 review: Slider screen-reader step, if a stale tree is published at a bound and the platform clamps the target to that bound, a press away from it is dropped (target equals published progress); check whether the delegate clamps.
+- Tooling (X21 merge round): a device gate started without the lease env fell through to the CI-default devices (AVD `nitroui`, iPhone 17) instead of refusing. A local device gate should refuse without a live lease unless `CI` is set.

@@ -322,6 +322,85 @@ async function staysUp(testId: string, ms: number, what: string) {
   }
 }
 
+/**
+ * Wait until the content's own mount/unmount counters have reached `times` each.
+ *
+ * Both counters are bumped by `Content`'s `useEffect`, which React flushes as a
+ * *passive* effect - after the commit that added or removed the view - and
+ * `BottomSheet` only drops its children in the render that native's dismissal
+ * causes: `dismissedCallback` calls `setMounted(false)` and `onDismiss()` in one
+ * go, so the `dismiss` event a test waits for is pushed before the render that
+ * unmounts anything, and native's `live` reaches 0 on its own side of that hop.
+ * Both witnesses are therefore older than the last unmount's bookkeeping, and a
+ * read taken the moment the sheet is gone can be one behind. That is the shape of the
+ * G16 and X19 runs: red on the `unmounts` line, then `20` and `30` in
+ * the rounds that inherit the counters because a thrown expectation skips `reset()`
+ * - the tenth unmount had arrived, late.
+ *
+ * It is not E2's shape. Both E2 runs were short on `mounts` and stayed short for
+ * good - `9`, `19`, `29`, `39` in one and `9`, `18`, `28`, `38` in the other - and a
+ * passive effect that arrives late cannot explain a mount that never arrives at
+ * all. That one is a cycle that neither mounted nor unmounted; see `waitForUnmount`.
+ *
+ * This waits for the number, not for the control: the caller still asserts it
+ * exactly, so content that never unmounts, or unmounts twice, still fails - and
+ * now fails naming both counters instead of one bare `9`.
+ */
+async function waitForContentCycles(
+  testId: string,
+  times: number,
+  what: string
+): Promise<void> {
+  await pollUntil(
+    () =>
+      (mounts.get(testId) ?? 0) >= times && (unmounts.get(testId) ?? 0) >= times
+        ? true
+        : null,
+    () =>
+      new Error(
+        `"${testId}" never counted ${what}: mounts=${String(
+          mounts.get(testId) ?? 0
+        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`
+      )
+  );
+}
+
+/**
+ * Wait until the content has unmounted `count` times, between one cycle and the next.
+ *
+ * This is E2's `expected 9 to be 10`. `dismissedCallback` puts `setMounted(false)`
+ * in the same React batch as the `onDismiss()` the loop is watching, and the loop
+ * used to answer that event by opening the next cycle straight away. Two updates in
+ * one batch is one render, and in that render `isPresented` is already true again,
+ * so `BottomSheet`'s `presented && !mounted` line mounts the content straight back
+ * before anything commits (src/components/BottomSheet/BottomSheet.tsx:351). The
+ * sheet closes and reopens, its content is never dropped, and *both* counters lose
+ * that cycle for good - `9` and `9`, then `19` and `19` in the rounds that inherit
+ * them. Waiting for the tenth unmount at the end of the round cannot save that run
+ * either: the number never arrives.
+ *
+ * Keeping content mounted through a close-and-reopen inside one exit animation is
+ * deliberate (docs/components/bottom-sheet.md), so this does not race it or forgive
+ * it - it removes the ordering. An open issued after the unmount has committed
+ * cannot be batched with the dismissal it would swallow, and that batch is the only
+ * ordering the E2 excerpts fit. The exact per-round asserts below stay as they were.
+ */
+async function waitForUnmount(
+  testId: string,
+  count: number,
+  what: string
+): Promise<void> {
+  await pollUntil(
+    () => ((unmounts.get(testId) ?? 0) >= count ? true : null),
+    () =>
+      new Error(
+        `"${testId}" never counted ${what}: mounts=${String(
+          mounts.get(testId) ?? 0
+        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`
+      )
+  );
+}
+
 async function waitForEvent(entry: string, timeoutMs = 8000) {
   return pollUntil(
     () => (eventLog.includes(entry) ? true : null),
@@ -957,6 +1036,11 @@ describe('BottomSheet · 50 cycles', () => {
           'a baseline with nothing up'
         );
       }
+      // Where this round's counters start. A round that passed ends in `reset()`, so
+      // this is 0; it is read rather than assumed because the round that inherits a
+      // predecessor's counters has to fail naming its own ten cycles, not starve on a
+      // wait for numbers a skipped `reset()` never cleared.
+      const unmountBase = unmounts.get('cycle') ?? 0;
       for (let i = 0; i < 10; i += 1) {
         eventLog.length = 0;
         setters.get('cycle')?.(true);
@@ -968,8 +1052,19 @@ describe('BottomSheet · 50 cycles', () => {
           (r) => r.live === '0',
           `cycle ${cycles + 1} closed`
         );
+        // Before the next open, not just before the asserts: see `waitForUnmount`.
+        await waitForUnmount(
+          'cycle',
+          unmountBase + i + 1,
+          `cycle ${cycles + 1}'s unmount`
+        );
         cycles += 1;
       }
+      await waitForContentCycles(
+        'cycle',
+        10,
+        `ten mounts and ten unmounts in round ${String(round + 1)}`
+      );
       expect(mounts.get('cycle')).toBe(10);
       expect(unmounts.get('cycle')).toBe(10);
       if (round === 4) {

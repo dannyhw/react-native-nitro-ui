@@ -213,6 +213,20 @@ namespace margelo::nitro::nitroui {
       auto __value = std::move(__result.value());
       return __value;
     }
+    inline void nuiTestPointerStream(double mode) override {
+      auto __result = _swiftPart.nuiTestPointerStream(std::forward<decltype(mode)>(mode));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline std::string nuiTestPointerStreamReport() override {
+      auto __result = _swiftPart.nuiTestPointerStreamReport();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
 
   private:
     NitroUi::HybridNitroUiSliderSpec_cxx _swiftPart;

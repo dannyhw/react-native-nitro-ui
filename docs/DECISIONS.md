@@ -586,3 +586,20 @@ mistyped copy of Material's search path shipped in SearchField 0.7.0 and drew a 
      allowed where something needs one.
    - **Not added:** a combined `icon={{ ios, android }}` prop, since `systemImage` + `androidIcon` already cover it.
 
+
+## D44 — Popover with React Native content: GO, and the spike's three questions (2026-11-07)
+
+S5 (`docs/tasks/S5-popover-spike.report.md`; prototype on `task/S5-popover-spike`, never merged) answered GO on both
+platforms: the first frame is the final size, a `Pressable` inside takes a real tap exactly once, it presents over an
+RN `Modal`, and 50 open/close cycles, drops during the entry transition and recycles while open leave nothing behind.
+The build follows the report's "what the build must change" list (no presented-container shadow node: the content
+lays itself out in place and native reads its box; iOS sets `preferredContentSize` before presenting; Android composes
+the popup only once the box has a size, with its own position provider and one RN root per presentation). The
+orchestrator decided its questions:
+
+1. **Android keyboard:** the position provider reads the keyboard (IME) insets and moves the popup clear of it, as
+   iOS does. It is tested on an emulator showing a full software keyboard, not the hardware-keyboard toolbar.
+2. **A popover dropped while presented** (for example when its `Modal` closes) follows BottomSheet's drop rule on
+   both platforms, tested on both. Today iOS reports `onIsPresentedChange(false)` and Android reports nothing.
+3. **iOS entrance animation:** UIKit's own zoom-and-fade is kept. The layout is final from the first frame; the
+   animation is the platform's, not a resize. No prop to turn it off in v1.
