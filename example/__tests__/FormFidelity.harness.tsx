@@ -182,8 +182,15 @@ const FIELDS = [
 
 /** How far a container metric may drift from SwiftUI's list, in pt. */
 const CONTAINER_BOUND_PT = 1;
-/** How far a row's content box may drift, in pt - see the note on the comparison. */
-const ROW_BOX_BOUND_PT = 8;
+/**
+ * How far a row's box may drift from SwiftUI's, in pt - see the note on the
+ * comparison.
+ *
+ * It used to be 8, which is how a row 8 pt too tall shipped as a pass: the bound and the
+ * bug were the same number. S6's answer minted the cell's chrome instead (`rowChrome`),
+ * so the bound is now what a reader could call a match.
+ */
+const ROW_BOX_BOUND_PT = 0.5;
 
 describe('Form fidelity (S6 spike, question 2)', () => {
   afterEach(() => {
@@ -213,6 +220,17 @@ describe('Form fidelity (S6 spike, question 2)', () => {
     if (!IOS) {
       // No platform Form on Android: measuring the prototype is the whole iOS-free half.
       expect(num(proto, 'rows')).toBe(8);
+      // ...except the one thing only Android can get wrong. The header and footer are
+      // Compose text in a layer *under* the rows, so the rows cover whatever Yoga failed
+      // to reserve: S6 reserved the glyphs alone and every header lost its lower half
+      // (form-android.png). The band therefore has to be the glyphs *plus* its padding -
+      // the padding itself is FormListMetrics' (16 dp / 12 dp), and what this insists on
+      // is that the reservation is not the glyph box: revert `onSizeChanged` to sit inside
+      // the padding and both lines below go red at once.
+      const band = (field: string, text: string) =>
+        num(proto, field) - num(proto, text);
+      expect(band('header', 'headerText')).toBeGreaterThanOrEqual(8);
+      expect(band('footer', 'footerText')).toBeGreaterThanOrEqual(4);
       return;
     }
 
@@ -228,10 +246,10 @@ describe('Form fidelity (S6 spike, question 2)', () => {
 
     // The container's own geometry has to match a SwiftUI list to the point, because that
     // is what "nobody can tell" means. The three row heights are *not* container metrics -
-    // they are the row's content box, which React Native lays out from its own text
-    // metrics - so they are compared against a named bound instead: the prototype's default
-    // row box is 60 pt where SwiftUI's plain row is 52 pt, and the 8 pt is a padding
-    // constant G-Form has to mint, not a difference between the containers.
+    // they are the row's box: the row's Yoga height plus the cell's `rowChrome` - so they
+    // are compared against a named bound instead. S6 measured 60 pt against SwiftUI's 52
+    // and the owner's answer was to match 52; S6b minted `rowChrome` to do it, and the
+    // bound is tight again, so a chrome that drifts back is a red gate, not a pass.
     //
     // Failure throws rather than asserting an array: the gate log prints an assertion's
     // received string on one truncated line and elides an array entirely, and this table is

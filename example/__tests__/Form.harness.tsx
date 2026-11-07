@@ -275,8 +275,12 @@ const styles = StyleSheet.create({
   pressable: { paddingHorizontal: 8 },
   column: { gap: 8 },
   columnRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center' },
-  // E7: the measured box is the row's content, and `measureInWindow` on it is the question.
-  measured: { flex: 1, paddingVertical: 6 },
+  // E7: the measured box has to *be* the row's box, so the row's own alignment and padding
+  // are neutralised here - otherwise the child sits inset by them and the case would be
+  // comparing a row with its content's inset copy. `measureInWindow` on the child then
+  // answers the question the case asks, because the two boxes have the same origin.
+  measuringRow: { alignItems: 'stretch', paddingHorizontal: 0 },
+  measured: { flex: 1 },
 });
 
 /**
@@ -666,6 +670,7 @@ function MeasureForm() {
           <Form.Row
             hybridRef={(view) => (rows[`m${index}`] = view)}
             key={`m${index}`}
+            style={styles.measuringRow}
           >
             <View
               ref={(handle) => {
