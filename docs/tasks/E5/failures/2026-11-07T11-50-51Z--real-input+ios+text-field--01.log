@@ -1,0 +1,59 @@
+# Failure excerpt — real-input:ios:text-field
+
+- Ran: 2026-11-07T11:50:51.308Z on code tree `459e2c830a8a` at HEAD `491db0c` (branch `task/E5-merge`)
+- Command: `node scripts/real-input/ios.mjs text-field`
+- Result: fail, exit 1, 197 ms
+- Load: start 4.99, end 4.99, median 4.99, max 4.99
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `E5-5qnlx`
+- Full log: `task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log` (<store>/task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-5qnlx (still live)
+  |   E5-5qnlx                 E5           both              pair-a
+  |   X21-8ilbt                X21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.99 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:text-field
+gate: node scripts/real-input/ios.mjs text-field (cwd .)
+gate: code tree 459e2c830a8a at HEAD 491db0c6
+gate: git tree 841f7788404d
+gate: log task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log
+gate:       <store>/task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log
+
+real-input (ios): Error: real-input: unknown argument "text-field".
+gate: real-input:ios:text-field FAIL in 0.2 s
+gate: recorded in .gates/task/E5-merge.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E5-merge/real-input+ios+text-field-2026-11-07T11-50-50.720Z.log (4 probe(s))
+
+```

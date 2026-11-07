@@ -91,6 +91,8 @@ type SliderHandle = {
   nuiTestAccessibilityStep(direction: number): void;
   nuiTestAccessibilityStepReport(): string;
   nuiTestFramePumpArmed(): boolean;
+  nuiTestPointerStream(mode: number): void;
+  nuiTestPointerStreamReport(): string;
 };
 type ProgressHandle = {
   readonly variant: string;

@@ -159,6 +159,53 @@ export interface NitroUiSliderMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestFramePumpArmed(): boolean;
+
+  /**
+   * TEMPORARY, test-only: inject a pointer stream through the platform's own touch
+   * entry point (Android `View.dispatchTouchEvent`), so a harness can put a MOVE
+   * and the release in **one** main-thread turn.
+   *
+   * `react-native-harness` presses and holds; `adb shell input swipe` waits for
+   * every event it injects. Neither can produce the shape a real finger produces
+   * on a busy frame — the last batched MOVE and the UP dispatched together, with
+   * Material 3's drag channel still holding the delta it read from that batch. The
+   * order those two land in *is* the contract of `onSlidingComplete`: an app told
+   * a drag ended must be able to read the value the drag ended on.
+   *
+   * `mode` picks the stream, and every one of them is a rule the docs state:
+   * - `0` — DOWN, three MOVEs, then the final MOVE and the UP in one turn. One
+   *   gesture: `start`, the changes, `complete`. A second `start` means the end
+   *   was reported before the last delta had been applied.
+   * - `1` — DOWN, then `ACTION_CANCEL`. A stream a parent takes over still owes
+   *   the app its `complete`: an app told `onSlidingStart` is owed one.
+   * - `2` — a second finger joins and leaves. Still exactly one gesture, because
+   *   the touch that opened it is one touch.
+   * - `3` — the press, the move that crosses the touch slop **and** the release all
+   *   in one turn, so everything the platform would do with the gesture is still
+   *   queued when the release is read. One start and one complete as well: an end
+   *   that is only correct when the move arrived a turn earlier is not correct.
+   *
+   * Posted to the platform UI thread, like `nuiTestDrag`. Observe the three
+   * callbacks, and read ``nuiTestPointerStreamReport`` for whether there was a
+   * laid-out view to dispatch to — a stream that reached nothing looks exactly
+   * like a control that reported nothing.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can inject a
+   * pointer stream.
+   */
+  nuiTestPointerStream(mode: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestPointerStream`` did, as one short
+   * line — the event count it dispatched, or why it dispatched none.
+   *
+   * Separate for the same reason as ``nuiTestAccessibilityStepReport``: the
+   * injection belongs to the platform UI thread, and a synchronous Nitro method
+   * may not block for it.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPointerStreamReport(): string;
 }
 
 /**
