@@ -3103,14 +3103,26 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
 
   const RUNGS = ['small', 'medium', 'large', 'xlarge', 'xxlarge'] as const;
 
-  /** Measure, in the order given, and refuse a control that never reported a box. */
+  /**
+   * Measure, in the order given, and refuse a control that never reported a box.
+   *
+   * `buttonIds` names the ids that are `Button`s, because the two controls answer
+   * `measureContent` through **different handle maps** — `handles` holds what
+   * `captureHybrid` handed back, `buttonHandles` what `captureButton` did. Asking the
+   * Menu map about a Button is not a wrong number, it is no number at all: the poll
+   * sits there until it times out, which is how this first met a device.
+   */
   async function measureAll(
-    testIds: readonly string[]
+    testIds: readonly string[],
+    buttonIds: readonly string[] = []
   ): Promise<Map<string, Size>> {
+    const buttons = new Set(buttonIds);
     const boxes = new Map<string, Size>();
     for (const testId of testIds) {
       await waitForTestId(testId);
-      const content = await waitForMeasured(testId, testId);
+      const content = buttons.has(testId)
+        ? await waitForMeasuredButton(testId, testId)
+        : await waitForMeasured(testId, testId);
       boxes.set(testId, await waitForBox(testId, content, testId));
     }
     return boxes;
@@ -3157,7 +3169,10 @@ describe('Menu · the glyph and the top rungs (G19 fix round 2)', () => {
       </View>,
       { timeout: 20000 }
     );
-    const boxes = await measureAll(['menu-plain', 'menu-icon', 'button-icon']);
+    const boxes = await measureAll(
+      ['menu-plain', 'menu-icon', 'button-icon'],
+      ['button-icon']
+    );
     console.log(`menu glyph boxes: ${logged(boxes)}`);
     await settle(300);
     const cold = delta(before, stats());
