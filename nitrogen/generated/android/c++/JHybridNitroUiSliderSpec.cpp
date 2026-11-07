@@ -246,5 +246,14 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return static_cast<bool>(__result);
   }
+  void JHybridNitroUiSliderSpec::nuiTestPointerStream(double mode) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(double /* mode */)>("nuiTestPointerStream");
+    method(_javaPart, mode);
+  }
+  std::string JHybridNitroUiSliderSpec::nuiTestPointerStreamReport() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("nuiTestPointerStreamReport");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
 
 } // namespace margelo::nitro::nitroui

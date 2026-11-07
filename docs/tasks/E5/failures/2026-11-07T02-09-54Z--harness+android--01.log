@@ -1,0 +1,200 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T02:09:54.094Z on code tree `09ba19e00f7d` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 444269 ms
+- Load: start 9.27, end 8.55, median 8.55, max 17.57
+- Device: android / device `emulator-5574` / lease `E5-onhkl`
+- Full log: `task/E5-slider-drag-start/harness+android-2026-11-07T02-09-53.327Z.log` (<store>/task/E5-slider-drag-start/harness+android-2026-11-07T02-09-53.327Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › reconciles a write from JS while a real finger is down`
+- `expected [ 's', 'v', 'c' ] to deeply equal [ 's', 'c' ]`
+- `FAIL __tests__/HostControls.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android-2026-11-07T02-09-53.327Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-onhkl (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.55 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 181 — the rest is in the full log above)
+
+```
+      height vs width: wide=300.19x48.00/300.19x48.00 narrow=180.19x48.00/180.19x48.00
+
+
+    console.log
+      squashed box: box=180.19x12.19 measured=180.19x48.00
+
+
+    console.log
+      zero-height box: measured=180.19x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 measured=200.00x48.00
+
+
+    console.log
+      unbounded: bounded box=200.00x48.00 scroller box=240.00x923.43 measured=240.00x48.00 declared=240
+
+
+    console.log
+      poison: guess=200x12 box=300.19x48.00 measured=300.19x48.00 epoch=4->3 corrections=1
+
+
+    console.log
+      user style: box=180.19x60.19 measured=180.19x48.00
+
+
+    console.log
+      press-order: box=411.43x48.00
+
+
+    console.log
+      held-write: order=svc start=[0.5] change=[0.5] complete=[0.5]
+
+
+    console.log
+      coalesce: same-turn moves=8 events=1
+
+
+    console.log
+      coalesce: spread moves=5 events=5
+
+
+    console.log
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #238 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #246 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #2 performed SetProgress(9.0) on #254 range=0.0..12.0@12.0 12.0->9.0 disabled=false
+
+
+    console.log
+      a11y walk: starts=8 complete=8
+
+
+    console.log
+      step in drag: #1 performed SetProgress(3.0) on #262 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: starts=[0] change=[3,3,6,9] complete=[9]
+
+
+    console.log
+      inverted range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 131.9ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 131.9ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 15.50/load5 20.64 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › reconciles a write from JS while a real finger is down
+
+    expected [ 's', 'v', 'c' ] to deeply equal [ 's', 'c' ]
+
+      [0m [90m 1040 |[39m           [32m`complete=${JSON.stringify(events.complete)}`[39m
+       [90m 1041 |[39m       )[33m;[39m
+      [31m[1m>[22m[39m[90m 1042 |[39m       expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1043 |[39m       expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m0.5[39m])[33m;[39m
+       [90m 1044 |[39m       [90m// The write from JS is not a gesture and does not echo one back.[39m
+       [90m 1045 |[39m       expect(events[33m.[39mchange)[33m.[39mtoEqual([])[33m;[39m[0m
+
+FAIL __tests__/HostControls.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was disposed before the test file finished running.
+
+gate: harness:android FAIL in 444.3 s (signal SIGTERM) - note: the code tree moved during the run (6c1a1d4ed8a4 now), so this line describes 09ba19e00f7d
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android-2026-11-07T02-09-53.327Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```

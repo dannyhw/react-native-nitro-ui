@@ -1,0 +1,195 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-07T02:53:45.674Z on code tree `102b3f7923ed` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 2053382 ms
+- Load: start 7.35, end 16.90, median 3.41, max 16.90
+- Device: android / device `emulator-5574` / lease `E5-onhkl`
+- Full log: `task/E5-slider-drag-start/real-input+android-2026-11-07T02-53-45.320Z.log` (<store>/task/E5-slider-drag-start/real-input+android-2026-11-07T02-53-45.320Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/real-input+android-2026-11-07T02-53-45.320Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-onhkl (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 18.19 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 519 — the rest is in the full log above)
+
+```
+    ✓ and opens no menu — expected 0, saw 0
+    ✓ the hold before the outside tap opens the menu
+    ✓ an outside tap closes the menu — expected 1, saw 1
+    ✓ and the press under it never lands — expected 0, saw 0
+    ✓ a hold on the inner ContextMenu opens the inner menu (rows Inner action)
+    ✓ the inner reports the open — expected 1, saw 1
+    ✓ the outer does not — expected 0, saw 0
+    ✓ a disabled ContextMenu opens nothing on a hold
+    ✓ and reports no open — expected 0, saw 0
+    ✓ the child keeps the gesture: one press on release — expected 1, saw 1
+    ✓ one node carries "Message from Grace" — expected 1, saw 1
+    ✓ and it is long-clickable — expected true, saw true
+    ✓ and focusable — expected true, saw true
+    ✓ a ContextMenu that is not accessible offers TalkBack no long-click — expected false, saw false
+    ✓ and is not focusable — expected false, saw false
+    · bottom edge: press=324,2351 popup=324,1705 → 640,2093
+    ✓ near the bottom edge the popup opens above the finger
+    ✓ and that ContextMenu reported the open — expected 1, saw 1
+
+  search-field: real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard
+    ✓ the search field starts empty — expected query:  (0), saw query:  (0)
+    ✓ and nothing has been focused, blurred or submitted yet — expected focus: 0 blur: 0 submitted: -, saw focus: 0 blur: 0 submitted: -
+    ✓ a placeholder nobody chose still draws a word for search
+    ✓ and a placeholder that was chosen is drawn too
+    · "Capped search field" occupies 42,1677 → 987,1824
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    ✓ and the field holds the same five — expected abcde, saw abcde
+    · "Frozen search field" occupies 42,1370 → 987,1517
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    ✓ and each one is reverted: the field still shows what JS kept — expected frozen, saw frozen
+    · "Typing search field" occupies 42,1062 → 987,1209
+    ✓ real keystrokes reach the field, and React sees the query — expected query: latte (5), saw query: latte (5)
+    ✓ the field shows what React was told — expected latte, saw latte
+    · "Focus search field" occupies 42,645 → 987,792
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ the Search key with an empty query submits nothing and blurs nobody — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ the field holds the query before anything clears it — expected go, saw go
+    · "Focus search field" occupies 42,645 → 987,792
+    · the clear button is "Clear query" at 852,657 → 978,783
+    ✓ the clear button names itself, so TalkBack can say what it does
+    ✓ a real tap on the clear button empties the field — expected , saw 
+    ✓ and clearing keeps focus: no blur, no submit — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ the Search key submits the query and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    ✓ a real tap on the anchor of a closed tooltip presses the anchor once — expected star presses: 1, saw star presses: 1
+    ✓ and opens nothing, reports nothing — expected 0 up, log none, saw 0 up, log none
+    ✓ the tooltip shows its title and its action — expected 1 title, 1 action, saw 1 title, 1 action
+    ✓ a tap outside closes the tooltip and reports the close alone — expected presented:false, saw presented:false
+    ✓ Back closes it and reports the close alone — expected presented:false > presented:false, saw presented:false > presented:false
+    ✓ a real tap on its action reports the id, then the close - once each, in order — expected presented:false > presented:false > action:ok > presented:false, saw presented:false > presented:false > action:ok > presented:false
+    ✓ once it is closed, a real tap on the anchor presses it once more — expected star presses: 2, saw star presses: 2
+    ✓ and opens nothing, reports nothing — expected 0 up, log presented:false > presented:false > action:ok > presented:false, saw 0 up, log presented:false > presented:false > action:ok > presented:false
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=29, hosted=35/39/43, note=46; named nodes: 12:Chip | 13:Chip | 14:Checkbox | 15:Checkbox | 16:Context | 17:Context | 18:Search | 19:Search | 20:Tooltip | 21:Tooltip | 22:Host | 23:Host | 27:react-native-nitro-ui  | 28:Everything inside a Ho | 29:THREE SWITCHES, ONE CO | 35:Hosted switch 0 | 39:Hosted switch 1 | 43:Hosted switch 2 | 46:The Host has a height; | 47:first switch, as JS se | 48:off | 49:changes JS has accepte | 50:2 | 51:flip the first from JS | 52:flip the first from JS | 53:A SLIDER AND A BUTTON, | 54:hosted Slider, as JS s | 55:0.40 | 56:hosted Slider gestures | 57:start=0 complete=0 | 58:presses the hosted But | 59:0 | 64:Hosted slider | 66:Hosted button | 67:Hosted action | 70:Hosted disabled button | 71:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 35,39,43, saw 35,39,43
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2322 → 355,2424
+    · "Hosted disabled button" needed 1 scroll to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted disabled button" occupies 42,1146 → 509,1251
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,1020 → 355,1125
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,1020 → 355,1125
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2185 → 1038,2311
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.88)
+    ✓ the hosted Slider closed the gesture it opened (start=1 complete=1)
+    ✓ dragging back moves a hosted Slider the other way (0.88 -> 0.11)
+    ✓ a drag the machine stretches out still lands where the finger left it (0.11 -> 0.83)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2204 → 335,2309
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 12:Chip | 13:Chip | 14:Checkbox | 15:Checkbox | 16:Context | 17:Context | 18:Search | 19:Search | 20:Tooltip | 21:Tooltip | 22:Host | 23:Host | 32:Hosted switch 0 | 36:Hosted switch 1 | 40:Hosted switch 2 | 43:The Host has a height; | 44:first switch, as JS se | 45:off | 46:changes JS has accepte | 47:2 | 48:flip the first from JS | 49:flip the first from JS | 50:A SLIDER AND A BUTTON, | 51:hosted Slider, as JS s | 52:0.83 | 53:hosted Slider gestures | 54:start=3 complete=3 | 55:presses the hosted But | 56:2 | 61:Hosted slider | 63:Hosted button | 64:Hosted action | 67:Hosted disabled button | 68:Hosted action, disable | 70:The Slider fills the H | 71:FOUR KINDS OF CONTROL, | 72:mixed Host, as JS sees | 73:off 0.50 0 | 79:Mixed switch | 82:Mixed slider | 83:Mixed linear progress | 84:Mixed circular progres | 86:Mixed button | 87:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 79,82,83,84,86, saw 79,82,83,84,86
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2204 → 335,2309
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1846 → 179,1930
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 2 scrolls to come on screen
+    · "Hosted segmented" occupies 42,2137 → 535,2263
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,2137 → 535,2263
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,2137 → 535,2263
+    ✓ the drawing did not move out from under the finger — expected 42,2137 → 535,2263, saw 42,2137 → 535,2263
+    · "Hosted segmented" occupies 42,2137 → 535,2263
+    ✓ a real tap on the last segment reaches JS as index 2 — expected 2, saw 2
+    ✓ and a SegmentedControl opens no window of its own, hosted or not — expected 0, saw 0
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · "Hosted picker" needed 2 scrolls to come on screen
+    · "Hosted picker" occupies 42,1433 → 777,1601
+    ✓ the hosted Picker shows the index JS gave it — expected 1, saw 1
+    ✓ no popup window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted picker" occupies 42,1433 → 777,1601
+    ✓ a real tap on the hosted anchor opens the menu as a popup window — expected 1, saw 1
+    · menu row "Gamma" at 106,1911 -> 234,1964; hosted anchor at 42,1433 -> 777,1601
+    ✓ the menu opens below the top of the box the Host drew, not at the top of the screen
+    ✓ the hosted menu marks the current choice ("Beta") selected to TalkBack
+    ✓ and the row reaches JS as index 2 — expected 2, saw 2
+    ✓ a real tap on a hosted menu row closes the popup — expected 0, saw 0
+    · "Hosted picker" occupies 42,1433 → 777,1601
+    ✓ Back shuts the hosted popup (no window left behind) — expected 0, saw 0
+    ✓ opening and dismissing reported no selection - a menu is not a choice — expected 2, saw 2
+
+  hosted-date-picker: real tap opens a hosted DatePicker's dialog, its day cells are in the a11y tree, and OK, Cancel, Back and removing the child each close it
+
+real-input (android): Error: real-input: tapping the "Host" tab did not bring up its screen.
+gate: real-input:android FAIL in 2053.4 s
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/E5-slider-drag-start/real-input+android-2026-11-07T02-53-45.320Z.log (5 probe(s))
+
+```

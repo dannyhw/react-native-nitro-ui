@@ -24,7 +24,7 @@
 
 import fs from 'node:fs';
 import { Buffer } from 'node:buffer';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -39,7 +39,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
-import { ECHO, screenTab } from './screens.mjs';
+import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
   findByDescription,
@@ -92,6 +92,29 @@ const REACT_TIMEOUT = Number(process.env.REAL_INPUT_TIMEOUT ?? 8000);
  * the OS at any load (`FOLLOWUPS.md:58`), and a tab tap is a synthesised touch.
  */
 const TAB_TAPS = 3;
+
+/**
+ * How apart the reads of a *gesture in flight* are spaced, in ms.
+ *
+ * Every read this suite makes is a `uiautomator dump`, and a dump is not free for
+ * the app being watched: answering it walks the control tree on the app's own UI
+ * thread. Reading at 250-300 ms is right for "has React drawn my tap yet", where
+ * the app is otherwise idle. During a drag it is the opposite — the app is trying
+ * to run a gesture, and each dump competes with the frames that gesture needs,
+ * which is half of why a stalled echo was ever mistaken for a finished drag (see
+ * {@link makeContext.dragControl}). A gesture-end question is coarse — has the
+ * finger left — so it is worth asking less than twice a second.
+ */
+const GESTURE_POLL_MS = 700;
+
+/**
+ * How many times a drag may be injected before the run calls it broken.
+ *
+ * Two: one to be affected by whatever the machine was doing, and one to find out
+ * whether that was the machine. Anything higher hides a control that never
+ * answers, which is the failure mode a drag check exists to catch.
+ */
+const DRAG_ATTEMPTS = 2;
 
 /**
  * How often to poll a witness that is read out of `uiautomator dump`.
@@ -405,6 +428,11 @@ const CHECKS = {
    * Dragging along that box and reading the echo React owns is therefore the whole
    * loop: touch, Compose, Nitro, JS, re-render, and the new value back down to native.
    *
+   * Its echo row is `host-slider-gesture` (`start=N complete=M`), and a drag of this
+   * control has to be waited for through it: the value echo says where a drag ended,
+   * never whether one is still going, and that gap is the flake this check used to be
+   * the only source of. See [dragAndSettle].
+   *
    * The width claim is here too, because it is what makes the drag mean what it says:
    * a `fillWidth` control inside a Host fills the Host, not its own style, so the
    * track has to be most of the screen wide. A Slider that had honoured its own
@@ -433,42 +461,72 @@ const CHECKS = {
       control.bounds.width > control.bounds.height * 3
     );
 
-    await t.dragControl(control, 0.4, 0.9, 800);
-    t.waitForValueToRise(
-      ECHO.hostSliderValue,
-      before,
-      'a real drag on a hosted Slider to reach React'
-    );
-    const up = t.waitForValueToSettle(
-      ECHO.hostSliderValue,
-      'the drag on the hosted Slider to finish'
-    );
+    // The drag, ended by the control rather than by a stopwatch: `dragAndSettle`
+    // waits for `host-slider-gesture` to report both phases of *this* gesture before
+    // it lets the value be read. That echo is the whole reason this check stopped
+    // being the one that fails alone - see [dragAndSettle].
+    const up = await t.dragAndSettle(control, 0.4, 0.9, 800, {
+      gesture: ECHO.hostSliderGesture,
+      value: ECHO.hostSliderValue,
+      description: 'a real drag on a hosted Slider to reach React',
+    });
     t.log.check(
       `a real drag moves a hosted Slider and React renders it (${String(
         before
       )} -> ${String(up)})`,
       up != null && up > before + 0.3
     );
+    // Every gesture the control reported has been closed, so nothing here is reading
+    // a drag that is still open. Compared rather than matched against `start=1
+    // complete=1`, because a drag the run had to inject twice is a fact the retry
+    // count carries, not a reason this line goes red.
+    const gestures = gestureCounts(t.requireEcho(ECHO.hostSliderGesture));
+    t.log.check(
+      `the hosted Slider closed the gesture it opened (${t.requireEcho(
+        ECHO.hostSliderGesture
+      )})`,
+      gestures.starts != null &&
+        gestures.starts >= 1 &&
+        gestures.completes === gestures.starts
+    );
 
     // Back the other way, from wherever the first drag left the thumb - the echo says
     // where that is, because the echo is what a person sees. A control that only ever
     // reported one direction would fail here rather than look fine.
-    await t.dragControl(control, 0.9, 0.1, 800);
-    // Wait for the gesture to be over, then read. `waitForEchoToChange` answers the
-    // first value that differs, which is a sample from mid-drag; the assertion wants
-    // where the thumb ended, and only a settled echo can say that.
-    t.waitForEchoToChange(
-      ECHO.hostSliderValue,
-      up,
-      'a second drag to move the hosted Slider back'
-    );
-    const landed = t.waitForValueToSettle(
-      ECHO.hostSliderValue,
-      'the second drag on the hosted Slider to finish'
-    );
+    // The same rule for the way back. The first drag is the one that used to be
+    // believed at 0.43; a check that only got the second drag right would still have
+    // the flake.
+    const landed = await t.dragAndSettle(control, 0.9, 0.1, 800, {
+      gesture: ECHO.hostSliderGesture,
+      value: ECHO.hostSliderValue,
+      description: 'a second drag on the hosted Slider',
+    });
     t.log.check(
       `dragging back moves a hosted Slider the other way (${up} -> ${String(landed)})`,
       landed != null && landed < up - 0.3
+    );
+
+    // A drag the machine has stretched out - which is what the flake actually was.
+    //
+    // Its samples arrive 1400 ms apart instead of in an 800 ms burst, so the value
+    // sits perfectly still for longer than the 1200 ms the old settle needed to
+    // believe a drag was over. Halfway through that drag the old code read a thumb a
+    // fraction of the way along, which is the `0.43` of a drag aimed at `0.9` that
+    // made this the control that failed alone on several branches; waiting for the
+    // control cannot be fooled by a pause. It is also the reason this assertion is
+    // here: if the settle ever goes back to a stopwatch, this line goes red on an idle
+    // machine, with no load to wait for.
+    const stretched = await t.dragAndSettle(control, 0.2, 0.85, 0, {
+      gesture: ECHO.hostSliderGesture,
+      value: ECHO.hostSliderValue,
+      description: 'a stretched-out drag on the hosted Slider',
+      stepMs: 1400,
+    });
+    t.log.check(
+      `a drag the machine stretches out still lands where the finger left it (${String(
+        landed
+      )} -> ${String(stretched)})`,
+      stretched != null && stretched > 0.75
     );
   },
 
@@ -1897,8 +1955,10 @@ const CHECKS = {
       'no gesture has been reported yet',
       `${t.requireEcho(ECHO.sliderStart)} ${t.requireEcho(
         ECHO.sliderChange
-      )} ${t.requireEcho(ECHO.sliderComplete)}`,
-      'start=0 change=0 complete=0'
+      )} ${t.requireEcho(ECHO.sliderComplete)} ${t.requireEcho(
+        ECHO.sliderPhaseOrder
+      )}`,
+      'start=0 change=0 complete=0 order=none'
     );
 
     // Press down a quarter of the way along the track and release three quarters
@@ -1915,6 +1975,15 @@ const CHECKS = {
       'one drag fires onSlidingComplete exactly once',
       t.requireEcho(ECHO.sliderComplete),
       'complete=1'
+    );
+    // The three counters say how many; only the order can say `start` came before
+    // the values and `complete` after them. A `V` stands for a run of value changes
+    // rather than for one of them, because a gesture's samples are coalesced to one
+    // per frame and the string has to stay readable.
+    t.log.checkEquals(
+      'one drag reports start, then the value changes, then complete',
+      t.requireEcho(ECHO.sliderPhaseOrder),
+      'order=SVC'
     );
     const changeText = t.requireEcho(ECHO.sliderChange);
     t.log.check(
@@ -1933,6 +2002,11 @@ const CHECKS = {
       'a second drag fires both phases again',
       `${t.requireEcho(ECHO.sliderStart)} ${t.requireEcho(ECHO.sliderComplete)}`,
       'start=2 complete=2'
+    );
+    t.log.checkEquals(
+      'the two drags report two gestures in the same order',
+      t.requireEcho(ECHO.sliderPhaseOrder),
+      'order=SVCSVC'
     );
     const backValue = t.value(ECHO.sliderValue);
     t.log.check(
@@ -1954,6 +2028,70 @@ const CHECKS = {
     t.log.check(
       `the controlled value echo follows the real drag (${String(before)} → ${String(after)})`,
       after != null && after > before + 0.2
+    );
+
+    // A real touch that never moves the thumb is a gesture, too.
+    //
+    // This is the case Material 3 reports nothing for: its tap path calls
+    // `onValueChange` only when the value it computed differs from the one the
+    // control already had, and `onSlidingStart` used to be inferred from that call,
+    // while `onSlidingComplete` was guarded on a drag having started. A finger going
+    // down on the thumb and lifting again - the most obvious thing a person can do to
+    // a Slider - was therefore silent on Android.
+    //
+    // The same point is pressed twice, and that is what makes it provable without
+    // knowing where the thumb is: the first press is allowed to move the value to
+    // wherever the finger landed, so the second press computes the value the control
+    // already holds, and nothing changes. Deriving the point from the value instead
+    // would put the check at the mercy of thumb padding it does not own.
+    const pressX = phases.bounds.x1 + phases.bounds.width * 0.42;
+    const pressY = phases.bounds.cy;
+    const countOf = (testID, prefix) =>
+      Number(t.requireEcho(testID).replace(prefix, ''));
+    const startsBefore = countOf(ECHO.sliderStart, 'start=');
+    const completesBefore = countOf(ECHO.sliderComplete, 'complete=');
+
+    await t.holdAt(pressX, pressY, 700);
+    // Both echoes below are React's render of the first press, and the second press
+    // is only "the one that changed nothing" once that render has happened: the
+    // control's own value moved the instant the finger lifted, but the text a check
+    // compares against is one React frame behind it. Awaiting the hold and settling
+    // before reading is what says the number below is the first press's answer rather
+    // than a snapshot taken while it was still on its way.
+    await t.settle(600);
+    const changesMid = countOf(ECHO.sliderChange, 'change=');
+    const valueMid = t.requireEcho(ECHO.sliderValue);
+    await t.holdAt(pressX, pressY, 700);
+    await t.settle(600);
+
+    t.log.check(
+      `two still presses each report a gesture (start ${String(
+        startsBefore
+      )} -> ${String(countOf(ECHO.sliderStart, 'start='))}, complete ${String(
+        completesBefore
+      )} -> ${String(countOf(ECHO.sliderComplete, 'complete='))})`,
+      countOf(ECHO.sliderStart, 'start=') === startsBefore + 2 &&
+        countOf(ECHO.sliderComplete, 'complete=') === completesBefore + 2
+    );
+    // The value half of the claim, and deliberately separate from the gesture half
+    // below: this line says the second press selected the value the control already
+    // had, which is what makes it the "changed nothing" press the other two are
+    // about. Reverted on its own it stays green - which is exactly why the two lines
+    // beside it count phases rather than trust this one.
+    t.log.check(
+      `the second press selected the value the control already had (${
+        ECHO.sliderChange
+      } stayed ${String(changesMid)}, ${valueMid})`,
+      countOf(ECHO.sliderChange, 'change=') === changesMid &&
+        t.requireEcho(ECHO.sliderValue) === valueMid
+    );
+    // `S` then `C`, with no `V` between them: the shape of the answer, not just that
+    // two more numbers moved.
+    t.log.check(
+      `a touch with no value change in it reads as "SC" (${t.requireEcho(
+        ECHO.sliderPhaseOrder
+      )})`,
+      t.requireEcho(ECHO.sliderPhaseOrder).endsWith('SC')
     );
   },
 
@@ -5757,6 +5895,300 @@ function makeContext(harness, log) {
     }
   };
 
+  /**
+   * Inject a drag across a node, between two fractions of its own width.
+   *
+   * Input only, and deliberately dumb: this is what a finger is. Reading the answer
+   * is [dragAndSettle], which is where the Android drag flake lived.
+   *
+   * @param {import('./uiautomator.mjs').UiautomatorNode} node
+   * @param {number} from
+   * @param {number} to
+   * @param {number} durationMs
+   * @param {number | null} [stepMs] space the samples this far apart instead of
+   *   letting `input swipe` pace them - a drag the machine has stretched out
+   */
+  /**
+   * One raw touch event, injected without waiting for the tool to come back.
+   *
+   * Only the stretched-out drag needs this. `adb shell input` blocks the runner
+   * until it has injected the whole gesture, and a check that cannot run while the
+   * runner is blocked cannot ask a question about a gesture that is still going -
+   * which is precisely the blind spot that made a slow drag indistinguishable from
+   * a finished one. Everything else in this suite shells out synchronously on
+   * purpose; a gesture in flight is the one place where waiting for the tool means
+   * the thing being measured never happens.
+   *
+   * @param {'DOWN' | 'MOVE' | 'UP'} action
+   * @param {number} x
+   * @param {number} y
+   * @returns {Promise<void>}
+   */
+  const motionAsync = (action, x, y) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(
+        'adb',
+        [
+          '-s',
+          harness.serial,
+          'shell',
+          'input',
+          'motionevent',
+          action,
+          String(Math.round(x)),
+          String(Math.round(y)),
+        ],
+        { stdio: 'ignore', env: process.env }
+      );
+      child.on('error', reject);
+      child.on('close', (code) =>
+        code === 0
+          ? resolve()
+          : reject(
+              new Error(`input motionevent ${action} exited ${String(code)}`)
+            )
+      );
+    });
+
+  /**
+   * Inject a drag across a node, between two fractions of its own width.
+   *
+   * Input only, and deliberately dumb: this is what a finger is. Reading the answer
+   * is [dragAndSettle], which is where the Android drag flake lived.
+   *
+   * Left un-awaited by its caller when `stepMs` is given, so the gesture is still
+   * being injected while that caller waits: DOWN, six MOVEs `stepMs` apart in one
+   * pointer stream, then UP there (`input motionevent`, as in [holdThenDrag]). That
+   * is what a loaded machine does to an 800 ms swipe by itself - `adb shell input`
+   * sleeps between its steps, and under load every sleep runs longer than it asked
+   * for - so this is the flake reproduced on demand instead of one hoped for. The
+   * spacing is what makes the reproduction bite: wider than the 1200 ms the old
+   * value-settle needed to be convinced, and a gesture that sparse always looked
+   * finished to it halfway along.
+   *
+   * @param {import('./uiautomator.mjs').UiautomatorNode} node
+   * @param {number} from
+   * @param {number} to
+   * @param {number} durationMs
+   * @param {number | null} [stepMs] stretch the gesture out, this far between samples
+   * @returns {Promise<void>} resolves when the whole gesture has been injected
+   */
+  const drag = async (node, from, to, durationMs, stepMs = null) => {
+    const x1 = node.bounds.x1 + node.bounds.width * from;
+    const x2 = node.bounds.x1 + node.bounds.width * to;
+    const y = node.bounds.cy;
+    if (stepMs == null) {
+      harness.swipe(x1, y, x2, y, durationMs);
+      // Not a settle: this only lets the injection's last events reach the app
+      // before the next read dumps the tree on top of them. Whether the gesture
+      // ended is answered by the control, not by this pause.
+      await sleep(400);
+      return;
+    }
+    await motionAsync('DOWN', x1, y);
+    for (let step = 1; step <= 6; step += 1) {
+      await sleep(stepMs);
+      await motionAsync('MOVE', x1 + ((x2 - x1) * step) / 6, y);
+    }
+    await sleep(stepMs);
+    await motionAsync('UP', x2, y);
+    await sleep(400);
+  };
+
+  /** How long [drag] takes when it stretches a gesture out, in ms. */
+  const stretchedInjectionMs = (stepMs) => stepMs * 7 + 5000;
+
+  /**
+   * Wait for a control to report that the gesture it is in has ended.
+   *
+   * "Is the drag over?" has exactly one honest answer available from out here: the
+   * control said `onSlidingComplete` and the app drew it. A stopwatch on the value
+   * cannot give that answer — see [dragAndSettle] for what pretending otherwise cost.
+   *
+   * Both phases have to advance *and* the screen has to show no gesture left open:
+   * a `complete` with no `start` behind it is the previous gesture still on its way
+   * to the screen, and a `start` with no `complete` after it is this one not yet
+   * closed. Either read as "over" is how a check ends up settling on a value the
+   * current touch never produced — the rule is [gestureReported], not a timestamp.
+   *
+   * Deliberately not [until]: a gesture whose end never came is the case the caller
+   * has a plan for, and aborting here would take the rest of the control's checks
+   * down with it.
+   *
+   * @param {string} testID a `start=N complete=M` echo ([gestureCounts])
+   * @param {{ starts: number | null, completes: number | null }} seen the same echo
+   *   read *before* the gesture was injected
+   * @param {number} [timeoutMs]
+   * @returns {Promise<boolean>} whether this gesture reported both of its phases
+   */
+  const waitForGestureEnd = async (testID, seen, timeoutMs = REACT_TIMEOUT) => {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      if (gestureReported(seen, gestureCounts(echo(testID)))) {
+        return true;
+      }
+      if (Date.now() >= deadline) {
+        return false;
+      }
+      // Asynchronous, unlike the other waits in this file: a stretched-out gesture
+      // is injected by a coroutine of this same process, and [blockMs] parks the
+      // event loop - the gesture would stop mid-way and the answer would be a
+      // question about the runner rather than about the control.
+      await sleep(GESTURE_POLL_MS);
+    }
+  };
+
+  /**
+   * Read a numeric echo until it holds still, and return what it settled on.
+   *
+   * A drag is a stream of `onValueChange` events and React renders each one, so the
+   * first echo that differs from the previous value is a reading taken *inside* the
+   * gesture rather than the result of it. Measured on `nitroui_t03`: a real drag
+   * that ended at `0.13` first read `0.83`, and a check that believed the first
+   * change saw a Slider that had barely moved. The fix is the wait, not the
+   * assertion - the value has to stop moving before anything is read off it.
+   *
+   * "Holds still" is `quietMs` of reads that agree, which cannot settle early on a
+   * control that never answered: it returns the unchanged value, and whatever is
+   * being asserted about the move goes red on it.
+   *
+   * What it cannot say is that a *gesture* has ended, and E5 is the run that lost
+   * a control to the difference: a drag that is merely slow has the value hold
+   * still for as long as a finished one, so this must be asked after the control
+   * has reported its end ([waitForGestureEnd]), not instead of it.
+   *
+   * @param {string} testID
+   * @param {string} description what is being waited for
+   * @param {number} [quietMs] how long the value must hold still
+   */
+  const waitForValueToSettle = (testID, description, quietMs = 1200) => {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    /** @type {number | null} */
+    let last = value(testID);
+    let quietSince = Date.now();
+    for (;;) {
+      blockMs(300);
+      const shown = value(testID);
+      if (shown !== last) {
+        last = shown;
+        quietSince = Date.now();
+      } else if (shown != null && Date.now() - quietSince >= quietMs) {
+        return shown;
+      }
+      if (Date.now() > deadline) {
+        log.abort(
+          `timed out after ${String(REACT_TIMEOUT)}ms waiting for ` +
+            `${description} - ${testID}="${String(last)}" was still moving`
+        );
+      }
+    }
+  };
+
+  /**
+   * Drag a control and return the value it lands on, where "lands on" means *after*
+   * the app has reported the end of that gesture.
+   *
+   * This is the fix for the one real-input check that has failed alone across
+   * branches, and the cause was the wait rather than the threshold:
+   *
+   * - `adb shell input swipe` returns once it has *injected* the gesture, which is
+   *   not when the app has finished with it. On a loaded machine the touch sits in a
+   *   queue behind everything else the app is doing, and the frames that would draw
+   *   the next value are the last thing to get scheduled.
+   * - `host-slider` answered "is the drag over?" with "has the number stopped
+   *   moving for 1200 ms", and a drag that is merely slow answers that exactly like
+   *   a finished one. The `E4` run reported a thumb at `0.43` of a drag aimed at
+   *   `0.9`, still long enough for the stopwatch to believe it, and every other drag
+   *   in that same run passed — which is what made it look like a loose threshold
+   *   instead of a wrong wait.
+   * - The old loop was also self-inflicted: every read is a `uiautomator dump`, and
+   *   a dump walks the control tree on the *app's* UI thread, so polling three times
+   *   a second through a gesture is part of what stops the gesture being drawn
+   *   ([GESTURE_POLL_MS]).
+   *
+   * The drag now ends when the *control* says it has, and only then is the value
+   * read. That is the shape `slider:` has always had — it waits on `complete=1` — and
+   * the reason that check never flaked while this one did. The value is still
+   * settled afterwards, because React rendering the last sample is its own race;
+   * what changed is that a settle can no longer be answered by a gesture that is
+   * merely in flight.
+   *
+   * A drag whose end never arrived is injected once more, reported the way a retried
+   * press is ([CheckLog.retried], counted by [Suite.finish]) so "21/22 passed" cannot
+   * quietly mean "and half of those needed two touches". The retry is not the fix;
+   * it is what stops a single truncated injection costing a run now that the reason
+   * it was truncated is no longer mistaken for the answer.
+   *
+   * @param {import('./uiautomator.mjs').UiautomatorNode} node
+   * @param {number} from
+   * @param {number} to
+   * @param {number} durationMs
+   * @param {object} options
+   * @param {string} options.gesture the control's `start=N complete=M` echo
+   * @param {string} options.value the numeric echo to return
+   * @param {string} options.description what is being waited for
+   * @param {number} [options.stepMs] inject the drag stretched out, with `stepMs` of
+   *   stillness between its samples (see [drag])
+   * @returns {Promise<number | null>}
+   */
+  const dragAndSettle = async (node, from, to, durationMs, options) => {
+    const { gesture, value: valueTestID, description, stepMs = null } = options;
+    if (echo(gesture) == null) {
+      // Loud on purpose: a control with no phase echo cannot have a drag of it told
+      // apart from one that never ended, and guessing from a timer is precisely the
+      // behaviour this function exists to remove.
+      log.abort(
+        `${description}: ${gesture} is not drawn on this screen, so a drag of ` +
+          'it cannot be told from one that never ended'
+      );
+    }
+    for (let attempt = 1; ; attempt += 1) {
+      const seen = gestureCounts(echo(gesture));
+      // Started, not awaited. A stretched-out gesture is still being injected while
+      // the wait below runs, and that is the point: the question has to be asked of
+      // a control that is mid-gesture, which is the only state in which the two
+      // answers - "the value is quiet" and "the finger has left" - differ.
+      let injectionFailure = null;
+      const injecting = drag(node, from, to, durationMs, stepMs).catch(
+        (error) => {
+          injectionFailure = error;
+        }
+      );
+      const ended = await waitForGestureEnd(
+        gesture,
+        seen,
+        stepMs == null
+          ? REACT_TIMEOUT
+          : REACT_TIMEOUT + stretchedInjectionMs(stepMs)
+      );
+      // Never leave touch events in flight past this drag - the next control's
+      // gesture would inherit them.
+      await injecting;
+      if (injectionFailure != null) {
+        log.abort(
+          `${description}: the drag could not be injected - ${String(
+            injectionFailure
+          )}`
+        );
+      }
+      if (ended) {
+        return waitForValueToSettle(valueTestID, description);
+      }
+      const shown = echo(gesture);
+      if (attempt >= DRAG_ATTEMPTS) {
+        log.abort(
+          `${description}: ${String(DRAG_ATTEMPTS)} drags and ${gesture} still ` +
+            `reads "${String(shown)}" - the control never reported the end of a ` +
+            'gesture, so any value read here would be a sample taken mid-drag'
+        );
+      }
+      log.retried(
+        `${description}: reported no finished gesture ` +
+          `(${gesture}="${String(shown)}"), dragged it again`
+      );
+    }
+  };
+
   return {
     log,
 
@@ -6500,7 +6932,10 @@ function makeContext(harness, log) {
     },
 
     /**
-     * Drag across a control between two fractions of its own width.
+     * Inject a drag across a control, between two fractions of its own width.
+     *
+     * Input only, and deliberately still dumb: this is what a finger is. Reading the
+     * answer is [dragAndSettle], which is where the Android drag flake lived.
      *
      * @param {import('./uiautomator.mjs').UiautomatorNode} node
      * @param {number} from
@@ -6515,8 +6950,17 @@ function makeContext(harness, log) {
         node.bounds.cy,
         durationMs
       );
+      // Not a settle: this only lets the injection's last events reach the app
+      // before the next read dumps the tree on top of them. Whether the gesture
+      // ended is answered by the control, not by this pause.
       await sleep(400);
     },
+
+    waitForGestureEnd,
+
+    dragAndSettle,
+
+    waitForValueToSettle,
 
     value,
 
@@ -7000,47 +7444,6 @@ function makeContext(harness, log) {
         `${description} (${testID} above ${String(previous)})`
       );
       return value(testID);
-    },
-
-    /**
-     * Read a numeric echo until it holds still, and return what it settled on.
-     *
-     * A drag is a stream of `onValueChange` events and React renders each one, so the
-     * first echo that differs from the previous value is a reading taken *inside* the
-     * gesture rather than the result of it. Measured on `nitroui_t03`: a real drag
-     * that ended at `0.13` first read `0.83`, and a check that believed the first
-     * change saw a Slider that had barely moved. The fix is the wait, not the
-     * assertion - the value has to stop moving before anything is read off it.
-     *
-     * "Holds still" is `quietMs` of reads that agree, which cannot settle early on a
-     * control that never answered: it returns the unchanged value, and whatever is
-     * being asserted about the move goes red on it.
-     *
-     * @param {string} testID
-     * @param {string} description what is being waited for
-     * @param {number} [quietMs] how long the value must hold still
-     */
-    waitForValueToSettle(testID, description, quietMs = 1200) {
-      const deadline = Date.now() + REACT_TIMEOUT;
-      /** @type {number | null} */
-      let last = value(testID);
-      let quietSince = Date.now();
-      for (;;) {
-        blockMs(300);
-        const shown = value(testID);
-        if (shown !== last) {
-          last = shown;
-          quietSince = Date.now();
-        } else if (shown != null && Date.now() - quietSince >= quietMs) {
-          return shown;
-        }
-        if (Date.now() > deadline) {
-          log.abort(
-            `timed out after ${String(REACT_TIMEOUT)}ms waiting for ` +
-              `${description} - ${testID}="${String(last)}" was still moving`
-          );
-        }
-      }
     },
   };
 }

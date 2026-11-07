@@ -533,6 +533,29 @@ open class HybridNitroUiSliderSpec_cxx {
     }
   }
   
+  @inline(__always)
+  public final func nuiTestPointerStream(mode: Double) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.nuiTestPointerStream(mode: mode)
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func nuiTestPointerStreamReport() -> bridge.Result_std__string_ {
+    do {
+      let __result = try self.__implementation.nuiTestPointerStreamReport()
+      let __resultCpp = std.string(__result)
+      return bridge.create_Result_std__string_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__string_(__exceptionPtr)
+    }
+  }
+  
   public final func getView() -> UnsafeMutableRawPointer {
     return Unmanaged.passRetained(__implementation.view).toOpaque()
   }

@@ -51,6 +51,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("nuiTestAccessibilityStep", &HybridNitroUiSliderSpec::nuiTestAccessibilityStep);
       prototype.registerHybridMethod("nuiTestAccessibilityStepReport", &HybridNitroUiSliderSpec::nuiTestAccessibilityStepReport);
       prototype.registerHybridMethod("nuiTestFramePumpArmed", &HybridNitroUiSliderSpec::nuiTestFramePumpArmed);
+      prototype.registerHybridMethod("nuiTestPointerStream", &HybridNitroUiSliderSpec::nuiTestPointerStream);
+      prototype.registerHybridMethod("nuiTestPointerStreamReport", &HybridNitroUiSliderSpec::nuiTestPointerStreamReport);
     });
   }
 

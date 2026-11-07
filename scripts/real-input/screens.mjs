@@ -57,6 +57,10 @@ export const ECHO = Object.freeze({
   sliderComplete: 'slider-complete-count',
   sliderValue: 'slider-phase-value',
   sliderControlledValue: 'slider-controlled-value',
+  // E5: the three phases in the order the app was told them (`order=SVC`), so a
+  // check can prove `start -> change -> complete` rather than three counts that
+  // happen to have moved.
+  sliderPhaseOrder: 'slider-phase-order',
   segmentedIndex: 'real-input-segmented-index',
   segmentedEvents: 'real-input-segmented-events',
   rejectEvents: 'real-input-reject-events',
@@ -87,6 +91,10 @@ export const ECHO = Object.freeze({
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
+  // E5: the hosted Slider's `start=N complete=M`. The value echo says where a drag
+  // ended, not that it is over, and a drag check that guesses the second from the
+  // first has been the flake.
+  hostSliderGesture: 'host-slider-gesture',
   hostButtonPresses: 'host-button-presses',
   hostMixedState: 'host-mixed-state',
   hostSegmentedIndex: 'host-segmented-index',
@@ -106,6 +114,69 @@ export const ECHO = Object.freeze({
   searchFocus: 'search-focus-echo',
   ctxEcho: 'ctx-echo',
 });
+
+/**
+ * Read a `start=N complete=M` gesture echo.
+ *
+ * A drag check has to ask the control whether its gesture is over, and from out
+ * here the only answer available is one text node of the accessibility tree — so
+ * the parse lives next to {@link ECHO}, the table that names that node, rather
+ * than in whichever runner happens to be reading it.
+ *
+ * A number that is missing is `null` rather than `0`: "the echo has not been
+ * drawn yet" and "no gesture has happened" are different answers, and a check that
+ * conflates them can settle a drag on an echo it never actually read.
+ *
+ * @param {string | null} text what the echo draws, or `null` for no such node
+ * @returns {{ starts: number | null, completes: number | null }}
+ */
+export function gestureCounts(text) {
+  const read = (name) => {
+    const matched =
+      text == null ? null : new RegExp(`${name}=(\\d+)`).exec(text);
+    return matched == null ? null : Number(matched[1]);
+  };
+  return { starts: read('start'), completes: read('complete') };
+}
+
+/**
+ * Whether a gesture echo reports a *new* gesture that has also been closed.
+ *
+ * The rule is the library's own event contract, read from outside the app: a
+ * gesture is over when this touch's `complete` has arrived, and a `complete` with no
+ * `start` after it cannot belong to it — that is the previous gesture still on its way
+ * to the screen, which is what a value settled on it would be a sample of. Both
+ * numbers missing is `false` because "the echo has not been drawn" is not an answer.
+ *
+ * The two counters are read together rather than one after the other, because the
+ * screen lags the app: a `complete` that has advanced is only this gesture's if the
+ * echo does not also show a `start` with no `complete` after it. `{1, 0} -> {2, 1}`
+ * advances both and still shows a gesture that has not closed — the shape of the
+ * retry path, where an injection reported its start and lost its end.
+ *
+ * `seen` is the same echo read before the gesture was injected; a `null` in it means
+ * the echo read zero at the time, not that it was missing, so the pair is compared
+ * loosely in that direction only.
+ *
+ * @param {{ starts: number | null, completes: number | null }} seen before the drag
+ * @param {{ starts: number | null, completes: number | null }} now during the drag
+ * @returns {boolean}
+ */
+export function gestureReported(seen, now) {
+  const advanced = (previous, current) => {
+    if (current == null) {
+      return false;
+    }
+    return previous == null ? current > 0 : current > previous;
+  };
+  return (
+    advanced(seen.starts, now.starts) &&
+    advanced(seen.completes, now.completes) &&
+    // Every start on the screen is closed, so the `complete` above cannot be an
+    // older gesture's: an open one would leave a start with nothing after it.
+    now.completes >= now.starts
+  );
+}
 
 /**
  * The echo that proves each example screen came up.

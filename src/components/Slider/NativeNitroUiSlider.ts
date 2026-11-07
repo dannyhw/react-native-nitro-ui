@@ -48,6 +48,10 @@ export interface NitroUiSliderHandle {
   nuiTestAccessibilityStepReport(): string;
   /** Whether the drag's frame pump is still armed - see `NitroUiSliderMethods.nuiTestFramePumpArmed`. */
   nuiTestFramePumpArmed(): boolean;
+  /** Test-only pointer stream - see `NitroUiSliderMethods.nuiTestPointerStream`. */
+  nuiTestPointerStream(mode: number): void;
+  /** What the last injected stream did - see `NitroUiSliderMethods.nuiTestPointerStreamReport`. */
+  nuiTestPointerStreamReport(): string;
 }
 
 /**
