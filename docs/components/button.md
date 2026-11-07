@@ -27,7 +27,7 @@ a child of a `<Host>` since 0.2.0 — `docs/components/host.md`.)
 | `disabled`           | `boolean \| undefined`                        | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.              |
 | `tintColor`          | `ColorValue \| undefined`                     | platform | SwiftUI `.tint()` / the variant's container or label colour.    |
 | `systemImage`        | `string \| undefined`                         | —        | iOS `Label` icon. **Ignored on Android** (see Android icons).  |
-| `androidIcon`        | `string \| undefined`                         | —        | Android leading drawable by resource name. **Ignored on iOS** (see Android icons). |
+| `androidIcon`        | `AndroidIconProp \| undefined`               | —        | `AndroidIconProp` is `string \| number \| ImageURISource`: an imported `.xml` vector drawable, or a drawable name. **Ignored on iOS** (see Android icons). |
 | `style`              | `ViewStyle`                                   | —        | Overrides the measured box (see Sizing).                        |
 | `testID`             | `string \| undefined`                         | —        | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.    |
 | `accessibilityLabel` | `string \| undefined`                         | —        | Label of the control itself; falls back to `title`.             |
