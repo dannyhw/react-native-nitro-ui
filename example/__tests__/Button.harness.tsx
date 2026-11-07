@@ -2169,20 +2169,32 @@ describe('androidIcon · an icon the app imports (D43)', () => {
           testID="sharp-name"
           hybridRef={captureHybrid('sharp-name')}
         />
+        <Button
+          title={PROBE_TITLE}
+          variant="text"
+          size="medium"
+          tintColor={TINT_CSS}
+          androidIcon={CLOSE_NAME}
+          testID="sharp-medium"
+          hybridRef={captureHybrid('sharp-medium')}
+        />
       </View>,
       { timeout: 20000 }
     );
-    for (const id of ['sharp-metro', 'sharp-name']) {
+    for (const id of ['sharp-metro', 'sharp-name', 'sharp-medium']) {
       await waitForTestId(id);
       const content = await waitForMeasured(id, id);
       await waitForBox(id, content, id);
     }
     const metro = await probeUntilDrawn('sharp-metro', TINT);
     const named = await probeUntilDrawn('sharp-name', TINT);
+    const medium = await probeUntilDrawn('sharp-medium', TINT);
     const metroHits = probeHits(metro.report);
     const namedHits = probeHits(named.report);
+    const mediumHits = probeHits(medium.report);
     console.log(
-      `sharp xxlarge: named=${named.report} metro=${metro.report} ` +
+      `sharp: named@xxlarge=${named.report} metro@xxlarge=${metro.report} ` +
+        `named@medium=${medium.report} ` +
         `ratio=${(namedHits / Math.max(1, metroHits)).toFixed(3)}`
     );
 
@@ -2195,11 +2207,11 @@ describe('androidIcon · an icon the app imports (D43)', () => {
           : `the shipped drawable drew ${namedHits} pixels of the tint and the ` +
               `imported one ${metroHits}: a stretched raster loses its thin strokes`
       ).toEqual('both roads drew the glyph at the slot size');
-      // The same drawable at the rung it was authored for, measured again: 24 dp to
-      // 40 dp is 2.78x the area, and a sharp glyph keeps its stroke proportions across
-      // that. Round 1's answer grew the box and thinned the ink, which is the failure
-      // a screenshot of one button cannot show you.
-      const mediumHits = await inkAtMedium(TINT);
+      // And the same drawable at the rung its file was authored for, in the same row:
+      // a 24 dp slot to a 40 dp one is 2.78x the area, and a vector keeps its stroke
+      // proportions across that. Round 1's answer grew the box and thinned the ink —
+      // the failure a screenshot of one button cannot show you, and the reason this
+      // claim is next to the other one rather than a second test.
       expect(
         namedHits >= 2 * mediumHits
           ? 'the top rung carries its share of ink for a 40 dp slot'
@@ -2213,30 +2225,6 @@ describe('androidIcon · an icon the app imports (D43)', () => {
       expect(metro.report).toContain('no pixels');
     }
   });
-
-  /** The same shipped glyph, probed at the rung its file was authored at. */
-  async function inkAtMedium(color: number): Promise<number> {
-    await render(
-      <View style={rowStyle}>
-        <Button
-          title={PROBE_TITLE}
-          variant="text"
-          size="medium"
-          tintColor={TINT_CSS}
-          androidIcon={CLOSE_NAME}
-          testID="sharp-medium"
-          hybridRef={captureHybrid('sharp-medium')}
-        />
-      </View>,
-      { timeout: 20000 }
-    );
-    await waitForTestId('sharp-medium');
-    const content = await waitForMeasured('sharp-medium', 'sharp-medium');
-    await waitForBox('sharp-medium', content, 'sharp-medium');
-    const report = await probeUntilDrawn('sharp-medium', color);
-    console.log(`sharp medium: ${report.report}`);
-    return probeHits(report.report);
-  }
 
   it('still draws a drawable that is not a vector, at the slot the ladder gives it', async () => {
     // The branch item 3 keeps. A `<vector>` is drawn; everything else — a PNG, a
