@@ -202,6 +202,21 @@ internal class SliderModel(
    * callbacks (start, one change, complete), because an app cannot tell an
    * increment from a thumb release and must not have to.
    *
+   * [publishedProgress] is the progress this control's semantics node was showing when
+   * the reader acted, and the direction is decided against *it* rather than against
+   * [displayed]. The two numbers come from different moments and agree only while the
+   * accessibility tree is up to date: [target] is what the platform computed from
+   * `ProgressBarRangeInfo`, which composition writes and Compose republishes once the
+   * snapshot holding the new [displayed] is applied — one frame later. Weigh a target
+   * built from the old progress against the new value and the reader's “up” reads as a
+   * move the other way. On `0..12 step 3`, whose stride is one whole step, a tree one
+   * press behind sends 3 to a model already at 3 — a press that does nothing at all —
+   * and a tree two presses behind sends 3 to a model holding 6 — a press that goes back
+   * down, which is the recurring `expected [3, 6, 3] to deeply equal [3, 6, 9]`
+   * (`docs/tasks/FOLLOWUPS.md:56`; `expected [3, 6, 9, 6]` is the same fault two steps
+   * further along one walk). The destination stays native's; the direction belongs to
+   * whoever pressed, and they were shown [publishedProgress].
+   *
    * Only the *direction* comes from the platform. The destination is [stepped],
    * and that is the fix: M3's own action moves by a twentieth of the range, which
    * on a range that does not end on a step - `0..10 step 3`, the docs' own
@@ -218,15 +233,18 @@ internal class SliderModel(
    * emitting a triple for a value that did not change is the bug above wearing a
    * different hat.
    */
-  fun accessibilityStepToward(target: Double): Boolean {
+  fun accessibilityStepToward(
+    target: Double,
+    publishedProgress: Double = displayed,
+  ): Boolean {
     if (!enabled) {
       return false
     }
     val from = displayed
     val up =
       when {
-        target > from -> true
-        target < from -> false
+        target > publishedProgress -> true
+        target < publishedProgress -> false
         else -> return false
       }
     val to = stepped(from, up)
@@ -563,7 +581,13 @@ private fun SliderTrack(
           contentDescription = label
         }
         progressBarRangeInfo = ProgressBarRangeInfo(displayed.toFloat(), range, ticks)
-        setProgress { target -> model.accessibilityStepToward(target.toDouble()) }
+        // The direction is decided against the progress *this* node publishes - the
+        // number the accessibility delegate built its target from - because a press can
+        // reach the model before Compose has republished it. See
+        // [SliderModel.accessibilityStepToward].
+        setProgress { target ->
+          model.accessibilityStepToward(target.toDouble(), publishedProgress = displayed)
+        }
         // M3's `sliderSemantics` is where `disabled()` lived, and the line above
         // clears that subtree, so a disabled Slider has to restate it. Without it
         // TalkBack reads an inert control - the action is refused - as a live,
