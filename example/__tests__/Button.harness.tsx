@@ -2127,14 +2127,18 @@ describe('androidIcon · an icon the app imports (D43)', () => {
    * The ratio of tight-tolerance ink a 2 dp stroke loses when the artwork behind it
    * was rasterised at 24 dp and stretched into a 40 dp slot.
    *
-   * Measured on the emulator, not reasoned out: the two cases below were run against
-   * the round-1 loader, which rasterised every app drawable at the file's own size, and
-   * the stretched glyph reported 0.50 of the ink the sharp one did. Fix round 2 routes
-   * a `<vector>` resource through Compose's own vector loader, so both roads draw at
-   * the size the slot asks for and the ratio goes to 1. `0.8` is the line between the
-   * two measured states, with room for a rebuild or two to differ by a little.
+   * Measured on the emulator, not reasoned out, and re-measured in fix round 2 with the
+   * round-1 loader put back into the APK: `close_24px` in a 40 dp slot reported 957
+   * pixels of the tint against the 1138 the same file drawn as a vector reported —
+   * 0.841. A stretched raster spreads a thin stroke's ink over more pixels than the
+   * tolerance admits, so it reads as *less* of the colour the probe was asked for, which
+   * is what a box measurement cannot see. Fix round 2 routes a `<vector>` resource
+   * through Compose's own vector loader, both roads draw at the size the slot asks for,
+   * and the ratio goes to 1. `0.95` sits between the two measured states with room for a
+   * rebuild: round 1's answer misses it, and nothing about antialiasing at 1.67x closes
+   * that gap.
    */
-  const SHARP_RATIO = 0.8;
+  const SHARP_RATIO = 0.95;
 
   it('draws the shipped drawable as sharply as the imported one, at the top rung', async () => {
     // One glyph, two roads, one box. Everything else in this file compares *boxes*,
