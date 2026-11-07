@@ -234,8 +234,8 @@ export function VolumeSlider() {
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on iOS" /></td>
-    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear and circular progress, determinate and indeterminate, tinted on Android" /></td>
+    <td><img src="docs/images/components/progress-ios.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on iOS: loading draws as a ring and wavy draws flat" /></td>
+    <td><img src="docs/images/components/progress-android.png" width="300" alt="Linear, circular, loading, tinted and wavy Progress on Android, with Material's morphing and contained loading shapes" /></td>
   </tr>
 </table>
 
