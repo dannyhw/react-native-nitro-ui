@@ -39,6 +39,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
+import { imeFrameTop } from './ime-frame.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -3046,7 +3047,7 @@ const CHECKS = {
       }
       if (imeTop == null) {
         t.log.abort(
-          'nothing reported the keyboard frame, so "above it" cannot be checked'
+          `nothing reported the keyboard frame, so "above it" cannot be checked - ${t.imeFrameSample()}`
         );
       }
       t.log.checkEquals(
@@ -5958,19 +5959,7 @@ class DeviceHarness {
    * @returns {number | null}
    */
   imeTopPx() {
-    /** @param {string} text @returns {number | null} */
-    const topOf = (text) => {
-      const frame = text.match(
-        /(?:mInputBoundsOnScreen|mInputFrame|mFrame)=Rect\((-?\d+),\s*(-?\d+) - (-?\d+),\s*(-?\d+)\)/
-      );
-      if (frame == null) {
-        return null;
-      }
-      const top = Number(frame[2]);
-      const bottom = Number(frame[4]);
-      return bottom > top ? top : null;
-    };
-    const fromService = topOf(this.shell('dumpsys input_method').stdout);
+    const fromService = imeFrameTop(this.shell('dumpsys input_method').stdout);
     if (fromService != null) {
       return fromService;
     }
@@ -5980,12 +5969,41 @@ class DeviceHarness {
       if (!/InputMethod/.test(block.slice(0, 220))) {
         continue;
       }
-      const top = topOf(block);
+      const top = imeFrameTop(block);
       if (top != null) {
         return top;
       }
     }
     return null;
+  }
+
+  /**
+   * The lines {@link imeTopPx} reads, for the check that fails when it says nothing.
+   *
+   * Every dumpsys scrape ends the same way: the format changes, the pattern stops
+   * matching, and a `null` quietly turns the rule into a no-op - or, as here, into a
+   * failure that reads like the control's fault. The abort names what the two dumps
+   * actually printed, so the next reader fixes the pattern instead of the claim.
+   *
+   * @returns {string}
+   */
+  imeFrameSample() {
+    const candidate = (/** @type {string} */ text) =>
+      text
+        .split('\n')
+        .filter((line) => /frame=|Rect\(/.test(line) && !/winConfig/.test(line))
+        .slice(0, 2)
+        .join(' ~ ')
+        .trim()
+        .slice(0, 160);
+    return [
+      `input_method: "${candidate(this.shell('dumpsys input_method').stdout)}"`,
+      `window windows: "${candidate(
+        this.shell('dumpsys window windows')
+          .stdout.split('Window #')
+          .find((block) => /InputMethod/.test(block.slice(0, 220))) ?? ''
+      )}"`,
+    ].join(' · ');
   }
 
   /**
@@ -7081,6 +7099,15 @@ function makeContext(harness, log) {
      */
     imeTopPx() {
       return harness.imeTopPx();
+    },
+
+    /**
+     * The dump lines `imeTopPx` read, for a check that has to fail on a `null`.
+     *
+     * @returns {string}
+     */
+    imeFrameSample() {
+      return harness.imeFrameSample();
     },
 
     /**
