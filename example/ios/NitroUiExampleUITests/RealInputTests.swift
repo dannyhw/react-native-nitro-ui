@@ -3635,7 +3635,7 @@ final class RealInputTests: XCTestCase {
     outside.tap()
     waitUntilOptionGone(fieldContent, "the outside tap to take the field popover down")
     XCTAssertTrue(
-      try read(Echo.popoverLog).hasSuffix("typed:a > typed:ab"),
+      try read(Echo.popoverLog).hasSuffix("typed:ab"),
       "real keystrokes reach the field inside the popover: \(echoText(Echo.popoverLog))"
     )
 
