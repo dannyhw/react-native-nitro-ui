@@ -214,3 +214,4 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G19 review: `URI(url)` throws on asset paths with spaces, so such an icon draws nothing; a dev URL with `/assets/../..` is sent as-is, unverified against Metro.
 - G19 review: nothing checks that a release bundle actually contains the imported icon drawables (`drawable-mdpi/…`).
 - X21 review: Slider screen-reader step, if a stale tree is published at a bound and the platform clamps the target to that bound, a press away from it is dropped (target equals published progress); check whether the delegate clamps.
+- Tooling (X21 merge round): a device gate started without the lease env fell through to the CI-default devices (AVD `nitroui`, iPhone 17) instead of refusing. A local device gate should refuse without a live lease unless `CI` is set.
