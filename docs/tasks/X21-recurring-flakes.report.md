@@ -1,7 +1,7 @@
 # X21 — The four flakes that keep costing merge rounds a re-run
 
-**Branch:** `task/X21-recurring-flakes` (from `main` at `9019f302`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `X21-znj7u` (`pair-a` — `emulator-5574` + `nitro-ui A` simulator, adb server `5043`, Metro `8295`)
+**Branch:** `task/X21-recurring-flakes` (from `main` at `9019f302`) · **Rounds:** 1 and fix round 1 (cap 3, D19) ·
+**Lease:** `X21-znj7u` (`pair-a` — `emulator-5574` + `nitro-ui A`, adb `5043`, Metro `8295`); fix round 1 ran on `X21-8ilbt` (`pair-b` — `emulator-5570` + `nitro-ui B`, adb `5041`, Metro `8293`)
 
 ## Summary
 
@@ -54,20 +54,40 @@ comes from the published progress, the destination from the model.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1823 tests / 72 suites | `c96349c087ab` | 2 m 46 s | start 5.3 / med 7.9 / max 13.6 |
-| `harness:ios` | **PASS** | 454 tests / 25 suites + isolated 4 tests / 2 suites | `c96349c087ab` (ios tree) | 15 m 01 s | start 6.8 / med 4.7 / max 10.4 |
-| `harness:android` | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `c96349c087ab` (android tree) | 15 m 08 s | start 10.1 / med 3.5 / max 10.1 |
-| `real-input:ios` | **PASS** | — | `c96349c087ab` (ios tree) | 26 m 16 s | start 8.1 / med 7.4 / max 31.4 |
-| `real-input:android` | **PASS** | — | `c96349c087ab` (android tree) | 41 m 46 s | start 4.0 / med 5.4 / max 115.4 |
+| `check` | **PASS** | 1824 tests / 72 suites | `a98a552f7415` | 2 m 52 s | start 32.6 / med 32.6 / max 53.8 |
+| `harness:ios` | **PASS** | 454 tests / 25 suites + isolated 4 tests / 2 suites | `a98a552f7415` (ios tree) | 10 m 51 s | start 10.1 / med 6.1 / max 30.5 |
+| `harness:android` | **PASS** | 505 tests / 25 suites + isolated 4 tests / 2 suites | `a98a552f7415` (android tree) | 15 m 08 s | start 4.3 / med 4.2 / max 10.9 |
+| `real-input:ios` | **PASS** | — | `a98a552f7415` (ios tree) | 26 m 44 s | start 6.5 / med 9.5 / max 42.5 |
+| `real-input:android` | **PASS** | — | `a98a552f7415` (android tree) | 42 m 15 s | start 3.4 / med 4.8 / max 220.9 |
 | `harness:android:-t:catches%20up` | stale | 1 failed of 505 tests / 25 suites | 34eb539768ec (not this tree) | 53.7 s | start 123.6 / med 76.4 / max 123.6 |
 | `harness:android:before%20the%20a11y%20tree%20catches%20up` | stale | — | 34eb539768ec (not this tree) | 1.1 s | start 170.9 / med 170.9 / max 170.9 |
 | `harness:android:before%20the%20a11y%20tree%20catches%20up:--background` | stale | — | 34eb539768ec (not this tree) | 1.5 s | start 109.4 / med 109.4 / max 109.4 |
-| `harness:android:BottomSheet` | **PASS** | 27 tests / 1 suites | `c96349c087ab` (android tree) | 2 m 10 s | start 4.7 / med 4.6 / max 5.4 |
-| `harness:android:Slider` | **PASS** | 25 tests / 1 suites | `c96349c087ab` (android tree) | 21.2 s | start 12.5 / med 11.4 / max 12.5 |
+| `harness:android:BottomSheet` | **PASS** | 27 tests / 1 suites | `a98a552f7415` (android tree) | 2 m 09 s | start 2.9 / med 3.6 / max 8.6 |
+| `harness:android:BottomSheet:--background` | stale | — | 31f5ad30b046 (not this tree) | 0.6 s | start 4.4 / med 4.4 / max 4.4 |
+| `harness:android:Slider` | stale | 25 tests / 1 suites | c96349c087ab (not this tree) | 21.2 s | start 12.5 / med 11.4 / max 12.5 |
 | `real-input:android:--control:button` | stale | — | ea6e7f333968 (not this tree) | 1 m 39 s | start 3.8 / med 3.4 / max 3.8 |
-| `real-input:ios:--control:text-field` | **PASS** | — | `c96349c087ab` (ios tree) | 6 m 56 s | start 10.4 / med 9.0 / max 23.8 |
+| `real-input:ios:--control:search-field` | **PASS** | — | `a98a552f7415` (ios tree) | 9 m 19 s | start 2.1 / med 12.2 / max 57.1 |
+| `real-input:ios:--control:text-field` | stale | — | c96349c087ab (not this tree) | 6 m 56 s | start 10.4 / med 9.0 / max 23.8 |
 
-`need --for review`: `need: review is satisfied on this code tree.` (`check`, `harness:ios`, `harness:android`). `need --for merge`: also satisfied — `real-input:ios` and `real-input:android` are green on the same tree. The three `stale` rows are named probes from this branch's earlier drafts (`gate.mjs harness:android -- -t ...`, which filters by file path, not test name) and the tab-tap mutation run; they are on trees this branch no longer has.
+`need --for review`: `need: review is satisfied on this code tree.` - `check`, `harness:ios` and
+`harness:android` are green on `a98a552f7415`, and the harness file plus `scripts/real-input/*` sit
+outside the platform prefixes, so both platforms had to be re-run for it.
+`need --for merge`: `need: merge is satisfied on this code tree.` - the whole-suite `real-input:ios`
+was re-run here too, because the fix round's Swift change is only compiled by that gate.
+
+**Repeat runs (fix round 1).** `gate.mjs harness:android -- BottomSheet` on the shipped tree: 5 of 5
+green, 27 tests each, 129 s each - and the full `harness:android` in this round passed the same suite
+a sixth time. `real-input:android` walked every screen with the fixed `goToScreen` for 42 m 15 s and
+finished `22/22 controls passed · 1 press sequence(s) needed a retry · 20/20 auxiliary checks passed`:
+the retry was a real dropped tap on the "Menu" tab, reported by the navigation and counted by the
+summary, which is the behaviour fix round 1 added for the sweep's half of those navigations.
+
+**One incident.** Clearing a port at 12:30Z, `kill 52685` took the Metro belonging to this task's own
+*running* `real-input:android`, not the leftover it looked like - `gate.mjs wait` had returned an older
+background record for that gate name and read as a pass, so a second launch had been refused and the
+first was still going. One pid, this lease's own device, nothing else touched; the suite launches the
+app once (`scripts/real-input/android.mjs:4903`) so the bundle was already loaded, and the run went on
+to pass. Since then every gate here has been verified from its ledger line, not from `wait`.
 
 ## Red proofs
 
@@ -92,8 +112,10 @@ comes from the published progress, the destination from the model.
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt`: the a11y step's direction comes from the published progress.
 - `android/src/test/java/com/margelo/nitro/nitroui/SliderModelTest.kt`: JVM test for the stale-tree window.
 - `example/__tests__/Slider.harness.tsx`: two reader presses posted in one turn — the ordering the flake found by accident.
-- `example/__tests__/BottomSheet.harness.tsx`: `waitForContentCycles` before the exact counter asserts.
-- `scripts/real-input/android.mjs`: `goToScreen` presses until the screen arrives, or names why it never will (`appPid`, `screenSummary`, `crashTail`).
+- `example/__tests__/BottomSheet.harness.tsx`: `waitForContentCycles` before the exact counter asserts, and `waitForUnmount` between cycles so a reopen cannot be batched with the dismissal it would swallow (fix round 1).
+- `docs/components/bottom-sheet.md`: content that survives a close and reopen inside one exit animation is one mounted content, not an unmount and a remount.
+- `scripts/real-input/android.mjs`: `goToScreen` presses until the screen arrives, or names why it never will (`appPid`, `screenSummary`, `crashTail`); its `log` parameter is no longer documented as optional-because-the-sweep-has-none.
+- `scripts/real-input/a11y-sweep.mjs`, `scripts/real-input/report.mjs`, `scripts/__tests__/conformance.test.js`: the sweep hands its case log to `goToScreen`, `Suite.finish` counts auxiliary retries in the total and names how many, and a fake device proves both (fix round 1).
 
 ## Follow-ups
 
@@ -164,19 +186,19 @@ it now waits for is the number that never arrives, so that run would go red at t
 
 ## Fix round 1
 
-**E2 was a different cause, and got its own row (2b).** Round 1's `waitForContentCycles` explains the
-G16/X19 late-unmount read, not E2's two runs: those were short on `mounts` and stayed short, which
-means one cycle neither mounted nor unmounted. The loop answered `cycle:dismiss` by opening the next
-sheet, and that open can be batched with `dismissedCallback`'s still-uncommitted
-`setMounted(false)` — `presented && !mounted` mounts the content straight back, and both counters
-lose the cycle for good. `waitForUnmount` now sits between cycles, so a reopen can only follow a
-committed unmount; the exact `toBe(10)` asserts are untouched and `docs/components/bottom-sheet.md`
-now says a sheet reopened inside its own exit keeps its content.
+**E2 was a second cause, and got row 2b.** Round 1's `waitForContentCycles` explains the
+G16/X19 late-unmount read, not E2: its runs were short on `mounts` and stayed short, so one cycle
+neither mounted nor unmounted. The loop answered `cycle:dismiss` by opening the next sheet, and that
+open can batch with `dismissedCallback`'s uncommitted `setMounted(false)` — `presented && !mounted`
+mounts the content straight back, and both counters lose the cycle. `waitForUnmount` now sits between
+cycles, so a reopen follows a committed unmount; the `toBe(10)` asserts are untouched, and
+`docs/components/bottom-sheet.md` says a sheet reopened inside its own exit keeps its content. Forced
+once per case on device, round 1's loop gave `mounts=9, unmounts=9` at the wait and `expected 9 to be
+10` at the bare assert; with that wait, green.
 
 **The sweep's re-taps are counted.** `runA11ySweep` hands its log to `goToScreen`, and `Suite.finish`
-adds auxiliary retries to the total and says how many. Red against the one-argument call
-(`retries` came back `[]`) and against the old total (`0 press sequence(s) needed a retry`).
+counts auxiliary retries in the total. Red twice: `retries` came back `[]` against the one-argument
+call, and the summary read `0 press sequence(s) needed a retry` against the old total.
 
-Flake 1 now reads "consistent with". The SearchField frozen field keeps burst typing — two keys
-before JS answers — while `typeKey` keeps the TextField's. Slider's clamp-at-bound case is a
-follow-up. Round 1's GitHub write is recorded above; this round made none.
+Flake 1 now reads "consistent with". Burst typing stays on the SearchField frozen field. Round 1's
+GitHub write is recorded above; this round made none.
