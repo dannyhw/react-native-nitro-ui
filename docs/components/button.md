@@ -140,6 +140,10 @@ same on both without a `Platform.select`. iOS draws `square.and.arrow.up` and
 never looks at `androidIcon`; Android draws your `.xml` and never looks at
 `systemImage`.
 
+Everything below is the prop itself, not the control: `Menu`'s trigger takes the
+same `androidIcon`, with the same forms and the same failure table — where it
+lands on that control is `docs/components/menu.md`, "The trigger's glyph".
+
 ### Getting the artwork
 
 Material Symbols is the set most apps reach for, and it is Apache 2.0. On
