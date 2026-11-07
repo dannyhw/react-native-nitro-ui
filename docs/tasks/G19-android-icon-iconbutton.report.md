@@ -157,7 +157,7 @@ Android. Fixed in `bf046323` (Android keeps the empty title, iOS gets a label) a
 - `android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt` — the pixel sampler, lifted out of `HybridNitroUiSegmentedControl.kt` so Button and SegmentedControl share one
 - `ios/components/Button/HybridNitroUiButton.swift` — `androidIcon` accepted and not drawn; `xlarge`/`xxlarge` to `.extraLarge`
 - `src/iconName.ts`, `src/components/Button/{Button,Button.nitro,NativeNitroUiButton,NitroUiButtonConfig}.ts` — the prop, its docs, its sizing-key field, the JS name rules
-- `plugin/index.js`, `plugin/__tests__/plugin.test.js`, `plugin/__fixtures__/android-icons/*` — the Expo config plugin, its fixture-project tests, and its fixtures
+- the Expo config plugin (`react-native-nitro-ui/plugin`): its entry, its fixture-project tests and its fixtures. Round 1 added them and fix round 1 deleted them, both inside this branch, so those paths open at neither end of the diff — `git show 5b7f4330 --stat` lists them, `git show a49eba03 --stat` deletes them.
 - `example/android/app/src/main/res/drawable/` — three Material Symbols vectors the device tests name: `nitroui_test_star.xml`, `nitroui_test_wide.xml`, `nitroui_test_shape.xml` (Apache 2.0)
 - `src/__tests__/iconName.test.tsx`, `src/__tests__/buttonSizingKey.test.tsx`, `android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconTest.kt`, `android/src/test/java/com/margelo/nitro/nitroui/ButtonModelTest.kt`, `example/__tests__/Button.harness.tsx` — tests
 - `docs/components/button.md`, `.changeset/g19-android-icon.md`, `package.json`, `etc/*`,
@@ -183,3 +183,132 @@ Android. Fixed in `bf046323` (Android keeps the empty title, iOS gets a label) a
 **1. IconButton: give it its own task, or owe it to a fix round here?** Brief items 4 and 7 are not built. This round shipped `androidIcon`, the ladder and the plugin with device evidence on both platforms, and IconButton would have shipped as prose: the README row, the import block, the Usage section, both screenshots, a `docs/components/` page of its own, the registry entry, sizing through the core path with conformance rules and a fallback, recycling with a full reset, the XS-XL x narrow/uniform/wide grid, the 48 dp target at XS, the toggle handshake including a refused change reverting, the required label at runtime in dev, and real-input taps on both platforms. That is Checkbox/G15-scale work, not a tail on this one, and D4 exists precisely to stop a component landing as a paragraph. **Recommendation: a task of its own** (`G19b`/`G22`), which is also what makes its bench arm possible on the bench host. Facts it should not have to re-derive: material3 1.5.0-beta02 has `IconButtonDefaults.{extraSmall…extraLarge}ContainerSize(widthOption)` with `IconButtonWidthOption.{Narrow,Uniform,Wide}`, `shapes(shape, pressedShape)`/`toggleableShapes(...)`, and per-size `…RoundShape/SquareShape/PressedShape/SelectedRoundShape/SelectedSquareShape` that are all `@Composable`; `androidx.compose.material3.Icon` is deprecated, and `androidx.compose.ui.graphics.Bitmap` does not exist (use `android.graphics.Bitmap`).
 
 **2. Is the padding coverage hole worth a golden?** See the red-proofs note. My recommendation: leave the harness comparing controls to each other and take an absolute-box golden as its own small task, because a golden on a text-sized control is a maintenance promise (font scale, density, Compose bumps) that one task should not sign quietly.
+
+---
+
+## Fix round 1
+
+**Lease:** `G19-PLACEHOLDER` · **Design change (D43 item 2), not a review fix.**
+
+`androidIcon` now takes the `.xml` the app *imports* —
+`androidIcon={require('./icons/share.xml')}` — beside round 1's drawable-name string.
+The prop is `ImageSourcePropType` narrowed to `string | number | ImageURISource`
+(`AndroidIconProp`, now public). One plain string crosses into native, with a `url:`
+marker on the file form: no AnyMap, and no patch to React Native's global asset
+resolver — that promise is a spy in `iconSource.test.ts`, not a sentence.
+
+**Release:** the asset is an ordinary drawable. The name sent is React Native's own
+`getAndroidResourceIdentifier` (`/src/assets/icons/share_24px.xml` →
+`src_assets_icons_share_24px`), pinned in test against the function itself, then
+resolved by round 1's resolver and cached per id.
+
+**Development:** that file is not in the APK and `assetSupportsNetworkLoads` refuses
+`xml` on Android, so the wrapper builds the URL the dev server answers
+(`assetServerURL` + `pickScale`, both copied — neither is a public entry) from
+`SourceCode.scriptURL`, cached for the process. `NitroUiIconFiles` reads it on one
+worker thread, our SAX reader parses it into an `ImageVector`, cached per URL, waiters
+coalesced, failures remembered. `NitroUiIconContent` is what the composition reads:
+`Absent`, `Pending`, artwork.
+
+**Round 1's rule for unresolvable artwork is unchanged and now covers files: draw
+nothing, reserve nothing** — a 404, a non-`<vector>`, a `.png` asset, one warning each.
+The slot is `iconSizeFor(size)` from the ladder. **This round found the bug in that
+sentence:** the slot was painted only with a painter, so `Pending` measured narrow and
+the Button grew sideways when the file arrived — invisible in release, where an icon is
+a resource and never in flight.
+
+**Removed:** `react-native-nitro-ui/plugin`, whole. **Docs:** Material Symbols (Android
+format), `@expo/material-symbols` as an option an Expo app may take, the drawable-name
+form, and iOS using `systemImage`. **IconButton stays out**, as the brief now says.
+
+### Gates
+
+<!--PLACEHOLDER-GATES-->
+
+### Red proofs
+
+Eighteen mutations, each reverted; `->` separates test, mutation and the line that went red.
+Every row is data in `docs/tasks/G19/mutations.json`, and every row here was run against the
+tree this report ships at.
+
+One run found a bug in this report rather than in the code. The device test first asserted that
+an imported icon publishes *one* size box for its mount, and a clean run went red on it: every
+Button publishes the component's declared fallback (`12.50x71.50`) and is corrected after, so
+the claim was never true of the named form either. The test now asserts what the design
+promises — the file adds no layout state the resource form lacks — by requiring that every box
+the imported icon published is one the named icon published, with guards pinning that each
+control measured its own box.
+
+JVM (`bash scripts/native-tests-android.sh --tests "<Class>"`, 1-8 s a run with the warm daemon):
+
+- `NitroUiIconReleasePathTest > aCommitThatSendsTheSameIconAgainAsksTheResourceTableOnce` -> drop the same-icon guard, so every prop commit re-asks the table -> `expected:<[src_assets_icons_share_24px]> but was:<[src_assets_icons_share_24px, src_assets_icons_share_24px, …]>` — three questions for one prop
+- `NitroUiIconReleasePathTest > aBundledAssetIsLookedUpUnderTheNameMetroFiledItUnder` -> the release path stops asking for the drawable at all -> `the resource table is asked for the name the wrapper built, character for character expected:<[src_assets_icons_share_24px]> but was:<[]>`; 5 of the class, incl. `aBundledNameThatIsNotInTheTableDrawsNothingAndReservesNothing` — `a miss is still a question that was asked`
+- `NitroUiIconSourceTest > aMarkedStringIsAFileAndItsUrlIsUntouched` -> the marker's scheme test asks the whole URL to be a scheme, so no dev-server icon is ever a file -> `aDevServerIconIsNeverAskedOfTheResourceTable`: `the slot is reserved while the file is read expected:<Pending> but was:<Absent>`; 6 red across the two classes
+- `NitroUiIconReleasePathTest > anAnswerToALoadRetiredByRecycleIsDropped` -> drop the generation counter -> `the retired load cannot overwrite the recycled Button's own icon`
+- `NitroUiIconReleasePathTest > aDevLoadFillsTheSlotItReservedAndAnAnswerOfNothingClearsIt` -> a failed load leaves its slot reserved -> `a 404 is round 1's missing-name answer, not a permanently empty box expected:<Absent> but was:<Pending>`
+- `NitroUiIconReleasePathTest > anAlreadyReadFileIsDrawnWithoutWaiting` -> key the per-URL cache wrong -> `AssertionError` — a file this process already read is read again, and the answer arrives late
+- `NitroUiVectorDrawableTest > theBrokenFixtureInTheExampleAppIsRefusedToo` -> accept a file with no `<vector>` element -> `wellFormedXmlThatIsNotAVectorIsRefusedNotDrawn`: `"has no <path> to draw" does not say "no <vector> element"`; 2 red
+- `NitroUiVectorDrawableTest > googlesOwnMaterialSymbolsFileIsReadAsItIsWritten` -> take the viewport to be the 24 dp box, not the 960-unit grid Google writes paths in -> `expected:<960.0> but was:<24.0>`; 3 red (Google's file, the units case, the `ImageVector` comparison)
+
+JS (`npx jest src/__tests__/iconSource.test.ts` 0.3 s a run, `buttonSizingKey.test.tsx` 1 s):
+
+- `androidIcon · the release build › names a bundled asset exactly the way React Native files it` -> the leading slash of the asset path survives into the drawable name -> `Expected: "src_assets_icons_share_24px" / Received: "_src_assets_icons_share_24px"`; 3 of 13, incl. the wire form and two paths for one glyph
+- `androidIcon · the development build › asks Metro for the file React Native refuses to load` -> every URL carries a scale suffix, including the single-scale ones Metro 404s on -> `Expected: "…/share_24px.xml?platform=android&hash=a1b2c3d4" / Received: "…/share_24px@1x.xml?…"`; 2 red, one of them the copy of React Native's own builder
+- `androidIcon · the development build › asks Metro for the file React Native refuses to load` -> the wrapper stops asking the dev server -> `Received: null` — the same test, from the other side
+- `androidIcon · the development build › never registers a transformer with React Native` -> the forbidden fix, teach React Native to load `.xml` -> `Expected number of calls: 0` on the spy over `addCustomSourceTransformer`/`setCustomSourceTransformer`
+- `androidIcon · the development build › refuses an asset that is not a vector drawable` -> stop checking the asset's type -> `Received: "url:http://10.0.2.2:8081/src/assets/icons/share_24px.png?platform=android&hash=a1b2c3d4"` — a `.png` handed to the vector parser
+- `androidIcon · the forms a caller can write › refuses the sources that cannot name artwork, and says why once each` -> drop the once-per-source guard -> `Expected length: 1 / Received length: 4` on the warning array
+- `Button · sizing key › separates two assets and refuses to key on an asset id` -> the icon leaves the size configuration -> `Expected: not "filled|medium|||Save"` — two assets, one measurement
+
+Device — Android (`emulator-5570`, `harness:android:Button`, the app rebuilt per mutation, 37-52 s
+a run, lease `G19-w2v9t`):
+
+- `androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive` -> a file that loaded is thrown away -> `expected 0 to be greater than 0` on the pixel probe, and `widens the control by the ladder, not by the file it loaded` red with it at `expected 28.19047619047619 to be less than 0.6`
+- `… draws the imported icon, and does not move the box when the bytes arrive` -> the empty slot is not held while the file is in flight -> `only the imported icon published 57.90x48.00 - the named icon published 12.50x71.50, 12.57x72.00, 60.19x48.00` — the control grew sideways when the bytes landed
+- `androidIcon · an icon the app imports (D43) › draws nothing for a file the dev server does not have, and keeps the no-icon box` -> a failed load keeps its slot -> `expected false to be true` on `sameSize(boxOf('missing-file'), plain)`
+
+### Files changed
+
+- `src/iconSource.ts` (new), `src/components/Button/Button.tsx`, `src/index.ts` — the
+  prop, the two resolutions, the marker, the cached dev-server origin.
+- `android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt` (new),
+  `android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt`,
+  `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt` — the
+  reader, the source/marker split, the per-URL file cache, the model's resolve step,
+  the empty slot.
+- `android/src/test/java/com/margelo/nitro/nitroui/NitroUiVectorDrawableTest.kt`,
+  `android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconSourceTest.kt`,
+  `android/src/test/java/com/margelo/nitro/nitroui/NitroUiIconReleasePathTest.kt`
+  (new); `src/__tests__/iconSource.test.ts` (new),
+  `src/__tests__/buttonSizingKey.test.tsx`; `example/__tests__/Button.harness.tsx`;
+  `example/src/assets/icons/`.
+- `plugin/` deleted; `package.json`, `eslint.config.mjs`, `etc/package-files.txt`.
+- `docs/components/button.md`, `README.md`, `.changeset/g19-android-icon.md`,
+  `example/src/ButtonScreen.tsx`, `example/src/readme-examples.tsx`.
+
+### Follow-ups
+
+- `docs/tasks/G19/mutations.json` still carries round 1's five plugin rows for a plugin
+  this round deleted; the rows are history, not a suite anyone can run.
+- `docs/images/components/button-{ios,android}.png` predate the "App icon (Android)"
+  row the Button screen gained; they show Buttons, not this one.
+- The example app keeps both an imported icon (`example/src/assets/icons/`) and a
+  `res/drawable/nitroui_test_*` one, which is now two fixtures for one prop by design —
+  the second form needs a drawable that is not a Metro asset.
+- The imported-icon test carries one dead probe: it samples `#000000`, a colour the glyph never
+  paints, so it logs `hits=0 drawnInMs=15026` and spends 15 s of every `Button` suite run to say
+  nothing. The pixel claim rests on the other probe, which counted 442 hits; deleting the dead
+  one changes the harness file, so it belongs with the IconButton task that opens it next.
+- `check`'s `ci-workflows` step failed once on `-accel-check` under load and passed on retry and
+  standalone; owned by X20's tooling, not by this diff.
+
+### Questions for orchestrator
+
+None. The one thing a reviewer should look at twice is the provenance of the two
+fixture icons: `example/src/assets/icons/{share,star}_24px.xml` are recorded in that
+folder's README as Google's Material Symbols download, unedited, with their SHA-256
+digests — this round could not reach Google's canonical bytes to re-download and
+compare (the GitHub API is not reachable from here), so the claim is the digest, not a
+fresh diff. `@expo/material-symbols@0.1.1` was fetched and *is* reachable, and its
+`star.xml` path data matches `star_24px.xml` segment for segment, which is the closest
+independent check available.
