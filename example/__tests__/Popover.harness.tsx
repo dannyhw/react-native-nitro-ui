@@ -879,15 +879,21 @@ describe('Popover', () => {
 
     it('reports nothing for a popover dropped while it is presented (D44 item 2)', async () => {
       const id = 'drop-open';
-      await render(<DropScene testId={id} initial />);
+      // Mounted closed and opened by hand: with `initial` the popover presents in the
+      // same commit as the probe beside it, so the baseline below races the very
+      // presentation it measures from - under load the probe's first report already
+      // says `live=1` and the baseline never arrives.
+      await render(<DropScene testId={id} />);
       await requireHandle(id);
       const probeId = `${id}-probe`;
       await requireHandle(probeId);
       const baseline = await waitForReport(
         probeId,
         (r) => r.raw !== '' && r.live === '0',
-        'a baseline with nothing up'
+        'a baseline with nothing up',
+        20000
       );
+      setters.get(id)?.(true);
       await waitForUp(id);
       const before = reportOf(id);
       clearEvents();
@@ -947,7 +953,7 @@ describe('Popover', () => {
         return (
           <Modal visible={modal} animationType="none">
             <View style={{ flex: 1 }}>
-              <Stage testId="in-modal" initial />
+              <Stage testId="in-modal" />
             </View>
           </Modal>
         );
@@ -964,9 +970,15 @@ describe('Popover', () => {
       const baseline = await waitForReport(
         'modal-probe',
         (r) => r.raw !== '' && r.live === '0',
-        'a baseline with nothing up'
+        'a baseline with nothing up',
+        20000
       );
+      // Opened here, not at mount: `initial` would present the popover in the same
+      // commit as the probe under the Modal, and the baseline above would be reading a
+      // race with it rather than a starting line. The Modal is up and settled by now,
+      // which is also the case a user actually hits.
       await requireHandle('in-modal');
+      setters.get('in-modal')?.(true);
       const up = await waitForUp('in-modal', 15000);
       expect(up.presentCount).toBe('1');
       expect(up.anchored).toBe('1');
