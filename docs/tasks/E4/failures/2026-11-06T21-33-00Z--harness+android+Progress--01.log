@@ -1,0 +1,79 @@
+# Failure excerpt — harness:android:Progress
+
+- Ran: 2026-11-06T21:33:00.459Z on code tree `cc5c7b6aa42b` at HEAD `8ff55b5` (branch `task/E4-progress-loading-wavy`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Progress`
+- Result: fail, exit 1, 15317 ms
+- Load: start 4.83, end 5.42, median 5.42, max 5.42
+- Device: android / device `emulator-5570` / lease `E4-h377u`
+- Full log: `task/E4-progress-loading-wavy/harness+android+Progress-2026-11-06T21-33-00.459Z.log` (<store>/task/E4-progress-loading-wavy/harness+android+Progress-2026-11-06T21-33-00.459Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Progress.harness.tsx`
+- `● Progress › paints the wavy and loading shapes it was asked for`
+- `expected -1 to be greater than 7.699125`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E4-progress-loading-wavy/harness+android+Progress-2026-11-06T21-33-00.459Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E4-h377u (still live)
+  |   E4-h377u                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.42 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Progress
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree cc5c7b6aa42b, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.83/5.87 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E4-progress-loading-wavy/harness+android+Progress-2026-11-06T21-33-00.459Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Progress.harness.tsx
+  ● Progress › paints the wavy and loading shapes it was asked for
+
+    expected -1 to be greater than 7.699125
+
+      [0m [90m 1694 |[39m       [90m// A flat bar is its 4 dp stroke and nothing else: the wave would be twice the[39m
+       [90m 1695 |[39m       [90m// band, and antialiasing buys at most a row each side.[39m
+      [31m[1m>[22m[39m[90m 1696 |[39m       expect(barFlat[33m.[39minkHeight)[33m.[39mtoBeGreaterThan([33mLINEAR_HEIGHT[39m [33m*[39m px [33m*[39m [35m0.7[39m)[33m;[39m
+       [90m      |[39m                                                [31m[1m^[22m[39m
+       [90m 1697 |[39m       expect(barFlat[33m.[39minkHeight)[33m.[39mtoBeLessThan([33mLINEAR_HEIGHT[39m [33m*[39m px [33m*[39m [35m1.6[39m)[33m;[39m
+       [90m 1698 |[39m       [90m// The wavy bar is the wave - Material's 10 dp of stroke and amplitude - so the[39m
+       [90m 1699 |[39m       [90m// same tint covers well over twice the band it does flat. That difference *is*[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 17 passed, 18 total
+Snapshots:   0 total
+Time:        14.373 s
+Ran all test suites matching Progress.
+
+
+
+```
