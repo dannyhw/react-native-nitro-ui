@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Bench fixture, not library iconography: the same disc `circle.png` is, as the
+  Android vector drawable nitro-ui requires (DECISIONS D43). Deliberately a plain
+  geometric shape rather than a Material Symbols file, because the arm that draws
+  it is a benchmark's stand-in and the library's real glyphs stay official.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#FF000000"
+      android:pathData="M2,12 A10,10 0 1,1 22,12 A10,10 0 1,1 2,12 Z" />
+</vector>
