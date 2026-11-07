@@ -17,10 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color as ComposeColor
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
@@ -35,7 +31,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
+import com.margelo.nitro.nitroui.core.nitroUiIcon
 
 /*
  * The Menu's split trigger: what Material 3 Expressive draws when a menu has both a
@@ -94,34 +90,6 @@ internal enum class MenuSplitVariant(
         ButtonVariant.Elevated -> Elevated
       }
   }
-}
-
-/**
- * The chevron of the trailing half.
- *
- * The geometry of Material's `Icons.Filled.ExpandMore` (Apache 2.0, the 24-unit
- * viewport), written out because this library does not depend on `material-icons-core`
- * for one glyph - the same decision [ChipLeadingCheck] records for the chip's check, and
- * the reason `MenuRows.kt` writes its own. Built once per process and shared: a hosted
- * control is its own composition, and `remember` cannot share anything between two of
- * them (`docs/architecture/core.md`, "Shared objects").
- */
-private val MenuChevronIcon: ImageVector by lazy {
-  ImageVector.Builder(
-    name = "NitroUiMenuChevron",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-  ).path(fill = SolidColor(ComposeColor.Black)) {
-    moveTo(16.59f, 8.59f)
-    lineTo(12f, 13.17f)
-    lineTo(7.41f, 8.59f)
-    lineTo(6f, 10f)
-    lineToRelative(6f, 6f)
-    lineToRelative(6f, -6f)
-    close()
-  }.build()
 }
 
 /** [splitButtonShapes]' store: one motion scheme and one rung at a time. */
@@ -345,7 +313,9 @@ internal fun MenuSplitButton(
         val onOpenChange: (Boolean) -> Unit = { wantsOpen -> model.setOpen(wantsOpen) }
         val chevron: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
           Icon(
-            imageVector = MenuChevronIcon,
+            // Google's Material Symbols `keyboard_arrow_down` - the icon Material's own
+            // split button uses - parsed once per process (`core/NitroUiIcons.kt`).
+            imageVector = nitroUiIcon(R.drawable.nitroui_keyboard_arrow_down),
             // Nothing of its own to announce: the half's node carries
             // [MENU_MORE_OPTIONS_LABEL] and the expanded/collapsed state, so a second
             // description here would be read twice.
