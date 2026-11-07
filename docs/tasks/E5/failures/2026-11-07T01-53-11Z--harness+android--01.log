@@ -1,0 +1,199 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T01:53:11.869Z on code tree `0a85862f774c` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 953485 ms
+- Load: start 263.29, end 4.08, median 16.60, max 263.29
+- Device: android / device `emulator-5574` / lease `E5-onhkl`
+- Full log: `task/E5-slider-drag-start/harness+android-2026-11-07T01-53-11.057Z.log` (<store>/task/E5-slider-drag-start/harness+android-2026-11-07T01-53-11.057Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Console`
+- `● Slider › reconciles a write from JS while a real finger is down`
+- `expected [ 's', 'v', 'c' ] to deeply equal [ 's', 'c' ]`
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android-2026-11-07T01-53-11.057Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-onhkl (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.08 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 222 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #238 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #246 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #2 performed SetProgress(9.0) on #254 range=0.0..12.0@12.0 12.0->9.0 disabled=false
+
+
+    console.log
+      a11y walk: starts=8 complete=8
+
+
+    console.log
+      step in drag: #1 performed SetProgress(3.0) on #262 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: starts=[0] change=[3,3,6,9] complete=[9]
+
+
+    console.log
+      inverted range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 164.2ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 164.2ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 214.95/load5 148.06 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › reconciles a write from JS while a real finger is down
+
+    expected [ 's', 'v', 'c' ] to deeply equal [ 's', 'c' ]
+
+      [0m [90m 1013 |[39m       [36mawait[39m settleEvents(events)[33m;[39m
+       [90m 1014 |[39m
+      [31m[1m>[22m[39m[90m 1015 |[39m       expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1016 |[39m       expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m0.2[39m])[33m;[39m
+       [90m 1017 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m0.5[39m])[33m;[39m
+       [90m 1018 |[39m       expect(handle[33m.[39mvalue)[33m.[39mtoBe([35m0.5[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › reconciles a write from JS while a real finger is down
+
+    expected [ 's', 'v', 'c' ] to deeply equal [ 's', 'c' ]
+
+      [0m [90m 1013 |[39m       [36mawait[39m settleEvents(events)[33m;[39m
+       [90m 1014 |[39m
+      [31m[1m>[22m[39m[90m 1015 |[39m       expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1016 |[39m       expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m0.2[39m])[33m;[39m
+       [90m 1017 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m0.5[39m])[33m;[39m
+       [90m 1018 |[39m       expect(handle[33m.[39mvalue)[33m.[39mtoBe([35m0.5[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 24 passed, 25 total
+Tests:       1 failed, 3 skipped, 496 passed, 500 total
+Snapshots:   0 total
+Time:        951.569 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 0a85862f at bb47a604dcb1bfd8dfd90cd3179ec21dd43178c9, now 64c41436 at a9c5c9bcae2f6d1b95ca212827c72f72242f4395)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:android FAIL in 953.5 s - note: the code tree moved during the run (64c41436f8d2 now), so this line describes 0a85862f774c
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android-2026-11-07T01-53-11.057Z.log (5 probe(s))
+
+```

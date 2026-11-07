@@ -1,0 +1,118 @@
+# Failure excerpt — harness:android:Slider
+
+- Ran: 2026-11-07T02:24:11.030Z on code tree `89039c30ce9d` at HEAD `a9c5c9b` (branch `task/E5-slider-drag-start`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Slider`
+- Result: fail, exit 1, 24095 ms
+- Load: start 10.27, end 8.21, median 9.42, max 10.27
+- Device: android / device `emulator-5574` / lease `E5-onhkl`
+- Full log: `task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log` (<store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › reports a gesture for a touch that never moves the thumb, in drag order`
+- `expected [] to deeply equal [ 's', 'c' ]`
+- `● Slider › reconciles a write from JS while a real finger is down`
+- `expected [ 's', 'v', 'c' ] to deeply equal [ 's' ]`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, 6, 9, 10, 9 ] to deeply equal [ 3, 6, 9, 10 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: E5-onhkl (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   E4-qa87m                 E4           both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.21 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 67 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Slider
+gate: node ../scripts/harness.mjs --harnessRunner android Slider (cwd example)
+gate: code tree 89039c30ce9d at HEAD a9c5c9bc
+gate: git tree 910424044844 with a DIRTY worktree (not reusable)
+gate: log task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log
+gate:       <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Slider
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 89039c30ce9d, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.27/11.37 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › reports a gesture for a touch that never moves the thumb, in drag order
+
+    expected [] to deeply equal [ 's', 'c' ]
+
+      [0m [90m 931 |[39m       [36mawait[39m pressInBox(box[33m,[39m [35m0.5[39m)[33m;[39m
+       [90m 932 |[39m       [36mawait[39m settleEvents(events)[33m;[39m
+      [31m[1m>[22m[39m[90m 933 |[39m       expect(order)[33m.[39mtoEqual([[32m's'[39m[33m,[39m [32m'c'[39m])[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 934 |[39m       expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m2[39m])[33m;[39m
+       [90m 935 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual([[35m2[39m])[33m;[39m
+       [90m 936 |[39m       expect(events[33m.[39mchange)[33m.[39mtoEqual([])[33m;[39m[0m
+
+  ● Slider › reconciles a write from JS while a real finger is down
+
+    expected [ 's', 'v', 'c' ] to deeply equal [ 's' ]
+
+      [0m [90m 1027 |[39m       [90m// Open, and empty: the down opened the gesture and the tap has selected nothing[39m
+       [90m 1028 |[39m       [90m// yet, which is the state E5 made reachable and the state the write goes into.[39m
+      [31m[1m>[22m[39m[90m 1029 |[39m       expect(order)[33m.[39mtoEqual([[32m's'[39m])[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1030 |[39m       expect(events[33m.[39mstart)[33m.[39mtoEqual([[35m0.2[39m])[33m;[39m
+       [90m 1031 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual([])[33m;[39m
+       [90m 1032 |[39m[0m
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, 6, 9, 10, 9 ] to deeply equal [ 3, 6, 9, 10 ]
+
+      [0m [90m 1867 |[39m       [32m'uneven past the top'[39m
+       [90m 1868 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 1869 |[39m     expect(uneven[33m.[39mcomplete)[33m.[39mtoEqual([[35m3[39m[33m,[39m [35m6[39m[33m,[39m [35m9[39m[33m,[39m [35m10[39m])[33m;[39m
+       [90m      |[39m                                    [31m[1m^[22m[39m
+       [90m 1870 |[39m
+       [90m 1871 |[39m     [90m// Starting at the bound: forward does nothing, back steps.[39m
+       [90m 1872 |[39m     expectPerformed([0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 23 passed, 26 total
+Snapshots:   0 total
+Time:        22.594 s
+Ran all test suites matching Slider.
+gate: harness:android:Slider FAIL in 24.1 s
+gate: recorded in .gates/task/E5-slider-drag-start.jsonl
+
+
+gate: appended the device context to task/E5-slider-drag-start/harness+android+Slider-2026-11-07T02-24-10.412Z.log (5 probe(s))
+
+```
