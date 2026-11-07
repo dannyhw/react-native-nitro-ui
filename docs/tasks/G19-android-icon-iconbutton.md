@@ -83,3 +83,39 @@ as one FOLLOWUPS line.
 `check`, both `harness:*` and both `real-input:*`, then `need --for review`. Report at
 `docs/tasks/G19-android-icon-iconbutton.report.md`, with the APIs at the top and benchmark numbers for IconButton.
 Export the ledger with `gate.mjs export --task G19`.
+
+## Fix round 1: the icon source changes (D43 item 2)
+
+The owner chose Metro assets for `androidIcon`, so this round reworks round 1's icon handling before review.
+IconButton stays out of G19; it becomes its own task after G19 merges.
+
+1. **`androidIcon` accepts a Metro asset:** `require('./icons/share.xml')`, an Android vector drawable. Keep round 1's
+   drawable-name string as the second form. The type is `ImageSourcePropType | string`, narrowed to what this means.
+   - The wrapper resolves the asset in JS and passes native a plain string (no AnyMap), with a marker for which form
+     it is.
+   - **Release builds:** the asset is an ordinary drawable resource. Resolve it through round 1's resolver.
+   - **Development:** React Native won't load Android `.xml` assets from Metro (`assetSupportsNetworkLoads` in
+     `AssetSourceResolver.js`). Build the Metro asset URL in the wrapper, not by patching React Native's global
+     `Image.resolveAssetSource` (D43). Load the file natively and parse it into an `ImageVector`, off the main
+     thread, cached per URL for the process. Write our own parser; don't copy @expo/ui's code.
+   - **Sizing:** the icon slot's size comes from the size ladder, so measurement never waits for the file. While a
+     dev load is in flight, the slot is reserved and empty. A load that fails draws nothing, logs one warning, and
+     keeps the size round 1 gives a missing name, whatever round 1's rule is. Say which.
+2. **Remove the config plugin** (`react-native-nitro-ui/plugin`): its code, tests, package entry and docs. Metro does
+   its job now.
+3. **Docs:** the user-facing icon section explains:
+   - passing a `.xml` file;
+   - where to get Material Symbols (Google's download, Android format);
+   - for Expo apps, `@expo/material-symbols` (`require('@expo/material-symbols/share.xml')`), described as an option
+     that works with nitro-ui, not a dependency;
+   - the drawable-name form for apps that already ship drawables;
+   - that iOS uses `systemImage`.
+
+   Update `button.md` and the README usage. The example app's test icons become `.xml` assets required from JS.
+4. **Tests, each shown red first:**
+   - The dev path: an asset loads from Metro and draws, the slot's size doesn't change when it arrives, and a 404
+     draws nothing.
+   - The release path, the resource lookup for a bundled asset's name, at least as a JVM test.
+   - The parser, against a real Material Symbols file and one malformed file.
+   - The wrapper: it never calls `addCustomSourceTransformer`.
+   - The sizing key separates two different assets.

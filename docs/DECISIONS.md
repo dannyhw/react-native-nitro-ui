@@ -557,8 +557,7 @@ SplitButton and Chip). The owner decided C and D.
 3. **Config plugins (owner, question C; clarifies PLAN principle 3):** an Expo config plugin is fine and expected
    where it makes the library better. What the owner rules out is a lot of manual setup: installing stays `npm i` +
    pod install / prebuild, and a bare React Native app may need a few small, documented steps but not many manual code
-   changes. *(How `androidIcon` gets its drawables is being redesigned under D43; the drawable-copying plugin is on
-   hold.)*
+   changes. *(Superseded by D43 item 2: `androidIcon` takes a Metro asset, and the drawable-copying plugin is dropped.)*
 4. **Size names (owner, question D):** the shared size ladder gains `xlarge` and `xxlarge`, used by Button and
    IconButton (Material's XS–XL map onto small…xxlarge).
 
@@ -570,6 +569,20 @@ mistyped copy of Material's search path shipped in SearchField 0.7.0 and drew a 
 1. **The library's own icons** (search, clear, the checks, the split button's chevron, and any later ones) come from
    Google's official Material Symbols files (Apache 2.0), copied unchanged by a script and checked against the
    source. No glyph path is typed by hand. Where a material3 component draws its own icon, that one is used.
-2. **Icons apps pass in** (`androidIcon` and the like): the design is proposed in the orchestrator's 2026-11-06
-   write-up (Metro assets, with `@expo/material-symbols` as the icon source) and is pending the owner's answer.
+2. **Icons apps pass in (owner, 2026-11-07):** `androidIcon` takes an Android vector drawable `.xml` as a Metro asset
+   (`require('./icons/share.xml')`), the way an image is passed. Metro bundles only what an app imports, and a release
+   build turns it into an ordinary drawable, so neither Expo nor bare apps need a setup step.
+   - **Loading:** the wrapper resolves the asset in JS and passes a plain string to native, never an AnyMap. In a
+     release build, native resolves the drawable resource. In development, it loads the file from Metro and parses
+     it. React Native refuses to load Android `.xml` assets from the dev server, so the wrapper builds that URL
+     itself. It must not patch React Native's global asset resolver, because that would change how `Image` behaves
+     across the whole app.
+   - **Sizing:** the icon's size comes from the size ladder, so measurement never waits for the file.
+   - **The drawable-name string** G19 built stays as a second form, for apps that already ship drawables.
+   - **Icon sources:** the docs point to Google's Material Symbols download (Android format). For Expo apps they
+     also name `@expo/material-symbols` (MIT, no dependencies, no code), which works with nitro-ui too. It's an
+     option, never a dependency.
+   - **Dropped:** D42 item 3's drawable-copying config plugin, because Metro does that job. Config plugins stay
+     allowed where something needs one.
+   - **Not added:** a combined `icon={{ ios, android }}` prop, since `systemImage` + `androidIcon` already cover it.
 
