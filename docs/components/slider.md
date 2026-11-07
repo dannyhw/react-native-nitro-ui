@@ -30,7 +30,7 @@ no core component to mirror.
 | `disabled`           | `boolean \| undefined`        | `false`      | SwiftUI `.disabled()` / Compose `enabled = false`.              |
 | `tintColor`          | `ColorValue \| undefined`     | platform     | SwiftUI `.tint()` / `SliderDefaults.colors(thumb, activeTrack)`. |
 | `onValueChange`      | `(value: number) => void`     | —            | During a drag, **at most once per frame**, with the value native shows. |
-| `onSlidingStart`     | `(value: number) => void`     | —            | When a drag begins, with the value it began at.                 |
+| `onSlidingStart`     | `(value: number) => void`     | —            | When a gesture begins, with the value it began at.              |
 | `onSlidingComplete`  | `(value: number) => void`     | —            | When a drag ends, **always** with the final value.              |
 | `style`              | `ViewStyle`                   | —            | Overrides the default box (see Sizing).                         |
 | `testID`             | `string \| undefined`         | —            | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.    |
@@ -55,12 +55,39 @@ invoked once when the view mounts, and a new function does not re-run it.
 | Range          | `ClosedRange<Double>`                                       | `ClosedFloatingPointRange<Float>`                                |
 | Stepped        | `step:` when the range ends on a step, else continuous      | `steps = wholeSteps - 1` when it does, else continuous            |
 | Value          | `NitroUiControlledValue<Double>` on `SliderModel`           | `NitroUiControlledValue<Double>` on `SliderModel`                 |
-| Drag start     | `onEditingChanged(true)`, or the first `Binding` write      | the first value change (Compose has no start callback)            |
-| Drag end       | `onEditingChanged(false)`                                   | `onValueChangeFinished`                                           |
+| Drag start     | `onEditingChanged(true)`, or the first `Binding` write      | the finger going down on the control's own box                    |
+| Drag end       | `onEditingChanged(false)`                                   | `onValueChangeFinished`, or the finger leaving                    |
 | Events per frame | one `onValueChange` per `CADisplayLink` tick              | one per `Choreographer` frame callback                            |
 | Test id        | RN's `testID` → `accessibilityIdentifier`                   | `host.tag` (Compose has no test id)                               |
 | Label          | `.accessibilityLabel(_:)` on the Slider                     | `Modifier.semantics { contentDescription }` on the Slider          |
 | Recycle        | hosting controller reused                                   | objects reused; composition rebuilt (`core.md` §6)                |
+
+### What counts as a gesture
+
+The three callbacks describe one gesture, and the gesture is the touch, not the value
+change: an app told `onSlidingStart` is always owed `onSlidingComplete`, and the two
+bracket whatever `onValueChange` events the touch produced — in that order.
+
+| Input                                       | iOS                                                                                       | Android                                                  |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Drag the thumb                              | start, one change per frame, complete                                                     | the same                                                 |
+| Touch the track beside the thumb            | nothing at all — SwiftUI's `Slider` ignores the track (`T15`)                              | start, the value it landed on, complete                  |
+| Press without moving the thumb off its value | nothing measured on iOS; the value-less iOS touch that has been measured (a track tap) reported nothing | one start, one complete, no change                       |
+| A screen-reader step                        | one start, one change, one complete                                                       | the same triple, with the same values                    |
+
+Android takes its start from the control's own touch stream (`sliderPressWatcher` in
+`HybridNitroUiSlider.kt`: the finger down on the `Initial` pointer pass, the finger up
+on `Final`) rather than from the first value change, which is what lets the third row
+report anything — Material 3's tap path only calls `onValueChange` when the value it
+computed differs, so a motionless touch has no first value change to be inferred
+from. The end is unchanged (`onValueChangeFinished`), and the end is idempotent, so
+the two things that can close a gesture report one complete. A value that arrives with
+no touch behind it still opens its own drag, so a screen-reader step and Compose's own
+key-event step keep the same triple as before.
+
+iOS reports what SwiftUI's `Slider` reports and nothing else: its
+`onEditingChanged` decides where a drag begins and ends, which is why the second row
+differs between the platforms at all.
 
 ### Why stepped mode is chosen natively
 
@@ -219,10 +246,13 @@ values the thumb can show, and still emits through the same handshake.
   When `maximum - minimum` is not a whole number of steps, both platforms use the
   continuous control and native snaps the value. Ticks appear only on ranges that
   end on a step.
-- **Android start events are inferred.** Compose has no drag-start callback, so
-  `onSlidingStart` comes from the first value change. A touch that never changes
-  the value therefore reports nothing at all: `onSlidingComplete` is guarded on a
-  drag having started, so the three callbacks are never half-emitted.
+- **A touch a parent steals is still a gesture.** On Android the start comes from
+  the finger going down on the control, so a press a scrolling parent takes over
+  before the control's own gesture began is still closed by the watcher — the app
+  gets its `onSlidingComplete` with the value the control had when the finger left,
+  rather than a start with nothing after it. A drag abandoned by an unmount or a
+  recycle stays silent, as always: a callback is not owed to an app that no longer
+  owns the instance.
 - **Compose semantics are not Views.** `@react-native-harness/ui`'s label query
   matches `View.contentDescription`, so it cannot see the label on either platform's
   hosted control (on iOS it matches the wrapped `UISlider`, whose label SwiftUI sets
