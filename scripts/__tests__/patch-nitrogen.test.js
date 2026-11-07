@@ -524,11 +524,21 @@ describe('patch-nitrogen: content children (G14)', () => {
     );
   });
 
-  it('is applied to every listed view the repo generates', () => {
-    // A view added to the list whose generated `.mm` the repo never re-patched is the
-    // failure this catches: its React Native children would mount beside the content view
-    // and stay in the app's window, which no unit test can see.
-    for (const view of contentChildrenViews()) {
+  it('is applied to every view that mounts React Native children', () => {
+    // The list here is written out rather than read back from the script, and that is the
+    // point: a check that asks the list whether the list is right can only agree with it.
+    // Dropping a view from `CONTENT_CHILDREN_VIEWS` is the mistake — its React Native
+    // children would then mount beside the content view and stay in the app's window,
+    // which no unit test can see and which `nitrogen:check` also catches (it regenerates
+    // the `.mm` and diffs it, so the drift is red from the other side). Both halves are
+    // asserted: the script still lists the view, and the committed file still carries it.
+    const mountsReactNativeChildren = [
+      'HybridNitroUiBottomSheet',
+      'HybridNitroUiPopover',
+    ];
+    const listed = contentChildrenViews();
+    expect(listed).toEqual(mountsReactNativeChildren);
+    for (const view of mountsReactNativeChildren) {
       const mm = readFileSync(join(repoRoot, mmPath(view)), 'utf8');
       expect(`${view}: ${mm.includes('// nitro-ui: content children')}`).toBe(
         `${view}: true`
