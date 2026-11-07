@@ -159,12 +159,16 @@ export interface NitroUiFormRowProps extends HybridViewProps {
    * iOS only in effect: the Form reports where this row's cell came to rest, in the Form's
    * own coordinate space, and the wrapper writes it into the row's absolute `top`/`left`.
    *
-   * Why this exists: React Native's `measure`/`measureInWindow` walk the *shadow tree*
-   * (`react/renderer/dom/Dom.cpp`'s `measureInWindow`, read in 0.88) and never ask UIKit
-   * where the view ended up. A row whose view lives in a `UICollectionViewListCell`
-   * therefore measured at its section's origin - S6 question 4's "a row's measured box is
-   * the Form's box", which is what breaks anything anchored to a row (Tooltip, Popover,
-   * ContextMenu). Publishing the cell's position makes the two trees agree again.
+   * Why this exists: `measure`/`measureInWindow` never ask UIKit where a view ended up.
+   * In 0.88 they are `react/renderer/dom/DOM.cpp`'s `measureInWindow`, which reaches
+   * `LayoutableShadowNode::computeLayoutMetricsFromRoot` - that walks the *shadow tree*`'s`
+   * `getAncestors` and sums each Yoga `frame.origin`, and touches no platform view. So a
+   * row whose view has been moved into a `UICollectionViewListCell` still measures at its
+   * section's origin: S6 question 4's "a row's measured box is the Form's box", which is
+   * what breaks anything anchored to a row (Tooltip, Popover, ContextMenu).
+   *
+   * Nothing else reads that origin on iOS - the cell owns where the row is drawn - so
+   * writing the cell's position into it is a correction to the shadow tree alone.
    *
    * It is a *settle-time* answer: the list moves cells every scroll frame and JS cannot be
    * told about each one, so `measure` is right when the list is at rest and lags by the

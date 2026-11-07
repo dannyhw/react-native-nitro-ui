@@ -5355,98 +5355,6 @@ final class RealInputTests: XCTestCase {
     print("real-input (ios): accessibility hierarchy - \(why)")
     print(app.debugDescription)
   }
-}
-
-/// A check could not continue because something it needs is not there at all.
-/// `continueAfterFailure = false` already ends the test at the first failed
-/// assertion; this keeps the case where an element is missing honest instead of
-/// letting the next assertion run against nothing.
-private struct RealInputCheckAborted: Error {
-  let identifier: String
-}
-
-/// A short summary of a list of millisecond timings: min, median, max, count.
-///
-/// Median rather than mean because a handful of slow presses is what matters here and
-/// a mean would hide them in the middle of a mostly-fast run.
-private func describeTimings(_ values: [Int]) -> String {
-  guard !values.isEmpty else {
-    return "none"
-  }
-  let sorted = values.sorted()
-  let median =
-    sorted.count.isMultiple(of: 2)
-    ? (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
-    : sorted[sorted.count / 2]
-  return "n=\(values.count) min=\(sorted.first!) median=\(median) max=\(sorted.last!)"
-}
-
-extension XCUIElement {
-  /// The middle of this element, as a point the system can touch.
-  var centre: XCUICoordinate {
-    coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
-  }
-
-  /// A finger's tap: a touch that *lasts*, rather than `tap()`'s zero-dwell one.
-  ///
-  /// Measured (F1, `docs/tasks/F1/dwell-probe.md`): `tap()` puts touch down and touch
-  /// up inside a single frame, and the hosted controls on a screen with much mounted on
-  /// it almost never take it - 0/12 and 1/12 presses moved `switch-uncontrolled`'s own
-  /// native `value:` at zero dwell, calm and loaded, while the same instant tap reached
-  /// the React Native `Pressable` beside it 3/3, so the touch path was alive. It is
-  /// *nearly* never, not never: the base `main` run at 23:15Z had a zero-dwell tap flip
-  /// that Switch on its first try and lose only the second, and X6 saw 10/10 green with
-  /// `tap()`. The drop is intermittent, which is exactly why a check that asserts after
-  /// one un-witnessed press could pass for months and then fail 11 runs in a row.
-  ///
-  /// How much is mounted matters as much as the shape: 0.03 s delivers 12/12 on the
-  /// Host screen and 1/12 on the 200-switch one. So this is not "SwiftUI ignores short
-  /// touches" - it is a recogniser that stops seeing the touch when the screen is busy,
-  /// and a person's quick tap lives in that band. That product question is in the
-  /// report; this helper's job is only to make the suite ask the same question every
-  /// time, and 0.15 s is the shortest shape with no observed losses.
-  ///
-  /// It is also the honest gesture for the refusal assertions (a disabled Button, a
-  /// disabled Picker): on a screen whose instant taps are usually dropped, "nothing
-  /// happened" was not evidence that the control refused the touch.
-  func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
-    centre.fingerTap(duration: duration)
-  }
-
-  /// A point a fraction of the way across this element, vertically centred.
-  ///
-  /// A segmented control needs it: `centre` is always the middle segment, and
-  /// proving that a segment *other* than the middle one answers a touch is half
-  /// of what the check is for. Fractions stay away from the edges, where the
-  /// rounded end caps and a possible 1 pt divider between segments live.
-  func atFraction(_ dx: CGFloat, dy: CGFloat = 0.5) -> XCUICoordinate {
-    coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy))
-  }
-
-  /// Press on the thumb and drag it along the track to a fraction of it.
-  ///
-  /// The start has to be where the thumb actually is. On iOS a SwiftUI Slider
-  /// ignores a touch that lands anywhere else on the track: measured in this
-  /// suite, presses at 0.1, 0.2, 0.25, 0.75 of the track and a tap on it each
-  /// reported nothing at all - no `onSlidingStart`, no `onValueChange`, no value
-  /// - while one drag that began on the thumb reported the start, forty changes
-  /// and the completion. A person grabs the thumb too. (Compose's Slider does
-  /// answer a touch on the track, which is why `scripts/real-input/android.mjs`
-  /// can start its drags at a quarter of the way along.)
-  ///
-  /// - Parameters `atValue`/`toFraction`: where to press, as a Slider value, and
-  ///   where to release, as a fraction of the track - both 0 being the left edge.
-  func dragFromThumb(atValue: Double, toFraction: CGFloat, hold: TimeInterval = 0.3) {
-    let inset = RealInputTests.thumbInset
-    let thumb = CGFloat(atValue)
-    let start = coordinate(
-      withNormalizedOffset: CGVector(dx: min(max(inset + thumb * (1 - 2 * inset), 0.05), 0.95), dy: 0.5)
-    )
-    let end = coordinate(withNormalizedOffset: CGVector(dx: toFraction, dy: 0.5))
-    // The hold is short because iOS clamps it to about three seconds anyway, and
-    // long enough that the control must treat this as a drag, not a tap.
-    start.press(forDuration: hold, thenDragTo: end)
-  }
 
   // MARK: - S6b: the Form screen
 
@@ -5777,6 +5685,99 @@ extension XCUIElement {
     let blue = CGFloat(pixel[2]) / 255
     return red * 0.299 + green * 0.587 + blue * 0.114
   }
+}
+
+/// A check could not continue because something it needs is not there at all.
+/// `continueAfterFailure = false` already ends the test at the first failed
+/// assertion; this keeps the case where an element is missing honest instead of
+/// letting the next assertion run against nothing.
+private struct RealInputCheckAborted: Error {
+  let identifier: String
+}
+
+/// A short summary of a list of millisecond timings: min, median, max, count.
+///
+/// Median rather than mean because a handful of slow presses is what matters here and
+/// a mean would hide them in the middle of a mostly-fast run.
+private func describeTimings(_ values: [Int]) -> String {
+  guard !values.isEmpty else {
+    return "none"
+  }
+  let sorted = values.sorted()
+  let median =
+    sorted.count.isMultiple(of: 2)
+    ? (sorted[sorted.count / 2 - 1] + sorted[sorted.count / 2]) / 2
+    : sorted[sorted.count / 2]
+  return "n=\(values.count) min=\(sorted.first!) median=\(median) max=\(sorted.last!)"
+}
+
+extension XCUIElement {
+  /// The middle of this element, as a point the system can touch.
+  var centre: XCUICoordinate {
+    coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+  }
+
+  /// A finger's tap: a touch that *lasts*, rather than `tap()`'s zero-dwell one.
+  ///
+  /// Measured (F1, `docs/tasks/F1/dwell-probe.md`): `tap()` puts touch down and touch
+  /// up inside a single frame, and the hosted controls on a screen with much mounted on
+  /// it almost never take it - 0/12 and 1/12 presses moved `switch-uncontrolled`'s own
+  /// native `value:` at zero dwell, calm and loaded, while the same instant tap reached
+  /// the React Native `Pressable` beside it 3/3, so the touch path was alive. It is
+  /// *nearly* never, not never: the base `main` run at 23:15Z had a zero-dwell tap flip
+  /// that Switch on its first try and lose only the second, and X6 saw 10/10 green with
+  /// `tap()`. The drop is intermittent, which is exactly why a check that asserts after
+  /// one un-witnessed press could pass for months and then fail 11 runs in a row.
+  ///
+  /// How much is mounted matters as much as the shape: 0.03 s delivers 12/12 on the
+  /// Host screen and 1/12 on the 200-switch one. So this is not "SwiftUI ignores short
+  /// touches" - it is a recogniser that stops seeing the touch when the screen is busy,
+  /// and a person's quick tap lives in that band. That product question is in the
+  /// report; this helper's job is only to make the suite ask the same question every
+  /// time, and 0.15 s is the shortest shape with no observed losses.
+  ///
+  /// It is also the honest gesture for the refusal assertions (a disabled Button, a
+  /// disabled Picker): on a screen whose instant taps are usually dropped, "nothing
+  /// happened" was not evidence that the control refused the touch.
+  func fingerTap(duration: TimeInterval = RealInputTests.pressDwell) {
+    centre.fingerTap(duration: duration)
+  }
+
+  /// A point a fraction of the way across this element, vertically centred.
+  ///
+  /// A segmented control needs it: `centre` is always the middle segment, and
+  /// proving that a segment *other* than the middle one answers a touch is half
+  /// of what the check is for. Fractions stay away from the edges, where the
+  /// rounded end caps and a possible 1 pt divider between segments live.
+  func atFraction(_ dx: CGFloat, dy: CGFloat = 0.5) -> XCUICoordinate {
+    coordinate(withNormalizedOffset: CGVector(dx: dx, dy: dy))
+  }
+
+  /// Press on the thumb and drag it along the track to a fraction of it.
+  ///
+  /// The start has to be where the thumb actually is. On iOS a SwiftUI Slider
+  /// ignores a touch that lands anywhere else on the track: measured in this
+  /// suite, presses at 0.1, 0.2, 0.25, 0.75 of the track and a tap on it each
+  /// reported nothing at all - no `onSlidingStart`, no `onValueChange`, no value
+  /// - while one drag that began on the thumb reported the start, forty changes
+  /// and the completion. A person grabs the thumb too. (Compose's Slider does
+  /// answer a touch on the track, which is why `scripts/real-input/android.mjs`
+  /// can start its drags at a quarter of the way along.)
+  ///
+  /// - Parameters `atValue`/`toFraction`: where to press, as a Slider value, and
+  ///   where to release, as a fraction of the track - both 0 being the left edge.
+  func dragFromThumb(atValue: Double, toFraction: CGFloat, hold: TimeInterval = 0.3) {
+    let inset = RealInputTests.thumbInset
+    let thumb = CGFloat(atValue)
+    let start = coordinate(
+      withNormalizedOffset: CGVector(dx: min(max(inset + thumb * (1 - 2 * inset), 0.05), 0.95), dy: 0.5)
+    )
+    let end = coordinate(withNormalizedOffset: CGVector(dx: toFraction, dy: 0.5))
+    // The hold is short because iOS clamps it to about three seconds anyway, and
+    // long enough that the control must treat this as a drag, not a tap.
+    start.press(forDuration: hold, thenDragTo: end)
+  }
+
 }
 
 extension XCUICoordinate {
