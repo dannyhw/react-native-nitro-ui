@@ -17,8 +17,10 @@ sizing-cache entry.
 `CircularWavyProgressIndicator` — both **stable** in material3 1.5.0-beta02 (no
 opt-in marker anywhere in `WavyProgressIndicatorKt`) — and `LoadingIndicator` /
 `ContainedLoadingIndicator`, which **are** `@ExperimentalMaterial3ExpressiveApi`
-and sit behind one `@OptIn` on one private composable, the only one in the
-library. iOS has no wavy indicator and no morphing shape: it draws the flat bar
+and sit behind one `@OptIn` on one private composable — the library's only
+`ExperimentalMaterial3ExpressiveApi` opt-in (Dialog, BottomSheet, DatePicker,
+SearchField and Tooltip all opt into `ExperimentalMaterial3Api`). iOS has no wavy
+indicator and no morphing shape: it draws the flat bar
 or ring and a circular `ProgressView`, storing `appearance` / `contained`
 unpainted — the `trackColor` treatment, documented rather than faked.
 
@@ -33,7 +35,11 @@ because it draws the flat bar and the ring.
 `'loading'`, `'loading|contained'`. Only a *shape* change remounts the native
 view; `appearance` and `contained` re-measure in place through `nuiSizingKey` →
 `noteSizingKeyChanged()`. Widening the remount would pass the same tests for the
-wrong reason.
+wrong reason. Said plainly: the per-configuration **declared** fallback that an
+earlier draft of this round sketched was **not** built, because
+`NitroUiSizing.setFallback` is keyed per component, not per configuration — six
+keys, one fallback each. The new configurations are covered by poisoning the
+engine's cache entry for that key instead, which is what the sizing rows measure.
 
 **The row no size can settle.** A wavy ring and `loading` both measure 48 dp and
 both publish one semantics node with the same `ProgressBarRangeInfo`, so the paint
@@ -44,7 +50,8 @@ colour's presence on `contained` and its absence beside it.
 **Two notes.** (1) The probe caught a bug in my own test: `processColor()`'s
 output handed to `tintColor` is processed twice, so the bar drew the scheme's
 colour and the probe found none of the red it was asked for; a plain `#00ff00`
-`View` now rides in the probe's frame. (2) `loading` is the one `@OptIn`: at
+`View` now rides in the probe's frame. (2) `loading` is the one *Expressive*
+`@OptIn`: at
 material3 1.5.0 **stable** an experimental member can vanish at a minor without a
 deprecation cycle, and the break compiles red in that one file.
 
@@ -52,14 +59,15 @@ deprecation cycle, and the break compiles red in that one file.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1818 tests / 71 suites | `e18a547f0973` | 2 m 39 s | start 5.3 / med 4.9 / max 6.0 |
-| `harness:ios` | **PASS** | 448 tests / 25 suites + isolated 4 tests / 2 suites | `e18a547f0973` (ios tree) | 10 m 51 s | start 6.2 / med 4.1 / max 6.6 |
-| `harness:android` | **PASS** | 498 tests / 25 suites + isolated 4 tests / 2 suites | `e18a547f0973` (android tree) | 15 m 07 s | start 3.8 / med 3.0 / max 5.9 |
-| `real-input:ios` | **PASS** | — | `e18a547f0973` (ios tree) | 27 m 54 s | start 4.2 / med 5.3 / max 17.4 |
-| `real-input:android` | **PASS** | — | `e18a547f0973` (android tree) | 41 m 07 s | start 6.6 / med 3.0 / max 8.9 |
-| `harness:android:Progress` | stale | 18 tests / 1 suites | 6070e0c8701b (not this tree) | 16.8 s | start 5.1 / med 5.1 / max 5.1 |
+| `check` | **PASS** | 1819 tests / 71 suites | `5882b14889d3` | 2 m 43 s | start 4.5 / med 5.5 / max 7.1 |
+| `harness:ios` | **PASS** | 448 tests / 25 suites + isolated 4 tests / 2 suites | `5882b14889d3` (ios tree) | 10 m 49 s | start 5.9 / med 5.5 / max 9.8 |
+| `harness:android` | **PASS** | 499 tests / 25 suites + isolated 4 tests / 2 suites | `5882b14889d3` (android tree) | 15 m 05 s | start 6.4 / med 3.6 / max 13.4 |
+| `real-input:ios` | stale | — | e18a547f0973 (not this tree) | 27 m 54 s | start 4.2 / med 5.3 / max 17.4 |
+| `real-input:android` | stale | — | e18a547f0973 (not this tree) | 41 m 07 s | start 6.6 / med 3.0 / max 8.9 |
+| `harness:android:Progress` | **PASS** | 19 tests / 1 suites | `5882b14889d3` (android tree) | 17.0 s | start 6.5 / med 6.8 / max 6.8 |
+| `harness:android:Progress:--background` | stale | — | 2ac53e423459 (not this tree) | 1.2 s | start 9.4 / med 9.4 / max 9.4 |
 | `harness:ios:Progress` | stale | 17 tests / 1 suites | 6070e0c8701b (not this tree) | 15.8 s | start 3.2 / med 5.1 / max 5.1 |
-| `real-input:android:--control:hosted-slider` | **PASS** | — | `e18a547f0973` (android tree) | 8 m 31 s | start 2.1 / med 3.0 / max 6.9 |
+| `real-input:android:--control:hosted-slider` | stale | — | e18a547f0973 (not this tree) | 8 m 31 s | start 2.1 / med 3.0 / max 6.9 |
 
 `need --for review`: need: review is satisfied on this code tree.
 
@@ -112,10 +120,12 @@ re-run (`E1`, `G17`, `X18`, `E3`).
   ProgressModelTest.kt:194`, `91 tests completed, 1 failed`.
 - **Not reddened, said plainly:** the same off-window-rule mutation on **Android**
   stayed green, and removing only `refreshAnimationReport()` from iOS's `onDropView`
-  stayed green. Both platforms have a second belt for that invariant (Android's
-  disposed composition answers `false`; iOS's off-window `drawnValue` is already
-  determinate), so the animation red proof above is the iOS one, from removing the
-  rule itself rather than one half of it.
+  stayed green. Both platforms have a second belt for that invariant: on Android
+  it is `model.reset()` in `NitroComposeHost.prepareForRecycle` that clears
+  `inWindow` — `drop()` never touches the model, so the disposed composition is
+  not the belt — and on iOS the off-window `drawnValue` is already determinate.
+  So the animation red proof above is the iOS one, from removing the rule itself
+  rather than one half of it.
 
 ## Files changed
 
@@ -188,3 +198,29 @@ Taken on the lease (`E4-h377u`) by the CONTRIBUTING recipe: a scratch
 (killed), `debug_http_host` written and `adb reverse tcp:8293` added (reverse
 removed; the preference already read `localhost:8293` from the harness run and was
 left as found), and `RCT_jsLocation` deleted afterwards because it was unset before.
+
+## Fix round 1
+
+**Sizing id.** `useSizingId(sizingKey)` minted a second id when `appearance` or
+`contained` moved under a view keyed on `shape` alone, so the first id's engine
+entry was never dropped. It is `useSizingId(shape)`; the re-measure still rides
+`noteSizingKeyChanged()` alone. Red: a new row moves `appearance` then `contained`
+and expects one mint -> `Expected: 1 / Received: 2` at
+`src/__tests__/useSizingId.test.tsx:378`.
+
+**Off-window wave.** material3 defaults a determinate wave's `waveSpeed` to the
+wavelength and runs `infiniteRepeatable` while attached, so the off-window swap
+animated a wave nobody could see. `ProgressModel.waveSpeed` now hands `0.dp` when
+`!inWindow`, and `isAnimating` counts an in-window wavy indicator: Material's
+determinate wave travels, and the harness comment says so. Red:
+`ProgressModelTest.kt:111` (default getter) and `:128` (old rule), one failure of
+93 each. The new detach/attach probe row is that suite's only red with the
+`inWindow` gate removed (`expected true to be false`,
+`example/__tests__/Progress.harness.tsx:1844`), 19/19 restored. `reset()` clears
+`animating` itself, so an unmount cannot see the detach gate.
+
+**Claims.** Only-`@OptIn` is now only-`ExperimentalMaterial3ExpressiveApi` (docs,
+changeset); the belt is `model.reset()` in `prepareForRecycle`, not a disposed
+composition. Stale comment, `sizingKey`/handle docs, the `circular ->` indent and
+fallback wording fixed. Gates re-run green at `5882b14889d3`; the
+`harness:android:Progress:--background` row is my mistyped argument, not a run.
