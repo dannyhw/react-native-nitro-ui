@@ -4,6 +4,7 @@ import { AssetRegistry, NativeModules } from 'react-native';
 
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
 import { Button } from '../components/Button/Button';
+import { resetAndroidIconSourceForTests } from '../iconSource';
 
 /**
  * Wrapper-level tests for the Button's `nuiSizingKey` (task G10, closing G2's
@@ -167,6 +168,9 @@ describe('Button · sizing key', () => {
     const star = register('star_24px', 'xml');
     const notAnIcon = register('photo', 'png');
     try {
+      // The dev-server origin is read once and kept, the way React Native keeps
+      // it; this suite has only just installed the `SourceCode` it will find.
+      resetAndroidIconSourceForTests();
       const withShare = await render(
         <Button
           title="Save"

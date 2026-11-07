@@ -164,8 +164,8 @@ release build it becomes an ordinary drawable resource with the name Metro
 derives from its path — `src/assets/icons/share.xml` ships as
 `src_assets_icons_share`.
 
-A TypeScript project needs an ambient declaration for the import, the same one
-an app writes for its images:
+A `require` needs nothing. An app that prefers `import` over `require` needs the
+ambient declaration it already writes for its images:
 
 ```ts
 // react-native-xml.d.ts

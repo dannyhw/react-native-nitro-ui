@@ -75,13 +75,22 @@ export interface AndroidIconEnv {
  * Where the JS bundle was served from, in the form an asset URL needs.
  *
  * React Native reads it off `SourceCode` the same way (`getDevServerURL` in
- * `Libraries/Image/resolveAssetSource.js`) and caches the answer; `assets://`
- * and a `file://` bundle have no dev server, and `null` is that answer. It is a
- * TurboModule rather than a root export, hence `NativeModules` — and read
- * lazily, because importing this module must not touch a native module: the
- * unit tests run it on Node.
+ * `Libraries/Image/resolveAssetSource.js`) and, like it, this remembers the
+ * answer: the bundle is not served from somewhere else halfway through a
+ * session, and `resolveAndroidIcon` runs on every render of every control that
+ * takes an icon, so re-asking would be a synchronous `getConstants()` per
+ * Button per render. `assets://` and a `file://` bundle have no dev server, and
+ * `null` is that answer - cached too, because it is an answer and not a failure.
+ * It is a TurboModule rather than a root export, hence `NativeModules` — and
+ * read lazily, because importing this module must not touch a native module:
+ * the unit tests run it on Node.
  */
+let cachedDevServerOrigin: string | null | undefined;
+
 function devServerOriginFromNative(): string | null {
+  if (cachedDevServerOrigin !== undefined) {
+    return cachedDevServerOrigin;
+  }
   const sourceCode = (
     NativeModules as unknown as {
       SourceCode?: {
@@ -95,7 +104,8 @@ function devServerOriginFromNative(): string | null {
   // Same expression React Native uses: the origin of the URL the bundle came
   // from, with its trailing slash, and nothing else is a dev server.
   const match = scriptURL?.match(/^https?:\/\/.*?\//);
-  return match != null ? match[0] : null;
+  cachedDevServerOrigin = match != null ? match[0] : null;
+  return cachedDevServerOrigin;
 }
 
 /**
@@ -201,9 +211,15 @@ function warnAndroidIconSource(detail: string): void {
   );
 }
 
-/** Forget the warning history. For tests, which must each see a fresh console. */
-export function resetAndroidIconSourceWarningsForTests(): void {
+/**
+ * Forget what this module remembers: the warning history and the dev server.
+ *
+ * For tests, which must each see a fresh console and, in the sizing-key suite,
+ * a `SourceCode` that was only just installed.
+ */
+export function resetAndroidIconSourceForTests(): void {
   warnedSources.clear();
+  cachedDevServerOrigin = undefined;
 }
 
 /**
