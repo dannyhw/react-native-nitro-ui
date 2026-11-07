@@ -34,7 +34,8 @@ class ButtonModelTest {
         tintColor = 0x11223344
         accessibilityLabel = "Save the file"
         systemImage = "square.and.arrow.down"
-        sizingKey = "text|large|square.and.arrow.down|Save"
+        androidIcon = "share"
+        sizingKey = "text|large|square.and.arrow.down|share|Save"
       }
 
     model.reset()
@@ -47,6 +48,13 @@ class ButtonModelTest {
     assertEquals(null, model.tintColor)
     assertEquals(null, model.accessibilityLabel)
     assertEquals(null, model.systemImage)
+    // `androidIcon` is the one icon prop a recycled row is guaranteed to re-send
+    // with a *different* value - a list row's glyph is per item - so a forgotten
+    // reset here shows the previous row's name until React's write lands. The
+    // bitmap that goes with it cannot be built on the JVM at all (see
+    // `NitroUiIconTest`), so what it is cleared to is asserted on the device, in
+    // `example/__tests__`'s recycle rule for a Button that changes `androidIcon`.
+    assertEquals(null, model.androidIcon)
     assertEquals("", model.sizingKey)
   }
 

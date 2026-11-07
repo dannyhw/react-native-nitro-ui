@@ -16,6 +16,11 @@
  * fails `check` when a shipped file no longer matches its hash - so a hand edit to a
  * coordinate cannot pass - or when a drawable appears that this list did not write.
  *
+ * `EXAMPLE_ICONS` is the same promise for the example app's test fixtures (G19 round
+ * 2): the harnesses load those files and the README screenshots are taken of them, so
+ * they are Google's glyphs too, recorded under `exampleFiles` rather than `files`
+ * because they are not shipped in the package.
+ *
  * Adding an icon: add a row to `ICONS`, run this script, and use the resource through
  * `nitroUiIcon` (`android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiIcons.kt`).
  * The variant is Material Symbols Outlined, weight 400, fill 0, grade 0, 24 px (the
@@ -44,6 +49,60 @@ const LICENSE_FILE = 'licenses/material-symbols/LICENSE';
 
 /** The committed record of what was written. */
 const LOCK_FILE = 'scripts/icons/material-symbols.lock.json';
+
+/**
+ * The same set's files, fetched for the **example app** instead of the library.
+ *
+ * A harness that loads a hand-typed star is a harness that asserts on somebody's copy
+ * of a glyph, and the screenshots in `docs/images/` are taken of it (G19 round 2).
+ * These three are byte-for-byte Google's, like the library's own, and are recorded in
+ * the lock's `exampleFiles` — a separate list because none of them ships in the
+ * package: `scripts/__tests__/android-icons.test.js` hash-checks both lists and
+ * requires every other `.xml` in those two folders to be declared there with the
+ * reason it cannot be upstream.
+ *
+ * The example's `star_24px.xml` and `nitroui_test_star.xml` are the same upstream file
+ * twice on purpose: one is `require`d and carried by Metro (the development half of
+ * `androidIcon`), the other is compiled into the APK (the release half), and the pair
+ * is what lets a test compare the two roads to one glyph.
+ */
+const EXAMPLE_ICONS = [
+  {
+    out: 'example/src/assets/icons/star_24px.xml',
+    symbol: 'star',
+    style: 'materialsymbolsoutlined',
+    file: 'star_24px.xml',
+    why: 'the Metro asset the Button and Menu harnesses require, and the file docs/components/button.md shows an app requiring',
+  },
+  {
+    out: 'example/src/assets/icons/share_24px.xml',
+    symbol: 'share',
+    style: 'materialsymbolsoutlined',
+    file: 'share_24px.xml',
+    why: 'a second upstream file, whose path fills the same 960-unit viewport differently from star: two icons in one row prove an icon slot comes from the size ladder and not from the artwork',
+  },
+  {
+    out: 'example/src/assets/icons/close_24px.xml',
+    symbol: 'close',
+    style: 'materialsymbolsoutlined',
+    file: 'close_24px.xml',
+    why: 'a 2 dp diagonal stroke, which is what shows up a glyph drawn at the wrong size: the sharpness case in example/__tests__/Button.harness.tsx measures it. Loaded by no other test, so its file arrives cold',
+  },
+  {
+    out: 'example/android/app/src/main/res/drawable/nitroui_test_close.xml',
+    symbol: 'close',
+    style: 'materialsymbolsoutlined',
+    file: 'close_24px.xml',
+    why: 'the same 2 dp glyph as a compiled drawable, so the release form and the development form of one glyph can be probed against each other at the same size',
+  },
+  {
+    out: 'example/android/app/src/main/res/drawable/nitroui_test_star.xml',
+    symbol: 'star',
+    style: 'materialsymbolsoutlined',
+    file: 'star_24px.xml',
+    why: "the resource-name form: the star above, compiled into the example APK, so a test can measure the release build's artwork against the development one",
+  },
+];
 
 /**
  * Every icon the library draws itself.
@@ -94,8 +153,20 @@ function targets() {
       url: rawUrl(`symbols/android/${icon.symbol}/${icon.style}/${icon.file}`),
       out: `${DRAWABLE_DIR}/${icon.resource}.xml`,
       icon,
+      example: false,
     })),
-    { url: rawUrl('LICENSE'), out: LICENSE_FILE, icon: null },
+    ...EXAMPLE_ICONS.map((icon) => ({
+      url: rawUrl(`symbols/android/${icon.symbol}/${icon.style}/${icon.file}`),
+      out: icon.out,
+      icon,
+      example: true,
+    })),
+    {
+      url: rawUrl('LICENSE'),
+      out: LICENSE_FILE,
+      icon: null,
+      example: false,
+    },
   ];
 }
 
@@ -110,6 +181,7 @@ async function download(url) {
 async function main() {
   const verify = process.argv.includes('--verify');
   const files = [];
+  const exampleFiles = [];
   const problems = [];
   for (const target of targets()) {
     const bytes = await download(target.url);
@@ -126,7 +198,7 @@ async function main() {
     }
     fs.mkdirSync(path.dirname(absolute), { recursive: true });
     fs.writeFileSync(absolute, bytes);
-    files.push({
+    (target.example ? exampleFiles : files).push({
       path: target.out,
       url: target.url,
       sha256: sha256(bytes),
@@ -155,13 +227,15 @@ async function main() {
     commit: COMMIT,
     license: 'Apache-2.0',
     files,
+    exampleFiles,
   };
   fs.writeFileSync(
     path.join(root, LOCK_FILE),
     `${JSON.stringify(lock, null, 2)}\n`
   );
   console.log(
-    `fetch-material-symbols: wrote ${files.length} files from ${REPO}@${COMMIT}`
+    `fetch-material-symbols: wrote ${files.length} library files and ` +
+      `${exampleFiles.length} example fixtures from ${REPO}@${COMMIT}`
   );
 }
 

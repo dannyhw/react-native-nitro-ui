@@ -64,6 +64,8 @@ namespace margelo::nitro::nitroui {
     void setTintColor(const std::variant<nitro::NullType, double>& tintColor) override;
     std::variant<nitro::NullType, std::string> getSystemImage() override;
     void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) override;
+    std::variant<nitro::NullType, std::string> getAndroidIcon() override;
+    void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) override;
     std::variant<nitro::NullType, std::string> getTestID() override;
     void setTestID(const std::variant<nitro::NullType, std::string>& testID) override;
     std::variant<nitro::NullType, std::string> getAccessibilityLabel() override;
@@ -80,6 +82,8 @@ namespace margelo::nitro::nitroui {
   public:
     // Methods
     NitroUiButtonSize measureContent() override;
+    void nuiTestPixelProbe(double color) override;
+    std::string nuiTestPixelReport() override;
 
   private:
     jni::global_ref<JHybridNitroUiButtonSpec::JavaPart> _javaPart;

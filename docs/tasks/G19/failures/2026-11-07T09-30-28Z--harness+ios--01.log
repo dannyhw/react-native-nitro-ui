@@ -1,0 +1,196 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-07T09:30:28.340Z on code tree `9a5bf93fae0e` at HEAD `9feb429` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 765657 ms
+- Load: start 6.50, end 187.34, median 12.34, max 187.34
+- Device: ios
+- Full log: `task/G19-android-icon-iconbutton/harness+ios-2026-11-07T09-30-27.739Z.log` (<store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-07T09-30-27.739Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● Console`
+- `● androidIcon · an icon the app imports (D43) › draws the shipped drawable as sharply as the imported one, at the top rung`
+- `Error: Promise created`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-07T09-30-27.739Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G19-3ttma                G19          both              pair-b
+  |   E5-5qnlx                 E5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 187.34 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 281 — the rest is in the full log above)
+
+```
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114082:24)
+      at anonymous (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115460:22)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #3863, created 29989ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at ?anon_0_ (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114086:24)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26509:14)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88389:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27653)
+      at Promise (address at InternalBytecode.js:1:27764)
+      at construct (native)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88387:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114082:24)
+      at anonymous (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115460:22)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+Summary of all failing tests
+FAIL __tests__/Button.harness.tsx
+  ● androidIcon · an icon the app imports (D43) › draws the shipped drawable as sharply as the imported one, at the top rung
+
+    Test timed out after 30000ms: androidIcon · an icon the app imports (D43) draws the shipped drawable as sharply as the imported one, at the top rung
+
+    Pending promises at timeout: 3
+
+    Promise #2957, created 15072ms after test start:
+      Error: Promise created
+
+      at createPromiseStack (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at probeUntilDrawn (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115436:36)
+      at anonymous (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115789:40)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #3862, created 29989ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114082:24)
+      at anonymous (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115460:22)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #3863, created 29989ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at ?anon_0_ (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114086:24)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26509:14)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88389:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27653)
+      at Promise (address at InternalBytecode.js:1:27764)
+      at construct (native)
+      at construct (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88387:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:114082:24)
+      at anonymous (http:/localhost:8291/__tests__/Button.harness.bundle/&modulesOnly=true&platform=ios:115460:22)
+      at asyncGeneratorStep (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8291/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+
+
+Test Suites: 1 failed, 1 skipped, 23 passed, 24 of 25 total
+Tests:       1 failed, 3 skipped, 463 passed, 467 total
+Snapshots:   0 total
+Time:        702.548 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9a5bf93fae0e, 17 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 17.96/14.77 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-07T09-30-27.739Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Booting iOS simulator iPhone 17...
+HARNESS Runner ios ready
+
+HARNESS Shutting down iOS simulator iPhone 17...
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        60.258 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 765.7 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+ios-2026-11-07T09-30-27.739Z.log (4 probe(s))
+
+```

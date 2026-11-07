@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("tintColor", &HybridNitroUiMenuSpec::setTintColor);
       prototype.registerHybridGetter("systemImage", &HybridNitroUiMenuSpec::getSystemImage);
       prototype.registerHybridSetter("systemImage", &HybridNitroUiMenuSpec::setSystemImage);
+      prototype.registerHybridGetter("androidIcon", &HybridNitroUiMenuSpec::getAndroidIcon);
+      prototype.registerHybridSetter("androidIcon", &HybridNitroUiMenuSpec::setAndroidIcon);
       prototype.registerHybridGetter("hasPrimaryAction", &HybridNitroUiMenuSpec::getHasPrimaryAction);
       prototype.registerHybridSetter("hasPrimaryAction", &HybridNitroUiMenuSpec::setHasPrimaryAction);
       prototype.registerHybridGetter("testID", &HybridNitroUiMenuSpec::getTestID);

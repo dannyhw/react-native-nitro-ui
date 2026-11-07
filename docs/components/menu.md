@@ -44,9 +44,10 @@ the items are data, never child views.
 | `title`              | `string`                              | required   | The trigger's label — and the default accessibility label.              |
 | `group`              | `MenuGroup`                           | required   | The items: `actions` then `sections`, as data.                          |
 | `variant`            | `'filled' \| 'tonal' \| 'outlined' \| 'text' \| 'elevated'` | `'filled'` | Button's variants, on the trigger only.                    |
-| `size`               | `'small' \| 'medium' \| 'large'`      | `'medium'` | Button's sizes, on the trigger only.                                    |
+| `size`               | `'small' \| 'medium' \| 'large' \| 'xlarge' \| 'xxlarge'` | `'medium'` | Button's five rungs, on the trigger only.               |
 | `disabled`           | `boolean \| undefined`                | `false`    | Disables the trigger. An open menu closes — Android; see [Open and close](#open-and-close). |
 | `systemImage`        | `string \| undefined`                 | —          | **iOS only.** Leading SF Symbol on the trigger.                         |
+| `androidIcon`        | `AndroidIconProp \| undefined`        | —          | **Android only.** Leading glyph on the trigger: a `require`'d `.xml` or a drawable name. [The trigger's glyph](#the-triggers-glyph). |
 | `tintColor`          | `ColorValue \| undefined`             | platform   | SwiftUI `.tint()` / the variant's container colour.                     |
 | `onSelect`           | `((id: string) => void) \| undefined` | —          | One call per picked row, with that row's `id`; on a pick it fires **before** `onClose`. |
 | `onOpen`             | `(() => void) \| undefined`           | —          | **Android only** — iOS never fires it: [Open and close](#open-and-close). |
@@ -108,6 +109,7 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 | Containment        | **required** (`needsContainment`) — the menu is the system's presentation | n/a — the popup is the composition's own window            |
 | Popup              | SwiftUI's own menu, presented by the system                          | its own `PopupWindow`, anchored to the trigger's own box          |
 | Trigger            | Button's label, Button's `.buttonStyle`, `.menuIndicator(.hidden)`    | Button's M3 button (`NitroUiM3Button`), one semantics node        |
+| Trigger glyph      | `systemImage` → `Image(systemName:)`, `androidIcon` accepted and ignored | `androidIcon` → the same icon slot `Button` draws; on the **leading half** of a split trigger |
 | Rows               | `Button`, `Toggle` (a `checked` row), `Section`, `Menu` inside `Menu` | `DropdownMenuItem(shape = MenuDefaults.itemShape(…))`, `CheckableDropdownMenuItem` (a `checked` row) |
 | Groups             | a `Section` is an inline `UIMenu`, set off by UIKit's separator      | each section, each submenu and each run of top-level actions is a `DropdownMenuGroup`, spaced by `MenuDefaults.GroupSpacing` and shaped by `MenuDefaults.groupShape` — no dividers |
 | Submenu            | **nests** — a real second-level menu                                 | renders its items **inline, as a group** titled with the submenu's title |
@@ -235,6 +237,38 @@ spec rather than a duration written here.
 `action`/`plain`, because on Android the second container really does make the box
 wider — see [Sizing](#sizing).
 
+## The trigger's glyph
+
+`androidIcon` is `Button`'s prop, on this trigger, with every rule that prop has — the
+file format, where Material Symbols come from, the `@expo/material-symbols` option, the
+drawable-name form and the failure table are all in `docs/components/button.md`,
+"Android icons". What is Menu's own is where the glyph lands:
+
+- **iOS never draws it.** `systemImage` is iOS's glyph, exactly as it is on `Button`;
+  `androidIcon` is accepted, stored (so a handle reads back what React sent) and never
+  painted. Measured: an icon'd Menu and a plain Menu are the same box on iOS.
+- **The plain trigger** puts it in the slot Material's `Button` uses — same ladder, same
+  painter, same `hasStartIcon` padding, because `Menu`'s trigger and `Button` are one
+  composition (`NitroUiM3Button`). A glyph that cannot be resolved therefore reserves
+  nothing here either: the control is exactly its no-glyph self.
+- **A split trigger puts it on the leading half**, where the label is; the trailing half
+  stays the chevron. The glyph is the same size as the plain trigger's at that rung,
+  because the ladder indexes it by `size`, not by which trigger got composed. The half's
+  own padding is Material's `leadingButtonContentPaddingFor`, which has no
+  `hasStartIcon` form, so the control grows by the glyph plus its spacing rather than
+  re-inseting its leading edge.
+- **`size` reaches the trigger**, both new rungs included. `MenuProps.size` has always
+  been `ButtonSize`, so `xlarge` type-checked while the wrapper's own list still had
+  three entries and rewrote it to `medium` — a 48 dp box answering to a name whose box
+  is 96. `Menu.harness.tsx` ("lays the five rungs out in order, and reaches the top
+  two") measures the five boxes, and `src/__tests__/menuSizingKey.test.tsx` pins the
+  rung that reaches native.
+
+The boxes are the numbers `Button` prints for the same configuration, because it is the
+same composition; the harness compares the two directly rather than quoting a constant
+(`Menu.harness.tsx`, "takes the glyph the Button takes, into the box the Button takes").
+The measured run for this round is in `docs/tasks/G19-android-icon-iconbutton.report.md`.
+
 ## Inside a `Host`
 
 `Menu` is hostable: inside `<Host>` it is composed by the Host's own composition
@@ -275,15 +309,15 @@ guard is proven able to catch a moved popup, and the sentence above stays the re
 ## Sizing
 
 `intrinsic`, and the box is the trigger's: `group` never changes it. The sizing key is
-Button's with one field added — `variant|size|action|systemImage|title`, where `action`
-is `'action'` when `primaryAction` is set and `'plain'` when it is not — for the same
-reason (`docs/components/button.md`). `disabled` and `tintColor` repaint; `group` is
+Button's with one field added — `variant|size|action|systemImage|androidIcon|title`,
+where `action` is `'action'` when `primaryAction` is set and `'plain'` when it is not —
+for the same reason (`docs/components/button.md`). `disabled` and `tintColor` repaint; `group` is
 deliberately not in the key, because the items live in a popup and free-form text in a
 key fragments the cache. `action` is in it because on Android it chooses the *layout*: a
 split button is two containers and a gap, so it is wider than the single button it
 replaces, and the two configurations cannot share a cache entry. iOS ignores the field —
 its `primaryAction` changes a gesture, not a box — and pays one extra cache entry per
-`(variant, size, systemImage, title)` pair for the simpler key.
+`(variant, size, systemImage, androidIcon, title)` pair for the simpler key.
 
 ### Measured
 
@@ -430,7 +464,10 @@ that list with VoiceOver and TalkBack remains a human pass.
 - **No submenus on Android.** A submenu's items appear inline as a group, in place.
   Ask for a submenu only where that is acceptable, and expect a flat list there — the
   same kind of documented split as `Picker`'s iOS-only `wheel`.
-- **`systemImage` is iOS-only** on both the trigger and the rows, as it is on `Button`.
+- **`systemImage` is iOS-only** on both the trigger and the rows, as it is on `Button`,
+  and **`androidIcon` is Android-only** on the trigger — the two halves of one control's
+  glyph, each ignored by the platform it does not name. A Menu with a glyph on both
+  platforms passes both props and no `Platform.select`.
 - **`primaryAction` is drawn differently on each platform, and it is a size statement on
   one of them.** iOS keeps one button and a gesture per job; Android draws two containers
   and is wider for it. Neither fires `onOpen` from the action half. What the iOS half does
