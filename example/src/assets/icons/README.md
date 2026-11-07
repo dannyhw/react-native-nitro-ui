@@ -10,7 +10,7 @@ carried by Metro.
 | `share_24px.xml`, `star_24px.xml` | Google's [Material Symbols][src], Android vector-drawable format, unedited. Apache 2.0, © Google. Not hand-typed (D43).       |
 | `not-a-vector.xml`                | Written for this repo. Well-formed XML that is not a vector drawable, so the parser has something wrong to be tested against. |
 
-The two real files are read by `android/src/test/.../NitroUiVectorDrawableTest.kt`
+The two real files are read by `android/src/test/java/com/margelo/nitro/nitroui/NitroUiVectorDrawableTest.kt`
 — the same bytes the emulator loads over Metro — and their digests are:
 
 ```
