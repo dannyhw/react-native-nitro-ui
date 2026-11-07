@@ -190,6 +190,7 @@ describe('coverage', () => {
       'Dialog',
       'Menu',
       'Picker',
+      'Popover',
       'Progress',
       'SearchField',
       'SegmentedControl',
@@ -1368,11 +1369,12 @@ describe('the a11y presentation cases', () => {
   const withDialog = (patch) =>
     repoManifests().map((m) => (m.name === 'Dialog' ? { ...m, ...patch } : m));
 
-  it('covers Dialog, BottomSheet and Tooltip, and only through their real-input checks', () => {
+  it('covers Dialog, BottomSheet, Tooltip and Popover, and only through their real-input checks', () => {
     expect(A11Y_PRESENTATIONS.map((entry) => entry.component)).toEqual([
       'Dialog',
       'BottomSheet',
       'Tooltip',
+      'Popover',
     ]);
     expect(checkA11yTable(repoManifests(), read)).toEqual([]);
   });
