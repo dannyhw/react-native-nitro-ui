@@ -43,6 +43,7 @@ import {
   androidDrawableNameForAsset,
   type AndroidIconProp,
   androidIconDrawableName,
+  androidIconResourceName,
   androidIconUrl,
   metroAssetUrl,
   resetAndroidIconSourceForTests,
@@ -152,10 +153,18 @@ describe('androidIcon · the release build', () => {
     );
   });
 
-  it('sends a bundled asset as that name, with no marker on it', () => {
+  /**
+   * The asset form carries the `res:` marker; the typed form does not.
+   *
+   * Round 1 sent this string bare. It cannot be bare any more: the same function
+   * that produced this name produces `__node_modules_expo_materialsymbols_star`
+   * for an asset hoisted out of a workspace root, and native cannot tell the two
+   * apart without being told which one it may look up without a second thought.
+   */
+  it("sends a bundled asset as that name, marked as the bundler's", () => {
     const id = registerVectorAsset({});
     const sent = withDev(false, () => resolveAndroidIcon(id));
-    expect(sent).toBe('src_assets_icons_share_24px');
+    expect(sent).toBe('res:src_assets_icons_share_24px');
     expect(androidIconUrl(sent ?? '')).toBeNull();
     expect(androidIconDrawableName(sent ?? '')).toBe(
       'src_assets_icons_share_24px'
@@ -177,7 +186,7 @@ describe('androidIcon · the release build', () => {
       resolveAndroidIcon(two),
     ]);
     expect(firstName).not.toBe(secondName);
-    expect(secondName).toBe('src_assets_icons_v2_share_24px');
+    expect(secondName).toBe('res:src_assets_icons_v2_share_24px');
   });
 
   it('keeps round 1 drawable names working, unchanged', () => {
@@ -186,9 +195,93 @@ describe('androidIcon · the release build', () => {
     expect(resolveAndroidIcon('share')).toBe('share');
     expect(androidIconUrl(resolveAndroidIcon('share') ?? '')).toBeNull();
   });
+
+  /**
+   * An asset whose path walks out of the project root, which is what a monorepo
+   * with hoisted `node_modules` hands Metro.
+   *
+   * `metro/src/Assets.js` builds `httpServerLocation` from the asset's folder
+   * relative to the project root, so an icon installed once at the root of a
+   * workspace is `/assets/../../node_modules/@expo/material-symbols` — and
+   * React Native's own name for it starts with underscores, because the `..`s
+   * survive as `_`s. That is a real name `aapt` accepted and `getIdentifier`
+   * finds, and it is not a name a developer would ever write, so round 1's
+   * "could this be a resource name?" gate refused it and a release build drew
+   * nothing — in exactly the setup `docs/components/button.md` recommends.
+   */
+  it("names a hoisted asset React Native's way, and marks it as the bundler's", () => {
+    const hoisted = {
+      httpServerLocation: '/assets/../../node_modules/@expo/material-symbols',
+      name: 'star',
+      type: 'xml',
+    };
+    const rnName = getAndroidResourceIdentifier(
+      hoisted as Parameters<typeof getAndroidResourceIdentifier>[0]
+    );
+    expect(androidDrawableNameForAsset(hoisted)).toBe(rnName);
+    expect(rnName).toBe('__node_modules_expo_materialsymbols_star');
+    // The reason the marker is needed: this passes no resource-name rule.
+    expect(/^[a-z]/.test(rnName)).toBe(false);
+
+    const id = registerVectorAsset({
+      httpServerLocation: hoisted.httpServerLocation,
+      name: hoisted.name,
+    });
+    const sent = withDev(false, () => resolveAndroidIcon(id));
+    expect(sent).toBe(`res:${rnName}`);
+    expect(androidIconUrl(sent ?? '')).toBeNull();
+    expect(androidIconDrawableName(sent ?? '')).toBe(rnName);
+    expect(androidIconResourceName(sent ?? '')).toBe(rnName);
+    // A bundler-derived name is not a typo to report: the app wrote a `require`,
+    // not a name, so the JS name rules have nothing to say about it.
+    expect(warnings).toEqual([]);
+  });
 });
 
 describe('androidIcon · the development build', () => {
+  /**
+   * The build type is where the bundle came from, not what `__DEV__` says.
+   *
+   * React Native itself decides by whether a server URL exists
+   * (`AssetSourceResolver.isLoadedFromServer`), and the two can disagree: JS Dev
+   * Mode off in the Expo Dev Launcher serves a `dev=false` bundle over Metro into
+   * a *debug* APK, which is `__DEV__ === false` with a dev server right there.
+   * Round 1 asked `__DEV__`, so that build resolved the drawable name — a file
+   * Metro never put in the APK — and drew no imported icon at all.
+   */
+  it('asks Metro for a dev=false bundle that Metro is serving', () => {
+    const id = registerVectorAsset({});
+    const sent = withDev(false, () =>
+      resolveAndroidIcon(id, {
+        devServerOrigin: DEV_ORIGIN,
+        deviceScale: 2,
+      })
+    );
+    expect(androidIconUrl(sent ?? '')).toBe(
+      'http://10.0.2.2:8081/src/assets/icons/share_24px.xml?platform=android&hash=a1b2c3d4'
+    );
+  });
+
+  /**
+   * …and the other way round, which is the half that costs a false warning.
+   *
+   * A debug build with the bundle *embedded* has no dev server and does have the
+   * drawable in the APK, so the name is the right answer and there is nothing to
+   * warn about. Round 1 warned "cannot reach the dev server" there, about a
+   * control whose icon was drawing fine.
+   */
+  it('names the drawable when the bundle is embedded, and says nothing', () => {
+    const id = registerVectorAsset({});
+    const sent = withDev(true, () =>
+      resolveAndroidIcon(id, {
+        devServerOrigin: null,
+        deviceScale: 2,
+      })
+    );
+    expect(sent).toBe('res:src_assets_icons_share_24px');
+    expect(warnings).toEqual([]);
+  });
+
   it('asks Metro for the file React Native refuses to load', () => {
     const id = registerVectorAsset({});
     const sent = resolveAndroidIcon(id, {

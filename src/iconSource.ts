@@ -38,16 +38,35 @@ export type AndroidIconProp = string | number | ImageURISource;
 /** The native string asks for a file to load. */
 const URL_PREFIX = 'url:';
 
+/** The native string asks for a drawable the *bundler* named. */
+const RESOURCE_PREFIX = 'res:';
+
 /**
  * The three forms as native sees them.
  *
- * `url:` is the only marker, and it cannot collide with the other form: an
- * Android resource name is `[a-z][a-z0-9_]*` and so can never contain a colon.
- * Leaving the prefix off is therefore the drawable-name form — which is exactly
- * what G19 round 1 sent, so a name keeps crossing the wire unchanged.
+ * Two markers, and neither can collide with the form it does not name: an Android
+ * resource name is `[a-z][a-z0-9_]*`, so it can never contain a colon and never
+ * starts with `res:` or `url:`.
+ *
+ * `url:` is the file Metro serves. `res:` is a drawable name that React Native
+ * derived from the asset's *path* rather than from what a developer typed, which
+ * matters because the derivation is not bound by what a hand-written name must
+ * look like: in a monorepo with hoisted `node_modules` the path walks up out of
+ * the project (`/assets/../../node_modules/...`) and the name comes out
+ * `__node_modules_expo_materialsymbols_star`. `aapt` accepted that file and
+ * `getIdentifier` finds it; a rule written for hand-typed names refuses it. So a
+ * `res:` name skips the name check on the way in — native looks it up as sent.
+ *
+ * Leaving both prefixes off is round 1's drawable-name form, unchanged, so an app
+ * that writes `androidIcon="share"` keeps crossing the wire exactly as before.
  */
 export function markAndroidIconUrl(url: string): string {
   return URL_PREFIX + url;
+}
+
+/** The drawable name inside a {@link markAndroidIconResource} string. */
+export function markAndroidIconResource(name: string): string {
+  return RESOURCE_PREFIX + name;
 }
 
 /** The URL inside a {@link markAndroidIconUrl} string, or `null` if it has none. */
@@ -55,9 +74,30 @@ export function androidIconUrl(value: string): string | null {
   return value.startsWith(URL_PREFIX) ? value.slice(URL_PREFIX.length) : null;
 }
 
-/** The drawable name inside a native `androidIcon` string. */
+/**
+ * A bundler-derived drawable name, or `null` if [value] is not one.
+ *
+ * This is what keeps the development warning honest: `warnAndroidIconName` checks
+ * the names an app *typed* (`Share Icon`, `24px`), and an asset id is not one of
+ * those. Hoisted out of a workspace root, an asset's own name fails those rules
+ * and is still exactly right.
+ */
+export function androidIconResourceName(value: string): string | null {
+  return value.startsWith(RESOURCE_PREFIX)
+    ? value.slice(RESOURCE_PREFIX.length)
+    : null;
+}
+
+/**
+ * The drawable name inside a native `androidIcon` string, marked or not.
+ *
+ * `''` for a URL, which is round 1's answer and means "there is no name in here".
+ */
 export function androidIconDrawableName(value: string): string {
-  return value.startsWith(URL_PREFIX) ? '' : value;
+  if (value.startsWith(URL_PREFIX)) {
+    return '';
+  }
+  return androidIconResourceName(value) ?? value;
 }
 
 /** `http://`, `https://`, `file://`, `content://`, `asset://` — anything with a scheme. */
@@ -229,6 +269,15 @@ export function resetAndroidIconSourceForTests(): void {
  * which is the prop being absent: the Button draws its no-icon self. The
  * rejected cases also say why, in development, because each of them is a call
  * site that looks like it should work.
+ *
+ * Which answer an asset gets is decided by **where the bundle came from**, not by
+ * `__DEV__` — the same thing React Native does when it asks
+ * `AssetSourceResolver.isLoadedFromServer`. The two are not the same question: JS
+ * Dev Mode off in the Expo Dev Launcher serves a `dev=false` bundle over Metro
+ * into a debug APK, and a debug build can embed its bundle too. Asking `__DEV__`
+ * got both wrong — the first drew no imported icon at all, because the drawable
+ * Metro never copied into the APK is not there to find, and the second warned
+ * about a dev server it had no use for.
  */
 export function resolveAndroidIcon(
   source: AndroidIconProp | null | undefined,
@@ -263,22 +312,18 @@ export function resolveAndroidIcon(
       return null;
     }
     const deviceScale = env.deviceScale ?? PixelRatio.get();
-    if (__DEV__) {
-      const origin =
-        env.devServerOrigin !== undefined
-          ? env.devServerOrigin
-          : devServerOriginFromNative();
-      if (origin != null) {
-        return markAndroidIconUrl(metroAssetUrl(asset, origin, deviceScale));
-      }
-      // No dev server to ask (an `assets://` bundle, say). The release answer is
-      // the only one left, and it is wrong — the file is not in the APK, so this
-      // resolves to the "not found" path and draws nothing.
-      warnAndroidIconSource(
-        `cannot reach the dev server for the asset at id ${source}`
-      );
+    const origin =
+      env.devServerOrigin !== undefined
+        ? env.devServerOrigin
+        : devServerOriginFromNative();
+    if (origin != null) {
+      return markAndroidIconUrl(metroAssetUrl(asset, origin, deviceScale));
     }
-    return androidDrawableNameForAsset(asset);
+    // No server to ask, so the bundle was embedded and Metro filed the file in
+    // the APK under a name of its own. There is nothing to warn about: this is
+    // the answer, and a name that is not in the table is native's to report, once
+    // (`NitroUiIconNames`), for both forms of the prop alike.
+    return markAndroidIconResource(androidDrawableNameForAsset(asset));
   }
 
   // A `{ uri }` source, as any `<Image>` accepts. The scheme decides which kind

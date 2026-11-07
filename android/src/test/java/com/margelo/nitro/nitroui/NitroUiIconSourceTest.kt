@@ -107,11 +107,45 @@ class NitroUiIconSourceTest {
     assertNull("and it is not a lookup either", parsed)
   }
 
+  /**
+   * A name React Native derived from an asset's *path*, which no rule for
+   * hand-typed names may judge.
+   *
+   * In a monorepo with hoisted `node_modules` — the layout `docs/components/button.md`
+   * points at when it offers `@expo/material-symbols` — Metro builds the asset's
+   * `httpServerLocation` relative to the project root and it walks *up*: `/assets/../../
+   * node_modules/@expo/material-symbols` (`metro/src/Assets.js:166-168`). React Native
+   * then names the drawable `__node_modules_expo_materialsymbols_star`, `aapt` files the
+   * copy under exactly that, and `getIdentifier` finds it. Round 1 ran every name through
+   * `[a-z][a-z0-9_]*`, so a release build — the only build where that file exists at all —
+   * drew nothing, silently, for the icons the docs recommend.
+   *
+   * `res:` is the wrapper saying *bundler-derived*: look this up as sent.
+   */
+  @Test
+  fun aBundlerDerivedNameIsLookedUpAsSent() {
+    val hoisted = "__node_modules_expo_materialsymbols_star"
+    assertEquals(NitroUiIconSource.Name(hoisted), NitroUiIconSource.parse("res:$hoisted"))
+    assertNull(
+      "the same string unmarked is still judged by the typed-name rule",
+      NitroUiIconSource.parse(hoisted),
+    )
+    // Verbatim, like a URL: the case and the underscores belong to the bundler, whose
+    // name has to match the one `aapt` filed, character for character.
+    val odd = "src_assets_icons_Share-24px"
+    assertEquals(NitroUiIconSource.Name(odd), NitroUiIconSource.parse("res:$odd"))
+    assertNull(NitroUiIconSource.parse("res:"))
+  }
+
   /** Two different files must not compare equal, or the second one draws the first. */
   @Test
   fun twoDifferentSourcesAreNeverEqual() {
     assertTrue(
       NitroUiIconSource.parse("url:http://h/a.xml") != NitroUiIconSource.parse("url:http://h/b.xml"),
+    )
+    assertTrue(
+      "two assets, two names, two drawables",
+      NitroUiIconSource.parse("res:src_assets_a_share") != NitroUiIconSource.parse("res:src_assets_b_share"),
     )
     assertTrue(
       NitroUiIconSource.parse("share") != NitroUiIconSource.parse("url:http://h/share.xml"),
