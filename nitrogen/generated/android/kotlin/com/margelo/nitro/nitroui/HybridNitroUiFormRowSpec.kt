@@ -65,6 +65,20 @@ abstract class HybridNitroUiFormRowSpec: HybridView() {
     set(value) {
       onPress = value?.let { it }
     }
+  
+  abstract var onFrameMoved: ((x: Double, y: Double) -> Unit)?
+  
+  private var onFrameMoved_cxx: Func_void_double_double?
+    @Keep
+    @DoNotStrip
+    get() {
+      return onFrameMoved?.let { Func_void_double_double_java(it) }
+    }
+    @Keep
+    @DoNotStrip
+    set(value) {
+      onFrameMoved = value?.let { it }
+    }
 
   // Methods
   @DoNotStrip

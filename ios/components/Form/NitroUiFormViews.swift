@@ -120,6 +120,32 @@ final class NitroUiFormRowHostView: UIView {
     fatalError("not used")
   }
 
+  /// Fabric writes Yoga's frame into this view (an `RCTViewComponentView` sets its content
+  /// view's frame in `updateLayoutMetrics`), and on iOS Yoga's origin now carries where this
+  /// row's *cell* came to rest - the shadow-tree half of S6b question 4's `measure` fix.
+  /// Where the view sits is UIKit's decision, not Yoga's: the cell owns that. So the origin
+  /// is dropped on the way in, and the row's component view - whose frame Fabric wrote from
+  /// the same metrics one statement earlier, before the write ever reached this view - is put
+  /// back where the cell put it. The size is untouched, which is the number the cell reads.
+  ///
+  /// This is why a row may carry a Yoga origin it does not obey: nothing else reads that
+  /// origin, because `measure` is computed from the shadow tree and hit-testing from this
+  /// view's real position.
+  override func setFrame(_ frame: CGRect) {
+    let own = frame.origin == .zero
+      ? frame
+      : CGRect(x: 0, y: 0, width: frame.width, height: frame.height)
+    super.setFrame(own)
+    guard frame.origin != .zero,
+      let component = owner?.componentView,
+      component.superview is NitroUiFormRowContainer,
+      component.frame.origin != .zero
+    else { return }
+    var pinned = component.frame
+    pinned.origin = .zero
+    component.frame = pinned
+  }
+
   override func layoutSubviews() {
     super.layoutSubviews()
     let height = bounds.height
@@ -179,8 +205,14 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     NSLayoutConstraint.activate([
       container.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
       container.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
-      container.topAnchor.constraint(equalTo: contentView.layoutMarginsGuide.topAnchor),
-      container.bottomAnchor.constraint(equalTo: contentView.layoutMarginsGuide.bottomAnchor),
+      // Vertically the margins guide is *not* right: it inset the row by 8 pt top and
+      // bottom, which made every row 8 pt taller than the same row in the reference
+      // (60 pt against SwiftUI's 52). Horizontally it is exactly right, so only these two
+      // lines move, onto `rowChrome` - the cell's whole vertical chrome, named.
+      container.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Self.rowChrome),
+      container.bottomAnchor.constraint(
+        equalTo: contentView.bottomAnchor, constant: -Self.rowChrome
+      ),
     ])
     height = container.heightAnchor.constraint(equalToConstant: 44)
     height.priority = .required - 1
@@ -254,6 +286,13 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     fatalError("not used")
   }
 
+  /// The cell's vertical chrome, one side. A row's box is its Yoga height plus
+  /// `2 * rowChrome`, and question 2's go line is that box against the same row in a
+  /// SwiftUI `Form` - 52 pt for this app's one-line rows, which is what 4 pt here buys.
+  static let rowChrome: CGFloat = 4
+  /// What the row itself measured last, for the geometry probe: the row box minus the
+  /// chrome. `-1` until a row has been shown.
+  private(set) var lastRowHeight: CGFloat = -1
   /// Show `rowView`, at the height its last Yoga layout gave it.
   func apply(_ rowView: UIView) {
     if row !== rowView {
@@ -264,6 +303,9 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     let measured = rowView.bounds.height > 0 ? rowView.bounds.height : rowView.frame.height
     if measured > 0, abs(height.constant - measured) > 0.25 {
       height.constant = measured
+    }
+    if measured > 0 {
+      lastRowHeight = measured
     }
   }
 
@@ -400,5 +442,28 @@ final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
     forItemAt indexPath: IndexPath
   ) {
     form?.listDidEndDisplaying(cell)
+  }
+
+  // MARK: Settling: where the rows came to rest (`onFrameMoved`)
+
+  /// The list laid out. Every scroll frame calls this, so the guard is the point: the
+  /// Form publishes row positions when the list is *at rest*, because JS cannot be told
+  /// about each frame of a flick and an anchor is shown to a list that stopped moving.
+  func scrollViewDidLayout(_ scrollView: UIScrollView) {
+    guard !scrollView.isDragging, !scrollView.isTracking, !scrollView.isDecelerating else {
+      return
+    }
+    form?.publishRowFrames()
+  }
+
+  /// A flick ended. `scrollViewDidLayout` already covers this (UIKit lays out after the
+  /// deceleration), and being told twice costs a comparison per row - so only the two
+  /// endings that can leave the list resting without a later layout are here.
+  func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+    if !decelerate { form?.publishRowFrames() }
+  }
+
+  func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+    form?.publishRowFrames()
   }
 }

@@ -101,6 +101,13 @@ namespace margelo::nitro::nitroui {
     inline void setOnPress(const std::optional<std::function<void()>>& onPress) noexcept override {
       _swiftPart.setOnPress(onPress);
     }
+    inline std::optional<std::function<void(double /* x */, double /* y */)>> getOnFrameMoved() noexcept override {
+      auto __result = _swiftPart.getOnFrameMoved();
+      return __result;
+    }
+    inline void setOnFrameMoved(const std::optional<std::function<void(double /* x */, double /* y */)>>& onFrameMoved) noexcept override {
+      _swiftPart.setOnFrameMoved(onFrameMoved);
+    }
 
   public:
     // Methods

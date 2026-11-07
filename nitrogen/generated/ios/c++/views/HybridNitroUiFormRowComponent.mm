@@ -128,6 +128,12 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.onPress.hasSameValue(oldViewProps->onPress)) {
       swiftPart.setOnPress(newViewProps.onPress.get());
     }
+    // onFrameMoved: optional
+    if (oldViewProps == nullptr
+          ? newViewProps.onFrameMoved.isProvided()
+          : !newViewProps.onFrameMoved.hasSameValue(oldViewProps->onFrameMoved)) {
+      swiftPart.setOnFrameMoved(newViewProps.onFrameMoved.get());
+    }
 
     // Update hybridRef if it changed
     if (oldViewProps == nullptr

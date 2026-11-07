@@ -215,6 +215,38 @@ open class HybridNitroUiFormRowSpec_cxx {
       }()
     }
   }
+  
+  public final var onFrameMoved: bridge.std__optional_std__function_void_double____x_____double____y______ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__optional_std__function_void_double____x_____double____y______ in
+        if let __unwrappedValue = self.__implementation.onFrameMoved {
+          return bridge.create_std__optional_std__function_void_double____x_____double____y______({ () -> bridge.Func_void_double_double in
+            let __closureWrapper = Func_void_double_double(__unwrappedValue)
+            return bridge.create_Func_void_double_double(__closureWrapper.toUnsafe())
+          }())
+        } else {
+          return .init()
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.onFrameMoved = { () -> ((_ x: Double, _ y: Double) -> Void)? in
+        if bridge.has_value_std__optional_std__function_void_double____x_____double____y______(newValue) {
+          let __unwrapped = bridge.get_std__optional_std__function_void_double____x_____double____y______(newValue)
+          return { () -> (Double, Double) -> Void in
+            let __wrappedFunction = bridge.wrap_Func_void_double_double(__unwrapped)
+            return { (__x: Double, __y: Double) -> Void in
+              __wrappedFunction.call(__x, __y)
+            }
+          }()
+        } else {
+          return nil
+        }
+      }()
+    }
+  }
 
   // Methods
   @inline(__always)

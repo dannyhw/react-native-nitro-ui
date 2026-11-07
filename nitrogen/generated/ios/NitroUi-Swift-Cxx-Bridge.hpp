@@ -804,6 +804,21 @@ namespace margelo::nitro::nitroui::bridge::swift {
   using std__weak_ptr_HybridNitroUiFormSectionSpec_ = std::weak_ptr<HybridNitroUiFormSectionSpec>;
   inline std__weak_ptr_HybridNitroUiFormSectionSpec_ weakify_std__shared_ptr_HybridNitroUiFormSectionSpec_(const std::shared_ptr<HybridNitroUiFormSectionSpec>& strong) noexcept { return strong; }
   
+  // pragma MARK: std::optional<std::function<void(double /* x */, double /* y */)>>
+  /**
+   * Specialized version of `std::optional<std::function<void(double / * x * /, double / * y * /)>>`.
+   */
+  using std__optional_std__function_void_double____x_____double____y______ = std::optional<std::function<void(double /* x */, double /* y */)>>;
+  inline std::optional<std::function<void(double /* x */, double /* y */)>> create_std__optional_std__function_void_double____x_____double____y______(const std::function<void(double /* x */, double /* y */)>& value) noexcept {
+    return std::optional<std::function<void(double /* x */, double /* y */)>>(value);
+  }
+  inline bool has_value_std__optional_std__function_void_double____x_____double____y______(const std::optional<std::function<void(double /* x */, double /* y */)>>& optional) noexcept {
+    return optional.has_value();
+  }
+  inline std::function<void(double /* x */, double /* y */)> get_std__optional_std__function_void_double____x_____double____y______(const std::optional<std::function<void(double /* x */, double /* y */)>>& optional) noexcept {
+    return optional.value();
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiFormRowSpec>
   /**
    * Specialized version of `std::shared_ptr<HybridNitroUiFormRowSpec>`.

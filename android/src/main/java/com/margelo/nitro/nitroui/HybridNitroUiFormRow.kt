@@ -86,6 +86,14 @@ internal class HybridNitroUiFormRow(
 
   override var onPress: (() -> Unit)? = null
 
+  /**
+   * iOS-only in effect (S6b question 4): there the Form has to tell a row where its cell
+   * came to rest, because React Native's `measure` reads the shadow tree and the view has
+   * moved into a cell. Here the row stays where Yoga put it - the two trees agree by
+   * construction - so nothing ever calls it. Declared because the spec declares it.
+   */
+  override var onFrameMoved: ((x: Double, y: Double) -> Unit)? = null
+
   override fun afterUpdate() {
     view.applyChrome(rawAccessory, rawSelected, rawPressable)
   }
@@ -99,6 +107,7 @@ internal class HybridNitroUiFormRow(
 
   override fun onDropView() {
     onPress = null
+    onFrameMoved = null
   }
 
   /** The cell's press reached React. */
@@ -138,6 +147,7 @@ internal class HybridNitroUiFormRow(
         view.width / density,
         view.height / density,
       )}",
+      "window=" + windowField(density),
       "h=${String.format("%.1f", view.height / density)}",
       "presses=${view.taps}",
       "pressesPending=${if (view.pressed) 1 else 0}",
@@ -145,6 +155,28 @@ internal class HybridNitroUiFormRow(
       "pressable=${if (rawPressable) 1 else 0}",
       "selected=${if (rawSelected) 1 else 0}",
     ).joinToString(";")
+  }
+
+  /**
+   * The row's box in its own window, in dp, or `-` before it is attached.
+   *
+   * iOS added this field for S6b question 4: a row there is re-parented into a
+   * `UICollectionViewListCell`, so what UIKit shows and what `measure()` reports came to be
+   * different numbers, and the harness needs both to see it. Android is the control for that
+   * case - this view is where Yoga put it, so the two answers are the same number by
+   * construction, which is exactly what the case needs to be able to say.
+   */
+  private fun windowField(density: Float): String {
+    if (!view.isAttachedToWindow) return "-"
+    val at = IntArray(2)
+    view.getLocationInWindow(at)
+    return String.format(
+      "%.1f,%.1f,%.1f,%.1f",
+      at[0] / density,
+      at[1] / density,
+      view.width / density,
+      view.height / density,
+    )
   }
 }
 

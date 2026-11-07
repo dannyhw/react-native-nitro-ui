@@ -29,6 +29,9 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private var rawPressable = false
   private var perfInstanceId: Int32 = nitroUiPerfNoInstance
   private var press: (() -> Void)?
+  private var frameMoved: ((Double, Double) -> Void)?
+  /// The last position handed to JavaScript, so a settle that changed nothing sends nothing.
+  private var published: (x: Double, y: Double)?
 
   /// `onPress` calls delivered through the cell, for the harness's 10/10.
   private(set) var presses = 0
@@ -86,6 +89,11 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     set { press = newValue }
   }
 
+  var onFrameMoved: ((_ x: Double, _ y: Double) -> Void)? {
+    get { frameMoved }
+    set { frameMoved = newValue }
+  }
+
   func afterUpdate() {
     nitroUiAssertMainThread()
     guard let component = componentView else { return }
@@ -101,14 +109,29 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     rawSelected = false
     rawPressable = false
     presses = 0
+    published = nil
   }
 
   func onDropView() {
     nitroUiAssertMainThread()
     press = nil
+    frameMoved = nil
+    published = nil
   }
 
   // MARK: - Events
+
+  /// The Form says where this row's cell came to rest, in the Form's own coordinates
+  /// (`onFrameMoved`, S6b question 4). The same position twice is not an event: the list
+  /// publishes on every settle, and most settles move nothing.
+  func publishCellFrame(x: CGFloat, y: CGFloat) {
+    nitroUiAssertMainThread()
+    guard frameMoved != nil else { return }
+    let next = (x: Double(x), y: Double(y))
+    if let published, published.x == next.x, published.y == next.y { return }
+    published = next
+    frameMoved?(next.x, next.y)
+  }
 
   /// The cell's selection reached this row.
   func cellPressed() {
@@ -171,12 +194,25 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
     return [
       "where=\(inCell ? "cell" : (component.superview is NitroUiFormHoldingView ? "holding" : "other"))",
       "frame=\(String(format: "%.1f,%.1f,%.1f,%.1f", frame.minX, frame.minY, frame.width, frame.height))",
+      // Where the row's pixels actually are (S6b): this view, converted to its window by
+      // UIKit. That is a different path from `measure()`, which walks the shadow tree, so a
+      // case can compare what JavaScript is told with what the screen shows. `-` is a row in
+      // a holding view: no window, no pixels.
+      "window=\(Self.inWindow(component))",
       "h=\(String(format: "%.1f", component.bounds.height))",
       "presses=\(presses)",
       "accessory=\(rawAccessory.stringValue)",
       "pressable=\(rawPressable ? 1 : 0)",
       "selected=\(rawSelected ? 1 : 0)",
     ].joined(separator: ";")
+  }
+
+  /// The view's box in its own window, or `-` when it has none: a row at rest in its
+  /// section's holding view draws nothing, so it has no place on screen to report.
+  private static func inWindow(_ view: UIView) -> String {
+    guard let window = view.window else { return "-" }
+    let box = view.convert(view.bounds, to: window)
+    return String(format: "%.1f,%.1f,%.1f,%.1f", box.minX, box.minY, box.width, box.height)
   }
 }
 
