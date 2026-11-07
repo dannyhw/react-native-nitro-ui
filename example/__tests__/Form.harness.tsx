@@ -721,9 +721,18 @@ function windowOf(
  * from the list's layout, while `window=` is a view's real position, and there is no view to
  * read for a recycled row. That is also why the case insists on a minimum count - "all zero
  * rows agree" is a pass that proves nothing.
+ *
+ * `scrollY` is the Form's own scroll offset in the platform's unit, and it is the one thing
+ * the two platforms cannot share here. React Native's `measure` sums Yoga origins and
+ * subtracts no scroll offset (0.88: `UIManagerBinding.cpp` -> `dom::measureInWindow`, and
+ * the loop in `LayoutableShadowNode.cpp` applies `frame.origin` and nothing else), so inside
+ * Android's `ScrollView` it describes where a row was *laid out*. iOS gets `0`: its Form
+ * publishes where each cell came to rest, so the shadow tree already carries the screen
+ * position - which is the whole point of question 4.
  */
 async function compareRows(
-  what: string
+  what: string,
+  scrollY: number
 ): Promise<{ compared: number; bad: string[] }> {
   let compared = 0;
   const bad: string[] = [];
@@ -743,20 +752,32 @@ async function compareRows(
     compared += 1;
     const off = Math.max(
       Math.abs(measured2[0] - native[0]),
-      Math.abs(measured2[1] - native[1])
+      Math.abs(measured2[1] + scrollY - native[1])
     );
     if (off > 1) {
       bad.push(
-        `${id}: measureInWindow ${measured2.map(round1).join(',')} vs UIKit ` +
+        `${id}: measureInWindow ${measured2.map(round1).join(',')} (+scroll ` +
+          `${round1(scrollY)} = ${round1(measured2[1] + scrollY)}) vs UIKit ` +
           `${native.map(round1).join(',')} (off by ${round1(off)} pt)`
       );
     }
   }
   console.log(
-    `S6b MEASURE ${what}: compared=${compared} mismatched=${bad.length}` +
+    `S6b MEASURE ${what}: compared=${compared} scroll=${round1(scrollY)} ` +
+      `mismatched=${bad.length}` +
       (bad.length > 0 ? ` - ${bad.join(' | ')}` : '')
   );
   return { compared, bad };
+}
+
+/** How far the Form has scrolled, as its own report says - Android only. */
+async function formScrollY(): Promise<number> {
+  const report = await formReport(
+    (r) => r.scroll !== undefined,
+    'the Form to report its scroll offset',
+    'measure'
+  );
+  return num(report, 'scroll');
 }
 
 function round1(value: number): string {
@@ -764,6 +785,10 @@ function round1(value: number): string {
 }
 
 describe('Form measure (S6b spike, question 4)', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it('measures a row as the row, before and after a scroll (E7)', async () => {
     render(<MeasureForm />);
     const form = await handleOf(() => forms.measure, 'the measuring Form');
@@ -775,7 +800,7 @@ describe('Form measure (S6b spike, question 4)', () => {
 
     // At rest. Android is the control here: its rows never leave Yoga's box, so both trees
     // have always agreed and a case that cannot see the difference is not worth running.
-    const atRest = await compareRows('at rest');
+    const atRest = await compareRows('at rest', 0);
     expect(atRest.bad).toEqual([]);
     expect(atRest.compared).toBeGreaterThanOrEqual(10);
 
@@ -784,8 +809,9 @@ describe('Form measure (S6b spike, question 4)', () => {
     // number travels native -> JS -> React -> Fabric, and each hop is a turn of a queue.
     const height = 180;
     form.nuiTestScrollTo(height);
+    const scrollY = IOS ? 0 : await formScrollY();
     const scrolled = await until(
-      () => compareRows(`after ${height} pt`),
+      () => compareRows(`after ${height} pt`, scrollY),
       (r) => r.bad.length === 0 && r.compared >= 10,
       20000,
       'every row in a cell to measure where UIKit put it'
