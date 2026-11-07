@@ -964,11 +964,18 @@ describe('Slider', () => {
     it('reconciles a write from JS while a real finger is down', async () => {
       // The mid-drag write (`finishes a drag that a write from JS lands inside`) is
       // driven through the seam. This is the same handshake with an actual finger held
-      // down on the control, which is the case E5 changes: the drag is open from the
-      // touch-down, so the write arrives inside a gesture that has no samples at all.
-      // The write is newer than the last event native emitted, so the app takes the
-      // thumb, and the release - which is the only thing the touch produced - reports
-      // the app's number.
+      // down on the control, which is the case E5 opens: the drag is live from the
+      // touch-down, so a write can land inside a gesture with no samples in it. The
+      // three endings that test allows for are the ones a pending sample creates, and
+      // a held press has none to offer — Material 3 applies a tap when the finger
+      // *lifts* (`onTap` runs after `tryAwaitRelease`), so a finger that has not lifted
+      // has selected nothing yet.
+      //
+      // That is the state worth testing, and it says what "reconciles" means here: the
+      // app's write and the finger's own selection both arrive, out of order, and the
+      // stream still ends self-consistent — one start, the control's value, one
+      // complete. The thumb ends where the finger is, and the app is told that with a
+      // change *before* the complete rather than left to guess it.
       const events = newEvents();
       const order: string[] = [];
       const held = (value: number) => (
@@ -995,34 +1002,90 @@ describe('Slider', () => {
       const box = await waitForBox('held-write');
       const handle = await handleFor('held-write');
 
-      // Held at the tick the thumb is already on, so the only thing the touch does is
-      // begin and end. 700 ms is long enough to write into the middle of it.
-      const holding = pressInBox(box, 0.2, 700);
-      await pollUntil(
-        () => (events.start.length > 0 ? true : null),
-        () =>
-          new Error(
-            'a touch-down reported no onSlidingStart (order=' +
-              `${order.join('')}).`
-          ),
-        3000
-      );
-      expect(events.complete).toEqual([]);
-      await rerender(held(0.5));
-      await holding;
-      await settleEvents(events);
+      // Held dead centre of a 0..1 range whose thumb is on 0.2. The middle is the one
+      // press point whose value does not depend on how far Material 3 pulls the track
+      // in: it maps x through `minPx = thumbWidth / 2` to
+      // `maxPx = totalWidth - thumbWidth / 2`, so both insets cancel at the midpoint and
+      // half the box is half the track however wide the thumb is. Anywhere else, a
+      // fraction of the box is a different fraction of the track — which is how an
+      // earlier draft of this test pressed "the tick the thumb is already on", moved the
+      // value, and measured a gesture with a sample in it while claiming one without.
+      // 2500 ms is long enough to write into the middle of the press on a busy emulator.
+      const holding = pressInBox(box, 0.5, 2500);
+      try {
+        await pollUntil(
+          () => (events.start.length > 0 ? true : null),
+          () =>
+            new Error(
+              'a touch-down reported no onSlidingStart (order=' +
+                `${order.join('')}).`
+            ),
+          3000
+        );
+        // A moment for anything this touch has already earned to reach JS, so the write
+        // below cannot be mistaken for it.
+        await sleep(250);
+        // Open, and empty: the down opened the gesture and the tap has selected nothing
+        // yet, which is the state E5 made reachable and the state the write goes into.
+        expect(order).toEqual(['s']);
+        expect(events.start).toEqual([0.2]);
+        expect(events.complete).toEqual([]);
 
-      expect(order).toEqual(['s', 'c']);
+        await rerender(held(0.9));
+        // The write reached the control *inside* the gesture — the precondition, asserted
+        // rather than assumed, because if the hold were too short the release below would
+        // be reporting for a write that landed after the drag. (`handle.value` is the
+        // value native was given, not the one it displays; what the write did to the
+        // thumb is the release's answer, not this one's.) Polled rather than bare for the
+        // reason `applies a value written from JS` gives: on Android a commit lands a
+        // moment after `rerender` resolving claims it has.
+        await waitFor(() => expect(handle.value).toBe(0.9));
+        // A write is not a gesture: it echoes no change back and does not close the one
+        // the finger owns.
+        await sleep(250);
+        expect(order).toEqual(['s']);
+        expect(events.change).toEqual([]);
+        expect(events.complete).toEqual([]);
+      } finally {
+        // The UP is sent by the same call this test is sitting inside, so an assertion
+        // that throws above would hand the rest of the suite a finger that is still
+        // down: the release lands in whichever test runs next and reads as a gesture
+        // nobody asked for. (Measured on this file's red-proof run, where a later,
+        // unrelated screen-reader test collected an extra complete from exactly that.)
+        await holding;
+      }
+      await settleEvents(events);
+      console.log(
+        `held-write: order=${order.join('')} ` +
+          `start=${JSON.stringify(events.start)} ` +
+          `change=${JSON.stringify(events.change)} ` +
+          `complete=${JSON.stringify(events.complete)}`
+      );
+      // One gesture, opened by the down and closed by the up, with the control's own
+      // selection of the pressed point between them: the 0.5 the finger is on wins over
+      // the 0.9 the app wrote a moment earlier, and says so in the stream. A write that
+      // arrives inside a live drag is reconciled by being *reported*, not by silently
+      // holding the thumb — the app ends up with the number the screen shows.
+      expect(order).toEqual(['s', 'v', 'c']);
       expect(events.start).toEqual([0.2]);
+      expect(events.change).toEqual([0.5]);
       expect(events.complete).toEqual([0.5]);
-      expect(handle.value).toBe(0.5);
       expect(handle.nuiTestFramePumpArmed()).toBe(false);
-      // And it is still an ordinary control: the next gesture reports itself once,
-      // from the value the write left on the thumb.
+      await sleep(150);
+      expect(handle.nuiTestFramePumpArmed()).toBe(false);
+
+      // And it is still an ordinary control: the next gesture reports itself exactly
+      // once, which is what says the gesture the write went through was closed rather
+      // than left half open for this press to join. Counted rather than read for value:
+      // a write that the handshake refused is not dropped (`docs/architecture/core.md`
+      // §11), so which number the thumb is on when this next down arrives is not what
+      // this line is about.
+      const startsAfter = events.start.length;
+      const completesAfter = events.complete.length;
       await pressInBox(box, 0.5);
       await settleEvents(events);
-      expect(events.start).toEqual([0.2, 0.5]);
-      expect(events.complete).toEqual([0.5, 0.5]);
+      expect(events.start.length).toBe(startsAfter + 1);
+      expect(events.complete.length).toBe(completesAfter + 1);
     });
   }
 

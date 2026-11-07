@@ -89,6 +89,21 @@ iOS reports what SwiftUI's `Slider` reports and nothing else: its
 `onEditingChanged` decides where a drag begins and ends, which is why the second row
 differs between the platforms at all.
 
+Two Android measurements belong with that table, both of them Material 3's rather than
+this library's:
+
+- **A tap is applied when the finger lifts.** Material 3's `onTap` runs after it has
+  awaited the release, so the value a press selects arrives after the start and before
+  the complete, never during the hold. A held press therefore holds a gesture that is
+  open and has no samples in it — the state a write from JS can land inside
+  (`Slider.harness.tsx`, "reconciles a write from JS while a real finger is down").
+- **Row three is "no change" when the value is one the control computed.** Material 3
+  compares the float it derived from the touch with the value it was *given*, so a press
+  onto a number JS wrote — a `0.5` that no track position reproduces exactly — can report
+  one `onValueChange` carrying the number the thumb already had. Press the same point
+  twice and the second is silent, because by then the value is one the control arrived at
+  itself: that pair is what the real-input check measures on a device.
+
 ### Why stepped mode is chosen natively
 
 `step` and the two bounds arrive as one unordered batch (core.md §3), so the
