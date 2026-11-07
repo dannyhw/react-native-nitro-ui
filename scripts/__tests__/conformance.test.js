@@ -2137,4 +2137,32 @@ describe('the a11y sweep, against a fake device', () => {
     expect(printed).toContain('1 input sequence(s) needed a retry');
     expect(printed).toContain('1 of them on an auxiliary check');
   });
+
+  it('counts every source of retry in the run’s one total', async () => {
+    // Three fix rounds, three sources, one number. E5 counts a re-dragged gesture on the
+    // control's log, the tab-tap guard counts a re-pressed control there too, and the sweep
+    // counts a re-tapped tab on an auxiliary log (X21). Both E5 and X21 edited the line that
+    // prints the total, so the merge keeps both halves: a total over the controls alone
+    // denies the sweep's re-taps — the exact silence X21 was raised for. 2 + 1 so neither
+    // half can satisfy it alone.
+    const controls = [
+      { id: 'slider', title: 'Slider drag' },
+      { id: 'switch', title: 'Switch' },
+    ];
+    const printed = await capturePrint(async () => {
+      const suite = new Suite('android', controls);
+      const slider = suite.begin(controls[0]);
+      slider.retried('dragTo: reported no finished gesture, dragged it again');
+      slider.retried('Slider: the value answered on tap 2/3');
+      slider.check('the drag reported one gesture', true);
+      const switchCheck = suite.begin(controls[1]);
+      switchCheck.check('the switch answered', true);
+      const sweep = suite.beginAuxiliary('a11y:slider', 'Slider a11y');
+      sweep.retried('navigation: the "Slider" tab answered on tap 2/3');
+      sweep.check('the tree names the control', true);
+      expect(suite.finish()).toBe(0);
+    });
+    expect(printed).toContain('3 input sequence(s) needed a retry');
+    expect(printed).toContain('1 of them on an auxiliary check');
+  });
 });
