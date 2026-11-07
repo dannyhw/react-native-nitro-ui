@@ -2210,11 +2210,16 @@ describe('androidIcon · an icon the app imports (D43)', () => {
           : `the shipped drawable drew ${namedHits} pixels of the tint and the ` +
               `imported one ${metroHits}: a stretched raster loses its thin strokes`
       ).toEqual('both roads drew the glyph at the slot size');
-      // And the same drawable at the rung its file was authored for, in the same row:
-      // a 24 dp slot to a 40 dp one is 2.78x the area, and a vector keeps its stroke
-      // proportions across that. Round 1's answer grew the box and thinned the ink —
-      // the failure a screenshot of one button cannot show you, and the reason this
-      // claim is next to the other one rather than a second test.
+      // And the same drawable at the rung its file was authored for, in the same row.
+      // This is a floor, not the sharpness guard: it asks only that the 40 dp slot
+      // carries at least double the ink of the 24 dp one, so what it catches is a slot
+      // that drew far too little — artwork dropped on the way to the canvas, or a glyph
+      // drawn at its own 24 dp inside a box it was never asked to fill. It is NOT what
+      // caught round 1: the stretched raster measured 957 pixels at 40 dp against 257
+      // at 24 dp on this fixture — 3.7x, which clears a 2x floor with room to spare.
+      // `SHARP_RATIO` above is the guard, because it reads the shipped drawable against
+      // the imported file at the same box; this line is why that claim sits in two
+      // places instead of one.
       expect(
         namedHits >= 2 * mediumHits
           ? 'the top rung carries its share of ink for a 40 dp slot'
@@ -2253,10 +2258,18 @@ describe('androidIcon · an icon the app imports (D43)', () => {
     // What is asserted is that it draws, and that it draws into the *same* box the
     // vector does: the slot comes from the ladder either way, which is the one rule an
     // artwork must not be able to bend.
+    //
+    // The three are `text` variants under the empty probe title, which is what makes the
+    // first assertion mean anything. A `filled` Button paints its container with
+    // `tintColor`, and the probe counts pixels that *are* the tint: over the filled pair
+    // this case shipped with it read 208267 hits — the area of a 40 dp pill, the same
+    // number it would have reported with no icon in the app at all. A text variant paints
+    // nothing behind the glyph, so `rasterHits > 0` is the artwork and nothing else.
     await render(
       <View style={rowStyle}>
         <Button
-          title="Share"
+          title={PROBE_TITLE}
+          variant="text"
           size="xxlarge"
           tintColor={TINT_CSS}
           androidIcon={RASTER_NAME}
@@ -2264,7 +2277,8 @@ describe('androidIcon · an icon the app imports (D43)', () => {
           hybridRef={captureHybrid('raster-icon')}
         />
         <Button
-          title="Share"
+          title={PROBE_TITLE}
+          variant="text"
           size="xxlarge"
           tintColor={TINT_CSS}
           androidIcon={CLOSE_NAME}
@@ -2272,7 +2286,8 @@ describe('androidIcon · an icon the app imports (D43)', () => {
           hybridRef={captureHybrid('raster-vector')}
         />
         <Button
-          title="Share"
+          title={PROBE_TITLE}
+          variant="text"
           size="xxlarge"
           testID="raster-plain"
           hybridRef={captureHybrid('raster-plain')}
