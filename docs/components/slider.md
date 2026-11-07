@@ -66,7 +66,11 @@ invoked once when the view mounts, and a new function does not re-run it.
 
 The three callbacks describe one gesture, and the gesture is the touch, not the value
 change: an app told `onSlidingStart` is always owed `onSlidingComplete`, and the two
-bracket whatever `onValueChange` events the touch produced — in that order.
+bracket whatever `onValueChange` events the touch produced — in that order. "In that
+order" is a real constraint rather than a description of the happy path: the last
+value of a gesture must be delivered before the callback that says the gesture ended,
+because the app reads the complete's value as the one the drag settled on. On Android
+that ordering is the whole difficulty — see the paragraph below the table.
 
 | Input                                       | iOS                                                                                       | Android                                                  |
 | ------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
@@ -74,16 +78,47 @@ bracket whatever `onValueChange` events the touch produced — in that order.
 | Touch the track beside the thumb            | nothing at all — SwiftUI's `Slider` ignores the track (`T15`)                              | start, the value it landed on, complete                  |
 | Press without moving the thumb off its value | nothing measured on iOS; the value-less iOS touch that has been measured (a track tap) reported nothing | one start, one complete, no change                       |
 | A screen-reader step                        | one start, one change, one complete                                                       | the same triple, with the same values                    |
+| A release batched with its own last move    | not measured — the rule is Material 3's, and SwiftUI's `onEditingChanged` owns the ends | one start, the last value, one complete                  |
+| A second finger joining and leaving         | not measured — SwiftUI's own gesture                                                      | one start, one complete: the gesture is the first touch  |
+| A stream a parent takes over (`CANCEL`)     | not measured — SwiftUI's own gesture                                                      | one start, one complete, whatever the value did          |
+| The control disabled mid-press              | not measured — `disabled` is SwiftUI's own                                                | one start, one complete, from the prop that disabled it  |
 
 Android takes its start from the control's own touch stream (`sliderPressWatcher` in
 `HybridNitroUiSlider.kt`: the finger down on the `Initial` pointer pass, the finger up
 on `Final`) rather than from the first value change, which is what lets the third row
 report anything — Material 3's tap path only calls `onValueChange` when the value it
 computed differs, so a motionless touch has no first value change to be inferred
-from. The end is unchanged (`onValueChangeFinished`), and the end is idempotent, so
-the two things that can close a gesture report one complete. A value that arrives with
-no touch behind it still opens its own drag, so a screen-reader step and Compose's own
-key-event step keep the same triple as before.
+from.
+
+**Which of the two closes a gesture is not a race.** The watcher sees the release
+*first* — and that is the opposite of what "the pass after Material 3's" suggests,
+because Material 3 does not act on a touch while it reads it. Foundation's
+`DragGestureNode` writes what it saw into an unlimited channel and a coroutine on the
+UI dispatcher drains it afterwards, so everything Material 3 will do with the last
+batch — apply the value, then clear its drag and call `onValueChangeFinished` —
+happens after the pointer pass that carried it. A finger's last move and its release
+arriving in one batch is therefore ordinary, not exotic: `adb shell input swipe` hides
+it only because it waits for every event it injects.
+
+So the watcher never ends a drag Material 3 has taken (`SliderState.isDragging` at the
+release says which ones those are); Material 3 ends those, from its own drained
+coroutine, value first and end second — `processDragCancel` reaches the same end, so a
+stream a parent takes over mid-drag is closed too. Ending one from the watcher would
+report the complete before the last change *and* leave that change to open a second
+drag, since it would arrive with no gesture left to belong to: one press reading back
+`start, change, complete, start, change, complete` is the bug this ordering exists to
+prevent. What the watcher does still owe is a touch Material 3 never took as a drag at
+all — a stream a parent took over, an `ACTION_CANCEL` — whose release reaches nobody
+else. A motionless press, by contrast, has already had its end called synchronously in
+the `Main` pass, and a touch whose slop was crossed in the very batch that carried the
+release has had nothing called yet. All three arrive at the same line, and the last two
+cannot be told apart from here, so the end is *launched* one main-thread hop later
+rather than called there: the hop costs nothing where Material 3 has already reported,
+and it is what keeps the third case behind Material 3's own work too. `endDrag` is
+idempotent, so the two can only ever report one complete.
+
+A value that arrives with no touch behind it still opens its own drag, so a
+screen-reader step and Compose's own key-event step keep the same triple as before.
 
 iOS reports what SwiftUI's `Slider` reports and nothing else: its
 `onEditingChanged` decides where a drag begins and ends, which is why the second row
@@ -265,9 +300,19 @@ values the thumb can show, and still emits through the same handshake.
   the finger going down on the control, so a press a scrolling parent takes over
   before the control's own gesture began is still closed by the watcher — the app
   gets its `onSlidingComplete` with the value the control had when the finger left,
-  rather than a start with nothing after it. A drag abandoned by an unmount or a
-  recycle stays silent, as always: a callback is not owed to an app that no longer
-  owns the instance.
+  rather than a start with nothing after it. A hand-over reaches this control as an
+  `ACTION_CANCEL`, not as a cancelled gesture: foundation delivers the pointer as
+  *raised*, which is why the watcher closes it on the way it closes any release. A
+  drag abandoned by an unmount or a recycle stays silent, as always: a callback is not
+  owed to an app that no longer owns the instance. `Slider.harness.tsx`'s
+  `nuiTestPointerStream` probe is what measures both this and the batched-release row
+  above, because no touch injector short of it puts two pointer events in one turn.
+- **Disabling a Slider mid-press closes its gesture.** `disabled` takes the control's
+  gestures away, including the ones the drag was being watched with, and neither the
+  watcher nor Material 3 ever learns the finger lifted — a detached drag node returns
+  before its own end action. The prop is what ends the drag, and it reports rather
+  than cancels: the app was given the start. `example`'s `inert-mid-press` case covers
+  it, and the press after a re-enable is the line that says the gesture really closed.
 - **Compose semantics are not Views.** `@react-native-harness/ui`'s label query
   matches `View.contentDescription`, so it cannot see the label on either platform's
   hosted control (on iOS it matches the wrapped `UISlider`, whose label SwiftUI sets

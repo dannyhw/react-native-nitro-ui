@@ -168,6 +168,14 @@ abstract class HybridNitroUiSliderSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestFramePumpArmed(): Boolean
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPointerStream(mode: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPointerStreamReport(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {
