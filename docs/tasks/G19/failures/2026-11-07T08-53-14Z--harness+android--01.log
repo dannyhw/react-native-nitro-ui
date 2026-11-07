@@ -1,0 +1,187 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T08:53:14.393Z on code tree `922954cc3292` at HEAD `d79c107` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 655930 ms
+- Load: start 7.49, end 3.56, median 3.87, max 11.78
+- Device: android / device `emulator-5570` / lease `G19-3ttma`
+- Full log: `task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● Console`
+- `● androidIcon · an icon the app imports (D43) › draws the shipped drawable as sharply as the imported one, at the top rung`
+- `expected 'the shipped drawable drew 957 pixels …' to deeply equal 'both roads drew the glyph at the slot…'`
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-3ttma (still live)
+  |   X21-znj7u                X21          both              pair-a
+  |   G19-3ttma                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.56 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 137 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 922954cc3292 at HEAD d79c107e
+gate: git tree 2bbe214bc31d
+gate: log task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log
+gate:       <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 922954cc3292, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.49/8.84 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      variants: filled=76.57x48.00 tonal=76.57x48.00 outlined=76.57x48.00 text=68.95x48.00 elevated=76.57x48.00 corrections=5 immediate=1 cached=5
+
+
+    console.log
+      presses after three enabled taps: ["press-me","press-me"]
+
+
+    console.log
+      title R3: short=57.90x48.00 long=153.90x48.00 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      size R3: small=58.67x48.00 large=88.76x56.00 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      same-size key change (android): box=70.86x48.00 measured=70.86x48.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      notify: short=57.90x48.00 long=153.90x48.00 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      cache key: OK=57.90x48.00 long=180.19x48.00 tonal=57.90x48.00
+
+
+    console.log
+      epoch: first=110.48x48.00 second=223.62x48.00 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} drawn=[]
+
+
+    console.log
+      200 buttons: corrections=200 immediate=1 cached=200
+
+
+    console.log
+      trace: drawn=["75.0x48.0"] real=75.05x48.00
+
+
+    console.log
+      shape ladder (square corners): small=57.90x48.00 medium=62.48x48.00 large=84.19x56.00
+
+
+    console.log
+      androidIcon boxes: plain=68.19x48.00 star=96.38x48.00 wide=96.38x48.00 missing=68.19x48.00 shape=68.19x48.00 corrections=5
+
+
+    console.log
+      androidIcon probes: [["probe-icon","n=1 size=158x126 want=#FF00A0 hits=408 mean=#837C80 closest=#FF00A0"],["probe-missing","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-shape","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-bare","n=1 size=152x126 want=#FF00A0 hits=0 mean=#808080 closest=#808080"],["probe-disabled","n=1 size=158x126 want=#FF00A0 hits=0 mean=#7F7F7F closest=#808080"]]
+
+
+    console.log
+      key trace: key="filled|medium||nitroui_test_star|TracedKey" laidOut=["12.5x71.5"] real=126.10x48.00
+
+
+    console.log
+      rung boxes: small=57.90x48.00 medium=64.38x48.00 large=85.71x56.00 xlarge=150.86x96.00 xxlarge=200.76x136.00
+
+
+    console.log
+      metro wire: url:http://localhost:8293/assets/src/assets/icons/star_24px.xml?platform=android&hash=af48588bf76164f691007603b8188c42
+
+
+    console.log
+      metro: hitsBefore=442 hitsAfter=442 drawnInMs=32.56479197740555 first=60.19x48.00 after=60.19x48.00 named=60.19x48.00 ids=[245,246] droppedForeign=0 metroBoxes=["12.50x71.50","60.19x48.00"] nameBoxes=["12.50x71.50","12.57x72.00","60.19x48.00"]
+
+
+    console.log
+      metro width probe: hits=0 drawnInMs=15036.75400698185
+
+
+    console.log
+      widths: metro=96.38x48.00 drawable=96.38x48.00 plain=68.19x48.00
+
+
+    console.log
+      404: hits=0 box=57.90x48.00 plainBox=57.90x48.00 plainHits=0
+
+
+    console.log
+      sharp: named@xxlarge=n=1 size=483x357 want=#FF00A0 hits=957 mean=#807F80 closest=#FF00A0 metro@xxlarge=n=1 size=483x357 want=#FF00A0 hits=1138 mean=#807F80 closest=#FF00A0 named@medium=n=1 size=158x126 want=#FF00A0 hits=257 mean=#827D80 closest=#FF00A0 ratio=0.841
+
+
+    console.log
+      raster branch: raster=265.90x136.00 vector=265.90x136.00 plain=209.90x136.00 hits=208267
+
+  ● androidIcon · an icon the app imports (D43) › draws the shipped drawable as sharply as the imported one, at the top rung
+
+    expected 'the shipped drawable drew 957 pixels …' to deeply equal 'both roads drew the glyph at the slot…'
+
+      [0m [90m 2211 |[39m           [33m:[39m [32m`the shipped drawable drew ${namedHits} pixels of the tint and the `[39m [33m+[39m
+       [90m 2212 |[39m               [32m`imported one ${metroHits}: a stretched raster loses its thin strokes`[39m
+      [31m[1m>[22m[39m[90m 2213 |[39m       )[33m.[39mtoEqual([32m'both roads drew the glyph at the slot size'[39m)[33m;[39m
+       [90m      |[39m                [31m[1m^[22m[39m
+       [90m 2214 |[39m       [90m// And the same drawable at the rung its file was authored for, in the same row:[39m
+       [90m 2215 |[39m       [90m// a 24 dp slot to a 40 dp one is 2.78x the area, and a vector keeps its stroke[39m
+       [90m 2216 |[39m       [90m// proportions across that. Round 1's answer grew the box and thinned the ink —[39m[0m
+
+FAIL __tests__/Menu.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was disposed before the test file finished running.
+
+gate: harness:android FAIL in 655.9 s (signal SIGTERM) - note: the code tree moved during the run (87bdbca96955 now), so this line describes 922954cc3292
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+android-2026-11-07T08-53-13.789Z.log (5 probe(s))
+gate: re-raising SIGTERM
+
+```

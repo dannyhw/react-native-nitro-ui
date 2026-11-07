@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("tintColor", &HybridNitroUiButtonSpec::setTintColor);
       prototype.registerHybridGetter("systemImage", &HybridNitroUiButtonSpec::getSystemImage);
       prototype.registerHybridSetter("systemImage", &HybridNitroUiButtonSpec::setSystemImage);
+      prototype.registerHybridGetter("androidIcon", &HybridNitroUiButtonSpec::getAndroidIcon);
+      prototype.registerHybridSetter("androidIcon", &HybridNitroUiButtonSpec::setAndroidIcon);
       prototype.registerHybridGetter("testID", &HybridNitroUiButtonSpec::getTestID);
       prototype.registerHybridSetter("testID", &HybridNitroUiButtonSpec::setTestID);
       prototype.registerHybridGetter("accessibilityLabel", &HybridNitroUiButtonSpec::getAccessibilityLabel);
@@ -41,6 +43,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridGetter("nuiSizingId", &HybridNitroUiButtonSpec::getNuiSizingId);
       prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiButtonSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiButtonSpec::measureContent);
+      prototype.registerHybridMethod("nuiTestPixelProbe", &HybridNitroUiButtonSpec::nuiTestPixelProbe);
+      prototype.registerHybridMethod("nuiTestPixelReport", &HybridNitroUiButtonSpec::nuiTestPixelReport);
     });
   }
 

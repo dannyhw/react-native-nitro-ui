@@ -1,0 +1,71 @@
+# Failure excerpt — harness:android:sharp
+
+- Ran: 2026-11-07T08:47:03.392Z on code tree `72182da36f76` at HEAD `7cf7b7e` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android sharp`
+- Result: fail, exit 1, 1803 ms
+- Load: start 18.04, end 18.04, median 18.04, max 18.04
+- Device: android
+- Full log: `task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   X21-znj7u                X21          both              pair-a
+  |   G19-3ttma                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 18.04 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 26 log line(s)
+
+```
+gate: harness:android:sharp
+gate: node ../scripts/harness.mjs --harnessRunner android sharp (cwd example)
+gate: code tree 72182da36f76 at HEAD 7cf7b7e7
+gate: git tree c33da0d8c1aa with a DIRTY worktree (not reusable)
+gate: log task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log
+gate:       <store>/task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android sharp
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 72182da36f76, 18 components registered)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 18.04/10.72 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  420 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 25 matches
+  testPathIgnorePatterns: \.(ios)\.harness\.(?:[mc]?[jt]sx?)$ - 420 matches
+  testRegex:  - 0 matches
+Pattern: sharp - 0 matches
+gate: harness:android:sharp FAIL in 1.8 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+android+sharp-2026-11-07T08-47-02.302Z.log (5 probe(s))
+
+```

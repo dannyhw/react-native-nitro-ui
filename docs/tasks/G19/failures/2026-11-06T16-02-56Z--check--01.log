@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T16:02:56.619Z on code tree `3bb396299e94` at HEAD `9626bbe` (branch `task/G19-android-icon-iconbutton`)
+- Command: `bun run check`
+- Result: fail, exit 1, 108365 ms
+- Load: start 3.94, end 40.16, median 29.33, max 53.40
+- Device: none recorded (not a device gate)
+- Full log: `task/G19-android-icon-iconbutton/check-2026-11-06T16-02-55.423Z.log` (<store>/task/G19-android-icon-iconbutton/check-2026-11-06T16-02-55.423Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "test:native:android" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2935 — the rest is in the full log above)
+
+```
+WARNING: API 'applicationVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling applicationVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+WARNING: API 'testVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling testVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+WARNING: API 'unitTestVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling unitTestVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+
+> Configure project :react-native-community_datetimepicker
+WARNING: API 'libraryVariants' is obsolete and has been replaced with 'AndroidComponentsExtension'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+The legacy variant API is disabled by default in AGP 9.0, but can be re-enabled by adding 
+    android.newDsl=false
+to this project's gradle.properties file.
+For more information, see http://developer.android.com/build/r/new-dsl.
+
+To determine what is calling libraryVariants, use -Pandroid.debug.obsoleteApi=true on the command line to display more information.
+
+> Configure project :react-native-nitro-modules
+[NitroModules] 🔥 Your app is boosted by nitro modules!
+
+> Configure project :react-native-nitro-ui
+[NitroModules] 🔥 nitroui is boosted by nitro!
+
+> Configure project :react-native-reanimated
+w: file://<repo>/node_modules/react-native-reanimated/android/build.gradle.kts:168:1: 'fun Project.android(configure: Action<LibraryExtension>): Unit' is deprecated. Replaced by com.android.build.api.dsl.LibraryExtension.
+This class is not used for the public extensions in AGP when android.newDsl=true, which is the default in AGP 9.0, and will be removed in AGP 10.0.
+
+> Configure project :react-native-worklets
+w: file://<repo>/node_modules/react-native-worklets/android/build.gradle.kts:162:1: 'fun Project.android(configure: Action<LibraryExtension>): Unit' is deprecated. Replaced by com.android.build.api.dsl.LibraryExtension.
+This class is not used for the public extensions in AGP when android.newDsl=true, which is the default in AGP 9.0, and will be removed in AGP 10.0.
+
+> Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-ui:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript
+
+> Task :react-native-nitro-ui:generateCodegenSchemaFromJavaScript
+
+> Task :react-native-nitro-modules:prepareHeaders
+No modules to process in combine-js-to-schema-cli. If this is unexpected, please check if you set up your NativeComponent correctly. See combine-js-to-schema.js for how codegen finds modules.
+> Task :react-native-nitro-ui:generateCodegenArtifactsFromSchema
+> Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema
+> Task :react-native-nitro-ui:preBuild
+> Task :react-native-nitro-modules:preBuild
+> Task :react-native-nitro-modules:preDebugBuild
+> Task :react-native-nitro-ui:preDebugUnitTestBuild
+> Task :react-native-nitro-ui:preDebugBuild
+> Task :react-native-nitro-modules:generateDebugBuildConfig FROM-CACHE
+> Task :react-native-nitro-modules:javaPreCompileDebug FROM-CACHE
+> Task :react-native-nitro-modules:generateDebugResources FROM-CACHE
+> Task :react-native-nitro-ui:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :react-native-nitro-ui:processDebugNavigationResources FROM-CACHE
+> Task :react-native-nitro-ui:javaPreCompileDebug FROM-CACHE
+> Task :react-native-nitro-ui:generateDebugResources FROM-CACHE
+> Task :react-native-nitro-modules:processDebugNavigationResources FROM-CACHE
+> Task :react-native-nitro-ui:generateDebugBuildConfig FROM-CACHE
+> Task :react-native-nitro-modules:packageDebugResources FROM-CACHE
+> Task :react-native-nitro-ui:packageDebugResources FROM-CACHE
+> Task :react-native-nitro-modules:parseDebugLocalResources FROM-CACHE
+> Task :react-native-nitro-modules:generateDebugRFile FROM-CACHE
+> Task :react-native-nitro-ui:parseDebugLocalResources FROM-CACHE
+> Task :react-native-nitro-ui:generateDebugRFile FROM-CACHE
+> Task :react-native-nitro-ui:generateDebugUnitTestStubRFile FROM-CACHE
+> Task :react-native-nitro-modules:compileDebugKotlin FROM-CACHE
+> Task :react-native-nitro-modules:processDebugJavaRes
+> Task :react-native-nitro-modules:compileDebugJavaWithJavac FROM-CACHE
+> Task :react-native-nitro-modules:bundleLibRuntimeToJarDebug
+> Task :react-native-nitro-modules:bundleLibCompileToJarDebug
+
+> Task :react-native-nitro-ui:compileDebugKotlin FAILED
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:228:25 Property delegate must have a 'getValue(ButtonModel, KMutableProperty1<*, *>)' method. None of the following functions is applicable:
+fun FloatState.getValue(thisObj: Any?, property: KProperty<*>): Float
+fun DoubleState.getValue(thisObj: Any?, property: KProperty<*>): Double
+fun IntState.getValue(thisObj: Any?, property: KProperty<*>): Int
+fun LongState.getValue(thisObj: Any?, property: KProperty<*>): Long
+fun <T> State<T>.getValue(thisObj: Any?, property: KProperty<*>): T
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:228:25 Property delegate must have a 'setValue(ButtonModel, KMutableProperty1<ButtonModel, ERROR CLASS: Ambiguity: getValue, [androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue]>, ERROR CLASS: Ambiguity: getValue, [androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue, androidx/compose/runtime/getValue])' method. None of the following functions is applicable:
+fun <T> MutableState<T>.setValue(thisObj: Any?, property: KProperty<*>, value: T): Unit
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:228:28 Cannot infer type for this parameter. Specify it explicitly.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:228:72 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButton.kt:228:81 Null cannot be a value of a non-null type 'uninferred T (of fun <T> mutableStateOf)'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:9:37 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:114:44 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:114:52 Argument type mismatch: actual type is 'Int', but 'Int' was expected.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:114:56 Argument type mismatch: actual type is 'Float', but 'Float' was expected.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:114:63 Argument type mismatch: actual type is 'Boolean', but 'Boolean' was expected.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:118:24 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:124:13 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:133:5 Cannot infer type for this parameter. Specify it explicitly.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:162:4 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:179:32 Cannot infer type for this parameter. Specify it explicitly.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:179:32 Unresolved reference. None of the following candidates is applicable because of a receiver type mismatch:
+fun <T, R> T.let(block: (T) -> R): R
+    [R|Contract description]
+     <
+        CallsInPlace(block, EXACTLY_ONCE)
+    >
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:179:36 Cannot infer type for this parameter. Specify it explicitly.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:224:77 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:226:5 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:229:7 Unresolved reference 'Bitmap'.
+e: file://<repo>/android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt:246:42 Unresolved reference 'Bitmap'.
+
+[Incubating] Problems report is available at: file://<repo>/example/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':react-native-nitro-ui:compileDebugKotlin'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+37 actionable tasks: 16 executed, 21 from cache
+Configuration cache entry stored.
+
+BUILD FAILED in 58s
+error: script "test:native:android" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 108.4 s - note: the code tree moved during the run (867cb8a9df2e now), so this line describes 3bb396299e94
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+gate: re-raising SIGTERM
+
+```

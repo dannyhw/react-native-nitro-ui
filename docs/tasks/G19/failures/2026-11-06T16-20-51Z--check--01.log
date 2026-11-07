@@ -1,0 +1,170 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-06T16:20:51.028Z on code tree `4d5fa9e63f96` at HEAD `110df07` (branch `task/G19-android-icon-iconbutton`)
+- Command: `bun run check`
+- Result: fail, exit 1, 154324 ms
+- Load: start 76.00, end 17.59, median 27.46, max 76.00
+- Device: none recorded (not a device gate)
+- Full log: `task/G19-android-icon-iconbutton/check-2026-11-06T16-20-50.300Z.log` (<store>/task/G19-android-icon-iconbutton/check-2026-11-06T16-20-50.300Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 357 — the rest is in the full log above)
+
+```
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:203:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (56.331 s)
+PASS scripts/__tests__/gate.test.js (58.552 s)
+PASS scripts/__tests__/gate-logs.test.js (66.467 s)
+PASS scripts/__tests__/ci-workflows.test.js (71.849 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (79.354 s)
+PASS scripts/__tests__/bench-gate.test.js (147.477 s)
+
+Test Suites: 71 passed, 71 total
+Tests:       1784 passed, 1784 total
+Snapshots:   0 total
+Time:        147.892 s, estimated 193 s
+Ran all test suites.
+──────── test:native — skipped, 0.0s ─────────────────────────────────────────────
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 5 passed, 1 failed, 11 skipped in 154.2s
+check: failed step(s): typecheck
+check: not started after the first failure: test:native, test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: typecheck ─────────────────────────────────────────────────────
+$ tsc
+src/__tests__/iconName.test.tsx(38,15): error TS2339: Property 'getByTestId' does not exist on type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+src/__tests__/iconName.test.tsx(69,18): error TS2708: Cannot use namespace 'jest' as a value.
+src/__tests__/iconName.test.tsx(91,24): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(96,24): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(107,24): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(108,19): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(110,31): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(125,24): error TS2345: Argument of type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is not assignable to parameter of type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>'.
+  Type '{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }' is missing the following properties from type 'Promise<{ rerender: (component: ReactElement<unknown, string | JSXElementConstructor<any>>) => Promise<void>; unmount: () => Promise<void>; ... 57 more ...; findAllByText: FindAllByQuery<...>; }>': then, catch, finally, [Symbol.toStringTag]
+src/__tests__/iconName.test.tsx(133,18): error TS2708: Cannot use namespace 'jest' as a value.
+src/__tests__/iconName.test.tsx(148,18): error TS2708: Cannot use namespace 'jest' as a value.
+error: script "check" exited with code 1
+gate: check FAIL in 154.3 s - note: the code tree moved during the run (01fef18a7add now), so this line describes 4d5fa9e63f96
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+```

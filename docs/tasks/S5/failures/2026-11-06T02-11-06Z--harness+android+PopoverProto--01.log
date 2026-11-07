@@ -1,0 +1,200 @@
+# Failure excerpt — harness:android:PopoverProto
+
+- Ran: 2026-11-06T02:11:06.092Z on code tree `113976b6288c` at HEAD `66d4604` (branch `task/S5-popover-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android PopoverProto`
+- Result: fail, exit 1, 14427 ms
+- Load: start 17.79, end 14.52, median 16.16, max 17.79
+- Device: android / device `emulator-5574` / lease `S5-bp78g`
+- Full log: `task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-11-05.668Z.log` (<store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-11-05.668Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/PopoverProto.harness.tsx`
+- `● PopoverProto · Q1 two-axis fit › shows its first frame at its final size, 10 of 10 contents`
+- `● PopoverProto · Q1 two-axis fit › sees a resize when the size arrives after the present (the oracle goes red)`
+- `● PopoverProto · Q5 lifetime › leaves live=0 after 50 present/dismiss cycles, and no LifecycleRegistry growth`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 0 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 50 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 100 ms into its entry`
+- `● PopoverProto · Q5 lifetime › leaves nothing when dropped 150 ms into its entry`
+- `● PopoverProto · Q5 lifetime › gives a recycled view none of the open popover it came from`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-11-05.668Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.4 --
+  | -- iOS 27.0 --
+  |     iPhone Air (<other device>) (Booted) 
+  |     iPhone 17 (F08675D3-A32B-4F88-BC81-02D7E0CB797E) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S5-bp78g (still live)
+  |   S5-bp78g                 S5           both              pair-a
+gate: load
+  |   load1 at the moment of failure: 14.52 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 221 — the rest is in the full log above)
+
+```
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 0 ms into its entry
+
+    NitroUiPopoverProto.nuiTestStateReport(...): java.lang.IllegalStateException: Method getObserverCount must be called on the main thread
+
+      	at androidx.lifecycle.LifecycleRegistry.enforceMainThreadIfNeeded(LifecycleRegistry.jvm.kt:300)
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 50 ms into its entry
+
+    NitroUiPopoverProto.nuiTestStateReport(...): java.lang.IllegalStateException: Method getObserverCount must be called on the main thread
+
+      	at androidx.lifecycle.LifecycleRegistry.enforceMainThreadIfNeeded(LifecycleRegistry.jvm.kt:300)
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 100 ms into its entry
+
+    NitroUiPopoverProto.nuiTestStateReport(...): java.lang.IllegalStateException: Method getObserverCount must be called on the main thread
+
+      	at androidx.lifecycle.LifecycleRegistry.enforceMainThreadIfNeeded(LifecycleRegistry.jvm.kt:300)
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+  ● PopoverProto · Q5 lifetime › leaves nothing when dropped 150 ms into its entry
+
+    NitroUiPopoverProto.nuiTestStateReport(...): java.lang.IllegalStateException: Method getObserverCount must be called on the main thread
+
+      	at androidx.lifecycle.LifecycleRegistry.enforceMainThreadIfNeeded(LifecycleRegistry.jvm.kt:300)
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+  ● PopoverProto · Q5 lifetime › gives a recycled view none of the open popover it came from
+
+    NitroUiPopoverProto.nuiTestStateReport(...): java.lang.IllegalStateException: Method getObserverCount must be called on the main thread
+
+      	at androidx.lifecycle.LifecycleRegistry.enforceMainThreadIfNeeded(LifecycleRegistry.jvm.kt:300)
+      	at androidx.lifecycle.LifecycleRegistry.getObserverCount(LifecycleRegistry.jvm.kt:238)
+      	at com.margelo.nitro.nitroui.HybridNitroUiPopoverProto.nuiTestStateReport(HybridNitroUiPopoverProto.kt:564)
+      	at com.facebook.jni.NativeRunnable.run(Native Method)
+      	at android.os.Handler.handleCallback(Handler.java:959)
+      	at android.os.Handler.dispatchMessage(Handler.java:100)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadHandler.dispatchMessage(MessageQueueThreadHandler.kt:21)
+      	at android.os.Looper.loopOnce(Looper.java:232)
+      	at android.os.Looper.loop(Looper.java:317)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion.startNewBackgroundThread$lambda$0(MessageQueueThreadImpl.kt:151)
+      	at com.facebook.react.bridge.queue.MessageQueueThreadImpl$Companion$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+      	at java.lang.Thread.run(Thread.java:1012)
+      [0m [90m 42 |[39m
+       [90m 43 |[39m [36mfunction[39m reportOf(id[33m:[39m string)[33m:[39m [33mReport[39m {
+      [31m[1m>[22m[39m[90m 44 |[39m   [36mconst[39m raw [33m=[39m handles[33m.[39m[36mget[39m(id)[33m?[39m[33m.[39mnuiTestStateReport() [33m?[39m[33m?[39m [32m''[39m[33m;[39m
+       [90m    |[39m                                                  [31m[1m^[22m[39m
+       [90m 45 |[39m   [36mconst[39m report[33m:[39m [33mReport[39m [33m=[39m { raw }[33m;[39m
+       [90m 46 |[39m   [36mfor[39m ([36mconst[39m pair [36mof[39m raw[33m.[39msplit([32m';'[39m)) {
+       [90m 47 |[39m     [36mconst[39m at [33m=[39m pair[33m.[39mindexOf([32m'='[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       8 failed, 8 total
+Snapshots:   0 total
+Time:        13.191 s
+Ran all test suites matching PopoverProto.
+gate: harness:android:PopoverProto FAIL in 14.4 s
+gate: recorded in .gates/task/S5-popover-spike.jsonl
+
+
+gate: appended the device context to task/S5-popover-spike/harness+android+PopoverProto-2026-11-06T02-11-05.668Z.log (5 probe(s))
+
+```

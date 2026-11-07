@@ -1,0 +1,72 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-06T18:04:43.706Z on code tree `89552b9236c5` at HEAD `aa63475` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit null signal SIGTERM, 446704 ms
+- Load: start 9.21, end 2.73, median 5.40, max 10.36
+- Device: android / device `emulator-5570` / lease `G19-8d0j7`
+- Full log: `task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-8d0j7 (still live)
+  |   G19-8d0j7                G19          both              pair-b
+  |   X20-9dxb5                X20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 2.73 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 27 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 89552b9236c5 at HEAD aa634755
+gate: git tree 03a7d5b1eb44
+gate: log task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log
+gate:       <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 89552b9236c5, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.21/8.01 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+gate: stopped the Metro this run started (64480) on port 8293 - the next gate on this lease gets a free port
+gate: stopped the Metro this run started (64480) on port 8293 - the next gate on this lease gets a free port
+gate: harness:android FAIL in 446.7 s (signal SIGTERM) - note: the code tree moved during the run (88ddc92c0d53 now), so this line describes 89552b9236c5
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+android-2026-11-06T18-04-43.283Z.log (5 probe(s))
+
+```

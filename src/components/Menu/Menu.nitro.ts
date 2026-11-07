@@ -106,8 +106,13 @@ export interface NitroUiMenuProps
    */
   variant: string;
   /**
-   * One of `'small' | 'medium' | 'large'`, resolved by the wrapper. SwiftUI
-   * `.controlSize` / Android content padding + label typography.
+   * One of `'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge'`, resolved by the
+   * wrapper. SwiftUI `.controlSize` / Android content padding + label typography.
+   *
+   * The same ladder `Button` sends, because the trigger *is* a Button on both
+   * platforms: `docs/components/menu.md` measures a Menu's box against a Button's,
+   * and D42 item 4 widened both at once (G19 fix round 2). A Menu that clamped
+   * three of the five rungs would type-check and quietly draw `medium`.
    */
   size: string;
   /**
@@ -140,6 +145,22 @@ export interface NitroUiMenuProps
    * Android, exactly as it is on Button, so it never changes the label's text.
    */
   systemImage: string | null;
+  /**
+   * Leading glyph on the trigger for Android, or `null`: the same string `Button`
+   * is sent, built the same way by the wrapper — a drawable the app ships named by
+   * its resource name, or a `url:` marker in front of the dev-server file Metro
+   * serves for a `require`'d `.xml` (`src/iconSource.ts`).
+   *
+   * Android only, like the prop it matches: iOS draws `systemImage` and ignores
+   * this, so a Menu with a glyph on both platforms sends both names and needs no
+   * `Platform.select`. It is drawn on the trigger — on the leading half when
+   * `hasPrimaryAction` makes Android draw the split button.
+   *
+   * It joins `nuiSizingKey`, exactly as it does on `Button`: a glyph before the
+   * label makes the control wider, so two Menus that differ only in this prop must
+   * not share one cached size.
+   */
+  androidIcon: string | null;
   /**
    * Whether `primaryAction` means anything (DECISIONS D29, E3). Both platforms
    * draw it, each in its own idiom: iOS keeps one button where a tap runs the

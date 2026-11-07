@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Deliberately broken. This file is never required from JavaScript and never
+     reaches a build: it exists so `android/src/test` can feed the `androidIcon`
+     vector parser something that is well-formed XML and not a vector drawable,
+     and prove the parser says so instead of drawing an empty slot. The real
+     files beside it are documented in README.md. -->
+<html>
+  <body>
+    <p>This is not an Android vector drawable.</p>
+  </body>
+</html>

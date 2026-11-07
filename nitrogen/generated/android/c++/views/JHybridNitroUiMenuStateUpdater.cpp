@@ -89,6 +89,11 @@ void JHybridNitroUiMenuStateUpdater::updateViewProps(jni::alias_ref<jni::JClass>
     hybridView->setSystemImage(newProps->systemImage.get());
   }
   if (oldProps == nullptr
+        ? newProps->androidIcon.isProvided()
+        : !newProps->androidIcon.hasSameValue(oldProps->androidIcon)) {
+    hybridView->setAndroidIcon(newProps->androidIcon.get());
+  }
+  if (oldProps == nullptr
         ? newProps->hasPrimaryAction.isProvided()
         : !newProps->hasPrimaryAction.hasSameValue(oldProps->hasPrimaryAction)) {
     hybridView->setHasPrimaryAction(newProps->hasPrimaryAction.get());

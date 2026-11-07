@@ -1,0 +1,200 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-07T09:11:34.034Z on code tree `96ad5f0cf6b8` at HEAD `aa281f1` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 933083 ms
+- Load: start 7.16, end 3.65, median 3.75, max 42.97
+- Device: android / device `emulator-5570` / lease `G19-3ttma`
+- Full log: `task/G19-android-icon-iconbutton/harness+android-2026-11-07T09-11-33.692Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T09-11-33.692Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · the glyph and the top rungs (G19 fix round 2) › takes the glyph the Button takes, into the box the Button takes`
+- `FAIL __tests__/Slider.harness.tsx`
+- `● Slider › steps to the next legal value when a screen reader asks`
+- `expected [ 3, 6, 3 ] to deeply equal [ 3, 6, 9 ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T09-11-33.692Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-3ttma (still live)
+  |   X21-znj7u                X21          both              pair-a
+  |   G19-3ttma                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.65 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 351 — the rest is in the full log above)
+
+```
+      quantise tenths: [0.3]
+
+
+    console.log
+      quantise thirds: [1]
+
+
+    console.log
+      quantise negatives: [-3]
+
+
+    console.log
+      rejected: starts=[0.2,0.2]
+
+
+    console.log
+      from JS: starts=[0.6]
+
+
+    console.log
+      mid-drag write: 5 attempts, release values=[0.5,0.5,0.5,0.5,0.5] (wrote 0.5, dragged to 0.8)
+
+
+    console.log
+      uncontrolled: starts=[0.4,0.7]
+
+
+    console.log
+      slow JS: events=6 for 6 moves over ~300ms
+
+
+    console.log
+      range change: starts=[0] complete=[40]
+
+
+    console.log
+      abandoned drag: reused=false
+
+
+    console.log
+      a11y: box=300.19x48.00 labelBox=null handleLabel=Volume
+
+
+    console.log
+      a11y step: #1 performed SetProgress(3.0) on #43651 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #3 performed SetProgress(0.5) on #43659 range=0.0..10.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      a11y step: #4 performed SetProgress(3.5) on #43659 range=0.0..10.0@3.0 3.0->6.0 disabled=false
+
+
+    console.log
+      step in drag: #1 performed SetProgress(3.0) on #43675 range=0.0..12.0@0.0 0.0->3.0 disabled=false
+
+
+    console.log
+      step in drag: starts=[0] change=[3,3,6,9] complete=[9]
+
+
+    console.log
+      inverted range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      flat range: starts=[5] change=[5] complete=[5]
+
+
+    console.log
+      Slider stress: 40 hosted controls mounted in 49.1ms last=411.43x48.00
+
+
+    console.log
+      timing: Slider stress: mount 40 instances 49.1ms (limit 15000ms) - reported, not gated (D21: HARNESS_TIMING=1 gates it) · load1 3.38/load5 6.51 over 10 cores · the bar is headroom for a debug build, not a target
+
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, 6, 3 ] to deeply equal [ 3, 6, 9 ]
+
+      [0m [90m 1563 |[39m       expectPerformed(report[33m,[39m what)[33m;[39m
+       [90m 1564 |[39m       [36mconst[39m index [33m=[39m events[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m[33m;[39m
+      [31m[1m>[22m[39m[90m 1565 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual(expected[33m.[39mslice([35m0[39m[33m,[39m index [33m+[39m [35m1[39m))[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1566 |[39m       [90m// The start of each step is the value it began from: the control's seed for[39m
+       [90m 1567 |[39m       [90m// the first, and each previously reported value after that. And never more[39m
+       [90m 1568 |[39m       [90m// starts than ends - the drag that never ends would show up here.[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · the glyph and the top rungs (G19 fix round 2) › takes the glyph the Button takes, into the box the Button takes
+
+    "button-icon" (button-icon) never reported a measured size.
+
+      [0m [90m 416 |[39m       [36mreturn[39m size [33m!=[39m [36mnull[39m [33m&&[39m size[33m.[39mwidth [33m>[39m [35m0[39m [33m&&[39m size[33m.[39mheight [33m>[39m [35m0[39m [33m?[39m size [33m:[39m [36mnull[39m[33m;[39m
+       [90m 417 |[39m     }[33m,[39m
+      [31m[1m>[22m[39m[90m 418 |[39m     () [33m=>[39m [36mnew[39m [33mError[39m([32m`"${testId}" (${what}) never reported a measured size.`[39m)
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 419 |[39m   )[33m;[39m
+       [90m 420 |[39m }
+       [90m 421 |[39m[0m
+
+FAIL __tests__/Slider.harness.tsx
+  ● Slider › steps to the next legal value when a screen reader asks
+
+    expected [ 3, 6, 3 ] to deeply equal [ 3, 6, 9 ]
+
+      [0m [90m 1563 |[39m       expectPerformed(report[33m,[39m what)[33m;[39m
+       [90m 1564 |[39m       [36mconst[39m index [33m=[39m events[33m.[39mcomplete[33m.[39mlength [33m-[39m [35m1[39m[33m;[39m
+      [31m[1m>[22m[39m[90m 1565 |[39m       expect(events[33m.[39mcomplete)[33m.[39mtoEqual(expected[33m.[39mslice([35m0[39m[33m,[39m index [33m+[39m [35m1[39m))[33m;[39m
+       [90m      |[39m                                      [31m[1m^[22m[39m
+       [90m 1566 |[39m       [90m// The start of each step is the value it began from: the control's seed for[39m
+       [90m 1567 |[39m       [90m// the first, and each previously reported value after that. And never more[39m
+       [90m 1568 |[39m       [90m// starts than ends - the drag that never ends would show up here.[39m[0m
+
+
+Test Suites: 2 failed, 23 passed, 25 total
+Tests:       2 failed, 3 skipped, 513 passed, 518 total
+Snapshots:   0 total
+Time:        907.053 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 96ad5f0cf6b8, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.44/4.81 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android-2026-11-07T09-11-33.692Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        23.501 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 933.1 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+android-2026-11-07T09-11-33.692Z.log (5 probe(s))
+
+```

@@ -1,0 +1,186 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-06T19:09:18.274Z on code tree `88ddc92c0d53` at HEAD `4689d0d` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 655913 ms
+- Load: start 3.91, end 10.05, median 4.82, max 13.18
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G19-8d0j7`
+- Full log: `task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log` (<store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● Console`
+- `● androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-8d0j7 (still live)
+  |   G19-8d0j7                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.05 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 142 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 88ddc92c0d53 at HEAD 4689d0d2
+gate: git tree b850ea0ff696 with a DIRTY worktree (not reusable)
+gate: log task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log
+gate:       <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 88ddc92c0d53, 17 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.91/4.55 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Button.harness.tsx
+  ● Console
+
+    console.log
+      variants: filled=77.33x34.33 tonal=77.33x34.33 outlined=77.33x34.33 text=53.33x20.33 elevated=77.33x34.33 corrections=5 immediate=2 cached=5
+
+
+    console.log
+      iOS: harness taps delivered to the Button = 1 (barometer 1); native-held onPress invoked once
+
+
+    console.log
+      title R3: short=53.67x34.33 long=173.67x34.33 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      size R3: small=58.00x28.00 large=82.00x50.33 warm={"corrections":0,"immediate":0,"flushes":0,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      same-size key change (ios): box=70.67x34.33 measured=70.67x34.33 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      notify: short=53.67x34.33 long=173.67x34.33 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      cache key: OK=47.67x34.33 long=207.00x34.33 tonal=47.67x34.33
+
+
+    console.log
+      epoch: first=119.33x34.33 second=259.33x34.33 d={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} drawn=[]
+
+
+    console.log
+      iOS: harness taps delivered to the Button = 0 (barometer 1); not deliverable to a hosted SwiftUI Button, so this asserts the box and the reported size only
+
+
+    console.log
+      200 buttons: corrections=200 immediate=2 cached=200
+
+
+    console.log
+      trace: drawn=["12.7x71.7"] real=76.67x34.33
+
+
+    console.log
+      shape ladder (square corners): small=53.33x28.00 medium=61.00x34.33 large=77.00x50.33
+
+
+    console.log
+      androidIcon boxes: plain=68.00x34.33 star=68.00x34.33 wide=68.00x34.33 missing=68.00x34.33 shape=68.00x34.33 corrections=5
+
+
+    console.log
+      key trace: key="filled|medium||nitroui_test_star|TracedKey" laidOut=["12.5x71.5"] real=104.67x34.33
+
+
+    console.log
+      rung boxes: small=55.67x28.00 medium=63.67x34.33 large=79.67x50.33 xlarge=79.67x50.33 xxlarge=79.67x50.33
+
+  ● androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it
+
+    "probe-icon" (probe-icon) never reported a measured size.
+
+      [0m [90m 237 |[39m       [36mreturn[39m size [33m!=[39m [36mnull[39m [33m&&[39m size[33m.[39mwidth [33m>[39m [35m0[39m [33m&&[39m size[33m.[39mheight [33m>[39m [35m0[39m [33m?[39m size [33m:[39m [36mnull[39m[33m;[39m
+       [90m 238 |[39m     }[33m,[39m
+      [31m[1m>[22m[39m[90m 239 |[39m     () [33m=>[39m [36mnew[39m [33mError[39m([32m`"${testId}" (${what}) never reported a measured size.`[39m)
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 240 |[39m   )[33m;[39m
+       [90m 241 |[39m }
+       [90m 242 |[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Button.harness.tsx
+  ● androidIcon · the drawable the app ships (G19) › draws the glyph in the control content colour, and nothing at all without it
+
+    "probe-icon" (probe-icon) never reported a measured size.
+
+      [0m [90m 237 |[39m       [36mreturn[39m size [33m!=[39m [36mnull[39m [33m&&[39m size[33m.[39mwidth [33m>[39m [35m0[39m [33m&&[39m size[33m.[39mheight [33m>[39m [35m0[39m [33m?[39m size [33m:[39m [36mnull[39m[33m;[39m
+       [90m 238 |[39m     }[33m,[39m
+      [31m[1m>[22m[39m[90m 239 |[39m     () [33m=>[39m [36mnew[39m [33mError[39m([32m`"${testId}" (${what}) never reported a measured size.`[39m)
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 240 |[39m   )[33m;[39m
+       [90m 241 |[39m }
+       [90m 242 |[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 23 passed, 24 of 25 total
+Tests:       1 failed, 2 skipped, 445 passed, 448 total
+Snapshots:   0 total
+Time:        628.253 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 88ddc92c0d53, 17 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 13.18/7.00 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        24.253 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 655.9 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+
+gate: appended the device context to task/G19-android-icon-iconbutton/harness+ios-2026-11-06T19-09-17.718Z.log (4 probe(s))
+
+```

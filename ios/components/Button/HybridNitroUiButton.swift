@@ -25,17 +25,31 @@ enum ButtonVariant: String {
   case elevated
 }
 
-/// `.controlSize` for the `small` / `medium` / `large` JS values.
+/// `.controlSize` for the five rungs of the shared ladder.
+///
+/// iOS has four usable `.controlSize` values and the ladder has five rungs, so the
+/// top two share one: `xlarge` and `xxlarge` both draw the largest button iOS
+/// offers. `.extraLarge` is iOS 17+; before it the largest is `.large`, so on an
+/// older OS the top three rungs are one control. That collapse is the honest
+/// mapping — there is no sixth button size to point at — and
+/// `docs/components/button.md` states it next to Android's five distinct heights.
 enum ButtonScale: String {
   case small
   case medium
   case large
+  case xlarge
+  case xxlarge
 
   var controlSize: ControlSize {
     switch self {
     case .small: return .small
     case .medium: return .regular
     case .large: return .large
+    case .xlarge, .xxlarge:
+      if #available(iOS 17.0, *) {
+        return .extraLarge
+      }
+      return .large
     }
   }
 }
@@ -68,6 +82,9 @@ final class ButtonModel: NitroUiModel {
   /// hold a name that does not; the setter decides, so the content never renders
   /// the "missing symbol" placeholder and never resizes after the fact.
   var systemImage: String?
+
+  /// The Android drawable name. Stored so the getter answers; never drawn on iOS.
+  var androidIcon: String?
   var testID: String?
   var accessibilityLabel: String?
   /// The size configuration React sent. The sizing engine reads the key out of
@@ -220,6 +237,10 @@ private struct OptionalAccessibility: ViewModifier {
 /// The Hybrid View React renders as `NitroUiButton`.
 final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
   private let host: NitroSwiftUIHost<ButtonContent>
+
+  /// Guards `pixelProbes`, which a probe writes on main and a report reads from
+  /// whichever thread Nitro called.
+  private let pixelProbesLock = NSLock()
 
   /// This component's name in the sizing engine: `HybridNitroUiButtonComponentName`
   /// in the generated C++, and `getName()` in the generated Kotlin.
@@ -375,6 +396,19 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     }
   }
 
+  /// Accepted and ignored: `androidIcon` names an Android drawable, and iOS draws
+  /// `systemImage` instead.
+  ///
+  /// It is still *stored* rather than dropped, for two reasons. `hybridRef` reads
+  /// it back, so a test can assert what React sent; and a prop that vanishes
+  /// between commits is the nitro#1184 crash, which the wrapper avoids by always
+  /// sending it — the native side has to keep whatever it is handed either way.
+  /// No `markDirty()`: nothing observes it, so a write must not cost a render.
+  var androidIcon: Variant_NullType_String {
+    get { model.androidIcon.map { .second($0) } ?? .first(.null) }
+    set { model.androidIcon = newValue.asType(String.self) }
+  }
+
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
@@ -449,6 +483,7 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
     model.disabled = false
     model.tint = nil
     model.systemImage = nil
+    model.androidIcon = nil
     model.testID = nil
     model.accessibilityLabel = nil
     model.sizingKey = ""
@@ -472,5 +507,31 @@ final class HybridNitroUiButton: HybridNitroUiButtonSpec, RecyclableView {
       return NitroUiButtonSize(width: 0, height: 0)
     }
     return NitroUiButtonSize(width: Double(size.width), height: Double(size.height))
+  }
+
+  /// Probes answered since the view mounted, so the report's `n=` counts the
+  /// caller's own probe rather than a previous control's. Kept here rather than in
+  /// the model because there is nothing in the model for it to describe.
+  private var pixelProbes = 0
+
+  /// Records that a probe was asked for, and answers nothing.
+  ///
+  /// iOS has no glyph to sample: `androidIcon` is Android's prop and iOS draws
+  /// `systemImage` instead, so an iOS probe of an Android icon is a test that should
+  /// not be running there. The report below therefore says `no pixels`, which the
+  /// harness's probe helper already treats as a hard failure rather than an answer
+  /// (`pixelProbe` in `example/__tests__/SegmentedControl.harness.tsx`) - the honest
+  /// outcome is a red test, not a green one about nothing.
+  func nuiTestPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
   }
 }

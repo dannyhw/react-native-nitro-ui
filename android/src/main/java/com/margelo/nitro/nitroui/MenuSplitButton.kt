@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MotionScheme
@@ -201,6 +202,13 @@ internal fun MenuSplitButton(
   val (leadingShapes, trailingShapes) = splitButtonShapes(scale)
   // Material's own padding and icon-size ladders, read at the same rung as the corners.
   // These two are plain functions of the height, so `remember` keys on the scale alone.
+  // The glyph the plain trigger draws, at the same rung: `docs/components/menu.md`
+  // measures one Menu's trigger against a Button's box, and a control that changed
+  // shape because it grew a second half would not be the same control any more. So
+  // the ladder is [ButtonDefaults]' rather than `SplitButtonDefaults`' own icon
+  // ladder, and a Menu's glyph is one size whether or not `primaryAction` is set.
+  val iconSize = remember(scale) { ButtonDefaults.iconSizeFor(scale.height) }
+  val iconSpacing = remember(scale) { ButtonDefaults.iconSpacingFor(scale.height) }
   val leadingPadding =
     remember(scale) {
       SplitButtonDefaults.leadingButtonContentPaddingFor(scale.height)
@@ -248,6 +256,20 @@ internal fun MenuSplitButton(
       val leadingModifier =
         halfModifier(model, spokenLabel, title, leading = true, enabled = enabled)
       val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
+        // The trigger's glyph, on the half that carries the label — the trailing half
+        // is the chevron, and iOS has one button for both jobs. Same helper the Button
+        // and the plain trigger use, so `Pending` reserves the same empty slot here and
+        // the artwork cannot widen the control when it arrives.
+        //
+        // The half's own padding is Material's `leadingButtonContentPaddingFor`, which
+        // has no `hasStartIcon` form the way `ButtonDefaults.contentPaddingFor` does;
+        // the glyph therefore sits at the resting inset and the half grows by the glyph
+        // plus [iconSpacing]. Measured, in `docs/components/menu.md`.
+        NitroUiIconSlotContent(
+          icon = model.androidIconContent,
+          size = iconSize,
+          spacing = iconSpacing,
+        )
         // One line, tail-truncated, exactly as `NitroUiM3Button` draws its label: the
         // half's intrinsic width is the title's, and a caller who gives the control a
         // narrower box truncates the title rather than painting outside it.

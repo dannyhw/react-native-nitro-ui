@@ -89,6 +89,11 @@ void JHybridNitroUiButtonStateUpdater::updateViewProps(jni::alias_ref<jni::JClas
     hybridView->setSystemImage(newProps->systemImage.get());
   }
   if (oldProps == nullptr
+        ? newProps->androidIcon.isProvided()
+        : !newProps->androidIcon.hasSameValue(oldProps->androidIcon)) {
+    hybridView->setAndroidIcon(newProps->androidIcon.get());
+  }
+  if (oldProps == nullptr
         ? newProps->testID.isProvided()
         : !newProps->testID.hasSameValue(oldProps->testID)) {
     hybridView->setTestID(newProps->testID.get());

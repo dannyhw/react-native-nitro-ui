@@ -6,6 +6,7 @@
 
 import { ColorValue } from 'react-native';
 import type { HybridObject } from 'react-native-nitro-modules';
+import type { ImageURISource } from 'react-native';
 import { JSX } from 'react';
 import { ReactNode } from 'react';
 import { Ref } from 'react';
@@ -16,6 +17,9 @@ export function AlertDialog(props: AlertDialogProps): JSX.Element;
 
 // @public
 export type AlertDialogProps = DialogProps;
+
+// @public
+export type AndroidIconProp = string | number | ImageURISource;
 
 // @public
 export function BottomSheet(input: BottomSheetProps): JSX.Element;
@@ -59,6 +63,7 @@ export function Button(input: ButtonProps): JSX.Element;
 
 // @public
 export interface ButtonProps extends ViewProps {
+    androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;
     // @internal
     hybridRef?: ((view: {
@@ -69,11 +74,14 @@ export interface ButtonProps extends ViewProps {
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
             height: number;
         };
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;
@@ -90,7 +98,7 @@ export interface ButtonProps extends ViewProps {
 export type ButtonShape = 'round' | 'square';
 
 // @public
-export type ButtonSize = 'small' | 'medium' | 'large';
+export type ButtonSize = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
 
 // @public
 export type ButtonVariant = 'filled' | 'tonal' | 'outlined' | 'text' | 'elevated';
@@ -310,6 +318,7 @@ export interface MenuGroup {
 
 // @public
 export interface MenuProps extends ViewProps {
+    androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;
     group: MenuGroup;
     // @internal
@@ -320,6 +329,7 @@ export interface MenuProps extends ViewProps {
         readonly disabled: boolean;
         readonly tintColor: number | null;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
