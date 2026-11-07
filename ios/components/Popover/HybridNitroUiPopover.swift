@@ -836,7 +836,11 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       fields.append("id=\(view.accessibilityIdentifier ?? "-")")
     }
     fields.append("anchorRect=\(Self.screenRect(of: anchorBox))")
-    fields.append("inPopover=\(container.superview?.next is NitroUiPopoverController ? 1 : 0)")
+    // Two views up, as `sync` reads it: the content sits in the controller's host,
+    // whose own next is the controller's root view, not the controller.
+    fields.append(
+      "inPopover=\(container.superview?.superview?.next is NitroUiPopoverController ? 1 : 0)"
+    )
     fields.append("hidden=\(container.isHidden ? 1 : 0)")
     fields.append("children=\(container.subviews.count)")
     fields.append("topPresented=\(NitroUiPresenterChain.topPresentedClass(in: anchor.window))")

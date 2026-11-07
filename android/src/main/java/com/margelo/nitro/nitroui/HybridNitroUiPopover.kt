@@ -387,6 +387,10 @@ internal class PopoverHost(
       (child.parent as? ViewGroup)?.removeView(child)
       root.addView(child, index)
     }
+    // The box is normally laid out *before* the popup composes, so a layout listener is
+    // not on its way: without asking here, the first-frame witness would never arm and
+    // the run would report no draws for a popup that drew.
+    watchDraws()
     return root
   }
 
