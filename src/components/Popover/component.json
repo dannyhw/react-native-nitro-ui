@@ -1,0 +1,16 @@
+{
+  "name": "Popover",
+  "hybridView": "NitroUiPopover",
+  "implementation": "HybridNitroUiPopover",
+  "id": "popover",
+  "sizing": null,
+  "hostable": false,
+  "exampleTab": "popover",
+  "exampleLabel": "Popover",
+  "bench": false,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it",
+  "androidViewManager": "NitroUiPopoverViewManager"
+}

@@ -172,3 +172,11 @@ export {
   type SearchFieldHandle,
   type SearchFieldProps,
 } from './components/SearchField/SearchField';
+
+// A popover with React Native content, anchored to one of your views (G22, DECISIONS
+// D44): `UIPopoverPresentationController` on iOS and a Compose `Popup` under a Material 3
+// `Surface` on Android, which has no popover control (D38 item 1). `isPresented` is
+// controlled through the event-count handshake, the `anchor` is laid out in place, and the
+// `children` lay themselves out in the app's own tree at up to `maxWidth` - the popover
+// shows that box rather than measuring it, so its first frame is its final size.
+export { type PopoverProps, Popover } from './components/Popover/Popover';

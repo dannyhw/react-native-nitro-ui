@@ -105,6 +105,7 @@ import {
   DatePicker,
   Menu,
   Picker,
+  Popover,
   Progress,
   SearchField,
   SegmentedControl,
@@ -1631,6 +1632,43 @@ function tooltipShows(
   );
 }
 
+const POPOVER_LABEL = 'Conformance popover';
+/** The two owners' content heights: different, and neither the other's. */
+const POPOVER_FIRST_HEIGHT = 120;
+const POPOVER_SECOND_HEIGHT = 260;
+
+/**
+ * A Popover owner whose content is a box of a known height.
+ *
+ * It sends no `accessibilityLabel` because there is none to send: a Popover's `anchor`
+ * stays in the app's layout and keeps its own taps, so a name on the wrapper would be a
+ * real element on screen that the a11y rule would (correctly) find, and D44 records that
+ * an `accessibilityLabel` never reaches a presented window on either platform. The name a
+ * person hears is the content's own, which real input reads through the tree.
+ */
+function popoverOwner(presented: boolean, height: number): ReactElement {
+  return (
+    <Popover
+      isPresented={presented}
+      onIsPresentedChange={recordRecycle('conformance-popover')}
+      anchor={<View style={{ width: 140, height: 36 }} />}
+      testID="conformance-popover"
+      hybridRef={captureDialog('conformance-popover')}
+    >
+      <View style={{ width: 180, height }} />
+    </Popover>
+  );
+}
+
+/** Whether a popover's report says it is up holding content `height` tall. */
+function popoverShows(report: Record<string, string>, height: number): boolean {
+  return (
+    report.presented === '1' &&
+    report.live === '1' &&
+    Math.abs(Number(report.contentH) - height) <= 1
+  );
+}
+
 /**
  * Every callback the a11y rule's own wrapper has to keep alive: a probe's control is wrapped
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
@@ -3112,6 +3150,89 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             label: "the message its tooltip shows (the second owner's)",
             expected: TOOLTIP_MESSAGE_SECOND,
             actual: report.message,
+          },
+        ];
+      },
+    },
+  },
+  {
+    name: 'Popover',
+    component: 'NitroUiPopover',
+    label: POPOVER_LABEL,
+    testId: 'conformance-popover',
+    selfSizing: false,
+    owner: () => popoverOwner(false, POPOVER_FIRST_HEIGHT),
+    control: (testId, variant) => (
+      <Popover
+        isPresented={false}
+        anchor={<View style={{ width: variant ? 120 : 90, height: 32 }} />}
+        testID={testId}
+      >
+        <View
+          style={{ width: variant ? 140 : 100, height: variant ? 60 : 40 }}
+        />
+      </Popover>
+    ),
+    state: (handle) => [
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // A popover's residue is the dialog's, plus its content: a user dismissal leaves one
+    // native event, so a reset that kept the count refuses the second owner's
+    // `isPresented` as stale; and a reset that kept the previous popover's content box
+    // would show the first owner's height in the second owner's popover. Both are read
+    // from the view (`nuiTestStateReport`).
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event), and the content the first ' +
+        "owner's popover held - the second owner presents with a fresh count and content " +
+        'of another height',
+      first: () => popoverOwner(true, POPOVER_FIRST_HEIGHT),
+      act: async () => {
+        const handle = await ensureHandle('conformance-popover');
+        const deadline = Date.now() + 8000;
+        while (!popoverShows(dialogReportOf(handle), POPOVER_FIRST_HEIGHT)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its popover: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-popover:false');
+        if (seen !== 'conformance-popover:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => popoverOwner(true, POPOVER_SECOND_HEIGHT),
+      read: async () => {
+        const handle = handleFor('conformance-popover');
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 6000;
+        let report = dialogReportOf(handle);
+        while (
+          !popoverShows(report, POPOVER_SECOND_HEIGHT) &&
+          Date.now() < deadline
+        ) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the popover the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: "the content height its popover holds (the second owner's)",
+            expected: String(POPOVER_SECOND_HEIGHT),
+            actual: report.contentH,
           },
         ];
       },

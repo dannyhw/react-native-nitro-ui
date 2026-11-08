@@ -1,0 +1,162 @@
+# Failure excerpt — harness:android:Popover
+
+- Ran: 2026-11-07T20:42:28.632Z on code tree `a8ecb117ec0c` at HEAD `2dbada1` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover`
+- Result: fail, exit 1, 57352 ms
+- Load: start 116.00, end 45.34, median 72.89, max 116.00
+- Device: android / device `emulator-5574` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+android+Popover-2026-11-07T20-42-28.632Z.log` (<store>/task/G22-popover/harness+android+Popover-2026-11-07T20-42-28.632Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size`
+- `expected [ '0x0', '389x252' ] to have a length of 1 but got 2`
+- `● Popover › the first frame is the final size (D44) › presents "tall" at its box, with one drawn size`
+- `expected [ '0x0', '578x641' ] to have a length of 1 but got 2`
+- `● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size`
+- `expected [ '0x0', '725x137' ] to have a length of 1 but got 2`
+- `● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size`
+- `expected [ '0x0', '588x315' ] to have a length of 1 but got 2`
+- `● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size`
+- `expected [ '0x0', '996x221' ] to have a length of 1 but got 2`
+- `● Popover › lifetime › cycles 10 more times (round 5)`
+- `● Popover › lifetime › reports nothing for a popover dropped while it is presented (D44 item 2)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover-2026-11-07T20-42-28.632Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 45.34 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 105 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Popover
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a8ecb117ec0c, 19 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 116.00/70.12 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+android+Popover-2026-11-07T20-42-28.632Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size
+
+    expected [ '0x0', '389x252' ] to have a length of 1 but got 2
+
+      [0m [90m 1735 |[39m [32m      flag(this, "ssfi", methodWrapper);[39m
+       [90m 1736 |[39m [32m    }[39m
+      [31m[1m>[22m[39m[90m 1737 |[39m [32m    let result = method.apply(this, arguments);[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1738 |[39m [32m    if (result !== void 0) return result;[39m
+       [90m 1739 |[39m [32m    let newAssertion = new Assertion();[39m
+       [90m 1740 |[39m [32m    transferFlags(this, newAssertion);[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "tall" at its box, with one drawn size
+
+    expected [ '0x0', '578x641' ] to have a length of 1 but got 2
+
+      [0m [90m 1735 |[39m [32m      flag(this, "ssfi", methodWrapper);[39m
+       [90m 1736 |[39m [32m    }[39m
+      [31m[1m>[22m[39m[90m 1737 |[39m [32m    let result = method.apply(this, arguments);[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1738 |[39m [32m    if (result !== void 0) return result;[39m
+       [90m 1739 |[39m [32m    let newAssertion = new Assertion();[39m
+       [90m 1740 |[39m [32m    transferFlags(this, newAssertion);[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size
+
+    expected [ '0x0', '725x137' ] to have a length of 1 but got 2
+
+      [0m [90m 1735 |[39m [32m      flag(this, "ssfi", methodWrapper);[39m
+       [90m 1736 |[39m [32m    }[39m
+      [31m[1m>[22m[39m[90m 1737 |[39m [32m    let result = method.apply(this, arguments);[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1738 |[39m [32m    if (result !== void 0) return result;[39m
+       [90m 1739 |[39m [32m    let newAssertion = new Assertion();[39m
+       [90m 1740 |[39m [32m    transferFlags(this, newAssertion);[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size
+
+    expected [ '0x0', '588x315' ] to have a length of 1 but got 2
+
+      [0m [90m 1735 |[39m [32m      flag(this, "ssfi", methodWrapper);[39m
+       [90m 1736 |[39m [32m    }[39m
+      [31m[1m>[22m[39m[90m 1737 |[39m [32m    let result = method.apply(this, arguments);[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1738 |[39m [32m    if (result !== void 0) return result;[39m
+       [90m 1739 |[39m [32m    let newAssertion = new Assertion();[39m
+       [90m 1740 |[39m [32m    transferFlags(this, newAssertion);[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size
+
+    expected [ '0x0', '996x221' ] to have a length of 1 but got 2
+
+      [0m [90m 1735 |[39m [32m      flag(this, "ssfi", methodWrapper);[39m
+       [90m 1736 |[39m [32m    }[39m
+      [31m[1m>[22m[39m[90m 1737 |[39m [32m    let result = method.apply(this, arguments);[39m
+       [90m      |[39m                              [31m[1m^[22m[39m
+       [90m 1738 |[39m [32m    if (result !== void 0) return result;[39m
+       [90m 1739 |[39m [32m    let newAssertion = new Assertion();[39m
+       [90m 1740 |[39m [32m    transferFlags(this, newAssertion);[39m[0m
+
+  ● Popover › lifetime › cycles 10 more times (round 5)
+
+    "cycles-probe" never reached nothing left after 50 cycles; its report is "seq=428;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=0;askedW=0;askedH=0;maxWidth=320;imePx=0;contentWaits=0;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=0;nodeH=0;children=0;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=13;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=17;recycles=17;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+  ● Popover › lifetime › reports nothing for a popover dropped while it is presented (D44 item 2)
+
+    "drop-open-probe" never reached a baseline with nothing up; its report is "seq=361;presented=0;js=0;live=1;presentCount=0;onScreen=0;roots=1;askedW=0;askedH=0;maxWidth=320;imePx=0;contentWaits=0;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=0;nodeH=0;children=0;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=16;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=11;recycles=11;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       7 failed, 17 passed, 24 total
+Snapshots:   0 total
+Time:        55.383 s, estimated 88 s
+Ran all test suites matching Popover.
+
+
+
+```

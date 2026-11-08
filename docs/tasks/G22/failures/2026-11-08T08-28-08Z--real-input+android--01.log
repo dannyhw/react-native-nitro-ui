@@ -1,0 +1,196 @@
+# Failure excerpt — real-input:android
+
+- Ran: 2026-11-08T08:28:08.286Z on code tree `9ca8d0014867` at HEAD `2a6c9d5` (branch `task/G22-popover`)
+- Command: `node scripts/real-input/android.mjs`
+- Result: fail, exit 1, 2303612 ms
+- Load: start 9.87, end 45.74, median 4.30, max 45.74
+- Device: android / device `emulator-5570` / lease `G22-d5myp`
+- Full log: `task/G22-popover/real-input+android-2026-11-08T08-28-07.614Z.log` (<store>/task/G22-popover/real-input+android-2026-11-08T08-28-07.614Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a real tap on the action half runs the primary action — expected action, saw none`
+- `✗ and raises no list - no window, and no open in the echo either — expected 0 | action, saw 0 | none`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/real-input+android-2026-11-08T08-28-07.614Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 45.74 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 557 — the rest is in the full log above)
+
+```
+    ✓ the field holds the query before anything clears it — expected go, saw go
+    · "Focus search field" occupies 42,645 → 987,792
+    · the clear button is "Clear query" at 852,657 → 978,783
+    ✓ the clear button names itself, so TalkBack can say what it does
+    ✓ a real tap on the clear button empties the field — expected , saw 
+    ✓ and clearing keeps focus: no blur, no submit — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ the Search key submits the query and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+
+  tooltip: a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone
+    ✓ no tooltip has reported anything before a touch — expected none, saw none
+    ✓ no tooltip is up before a touch — expected 0, saw 0
+    ✓ a real tap on the anchor of a closed tooltip presses the anchor once — expected star presses: 1, saw star presses: 1
+    ✓ and opens nothing, reports nothing — expected 0 up, log none, saw 0 up, log none
+    ✓ the tooltip shows its title and its action — expected 1 title, 1 action, saw 1 title, 1 action
+    ✓ a tap outside closes the tooltip and reports the close alone — expected presented:false, saw presented:false
+    ✓ Back closes it and reports the close alone — expected presented:false > presented:false, saw presented:false > presented:false
+    ✓ a real tap on its action reports the id, then the close - once each, in order — expected presented:false > presented:false > action:ok > presented:false, saw presented:false > presented:false > action:ok > presented:false
+    ✓ once it is closed, a real tap on the anchor presses it once more — expected star presses: 2, saw star presses: 2
+    ✓ and opens nothing, reports nothing — expected 0 up, log presented:false > presented:false > action:ok > presented:false, saw 0 up, log presented:false > presented:false > action:ok > presented:false
+
+  popover: a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it
+    ✓ no popover has reported anything before a touch — expected none, saw none
+    ✓ nothing is up and nothing has been pressed inside — expected 0 up, inner presses: 0, saw 0 up, inner presses: 0
+    ✓ the presented popover is the node named popover-short-popover — expected true, saw true
+    ✓ a tap outside closes the popover and reports it — expected short:presented:false > short:dismiss, saw short:presented:false > short:dismiss
+    ✓ one injected tap inside reaches JS exactly once (open 1) — expected inner presses: 1, saw inner presses: 1
+    ✓ the press inside reports, then the dismiss its own close causes — expected true, saw true
+    ✓ one injected tap inside reaches JS exactly once (open 2) — expected inner presses: 2, saw inner presses: 2
+    ✓ one injected tap inside reaches JS exactly once (open 3) — expected inner presses: 3, saw inner presses: 3
+    ✓ one injected tap inside reaches JS exactly once (open 4) — expected inner presses: 4, saw inner presses: 4
+    ✓ one injected tap inside reaches JS exactly once (open 5) — expected inner presses: 5, saw inner presses: 5
+    ✓ one injected tap inside reaches JS exactly once (open 6) — expected inner presses: 6, saw inner presses: 6
+    ✓ one injected tap inside reaches JS exactly once (open 7) — expected inner presses: 7, saw inner presses: 7
+    ✓ one injected tap inside reaches JS exactly once (open 8) — expected inner presses: 8, saw inner presses: 8
+    ✓ one injected tap inside reaches JS exactly once (open 9) — expected inner presses: 9, saw inner presses: 9
+    ✓ one injected tap inside reaches JS exactly once (open 10) — expected inner presses: 10, saw inner presses: 10
+    ✓ ten opens, ten presses inside, and no more — expected inner presses: 10, saw inner presses: 10
+    ✓ a real tap on the TextInput inside the popover brings up the keyboard — expected true, saw true
+    ✓ the popover moves clear of the keyboard — expected true, saw true
+    ✓ the field stays above the keyboard (field bottom 1295, keyboard top 1541, popup 1085..1499, anchor 1769..1875) — expected true, saw true
+    ✓ the popup sits against its anchor or the keyboard (aboveKeyboard: popup 1085..1499, anchor 1769..1875, 0 px off the keyboard's edge minus its margin) — expected true, saw true
+    ✓ real keystrokes reach the field inside the popover, before its own close (ver-short > short:dismiss > typed:a > typed:ab > field:presented:false) — expected true, saw true
+    ✓ nothing is left up at the end — expected 0 + 0 up, saw 0 + 0 up
+
+  hosted-switch: real tap toggles a Switch inside a <Host>, where the control has no view of its own
+    ✓ the hosted Switch starts off — expected off, saw off
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ one real tap flips a hosted Switch (React renders "on") — expected on, saw on
+    · "Hosted switch 0" occupies 42,925 → 179,1009
+    ✓ a second real tap flips it back, so the check is not one fluke — expected off, saw off
+    ✓ the Host reported both changes it was asked for — expected 2, saw 2
+    · tree positions — section=29, hosted=35/39/43, note=46; named nodes: 12:Checkbox | 13:Checkbox | 14:Context | 15:Context | 16:Search | 17:Search | 18:Tooltip | 19:Tooltip | 20:Popover | 21:Popover | 22:Host | 23:Host | 27:react-native-nitro-ui  | 28:Everything inside a Ho | 29:THREE SWITCHES, ONE CO | 30:Reset the counters | 35:Hosted switch 0 | 39:Hosted switch 1 | 43:Hosted switch 2 | 46:The Host has a height; | 47:first switch, as JS se | 48:off | 49:changes JS has accepte | 50:2 | 51:flip the first from JS | 52:flip the first from JS | 53:A SLIDER AND A BUTTON, | 54:hosted Slider, as JS s | 55:0.40 | 56:hosted Slider gestures | 57:start=0 complete=0 | 58:presses the hosted But | 59:0 | 64:Hosted slider | 66:Hosted button | 67:Hosted action | 70:Hosted disabled button | 71:Hosted action, disable
+    ✓ the tree carries the RN text above the Host — expected true, saw true
+    ✓ the tree carries the RN note below the Host — expected true, saw true
+    ✓ the tree carries a node for each hosted Switch — expected true,true,true, saw true,true,true
+    ✓ each hosted Switch is its own labelled node, in mount order — expected 35,39,43, saw 35,39,43
+    ✓ the RN text above the Host is read before every hosted Switch — expected true,true,true, saw true,true,true
+    ✓ the RN note below the Host is read after every hosted Switch — expected true,true,true, saw true,true,true
+
+  hosted-button: real tap presses a Button inside a <Host>, and a disabled one beside it stays unpressed
+    · "Hosted button" occupies 42,2322 → 355,2424
+    · "Hosted disabled button" needed 1 scroll to come on screen - after 1 naming with no box (composed outside the clip)
+    · "Hosted disabled button" occupies 42,1197 → 509,1302
+    ✓ the hosted Buttons start with no presses recorded — expected 0, saw 0
+    · "Hosted button" occupies 42,1071 → 355,1176
+    ✓ one real tap on a hosted Button reaches onPress — expected 1, saw 1
+    ✓ a real tap on the disabled hosted Button does not press it — expected 1, saw 1
+    · "Hosted button" occupies 42,1071 → 355,1176
+    ✓ a second real tap presses the hosted Button again — expected 2, saw 2
+
+  hosted-slider: real drag moves a Slider inside a <Host>, whose width is the track
+    · "Hosted slider" occupies 42,2185 → 1038,2311
+    ✓ the hosted Slider starts at 0.40 — expected 0.4, saw 0.4
+    ✓ the hosted Slider fills the Host (996 of 1080 px wide)
+    ✓ the hosted Slider is a track rather than a square
+    ✓ a real drag moves a hosted Slider and React renders it (0.4 -> 0.89)
+    ✓ the hosted Slider closed the gesture it opened (start=1 complete=1)
+    ✓ dragging back moves a hosted Slider the other way (0.89 -> 0.12)
+    ✓ a drag the machine stretches out still lands where the finger left it (0.12 -> 0.83)
+
+  hosted-mixed: one <Host> composes four kinds of control, and each keeps its own node, order and geometry
+    · "Mixed button" needed 1 scroll to come on screen
+    · "Mixed button" occupies 42,2172 → 335,2277
+    ✓ the mixed Host starts with nothing answered — expected off 0.50 0, saw off 0.50 0
+    · named nodes in the tree: 12:Checkbox | 13:Checkbox | 14:Context | 15:Context | 16:Search | 17:Search | 18:Tooltip | 19:Tooltip | 20:Popover | 21:Popover | 22:Host | 23:Host | 27:The Host has a height; | 28:first switch, as JS se | 29:off | 30:changes JS has accepte | 31:2 | 32:flip the first from JS | 33:flip the first from JS | 34:A SLIDER AND A BUTTON, | 35:hosted Slider, as JS s | 36:0.83 | 37:hosted Slider gestures | 38:start=3 complete=3 | 39:presses the hosted But | 40:2 | 45:Hosted slider | 47:Hosted button | 48:Hosted action | 51:Hosted disabled button | 52:Hosted action, disable | 54:The Slider fills the H | 55:FOUR KINDS OF CONTROL, | 56:mixed Host, as JS sees | 57:off 0.50 0 | 63:Mixed switch | 66:Mixed slider | 67:Mixed linear progress | 68:Mixed circular progres | 70:Mixed button | 71:Mixed action
+    ✓ the mixed Host publishes a node for each of its five children — expected true,true,true,true,true, saw true,true,true,true,true
+    ✓ each kind of control is its own node, in mount order — expected 63,66,67,68,70, saw 63,66,67,68,70
+    · widths in px - slider=996, bar=996, indicator=105, switch=137
+    ✓ the linear bar is as wide as the Slider (996 vs 996)
+    ✓ the circular indicator keeps its own width (105 vs 996)
+    ✓ the Switch keeps its own width too (137 vs 996)
+    ✓ the indicator is drawn as a square, not stretched across the Host (105 x 105)
+    · "Mixed button" occupies 42,2172 → 335,2277
+    ✓ the Button in a mixed Host presses, and nothing else in it moved — expected off 0.50 1, saw off 0.50 1
+    · "Mixed switch" occupies 42,1814 → 179,1898
+    ✓ the Switch in the same Host answers too, and the press count stays — expected on 0.50 1, saw on 0.50 1
+
+  hosted-segmented: real tap selects a segment of a SegmentedControl inside a <Host>, which owns no window
+    · "Hosted segmented" needed 3 scrolls to come on screen
+    · "Hosted segmented" occupies 42,1990 → 535,2116
+    ✓ the hosted SegmentedControl shows the index JS gave it — expected 0, saw 0
+    ✓ no window belongs to the app before a touch — expected 0, saw 0
+    · "Hosted segmented" occupies 42,1990 → 535,2116
+    ✓ a real tap on the middle segment of a hosted SegmentedControl reaches JS as index 1 — expected 1, saw 1
+    · "Hosted segmented" occupies 42,1990 → 535,2116
+    ✓ the drawing did not move out from under the finger — expected 42,1990 → 535,2116, saw 42,1990 → 535,2116
+    · "Hosted segmented" occupies 42,1990 → 535,2116
+    ✓ a real tap on the last segment reaches JS as index 2 — expected 2, saw 2
+    ✓ and a SegmentedControl opens no window of its own, hosted or not — expected 0, saw 0
+
+  hosted-picker: real tap opens a hosted Picker's menu under the box the Host drew, and a row reaches JS
+    · navigation: tap 1/3 on the "Host" tab left pid=14674, tab bar shows Checkbox, Context, Search, Tooltip, Popover, Host - tapping again
+    · navigation: tap 2/3 on the "Host" tab left pid=14674, tab bar shows Checkbox, Context, Search, Tooltip, Popover, Host - tapping again
+    · navigation: tap 3/3 on the "Host" tab left pid=14674, tab bar shows Checkbox, Context, Search, Tooltip, Popover, Host - tapping again
+
+real-input (android): Error: real-input: tapping the "Host" tab 3 times did not bring up its screen (looking for "host-controlled-value"; pid=14674, tab bar shows Checkbox, Context, Search, Tooltip, Popover, Host). The app's log ends:
+11-08 09:05:07.334 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ac9c7fa
+11-08 09:05:07.373 14674 14723 D EGL_emulation: app_time_stats: avg=653.39ms min=30.60ms max=2485.05ms count=4
+11-08 09:05:08.406 14674 14723 D EGL_emulation: app_time_stats: avg=49.74ms min=12.73ms max=340.19ms count=18
+11-08 09:05:11.282 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@67c92e4
+11-08 09:05:13.683 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a0690fe
+11-08 09:05:17.690 14674 14680 I nitroui.example: Background concurrent mark compact GC freed 24MB AllocSpace bytes, 0(0B) LOS objects, 20% free, 92MB/116MB, paused 1.282ms,9.318ms total 498.433ms
+11-08 09:05:18.630 14674 14723 D EGL_emulation: app_time_stats: avg=5058.76ms min=28.14ms max=10089.38ms count=2
+11-08 09:05:22.008 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8593c70
+11-08 09:05:24.551 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@b63edff
+11-08 09:05:27.121 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@8e30be8
+11-08 09:05:29.839 14674 14723 D EGL_emulation: app_time_stats: avg=495.12ms min=4.68ms max=10205.50ms count=22
+11-08 09:05:30.960 14674 14723 D EGL_emulation: app_time_stats: avg=39.17ms min=3.41ms max=82.29ms count=20
+11-08 09:05:34.180 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@eacee60
+11-08 09:05:37.669 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@57bcf9a
+11-08 09:05:37.689 14674 14723 D EGL_emulation: app_time_stats: avg=3364.32ms min=100.20ms max=6628.44ms count=2
+11-08 09:05:41.802 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4ee6331
+11-08 09:05:46.425 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@d759b76
+11-08 09:05:48.668 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@674d0bd
+11-08 09:05:51.359 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ff852b0
+11-08 09:05:54.207 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@efaf93f
+11-08 09:05:59.499 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@ff9b23b
+11-08 09:06:04.492 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@dce17b8
+11-08 09:06:07.339 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@caf9739
+11-08 09:06:25.901 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@24dc477
+11-08 09:06:30.941 14674 14674 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@a4d944
+gate: real-input:android FAIL in 2303.6 s
+gate: recorded in .gates/task/G22-popover.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G22-popover/real-input+android-2026-11-08T08-28-07.614Z.log (5 probe(s))
+
+```

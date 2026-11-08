@@ -1,0 +1,101 @@
+# Failure excerpt — harness:ios:Popover:--testNamePattern:together
+
+- Ran: 2026-11-08T11:02:51.641Z on code tree `5e7737eb267d` at HEAD `db4ad6e` (branch `task/G22-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Popover --testNamePattern together`
+- Result: fail, exit 1, 38986 ms
+- Load: start 6.22, end 5.76, median 6.46, max 7.59
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-p8rhv`
+- Full log: `task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log` (<store>/task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › beside another presenter › presents a Tooltip and a Popover together, closing the tooltip first`
+- `● Popover › beside another presenter › presents a Tooltip and a Popover together, closing the popover first`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-p8rhv (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.76 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 56 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Popover:--testNamePattern:together
+gate: node ../scripts/harness.mjs --harnessRunner ios Popover --testNamePattern together (cwd example)
+gate: code tree 5e7737eb267d at HEAD db4ad6e3
+gate: git tree 2e64ecf6e6df with a DIRTY worktree (not reusable)
+gate: log task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log
+gate:       <store>/task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Popover --testNamePattern together
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 5e7737eb267d, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.22/5.54 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › beside another presenter › presents a Tooltip and a Popover together, closing the tooltip first
+
+    "pair-tip-first-probe" never reached nothing of the pair left on screen; its report is "seq=364;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=0;firstW=0;firstH=0;finalW=0;finalH=0;sizes=;maxWidth=320;nodeW=0;nodeH=0;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=0;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;anchored=1;drops=0;recycles=0"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+  ● Popover › beside another presenter › presents a Tooltip and a Popover together, closing the popover first
+
+    "pair-pop-first-probe" never reached nothing of the pair left on screen; its report is "seq=381;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=56;firstW=180;firstH=90;finalW=180;finalH=90;sizes=180x90;maxWidth=320;nodeW=0;nodeH=0;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=0;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;anchored=1;drops=1;recycles=1"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 28 skipped, 30 total
+Snapshots:   0 total
+Time:        37.391 s
+Ran all test suites matching Popover with tests matching "together".
+gate: harness:ios:Popover:--testNamePattern:together FAIL in 39.0 s
+gate: recorded in .gates/task/G22-merge.jsonl
+
+
+gate: appended the device context to task/G22-merge/harness+ios+Popover+--testNamePattern+together-2026-11-08T11-02-50.849Z.log (4 probe(s))
+
+```
