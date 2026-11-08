@@ -492,6 +492,19 @@ const isUp = (report: Report) =>
   num(report, 'askedH') > 0 &&
   num(report, 'presentCount') >= 1;
 
+/**
+ * Nothing of this popover is on screen. `onScreen` is not the same claim on both
+ * platforms - Android's is "React asked for this" (`model.presented`, in
+ * `nuiTestStateReport`), iOS's is "the presentation is up" (`popoverIsUp`) - so each half
+ * names what its own platform witnesses instead: no counted presentation, and no window of
+ * the popover's to point at.
+ */
+const nothingUp = (report: Report) =>
+  num(report, 'presentCount') === 0 &&
+  (IOS
+    ? num(report, 'onScreen') === 0 && num(report, 'inPopover') === 0
+    : num(report, 'inPopup') === 0 && num(report, 'draws') === 0);
+
 /** Assert a report field says yes, naming the whole report when it does not. */
 function requireYes(report: Report, field: string, what: string): void {
   if (report[field] !== '1') {
@@ -803,8 +816,7 @@ describe('Popover', () => {
     await sleep(1700);
     const waiting = reportOf(id);
     expect(waiting.presented).toBe('1');
-    expect(waiting.onScreen).toBe('0');
-    expect(num(waiting, 'presentCount')).toBe(0);
+    expect(nothingUp(waiting)).toBe(true);
     const up = await waitForUp(id, 15000);
     expect(num(up, 'presentCount')).toBe(1);
     // And it comes up at the box it finally measured, not at a default it then jumps from.
@@ -839,7 +851,7 @@ describe('Popover', () => {
     );
     await requireHandle(id);
     const up = await waitForUp(id);
-    expect(num(up, 'presentCount')).toBe('1');
+    expect(num(up, 'presentCount')).toBe(1);
     expect(Math.abs(num(up, 'askedH') - 92)).toBeLessThanOrEqual(1);
     if (IOS) {
       expect(Math.abs(num(up, 'prefH') - 92)).toBeLessThanOrEqual(1);
@@ -1143,7 +1155,7 @@ describe('Popover', () => {
         id,
         (r) =>
           r.presented === '1' &&
-          num(r, 'onScreen') === 0 &&
+          nothingUp(r) &&
           num(r, 'askedW') === 0 &&
           num(r, 'contentWaits') > 0,
         'an ask that waited for a box and got none',
