@@ -219,12 +219,19 @@ export default function FormScreen() {
           footer="These settings apply to this device only."
           title="Connectivity"
         >
-          <Form.Row onPress={countRow}>
-            <View
-              accessibilityLabel="Row with onPress"
-              style={styles.rowContent}
-              testID="form-row"
-            >
+          {/*
+            The label and the `testID` go on `Form.Row` itself, because that is what the
+            component promises: a row with `onPress` is *one* element, named, that a person can
+            press. On the content `View` below, the name sat on a child of the thing that
+            presses — which is the split the a11y table exists to catch, and on Android it also
+            meant the named node was never the clickable one (fix round 1).
+          */}
+          <Form.Row
+            accessibilityLabel="Row with onPress"
+            onPress={countRow}
+            testID="form-row"
+          >
+            <View style={styles.rowContent}>
               <Text style={styles.label}>Notifications</Text>
               <Text style={styles.detail}>onPress: one press per tap</Text>
             </View>

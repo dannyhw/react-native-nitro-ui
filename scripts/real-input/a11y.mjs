@@ -58,7 +58,7 @@
  * measured shapes in `scripts/__tests__/real-input-a11y.test.js`.
  */
 
-import { findAllByDescription } from './uiautomator.mjs';
+import { findByTestId, findAllByDescription } from './uiautomator.mjs';
 
 /**
  * One control's a11y case: what to look for, on which screen, and what its node has to
@@ -405,13 +405,22 @@ export const A11Y_CONTROLS = Object.freeze([
     hybridView: 'NitroUiForm',
     screen: 'form',
     // What the component page promises (C1): a row with `onPress` is one element carrying
-    // the row's name, not the row's two `Text`s. Android keeps that promise — the dump
-    // makes the row one node and this label is on it. iOS does not yet, measured twice on
-    // pair-b (G24 rounds 2 and 3): the only element with the name is the wrapper React
-    // Native made for the row's `Text`, and the list's cell does not answer for its name
-    // at all — setting its label at configuration time and deriving it on every read give
-    // the same XCUITest tree, byte for byte. That is the debt row below, and the reason
-    // this case is not deleted: the day UIKit is made to answer, the row goes stale.
+    // the row's name, not the row's two `Text`s. The label is therefore written on
+    // `Form.Row` itself (`FormScreen.tsx`), which is the element that presses.
+    //
+    // Android keeps the promise: `applyChrome` makes a pressable row one clickable node, and
+    // that node carries the name. It took two things to see that — performing
+    // `ACTION_CLICK` rather than reading `isClickable` as a promise (`HybridNitroUiFormRow`),
+    // and clearing `contentDescription` on the way into the view pool, which React Native's
+    // `prepareToRecycleView` does not do and which let a recycled row keep answering for a
+    // mount that had ended (both fix round 1; the upstream gap is a FOLLOWUPS line).
+    //
+    // iOS does not, measured twice on pair-b (G24 rounds 2 and 3) and unchanged by this
+    // round: the only element with the name is the React Native view the app wrote the label
+    // on, and the list's cell does not answer for the row's name at all — configuring the
+    // cell's label and deriving it on every read give the same XCUITest tree, byte for byte.
+    // That is the debt row below, and the reason this case is not deleted: the day UIKit is
+    // made to answer, the row goes stale.
     label: 'Row with onPress',
     role: 'interactive',
     anchorTestId: 'form-row',
@@ -626,11 +635,12 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     followups:
       'G24 a11y: a Form row is one button on Android; on iOS its name stays on the wrapper',
     // Measured twice on pair-b (G24 rounds 2 and 3), byte for byte the same: the only
-    // element carrying the row's name is the React Native wrapper for the row's `Text`,
-    // announced as `other`, on the row's box - and the list's cell does not answer for the
-    // row's name at all, so writing the cell's label at configuration time and deriving it
-    // on every read produce the same tree. The row presses, the name is where the row is
-    // drawn, and what is missing is the merge into one button element.
+    // element carrying the row's name is the React Native view the app put the label on —
+    // which since fix round 1 *is* the row, `Form.Row` itself — announced as `other`, on the
+    // row's box. The list's cell does not answer for the row's name at all, so writing the
+    // cell's label at configuration time and deriving it on every read produce the same tree.
+    // The row presses, the name is where the row is drawn, and what is missing is the merge
+    // into one button element: the cell has to be the leaf that UIKit already made it.
     //
     // Anchored on the wrapper being announced as `other`: a cell that starts answering is
     // no longer this sentence, so the row goes stale and the run says so.
@@ -1393,7 +1403,35 @@ export function a11yProblems(control, tree) {
     );
   }
 
-  const node = named[0];
+  // Which node is "the control", when the tree offers more than one answer.
+  //
+  // `named[0]` is tree order, and tree order is not identity. Measured on a long
+  // `real-input:android` session, the Form row's name was carried both by the row and by a
+  // recycled wrapper the screen had re-used, `named[0]` was the latter, and the actionable half
+  // of this rule graded *that* node — so the finding printed a container's box and said nothing
+  // about the row a person actually presses (G24 fix round 1).
+  //
+  // So when the name is on more than one node and the dump can still name the control by its
+  // own `testID`, ask the actionability question of that node. The duplicate above stays a
+  // finding — this decides *which* node is graded, not whether a second one is allowed. With
+  // one named node nothing changes, which is what keeps the other twenty-two controls graded
+  // exactly as they are today.
+  const anchor =
+    named.length > 1 && control.anchorTestId != null
+      ? findByTestId(tree, control.anchorTestId)
+      : undefined;
+  const node =
+    anchor != null &&
+    anchor.bounds.width > 0 &&
+    anchor.bounds.height > 0 &&
+    anchor.scrollable !== 'true' &&
+    isActable(anchor)
+      ? anchor
+      : named[0];
+  const subject =
+    node === named[0]
+      ? `the node that carries "${control.label}"`
+      : `the node under "${String(control.anchorTestId)}"`;
   if (node.scrollable === 'true') {
     // Measured: the only `scrollable="true"` node containing a control is the page's own
     // `ScrollView`, and it is `focusable="true"` as well — so it would satisfy the
@@ -1410,7 +1448,7 @@ export function a11yProblems(control, tree) {
     !hasActableHome(node, tree)
   ) {
     problems.push(
-      `${control.hybridView}: the node that carries "${control.label}" is not ` +
+      `${control.hybridView}: ${subject} is not ` +
         `actionable, and nothing whose box is the control's is either ` +
         `(${describeNode(node)}) — the name sits where a screen reader can stop ` +
         'but nobody can act, which is the split G5 M2 and G6 M3 found by hand. ' +

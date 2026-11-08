@@ -379,6 +379,62 @@ describe('the a11y rule, on measured trees', () => {
       'is not actionable'
     );
   });
+
+  it('grades the control, not the first node that happens to carry its name', () => {
+    // G24 fix round 1's Android finding, from the Form's own dump. A long `real-input`
+    // session left the row's name on two nodes — the row, and a recycled wrapper the
+    // screen had re-used — and `named[0]` was the wrapper, so the actionable half of the
+    // rule graded a container and the finding said nothing about the row a person presses.
+    // Built by *adding* that second node to the measured tree, in the tree order that
+    // fooled the rule, and by making the row clickable the way `applyChrome` does for a
+    // pressable row (the other half of the same round).
+    const row = named('form');
+    expect(row.resourceId).toBe(control('form').anchorTestId);
+    const pressable = { ...row, clickable: 'true' };
+    const box = row.bounds;
+    const wrapper = {
+      ...row,
+      resourceId: '',
+      // The shape of the node the run actually graded: named, focusable, and as big as a
+      // piece of the page — a wrapper the screen kept, not a control.
+      focusable: 'true',
+      scrollable: 'true',
+      bounds: {
+        ...box,
+        x1: 0,
+        y1: 0,
+        x2: box.x2 + 60,
+        y2: box.y2 + 400,
+        width: box.width + 60,
+        height: box.height + 400,
+        cx: box.cx,
+        cy: box.cy,
+      },
+    };
+    const nodes = [
+      wrapper,
+      ...tree('form').map((node) => (node === row ? pressable : node)),
+    ];
+
+    const problems = a11yProblems(control('form'), nodes);
+    // The duplicate is still a finding — grading the right node does not forgive a name
+    // on two of them.
+    expect(problems.length).toBe(1);
+    expect(problems[0]).toContain('announces twice');
+    // ...and the actionability question was asked of the row, not of the wrapper: before
+    // this, the run's whole Android finding was this line about a container.
+    expect(problems.join(' ')).not.toContain('scroll container');
+    expect(problems.join(' ')).not.toContain('is not actionable');
+
+    // The other half: with one named node the anchor changes nothing, so no control that
+    // passes today is graded differently. The same tree minus the wrapper is the fixture,
+    // whose named node is *not* actionable — and still reported as such.
+    const single = a11yProblems(
+      control('form'),
+      tree('form').map((node) => (node === row ? pressable : node))
+    );
+    expect(single).toEqual([]);
+  });
 });
 
 describe('the debt list', () => {
