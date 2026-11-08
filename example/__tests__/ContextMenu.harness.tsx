@@ -1453,8 +1453,8 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     // Before anything is open the probe refuses: "nothing to sample" is a different
     // answer from "sampled and found none", and a test has to be able to tell them apart.
     const handle = await handleFor('miss');
-    handle.nuiTestMenuPixelProbe(0x123456);
-    expect(handle.nuiTestMenuPixelReport()).toContain('no popup');
+    const refused = await probePopup(handle, 0x123456, 'the closed popup');
+    expect(refused).toContain('no popup');
 
     const missing = await openMenu('miss');
     expect(missing.iconTints).toBe('-');

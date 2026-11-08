@@ -3473,6 +3473,31 @@ describe('Menu · the row glyphs (G21)', () => {
     return hits == null ? 0 : Number(hits[1]);
   }
 
+  /**
+   * A split trigger whose two hit targets have been **measured**, not merely composed.
+   *
+   * `split === true` is the composition saying it drew both halves; the rects are the
+   * witness's own measurement and land a frame later. Read in between, a control answers
+   * a zero-wide leading half, and a zero-wide half compared against a measured one is a
+   * "difference" of the whole control — which is what this first reported as an 87 px
+   * move of the chevron's half. Degenerate rects are `-1,-1,-1,-1`, whose width is 0, so
+   * both halves being wide is what says the frame has landed.
+   */
+  async function splitHalves(testId: string): Promise<MenuReport> {
+    return await waitForMenu(
+      testId,
+      (r) => {
+        if (r.split !== true) {
+          return false;
+        }
+        const [lLeft, , lRight] = edges(r.leading, 'leading half');
+        const [tLeft, , tRight] = edges(r.trailing, 'trailing half');
+        return lRight > lLeft && tRight > tLeft;
+      },
+      12000
+    );
+  }
+
   /** Open `testId`, wait for its rows to be composed, and hand back the report. */
   async function openRows(testId: string): Promise<MenuReport> {
     await pressTrigger(testId);
@@ -3686,8 +3711,12 @@ describe('Menu · the row glyphs (G21)', () => {
     // Before anything is open, the probe refuses: "nothing to sample" is a different
     // answer from "sampled, and found none", and the harness needs to tell them apart.
     const handle = await waitForHandle('rows-missing', 'the closed control');
-    handle.nuiTestMenuPixelProbe(0x123456);
-    expect(handle.nuiTestMenuPixelReport()).toContain('no popup');
+    const refused = await probeOnce(
+      () => handle.nuiTestMenuPixelProbe(0x123456),
+      () => handle.nuiTestMenuPixelReport(),
+      'the closed popup'
+    );
+    expect(refused).toContain('no popup');
 
     const missing = await openRows('rows-missing');
     expect(missing.iconTints).toBe('-');
@@ -3751,14 +3780,20 @@ describe('Menu · the row glyphs (G21)', () => {
   });
 
   it('puts the trigger glyph in the leading half, and only there', async () => {
-    const tint = 0xff00a0;
+    // A CSS string, not the bare number: `tintColor` is a `ColorValue`, and the number
+    // form is an *ARGB* int — `0xff00a0` is alpha 0, so the app would ask for a
+    // transparent tint and a probe that then found nothing would read as a dropped
+    // glyph. `processColor` is the same conversion the wrapper runs, and the probe
+    // compares RGB, which is why the sampled colour is written through it too.
+    const tintCss = '#ff00a0';
+    const tint = processColor(tintCss) as number;
     await render(
       <View style={columnStyle}>
         <Menu
           title="Publish"
           group={glyphGroup(undefined)}
           primaryAction={() => {}}
-          tintColor={tint}
+          tintColor={tintCss}
           androidIcon={SLAB_NAME}
           testID="split-ink"
           hybridRef={captureHybrid('split-ink')}
@@ -3767,7 +3802,7 @@ describe('Menu · the row glyphs (G21)', () => {
           title="Publish"
           group={glyphGroup(undefined)}
           primaryAction={() => {}}
-          tintColor={tint}
+          tintColor={tintCss}
           testID="split-noink"
           hybridRef={captureHybrid('split-noink')}
         />
@@ -3788,8 +3823,8 @@ describe('Menu · the row glyphs (G21)', () => {
       return;
     }
 
-    const withGlyph = report('split-ink');
-    const without = report('split-noink');
+    const withGlyph = await splitHalves('split-ink');
+    const without = await splitHalves('split-noink');
     const [lLeft, , lRight] = edges(withGlyph.leading, 'leading');
     const [tLeft, , tRight] = edges(withGlyph.trailing, 'trailing');
     const [plainLLeft, , plainLRight] = edges(without.leading, 'leading');
@@ -3798,6 +3833,9 @@ describe('Menu · the row glyphs (G21)', () => {
       `split halves: glyph=${lRight - lLeft}/${tRight - tLeft} ` +
         `plain=${plainLRight - plainLLeft}/${plainTRight - plainTLeft}`
     );
+    // Two places, not one rect twice — the seam of a real split button.
+    expect(lRight).toBeLessThanOrEqual(tLeft + 1);
+    expect(plainLRight).toBeLessThanOrEqual(plainTLeft + 1);
     // The label, glyph and all, lives in the leading half: that half grows by the slot,
     // and the chevron's half does not move at all.
     expect(lRight - lLeft).toBeGreaterThan(plainLRight - plainLLeft + 8);
