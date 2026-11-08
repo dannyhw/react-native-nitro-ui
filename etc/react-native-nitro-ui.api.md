@@ -285,6 +285,65 @@ export interface DialogProps extends ViewProps {
 }
 
 // @public
+export const Form: FormComponent;
+
+// @public
+export type FormAccessory = 'none' | 'disclosure' | 'checkmark';
+
+// @public
+export interface FormComponent {
+    // (undocumented)
+    (props: FormProps): JSX.Element;
+    Row(props: FormRowProps): JSX.Element;
+    Section(props: FormSectionProps): JSX.Element;
+}
+
+// @public
+export interface FormProps extends ViewProps {
+    // (undocumented)
+    children?: ReactNode;
+    // @internal
+    hybridRef?: ((view: {
+        readonly keyboardAvoidance: boolean;
+        readonly nuiContentOffsetY: number | null;
+        nuiTestFormReport(): string;
+        nuiTestScrollTo(y: number): void;
+        nuiTestCommand(command: string): void;
+    }) => void) | undefined;
+    keyboardAvoidance?: boolean | undefined;
+}
+
+// @public
+export interface FormRowProps extends ViewProps {
+    accessory?: FormAccessory | undefined;
+    // (undocumented)
+    children?: ReactNode;
+    // @internal
+    hybridRef?: ((view: {
+        readonly accessory: FormAccessory;
+        readonly selected: boolean;
+        readonly pressable: boolean;
+        nuiTestRowReport(): string;
+    }) => void) | undefined;
+    onPress?: (() => void) | undefined;
+    selected?: boolean | undefined;
+}
+
+// @public
+export interface FormSectionProps extends ViewProps {
+    // (undocumented)
+    children?: ReactNode;
+    footer?: string | null | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly title: string | null;
+        readonly footer: string | null;
+        nuiTestSectionReport(): string;
+    }) => void) | undefined;
+    title?: string | null | undefined;
+}
+
+// @public
 export function Host(input: HostProps): JSX.Element;
 
 // @public
