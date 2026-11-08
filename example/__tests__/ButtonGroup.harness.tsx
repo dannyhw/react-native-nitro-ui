@@ -533,7 +533,9 @@ describe('ButtonGroup · G20', () => {
     const fits = await probeRow('bg-fits');
     expect(fits.visible).toBe(String(ACTIONS.length));
     expect(fits.overflow).toBe('0');
-    expect((fits.shown ?? 'none').split(',')).toEqual(ACTIONS.map((item) => item.id));
+    expect((fits.shown ?? 'none').split(',')).toEqual(
+      ACTIONS.map((item) => item.id)
+    );
   });
 
   it('presses once per item, from the row and from the overflow menu', async () => {
