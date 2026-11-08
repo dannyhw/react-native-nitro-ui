@@ -1,0 +1,64 @@
+# Failure excerpt — real-input:ios:--control:popover
+
+- Ran: 2026-11-07T20:38:45.264Z on code tree `a2f8de508fda` at HEAD `2dbada1` (branch `task/G22-popover`)
+- Command: `node scripts/real-input/ios.mjs --control popover`
+- Result: fail, exit 1, 205986 ms
+- Load: start 4.68, end 147.27, median 92.79, max 177.79
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log` (<store>/task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 147.27 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 21 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:popover
+gate: node scripts/real-input/ios.mjs --control popover (cwd .)
+gate: code tree a2f8de508fda at HEAD 2dbada15
+gate: git tree 11a66ab83c88 with a DIRTY worktree (not reusable)
+gate: log task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log
+gate:       <store>/task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+
+real-input (ios): Error: real-input: the code tree changed during the build (before a2f8de508fda, after a8ecb117ec0c: 1001 files when it started, 1001 now). No stamp was written - nothing here proves which sources this binary came from. Run the build again with nothing else writing to the tree.
+       an incremental xcodebuild that never recompiled the generated hybrids is the usual cause: `rm -rf example/ios/build` and run again.
+gate: real-input:ios:--control:popover FAIL in 206.0 s - note: the code tree moved during the run (a8ecb117ec0c now), so this line describes a2f8de508fda
+gate: recorded in .gates/task/G22-popover.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G22-popover/real-input+ios+--control+popover-2026-11-07T20-38-44.377Z.log (4 probe(s))
+
+```

@@ -1,0 +1,145 @@
+# Failure excerpt — harness:ios:Popover
+
+- Ran: 2026-11-07T20:36:13.616Z on code tree `a2f8de508fda` at HEAD `2dbada1` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Popover`
+- Result: fail, exit 1, 97242 ms
+- Load: start 4.46, end 6.61, median 4.62, max 6.61
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+ios+Popover-2026-11-07T20-36-13.616Z.log` (<store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-36-13.616Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › opens below its anchor, and above it when there is no room below`
+- `expected 134 to be less than 96`
+- `● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size`
+- `expected false to be true // Object.is equality`
+- `● Popover › the first frame is the final size (D44) › presents "tall" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-36-13.616Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.61 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 94 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Popover
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a2f8de508fda, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.46/7.06 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-36-13.616Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › opens below its anchor, and above it when there is no room below
+
+    expected 134 to be less than 96
+
+      [0m [90m 652 |[39m       expect(
+       [90m 653 |[39m         [33mMath[39m[33m.[39mabs(popup[33m![39m[33m.[39mx [33m+[39m popup[33m![39m[33m.[39mwidth [33m/[39m [35m2[39m [33m-[39m (anchor[33m![39m[33m.[39mx [33m+[39m anchor[33m![39m[33m.[39mwidth [33m/[39m [35m2[39m))
+      [31m[1m>[22m[39m[90m 654 |[39m       )[33m.[39mtoBeLessThan([33mMath[39m[33m.[39mmax(anchor[33m![39m[33m.[39mwidth[33m,[39m [35m40[39m) [33m+[39m [35m24[39m)[33m;[39m
+       [90m     |[39m                     [31m[1m^[22m[39m
+       [90m 655 |[39m     } [36melse[39m {
+       [90m 656 |[39m       [90m// Our own provider: below the anchor, start-aligned — where "start" is the anchor's[39m
+       [90m 657 |[39m       [90m// own edge unless the window margin is closer: the fixture's anchor sits at x=0, and[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 568 |[39m         [36mconst[39m seen [33m=[39m drawn(up)[33m;[39m
+       [90m 569 |[39m         expect(seen[33m.[39mdistinct)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 570 |[39m         expect(isSize(seen[33m.[39mdistinct[[35m0[39m] [33m?[39m[33m?[39m [32m''[39m[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 571 |[39m         expect(isSize(seen[33m.[39mfirst[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 572 |[39m         expect(isSize(seen[33m.[39mlast[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 573 |[39m         [90m// The witness saw more than the one frame it asserts on, so "one size" is a[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "tall" at its box, with one drawn size
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 568 |[39m         [36mconst[39m seen [33m=[39m drawn(up)[33m;[39m
+       [90m 569 |[39m         expect(seen[33m.[39mdistinct)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 570 |[39m         expect(isSize(seen[33m.[39mdistinct[[35m0[39m] [33m?[39m[33m?[39m [32m''[39m[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 571 |[39m         expect(isSize(seen[33m.[39mfirst[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 572 |[39m         expect(isSize(seen[33m.[39mlast[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 573 |[39m         [90m// The witness saw more than the one frame it asserts on, so "one size" is a[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 568 |[39m         [36mconst[39m seen [33m=[39m drawn(up)[33m;[39m
+       [90m 569 |[39m         expect(seen[33m.[39mdistinct)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 570 |[39m         expect(isSize(seen[33m.[39mdistinct[[35m0[39m] [33m?[39m[33m?[39m [32m''[39m[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 571 |[39m         expect(isSize(seen[33m.[39mfirst[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 572 |[39m         expect(isSize(seen[33m.[39mlast[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 573 |[39m         [90m// The witness saw more than the one frame it asserts on, so "one size" is a[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 568 |[39m         [36mconst[39m seen [33m=[39m drawn(up)[33m;[39m
+       [90m 569 |[39m         expect(seen[33m.[39mdistinct)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 570 |[39m         expect(isSize(seen[33m.[39mdistinct[[35m0[39m] [33m?[39m[33m?[39m [32m''[39m[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 571 |[39m         expect(isSize(seen[33m.[39mfirst[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 572 |[39m         expect(isSize(seen[33m.[39mlast[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 573 |[39m         [90m// The witness saw more than the one frame it asserts on, so "one size" is a[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size
+
+    expected false to be true // Object.is equality
+
+      [0m [90m 568 |[39m         [36mconst[39m seen [33m=[39m drawn(up)[33m;[39m
+       [90m 569 |[39m         expect(seen[33m.[39mdistinct)[33m.[39mtoHaveLength([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 570 |[39m         expect(isSize(seen[33m.[39mdistinct[[35m0[39m] [33m?[39m[33m?[39m [32m''[39m[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m     |[39m                                                                      [31m[1m^[22m[39m
+       [90m 571 |[39m         expect(isSize(seen[33m.[39mfirst[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 572 |[39m         expect(isSize(seen[33m.[39mlast[33m,[39m asked[33m.[39mw[33m,[39m asked[33m.[39mh))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 573 |[39m         [90m// The witness saw more than the one frame it asserts on, so "one size" is a[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 18 passed, 24 total
+Snapshots:   0 total
+Time:        95.208 s, estimated 122 s
+Ran all test suites matching Popover.
+
+
+
+```

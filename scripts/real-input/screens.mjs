@@ -88,6 +88,10 @@ export const ECHO = Object.freeze({
   sheetLog: 'sheet-log',
   tooltipLog: 'tooltip-log',
   tooltipPresses: 'tooltip-anchor-presses',
+  // G22: the events the app received, and the count of real taps that landed inside a
+  // popover - "exactly once over 10 opens" is a comparison against this, not a guess.
+  popoverLog: 'popover-log',
+  popoverPresses: 'popover-inner-presses',
   hostValue: 'host-controlled-value',
   hostEvents: 'host-events-count',
   hostSliderValue: 'host-slider-value',
@@ -216,6 +220,7 @@ export const SCREEN_TAB = Object.freeze({
   dialog: { anchor: ECHO.dialogLog },
   sheet: { anchor: ECHO.sheetLog },
   tooltip: { anchor: ECHO.tooltipLog },
+  popover: { anchor: ECHO.popoverLog },
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
   host: { anchor: ECHO.hostValue },

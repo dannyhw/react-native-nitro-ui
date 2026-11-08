@@ -1,0 +1,103 @@
+# Failure excerpt — harness:android:Popover
+
+- Ran: 2026-11-08T05:53:08.528Z on code tree `ab48a6b5d8fb` at HEAD `5153330` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover`
+- Result: fail, exit 1, 57914 ms
+- Load: start 23.25, end 16.89, median 23.17, max 23.67
+- Device: android / device `emulator-5570` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log` (<store>/task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › follows the content when it resizes while the popover is up`
+- `expected 1 to be '1' // Object.is equality`
+- `● Popover › lifetime › takes the content back from a popover that never got up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 16.89 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 55 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:Popover
+gate: node ../scripts/harness.mjs --harnessRunner android Popover (cwd example)
+gate: code tree ab48a6b5d8fb at HEAD 51533308
+gate: git tree e6865238438c with a DIRTY worktree (not reusable)
+gate: log task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log
+gate:       <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Popover
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree ab48a6b5d8fb, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 23.25/11.10 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › follows the content when it resizes while the popover is up
+
+    expected 1 to be '1' // Object.is equality
+
+      [0m [90m 885 |[39m     expect(box)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+       [90m 886 |[39m     expect([33mMath[39m[33m.[39mabs(box[33m![39m[33m.[39mheight [33m-[39m grownPx))[33m.[39mtoBeLessThanOrEqual([35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 887 |[39m     expect(num(grownReport[33m,[39m [32m'presentCount'[39m))[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                                  [31m[1m^[22m[39m
+       [90m 888 |[39m     expect(num(grownReport[33m,[39m [32m'live'[39m))[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 889 |[39m   })[33m;[39m
+       [90m 890 |[39m[0m
+
+  ● Popover › lifetime › takes the content back from a popover that never got up
+
+    "never-up" never counted its content after a close with nothing up: mounts=1, unmounts=0
+
+      [0m [90m 467 |[39m     () [33m=>[39m ((unmounts[33m.[39m[36mget[39m(testId) [33m?[39m[33m?[39m [35m0[39m) [33m>=[39m count [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 468 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 469 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 470 |[39m         [32m`"${testId}" never counted ${what}: mounts=${String([39m
+       [90m 471 |[39m [32m          mounts.get(testId) ?? 0[39m
+       [90m 472 |[39m [32m        )}, unmounts=${String(unmounts.get(testId) ?? 0)}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 28 passed, 30 total
+Snapshots:   0 total
+Time:        55.679 s, estimated 65 s
+Ran all test suites matching Popover.
+gate: harness:android:Popover FAIL in 57.9 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+android+Popover-2026-11-08T05-53-07.473Z.log (5 probe(s))
+
+```

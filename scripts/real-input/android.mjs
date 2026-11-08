@@ -39,6 +39,8 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
+import { imeInsetSample, imeInsetTop } from './ime-frame.mjs';
+import { judgePopupPlacement } from './popover-placement.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -2868,6 +2870,263 @@ const CHECKS = {
       'and opens nothing, reports nothing',
       `${String(upCount())} up, log ${String(t.requireEcho(ECHO.tooltipLog))}`,
       `0 up, log ${afterAction}`
+    );
+  },
+
+  'popover': async (t) => {
+    // The texts `PopoverScreen` puts in its popovers' content. Each appears nowhere else
+    // on the screen, so a text match names the popover. The content is React Native views
+    // in a popup window of its own, and while it is up the dump can be that window's tree
+    // rather than the app's — so the screen's log is read only with the popover down, and
+    // what happens *inside* the popover is counted by the screen's own node.
+    //
+    // The headline claim is arithmetic, not a feeling: the screen counts every press that
+    // reaches JS (`popover-inner-presses`), so ten opens with one injected tap inside each
+    // have to end on `inner presses: 10`. A touch root that also delivered the press would
+    // end it on 11 and a press the popup swallowed on 9 — and `requireEchoToStay` is what
+    // tells a second press that arrives late apart from one that never arrives.
+    const SHORT = 'Do the thing';
+    const FIELD = 'Rename this list';
+    const upCount = (text) => () =>
+      t.dump().filter((node) => node.text === text).length;
+    const anchor = (testID) => () => {
+      const node = t.nodeByTestId(testID);
+      if (node == null) {
+        t.log.abort(`no "${testID}" anchor on the Popover screen`);
+      }
+      return node;
+    };
+    const openWith = async (testID, witness, description) => {
+      await t.tapUntilUp(anchor(testID), description, upCount(witness), {
+        pollMs: DUMP_POLL_MS,
+      });
+      t.waitForOption(witness, description);
+    };
+    const waitGone = async (witness, description) => {
+      const deadline = Date.now() + REACT_TIMEOUT;
+      while (upCount(witness)() > 0) {
+        if (Date.now() > deadline) {
+          t.log.abort(`timed out waiting for ${description}`);
+        }
+        await t.settle(250);
+      }
+    };
+    // Outside: the log line, a `Text` with no press of its own at the top of the page,
+    // above every anchor. Aimed at its first line rather than its centre, because that
+    // line grows downward as events arrive and a centre tap would drift onto the Reset
+    // button — which would zero the very counter the ten opens are read from.
+    const logNode = t.nodeByTestId(ECHO.popoverLog);
+    if (logNode == null) {
+      t.log.abort('no "popover-log" on the Popover screen to tap outside on');
+    }
+    const outside = { x: logNode.bounds.x1 + 6, y: logNode.bounds.y1 + 4 };
+    const tapOutside = async () => {
+      await t.tapPx(outside.x, outside.y);
+      await t.settle(400);
+    };
+
+    // 1. Before a touch: nothing reported, nothing pressed inside, nothing up.
+    t.log.checkEquals(
+      'no popover has reported anything before a touch',
+      t.requireEcho(ECHO.popoverLog),
+      'none'
+    );
+    t.log.checkEquals(
+      'nothing is up and nothing has been pressed inside',
+      `${String(upCount(SHORT)())} up, ${String(
+        t.requireEcho(ECHO.popoverPresses)
+      )}`,
+      '0 up, inner presses: 0'
+    );
+
+    // 2. A real tap on the app's own anchor opens it, and the popover's React Native
+    //    content is in the window — readable by a screen reader and findable by id, which
+    //    is the half of the rule no in-app query can state (a11y.mjs, A11Y_PRESENTATIONS).
+    await openWith(
+      'popover-short-anchor',
+      SHORT,
+      'the real tap that opens the popover'
+    );
+    t.log.checkEquals(
+      'the presented popover is the node named popover-short-popover',
+      t.nodeByTestId('popover-short-popover') != null,
+      true
+    );
+
+    // 3. A tap outside takes it down and reports the close, then the dismiss.
+    await tapOutside();
+    await waitGone(SHORT, 'a tap outside to take the popover down');
+    t.log.checkEquals(
+      'a tap outside closes the popover and reports it',
+      t.requireEcho(ECHO.popoverLog),
+      'short:presented:false > short:dismiss'
+    );
+
+    // 4. Ten opens, one injected tap inside each: the press reaches JS exactly once. The
+    //    log is read once the popover is down, so the order claim is checked on the first
+    //    open; the counter is what carries "exactly once" through all ten.
+    for (let opened = 1; opened <= 10; opened += 1) {
+      await openWith(
+        'popover-short-anchor',
+        SHORT,
+        `the real tap that opens the popover for the ${String(opened)}${
+          opened === 1 ? 'st' : opened === 2 ? 'nd' : opened === 3 ? 'rd' : 'th'
+        } time`
+      );
+      await t.tapNode(
+        t.waitForOption(SHORT, 'the Pressable inside the popover')
+      );
+      await waitGone(
+        SHORT,
+        `the press inside the popover to close it (open ${String(opened)})`
+      );
+      const once = `inner presses: ${String(opened)}`;
+      t.log.checkEquals(
+        `one injected tap inside reaches JS exactly once (open ${String(
+          opened
+        )})`,
+        t.requireEchoToStay(
+          ECHO.popoverPresses,
+          once,
+          `no second press arriving after open ${String(opened)}`
+        ),
+        once
+      );
+      if (opened === 1) {
+        // D32's order from outside: the press reports, then the dismiss its own close
+        // causes. That close is the app's, so it reports no `presented:false` — only a
+        // close the popover decided for itself does (DECISIONS D44 item 2).
+        t.log.checkEquals(
+          'the press inside reports, then the dismiss its own close causes',
+          t
+            .requireEcho(ECHO.popoverLog)
+            .endsWith('press:popover-short > short:dismiss'),
+          true
+        );
+      }
+    }
+    t.log.checkEquals(
+      'ten opens, ten presses inside, and no more',
+      t.requireEcho(ECHO.popoverPresses),
+      'inner presses: 10'
+    );
+
+    // 5. The keyboard. A `TextInput` inside the popover has to bring the IME up (the
+    //    popup is focusable, which is the only reason it can) and the content has to stay
+    //    above the keyboard's own top edge — measured off the IME's frame, not off a
+    //    fraction of the screen. An emulator answers `hw.keyboard=yes`, which hides the
+    //    soft keyboard, so the case asks for one and puts the setting back either way.
+    const hardKeyboard = t.setImeWithHardKeyboard(true);
+    // The anchor's box has to be read before the popover is up: a focusable popup takes the
+    // uiautomator dump for itself, so once it is presented the app's own window — and the
+    // anchor with it — is simply not in the tree (measured, G22).
+    const anchorBox = t.nodeByTestId('popover-field-anchor')?.bounds ?? null;
+    try {
+      await openWith(
+        'popover-field-anchor',
+        FIELD,
+        'the real tap that opens the popover with a field'
+      );
+      const beforeField = t.nodeByTestId('popover-inner-field');
+      if (beforeField == null) {
+        t.log.abort(
+          'the field popover is up without its TextInput in the tree'
+        );
+      }
+      await t.tapNode(beforeField);
+      const imeDeadline = Date.now() + REACT_TIMEOUT;
+      while (!t.imeShown() && Date.now() < imeDeadline) {
+        await t.settle(250);
+      }
+      t.log.checkEquals(
+        'a real tap on the TextInput inside the popover brings up the keyboard',
+        t.imeShown(),
+        true
+      );
+      // The inset animates in and the popover moves with it, so the keyboard's edge is read
+      // until it stops moving and the field's box only afterwards. `mInputShown` flips at the
+      // *start* of the show, and until the inset is up the source says nothing (`visible=false`
+      // over an empty frame), so one early read would measure a keyboard still on its way up
+      // and flatter a popover sitting half behind it.
+      const imeTop = await t.imeTopSettled();
+      const afterField = t.nodeByTestId('popover-inner-field');
+      if (afterField == null) {
+        t.log.abort(
+          'the TextInput vanished from the tree with the keyboard up'
+        );
+      }
+      if (imeTop == null) {
+        t.log.abort(
+          `nothing reported a settled keyboard edge, so "above it" cannot be checked - ${t.imeFrameSample()}`
+        );
+      }
+      t.log.checkEquals(
+        'the popover moves clear of the keyboard',
+        afterField.bounds.y1 < beforeField.bounds.y1,
+        true
+      );
+      const aboveIme = afterField.bounds.y2 <= imeTop;
+      // The popup's own box and the anchor's go into the message because the placement has
+      // three branches, and the only way to tell which one ran is to see where the popup put
+      // its box relative to the anchor it was placed against.
+      const popupBox = t.nodeByTestId('popover-field-popover')?.bounds;
+      t.log.checkEquals(
+        // A wrong number here has always been a measurement problem rather than a popover
+        // one, so the failure names the dump the number came from.
+        `the field stays above the keyboard (field bottom ${String(
+          afterField.bounds.y2
+        )}, keyboard top ${String(imeTop)}, popup ${
+          popupBox ? `${String(popupBox.y1)}..${String(popupBox.y2)}` : '-'
+        }, anchor ${
+          anchorBox ? `${String(anchorBox.y1)}..${String(anchorBox.y2)}` : '-'
+        })${aboveIme ? '' : ` - ${t.imeFrameSample()}`}`,
+        aboveIme,
+        true
+      );
+      // And the popup is where the placement model says it has to be: against its anchor, or
+      // — with the keyboard leaving room for neither of those — against the keyboard's edge.
+      // Without this the claim above is half-blind, and it was: a popup pinned to the top of
+      // the screen keeps the field above the keyboard *better* than a placed one does, so the
+      // run passed on a popover 985 px away from the thing it points at (G22).
+      const placement = judgePopupPlacement({
+        popupBox,
+        anchorBox,
+        imeTopPx: imeTop,
+        marginPx: Math.round(16 * t.density()),
+        spacingPx: Math.round(4 * t.density()),
+      });
+      t.log.checkEquals(
+        `the popup sits against its anchor or the keyboard (${placement.branch}: ${placement.detail})`,
+        placement.ok,
+        true
+      );
+      // And the keystrokes reach the field: the log, read once the popover is down,
+      // carries what JS received. Asserted on the committed value rather than on one
+      // entry per character, because `input text` can deliver both characters in one
+      // commit and RN then reports the field's text once. The screen also records the
+      // field popover's own close from that outside tap, so the claim is the order the log
+      // carries - the keystrokes, then the close - which a bare suffix can never see.
+      await t.type('ab');
+      await t.hideKeyboard();
+      await tapOutside();
+      await waitGone(FIELD, 'the outside tap to take the field popover down');
+      const typedLog = t.requireEcho(ECHO.popoverLog);
+      t.log.checkEquals(
+        `real keystrokes reach the field inside the popover, before its own close (${typedLog.slice(-70)})`,
+        typedLog.includes('typed:ab') &&
+          typedLog.indexOf('typed:ab') <
+            typedLog.lastIndexOf('field:presented:false'),
+        true
+      );
+    } finally {
+      t.setImeWithHardKeyboard(hardKeyboard);
+    }
+
+    // 6. Nothing left up for the next control or the a11y sweep.
+    t.log.checkEquals(
+      'nothing is left up at the end',
+      `${String(upCount(SHORT)())} + ${String(upCount(FIELD)())} up`,
+      '0 + 0 up'
     );
   },
 
@@ -5719,7 +5978,90 @@ class DeviceHarness {
    * @returns {boolean}
    */
   imeShown() {
-    return /mInputShown=true/.test(this.shell('dumpsys input_method'));
+    return /mInputShown=true/.test(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
+   * The y of the top edge of the soft keyboard, in px, or `null` when nothing says.
+   *
+   * `Popover`'s keyboard claim is "the content stays above the IME", which can only be
+   * checked against the IME's own frame rather than against a fraction of the screen —
+   * the keyboard is 306 px on one image and 420 on another, and a hardcoded number would
+   * pass the check on the shallow one whatever the popover did. Two sources are read
+   * because they disagree by release: the input method service knows the frame it was
+   * given, and the window manager knows the frame the IME window actually has.
+   *
+   * A `null` is not a pass: the caller has to fail the claim, because a parser that
+   * stopped matching would otherwise turn the rule into a no-op.
+   *
+   * @returns {number | null}
+   */
+  imeTopPx() {
+    return imeInsetTop(this.shell('dumpsys activity top').stdout);
+  }
+
+  /**
+   * The `type=ime` lines {@link imeTopPx} reads, for the check that fails when it says
+   * nothing.
+   *
+   * Every dumpsys scrape ends the same way: the format changes, the pattern stops matching,
+   * and a `null` quietly turns the rule into a no-op - or, as here, into a failure that reads
+   * like the control's fault. The abort names what the dump actually printed, so the next
+   * reader fixes the pattern instead of the claim.
+   *
+   * @returns {string}
+   */
+  imeFrameSample() {
+    return `activity top: "${imeInsetSample(
+      this.shell('dumpsys activity top').stdout
+    )}"`;
+  }
+
+  /**
+   * The keyboard's top edge, once the inset has stopped moving.
+   *
+   * The inset animates in, so a single read is a frame of that animation: the keyboard's top
+   * on its way up is lower than where it ends, which would let a popover sitting half behind
+   * the keys pass. Two equal reads in a row mean it has arrived, and the field's box is
+   * measured after that, so both ends of the comparison describe the same settled moment.
+   *
+   * @returns {Promise<number | null>} the settled edge, or `null` when it never appeared or
+   *   never stopped moving
+   */
+  async imeTopSettled() {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    let top = this.imeTopPx();
+    while (Date.now() < deadline) {
+      await sleep(250);
+      const next = this.imeTopPx();
+      if (next != null && next === top) {
+        return next;
+      }
+      top = next;
+    }
+    return null;
+  }
+
+  /**
+   * Whether the emulator is told to show a soft keyboard even with a hardware one.
+   *
+   * `Popover`'s keyboard case needs a keyboard *on screen* to stay clear of, and an
+   * emulator with `hw.keyboard=yes` has a hardware one and hides the soft one, so the
+   * case has to ask for it and then put the setting back ({@link imeWithHardKeyboard}).
+   *
+   * @param {boolean} enabled
+   */
+  setImeWithHardKeyboard(enabled) {
+    this.shell(
+      `settings put secure show_ime_with_hard_keyboard ${enabled ? '1' : '0'}`
+    );
+  }
+
+  /** @returns {boolean} the current `show_ime_with_hard_keyboard`, as written. */
+  imeWithHardKeyboard() {
+    return /1/.test(
+      this.shell('settings get secure show_ime_with_hard_keyboard').stdout
+    );
   }
 
   /**
@@ -6778,6 +7120,54 @@ function makeContext(harness, log) {
      * the app's Back, which sends a React Native root to the background - and every
      * later check then finds the launcher.
      */
+    /** Whether the soft keyboard is on screen (`mInputShown`). */
+    imeShown() {
+      return harness.imeShown();
+    },
+
+    /**
+     * The y of the soft keyboard's top edge in px, or `null` when no source says.
+     *
+     * Callers must treat `null` as a failure of their own claim: see
+     * `DeviceHarness.imeTopPx` for why a missing frame cannot be a pass.
+     *
+     * @returns {number | null}
+     */
+    imeTopPx() {
+      return harness.imeTopPx();
+    },
+
+    /**
+     * The same edge, once the inset has stopped animating.
+     *
+     * @returns {Promise<number | null>}
+     */
+    imeTopSettled() {
+      return harness.imeTopSettled();
+    },
+
+    /**
+     * The dump lines `imeTopPx` read, for a check that has to fail on a `null`.
+     *
+     * @returns {string}
+     */
+    imeFrameSample() {
+      return harness.imeFrameSample();
+    },
+
+    /**
+     * Ask the emulator to show a soft keyboard beside a hardware one, and hand back what
+     * the setting said before, so a caller can put it back.
+     *
+     * @param {boolean} enabled
+     * @returns {boolean} the previous value
+     */
+    setImeWithHardKeyboard(enabled) {
+      const previous = harness.imeWithHardKeyboard();
+      harness.setImeWithHardKeyboard(enabled);
+      return previous;
+    },
+
     async hideKeyboard() {
       if (harness.imeShown()) {
         harness.key(KEY_BACK);
