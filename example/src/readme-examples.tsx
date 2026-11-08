@@ -370,7 +370,11 @@ export function ShareMenu() {
     <Popover
       isPresented={open}
       onIsPresentedChange={setOpen}
-      anchor={<Text>Share this list</Text>}
+      anchor={
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+          <Text>Share this list</Text>
+        </Pressable>
+      }
     >
       <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
         <Text>Copy link</Text>

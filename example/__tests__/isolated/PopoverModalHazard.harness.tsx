@@ -144,10 +144,12 @@ describe('Popover · the stranded-Modal hazard (own app instance)', () => {
       setters.get('pin')?.(true);
       const shown = await waitForReport('pin', isUp, 'up inside the Modal');
       // The move that strands a popover in the Modal's chain. On iOS RN keeps a closing
-      // Modal's content mounted until its native dismissal has ended, so the popover
-      // sees its window go first - the window-loss close, reported once - and is
-      // unmounted after. On Android the unmount comes first: a drop, which reports
-      // nothing (D44 item 2). Pinned both ways, so a change on either side is seen.
+      // Modal's content mounted until its native dismissal has ended, so the popover sees
+      // its window go first and the unmount comes after; on Android the unmount comes
+      // first. The order differs, the rule does not: a `Modal` closing under a popover
+      // takes the mount with it, and a popover dropped while presented reports nothing
+      // (D44 item 2, and BottomSheet's). iOS used to report `presented:false` there - the
+      // one event an app can do nothing with, since the screen it came from is gone.
       setters.get('modal')?.(false);
       await sleep(1800);
       cleanup();
@@ -177,7 +179,7 @@ describe('Popover · the stranded-Modal hazard (own app instance)', () => {
       console.log(
         `popover in a closing ${style} Modal reported: [${eventLog.join(',')}]`
       );
-      expect(eventLog).toEqual(IOS ? ['pin:presented:false'] : []);
+      expect(eventLog).toEqual([]);
     });
   }
 });

@@ -114,7 +114,7 @@ platform's tree; `need` names the example's harness/screen files as counting for
   popover brings up the keyboard - expected true, saw false" and then
   `TypeError: text.match is not a function`; with that fixed, red again on "nothing reported the
   keyboard frame" until the API 34+ dump shape was learned -> `3aa02ef1`, `f817fcc6`
-- `HybridNitroUiPopover.swift` `present()` -> `preferredContentSize = CGSize(width: 320, height: 480)`
+- `HybridNitroUiPopover.swift` `presentIfPossible()` -> `preferredContentSize = CGSize(width: 320, height: 480)`
   (what UIKit picks when nothing is asked for) -> all five "the first frame is the final size"
   fixtures red at the drawn-size check, plus "opens below its anchor":
   `expected 134 to be less than 96`
@@ -175,8 +175,11 @@ platform's tree; `need` names the example's harness/screen files as counting for
   about still reports the presentation that ended. Suppressing it would be a spec change, so the
   suite reads it as shipped.
 - bench: `bench: false`, so the brief's comparison against `react-native-popover-view` and the
-  component's bench cells are left for the merge mint (X14); the report carries the
-  harness-measured first-frame numbers instead.
+  component's bench cells are left for the merge mint (X14), and no Popover row is minted on
+  this machine either. The first-frame claim is therefore only carried here as the harness
+  measurement it is: five fixtures x two platforms, each asserting one distinct drawn size
+  equal to the box (`firstDrawMs`/`contentWaits` in each report), which is a correctness claim
+  and not a benchmark.
 - core: `NitroUiSheetRootView` is now shared by BottomSheet and Popover on Android; a shared
   "presented RN root" class for both platforms is worth extracting when a third control needs it.
 - a11y: `accessibilityLabel` still never reaches a presented window on either platform (D44
@@ -198,8 +201,16 @@ platform's tree; `need` names the example's harness/screen files as counting for
   puts the provider's answer straight into the popup window's `LayoutParams.x/y`, measured from
   the window's own top edge. `getWindowVisibleDisplayFrame` on the same view answers
   `[0,142][1080,2361]` and `[0,142][1080,1541]`: the two edges the placement needed, and the
-  keyboard's own top is the frame's bottom. A y of 1763 draws at screen 1763; a y of 60 draws at
-  142, because the window manager will not put a popup over the status bar.
+  keyboard's own top is the frame's bottom. A y of 60 draws at 142, because the window manager
+  will not put a popup over the status bar.
+- **That paragraph said "a y of 1763 draws at screen 1763", and fix round 1 removed it: it is
+  only true of a host window at the screen's origin.** The frame above is in *screen*
+  coordinates, `anchorBounds` and the returned offset are the *window*'s, and every fixture this
+  repo has ever run has the RN window at (0, 0), where the two are the same numbers. `27d1d7ae`
+  fixed the frame's *height* and left its origin dropped, which is the same bug one coordinate
+  further along; `PopoverPlacement.windowFrame` now subtracts the host's `rootView` location, and
+  `PopoverPlacementTest.theVisibleFrameIsConvertedIntoTheWindowThatHostsThePopover` runs a window
+  at screen y = 1200, where the two answers are 275 and 897.
 - Incident: while iterating on the keyboard check, a throwaway probe of mine force-stopped and
   relaunched the example while `real-input:android:--control:popover` was in its a11y sweep, and
   that sweep failed for that reason alone. Filtered runs are evidence only; the gate rows below

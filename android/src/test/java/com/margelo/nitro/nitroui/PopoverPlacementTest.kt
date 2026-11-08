@@ -139,6 +139,75 @@ class PopoverPlacementTest {
     )
   }
 
+  /**
+   * The frame arrives in *screen* coordinates and the popup is placed in the host
+   * window's, so the window's own corner has to come off before any of the above.
+   *
+   * Every fixture in this file has the host window at the screen's origin - a phone with
+   * the app filling the screen, which is the only geometry an RN example app has ever had
+   * here - and there the subtraction changes no number, so none of them can see the
+   * difference. The window below is a freeform/split-screen one: it occupies screen y
+   * 1200..2400, its visible frame is `[0,1200]..[1080,2200]`, and the anchor's own box is
+   * 700..806 *in the window* (1900..2006 on screen, behind the frame's bottom edge as
+   * screen coordinates report it). Placed against the frame as it came, this anchor gets
+   * y=817 - below the anchor, running 231 px past the bottom of the window the popup
+   * belongs to. Placed against the frame in the window's coordinates, there is no room
+   * below and the popup flips above: y=275.
+   */
+  @Test
+  fun theVisibleFrameIsConvertedIntoTheWindowThatHostsThePopover() {
+    val windowTopPx = 1200
+    val windowLeftPx = 540
+
+    assertEquals(
+      PopoverFrame(left = 0, top = 0, right = 540, bottom = 1000),
+      PopoverPlacement.windowFrame(
+        frameLeft = 540,
+        frameTop = 1200,
+        frameRight = 1080,
+        frameBottom = 2200,
+        windowLeft = windowLeftPx,
+        windowTop = windowTopPx,
+      ),
+    )
+
+    val frame =
+      PopoverPlacement.windowFrame(
+        frameLeft = 0,
+        frameTop = 1200,
+        frameRight = 1080,
+        frameBottom = 2200,
+        windowLeft = 0,
+        windowTop = windowTopPx,
+      )
+    assertEquals(
+      275,
+      PopoverPlacement.placeTop(
+        anchorTop = 700,
+        anchorBottom = 806,
+        contentHeight = contentHeight,
+        spacingPx = spacingPx,
+        marginPx = marginPx,
+        frameTopPx = frame.top,
+        frameBottomPx = frame.bottom,
+      ),
+    )
+    // A window at the screen's origin - every other fixture here - subtracts nothing, which
+    // is why none of them could have found this: the frame it places against is the one the
+    // tests above already pin (1763 below the anchor, 1085 with the keyboard up).
+    assertEquals(
+      PopoverFrame(0, 142, 1080, 2361),
+      PopoverPlacement.windowFrame(
+        frameLeft = 0,
+        frameTop = 142,
+        frameRight = 1080,
+        frameBottom = 2361,
+        windowLeft = 0,
+        windowTop = 0,
+      ),
+    )
+  }
+
   @Test
   fun thePopupStaysInsideTheFrameHorizontally() {
     // The measured case: the anchor is 42 px in, the content 578 wide, the frame 1080.

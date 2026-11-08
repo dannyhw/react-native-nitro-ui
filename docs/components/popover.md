@@ -140,7 +140,7 @@ batch gets there first and reports nothing.
 
 The device suite checks 50 open/close cycles, drops at 0, 80 and 150 ms into the entry
 transition, a recycle while open and a drop of an open popover all leave no window, no
-controller, no React Native root and no lifecycle observer behind.
+controller and no React Native root behind.
 
 ## Accessibility
 

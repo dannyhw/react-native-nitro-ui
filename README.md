@@ -40,7 +40,7 @@ the layout engine, and React never sees a native node.
 one Compose composition on Android instead of one each. It holds every control
 except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu`, `Tooltip`
 and `Popover`, and refuses those seven with an error that names them. The first three
-wait for a round that measures them inside a Host; the last three are refused by
+wait for a round that measures them inside a Host; the last four are refused by
 design, because each is a `View` around React Native children, not a control a
 composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
@@ -904,7 +904,11 @@ export function ShareMenu() {
     <Popover
       isPresented={open}
       onIsPresentedChange={setOpen}
-      anchor={<Text>Share this list</Text>}
+      anchor={
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+          <Text>Share this list</Text>
+        </Pressable>
+      }
     >
       <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
         <Text>Copy link</Text>
