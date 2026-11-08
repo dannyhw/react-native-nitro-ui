@@ -5549,7 +5549,7 @@ final class RealInputTests: XCTestCase {
     var sampledAt: Date?
     group.enter()
     DispatchQueue.global().asyncAfter(deadline: .now() + sampleAfter) {
-      held = meanLuminance(of: element.screenshot().image)
+      held = self.meanLuminance(of: element.screenshot().image)
       sampledAt = Date()
       group.leave()
     }
