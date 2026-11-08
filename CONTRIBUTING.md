@@ -988,6 +988,29 @@ acquire --task <id>` over setting them by hand (see "Leasing a device or port").
 Only start devices you need, never touch a device you did not start, and shut
 down the ones you started when you finish.
 
+### Reading a measured box in a harness log
+
+Three things a component's docs page deliberately does not explain, because they are
+how the suite measures rather than what an app gets:
+
+- **Every box is read from a poisoned fallback.** `seedSizingSize` files a size no
+  instance of the component can have (IconButton's suite uses 17.5 x 63.5 pt) under
+  each configuration's key and then bumps the sizing environment, so the mount that
+  follows starts wrong and _has_ to correct. Without it, a fallback that happens to be
+  exact for the configuration under test makes "the correction arrived" and "it never
+  arrived" read identically - which is why a fixture's fallback must never coincide
+  with the right answer.
+- **A device box is a density multiple, not the number in the table.** The pool's
+  Android pair is 2.625 density, so IconButton's `medium`/`wide` token of 52 dp is
+  laid out as 137 px and reads back as 52.19 dp: 52 dp does not divide evenly at that
+  density. Comparisons in the suite allow 0.6 for it, and a docs table that quotes dp
+  is quoting the token, not the pixel count.
+- **"Known debt" rows are pinned to the measurement that opened them.**
+  `A11Y_EXEMPTIONS` (`scripts/real-input/a11y.mjs`) matches a failure's own numbers, so
+  a row is reported _stale_ the moment the geometry changes for any reason - including
+  being fixed - and a fixed control has to delete its row. `docs/tasks/FOLLOWUPS.md`
+  owns what each one is for.
+
 ### Wall-clock gates (`HARNESS_TIMING`)
 
 Harness assertions split in two (D21). **Structural** ones — corrections,
