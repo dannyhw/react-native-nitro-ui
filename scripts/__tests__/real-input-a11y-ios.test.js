@@ -476,6 +476,70 @@ describe('the iOS debt rows', () => {
       ).every((line) => line.includes('the ios entry'))
     ).toBe(true);
   });
+
+  it('reports the shipped IconButton inset as its recorded debt, and only that', () => {
+    // Measured on pair-a (iOS 27): the name is on the `button` element, enabled and hittable,
+    // and it is the style's own 38.67 pt box centred inside the 44 x 44 pt host React Native
+    // laid out — the 44 pt touch target is a layer *behind* the control, so the element never
+    // grew to the box. Debt, printed every run, and the fixture is the tree the sweep reported,
+    // not a sketch of it.
+    const measured = parseIosA11yLog(
+      readFileSync(`${__dirname}/fixtures/a11y/ios-icon-button.log`, 'utf8')
+    ).get('icon-button');
+    expect(measured).toHaveLength(6);
+    const shipped = checkIosControlA11y(control('icon-button'), measured);
+    expect(shipped.failures).toEqual([]);
+    expect(shipped.known).toHaveLength(1);
+    expect(shipped.known[0]).toContain('known failing');
+    expect(shipped.known[0]).toContain('is announced by the element at');
+    expect(shipped.exempt).toBe(true);
+    // The regression the box rule exists for is not this row: a name that has *moved*, rather
+    // than been inset by the component on purpose, has to go red beside the known finding
+    // instead of being swallowed by it.
+    const moved = checkIosControlA11y(
+      control('icon-button'),
+      measured.map((entry) =>
+        entry.anchor
+          ? entry
+          : { ...entry, frame: { ...entry.frame, x: 20.5, width: 35 } }
+      )
+    );
+    expect(moved.failures).toHaveLength(1);
+    expect(moved.failures[0]).toContain('not the control');
+    expect(moved.exempt).toBe(false);
+  });
+
+  it('excuses the measured inset, not a box one point or ten wider', () => {
+    // G16's "not 12 or 22" test, for a number instead of a count. The row quotes the geometry
+    // it was measured with, so the only tree it can excuse is that one.
+    const [row] = exemptionsFor('icon-button', 'ios');
+    const sentence = (namedBox, drawnBox) =>
+      'NitroUiIconButton: "Real-input icon button" is announced by the element at ' +
+      `(${namedBox}) while the control is drawn at (${drawnBox}) \u2014 the name is on a ` +
+      "box that is not the control's";
+    const DRAWN = '16, 267, 44, 44';
+    expect(
+      row.matches.test(sentence('18.67, 269.67, 38.67, 38.67', DRAWN))
+    ).toBe(true);
+    // The vertical coordinate is the one number allowed to move: it is where the screen sits,
+    // and a row pinned to it would go stale for an unrelated layout change.
+    expect(
+      row.matches.test(sentence('18.67, 412.67, 38.67, 38.67', DRAWN))
+    ).toBe(true);
+    // The two boxes agreeing is the row's retirement, not something it excuses.
+    expect(row.matches.test(sentence('16, 267, 44, 44', DRAWN))).toBe(false);
+    expect(
+      row.matches.test(sentence('18.17, 269.67, 38.67, 38.67', DRAWN))
+    ).toBe(false);
+    expect(
+      row.matches.test(sentence('18.67, 269.67, 40.67, 38.67', DRAWN))
+    ).toBe(false);
+    expect(
+      row.matches.test(
+        sentence('18.67, 269.67, 38.67, 38.67', '16, 267, 54, 44')
+      )
+    ).toBe(false);
+  });
 });
 
 describe('reading the pass out of an xcodebuild log', () => {

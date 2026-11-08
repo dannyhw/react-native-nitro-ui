@@ -505,14 +505,20 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
  *   arrive at the same element. A person hears the name stutter.
  *
- * **No `icon-button` iOS row any more**, and the reason belongs here because G23 shipped
- * one: its name was on the right element and two pixels off the box, and the row quoted
- * those pixels so a *moved* name still went red. IconButton's 44 pt touch target
- * (`HybridNitroUiIconButton.swift`) removed the finding by making the box integral — the
- * element is the control's own 44 x 44 pt and the host is laid out at 44 x 44 pt, so the
- * two reads are of one layout and {@link IOS_FRAME_TOLERANCE_PT} covers the rest. The
- * row, its fixture and its matrix cells went out with that change rather than being
- * widened; if the sweep ever disagrees, the row comes back with the numbers it measured.
+ * **The `icon-button` iOS row** came back in G23's fix round, with different numbers, and the
+ * reason belongs here: the 44 pt touch target was expected to retire it and did not. Measured on
+ * pair-a (iOS 27, `iPhone 17`), the name is still on the right element — `button`, enabled,
+ * hittable — and it is inset further than before: React Native lays the host out at
+ * 44 x 44 pt (`measureContent()` answers with the target, so the box is integral) while SwiftUI
+ * reports its `Button` element at the style's own 38.67 pt, centred inside it. The target is a
+ * clear layer *behind* the control, so the element keeps the drawn control's geometry. That also
+ * retires G23 round 0's explanation — that a host a fraction of a point wider than the
+ * Button's own integral width produced the inset — because this host is integral and the inset
+ * stayed. So this is a target larger than the control it wraps, not two reads of one layout, and
+ * {@link IOS_FRAME_TOLERANCE_PT} cannot cover it. VoiceOver stops on the control. It is recorded
+ * rather than fixed because both ways of moving the stop onto the target were built and both left
+ * the name on two elements, which is a worse finding than the inset; `FOLLOWUPS.md` owns the
+ * measurement that retires the row.
  *
  * @type {ReadonlyArray<A11yExemption>}
  */
@@ -576,6 +582,22 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
     matches:
       /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+  },
+  {
+    control: 'icon-button',
+    platform: 'ios',
+    followups:
+      "G23 a11y: the iOS IconButton's accessibility element is the drawn control, inset inside its 44 pt touch target",
+    // The measured inset and nothing wider (G23 fix round, iOS 27, iPhone 17). `18.67`/`38.67`
+    // inside `16`/`44` *is* the finding, so a name that has actually moved — onto the wrapper,
+    // or off the centre of the target — is not excused by it. The vertical coordinate is the one
+    // number allowed to float: it is where the screen happens to sit, and pinning it would make
+    // this row stale whenever anything above IconButton changed height, which is a layout note and
+    // not a regression in the name. Every other number is the finding itself, so
+    // `staleExemptions` reports this row the moment the geometry changes for any reason —
+    // including being fixed.
+    matches:
+      /is announced by the element at \(18\.67, [\d.]+, 38\.67, 38\.67\) while the control is drawn at \(16, [\d.]+, 44, 44\)/,
   },
 ]);
 
