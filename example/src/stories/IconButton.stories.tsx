@@ -409,7 +409,7 @@ export const Glyphs: Story = {
       <Row label="androidIcon from a Metro asset (Android) / SF Symbol (iOS)">
         <IconButton
           accessibilityLabel="Share, from an asset"
-          androidIcon={require('../src/assets/icons/share_24px.xml')}
+          androidIcon={require('../assets/icons/share_24px.xml')}
           size="large"
           systemImage="square.and.arrow.up"
           variant="tonal"
