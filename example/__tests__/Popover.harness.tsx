@@ -853,9 +853,11 @@ describe('Popover', () => {
     const up = await waitForUp(id);
     expect(num(up, 'presentCount')).toBe(1);
     expect(Math.abs(num(up, 'askedH') - 92)).toBeLessThanOrEqual(1);
+    // `prefH` is the number UIKit was given; `viewH` is UIKit's own view, which it is free
+    // to round, so what the popover does with it is measured as a delta further down.
+    const beforeViewH = IOS ? num(up, 'viewH') : 0;
     if (IOS) {
       expect(Math.abs(num(up, 'prefH') - 92)).toBeLessThanOrEqual(1);
-      expect(Math.abs(num(up, 'viewH') - 92)).toBeLessThanOrEqual(1);
     }
 
     setters.get(`${id}:grown`)?.(true);
@@ -872,7 +874,7 @@ describe('Popover', () => {
         Math.abs(num(r, 'askedH') - grownHeight) <= 1 &&
         (IOS
           ? Math.abs(num(r, 'prefH') - grownHeight) <= 1 &&
-            Math.abs(num(r, 'viewH') - grownHeight) <= 1
+            num(r, 'viewH') - beforeViewH >= grownHeight - 92 - 2
           : isSize(r.lastDraw ?? '', Math.round(width * scale), grownPx)),
       'the popover at the content height it grew to',
       12000
@@ -1371,17 +1373,21 @@ describe('Popover', () => {
         </>
       );
       await requireHandle('sheet-probe');
-      const baseline = await waitForReport(
-        'sheet-probe',
-        (r) => r.raw !== '' && r.live === '0',
-        'a baseline with no popover up',
-        20000
-      );
       await waitForHandleReport(
         sheets,
         'sheet',
         sheetUp,
         'the sheet, open',
+        20000
+      );
+      // The residue baseline is the sheet up and the popover never opened: a sheet is a
+      // presenter of its own (its controller, its touch root), and `nothingLeft` compares
+      // those counts, so a baseline from before the sheet would read the sheet as the
+      // popover's remains.
+      const sheetBaseline = await waitForFreshReport(
+        'sheet-probe',
+        (r) => r.live === '0',
+        'the probe with the sheet up and no popover',
         20000
       );
       await requireHandle('in-sheet');
@@ -1407,7 +1413,7 @@ describe('Popover', () => {
       expect(sheetUp(reportOfHandle(sheets, 'sheet'))).toBe(true);
       await waitForFreshReport(
         'sheet-probe',
-        nothingLeft(baseline),
+        nothingLeft(sheetBaseline),
         'nothing of the popover left inside the sheet',
         12000
       );
