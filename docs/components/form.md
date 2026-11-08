@@ -58,7 +58,7 @@ cost no rows and why a React Native header node is a later decision.
 | Prop        | Type                     | Default    | Maps to                                                                 |
 | ----------- | ------------------------ | ---------- | ------------------------------------------------------------------------ |
 | `children`  | `ReactNode`              | —          | The row's content.                                                        |
-| `onPress`   | `() => void \| undefined`| —          | The cell highlight and one a11y element on iOS; M3's pressed state and one merged node on Android. |
+| `onPress`   | `() => void \| undefined`| —          | The cell highlight and the row's press. Android also merges the row into one a11y node; iOS's merge is recorded debt (`a11y:form`), so there the name sits on the row's own element. |
 | `accessory` | `'none' \| 'disclosure' \| 'checkmark'` | `'none'` | `UICellAccessory.disclosureIndicator` / `.checkmark`; Material Symbols `chevron_right` / `check` (D43). |
 | `selected`  | `boolean \| undefined`   | `false`    | The cell's selected background; `secondaryContainer` on Android.          |
 | `style`     | `ViewStyle`              | —          | Laid out by Yoga inside the row box.                                      |

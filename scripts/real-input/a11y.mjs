@@ -388,15 +388,20 @@ export const A11Y_CONTROLS = Object.freeze([
     component: 'Form',
     hybridView: 'NitroUiForm',
     screen: 'form',
-    // A row with `onPress` is the element, not its two `Text`s: iOS turns the cell into
-    // one button whose label is gathered from the row's content (and stops at the first
-    // labelled view, which is why this label survives the walk), and Android merges the
-    // row into one node. What is being graded is that the merge kept the name.
+    // What the component page promises (C1): a row with `onPress` is one element carrying
+    // the row's name, not the row's two `Text`s. Android keeps that promise — the dump
+    // makes the row one node and this label is on it. iOS does not yet, measured twice on
+    // pair-b (G24 rounds 2 and 3): the only element with the name is the wrapper React
+    // Native made for the row's `Text`, and the list's cell does not answer for its name
+    // at all — setting its label at configuration time and deriving it on every read give
+    // the same XCUITest tree, byte for byte. That is the debt row below, and the reason
+    // this case is not deleted: the day UIKit is made to answer, the row goes stale.
     label: 'Row with onPress',
     role: 'interactive',
     anchorTestId: 'form-row',
-    // The cell is a button because the row presses. `other` would be what a list cell
-    // with no press gesture announces itself as, and recording that here would freeze it.
+    // What the row has to be announced as, not what it is: a pressable row is a button
+    // because the row presses. `other` is what the tree reports today, and recording the
+    // measurement here would freeze the bug into the expectation.
     iosTrait: 'button',
   },
 ]);
@@ -504,6 +509,13 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  *   all. The one the label reaches announces **"Hosted picker, Hosted picker"** — the
  *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
  *   arrive at the same element. A person hears the name stutter.
+ * - `form`: nothing under the row's `testID` is announced as "Row with onPress" either.
+ *   The only element with the name is the React Native wrapper for the row's own `Text`,
+ *   announced as `other`, and the list's cell does not answer for the row's name — so the
+ *   row is a group of stops with a named one in it, not the one button the Android half
+ *   announces. G24 round 3 measured the same tree with the cell's label derived on read
+ *   instead of stored at configuration time, which rules out the first guess (a stale
+ *   snapshot) and leaves the merge itself unfixed.
  *
  * @type {ReadonlyArray<A11yExemption>}
  */
@@ -567,6 +579,23 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
     matches:
       /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+  },
+  {
+    control: 'form',
+    platform: 'ios',
+    followups:
+      'G24 a11y: a Form row is one button on Android; on iOS its name stays on the wrapper',
+    // Measured twice on pair-b (G24 rounds 2 and 3), byte for byte the same: the only
+    // element carrying the row's name is the React Native wrapper for the row's `Text`,
+    // announced as `other`, on the row's box - and the list's cell does not answer for the
+    // row's name at all, so writing the cell's label at configuration time and deriving it
+    // on every read produce the same tree. The row presses, the name is where the row is
+    // drawn, and what is missing is the merge into one button element.
+    //
+    // Anchored on the wrapper being announced as `other`: a cell that starts answering is
+    // no longer this sentence, so the row goes stale and the run says so.
+    matches:
+      /is announced as "Row with onPress" .*\(wrapper: other "Row with onPress"/,
   },
 ]);
 
