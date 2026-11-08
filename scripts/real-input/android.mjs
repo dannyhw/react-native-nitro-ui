@@ -50,6 +50,13 @@ import {
   tabTarget,
 } from './uiautomator.mjs';
 import { checkTabTargets, exampleTabs } from './tab-targets.mjs';
+import {
+  imeInsetSample,
+  imeInsetTop,
+  imeServiceSample,
+  imeServiceShown,
+  imeServiceTopPx,
+} from './ime-frame.mjs';
 import { nativeChecked, nativeEnabled } from './android-tree.mjs';
 import { decodePng, pixelAt } from './png-pixel.mjs';
 import {
@@ -5716,10 +5723,88 @@ class DeviceHarness {
   /**
    * Whether the soft keyboard is on screen, as the input method service says.
    *
+   * `.stdout`, not the result itself: `shell()` answers `{ status, stdout, stderr }` and
+   * `RegExp.test` coerces its argument, so the version this replaced asked whether
+   * `"[object Object]"` contains `mInputShown=true`. That is `false` for a keyboard that is
+   * plainly on screen, which turns every witness built on it — this check and
+   * `hideKeyboard()`'s decision to press Back — into one that can only ever say "no".
+   *
    * @returns {boolean}
    */
   imeShown() {
-    return /mInputShown=true/.test(this.shell('dumpsys input_method'));
+    return imeServiceShown(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
+   * The top edge of the soft keyboard in screen pixels, or `null` when nothing answers.
+   *
+   * "Is the focused field still *above* the keyboard" is a question about two edges, and the
+   * accessibility tree carries only one of them — `uiautomator dump` walks the app's window,
+   * never the input method's. Both readers in `ime-frame.mjs` are consulted, in this order:
+   *
+   * 1. this app window's `ime` `InsetsSource`, which is the rectangle the app is told to
+   *    avoid and therefore the one a control's own claim is about (the reader `Popover`'s
+   *    keyboard check shares);
+   * 2. the IME service's own `visibleTopInsets`, read only while `mInputShown=true`, because
+   *    that block is the *last computed* insets and survives the keyboard going away.
+   *
+   * `dumpsys window windows` is not one of them, and is the reason both exist: from API 30
+   * the `Window{… InputMethod}` record is a full-height insets host whose `frame=` is
+   * `[0,142][1080,2424]` with GBoard up *and* down, so read as a keyboard edge it always
+   * says `top=142` — a claim S6b round 2 printed before the two witnesses were compared.
+   *
+   * @returns {number | null}
+   */
+  imeTopPx() {
+    const fromWindow = imeInsetTop(this.shell('dumpsys activity top').stdout);
+    if (fromWindow != null) {
+      return fromWindow;
+    }
+    return imeServiceTopPx(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
+   * The keyboard's edge from the IME service alone, for a check that wants the second
+   * witness beside the first rather than a fallback. See {@link imeTopPx}.
+   *
+   * @returns {number | null}
+   */
+  imeServiceTopPx() {
+    return imeServiceTopPx(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
+   * What the two keyboard readers actually said, for the failure that has to be fixable.
+   *
+   * @returns {string}
+   */
+  imeEdgeSample() {
+    return (
+      `window: ${imeInsetSample(this.shell('dumpsys activity top').stdout)}` +
+      ` | service: ${imeServiceSample(this.shell('dumpsys input_method').stdout)}`
+    );
+  }
+
+  /**
+   * Whether the IME is asked to show on a device that also has a hardware keyboard.
+   *
+   * @returns {'0' | '1' | 'unset'}
+   */
+  imeShowsWithHardKeyboard() {
+    const value = this.shell(
+      'settings get secure show_ime_with_hard_keyboard'
+    ).stdout.trim();
+    // `settings get` answers the string `null` for an unset key, and nothing for nothing.
+    return value === '0' || value === '1' ? value : 'unset';
+  }
+
+  /**
+   * Ask the IME to show on a device that also has a hardware keyboard (every AVD does).
+   *
+   * @param {'0' | '1'} value
+   */
+  setImeShowsWithHardKeyboard(value) {
+    this.shell(`settings put secure show_ime_with_hard_keyboard ${value}`);
   }
 
   /**
@@ -6265,6 +6350,76 @@ function makeContext(harness, log) {
      */
     density() {
       return harness.density();
+    },
+
+    /** The window size in pixels, for a check that has to say something about a band of it. */
+    screenSize: () => harness.screenSize(),
+
+    /**
+     * Whether the software keyboard is up, as the input method service says.
+     *
+     * `mInputShown=true` is the service's own answer that it put an input view on screen,
+     * which is the only way a check can tell a real keyboard from the hardware-keyboard
+     * toolbar an emulator answers a focused field with.
+     */
+    imeShown() {
+      return harness.imeShown();
+    },
+
+    /**
+     * The keyboard's top edge in screen pixels, or `null` when nothing says. See
+     * [DeviceHarness.imeTopPx] for why a missing edge is never a guess.
+     *
+     * @returns {number | null}
+     */
+    imeTopPx() {
+      return harness.imeTopPx();
+    },
+
+    /** The IME service's own edge, as the second witness beside {@link imeTopPx}. */
+    imeServiceTopPx() {
+      return harness.imeServiceTopPx();
+    },
+
+    /** What both keyboard readers saw, for a failure the next reader can act on. */
+    imeEdgeSample() {
+      return harness.imeEdgeSample();
+    },
+
+    /**
+     * Run `body` on a device that will actually show a software keyboard, and leave the
+     * device as it was found.
+     *
+     * Every AVD in the pool has a hardware keyboard, and Android answers a focused field on
+     * one with a floating toolbar instead of a keyboard. A check about *the keyboard* has to
+     * raise `show_ime_with_hard_keyboard` for its duration and put it back afterwards, so the
+     * pool's device keeps no other task's assumption.
+     *
+     * If the process is killed inside `body` the preference stays raised; a `finally` cannot
+     * run on a kill, and this says so rather than pretending otherwise.
+     *
+     * @param {() => Promise<void>} body
+     */
+    async withFullSoftwareKeyboard(body) {
+      const found = harness.imeShowsWithHardKeyboard();
+      if (found !== '1') {
+        harness.setImeShowsWithHardKeyboard('1');
+        log.note(
+          `show_ime_with_hard_keyboard was "${found}" - raised to 1 for the keyboard case ` +
+            'so the software keyboard shows despite the AVD hardware keyboard'
+        );
+      }
+      try {
+        await body();
+      } finally {
+        if (found !== '1') {
+          harness.setImeShowsWithHardKeyboard(found === 'unset' ? '0' : found);
+          log.note(
+            `show_ime_with_hard_keyboard restored to ` +
+              `${found === 'unset' ? '0 (it was unset)' : found}`
+          );
+        }
+      }
     },
 
     /**
