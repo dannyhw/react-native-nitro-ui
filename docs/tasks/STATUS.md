@@ -113,4 +113,4 @@
 | S6b | Form spike round 2: real iOS taps in reparented cells, the keyboard, iOS `measure`, the 52 pt row and the Android header layer | Apex | Opus | done: GO with the Android keyboard as the build's first item (D45; report merged as round 2 of S6's, prototype on `task/S6b-form-spike` `e47f30fc`) |
 | G24 | Form and Section (Q10 C1, S6/S6b, D45) | Apex | Opus | running |
 | G20 | ButtonGroup (Q9 Appendix B, D42; the four early checks first) | Apex | Opus | running |
-| G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | running |
+| G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | code done at `b82bf717`, `check` green; device gates not run (no free pair behind G24 and G20). Device round starts when a pair frees |
