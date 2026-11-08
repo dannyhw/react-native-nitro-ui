@@ -37,6 +37,7 @@ import { Tooltip } from '../Tooltip/Tooltip';
 import { Checkbox } from '../Checkbox/Checkbox';
 import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
+import { Form } from '../Form/Form';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -112,6 +113,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [BottomSheet, 'BottomSheet'],
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
+  [Form, 'Form'],
 ]);
 
 /**

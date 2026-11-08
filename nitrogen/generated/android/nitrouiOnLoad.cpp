@@ -36,6 +36,13 @@
 #include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
 #include "JHybridNitroUiDialogSpec.hpp"
 #include "views/JHybridNitroUiDialogStateUpdater.hpp"
+#include "JHybridNitroUiFormSpec.hpp"
+#include "views/JHybridNitroUiFormStateUpdater.hpp"
+#include "JHybridNitroUiFormSectionSpec.hpp"
+#include "JFunc_void_double_double_double_double.hpp"
+#include "views/JHybridNitroUiFormSectionStateUpdater.hpp"
+#include "JHybridNitroUiFormRowSpec.hpp"
+#include "views/JHybridNitroUiFormRowStateUpdater.hpp"
 #include "JHybridNitroUiHostSpec.hpp"
 #include "views/JHybridNitroUiHostStateUpdater.hpp"
 #include "JHybridNitroUiMenuSpec.hpp"
@@ -212,6 +219,30 @@ struct JHybridNitroUiTooltipSpecImpl: public jni::JavaClass<JHybridNitroUiToolti
     return javaPart->getJHybridNitroUiTooltipSpec();
   }
 };
+struct JHybridNitroUiFormSpecImpl: public jni::JavaClass<JHybridNitroUiFormSpecImpl, JHybridNitroUiFormSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiForm;";
+  static std::shared_ptr<JHybridNitroUiFormSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiFormSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiFormSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiFormSpec();
+  }
+};
+struct JHybridNitroUiFormSectionSpecImpl: public jni::JavaClass<JHybridNitroUiFormSectionSpecImpl, JHybridNitroUiFormSectionSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiFormSection;";
+  static std::shared_ptr<JHybridNitroUiFormSectionSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiFormSectionSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiFormSectionSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiFormSectionSpec();
+  }
+};
+struct JHybridNitroUiFormRowSpecImpl: public jni::JavaClass<JHybridNitroUiFormRowSpecImpl, JHybridNitroUiFormRowSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiFormRow;";
+  static std::shared_ptr<JHybridNitroUiFormRowSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiFormRowSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiFormRowSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiFormRowSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -239,6 +270,13 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDialogSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDialogStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiFormSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiFormStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiFormSectionSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_double_double_double_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiFormSectionStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiFormRowSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiFormRowStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiHostSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiHostStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiMenuSpec::CxxPart::registerNatives();
@@ -377,6 +415,24 @@ void registerAllNatives() {
     "NitroUiTooltip",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiTooltipSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiForm",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiFormSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiFormSection",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiFormSectionSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiFormRow",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiFormRowSpecImpl::create();
     }
   );
 }
