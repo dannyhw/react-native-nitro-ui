@@ -734,15 +734,20 @@ function windowOf(
  * is the go line; fourteen is the same claim with a margin, and a pass that stops at the limit
  * is still a pass on rows it actually read.
  *
- * `scrolledBy` is how far the Form has scrolled, and it is the one thing the two platforms
- * cannot share here. React Native's `measure` sums Yoga origins and subtracts no scroll
- * offset (0.88: `UIManagerBinding.cpp` -> `dom::measureInWindow`, whose
- * `getLayoutMetricsFromRoot` reaches `LayoutableShadowNode::computeLayoutMetricsFromRoot`,
- * a walk over `getAncestors` that applies `frame.origin` and nothing else), so on Android it
- * still describes where a row was *laid out* while the view has travelled up by the scroll
- * offset - which is why the case subtracts it from the shadow-tree answer rather than adding
- * it. iOS gets `0`: its Form publishes where each cell came to rest, so the shadow tree
- * already carries the screen position - the whole point of question 4.
+ * `scrolledBy` is a correction the case applies to the shadow-tree answer, and S6b measured
+ * that it is `0` on both platforms - which is the most useful thing this case found.
+ * `measure`/`measureInWindow` are one shared C++ walk (`UIManagerBinding.cpp:689` ->
+ * `dom::measureInWindow` -> `LayoutableShadowNode::computeRelativeLayoutMetrics`), and per
+ * ancestor that walk adds two things: the node's Yoga `frame.origin` and its
+ * `getContentOriginOffset(true)`. RN's `ScrollView` overrides the second to `-contentOffset`
+ * (`ScrollViewShadowNode.cpp:67`, fed from `scrollViewDidScroll`), so an Android Form - whose
+ * scroller *is* an RN `ScrollView` (`Form.tsx`) - already measures where its rows are drawn,
+ * mid-scroll and at rest: after a 180 dp scroll its rows measured `-178.7` against UIKit's
+ * `-178.7`. iOS gets the same `0` for the opposite reason: a `UICollectionView` is not a
+ * shadow node, so nothing in the walk knows about its scroll, and the Form publishes each
+ * cell's resting place into the row's own `top`/`left` to put it there (question 4).
+ * Subtracting the scroll offset on Android, which an earlier draft of this case did, made all
+ * fourteen comparisons wrong by exactly the scroll - a wrong assumption, not a wrong Form.
  */
 async function compareRows(
   what: string,
@@ -770,6 +775,9 @@ async function compareRows(
     compared += 1;
     // The view has been drawn `scrolledBy` higher than Yoga laid it out; the shadow-tree
     // answer does not know that (see above), so it has to be taken off before comparing.
+    // Both platforms answer `0` today, so this subtraction is a seam rather than a
+    // correction: it stays because the day a Form scrolls inside itself on iOS without
+    // publishing (or a platform stops applying the ancestor hook) is the day it is needed.
     const expectY = measured2[1] - scrolledBy;
     const off = Math.max(
       Math.abs(measured2[0] - native[0]),
@@ -848,11 +856,15 @@ describe('Form measure (S6b spike, question 4)', () => {
     expect(atRest.compared).toBeGreaterThanOrEqual(10);
 
     // Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do
-    // not, until the Form publishes where they came to rest. The poll is the settle - the
-    // number travels native -> JS -> React -> Fabric, and each hop is a turn of a queue.
+    // not, until the Form publishes where they came to rest - and on Android that the list
+    // really moved is asked of the device, not assumed, because a case that compared two
+    // numbers with nothing scrolled would pass on the at-rest readings.
     const height = 180;
     form.nuiTestScrollTo(height);
-    const scrolledBy = IOS ? 0 : await formScrollY(height / 2);
+    const scrolledBy = 0;
+    if (!IOS) {
+      expect(Math.abs((await formScrollY(height / 2)) - height)).toBeLessThanOrEqual(2);
+    }
     const scrolled = await until(
       () => compareRows(`after ${height} pt`, scrolledBy),
       (r) => r.bad.length === 0 && r.compared >= 10,
