@@ -52,7 +52,11 @@ import {
   tabTarget,
 } from './uiautomator.mjs';
 import { checkTabTargets, exampleTabs } from './tab-targets.mjs';
-import { nativeChecked, nativeEnabled } from './android-tree.mjs';
+import {
+  nativeChecked,
+  nativeEnabled,
+  tightestFlaggedNode,
+} from './android-tree.mjs';
 import { decodePng, pixelAt } from './png-pixel.mjs';
 import {
   CALENDAR_WIDE_MIN_DP,
@@ -2212,12 +2216,26 @@ const CHECKS = {
      * `Text` it paints when the label style shows titles, and as the
      * `contentDescription` the component sets when it does not.
      *
+     * The name is only where the search starts. Measured on `emulator-5574` against
+     * the shipped control, Material merges the *row* and then draws each item as
+     * three nodes: the item's own box (`android.view.View`, `clickable=true`, and for
+     * a toggle `checkable=true checked=true|false`), the title as a separate
+     * `android.widget.TextView`, and the role decoration Compose writes for
+     * `Role.Button`/`Role.Checkbox` (`android.widget.Button`/`android.widget.CheckBox`,
+     * neither clickable nor checkable). "Bold" the `TextView` says
+     * `checkable=false enabled=true` whatever the item is, so an item read through its
+     * name answers "off" for a checked toggle and "enabled" for a disabled item —
+     * which is why the check below resolves the name through
+     * {@link tightestFlaggedNode}, the same rule `nativeChecked` measures for Switch
+     * and Chip, and taps, `checked` and `enabled` all come off the item's own node.
+     *
      * @param {string} groupLabel the group's `accessibilityLabel`
      * @param {string} title the item's title
      */
     const itemOf = (groupLabel, title) => {
       const group = t.requireControl(groupLabel);
-      const candidates = t.dump().filter((node) => {
+      const tree = t.dump();
+      const named = tree.filter((node) => {
         const { bounds } = node;
         return (
           (node.text === title || node.contentDesc === title) &&
@@ -2229,15 +2247,21 @@ const CHECKS = {
           bounds.y2 <= group.bounds.y2 + 1
         );
       });
-      if (candidates.length === 0) {
+      if (named.length === 0) {
         return null;
       }
-      // The clickable one, which is the button itself: a `Text` inside it is a tighter
-      // box and a tap on either lands on the button, but only the button's node says
-      // whether the item is enabled, and the enabled reading is what step 5 asserts.
-      return (
-        candidates.find((node) => node.clickable === 'true') ?? candidates[0]
-      );
+      const control = tightestFlaggedNode(tree, named[0], 'clickable');
+      if (control == null) {
+        const { bounds } = named[0];
+        t.log.abort(
+          `group "${groupLabel}" draws the title "${title}" but no clickable node ` +
+            `contains it — the name is on [${named[0].className}] at ` +
+            `[${String(bounds.x1)},${String(bounds.y1)}]` +
+            `[${String(bounds.x2)},${String(bounds.y2)}], so nothing here can be ` +
+            'pressed, checked or disabled by a reader'
+        );
+      }
+      return control;
     };
 
     /** Like {@link itemOf}, and aborts with the group and item named when absent. */
@@ -2259,6 +2283,8 @@ const CHECKS = {
      * Read from the item node rather than through `nativeChecked`, which needs a
      * `contentDescription` to start from and an item drawn with its title has none —
      * and "which `Bold`?" is answered by geometry, not by a name four nodes share.
+     * `itemOf` has already resolved that geometry, so a `null` here means the item is
+     * drawn without a toggle state at all, which is the answer step 1 asserts against.
      */
     const itemChecked = (groupLabel, title) => {
       const node = itemOf(groupLabel, title);
@@ -2307,6 +2333,17 @@ const CHECKS = {
       itemChecked(TOGGLES, 'Bold'),
       'on'
     );
+    // The flags of the two nodes the check above just read, as evidence: the class
+    // Compose writes for `Role.Checkbox` and the `checked` a screen reader is handed,
+    // recorded the way the Checkbox and IconButton checks record theirs.
+    for (const title of ['Bold', 'Italic']) {
+      const node = requireItem(TOGGLES, title);
+      t.log.note(
+        `item node "${title}": clickable=${node.clickable} ` +
+          `checkable=${node.checkable} checked=${node.checked} ` +
+          `enabled=${node.enabled} class=${node.className}`
+      );
+    }
 
     // 2. One tap per item, and each item names itself. The counter is asserted as an
     //    exact number and the id alongside it: the pair is what says *this* item
@@ -2449,16 +2486,20 @@ const CHECKS = {
       '3 2'
     );
     // The barrier: the enabled sibling in the *same* group, tapped the same way, still
-    // lands — so the silence above was a refusal and not a screen that stopped answering.
+    // lands — so the silence above was a refusal and not a screen that stopped
+    // answering. It reports into the disabled pair's own counter, because that is the
+    // counter this group writes to (`onDisabled` is shared by the disabled group and
+    // the group with one disabled item, precisely so that a stray delivery is a number
+    // that moved); the presses counter belongs to the actions row two rows above.
     t.log.checkEquals(
       'the enabled item of the half-disabled group still answers',
       await t.tapUntilValue(
         () => requireItem(DISABLED_ITEM, 'Copy'),
-        ECHO.buttonGroupPresses,
-        '4',
+        ECHO.buttonGroupDisabledEvents,
+        '1',
         'the barrier tap beside the disabled item'
       ),
-      '4'
+      '1'
     );
 
     // 6. Overflow. Six titles cannot share the 220 dp well, so some items are not
@@ -2509,18 +2550,19 @@ const CHECKS = {
       `${await t.tapOptionUntilValue(
         hidden,
         ECHO.buttonGroupPresses,
-        '5',
+        '4',
         'picking the overflowed row'
       )} ${t.requireEcho(ECHO.buttonGroupPressedId)}`,
-      '5 quarter'
+      '4 quarter'
     );
     t.waitForPopupCount(0, 'the menu to close after the pick');
     t.log.checkEquals(
-      'and the row it came out of is left alone: five presses, five reports',
+      'and the row it came out of is left alone: four presses, two flips, one ' +
+        'delivery beside the disabled pair',
       `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
         `${t.requireEcho(ECHO.buttonGroupToggleEvents)} ` +
         `${t.requireEcho(ECHO.buttonGroupDisabledEvents)}`,
-      '5 2 0'
+      '4 2 1'
     );
   },
 

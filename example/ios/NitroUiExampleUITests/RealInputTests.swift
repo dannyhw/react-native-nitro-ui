@@ -3485,16 +3485,22 @@ final class RealInputTests: XCTestCase {
       "nothing else should answer a tap on the disabled pair"
     )
     // The barrier: the enabled sibling in the *same* group, tapped the same way, still
-    // lands — so the silence above was a refusal and not a screen that stopped answering.
+    // lands — so the silence above was a refusal and not a screen that stopped
+    // answering. It reports into the disabled pair's own counter, because that is the
+    // counter this group writes to: `onDisabled` is shared by the disabled group and the
+    // group with one disabled item, precisely so that a stray delivery is a number that
+    // moved. The presses counter belongs to the actions row two groups above, and the
+    // Android half measured that on a device (a barrier aimed at it stays at 3 however
+    // many taps land), so both platforms now aim this tap at the counter that moves.
     XCTAssertEqual(
       try tapItemUntilValue(
         disabledItem,
         "Copy",
-        echo: Echo.buttonGroupPresses,
-        expected: "4",
+        echo: Echo.buttonGroupDisabledEvents,
+        expected: "1",
         waitingFor: "the barrier tap beside the disabled item"
       ),
-      "4",
+      "1",
       "the enabled item of a group with a disabled sibling should still answer"
     )
 
@@ -3521,10 +3527,10 @@ final class RealInputTests: XCTestCase {
       try tapOptionUntilValue(
         option: "Quarter",
         echo: Echo.buttonGroupPresses,
-        expected: "5",
+        expected: "4",
         waitingFor: "picking the overflowed row"
       ),
-      "5",
+      "4",
       "a real tap on the overflowed row should report onPress for it, once"
     )
     XCTAssertEqual(
@@ -3535,8 +3541,9 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(
       "\(try read(Echo.buttonGroupPresses)) \(try read(Echo.buttonGroupToggleEvents)) "
         + "\(try read(Echo.buttonGroupDisabledEvents))",
-      "5 2 0",
-      "five presses, five reports, and no delivery to a disabled control"
+      "4 2 1",
+      "four presses and two flips — one more of each than the taps above reported — plus "
+        + "the one delivery the barrier tap beside the disabled pair was owed"
     )
   }
 
