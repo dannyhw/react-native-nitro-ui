@@ -1,0 +1,92 @@
+# Failure excerpt — harness:ios:PopoverModalHazard
+
+- Ran: 2026-11-07T20:30:41.607Z on code tree `d57c8b115df1` at HEAD `2dbada1` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios PopoverModalHazard`
+- Result: fail, exit 1, 25594 ms
+- Load: start 5.58, end 4.72, median 5.39, max 5.58
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+ios+PopoverModalHazard-2026-11-07T20-30-41.607Z.log` (<store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-07T20-30-41.607Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/isolated/PopoverModalHazard.harness.tsx`
+- `● Popover · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a fullScreen Modal closes with its popover up`
+- `expected 'NitroUiPopoverController' to contain 'ModalHostViewController'`
+- `● Popover · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a pageSheet Modal closes with its popover up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-07T20-30-41.607Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.72 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios PopoverModalHazard
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree d57c8b115df1, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.58/8.43 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-07T20-30-41.607Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/isolated/PopoverModalHazard.harness.tsx
+  ● Popover · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a fullScreen Modal closes with its popover up
+
+    expected 'NitroUiPopoverController' to contain 'ModalHostViewController'
+
+      [0m [90m 173 |[39m         [90m// the popover - and the app's chain never holds a popover at all.[39m
+       [90m 174 |[39m         expect(shown[33m.[39mownWindow)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 175 |[39m         expect(shown[33m.[39mtopPresented)[33m.[39mtoContain([32m'ModalHostViewController'[39m)[33m;[39m
+       [90m     |[39m                                             [31m[1m^[22m[39m
+       [90m 176 |[39m       }
+       [90m 177 |[39m       console[33m.[39mlog(
+       [90m 178 |[39m         [32m`popover in a closing ${style} Modal reported: [${eventLog.join(',')}]`[39m[0m
+
+  ● Popover · the stranded-Modal hazard (own app instance) › leaves no Modal host behind when a pageSheet Modal closes with its popover up
+
+    "pin" never reached up inside the Modal; its report is "seq=180;presented=1;js=1;live=0;presentCount=0;onScreen=0;contentW=170;contentH=96;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=34;firstW=170;firstH=96;finalW=170;finalH=96;sizes=170x96;maxWidth=320;nodeW=320;nodeH=96;anchorRect=-;inPopover=0;hidden=1;children=1;topPresented=-;modalHosts=0;windows=0;controllers=0;touchRoots=0;userDismissals=0;unasked=0;anchored=0;drops=2;recycles=2"; events=[]
+
+      [0m [90m 68 |[39m     [36mif[39m (check(report)) [36mreturn[39m report[33m;[39m
+       [90m 69 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 70 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 71 |[39m         [32m`"${testId}" never reached ${what}; its report is "${report.raw}"; events=[${eventLog.join(',')}]`[39m
+       [90m 72 |[39m       )[33m;[39m
+       [90m 73 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 2 total
+Snapshots:   0 total
+Time:        24.085 s
+Ran all test suites matching PopoverModalHazard.
+
+
+
+```

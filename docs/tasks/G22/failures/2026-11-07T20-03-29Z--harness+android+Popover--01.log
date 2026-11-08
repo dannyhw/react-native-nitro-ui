@@ -1,0 +1,212 @@
+# Failure excerpt — harness:android:Popover
+
+- Ran: 2026-11-07T20:03:29.068Z on code tree `c9b51a8e6f77` at HEAD `4c0a78a` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover`
+- Result: fail, exit 1, 103602 ms
+- Load: start 5.66, end 4.38, median 5.24, max 5.66
+- Device: android / device `emulator-5574` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+android+Popover-2026-11-07T20-03-28.652Z.log` (<store>/task/G22-popover/harness+android+Popover-2026-11-07T20-03-28.652Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › caps the content at the smaller of maxWidth and the window less its margins`
+- `● Popover › opens below its anchor, and above it when there is no room below`
+- `expected null not to be null`
+- `● Popover › puts the content where the popover is, not where the anchor is`
+- `expected '0' to be '1' // Object.is equality`
+- `● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size`
+- `● Popover › the handshake › presents again when nothing is listening for the close`
+- `expected [ 'unheard:dismiss' ] to deeply equal []`
+- `● Popover › the handshake › takes a close JS asked for without an event of its own`
+- `expected [] to deeply equal [ 'withdraw:dismiss' ]`
+- `● Popover › lifetime › leaves nothing when dropped 0 ms into the entry`
+- `● Popover › lifetime › leaves nothing when dropped 150 ms into the entry`
+- `● Popover › lifetime › gives a recycled view none of its previous popover`
+- `● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover-2026-11-07T20-03-28.652Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.38 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 187 — the rest is in the full log above)
+
+```
+       [90m 598 |[39m     expect(anchor)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+      [31m[1m>[22m[39m[90m 599 |[39m     expect(popup)[33m.[39mnot[33m.[39mtoBeNull()[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 600 |[39m     [36mif[39m ([33mIOS[39m) {
+       [90m 601 |[39m       [90m// UIKit puts the arrow on the anchor's far side and points at it: the popover is[39m
+       [90m 602 |[39m       [90m// either wholly below or wholly above, and its arrow names which.[39m[0m
+
+  ● Popover › puts the content where the popover is, not where the anchor is
+
+    expected '0' to be '1' // Object.is equality
+
+      [0m [90m 910 |[39m     [36mconst[39m up [33m=[39m [36mawait[39m waitForUp(id)[33m;[39m
+       [90m 911 |[39m     expect(num(up[33m,[39m [32m'children'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 912 |[39m     expect([33mIOS[39m [33m?[39m up[33m.[39minPopover [33m:[39m up[33m.[39minPopup)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                                 [31m[1m^[22m[39m
+       [90m 913 |[39m     [90m// The node is not the popover: it is the content's box, and on iOS it is hidden[39m
+       [90m 914 |[39m     [90m// while its content is on screen somewhere else.[39m
+       [90m 915 |[39m     [36mif[39m ([33mIOS[39m) expect(up[33m.[39mhidden)[33m.[39mtoBe([32m'1'[39m)[33m;[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size
+
+    expected '0' to be '1' // Object.is equality
+
+      [0m [90m 505 |[39m         [90m// stays behind as the anchor's neighbour and its one child is what native moves.[39m
+       [90m 506 |[39m         expect(num(up[33m,[39m [32m'children'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 507 |[39m         expect([33mIOS[39m [33m?[39m up[33m.[39minPopover [33m:[39m up[33m.[39minPopup)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                                     [31m[1m^[22m[39m
+       [90m 508 |[39m         [36mif[39m ([33mIOS[39m) expect(up[33m.[39mhidden)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 509 |[39m         [36mconst[39m asked [33m=[39m askedPx(up)[33m;[39m
+      [90m 510 |[39m         [90m// What native asked for *is* what Yoga laid out: no measuring, no guessing, and[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size
+
+    expected '0' to be '1' // Object.is equality
+
+      [0m [90m 505 |[39m         [90m// stays behind as the anchor's neighbour and its one child is what native moves.[39m
+       [90m 506 |[39m         expect(num(up[33m,[39m [32m'children'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 507 |[39m         expect([33mIOS[39m [33m?[39m up[33m.[39minPopover [33m:[39m up[33m.[39minPopup)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                                     [31m[1m^[22m[39m
+       [90m 508 |[39m         [36mif[39m ([33mIOS[39m) expect(up[33m.[39mhidden)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 509 |[39m         [36mconst[39m asked [33m=[39m askedPx(up)[33m;[39m
+      [90m 510 |[39m         [90m// What native asked for *is* what Yoga laid out: no measuring, no guessing, and[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size
+
+    "size-capped"'s content never laid out a box at all: {"x":0,"y":0,"width":0,"height":120}; report "seq=288;presented=1;js=1;live=0;presentCount=0;onScreen=1;roots=0;askedW=0;askedH=120;maxWidth=224;imePx=0;contentWaits=2;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=224;nodeH=120;children=1;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=6;recycles=6;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 307 |[39m     }[33m,[39m
+       [90m 308 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 309 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 310 |[39m         [32m`"${testId}"'s content never laid out ${what}: ${JSON.stringify([39m
+       [90m 311 |[39m [32m          layouts.get(testId) ?? null[39m
+       [90m 312 |[39m [32m        )}; report "${reportOf(testId).raw}"`[39m[0m
+
+  ● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size
+
+    "size-window-capped"'s content never laid out a box at all: {"x":0,"y":0,"width":0,"height":84.19047546386719}; report "seq=289;presented=1;js=1;live=0;presentCount=0;onScreen=1;roots=0;askedW=0;askedH=84;maxWidth=379;imePx=0;contentWaits=2;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=379;nodeH=84;children=1;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=7;recycles=7;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 307 |[39m     }[33m,[39m
+       [90m 308 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 309 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 310 |[39m         [32m`"${testId}"'s content never laid out ${what}: ${JSON.stringify([39m
+       [90m 311 |[39m [32m          layouts.get(testId) ?? null[39m
+       [90m 312 |[39m [32m        )}; report "${reportOf(testId).raw}"`[39m[0m
+
+  ● Popover › the handshake › presents again when nothing is listening for the close
+
+    expected [ 'unheard:dismiss' ] to deeply equal []
+
+      [0m [90m 692 |[39m       expect(again[33m.[39muserDismissals)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 693 |[39m       [90m// Nothing reached JS as an app event, and the count moved all the same.[39m
+      [31m[1m>[22m[39m[90m 694 |[39m       expect(eventLog[33m.[39mfilter((e) [33m=>[39m e[33m.[39mstartsWith([32m'unheard:'[39m)))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                                                       [31m[1m^[22m[39m
+       [90m 695 |[39m       expect(handles[33m.[39m[36mget[39m([32m'unheard'[39m)[33m?[39m[33m.[39mmostRecentEventCount)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 696 |[39m     })[33m;[39m
+       [90m 697 |[39m[0m
+
+  ● Popover › the handshake › takes a close JS asked for without an event of its own
+
+    expected [] to deeply equal [ 'withdraw:dismiss' ]
+
+      [0m [90m 710 |[39m       [90m// A change React asked for is not a native interaction: the app gets no[39m
+       [90m 711 |[39m       [90m// `onIsPresentedChange` back for its own write (D33).[39m
+      [31m[1m>[22m[39m[90m 712 |[39m       expect(eventLog)[33m.[39mtoEqual([[32m'withdraw:dismiss'[39m])[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 713 |[39m       expect(reportOf([32m'withdraw'[39m)[33m.[39muserDismissals)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 714 |[39m       expect(reportOf([32m'withdraw'[39m)[33m.[39munasked)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 715 |[39m     })[33m;[39m[0m
+
+  ● Popover › lifetime › leaves nothing when dropped 0 ms into the entry
+
+    "drop-0-probe" never reached nothing left after a drop at 0 ms; its report is "seq=429;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=0;askedW=0;askedH=0;maxWidth=320;imePx=0;contentWaits=0;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=0;nodeH=0;children=0;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=2;recycles=2;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+  ● Popover › lifetime › leaves nothing when dropped 150 ms into the entry
+
+    "drop-150-probe" never reached nothing left after a drop at 150 ms; its report is "seq=762;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=0;askedW=0;askedH=0;maxWidth=320;imePx=0;contentWaits=0;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=0;nodeH=0;children=0;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=9;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=4;recycles=4;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+  ● Popover › lifetime › gives a recycled view none of its previous popover
+
+    expected '0' to be '1' // Object.is equality
+
+      [0m [90m 833 |[39m       setters[33m.[39m[36mget[39m([32m'new'[39m)[33m?[39m[33m.[39m([36mtrue[39m)[33m;[39m
+       [90m 834 |[39m       [36mconst[39m up [33m=[39m [36mawait[39m waitForUp([32m'new'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 835 |[39m       expect(up[33m.[39mpresentCount)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 836 |[39m       [36mawait[39m settledLayout(
+       [90m 837 |[39m         [32m'new'[39m[33m,[39m
+       [90m 838 |[39m         (l) [33m=>[39m [33mMath[39m[33m.[39mabs(l[33m.[39mheight [33m-[39m [35m90[39m) [33m<=[39m [35m1[39m[33m,[39m[0m
+
+  ● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does
+
+    "in-modal" never reached a popover on screen; its report is "seq=1173;presented=0;js=0;live=0;presentCount=0;onScreen=0;roots=0;askedW=0;askedH=0;maxWidth=320;imePx=0;contentWaits=0;placed=0;placedAt=-;contentW=0;contentH=0;nodeW=0;nodeH=0;children=0;inPopup=0;density=2.625;anchorRect=0,0,189,95;draws=0;firstDraw=0x0;lastDraw=0x0;drawSizes=;firstDrawMs=-1;popRect=-;windowFocused=0;lifecycleObservers=10;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=7;recycles=7;measuresAfterDrop=1;layoutsAfterDrop=1;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       13 failed, 7 passed, 20 total
+Snapshots:   0 total
+Time:        102.133 s
+Ran all test suites matching Popover.
+gate: harness:android:Popover FAIL in 103.6 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+android+Popover-2026-11-07T20-03-28.652Z.log (5 probe(s))
+
+```
