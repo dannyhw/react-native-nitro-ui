@@ -112,3 +112,5 @@
 | G23 | IconButton (Q9 C4 on G19's icon path, D43) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on the tree with Popover in; iOS hit box floored at 44 × 44 pt) |
 | S6b | Form spike round 2: real iOS taps in reparented cells, the keyboard, iOS `measure`, the 52 pt row and the Android header layer | Apex | Opus | done: GO with the Android keyboard as the build's first item (D45; report merged as round 2 of S6's, prototype on `task/S6b-form-spike` `e47f30fc`) |
 | G24 | Form and Section (Q10 C1, S6/S6b, D45) | Apex | Opus | running |
+| G20 | ButtonGroup (Q9 Appendix B, D42; the four early checks first) | Apex | Opus | running |
+| G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | running |
