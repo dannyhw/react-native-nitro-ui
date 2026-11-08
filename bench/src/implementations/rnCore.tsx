@@ -7,14 +7,22 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { ScrollView } from 'react-native';
 
 import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateLabel,
+  FORM_ROW_HOST_STYLE,
+  FORM_VALUE_STYLE,
+  formRowKind,
+  formRowLabel,
+  formRowValue,
+  formSwitchValue,
   menuTitle,
   onPress,
+  onRowPress,
   onValueChange,
   range,
   rowStyle,
@@ -74,6 +82,51 @@ import {
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
+  if (component === 'form') {
+    // RN core has no grouped list, so the floor is the column an app would build
+    // instead: a `ScrollView` of boxes, one per row, with the same mixed content
+    // every other arm renders. Also a *floor* - no grouping, no cell reuse, no
+    // section header, no pressed state - which is the point: the ratio against it
+    // says what a real grouped list costs over scrolling plain views, and the two
+    // `@expo/ui` arms answer the peer question (S6's question 6).
+    return (
+      <ScrollView testID="bench-rn-core-form" style={style}>
+        {range(n).map((index) => {
+          const kind = formRowKind(index);
+          const label = formRowLabel(index);
+          const content = (
+            <>
+              <Text>{label}</Text>
+              {kind === 'detail' ? (
+                <Text style={FORM_VALUE_STYLE}>{formRowValue(value)}</Text>
+              ) : null}
+              {kind === 'switch' ? (
+                <Switch
+                  testID={`bench-rn-core-form-switch-${String(index)}`}
+                  value={formSwitchValue(index, value)}
+                  onValueChange={onValueChange}
+                />
+              ) : null}
+            </>
+          );
+          return kind === 'press' ? (
+            <Pressable
+              key={index}
+              testID={`bench-rn-core-form-press-${String(index)}`}
+              onPress={onRowPress}
+              style={formStyles.row}
+            >
+              {content}
+            </Pressable>
+          ) : (
+            <View key={index} style={formStyles.row}>
+              {content}
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  }
   if (component === 'date-picker') {
     return (
       <>
@@ -267,6 +320,22 @@ const buttonStyles = StyleSheet.create({
  * because a chevron is decoration this arm invented and the list is the part the
  * other arms actually have to build - which is what the ratio is there to show.
  */
+/**
+ * The core floor's form row: the box every arm's row is roughly the size of
+ * ({@link FORM_ROW_HOST_STYLE}) and the same horizontal layout a settings row has.
+ * No grouping, no separators, no background - the floor draws a row of content and
+ * nothing else, because RN core owns no list chrome and decoration here would be
+ * this arm's, not the control's.
+ */
+const formStyles = StyleSheet.create({
+  row: {
+    ...FORM_ROW_HOST_STYLE,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+});
+
 const pickerStyles = StyleSheet.create({
   box: {
     borderWidth: 1,
