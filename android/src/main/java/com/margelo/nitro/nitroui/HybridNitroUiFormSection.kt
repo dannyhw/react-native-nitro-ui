@@ -158,12 +158,6 @@ internal class HybridNitroUiFormSection(
     view.dropSection()
   }
 
-  /** Take the previous mount's accessibility identity off before this view goes to the pool. */
-  fun resetAccessibility() {
-    contentDescription = null
-    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
-  }
-
   /** What the layer measured, in px; reported in dp once per change. */
   fun reportMetrics(
     headerPx: Float,
@@ -581,7 +575,8 @@ internal class NitroUiFormSectionView(
    *
    * React Native calls `onDropViewInstance` as the front door of *recycling* as well as of a
    * real unmount, and this view outlives the mount: it goes back to the pool and the next
-   `Form.Section` is handed the same object. Removing the host from it — which is what this did
+   * `Form.Section` is handed the same object. Removing the host from it — which is what this
+   * did
    * — left a pooled section with no layer at all: the shapes, the header band and the pressed
    * state were gone for good, and every section mounted after an unmounted one drew its rows
    * over the page background, blank (fix round 1).
@@ -592,6 +587,18 @@ internal class NitroUiFormSectionView(
    */
   fun dropSection() {
     composeHost?.drop()
+  }
+
+  /**
+   * Take the previous mount's accessibility identity off before this view goes to the pool.
+   *
+   * Same rule as the Row's: React Native's `prepareToRecycleView` clears its own
+   * `accessibility_label` tag and leaves `contentDescription` and `importantForAccessibility`
+   * set, so a pooled section comes back still named for a mount that ended (fix round 1).
+   */
+  fun resetAccessibility() {
+    contentDescription = null
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
   /** The finger is on this row, or is no longer. */
