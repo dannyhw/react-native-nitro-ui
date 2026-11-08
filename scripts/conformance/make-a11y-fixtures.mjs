@@ -22,6 +22,21 @@ import { parseHierarchy } from '../real-input/uiautomator.mjs';
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
 const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
 
+/**
+ * `--only <id>[,<id>…]` refreshes one control's fixture.
+ *
+ * Regenerating the whole set is the right thing after a change that could move any
+ * control's tree, and the wrong thing when one control is new: the committed fixtures are
+ * the measured basis for rules this task did not touch, and rewriting all of them makes a
+ * later diff impossible to read. The tab walk still starts from the top, so the
+ * horizontal tab strip is searched in order exactly as a full run does.
+ */
+const onlyAt = process.argv.indexOf('--only');
+const only =
+  onlyAt >= 0 && process.argv[onlyAt + 1] != null
+    ? new Set(process.argv[onlyAt + 1].split(',').map((entry) => entry.trim()))
+    : null;
+
 const TAB_LABEL = {
   switch: 'Switch',
   slider: 'Slider',
@@ -145,6 +160,7 @@ function findTab(label) {
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
 for (const control of A11Y_CONTROLS) {
+  if (only != null && !only.has(control.id)) continue;
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();

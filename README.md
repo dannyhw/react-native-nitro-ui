@@ -21,7 +21,7 @@ the layout engine, and React never sees a native node.
 | `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
 | `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`         | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
-| `ButtonGroup`          | a row of bordered controls, or `ControlGroup` when connected   | M3 `ButtonGroup` with `customItem` and its overflow menu                             | next  | [button-group.md](docs/components/button-group.md)              |
+| `ButtonGroup`        | a row of bordered controls, or `ControlGroup` when connected   | M3 `ButtonGroup` with `customItem` and its overflow menu                                              | next  | [button-group.md](docs/components/button-group.md)           |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
@@ -414,8 +414,8 @@ what each platform does with a glyph it cannot resolve.
   </tr>
 </table>
 
-A row of **commands** — *Copy | Paste | Share* — optionally with independent
-toggles — *Bold | Italic | Underline*. Items are data, `onPress` reports the id you
+A row of **commands** — _Copy | Paste | Share_ — optionally with independent
+toggles — _Bold | Italic | Underline_. Items are data, `onPress` reports the id you
 gave them, and the items that do not fit move into an overflow menu. It has no
 selected value: one-of-a-few is `SegmentedControl`, and
 [button-group.md](docs/components/button-group.md#buttongroup-or-segmentedcontrol)
@@ -437,7 +437,12 @@ export function FormatToolbar({
         { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc' },
         { id: 'paste', title: 'Paste', systemImage: 'doc.on.clipboard' },
         // Controlled: this render decides what is drawn.
-        { id: 'spellcheck', title: 'Spellcheck', toggle: true, checked: spellcheck },
+        {
+          id: 'spellcheck',
+          title: 'Spellcheck',
+          toggle: true,
+          checked: spellcheck,
+        },
         // Uncontrolled: native owns it after the first render.
         { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
       ]}
