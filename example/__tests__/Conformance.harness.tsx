@@ -3990,7 +3990,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         // The item starts checked (`defaultChecked`), so the press that arms the probe
         // reports it *unchecked* — the residue a missing reset would show.
         await waitFor(() =>
-          expect(eventsSince(0)).toEqual(['conformance-button-group:bold:false'])
+          expect(eventsSince(0)).toEqual([
+            'conformance-button-group:bold:false',
+          ])
         );
       },
       second: () => (
@@ -4049,7 +4051,9 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         // The item starts checked (`defaultChecked`), so the press that arms the probe
         // reports it *unchecked* — the residue a missing reset would show.
         await waitFor(() =>
-          expect(eventsSince(0)).toEqual(['conformance-button-group:bold:false'])
+          expect(eventsSince(0)).toEqual([
+            'conformance-button-group:bold:false',
+          ])
         );
       },
       second: () => (

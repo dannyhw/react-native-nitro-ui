@@ -182,7 +182,12 @@ export function FormatToolbar({
         { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc' },
         { id: 'paste', title: 'Paste', systemImage: 'doc.on.clipboard' },
         // Controlled: this render decides what is drawn.
-        { id: 'spellcheck', title: 'Spellcheck', toggle: true, checked: spellcheck },
+        {
+          id: 'spellcheck',
+          title: 'Spellcheck',
+          toggle: true,
+          checked: spellcheck,
+        },
         // Uncontrolled: native owns it after the first render.
         { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
       ]}
