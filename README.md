@@ -886,8 +886,8 @@ actions; a title or an action makes Android's tooltip the rich one.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/popover-ios.png" width="300" alt="A Popover open under a Share this list anchor, with three rows of React Native content, on iOS" /></td>
-    <td><img src="docs/images/components/popover-android.png" width="300" alt="A Popover open under a Share this list anchor, with three rows of React Native content, on Android" /></td>
+    <td><img src="docs/images/components/popover-ios.png" width="300" alt="A Popover open from its Share this list anchor, with three rows of React Native content, on iOS" /></td>
+    <td><img src="docs/images/components/popover-android.png" width="300" alt="A Popover open from its Share this list anchor, with three rows of React Native content, on Android" /></td>
   </tr>
 </table>
 
