@@ -4111,8 +4111,21 @@ const CHECKS = {
         ),
         'yes'
       );
-      t.log.check('the IME says its input view is on screen', t.imeShown());
-      const imeTop = t.imeTopPx();
+      // A keyboard is not up the instant the field takes focus. The IME service has to
+      // attach a surface first, and both witnesses here - the service's own `mInputShown`
+      // and the window service's rectangle - answer "nothing yet" when they are read too
+      // early. S6b's first Android run read them on the same instant the focus echo landed
+      // and called that "no input view, no keyboard window"; so each is given a bounded
+      // settle, and what is reported is the last thing the device actually said.
+      const imeDeadline = Date.now() + 5000;
+      let imeIn = t.imeShown();
+      let imeTop = t.imeTopPx();
+      while ((!imeIn || imeTop == null) && Date.now() < imeDeadline) {
+        await sleep(250);
+        imeIn = t.imeShown();
+        imeTop = t.imeTopPx();
+      }
+      t.log.check('the IME says its input view is on screen', imeIn);
       if (imeTop == null) {
         // A keyboard edge that cannot be read is not a pass: say it is unmeasured, in the
         // one channel the summary line carries, rather than let a missing window-service

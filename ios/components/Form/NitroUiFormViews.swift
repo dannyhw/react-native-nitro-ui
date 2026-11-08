@@ -209,6 +209,20 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     (formOwner as HybridNitroUiForm?)?.refresh(cell: self, for: row)
   }
 
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    // Report the width this cell really gives the row, on every layout of the cell.
+    // `NitroUiFormRowContainer.layoutSubviews` says the same thing, and for a cell that is
+    // being configured for the first time it says it too early: the Form names itself as the
+    // owner just after the row is adopted, and nothing lays the cell out again just because
+    // that happened. S6b found the row still being laid out at the list's cell width (370 pt,
+    // and 402 pt before the layout had any attributes at all) instead of the 338 pt it is
+    // drawn in, which pushes right-aligned content out past the cell.
+    if container.bounds.width > 0 {
+      formOwner?.rowBoxWidthReported(container.bounds.width)
+    }
+  }
+
   override init(frame: CGRect) {
     super.init(frame: frame)
     contentConfiguration = nil
