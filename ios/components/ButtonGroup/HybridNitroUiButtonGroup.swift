@@ -403,7 +403,15 @@ struct ButtonGroupContent: NitroUIContent {
     overflow: [ButtonGroupItemState]
   ) -> some View {
     PlacementWitness(
-      onPlace: { model.recordPlacement(visible: items.count, overflow: !overflow.isEmpty) }
+      // What the row *composed*, not what the candidate asked for: a disabled group
+      // composes no overflow control at all (D29), and saying "this candidate carries
+      // overflow items" would report a control that is not on screen.
+      onPlace: {
+        model.recordPlacement(
+          visible: items.count,
+          overflow: !overflow.isEmpty && !model.disabled
+        )
+      }
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
         row(items)
@@ -974,8 +982,18 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
 
   /// Read what the row laid out, on the main thread. Returns at once.
   func nuiTestProbeRow() throws {
+    let host = self.host
     let model = self.model
-    let report = { model.publishRowReport(order: model.items.map(\.id)) }
+    let report = {
+      // Lay the row out before answering. The placement record is written by
+      // `placeSubviews`, so a probe that only reads the record answers with whatever
+      // layout the host last happened to do — and a host that has been recycled into a
+      // new mount has no reason to have laid anything out yet, where it would answer
+      // "nothing" about a row that is on screen.
+      host.setNeedsLayout()
+      host.layoutIfNeeded()
+      model.publishRowReport(order: model.items.map(\.id))
+    }
     if Thread.isMainThread {
       report()
     } else {
