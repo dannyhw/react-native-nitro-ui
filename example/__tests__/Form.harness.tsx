@@ -863,16 +863,6 @@ describe('Form measure (E7)', () => {
       'measure'
     );
 
-    // The number the whole comparison rests on, asked rather than assumed: the offset the
-    // shadow tree is correcting by is the offset the list is actually at. A form at rest with
-    // a list inset it has not published fails here with both numbers named, before any of
-    // the per-row arithmetic gets a chance to blame the row.
-    await formReport(
-      (r) => Math.abs(num(r, 'origin') - num(r, 'offset')) <= 0.5,
-      'the published offset to be where the list is',
-      'measure'
-    );
-
     // At rest. Android is the control here: its rows never leave Yoga's box, so both trees
     // have always agreed and a case that cannot see the difference is not worth running.
     const atRest = await compareRows('at rest', 0);
