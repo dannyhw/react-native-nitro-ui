@@ -890,7 +890,16 @@ describe('Popover', () => {
     expect(box).not.toBeNull();
     expect(Math.abs(box!.height - grownPx)).toBeLessThanOrEqual(2);
     expect(num(grownReport, 'presentCount')).toBe(1);
-    expect(num(grownReport, 'live')).toBe(1);
+    // And this mount still owns a presentation: the witnesses are its own, not the
+    // process-wide `live`, which iOS only moves when UIKit's entry transition *ends* -
+    // measured here at `live=0` beside `onScreen=1;windows=1;controllers=1`, because a
+    // popover grown as fast as this one grows is still animating in.
+    requireYes(grownReport, 'onScreen', 'the grown popover is still on screen');
+    requireYes(
+      grownReport,
+      IOS ? 'inPopover' : 'inPopup',
+      'its content is still inside it'
+    );
   });
 
   it('opens below its anchor, and above it when there is no room below', async () => {
