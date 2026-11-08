@@ -15,7 +15,7 @@ import type { ComponentName } from '../types';
 const ROW_HEIGHTS: Record<
   Exclude<
     ComponentName,
-    'button' | 'segmented-control' | 'date-picker' | 'picker' | 'menu'
+    'button' | 'segmented-control' | 'date-picker' | 'picker' | 'menu' | 'form'
   >,
   number
 > = {
@@ -35,6 +35,121 @@ const ROW_HEIGHTS: Record<
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
    purpose - see `fitRowStyle`. */
+
+/* Form has none either, for a different reason: it is a container, so an arm
+   renders one box for the whole batch rather than one row per instance - see
+   `formStyle`. */
+
+/**
+ * The box every `form` arm gives its one container, returned by {@link rowStyle}.
+ *
+ * For every other component `n` counts controls and an arm renders `n` of them, so
+ * the row height is the shared fairness lever. For a Form `n` counts the *rows
+ * inside* one grouped list, and there is exactly one box to size: the list itself.
+ * A fixed height would clip the batch at `mount.form:50` and price a scroll view
+ * scrolling to nothing; `flex: 1` is what an app writes, and it is one module-level
+ * object so no arm hands its host a changed prop identity (the `rowStyle`
+ * reasoning).
+ */
+const formStyle = { width: '100%' as const, flex: 1 as const };
+
+/**
+ * The box the `expo-ui-host-per-control` arm gives each of its one-row hosts.
+ *
+ * That arm's shape for this component is one hosting view per *row* - what an app
+ * pays if it hosts each settings row separately rather than one grouped list - and
+ * a host has no intrinsic size, so it needs a box or it collapses to nothing and
+ * the arm measures an empty view. 56 is the tall row on either platform (Material
+ * 3's list item minimum, and the box nitro-ui's Android row asks for), so a row is
+ * never clipped by the box it was handed. The two grouped-list arms do not use it:
+ * their rows are sized by the list, which is part of what they cost.
+ */
+export const FORM_ROW_HOST_STYLE: { width: '100%'; height: number } = {
+  width: '100%',
+  height: 56,
+};
+
+/**
+ * The trailing value's box, for the arms whose rows are React Native views.
+ *
+ * A `detail` row's value sits at the row's trailing edge, which is what an app
+ * writes; the two `@expo/ui` arms get that for free from the row primitive each
+ * runtime uses for the job (`LabeledContent` and `ListItem`). Module-level, as
+ * every other style here.
+ */
+export const FORM_VALUE_STYLE = {
+  flex: 1,
+  textAlign: 'right',
+} as const;
+
+/**
+ * The kinds of row a `form` arm cycles through, in order.
+ *
+ * "Mixed rows" is what a settings screen is made of, and the only shape that
+ * prices a grouped list honestly: fifty identical labels would measure the
+ * cheapest cell each platform can build and miss the control-hosting cell that is
+ * most of what a Form costs (Q10 question 6, asked against `@expo/ui`). One of
+ * each kind per four rows, so N = 20 is five of each and N = 50 is 13/13/12/12.
+ *
+ * - `label`: a title alone - the row a Form is mostly made of;
+ * - `detail`: a title with a trailing value, whose text the flip changes length;
+ * - `switch`: a title with a control at its trailing edge;
+ * - `press`: a row the whole row answers to, the `onPress` case.
+ */
+export type FormRowKind = 'label' | 'detail' | 'switch' | 'press';
+
+const FORM_ROW_KINDS: readonly FormRowKind[] = [
+  'label',
+  'detail',
+  'switch',
+  'press',
+];
+
+/** The kind of this arm's `index`th row - the same sequence on every arm. */
+export function formRowKind(index: number): FormRowKind {
+  const kind = FORM_ROW_KINDS[index % FORM_ROW_KINDS.length];
+  return kind ?? 'label';
+}
+
+/**
+ * The title every arm paints on its `index`th row, constant across the flip.
+ *
+ * The number is the row's identity, so the batch is N distinct rows and not one
+ * string repeated: a list of byte-identical rows is not a list an app builds, and
+ * no arm should be rewarded for a deduplication the others happen not to get.
+ */
+export function formRowLabel(index: number): string {
+  return `Row ${String(index + 1)}`;
+}
+
+/**
+ * The trailing value a `detail` row shows, flipped by `update.form`.
+ *
+ * Two lengths on purpose, as `buttonTitle` does: the value's own width is part of
+ * the row's measured box, so the flip moves a measured box rather than repainting
+ * a fixed one (D16). The same two words on every arm, so the same re-measure is
+ * what each ratio prices.
+ */
+export function formRowValue(value: boolean): string {
+  return value ? 'Every day' : 'Once';
+}
+
+/**
+ * Whether this arm's `index`th switch row is on, flipped by `update.form`.
+ *
+ * Staggered by index rather than every switch mirroring the bit, so a flip is a
+ * half-turn of the batch on every arm instead of one prop that a runtime could
+ * coalesce into the previous frame. The parity is the same function everywhere, so
+ * the same rows change on every arm.
+ */
+export function formSwitchValue(index: number, value: boolean): boolean {
+  return (index + (value ? 1 : 0)) % 2 === 0;
+}
+
+/** Stable no-op `onPress` for the batch's `press` rows, for the reason {@link onPress} exists. */
+export function onRowPress(): void {
+  // Intentionally empty: state is driven by the runner.
+}
 
 /**
  * Whether a component's own measurement decides its box, so no arm may be given a
@@ -108,6 +223,11 @@ const styles = StyleSheet.create({
  * other arm pays (T02 review NIT).
  */
 export function rowStyle(component: ComponentName) {
+  if (component === 'form') {
+    // One container for the whole batch, so the box is the Form's own and not a
+    // row's - the same style object on every arm.
+    return formStyle;
+  }
   if (isSizedByContent(component)) {
     return fitRowStyle;
   }
@@ -131,6 +251,11 @@ export function stackStyle(
   n: number,
   component: ComponentName
 ): { height: number; width: '100%' } | typeof sharedHostStyle {
+  if (component === 'form') {
+    // The batch *is* one container, so the host takes the Form's box rather than
+    // a height built by multiplying a row's by `n`.
+    return formStyle;
+  }
   if (isSizedByContent(component)) {
     // A self-sizing batch hugs its content: telling the host a height would take
     // the control's own measurement out of the measurement.
