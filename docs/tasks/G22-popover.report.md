@@ -6,46 +6,59 @@
 ## Summary
 
 **Shipped.** `<Popover isPresented onIsPresentedChange anchor children onDismiss maxWidth testID style>`
-(`src/components/Popover/Popover.tsx`), controlled through the event-count handshake with
+(`src/components/Popover/Popover.tsx`), controlled through the handshake with
 Tooltip's refusal warning; every native prop always passed, `testID`/`nuiPerfId` as `T | null`.
-`sizing: null`, `hostable: false`, `realInput: true`, `bench: false`. `docs/components/popover.md`,
-the README row, import, Usage section, both screenshots and a minor changeset.
+`sizing: null`, `hostable: false`, `realInput: true`, `bench: false`; docs page, README row,
+import, Usage, both screenshots, changeset.
 
 **Sizing.** The content lays itself out in the app's own tree, capped at
 `min(maxWidth ?? 320, windowWidth - 32)`, and native shows that box - no measuring round-trip.
-iOS sets `preferredContentSize` before presenting and refuses to present until the box is sized;
-Android composes the popup only once it is. Five fixtures (narrow, tall, short, `maxWidth`-capped,
-window-capped) assert the first drawn frame equals the settled box, on both platforms.
+iOS sets `preferredContentSize` and refuses to present until the box is sized; Android composes
+only once it is. Five fixtures (narrow, tall, short, capped two ways) assert the first drawn frame equals the settled box, on both platforms.
 
 **Decision 1 - iOS presents from its own window**, as Tooltip does (D41), not through D35's
 chain: a popover in the app's chain is what UIKit dismisses when the app closes a `Modal`, and
-the next `Modal` is refused - measured for Tooltip (G18), re-measured here.
-`example/__tests__/isolated/PopoverModalHazard.harness.tsx` asserts `ownWindow=1` with a
-`ModalHostViewController` on top while both are up, and that all three are gone afterwards.
+the next `Modal` is refused (measured for Tooltip, re-measured here).
+`example/__tests__/isolated/PopoverModalHazard.harness.tsx` asserts `ownWindow=1` under a
+`ModalHostViewController` while both are up, and nothing left after.
 
 **Decision 2 - Android reuses BottomSheet's `NitroUiSheetRootView`** for the presented RN root.
 
-**Keyboard (D44 item 1).** The placement is arithmetic in `PopoverPlacement`, keyed on the ime
-inset so an open popup places itself again; the inset is read from the window the popup is placed
-in - both it and the popup's own window trigger the read - and the popup is focusable so a
-`TextInput` inside can raise the keyboard. Documented as API 30+.
+**Keyboard (D44 item 1).** The placement is arithmetic in `PopoverPlacement`, against the host
+window's *visible display frame* - below the status bar, stopping at the keyboard - read each
+time the provider runs; the ime inset is what has an open popup place itself again.
+The popup is focusable, so a `TextInput` inside raises the keyboard; the frame is everywhere,
+the re-placement trigger (`ime()`) is API 30+.
 
-**What the gates found.** Seven bugs only a device run showed: three example anchors without
-`onPress` (`3ec7d8af`, caught by `real-input:ios` before it had ever run green); the publish
-manifest omitting the built popover files (`26aad5b5`, `check`); two fixtures reading their
-"nothing up" baseline in the commit that measures it (`6c1b82ff`); a keyboard check demanding a
-log *ending* in `typed:ab`, which the close it was told to do forbids (`494dced2`); an IME probe
-comparing `[object Object]`, then matching a dump shape API 34+ no longer prints (`3aa02ef1`,
-`f817fcc6`); **the popup flipping above an anchor that was itself behind the keyboard**, leaving
-its lower edge under the keys (`bce1fd8f`); and measuring that edge from the popup's own window,
-whose inset is 43 px short of the window the popup is placed in (`44330c62`).
+**What the gates found.** Nine bugs only a device run showed: three example anchors without
+`onPress` (`3ec7d8af`); the publish manifest omitting the built popover files (`26aad5b5`); two
+fixtures reading their "nothing up" baseline in the commit that measures it (`6c1b82ff`); a
+keyboard check demanding a log *ending* in `typed:ab` (`494dced2`); an IME probe comparing
+`[object Object]`, then matching a dump shape API 34+ dropped (`3aa02ef1`, `f817fcc6`);
+the popup flipping above an anchor behind the keys (`bce1fd8f`); that edge read from the
+popup's own window, 43 px short (`44330c62`); and placing
+against the *height* Compose hands a position provider - the frame's height with its origin
+dropped and the keyboard already off it - so the popup was asked for y=60 and pinned to the top
+of the screen, 985 px above its edge, while "the field stays above the keyboard" passed
+(`27d1d7ae`; `328b3c22` adds the check that catches it).
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1870 tests / 77 suites | `44e2c8a666b8` | 2 m 47 s | start 7.2 / med 7.6 / max 9.1 |
+| `harness:ios` | **PASS** | 484 tests / 26 suites + isolated 6 tests / 3 suites | `44e2c8a666b8` (ios tree) | 12 m 39 s | start 4.3 / med 7.2 / max 28.2 |
+| `harness:android` | **PASS** | 540 tests / 26 suites + isolated 6 tests / 3 suites | `44e2c8a666b8` (android tree) | 15 m 58 s | start 4.7 / med 4.8 / max 14.5 |
+| `real-input:ios` | **PASS** | — | `44e2c8a666b8` (ios tree) | 31 m 09 s | start 4.2 / med 10.0 / max 42.5 |
+| `real-input:android` | **PASS** | — | `44e2c8a666b8` (android tree) | 47 m 19 s | start 6.0 / med 3.5 / max 10.5 |
 
-`need --for review`: GATE_PLACEHOLDER
+Lease `G22-q9eoq`. The ledger also carries filtered runs (`harness:ios:Popover`,
+`real-input:android:--control:popover`, …) on older trees: evidence from the round, satisfying
+nothing, all reported `stale` by `gate.mjs table`. The device rows ran one at a time with nothing
+else on the pair.
+
+`need --for review`: satisfied on this code tree — `check` green, both harnesses green on their
+platform's tree; `need` names the example's harness/screen files as counting for both platforms.
 
 ## Red proofs
 
@@ -70,9 +83,20 @@ whose inset is 43 px short of the window the popup is placed in (`44330c62`).
   -> `Popover`'s manifest `realInput: false`
 - `scripts/__tests__/component-coverage.test.js` "every manifest is covered, or has a stated
   reason" -> `selfSizing: false` removed from the Popover fixture -> that test
-- `PopoverPlacementTest.kt` "an anchor behind the keyboard does not flip the popup into it" ->
-  the flip condition back to `above >= marginPx` -> that test: `expected 1085 but was 1228`, which
-  is 143 px of the popup behind the keys
+- `PopoverPlacementTest.kt` "anAnchorBehindTheKeyboardDoesNotFlipThePopupIntoIt" -> the flip
+  condition back to `above >= minTop` alone -> that test: `expected:<1085> but was:<1221>`, which
+  is 94 px of the popup behind the keys
+- same file, two tests -> `usableBottom` built from the frame's *height* (`frameBottom - frameTop
+  - margin`), which is the double-count as shipped -> `expected:<1085> but was:<943>` and
+  `expected:<1763> but was:<1621>`
+- same file "contentTooTallForTheFrameStartsAtTheFramesTopMargin" -> `minTop = marginPx`, the
+  frame's origin ignored -> `expected:<184> but was:<42>`: a popup starting under the status bar
+- same file "thePopupStaysInsideTheFrameHorizontally" -> `placeLeft` without the frame's left edge
+  -> `expected:<142> but was:<42>`
+- `scripts/__tests__/real-input-popover-placement.test.js` -> the above-anchor tolerance widened to
+  2000 px -> 3 failing, among them "rejects the popup pinned to the top of the screen"
+- same file -> the behind-the-keys and missing-popup guards dropped -> 2 failing: "rejects a popup
+  whose own bottom is behind the keyboard", "fails when the popup is not in the dump at all"
 - `scripts/__tests__/real-input-ime-frame.test.js` "says nothing about a keyboard that is not up"
   -> the `visible=true` filter dropped -> that test, `Received: 142` - the status bar, the number
   the two window-frame readers answered with on a device and the reason it may never be answered
@@ -128,6 +152,9 @@ whose inset is 43 px short of the window the popup is placed in (`44330c62`).
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPopover.kt` + `NitroUiPopoverViewManager.kt`
   — the popup, `PopoverPlacement`, the IME inset and its two observers, and the draw witnesses.
 - `android/src/test/java/com/margelo/nitro/nitroui/PopoverPlacementTest.kt` — the placement rule, on the geometry a device produced.
+- `scripts/real-input/popover-placement.mjs` + `scripts/__tests__/real-input-popover-placement.test.js`
+  — the popup's box judged from outside the process: against its anchor, or against the
+  keyboard's edge, with the parked popup as one of the fixtures.
 - `scripts/patch-nitrogen.mjs`, `scripts/__tests__/patch-nitrogen.test.js` — the content-children
   patch extended to the popover's generated `.mm`, with the expected set in the test.
 - `example/__tests__/Popover.harness.tsx`, `example/__tests__/isolated/PopoverModalHazard.harness.tsx`,
@@ -155,12 +182,24 @@ whose inset is 43 px short of the window the popup is placed in (`44330c62`).
 - a11y: `accessibilityLabel` still never reaches a presented window on either platform (D44
   records it); a Popover has no label prop of its own, so the content's own names are what a
   screen reader gets.
+- core: `Tooltip` and `Menu` place through Material's position provider, which is handed the same
+  size-without-an-origin (`PopupLayout.getDisplayBounds`) and so has the same blind spot Popover
+  had; worth a look at whether either of their placements is a status bar out on a device whose
+  frame is not its window.
 
 ## Appendix
 
 - iOS's source rectangle is the anchor's box converted into the presentation window's root:
   `popoverSource.sourceView = source` (the anchor itself) puts the popover back in the app's
   presentation chain, which is what Decision 1 exists to avoid.
+- The coordinate space, measured on the API 35 emulator so the next reader does not have to:
+  `PopupLayout.updatePosition` asks the host window for its visible display frame, keeps the
+  *size* as `windowSize` (2219 px tall with no keyboard, 1399 with one, of a 2424 px screen) and
+  puts the provider's answer straight into the popup window's `LayoutParams.x/y`, measured from
+  the window's own top edge. `getWindowVisibleDisplayFrame` on the same view answers
+  `[0,142][1080,2361]` and `[0,142][1080,1541]`: the two edges the placement needed, and the
+  keyboard's own top is the frame's bottom. A y of 1763 draws at screen 1763; a y of 60 draws at
+  142, because the window manager will not put a popup over the status bar.
 - Incident: while iterating on the keyboard check, a throwaway probe of mine force-stopped and
   relaunched the example while `real-input:android:--control:popover` was in its a11y sweep, and
   that sweep failed for that reason alone. Filtered runs are evidence only; the gate rows below
