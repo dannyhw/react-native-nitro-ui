@@ -884,8 +884,8 @@ describe('Popover', () => {
     const box = rectOf(grownReport.popRect);
     expect(box).not.toBeNull();
     expect(Math.abs(box!.height - grownPx)).toBeLessThanOrEqual(2);
-    expect(num(grownReport, 'presentCount')).toBe('1');
-    expect(num(grownReport, 'live')).toBe('1');
+    expect(num(grownReport, 'presentCount')).toBe(1);
+    expect(num(grownReport, 'live')).toBe(1);
   });
 
   it('opens below its anchor, and above it when there is no room below', async () => {
