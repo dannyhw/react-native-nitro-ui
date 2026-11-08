@@ -3629,9 +3629,23 @@ final class RealInputTests: XCTestCase {
       keyboardTop + 1,
       "the field stays visible above the keyboard (field bottom \(afterField.maxY), keyboard top \(keyboardTop))"
     )
-    // And the keystrokes reach the field: the log, read once the popover is down, carries
-    // what JS received.
+    // And the keystrokes reach the field - read while the popover is still up. A keystroke
+    // still in React Native's queue is lost when the close unmounts the field, and the full
+    // run on 2026-11-08 lost the second of `ab` that way (the log carried `typed:a` and then
+    // the close, with no `typed:ab`) at load1 ~13; the same control passed on its own at
+    // load1 ~5. Waiting here keeps the claim - JS received both keystrokes - and takes the
+    // close out of the race: a character that never arrives still goes red.
     field.typeText("ab")
+    var typedWhileUp = ""
+    let keystrokesArrived = waitUntil({
+      typedWhileUp = echoText(Echo.popoverLog)
+      return typedWhileUp.contains("typed:ab")
+    }, window: 10)
+    XCTAssertTrue(
+      keystrokesArrived,
+      "real keystrokes reach the field inside the popover while it is still up: "
+        + typedWhileUp
+    )
     outside.tap()
     waitUntilOptionGone(fieldContent, "the outside tap to take the field popover down")
     // The screen records the field popover's own close after that outside tap, so what this
