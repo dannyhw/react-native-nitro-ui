@@ -709,7 +709,7 @@ export const DECLARED_FALLBACKS = Object.freeze({
   // will not publish anything smaller); the device run is what made it a fact.
   NitroUiIconButton: {
     android: { width: 48, height: 48 },
-    ios: { width: 25, height: 23 },
+    ios: { width: 44, height: 44 },
   },
 });
 
