@@ -1,7 +1,7 @@
 # G24 — Form and Section
 
 **Branch:** `task/G24-form` (from `main` at `60dda361`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `G24-<id>` (pair B / Metro `<port>`)
+**Lease:** `G24-n0vyo` (pair B / Metro `8293`)
 
 ## API
 
@@ -24,35 +24,36 @@ The platform mapping, the settle-time `measure()` contract and the off-screen-ro
 
 `Form` is iOS's list and Android's shapes. On iOS the container is a
 `UICollectionView` in `.insetGrouped` appearance whose list cells hold the rows; on Android
-there is no platform `Form` to host, so the rows stay exactly where Yoga put them inside
-React Native's own `ScrollView` and each section draws Material 3 Expressive's segmented-list
-shapes behind them (D45). A nitro-ui control in a row is the same standalone control it is
-anywhere else — no `Host`, no re-parenting into Compose.
+there is no platform `Form` to host, so rows stay exactly where Yoga put them inside React
+Native's own `ScrollView` and each section draws Material 3 Expressive's segmented-list shapes
+behind them (D45). A nitro-ui control in a row is the same standalone control it is anywhere
+else — no `Host`, no re-parenting into Compose.
 
-Three mechanisms carry the component, and each is the reason a spike-shaped version would not
-have worked:
+Four mechanisms carry it, each one a spike would have skipped:
 
-- **One number makes `measure()` right.** iOS lays a row out at the width a cell hands it, so
-  the Form reports that width (`onContentBox`) and each row's Yoga box becomes its cell's box;
-  a section reports the y the list gave it, so a row's Yoga origin is its position in the list
-  content. With that, the shadow-node correction is the scroll offset, published when scrolling
-  settles (`cpp/NitroUiScrollOffset.hpp`, D45 item 3). Mid-fling a measurement reads the last
-  settled position, and a row outside the visible cells has no cell — both documented as
-  deliberate.
-- **The keyboard is insets, not a scroll hack.** Android reserves
-  `WindowInsetsCompat.Type.ime()` in its scroll content and asks the scroller to make the
-  focused row visible; iOS grows the list's bottom inset. The real-input check reads the
-  keyboard's own top edge rather than a height guessed per system image.
-- **A press belongs to the cell.** A row with `onPress` is UIKit's cell highlight and one
-  button element; on Android it is M3's pressed state and one merged node that does not steal
-  touches from a `Switch` or a `Pressable` in the row.
+- **Three numbers make `measure()` right.** iOS lays a row out at the width a cell hands it
+  (`onContentBox`); the cell puts 4 pt above and below every row, so the Section reports that
+  space between rows and each row takes half of it as a margin (`onMetrics`); a section reports
+  the y the list gave it, so a row's Yoga origin is where its cell is drawn. The shadow-node
+  correction is then the scroll offset alone (`cpp/NitroUiScrollOffset.hpp`, D45 item 3);
+  without the middle number, row 14 measured 176 pt out. Mid-fling lag and off-screen rows are
+  documented as deliberate.
+- **A settle is not only a scroll.** UIKit applies the list's top inset to `contentOffset.y`
+  inside the layout pass that reports the list at rest, and a list's first geometry pass can run
+  before `onContentOffset` is attached. The holding view notices the safe area moving,
+  and an offset counts as published only when a listener heard it: otherwise a form at rest
+  measures 68 pt above its pixels, with nothing left to trigger a second publish.
+- **The keyboard is insets, not a scroll hack.** Android reserves `ime()` in its scroll content
+  and asks the scroller to make the focused row visible; iOS grows the list's bottom inset.
+- **A press belongs to the cell.** A row with `onPress` is UIKit's cell highlight and one button
+  element; on Android it is M3's pressed state and one merged node that does not steal touches
+  from a `Switch` in the row.
 
-The real-input tooling fixes came first, in their own commit: `imeShown()` was asking whether
-`"[object Object]"` contains `mInputShown=true`, `hideKeyboard()` was pressing Back for nobody,
-and the keyboard edge was being read from the IME's window record — which from API 30 is a
-full-height insets host whose `frame=` never moves. Both readers now live in
-`scripts/real-input/ime-frame.mjs`, are pure, and are unit-tested, so a dumpsys format change
-fails in `check` rather than in a device run.
+The real-input fixes came first, in their own commit: `imeShown()` was asking whether
+`"[object Object]"` contains `mInputShown=true`, and the keyboard edge came from the IME's window
+record — since API 30 a full-height insets host whose `frame=` never moves. Both readers are
+pure functions in `scripts/real-input/ime-frame.mjs`, unit-tested, so a dumpsys format change
+fails in `check` rather than on a device.
 
 ## Gates
 
@@ -79,9 +80,15 @@ Host (each mutation applied to the source, reverted after the run):
 - `bench-gate.test.js` -> the Form's four quick-plan cells removed -> `schedules one complete component per --component, never a mix`
 - `readme-components.test.js` -> no `docs/images/components/form-ios.png` -> `Form: docs/images/components/form-ios.png does not exist`
 
-On device:
+On device (each is the shipped bug, not a mutation — the case was red before the fix and green
+after it, on the same fixture):
 
-- <pending>
+- `Form.harness E7` -> the Section reporting `0` for the space between rows, as it did -> `m13:
+  measureInWindow 40.0,612.3,340.0,44.0 vs UIKit 40.0,788.3,340.0,44.0 (off by 176.0 pt)`, the
+  error growing exactly 8 pt per row (`harness:ios` at 11:13)
+- `Form.harness E7` -> the Form recording an offset before `onContentOffset` was attached, as it
+  did -> `geometry{offset=-68.00,origin=-68.00,received=0.00}` with all 14 rows `off by 72.0 pt`
+  (`harness:ios:Form` at 11:36)
 
 ## Files changed
 
@@ -100,4 +107,13 @@ On device:
 
 ## Follow-ups
 
-- <pending>
+- `bun run bench -- --component Form` has arms, a plan and no numbers: this is not the bench
+  host, and the device pool was saturated for the whole round.
+- iOS 15.1-16.3 has no `scrollViewDidChangeAdjustedContentInset:` (a protocol requirement cannot
+  be answered behind `@available` at this deployment target), so an inset change there rides on
+  `NitroUiFormHoldingView.safeAreaInsetsDidChange` — enough for a safe-area-driven inset, which
+  is the one measured, and one callback narrower for anything else.
+- A row's `marginVertical` is now load-bearing geometry, not spacing taste: the space the
+  platform draws between rows and the margin each row takes have to stay equal, and `E7` is the
+  case that notices when they do not. Anything that later lets an app set row spacing has to
+  re-report it, not style it.

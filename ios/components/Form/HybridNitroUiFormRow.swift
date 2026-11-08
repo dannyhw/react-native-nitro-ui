@@ -171,6 +171,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   private func buildRowReport() -> String {
     nitroUiAssertMainThread()
     guard let component = componentView else { return "where=detached" }
+    // The one test of "is this row being drawn", used both by `where=` and by `window=` below,
+    // so the two can never disagree about the same row.
     let inCell = component.superview is NitroUiFormRowContainer
     let frame = component.frame
     return [
@@ -178,9 +180,8 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
       "frame=\(String(format: "%.1f,%.1f,%.1f,%.1f", frame.minX, frame.minY, frame.width, frame.height))",
       // Where the row's pixels actually are: this view, converted to its window by UIKit.
       // That is a different path from `measure()`, which walks the shadow tree, so a case can
-      // compare what JavaScript is told with what the screen shows. `-` is a row in a holding
-      // view: no window, no pixels.
-      "window=\(Self.inWindow(component))",
+      // compare what JavaScript is told with what the screen shows.
+      "window=\(Self.inWindow(component, inCell: inCell))",
       "h=\(String(format: "%.1f", component.bounds.height))",
       "presses=\(presses)",
       "accessory=\(rawAccessory.stringValue)",
@@ -191,8 +192,15 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
 
   /// The view's box in its own window, or `-` when it has none: a row at rest in its
   /// section's holding view draws nothing, so it has no place on screen to report.
-  private static func inWindow(_ view: UIView) -> String {
-    guard let window = view.window else { return "-" }
+  ///
+  /// "Has none" cannot be asked of `view.window` alone. The holding view is hidden rather than
+  /// detached, so a row that has just been handed back still has a window, and converting its
+  /// bounds answers with a box - `0,0,340,44` - for pixels that are nowhere on screen. The E7
+  /// case found that after a scroll: the two rows the scroll recycled out of their cells were
+  /// compared against that box, and no amount of polling settled it. A row reports pixels only
+  /// from inside a cell, which is where its pixels are.
+  private static func inWindow(_ view: UIView, inCell: Bool) -> String {
+    guard inCell, let window = view.window else { return "-" }
     let box = view.convert(view.bounds, to: window)
     return String(format: "%.1f,%.1f,%.1f,%.1f", box.minX, box.minY, box.width, box.height)
   }
