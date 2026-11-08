@@ -39,6 +39,11 @@ type FormHandle = {
 
 const forms: Record<string, FormHandle> = {};
 
+/** A section handle: its own report is where the header and footer bands are measured. */
+type SectionHandle = { nuiTestSectionReport(): string };
+
+const sections: Record<string, SectionHandle> = {};
+
 /** Names what is on screen, so a screenshot says what it shows. Set by `hold()`. */
 let setPhase: (phase: string) => void = () => {};
 
@@ -104,6 +109,35 @@ async function read(
   }
 }
 
+/**
+ * Read a section's own report until Compose has measured the header band.
+ *
+ * The bands are not in the Form's report and cannot be: a Form has several sections, and the
+ * numbers belong to one of them. So the case asks the section that owns them, the same way
+ * `Form.harness` asks a section for its shapes.
+ */
+async function readSection(
+  which = 'first',
+  ok: (r: Record<string, string>) => boolean = () => true
+): Promise<Record<string, string>> {
+  const deadline = Date.now() + 12000;
+  for (;;) {
+    try {
+      const report = parse(sections[which]?.nuiTestSectionReport() ?? '');
+      if (ok(report)) return report;
+    } catch {
+      /* not yet */
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `never saw the "${which}" section report satisfied - last was ` +
+          `${String(sections[which]?.nuiTestSectionReport() ?? '<no handle>')}`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 /** Name the phase on screen, then hold a window wide enough to screenshot it. */
 async function hold(marker: string): Promise<void> {
   setPhase(marker);
@@ -124,6 +158,9 @@ function FidelityForm() {
     >
       <Form.Section
         footer="These settings apply to this device only."
+        hybridRef={(view) => {
+          sections.first = view;
+        }}
         title="Connectivity"
       >
         <Form.Row>
@@ -196,6 +233,7 @@ describe('Form fidelity (S6 spike, question 2)', () => {
   afterEach(() => {
     cleanup();
     for (const key of Object.keys(forms)) delete forms[key];
+    for (const key of Object.keys(sections)) delete sections[key];
   });
 
   it('measures the prototype and a SwiftUI Form the same way (E2)', async () => {
@@ -225,10 +263,16 @@ describe('Form fidelity (S6 spike, question 2)', () => {
       // to reserve: S6 reserved the glyphs alone and every header lost its lower half
       // (form-android.png). The band therefore has to be the glyphs *plus* its padding -
       // the padding itself is FormListMetrics' (16 dp / 12 dp), and what this insists on
-      // is that the reservation is not the glyph box: revert `onSizeChanged` to sit inside
-      // the padding and both lines below go red at once.
+      // is that the reservation is not the glyph box: put `onSizeChanged` back inside the
+      // padding and both lines below go red at once.
+      const bands = await readSection('first', (r) => {
+        num(r, 'headerBand');
+        num(r, 'footerBand');
+        return true;
+      });
+      console.log(`S6 BANDS first section ${JSON.stringify(bands)}`);
       const padding = (band: string, text: string) =>
-        num(proto, band) - num(proto, text);
+        num(bands, band) - num(bands, text);
       expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
       expect(padding('footerBand', 'footerText')).toBeGreaterThanOrEqual(4);
       return;
