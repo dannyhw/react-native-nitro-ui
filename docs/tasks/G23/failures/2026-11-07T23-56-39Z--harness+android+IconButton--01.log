@@ -1,0 +1,71 @@
+# Failure excerpt — harness:android:IconButton
+
+- Ran: 2026-11-07T23:56:39.917Z on code tree `43a2dcf67352` at HEAD `90bcfe5` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android IconButton`
+- Result: fail, exit 1, 12814 ms
+- Load: start 5.02, end 5.01, median 5.01, max 5.02
+- Device: android / device `emulator-5570` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+android+IconButton-2026-11-07T23-56-39.917Z.log` (<store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-56-39.917Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-56-39.917Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.01 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 25 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android IconButton
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 43a2dcf67352, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.02/9.72 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-56-39.917Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        11.445 s, estimated 23 s
+Ran all test suites matching IconButton.
+
+
+
+```

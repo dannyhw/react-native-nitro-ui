@@ -68,7 +68,26 @@ merge (X14), so there are no numbers to report.
 
 ## Gates
 
-<!-- `node scripts/gate.mjs table` — pasted below, not typed. -->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1897 tests / 77 suites | `7c3724206844` | 2 m 48 s | start 7.3 / med 8.3 / max 11.1 |
+| `harness:ios` | **PASS** | 482 tests / 26 suites + isolated 4 tests / 2 suites | `7c3724206844` (ios tree) | 11 m 33 s | start 5.9 / med 7.4 / max 17.4 |
+| `harness:android` | **PASS** | 538 tests / 26 suites + isolated 4 tests / 2 suites | `7c3724206844` (android tree) | 16 m 32 s | start 11.3 / med 8.0 / max 45.0 |
+| `real-input:ios` | **PASS** | — | `7c3724206844` (ios tree) | 30 m 41 s | start 4.7 / med 5.9 / max 30.8 |
+| `real-input:android` | **PASS** | — | `7c3724206844` (android tree) | 46 m 53 s | start 3.9 / med 5.4 / max 29.2 |
+| `harness:android:IconButton` | stale | 0 tests / 1 suites | 43a2dcf67352 (not this tree) | 12.8 s | start 5.0 / med 5.0 / max 5.0 |
+| `harness:ios:Conformance` | stale | 1 failed of 85 tests / 1 suites | 95f0b1ddd95a (not this tree) | 2 m 49 s | start 36.3 / med 13.5 / max 36.3 |
+| `harness:ios:IconButton` | stale | 2 failed of 9 tests / 1 suites | d736daa2ed97 (not this tree) | 24.7 s | start 9.4 / med 18.9 / max 21.1 |
+| `real-input:android:--control:icon-button` | **PASS** | — | `7c3724206844` (android tree) | 11 m 07 s | start 4.1 / med 5.9 / max 40.4 |
+| `real-input:ios:--control:icon-button` | stale | — | d736daa2ed97 (not this tree) | 9 m 56 s | start 16.5 / med 9.4 / max 30.9 |
+| `real-input:ios:icon-button` | stale | — | d736daa2ed97 (not this tree) | 0.5 s | start 17.4 / med 17.4 / max 17.4 |
+
+One code tree, `7c3724206844`: all five gates green on it, and
+`need --for merge` answers `merge is satisfied on this code tree.`. The filtered rows below satisfy only
+their own name — the four stale ones are the mutation runs and the pre-fix runs, left in the
+ledger because a round's red lines are evidence, not noise.
+
+`need: merge is satisfied on this code tree.`
 
 ## Red proofs
 
