@@ -1424,11 +1424,21 @@ type Fixture = {
    * visibly distinct, the way the other suites' churn does (`Sizing.harness.tsx:504`).
    */
   control: (testId: string, variant: boolean) => ReactElement;
-  /** What the control reports about itself, for the recycle rule. */
+  /**
+   * What the control reports about itself, for the recycle rule.
+   *
+   * May be async because one control's state is not a prop: the Form answers from a native
+   * report whose numbers belong to the UI thread (`nuiTestFormReport`), so a JS-thread read
+   * returns the report *as it last stood* and a mount can move it a beat later. Deciding on
+   * the first answer would blame the component's reset for a report that had not been
+   * rebuilt yet — see {@link settledFormReport}.
+   */
   state: (
     handle: Handle,
     second: boolean
-  ) => Array<{ label: string; expected: unknown; actual: unknown }>;
+  ) =>
+    | Array<{ label: string; expected: unknown; actual: unknown }>
+    | Promise<Array<{ label: string; expected: unknown; actual: unknown }>>;
   /**
    * The part of this rule that can actually fail: two owners of one testID, an interaction,
    * and the control's own answer afterwards. See {@link RecycleProbe} for why a prop cannot
@@ -1693,14 +1703,43 @@ function formFixtureProps(
   };
 }
 
-/** The Form's report, as `key -> value` — the shape every other report here has. */
-function formFields(handle: Handle): Record<string, string> {
+/** One report string, as `key -> value` — the shape every other report here has. */
+function formFieldsOf(report: string): Record<string, string> {
   const fields: Record<string, string> = {};
-  for (const pair of (handle.nuiTestFormReport?.() ?? '').split(';')) {
+  for (const pair of report.split(';')) {
     const at = pair.indexOf('=');
     if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
   }
   return fields;
+}
+
+function formFields(handle: Handle): Record<string, string> {
+  return formFieldsOf(handle.nuiTestFormReport?.() ?? '');
+}
+
+/**
+ * The Form's report once it has stopped moving.
+ *
+ * `nuiTestFormReport()` is the eventual-consistency seam every report in this library is
+ * (the numbers are the UI thread's, the reader is on the JS thread, so a call answers what
+ * the *last* call's build produced), and a recycled view inherits the report its previous
+ * owner left in it. So the first read after a mount is allowed to be the previous owner's
+ * `rows=4`, or the first-ever read is `pending`. This waits for two consecutive reads to
+ * agree on something real, which says the tree is not moving — it never waits for a
+ * particular number, so a reset that really did leave four rows registered still reads
+ * four, and still fails.
+ *
+ * Same shape as the a11y sweep's "read 3 times before two agreed" (`scripts/real-input/a11y.mjs`).
+ */
+async function settledFormReport(handle: Handle): Promise<string> {
+  let previous = handle.nuiTestFormReport?.() ?? 'pending';
+  for (let read = 0; read < 12; read += 1) {
+    await settle(80);
+    const next = handle.nuiTestFormReport?.() ?? 'pending';
+    if (next !== 'pending' && next === previous) return next;
+    previous = next;
+  }
+  return previous;
 }
 const FIXTURES: ReadonlyArray<Fixture> = [
   {
@@ -3586,18 +3625,21 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     // The Form's own account of what it is holding: `rows` is what registered with the list,
     // and `orphans` is the shape a component view takes when a recycle moved it out and
     // nothing moved it back.
-    state: (handle, second) => [
-      {
-        label: 'rows',
-        expected: second ? 2 : 4,
-        actual: Number(formFields(handle).rows),
-      },
-      {
-        label: 'orphans',
-        expected: 0,
-        actual: Number(formFields(handle).orphans),
-      },
-    ],
+    state: async (handle, second) => {
+      const fields = formFieldsOf(await settledFormReport(handle));
+      return [
+        {
+          label: 'rows',
+          expected: second ? 2 : 4,
+          actual: Number(fields.rows),
+        },
+        {
+          label: 'orphans',
+          expected: 0,
+          actual: Number(fields.orphans),
+        },
+      ];
+    },
     // The residue a Form leaves is its own bookkeeping: which rows are registered, and where
     // its list is scrolled to. Four rows and a real scroll for the first owner, two rows for
     // the second. A reset that skipped the bookkeeping reports `rows=4`, or - the shape the
@@ -3644,10 +3686,12 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       ),
       read: async () => {
         const handle = handleFor('conformance-form');
-        const report = formFields(handle);
+        // Settled, for the reason `settledFormReport` states: this read is one beat behind
+        // the UI thread, and a recycled view starts life holding its previous owner's report.
+        const report = formFieldsOf(await settledFormReport(handle));
         console.log(
-          `    · the second owner's list: rows=${report.rows} ` +
-            `sections=${report.sections} orphans=${report.orphans} ` +
+          `    · the second owner's list: rows=${report.rows ?? '(none)'} ` +
+            `sections=${report.sections ?? '(none)'} orphans=${report.orphans ?? '(none)'} ` +
             `scroll=${report.scroll ?? report.offset} offset=${report.offset}`
         );
         return [
@@ -3946,7 +3990,7 @@ describe('conformance · every control, four rules', () => {
           recycleFindings({
             component: fixture.name,
             identity: 'first owner',
-            checks: fixture.state(handleFor(fixture.testId), false),
+            checks: await fixture.state(handleFor(fixture.testId), false),
           })
         ).toEqual([]);
         first.unmount();
@@ -3956,7 +4000,7 @@ describe('conformance · every control, four rules', () => {
         const second = await render(fixture.owner(true), RENDER);
         await settle();
         await ensureHandle(fixture.testId);
-        const propChecks = fixture.state(handleFor(fixture.testId), true);
+        const propChecks = await fixture.state(handleFor(fixture.testId), true);
         console.log(
           `    · ${fixture.testId} props after the second owner: ` +
             propChecks
