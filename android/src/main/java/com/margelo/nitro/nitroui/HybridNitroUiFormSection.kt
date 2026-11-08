@@ -1,5 +1,6 @@
 package com.margelo.nitro.nitroui
 
+import android.graphics.Rect
 import android.os.Looper
 import android.os.Handler
 import android.app.Activity
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,13 +28,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as GeometryRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -47,6 +53,7 @@ import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.views.RecyclableView
 import com.margelo.nitro.nitroui.views.HybridNitroUiFormSectionStateUpdater
 import kotlin.math.roundToInt
@@ -122,8 +129,20 @@ internal class HybridNitroUiFormSection(
 
   override var onMetrics: ((headerHeight: Double, footerHeight: Double, inset: Double, gap: Double) -> Unit)? = null
 
+  /**
+   * Always `0`, once — and that is the whole story on Android.
+   *
+   * iOS has to say where the list put a section, because its rows are drawn by cells that move
+   * without React Native knowing. Here the section is a `ReactViewGroup` and its rows are its
+   * children at the frames Yoga gave them, so the section is at `0` of its own box and every
+   * row's Yoga origin already matches where it is drawn. `Form.tsx` still positions the section
+   * absolutely from whatever it is told, so `0` is not a placeholder — it is the answer.
+   */
+  override var onPlacement: ((top: Double) -> Unit)? = null
+
   override fun afterUpdate() {
     view.refreshChrome()
+    onPlacement?.invoke(0.0)
   }
 
   override fun prepareForRecycle() {
@@ -135,6 +154,7 @@ internal class HybridNitroUiFormSection(
 
   override fun onDropView() {
     onMetrics = null
+    onPlacement = null
     view.dropSection()
   }
 
@@ -289,6 +309,52 @@ internal class NitroUiFormSectionView(
 
   val rowViews: List<NitroUiFormRowView>
     get() = (0 until childCount).mapNotNull { getChildAt(it) as? NitroUiFormRowView }
+
+  /**
+   * Forward a focused row's request to be seen, with the rectangle moved into this view's space.
+   *
+   * The Form's box forwards it on to React Native's `ScrollView`, which is the only view here
+   * that can scroll — but `ViewGroup` asks a request's parent's *direct* child, so without this
+   * hop a field two levels below the scroll view is never heard from (D45 item 1, and the real
+   * input case S6b measured red). This view does not scroll, so `scrollX`/`scrollY` are the
+   * framework's own correction and normally 0.
+   */
+  override fun requestChildRectangleOnScreen(
+    child: View,
+    rectangle: Rect,
+    immediate: Boolean,
+  ): Boolean {
+    val scrolled = super.requestChildRectangleOnScreen(child, rectangle, immediate)
+    val up = parent?.requestChildRectangleOnScreen(this, movedIntoSelf(child, rectangle), immediate)
+    return scrolled || up == true
+  }
+
+  override fun requestChildRectangleOnScreen(
+    child: View,
+    rectangle: Rect,
+    immediate: Boolean,
+    direction: Int,
+  ): Boolean {
+    val scrolled =
+      super.requestChildRectangleOnScreen(child, rectangle, immediate, direction)
+    val up =
+      parent?.requestChildRectangleOnScreen(
+        this,
+        movedIntoSelf(child, rectangle),
+        immediate,
+        direction,
+      )
+    return scrolled || up == true
+  }
+
+  private fun movedIntoSelf(
+    child: View,
+    rectangle: Rect,
+  ): Rect {
+    val out = Rect(rectangle)
+    out.offset(child.left - scrollX, child.top - scrollY)
+    return out
+  }
 
   /** This section's position among the Form's sections, for the report. */
   fun sectionIndex(): Int {
@@ -536,17 +602,45 @@ internal fun FormSegmentedLayer(
           ),
       )
     }
-    // 3. The header and footer, measured here so their space can be reserved by Yoga.
+    // 3. The accessories. iOS gets these from `UICellAccessory`; the Android twin is one of
+    // Google's own Material Symbols drawables, because the spike's version was a caret typed
+    // out as `Path` line commands and D43's guard exists for exactly that (it is how
+    // SearchField 0.7.0 shipped a search icon that drew a key). `nitroUiIcon` parses the
+    // shipped XML once per process; `Icon` tints it, which the parsed vector's own intrinsic
+    // colour must not be trusted to get right across light and dark.
     //
-    // No accessory is drawn. iOS gets one from `UICellAccessory`; the Android twin here was a
-    // caret written out as `Path` line commands, and D43's guard is right to refuse it -
-    // hand-typed geometry in `android/src/main` is what shipped SearchField's wrong search
-    // icon once. A chevron or a check has to arrive as one of Google's drawables through
-    // `scripts/icons/fetch-material-symbols.mjs`; `FormListMetrics.TrailingPadding` already
-    // reserves the room for it. That is G-Form's work, not the spike's.
+    // Drawn into the same layer, so an accessory costs a node and not a composition. The room
+    // is `FormListMetrics.TrailingPadding`, and `Form.tsx` reserves it on the row, because a
+    // row's content is React Native's and only the row knows it has an accessory.
+    rows.forEachIndexed { index, rect ->
+      val icon = accessoryIcon(rect.accessory)
+      if (icon == null) return@forEachIndexed
+      val size = FormListMetrics.AccessorySize
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+          Modifier
+            .align(Alignment.TopEnd)
+            .offset {
+              IntOffset(
+                (rect.right - size.toPx() - FormListMetrics.TrailingPadding.toPx()).roundToInt(),
+                (rect.top + (rect.height - size.toPx()) / 2f).roundToInt(),
+              )
+            }
+            .size(size),
+      )
+    }
+
+    // 4. The header and footer, measured here so their space can be reserved by Yoga.
     model.headerText?.takeIf { it.isNotEmpty() }?.let { text ->
       Text(
         text = text,
+        // A heading, in the one sense TalkBack has for it. The layer as a whole is
+        // `IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS` because it is decoration — but a
+        // header is not decoration, it is the thing that tells a person which group of rows
+        // they are in, and React Native never sees it to set the role itself.
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 2,
@@ -554,6 +648,10 @@ internal fun FormSegmentedLayer(
         modifier =
           Modifier
             .align(Alignment.TopStart)
+            // Not a `Text` argument: a heading is a modifier, and it is the one thing here a
+            // screen reader can act on. The layer as a whole hides its descendants, so without
+            // this a section header is announced as plain text in an unlabelled group.
+            .semantics { heading() }
             // `onSizeChanged` sits *outside* the padding on purpose, so what goes to Yoga
             // is the whole band the header draws into - padding and text. With it inside,
             // `headerPx` was the glyphs alone, Yoga reserved only that, and the 16 dp the
@@ -592,6 +690,15 @@ internal fun FormSegmentedLayer(
   }
 }
 
+/** The glyph a row's accessory asks for, or null for none. */
+@Composable
+private fun accessoryIcon(accessory: Int): ImageVector? =
+  when (accessory) {
+    NitroUiFormRowView.ACCESSORY_DISCLOSURE -> nitroUiIcon(R.drawable.nitroui_chevron_right)
+    NitroUiFormRowView.ACCESSORY_CHECKMARK -> nitroUiIcon(R.drawable.nitroui_check)
+    else -> null
+  }
+
 /** Give a layer the px size of one row, without a Dp round trip. */
 private fun Modifier.withPixelSize(
   widthPx: Float,
@@ -624,7 +731,11 @@ private fun DrawScope.drawRowContainer(
   shape: androidx.compose.ui.graphics.Shape,
   colors: androidx.compose.material3.ListItemColors,
 ) {
-  val box = Rect(rect.left, rect.top, rect.right, rect.top + rect.height)
+  val box =
+    GeometryRect(
+      Offset(rect.left, rect.top),
+      Offset(rect.right, rect.top + rect.height),
+    )
   drawOutline(
     outline = shape.createOutline(Size(box.width, box.height), layoutDirection, this),
     color = colors.containerColor(enabled = true, selected = rect.selected, dragged = false),
@@ -647,8 +758,11 @@ internal object FormListMetrics {
   /** Below a section footer's text. */
   val FooterBottomPadding = 12.dp
 
-  /** Inside a row's trailing edge, where an accessory sits (px). */
-  const val TrailingPadding = 16f
+  /** Inside a row's trailing edge, where an accessory sits. */
+  val TrailingPadding = 16.dp
+
+  /** The side of an accessory's glyph — Material's own 24 dp canvas. */
+  val AccessorySize = 24.dp
 }
 
 /**

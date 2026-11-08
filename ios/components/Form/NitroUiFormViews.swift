@@ -128,7 +128,7 @@ final class NitroUiFormRowHostView: UIView {
   ///
   /// Since S6b that origin is *not* zero-based any more: the Form publishes where this row's
   /// cell came to rest into the row's absolute `top`/`left`, so that `measure` - which is a
-  /// shadow-tree walk, never a UIKit question (`Form.nitro.ts`'s `onFrameMoved`) - describes
+  /// shadow-tree walk, never a UIKit question (`docs/components/form.md`) - describes
   /// where the row actually is. UIKit must not obey the same number: the cell owns where a
   /// row is drawn. So on every write, after the component view has had its frame written
   /// from the same metrics, the origin is taken back off it. Being asked from the content
@@ -458,7 +458,41 @@ final class NitroUiFormSupplementaryCell: UICollectionViewListCell {
     configuration.text = text ?? ""
     contentConfiguration = configuration
     isHidden = (text ?? "").isEmpty
+    // A heading, in the one sense a screen reader has for it. UIKit draws these, so UIKit has
+    // to say what they are: React Native never sees a header, and an app cannot set a trait on
+    // a view it does not have.
+    isAccessibilityElement = !(text ?? "").isEmpty
+    accessibilityLabel = text
+    accessibilityTraits = footer ? [] : .header
   }
+}
+
+/// The label for a view that VoiceOver is going to announce as one element: the text of what
+/// it contains, in reading order.
+///
+/// A pressable `Form.Row` is one button (C1), and a button with no label is worse than no
+/// button — so the label is gathered from the row's own React Native content rather than
+/// invented. `UIAccessibilityElementsNotification`-style traversal is what UIKit does for a
+/// leaf element anyway; doing it here is only about *before* it becomes one.
+func nitroUiAggregatedLabel(in view: UIView) -> String? {
+  var parts: [String] = []
+  nitroUiAppendLabels(from: view, into: &parts)
+  guard !parts.isEmpty else { return nil }
+  return parts.joined(separator: ", ")
+}
+
+/// One level of {@link nitroUiAggregatedLabel}: a function rather than a local closure,
+/// because a closure that recurses cannot be the `let` it is binding.
+private func nitroUiAppendLabels(from view: UIView, into parts: inout [String]) {
+  if let label = view.accessibilityLabel, !label.isEmpty {
+    parts.append(label)
+    return
+  }
+  if let text = (view as? UILabel)?.text, !text.isEmpty {
+    parts.append(text)
+    return
+  }
+  for subview in view.subviews { nitroUiAppendLabels(from: subview, into: &parts) }
 }
 
 // MARK: - The list's delegate
@@ -485,26 +519,35 @@ final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
     form?.listDidEndDisplaying(cell)
   }
 
-  // MARK: Settling: where the rows came to rest (`onFrameMoved`)
+  // MARK: Settling: where the list came to rest
 
-  /// The list laid out. Every scroll frame calls this, so the guard is the point: the
-  /// Form publishes row positions when the list is *at rest*, because JS cannot be told
-  /// about each frame of a flick and an anchor is shown to a list that stopped moving.
+  /// The list laid out. Every scroll frame calls this, so the guard is the point: the Form
+  /// reports its geometry when the list is *at rest*, because JS cannot be told about each
+  /// frame of a flick and `measure` is a question about where something stopped.
+  ///
+  /// `reportGeometry` sends at most one number per settle and nothing at all when the offset
+  /// did not move, so being reached twice from here and from the two endings below costs a
+  /// comparison, not a re-render.
   func scrollViewDidLayout(_ scrollView: UIScrollView) {
     guard !scrollView.isDragging, !scrollView.isTracking, !scrollView.isDecelerating else {
       return
     }
-    form?.publishRowFrames()
+    form?.reportGeometry()
   }
 
-  /// A flick ended. `scrollViewDidLayout` already covers this (UIKit lays out after the
-  /// deceleration), and being told twice costs a comparison per row - so only the two
-  /// endings that can leave the list resting without a later layout are here.
+  /// A drag ended without decelerating: UIKit does not have to lay anything out for the list
+  /// to be at rest, so this ending cannot be left to `scrollViewDidLayout`.
   func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
-    if !decelerate { form?.publishRowFrames() }
+    if !decelerate { form?.reportGeometry() }
   }
 
+  /// A `setContentOffset(animated: true)` finished - the keyboard path's scroll, and the
+  /// harness's own.
   func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
-    form?.publishRowFrames()
+    form?.reportGeometry()
+  }
+
+  func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+    form?.reportGeometry()
   }
 }

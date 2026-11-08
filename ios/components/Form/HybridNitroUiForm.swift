@@ -2,7 +2,7 @@
 //  HybridNitroUiForm.swift
 //  react-native-nitro-ui
 //
-//  The Form of the S6 spike: a `UICollectionView` with
+//  `Form`: a `UICollectionView` with
 //  `UICollectionLayoutListConfiguration(appearance: .insetGrouped)` - the UIKit list under
 //  SwiftUI's `Form` - whose rows are React Native views moved into
 //  `UICollectionViewListCell`s (Q10 Appendix C1; the questions are Appendix E).
@@ -23,8 +23,15 @@
 //  because this class owns both moves, and its frame is `(0, 0, w, h)` in either - see
 //  `NitroUiFormViews.swift` for why.
 //
-//  Nothing here is a shippable decision. It is a prototype to be measured and argued with;
-//  `docs/tasks/S6-form-spike.report.md` is the deliverable.
+//  **Where a row is.** A row is drawn by a cell, which moves without React Native knowing,
+//  and `measure` never asks a view where it ended up (D45 item 3). Two numbers fix that for
+//  every row at once, both reported when the list *settles*: each section's top in the list's
+//  own content coordinates (`onPlacement`, which `Form.tsx` puts the section at with
+//  `position: absolute`), and how far the content is scrolled (`onContentOffset`, which goes
+//  straight back in as `nuiContentOffsetY` and out of the Form's shadow node as
+//  `-offset`). A row's Yoga origin is then its position in the content, and the one number
+//  the shadow node subtracts is the one number that changes while scrolling. See
+//  `docs/components/form.md` for what that means for a `measure` taken mid-flick.
 //
 
 import NitroModules
@@ -111,6 +118,19 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   private var avoidsKeyboard = true
   private var perfInstanceId: Int32 = nitroUiPerfNoInstance
   private var contentBox: ((_ width: Double) -> Void)?
+  private var scrollOffsetReport: ((_ y: Double) -> Void)?
+  /// Received and never used on iOS: React Native's own `ScrollViewShadowNode` is what
+  /// carries the scroll correction there, and this list is the only scroller here. Stored so
+  /// the prop exists for `Form.tsx` to send on both platforms.
+  private var receivedContentOffsetY: Double?
+  /// Declared because the spec has it; iOS never calls it. UIKit avoids the keyboard with a
+  /// content inset on this very list (`setBottomInset`), so there is no inset for JavaScript
+  /// to reserve. Android, whose scroller is React Native's and above the Form, does call it.
+  private var imeInset: ((Double) -> Void)?
+  /// The last offset handed to JavaScript, so a settle that moved nothing sends nothing.
+  private var reportedOffset: Double?
+  /// The last per-section placement, per model, for the same reason.
+  private var reportedPlacement: [ObjectIdentifier: Double] = [:]
 
   // MARK: Witnesses
 
@@ -159,6 +179,24 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     set { contentBox = newValue }
   }
 
+  var onContentOffset: ((_ y: Double) -> Void)? {
+    get { scrollOffsetReport }
+    set { scrollOffsetReport = newValue }
+  }
+
+  var onImeInset: ((_ inset: Double) -> Void)? {
+    get { imeInset }
+    set { imeInset = newValue }
+  }
+
+  /// The offset this Form reported and JavaScript sent back, which the *shadow node* is the
+  /// consumer of. Read here only for the report, so a harness can tell "the list is at 300"
+  /// apart from "the list is at 300 and the shadow tree was told".
+  var nuiContentOffsetY: Variant_NullType_Double {
+    get { receivedContentOffsetY.map { .second($0) } ?? .first(.null) }
+    set { receivedContentOffsetY = newValue.asType(Double.self) }
+  }
+
   func afterUpdate() {
     nitroUiAssertMainThread()
     if avoidsKeyboard {
@@ -179,9 +217,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     sections.removeAll()
     knownRows.removeAllObjects()
+    reportedPlacement.removeAll()
+    reportedOffset = nil
+    reportedWidth = .zero
     reparents = 0
     reclaims = 0
     taps = 0
+    boxReports = 0
+    setBottomInset(0)
     applySnapshot()
   }
 
@@ -190,6 +233,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     prepareForRecycle()
     removeKeyboardObservers()
     contentBox = nil
+    scrollOffsetReport = nil
+    imeInset = nil
   }
 
   // MARK: - Putting the list in the component view
@@ -209,6 +254,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // The layout needs one pass before it can answer what a cell is wide.
       list.layoutIfNeeded()
       reportContentBox()
+      // A resize moves every section's box, so the placements the shadow tree holds are
+      // as stale as a scroll would have made them.
+      reportGeometry()
       if !framedList { framedList = true }
     }
   }
@@ -361,7 +409,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // now wrong. One turn later, when UIKit has placed the cells, they are read again
     // (the delegate's own `scrollViewDidLayout` also covers this; the first apply of a
     // brand-new list is the moment it can miss).
-    DispatchQueue.main.async { [weak self] in self?.publishRowFrames() }
+    DispatchQueue.main.async { [weak self] in self?.reportGeometry() }
   }
 
   private func configureDataSource() {
@@ -432,6 +480,18 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     let owner = HybridNitroUiForm.rowOwner(of: row)
     cell.accessories = Self.accessories(for: owner)
     cell.isPressable = owner?.pressable == true
+    // One button element, or the row's own content.
+    //
+    // `isAccessibilityElement = true` makes the cell a *leaf*: UIKit stops descending, so the
+    // text, the `Switch` and the value label inside the row become one thing a person can
+    // activate instead of six swipes that do nothing. The label is then this cell's job, and
+    // it is read out of the row rather than typed (C1: "rows with `onPress` are one button
+    // element"). A row without `onPress` is left exactly as React Native laid it out — a
+    // `Switch` in it stays its own element, which is what the brief asks for.
+    let pressable = owner?.pressable == true
+    cell.isAccessibilityElement = pressable
+    cell.accessibilityTraits = pressable ? .button : []
+    cell.accessibilityLabel = pressable ? nitroUiAggregatedLabel(in: row) : nil
     cell.isSelectedRow = owner?.selected == true
     var configuration = UIBackgroundConfiguration.listGroupedCell()
     configuration.backgroundColor = .secondarySystemGroupedBackground
@@ -632,71 +692,105 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
         animated: true
       )
     }
+    // The inset changed the visible box and the scroll changed the offset, both of which the
+    // shadow tree has to be told about — and the settle animation reports again when it ends.
+    reportGeometry()
   }
 
-  // MARK: - Where each row came to rest (`onFrameMoved`, S6b question 4)
+  // MARK: - Where the list came to rest (`onPlacement` / `onContentOffset`, D45 item 3)
 
-  /// Publish where every row's cell currently sits, in the Form's own coordinate space, so
-  /// the shadow tree can be told the same thing UIKit already knows.
+  /// Tell the shadow tree the two numbers that make every row measure where it is drawn.
   ///
-  /// Two sources, and the difference is said out loud because it is a real difference:
+  /// - one per section: where the list put its first row, less the header band JavaScript
+  ///   already reserves inside the section, in the list's own *content* coordinates — sent
+  ///   back as that section's absolute `top`, so a row's Yoga origin within it is the same
+  ///   offset its cell is drawn at within the section;
+  /// - one for the Form: how far the content is scrolled, sent back as `nuiContentOffsetY`
+  ///   and out of the Form's shadow node as the origin offset every descendant is measured
+  ///   against.
   ///
-  /// - a row with a cell on screen is read from that cell's view - the pixels the person
-  ///   sees, converted into ``holding``, which is the view the section's Yoga origin is at,
-  ///   which is exactly the space `measure` accumulates into;
-  /// - a row in a recycled cell has no view position, so its item's layout attributes minus
-  ///   `contentOffset` are used, offset by the insets the last visible cell was measured to
-  ///   apply. That is derived geometry: right for anything asking "where would that row be",
-  ///   wrong to the pixel if UIKit's margins disagree with the last one measured.
+  /// Two numbers, not one per row, is the point: `children` is the app's own element tree, so
+  /// a settle re-renders the Form and the sections and nothing below them, where the spike's
+  /// per-row `onFrameMoved` re-rendered every visible row.
   ///
-  /// Called when the list settles, never per scroll frame: JS cannot be told about every
-  /// frame of a flick, and an anchor is shown when a list is at rest. Between settles the
-  /// published number lags by the scroll offset, which is what `onFrameMoved` documents.
-  func publishRowFrames() {
-    guard let base = holdingIfMounted() else { return }
-    var cellInsets = lastCellInsets
-    for (sectionIndex, model) in sections.enumerated() {
-      for (rowIndex, row) in model.rows.enumerated() {
-        let path = IndexPath(item: rowIndex, section: sectionIndex)
-        let box: CGRect?
-        if let cell = list.cellForItem(at: path) as? NitroUiFormRowCell,
-          let shown = cell.row, shown.window != nil {
-          box = shown.convert(shown.bounds, to: base)
-          // What a cell adds between its item's box and the row inside it, learned from the
-          // cell rather than hard-coded: the list's margins and the cell's own chrome.
-          if let attributes = list.collectionViewLayout.layoutAttributesForItem(at: path) {
-            let inBase = list.convert(attributes.frame, to: base)
-            cellInsets = CGSize(
-              width: (box?.minX ?? 0) - inBase.minX,
-              height: (box?.minY ?? 0) - inBase.minY
-            )
-          }
-        } else if let attributes =
-          list.collectionViewLayout.layoutAttributesForItem(at: path) {
-          let inList = attributes.frame.offsetBy(
-            dx: -list.contentOffset.x,
-            dy: -list.contentOffset.y
-          )
-          box = list.convert(inList, to: base)
-            .offsetBy(dx: cellInsets.width, dy: cellInsets.height)
-        } else {
-          box = nil
-        }
-        guard let box else { continue }
-        HybridNitroUiForm.rowOwner(of: row)?.publishCellFrame(x: box.minX, y: box.minY)
-      }
+  /// Called when the list settles, never per scroll frame — JS cannot be told about every
+  /// frame of a flick. Between settles the published offset lags by the scroll distance, which
+  /// is what `docs/components/form.md` says out loud.
+  func reportGeometry() {
+    guard holding.superview != nil else { return }
+    list.layoutIfNeeded()
+
+    let offset = Double(list.contentOffset.y)
+    if reportedOffset != offset {
+      reportedOffset = offset
+      scrollOffsetReport?(offset)
     }
-    lastCellInsets = cellInsets
+
+    let inset = rowInset()
+    for (sectionIndex, model) in sections.enumerated() {
+      guard let top = sectionTop(sectionIndex, in: model) else { continue }
+      // The inset is a property of the section's box too, so it rides along even when the
+      // top did not move; `applyPlacement` sends neither number if neither changed.
+      model.hybrid?.applyPlacement(top: top, inset: inset)
+    }
   }
 
-  /// The insets a cell puts between its item's box and the row it shows, from the last cell
-  /// that was on screen (so a recycled row's derived position is not a guess).
-  private var lastCellInsets = CGSize(width: 20, height: NitroUiFormRowCell.rowChrome)
+  /// The y JavaScript has to put this section at, in the list's content coordinates, so that
+  /// every row's Yoga origin *is* its cell's position in that content — which is what makes
+  /// the Form's one `-contentOffset` correction enough for all of them (D45 item 3).
+  ///
+  /// Asked of the layout, not of a cell on screen. A cell's own position is in the window, so
+  /// turning it back into content coordinates means adding the scroll offset and this
+  /// section's *current* placement back on — and a section being re-placed is a section that
+  /// has not been told the right placement yet. Read from a cell it therefore feeds on
+  /// itself: the answer moves by the scroll on every settle, which is the drift that makes a
+  /// `measure` disagree with the pixels. The layout also answers for a section that is off
+  /// screen, which a cell cannot (D45 item 5).
+  ///
+  /// The header band comes off because JavaScript reserves it *inside* the section
+  /// (`paddingTop`), and `reportMetrics` takes that band from this same query — so the two
+  /// halves of the invariant are read from one place, not from two that have to agree.
+  ///
+  /// `nil` means the layout has not worked this section out yet, and the caller leaves the
+  /// section where the last settle put it rather than sending it a `0` to start from.
+  private func sectionTop(_ sectionIndex: Int, in model: NitroUiFormSectionModel) -> CGFloat? {
+    guard !model.rows.isEmpty else { return nil }
+    guard let first = list.collectionViewLayout.layoutAttributesForItem(
+      at: IndexPath(item: 0, section: sectionIndex)
+    ) else { return nil }
+    return first.frame.minY - supplementaryHeight(footer: false, in: model)
+  }
 
-  /// The Form's content view, once it has one. Frames are published into this space because
-  /// it is where a section's Yoga origin is, which is what `measure` walks up from.
-  private func holdingIfMounted() -> UIView? {
-    holding.superview == nil ? nil : holding
+  /// The height the header's *text* needs, asked of the same content configuration the header
+  /// cell is built with. A section's band has to be at least this plus the text's leading, so
+  /// the harness compares the band the shadow tree was told with the text it has to hold —
+  /// which is the assertion that keeps a row from painting over a header.
+  func headerTextHeight(in model: NitroUiFormSectionModel) -> CGFloat? {
+    guard let title = model.title, !title.isEmpty else { return nil }
+    // A value type, so filling it in needs a `var` — and the font is read from the
+    // configuration rather than typed, because "the same configuration the header cell is
+    // built with" is only an argument if the font really is the one it uses.
+    var configuration = UIListContentConfiguration.groupedHeader()
+    configuration.text = title
+    let font = configuration.textProperties.font
+      ?? UIFont.preferredFont(forTextStyle: .subheadline)
+    // `lineHeight`, not the glyph box: the band has to hold the text *and* its leading, and
+    // a band sized to the glyphs alone is what lets the first row paint over a header.
+    return ceil(title.size(withAttributes: [.font: font]).height + font.leading)
+  }
+
+  /// The x a row is drawn at, in the same space: what the list's margins and the cell's own
+  /// content margins put between the Form's edge and the row. The spike typed `20` here,
+  /// which is right until the layout changes its mind (D38.1).
+  private func rowInset() -> CGFloat {
+    for cell in list.visibleCells {
+      guard let cell = cell as? NitroUiFormRowCell, let shown = cell.row,
+        shown.window != nil else { continue }
+      return shown.convert(shown.bounds, to: holding).minX
+    }
+    guard let attributes = list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))
+    else { return 0 }
+    return list.convert(attributes.frame, to: holding).minX
   }
 
   private func setBottomInset(_ inset: CGFloat) {
@@ -777,6 +871,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "heights=\(heights)",
       "taps=\(taps)",
       "keyboard=\(Self.number(keyboardInset))",
+      "ime=0.00",
+      "offset=\(Self.number(list.contentOffset.y))",
+      "origin=\(Self.number(reportedOffset ?? .nan))",
+      "placed=\(reportedPlacement.count)",
     ] + geometryFields(of: list, kind: "prototype")).joined(separator: ";")
   }
 
@@ -806,7 +904,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     DispatchQueue.main.async { [weak self] in
       self?.list.setContentOffset(CGPoint(x: 0, y: CGFloat(y)), animated: false)
       self?.list.layoutIfNeeded()
-      self?.publishRowFrames()
+      self?.reportGeometry()
     }
   }
 
