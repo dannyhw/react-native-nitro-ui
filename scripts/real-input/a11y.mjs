@@ -73,12 +73,14 @@ import { findAllByDescription } from './uiautomator.mjs';
  * @property {string} hybridView the component's Fabric name, for the report line
  * @property {ScreenId} screen the example tab that renders it
  * @property {string} label the `accessibilityLabel` the example screen puts on it
- * @property {'interactive'|'indicator'} role `interactive` controls have to be a node a
- *   person can act on; `indicator` controls only have to be a node with a box. A
- *   Progress draws and announces and is not something you press, so requiring
+ * @property {'interactive'|'indicator'|'container'} role `interactive` controls have to
+ *   be a node a person can act on; `indicator` controls only have to be a node with a
+ *   box. A Progress draws and announces and is not something you press, so requiring
  *   `clickable` would assert something the component deliberately is not — and
  *   `android.widget.ProgressBar` is announced with its value by its *class*, which no
- *   flag in the dump says.
+ *   flag in the dump says. A `container` names a **group**: the pressable things are its
+ *   members, so the name has to sit on a box that still leads to them
+ *   ({@link hasActableMembers}) — a container grades its contents, not its own actions.
  * @property {boolean} [hosted] the control *inside a* `<Host>`. Measured difference:
  *   the child's own RN view is laid out at 0×0 (D24) and never appears with a box, so
  *   the Compose node carrying the name is the only one there is.
@@ -275,7 +277,14 @@ export const A11Y_CONTROLS = Object.freeze([
     hybridView: 'NitroUiButtonGroup',
     screen: 'buttongroup',
     label: 'Real-input actions',
-    role: 'interactive',
+    // A group, not a control: `role: 'container'` grades the name where it genuinely
+    // lives. `interactive` would demand that the node carrying "Real-input actions" can
+    // itself be pressed, and measured on Android that node is Material's merged row —
+    // `android.view.View` [212,805][868,931], no actions — with the three items as
+    // separately reachable `clickable|focusable` views inside it. That is the shape a row
+    // of commands *should* have; the wrong fix would be a press handler on the row, which
+    // would make one stop of the whole group and hide the items.
+    role: 'container',
     anchorTestId: 'real-input-button-group',
     // No `iosTrait`, for ContextMenu's reason rather than as debt: a group is not one
     // control, so there is no single kind to be told — its *items* are the buttons, and
@@ -284,10 +293,13 @@ export const A11Y_CONTROLS = Object.freeze([
     // enabled. Measured (G20, iOS 27), the `ControlGroup` under the wrapper is exactly
     // that one element, and the items stay separate stops under it.
     //
-    // Android is the sharper half, and the reason this case exists: the group's name has
-    // to reach a node that is *not* the row's layout box, while each item keeps its own
-    // name too. Material's `ButtonGroup` merges its items into one semantics container,
-    // so a name landing on the wrapper (the G5/G6 shape) is a finding here, not a pass.
+    // Android is the sharper half, and the reason this case exists: Material's
+    // `ButtonGroup` merges its row into one semantics node, and it is that node which
+    // takes the group's name — measured, `android.view.View` [212,805][868,931] with no
+    // actions, with the three items still `clickable|focusable` inside it and still named
+    // by their own text ("Copy", "Cut", "Paste"). So the finding to guard is a group whose
+    // name stops leading to its items: a merged box with nothing pressable in it, or a
+    // name that slid up onto the page.
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
@@ -846,7 +858,10 @@ export function iosA11yProblems(control, tree) {
         'somewhere else than the thing a person presses'
     );
   }
-  if (control.role === 'interactive' && !node.enabled && !node.hittable) {
+  // Not `=== 'interactive'`: a group's element owes this too. The roles differ in *what*
+  // has to be actable — the node itself versus its members — not in whether a stop that
+  // carries a name may be inert on both counts.
+  if (control.role !== 'indicator' && !node.enabled && !node.hittable) {
     problems.push(
       `${control.hybridView}: the element announced as "${control.label}" ` +
         `(${describeIosNode(node)}) is neither enabled nor hittable — a screen ` +
@@ -1379,6 +1394,17 @@ export function a11yProblems(control, tree) {
         `(${describeNode(node)}), not on a control — a screen reader would read the ` +
         'whole page as this control, and pressing the control would do nothing at all'
     );
+  } else if (control.role === 'container' && !hasActableMembers(node, tree)) {
+    // The group shape: the name is on the container because that is what a group's label
+    // *is*, so the question is not whether the container can be pressed (it cannot, and
+    // demanding it would push a component toward making a whole row one button) but
+    // whether the labelled box still reaches the items it names.
+    problems.push(
+      `${control.hybridView}: "${control.label}" names a group whose box contains ` +
+        `nothing a person can act on (${describeNode(node)}) — the group is announced ` +
+        'and its items are not inside it, so a reader hears a name for a row it cannot ' +
+        'actually reach'
+    );
   } else if (
     control.role === 'interactive' &&
     !isActable(node) &&
@@ -1466,6 +1492,34 @@ function actableHomes(named, tree) {
         area(node) <= area(named) * ACTABLE_HOME_AREA_RATIO
     )
     .sort((a, b) => area(a) - area(b));
+}
+
+/**
+ * Whether the box a group's name sits on actually contains things a person can act on.
+ *
+ * The mirror of {@link hasActableHome}, and needed because that one is the wrong shape for
+ * a group: measured on Android (G20), Material merges a `ButtonGroup`'s row into the node
+ * that carries the group's `accessibilityLabel`, and the items stay separately reachable
+ * just *inside* that box — a `View` at [212,805][868,931] with three clickable views
+ * between 212 and 868. So the name is on a node with no actions of its own, which is
+ * right for a container and reads as a failure to a rule that only knows "the control must
+ * be pressable". What is worth asserting is the contents: a labelled group whose box holds
+ * nothing pressable is a group that has swallowed its items.
+ *
+ * @param {import('./uiautomator.mjs').UiautomatorNode} named
+ * @param {ReadonlyArray<import('./uiautomator.mjs').UiautomatorNode>} tree
+ */
+function hasActableMembers(named, tree) {
+  return tree.some(
+    (node) =>
+      node !== named &&
+      isActable(node) &&
+      node.scrollable !== 'true' &&
+      covers(named.bounds, node.bounds) &&
+      // Members, not the group itself: a container that also reports its own press is
+      // already graded by the `interactive` branch, which asks the harder question.
+      area(node) < area(named)
+  );
 }
 
 /**

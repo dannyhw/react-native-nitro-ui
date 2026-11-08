@@ -119,6 +119,11 @@ describe('the a11y rule, on measured trees', () => {
       // minimum interactive size around a 40 dp visual, which is the arrangement the
       // ladder's own docs page prints. The Switch's shape, so no debt row.
       'icon-button',
+      // G20's ButtonGroup, measured on pair-a: the group's name is on Material's merged
+      // row (a `View` at [212,805][868,931] with no actions of its own) and the three
+      // items are `clickable|focusable` inside it, each named by its own text — which is
+      // what `role: 'container'` exists to grade, and what the mutation below proves.
+      'button-group',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
@@ -371,6 +376,40 @@ describe('the a11y rule, on measured trees', () => {
     expect(a11yProblems(control('switch'), stripped)[0]).toContain(
       'is not actionable'
     );
+  });
+
+  it('grades a group by what its box contains, and goes red when that is nothing', () => {
+    // The `container` role's own proof, on ButtonGroup's measured tree: Material merges
+    // the row into the node that carries the group's name, and the items survive inside
+    // it as three separately clickable views. The rule passes that shape (above), so the
+    // pass has to be the *items* doing it — take their actions away and the same tree is
+    // a group that announces itself and leads nowhere. This is also the mutation a real
+    // bug would produce: a `Modifier.pointerInput` on the merged container, or a
+    // `clearAndSetSemantics` on the row, swallows exactly these three nodes.
+    const items = tree('button-group').filter(
+      (node) =>
+        node.scrollable !== 'true' &&
+        (node.clickable === 'true' ||
+          node.checkable === 'true' ||
+          node.focusable === 'true')
+    );
+    expect(items.length).toBe(3);
+    expect(a11yProblems(control('button-group'), tree('button-group'))).toEqual(
+      []
+    );
+    const swallowed = tree('button-group').map((node) =>
+      items.includes(node)
+        ? {
+            ...node,
+            clickable: 'false',
+            checkable: 'false',
+            focusable: 'false',
+          }
+        : node
+    );
+    const problems = a11yProblems(control('button-group'), swallowed);
+    expect(problems.length).toBe(1);
+    expect(problems[0]).toContain('names a group whose box contains nothing');
   });
 });
 
