@@ -399,7 +399,6 @@ export const A11Y_CONTROLS = Object.freeze([
     // with no press gesture announces itself as, and recording that here would freeze it.
     iosTrait: 'button',
   },
-
 ]);
 
 /**
