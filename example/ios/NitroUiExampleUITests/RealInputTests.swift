@@ -3400,6 +3400,51 @@ final class RealInputTests: XCTestCase {
       "the enabled toggle, tapped the same way, should still answer"
     )
     XCTAssert(disabled.isHittable, "the disabled control should still be touchable")
+
+    // 7. The touch target: a real tap in the **corner** of the laid-out box, where no
+    //    artwork is. Both fixtures are bordered (`filled` and `tonal`), so their glyphs
+    //    and their bezels measure under Apple's 44 pt minimum and the box they are laid
+    //    out in is 44 pt with the control centred inside it. A tap 2% in from the corner
+    //    is therefore outside the pill on every axis, and the only thing that can answer
+    //    it is the tappable layer `targetLayered` puts behind a control whose own style
+    //    cannot reach the target — which is why this step is the proof and a box
+    //    measurement is not: before that layer, the same box measured 39.67 x 39 pt and
+    //    the corner belonged to nobody, so the two numbers below stay exactly where they
+    //    are and no assertion about a size can see the difference.
+    //
+    // One press, and one flip, again as exact numbers: a hit layer that also let the
+    // control's own gesture answer the same touch would report two.
+    let targetBox = pressButton.frame
+    XCTAssert(
+      targetBox.width >= 43.5 && targetBox.height >= 43.5,
+      "the fixture should be laid out at the 44 pt target before a corner is aimed at, "
+        + "got \(Int(targetBox.width)) x \(Int(targetBox.height))"
+    )
+    pressButton.atFraction(0.02, dy: 0.02).fingerTap()
+    XCTAssertEqual(
+      try read(Echo.iconButtonPresses), "3",
+      "a real tap in the corner of the press form's box should press exactly once"
+    )
+    XCTAssertEqual(
+      readUntil(Echo.iconButtonPresses, timeout: 1.0) { $0 != "3" }, "3",
+      "and the corner tap should not also reach the control underneath it"
+    )
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-icon-button-toggle",
+        echo: Echo.iconButtonValue,
+        expected: "off",
+        as: "the toggle icon button",
+        waitingFor: "the real corner tap that flips the toggle",
+        nativeState: { self.nativeChipState(of: "real-input-icon-button-toggle") }
+      ),
+      "off",
+      "a real tap in the corner of the toggle's box should flip it once"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "4",
+      "one flip, one event - a corner tap that reached both layers would report two"
+    )
   }
 
   /// Poll a control's own Switch value until it reports `expected` (3 s), and return its

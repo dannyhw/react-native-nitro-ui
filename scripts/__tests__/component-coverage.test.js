@@ -374,17 +374,16 @@ describe('every component is covered by the conformance suite', () => {
     // `known failing` lines from the exemption lists. Deriving one from the other is what
     // keeps a report's coverage table honest when a row is added or removed.
     //
-    // Six cells, each a measurement rather than a guess: the Slider and SegmentedControl
+    // Five cells, each a measurement rather than a guess: the Slider and SegmentedControl
     // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
     // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
     // an accessible ContextMenu still lists its first Text under the labelled wrapper (iOS),
-    // an IconButton's name is on the right element and 2 px off its box because SwiftUI keeps
-    // a Button's own integral width inside a host React Native laid out at a fraction of a
-    // point more (iOS), and Menu holds recycle residue no read-out can show on iOS.
-    // SegmentedControl's recycle cell was the fifth of those until F6 gave the fixture a
-    // read-out that can see the residue; the a11y one stands, because that debt is about a
-    // name, not a state. The two platforms fail some of the same controls for different
-    // reasons, which is why `A11Y_EXEMPTIONS` rows carry a platform.
+    // and Menu holds recycle residue no read-out can show on iOS. SegmentedControl's recycle
+    // cell was the fifth of those until F6 gave the fixture a read-out that can see the
+    // residue; the a11y one stands, because that debt is about a name, not a state. The two
+    // platforms fail some of the same controls for different reasons, which is why
+    // `A11Y_EXEMPTIONS` rows carry a platform. IconButton's a11y cell left this list in
+    // G23's fix round, when its 44 pt touch target made its box and its element agree.
     const keys = failingKeys();
     expect(keys).toEqual([
       'Menu|recycle-reset',
@@ -392,7 +391,6 @@ describe('every component is covered by the conformance suite', () => {
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
-      'IconButton|a11y-name-on-focusable-node',
     ]);
     // …and every one of those cells really is marked failing in the matrix.
     const matrix = coverageMatrix(manifests, {

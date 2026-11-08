@@ -378,10 +378,11 @@ describe('the debt list', () => {
   it('is the measured findings, per platform, and nothing else', () => {
     // Four Android rows (two controls, one finding each) and the iOS rows, each measured
     // on a simulator: the Slider's name is announced as the wrong kind of control, a
-    // hosted Picker's name is announced twice, an accessible ContextMenu still lists a
-    // child as a stop, and an IconButton's Button element is two pixels off the box
-    // React Native laid out. A row that named no platform would let one measurement
-    // excuse both halves, so each row says which one it was measured on.
+    // hosted Picker's name is announced twice, and an accessible ContextMenu still lists
+    // a child as a stop. A row that named no platform would let one measurement excuse
+    // both halves, so each row says which one it was measured on. An IconButton row was
+    // here and left when the control's 44 pt touch target made its box and its element
+    // the same 44 x 44 pt box; `a11y.mjs` says why that is worth knowing.
     expect(
       A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)
     ).toEqual([
@@ -393,7 +394,6 @@ describe('the debt list', () => {
       'ios:hosted-slider',
       'ios:hosted-picker',
       'ios:context-menu',
-      'ios:icon-button',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.

@@ -418,59 +418,6 @@ describe('the iOS debt rows', () => {
     expect(result.exempt).toBe(false);
   });
 
-  it('reports the shipped Button inset as its recorded debt, and only that', () => {
-    // Measured on pair-b (iOS 27): the name is on the `button` element, enabled and
-    // hittable, 39 pt wide inside the 39.67 pt box React Native laid out. Debt — printed
-    // every run — and the fixture is the tree the sweep reported, not a sketch of it.
-    const measured = parseIosA11yLog(
-      readFileSync(`${__dirname}/fixtures/a11y/ios-icon-button.log`, 'utf8')
-    ).get('icon-button');
-    expect(measured).toHaveLength(5);
-    const shipped = checkIosControlA11y(control('icon-button'), measured);
-    expect(shipped.failures).toEqual([]);
-    expect(shipped.known).toHaveLength(1);
-    expect(shipped.known[0]).toContain('known failing');
-    expect(shipped.known[0]).toContain('is announced by the element at');
-    expect(shipped.exempt).toBe(true);
-    // The regression the box rule exists for is not this row: a name that has *moved*,
-    // rather than been inset by the platform, has to go red beside the known finding
-    // instead of being swallowed by it.
-    const moved = checkIosControlA11y(
-      control('icon-button'),
-      measured.map((entry) =>
-        entry.anchor
-          ? entry
-          : { ...entry, frame: { ...entry.frame, x: 18.5, width: 35 } }
-      )
-    );
-    expect(moved.failures).toHaveLength(1);
-    expect(moved.failures[0]).toContain('not the control');
-    expect(moved.exempt).toBe(false);
-  });
-
-  it('excuses the measured inset, not a box one point or ten wider', () => {
-    // G16's "not 12 or 22" test, for a number instead of a count. The row quotes the
-    // geometry it was measured with, so the only tree it can excuse is that one.
-    const [row] = exemptionsFor('icon-button', 'ios');
-    const sentence = (namedBox, drawnBox) =>
-      'NitroUiIconButton: "Real-input icon button" is announced by the element at ' +
-      `(${namedBox}) while the control is drawn at (${drawnBox}) — the name is on a ` +
-      "box that is not the control's";
-    const DRAWN = '16, 273, 39.67, 39';
-    expect(row.matches.test(sentence('16.50, 273, 39, 39', DRAWN))).toBe(true);
-    // The vertical coordinate is the one number allowed to move: it is where the screen
-    // sits, and a row pinned to it would go stale for an unrelated layout change.
-    expect(row.matches.test(sentence('16.50, 412.67, 39, 39', DRAWN))).toBe(
-      true
-    );
-    expect(row.matches.test(sentence('16, 273, 39.67, 39', DRAWN))).toBe(false);
-    expect(row.matches.test(sentence('15.50, 273, 39, 39', DRAWN))).toBe(false);
-    expect(row.matches.test(sentence('16.50, 273, 41, 39', DRAWN))).toBe(false);
-    expect(
-      row.matches.test(sentence('16.50, 273, 39, 39', '16, 273, 49.67, 39'))
-    ).toBe(false);
-  });
-
   it('counts a doubled name by the name, not by the separator', () => {
     // "Hosted picker Hosted picker" (no comma), a localised joiner, and a component that
     // concatenated the strings itself are all the same finding to a person hearing it. A

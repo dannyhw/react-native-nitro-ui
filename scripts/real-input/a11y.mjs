@@ -505,19 +505,14 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
  *   arrive at the same element. A person hears the name stutter.
  *
- * **The `icon-button` iOS row** is G23's, measured on pair-b (iOS 27, iPhone Air): the
- * name is on the right element — `button`, enabled, hittable — two pixels off the box.
- * React Native lays the host out at 39.67 x 39 pt and SwiftUI reports its Button element
- * at 39 x 39, inset half a point from the left: the element is the Button’s own geometry,
- * and a `Button` keeps it when the host it is served is a fraction wider than the Button
- * wants to be. So this is not two reads of one layout, which is what
- * {@link IOS_FRAME_TOLERANCE_PT} is sized for — it is the host’s fractional flex width
- * (39.67 pt is 119 px at 3x) against a Button that holds its own integral 117 px.
- * VoiceOver stops on the control. It is recorded rather than fixed because both ways of
- * making the boxes agree are worse than the debt: stretching the Button to the host
- * widens the pill the design draws, and publishing a frame the element does not have
- * would make this rule grade a number the component invented. `FOLLOWUPS.md` owns it,
- * with the measurement that retires the row.
+ * **No `icon-button` iOS row any more**, and the reason belongs here because G23 shipped
+ * one: its name was on the right element and two pixels off the box, and the row quoted
+ * those pixels so a *moved* name still went red. IconButton's 44 pt touch target
+ * (`HybridNitroUiIconButton.swift`) removed the finding by making the box integral — the
+ * element is the control's own 44 x 44 pt and the host is laid out at 44 x 44 pt, so the
+ * two reads are of one layout and {@link IOS_FRAME_TOLERANCE_PT} covers the rest. The
+ * row, its fixture and its matrix cells went out with that change rather than being
+ * widened; if the sweep ever disagrees, the row comes back with the numbers it measured.
  *
  * @type {ReadonlyArray<A11yExemption>}
  */
@@ -581,22 +576,6 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
     matches:
       /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
-  },
-  {
-    control: 'icon-button',
-    platform: 'ios',
-    followups:
-      'G23 a11y: the IconButton Button element sits 2 px off its laid-out box',
-    // The measured inset and nothing wider (G23, iOS 27). `16.50`/`39` against
-    // `16`/`39.67` *is* the finding, so a name that has actually moved — onto the
-    // wrapper, or a point or two further along — is not excused by it. The vertical
-    // coordinate is the one number allowed to float: it is where the screen happens to
-    // sit, and pinning it would make this row stale whenever anything above IconButton
-    // changed height, which is a layout note and not a regression in the name. Every
-    // other number is the finding itself, so `staleExemptions` reports this row the
-    // moment the geometry changes for any reason — including being fixed.
-    matches:
-      /is announced by the element at \(16\.50, [\d.]+, 39, 39\) while the control is drawn at \(16, [\d.]+, 39\.67, 39\)/,
   },
 ]);
 
