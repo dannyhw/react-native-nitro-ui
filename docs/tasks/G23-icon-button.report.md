@@ -240,16 +240,16 @@ the name, so the row came back re-measured and the fractional-width explanation 
 
 ## Merge round
 
-`origin/main` (Popover, G22) merged in from `4cead7b5`. Both components are kept in every shared
-list: the README Components table, import block and `<Host>` prose, the example's screen tabs,
+`origin/main` (Popover, G22) merged in from `4cead7b5`. Both components stay in every shared list:
+the README Components table, import block and `<Host>` prose, the example's screen tabs,
 `viewConfigs.test.ts`, `controls.mjs` and `nitro.json`; `FOLLOWUPS.md` keeps both sides' lines.
 `nitro.json` was resolved by hand, every generated file regenerated — codegen, `bun run regen`,
-`api-extractor`, `manifest:update` — which is what caught two hand-merge faults: nitrogen's
-registries left the IconButton registration unclosed, and `controls.mjs` had folded the popover
-row into the icon-button row, so real input would have tapped sixteen controls and never an
-IconButton. The README's `<Host>` section named seven refused controls where `HostChildren` names
-nine; it names nine now. `registry:check`, `nitrogen:check`, `readme:check` and `manifest:check`
-are clean, and the merge changes no platform source of its own.
+`api-extractor`, `manifest:update` — which caught two hand-merge faults: nitrogen's registries
+left the IconButton registration unclosed, and `controls.mjs` had folded the popover row into the
+icon-button row, so real input would have tapped sixteen controls, never an IconButton. The
+README's `<Host>` section named seven refused controls where `HostChildren` names nine; it names
+nine now. `registry:check`, `nitrogen:check`, `readme:check` and `manifest:check` are clean; the
+merge changes no platform source.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
@@ -263,7 +263,8 @@ are clean, and the merge changes no platform source of its own.
 All five green on `b820d8ee4628` (lease `G23-xcdn8`, pair-a); `need --for merge` is satisfied. The
 first Android sweep took the `menu` read race already in `FOLLOWUPS.md` — 23/24 controls, with
 `icon-button` and `popover` PASS — and the re-run of the same tree is green, its excerpt
-committed. Those rows and the fix round's stay in the ledger beside the 63 earlier lines.
+committed. Those rows and the fix round's stay in the ledger with the 63 earlier lines. One hygiene
+note: an unowned `adb reverse tcp:8080` on the leased device was removed.
 
 ## Appendix: the iOS a11y stop, measured
 
