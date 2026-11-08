@@ -80,6 +80,8 @@ final class RealInputTests: XCTestCase {
     static let menuEvents = "real-input-menu-events"
     static let contextMenu = "ctx-echo"
     static let contextMenuOrder = "ctx-order"
+    static let formScreen = "form-screen-echo"
+    static let formRowPresses = "form-row-presses"
     static let chipValue = "real-input-chip-value"
     static let chipEvents = "real-input-chip-events"
     static let chipRefusedLast = "real-input-chip-refused-last"
@@ -466,6 +468,8 @@ final class RealInputTests: XCTestCase {
                tab: Tab.searchFieldTab, screenAnchor: Echo.searchTyping),
       A11yCase(id: "context-menu", testId: "ctx-accessible", label: "Message from Grace",
                tab: Tab.contextMenuTab, screenAnchor: Echo.contextMenu),
+      A11yCase(id: "form", testId: "form-row", label: "Row with onPress",
+               tab: Tab.formTab, screenAnchor: Echo.formScreen),
     ]
   }
 
