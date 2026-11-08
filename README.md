@@ -390,9 +390,13 @@ export function BookmarkButton({
 `size` is the same ladder as `Button`'s, and on Android a rung is Material's own
 icon-button container token — with Material's 48 dp minimum touch target
 measured rather than assumed, so the two smallest rungs sit in a box larger than
-the token they are drawn from. `width` (`narrow` / `uniform` / `wide`) is
-Material's three width options for a rung and is **Android-only**: it costs width
-and never height there, and iOS keeps one box for all three.
+the token they are drawn from. iOS floors its box at Apple's 44 pt target the
+same way, so a `small` IconButton is a 20 pt glyph inside a 44 pt target rather
+than a 20 pt control, and the styles that draw a bezel reach that target through
+a tappable layer behind the control instead of a wider bezel. `width` (`narrow` /
+`uniform` / `wide`) is Material's three width options for a rung and is
+**Android-only**: it costs width and never height there, and iOS keeps one box for
+all three.
 [icon-button.md](docs/components/icon-button.md) has both columns measured, and
 what each platform does with a glyph it cannot resolve.
 
