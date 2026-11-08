@@ -130,8 +130,23 @@ final class IconButtonModel: NitroUiModel {
   /// Whether the control is a toggle. The wrapper sends `defaultChecked` as
   /// non-null exactly when the caller used the toggle form, which is the one
   /// signal that tells an *uncontrolled toggle* (both values null) apart from a
-  /// press button (both null too).
+  /// press button (both null too) - and, for the same reason, the only one that
+  /// says when the caller has *stopped* using it. Written from that signal in
+  /// ``HybridNitroUiIconButton/afterUpdate()``, never by a prop setter.
   var isToggle = false
+  /// Whether the 44 pt target is built by widening the *label* rather than by a hit
+  /// layer behind the whole control.
+  ///
+  /// Only `standard` can do that, and only in the press form: it is the one variant
+  /// iOS draws with no container (`.borderless`), so a 44 pt label is a 44 pt control
+  /// with nothing grown around it. Every other configuration draws a bezel - the
+  /// three bordered button styles and the toggle form, whose `.button` toggle style is
+  /// a bordered box whatever `variant` says - and widening their label would widen
+  /// the artwork, not just the target (`IconButtonContent/minimumTouchTarget`).
+  var floorsLabel: Bool {
+    return !isToggle && variant == .standard
+  }
+
   /// The toggle's selection, behind the handshake (§4). The press form never reads
   /// it, which is why `displayed` starting at `false` costs nothing there.
   var state = NitroUiControlledValue<Bool>(displayed: false)
@@ -148,6 +163,20 @@ final class IconButtonModel: NitroUiModel {
   private var drawn = "none"
   private var probes = 0
   private var accessibilityReport = "none"
+  /// What the glyph measures with no target floor applied, as `WxH` (`control=` in
+  /// ``stateReport()``).
+  ///
+  /// The 44 pt floor is why this exists: with it, `small`, `medium` and `large` all
+  /// lay out at one 44 x 44 pt box, so the laid-out box stops being evidence that the
+  /// rung moved the artwork at all - and "the rung sizes the glyph" is the iOS half of
+  /// the ladder, the thing `symbolPointSize` is for. Recording what the label measures
+  /// before the floor is applied lets the harness assert both halves at once: the
+  /// glyph ladder from this field, and the floor from `box == max(control, 44)`.
+  ///
+  /// Test-only, and stored rather than published for Chip's reason: the drawing code
+  /// writes it, and publishing what the body wrote would ask for the update that just
+  /// happened.
+  private var artworkSize = "none"
 
   override init() {
     super.init()
@@ -189,11 +218,19 @@ final class IconButtonModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// `displayed=<0|1|none>;probes=<n>;a11y=<...>`. Safe from any thread.
+  /// Store what the glyph measured before the target floor widened the control.
+  func recordArtworkSize(_ size: CGSize) {
+    reportLock.lock()
+    artworkSize = String(format: "%.2fx%.2f", size.width, size.height)
+    reportLock.unlock()
+  }
+
+  /// `displayed=<0|1|none>;probes=<n>;a11y=<...>;control=<WxH>`. Safe from any thread.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport);"
+      + "control=\(artworkSize)"
   }
 
   /// Back to "nothing yet", for recycling: a reused view whose report still
@@ -204,6 +241,7 @@ final class IconButtonModel: NitroUiModel {
     drawn = "none"
     probes = 0
     accessibilityReport = "none"
+    artworkSize = "none"
     reportLock.unlock()
   }
 }
@@ -212,6 +250,26 @@ final class IconButtonModel: NitroUiModel {
 struct IconButtonContent: NitroUIContent {
   /// The subscription to ``NitroUiModel/objectWillChange``.
   @ObservedObject private var model: IconButtonModel
+
+  /// iOS's floor under the laid-out box, in points - Apple's own minimum for a
+  /// tappable region, the number its Human Interface Guidelines have quoted since iOS 7
+  /// and the one UIKit controls keep for their cells and bars, and the exact
+  /// counterpart of Android's 48 dp
+  /// `MinInteractiveComponentSize`, which `IconButtonScale.containerSize` applies to
+  /// every rung there. A rung whose glyph is smaller than the target is drawn at its
+  /// own rung and *centred inside* the target: the ladder sizes the artwork, the
+  /// floor sizes the target, and Material separates those two on purpose.
+  ///
+  /// Why a floor is needed at all: before it, the laid-out box *was* the tappable
+  /// area, and `standard`/`medium` measured 25 x 23 pt - a control a fifth smaller
+  /// than Apple's minimum, against Android's rule that no rung is ever below Material's.
+  ///
+  /// Growing the layout alone would not fix that either, and that is the part this
+  /// file has to get right rather than assume: a SwiftUI `Button` hit-tests its own
+  /// label and style, not the frame its host was laid out in, so `.frame(minWidth: 44,
+  /// minHeight: 44)` around one moves the box React Native reserves and leaves the
+  /// gesture exactly where it was. Hence the two different constructions below.
+  private static let minimumTouchTarget: CGFloat = 44
 
   init(model: IconButtonModel) {
     self.model = model
@@ -226,10 +284,59 @@ struct IconButtonContent: NitroUIContent {
     let _ = model.recordDrawn(drawn)
     // Everything that applies to every variant stays outside the switch, so a
     // variant change costs one style and not a different set of modifiers.
-    styledControl
-      .controlSize(model.scale.controlSize)
-      .disabled(model.disabled)
-      .modifier(OptionalIconButtonTint(color: model.tint))
+    if model.floorsLabel {
+      // `standard`: the label is already framed to the target (see ``label``), so
+      // the Button's own hit area is the whole 44 pt box and its accessibility
+      // element is that box too. No second layer, and no `.accessibilityElement`
+      // rewrite of an element iOS already gets right.
+      styledControl
+        .controlSize(model.scale.controlSize)
+        .disabled(model.disabled)
+        .modifier(OptionalIconButtonTint(color: model.tint))
+    } else {
+      // Every drawn-container configuration: the control keeps the box its own
+      // style measures, and a target the same control cannot reach is added behind
+      // it. See ``targetLayered``.
+      targetLayered
+    }
+  }
+
+  /// The control plus ``IconButtonContent/minimumTouchTarget`` of tappable area, for
+  /// the configurations that draw a bezel.
+  ///
+  /// Growing the *layout* is not the same as growing the target here: the frame that
+  /// widens the host's box leaves the Button's own gesture inside the label. The extra
+  /// area therefore needs a view of its own to receive the tap, and the only place it
+  /// can go is **behind** the control - in front it would swallow the taps the style is
+  /// supposed to answer (the press highlight, the Toggle's own binding) and the control
+  /// would stop looking pressed.
+  ///
+  /// The layer is `Color.clear`, so nothing is painted; `contentShape(Rectangle())`
+  /// is what makes a clear view hit-testable at all, and `onTapGesture` runs the same
+  /// ``IconButtonModel/press()`` the control's own gesture runs, so a tap on the
+  /// corner and a tap on the glyph cannot disagree about what a press is. A tap
+  /// landing inside both goes to the control, which is on top of the `ZStack`.
+  ///
+  /// `.accessibilityElement(children: .combine)` then makes the *one* element a
+  /// reader stops on the `ZStack` - the 44 pt box - rather than the control inside
+  /// it, which is what `scripts/real-input/a11y.mjs` compares against the laid-out
+  /// box. The layer itself is hidden, so combining it in adds a frame and no name.
+  private var targetLayered: some View {
+    ZStack {
+      Color.clear
+        .frame(
+          width: Self.minimumTouchTarget,
+          height: Self.minimumTouchTarget
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { model.press() }
+        .accessibilityHidden(true)
+      styledControl
+        .controlSize(model.scale.controlSize)
+        .disabled(model.disabled)
+        .modifier(OptionalIconButtonTint(color: model.tint))
+    }
+    .accessibilityElement(children: .combine)
   }
 
   /// The control, in the style its form has on iOS.
@@ -311,8 +418,8 @@ struct IconButtonContent: NitroUIContent {
   /// The glyph, named. `.iconOnly` draws the icon and keeps the title as the
   /// element's accessibility name, which is the whole of C4's iOS accessibility
   /// rule: the control is named by the only text it has, and shows none of it.
-  private var label: some View {
-    Label {
+  @ViewBuilder private var label: some View {
+    let glyph = Label {
       Text(model.accessibilityLabel)
     } icon: {
       if let systemImage = model.systemImage {
@@ -326,12 +433,55 @@ struct IconButtonContent: NitroUIContent {
       }
     }
     .labelStyle(.iconOnly)
+    .background(IconButtonArtworkReader { size in model.recordArtworkSize(size) })
+
+    // The one configuration where the target can be built by widening the label:
+    // `minWidth`/`minHeight` rather than `width`/`height`, because from `xxlarge` up
+    // the glyph is what decides the box and a fixed frame would clip it. `Content`
+    // centres by default, which is what "the glyph drawn at its rung and centred"
+    // means here, and `contentShape` is what makes the widened label tappable in the
+    // space around the artwork rather than only on the artwork's own pixels.
+    if model.floorsLabel {
+      glyph
+        .frame(
+          minWidth: Self.minimumTouchTarget,
+          minHeight: Self.minimumTouchTarget
+        )
+        .contentShape(Rectangle())
+    } else {
+      glyph
+    }
   }
 
   /// A tap on the press form. Nothing to reconcile: a press is a gesture, not a
   /// value React owns.
   private func press() {
     model.press()
+  }
+}
+
+/// Reports the size of the view it is a `background` of, once per layout, without
+/// becoming a second source of truth about it.
+///
+/// A `GeometryReader` in a `background` is laid out *at* the primary view's size and
+/// proposes nothing back to it, so this cannot widen the label it measures - which is
+/// the whole reason the floor above is written as `minWidth`/`minHeight` on the label
+/// and this hangs off the artwork instead of being the other way round. The callback
+/// stores; it never publishes, so a layout pass cannot ask itself for another one.
+private struct IconButtonArtworkReader: View {
+  let onMeasure: (CGSize) -> Void
+
+  var body: some View {
+    GeometryReader { proxy in
+      // Read where SwiftUI hands the size over, and store. This is the same move
+      // ``IconButtonContent/body`` makes with `recordDrawn`: a statement in the view
+      // that has the value, writing plain storage. It deliberately does *not* use
+      // `onAppear`/`onChange` - the deployment target is 15.1, where both spellings
+      // of the current signature are unavailable and the older one is deprecated -
+      // and a body re-evaluation is exactly the moment the new size is known anyway.
+      let _ = onMeasure(proxy.size)
+      Color.clear
+    }
   }
 }
 
@@ -374,13 +524,19 @@ final class HybridNitroUiIconButton: HybridNitroUiIconButtonSpec, RecyclableView
   /// paragraph.
   ///
   /// Measured on the device (`harness:ios`'s Conformance run compares this row
-  /// against the control's own measurement): `standard` + `medium` with a 24 pt
-  /// `xmark` is 25 x 23 pt - the glyph plus whatever the `.borderless` style adds,
-  /// which is the least of the four variants. The first version of this row said
-  /// 32 x 32 from an off-device estimate and went red against the real 25 x 23, and
-  /// the same control measured 15.33 x 15 before the rung sized the symbol at all.
-  /// See the table in the docs page for every rung.
-  private static let fallbackSize = (width: 25.0, height: 23.0)
+  /// against the control's own measurement): with the 44 pt target floor
+  /// (`IconButtonContent/minimumTouchTarget`) every rung up to and including
+  /// `xxlarge` is *under* the floor - the largest glyph box measured 40.67 x 38 - so
+  /// the default configuration, and every other `standard` rung, is laid out at
+  /// exactly 44 x 44 pt. Before the floor this row said 25 x 23, the glyph plus what
+  /// the `.borderless` style adds, and the version before that said 32 x 32 from an
+  /// off-device estimate and went red against the real number.
+  ///
+  /// The floor also makes the declaration true for **every** rung rather than only
+  /// for the default one: the glyph boxes run 20.33 x 19 up to 40.67 x 38, all inside
+  /// 44, so no cold first frame is further from its control than this one is. See the
+  /// table in the docs page for the glyph and the box of every rung.
+  private static let fallbackSize = (width: 44.0, height: 44.0)
 
   private static let declaresFallback: Bool = {
     NitroUiSizing.setFallback(sizingComponentName, fallbackSize.width, fallbackSize.height, NitroUiSizingPolicy.intrinsic.rawValue)
@@ -528,14 +684,10 @@ final class HybridNitroUiIconButton: HybridNitroUiIconButtonSpec, RecyclableView
     }
     set {
       let next = newValue.asType(Bool.self)
-      if next != nil {
-        // A non-null `checked` is the toggle form, whichever way it arrived: the
-        // wrapper sends both form signals together, and reading either one keeps
-        // the two from disagreeing if that ever stops being true.
-        model.isToggle = true
-      }
       // Not visual on its own: `displayed` only follows once the event count says
-      // JS has caught up. See `afterUpdate()`.
+      // JS has caught up. See `afterUpdate()`. Not a form signal either: see the
+      // `afterUpdate()` note on `isToggle` for why the form comes from
+      // `defaultChecked` and is re-read on every batch.
       model.state.js = next
     }
   }
@@ -548,9 +700,10 @@ final class HybridNitroUiIconButton: HybridNitroUiIconButtonSpec, RecyclableView
     set {
       let next = newValue.asType(Bool.self)
       model.defaultChecked = next
-      if next != nil {
-        model.isToggle = true
-      }
+      // The form itself is decided in `afterUpdate()`, from this value, so that a
+      // caller who *stops* using the toggle form is believed as well as one who
+      // starts. A `null` here is that signal, and only `afterUpdate()` can act on
+      // it without racing the other setter.
       guard model.state.js == nil, !model.didApplyDefault, let seed = next else {
         return
       }
@@ -612,6 +765,34 @@ final class HybridNitroUiIconButton: HybridNitroUiIconButtonSpec, RecyclableView
   // MARK: - Lifecycle
 
   func afterUpdate() {
+    // The form, re-read every batch.
+    //
+    // `defaultChecked` is non-null exactly when the wrapper is in the toggle form
+    // (`IconButton.tsx`: `defaultChecked={isToggle ? controlled.defaultValue :
+    // null}`, and `useControlled` answers a `Bool` for `defaultValue` in that form,
+    // never `null`), so it is a signal that goes both ways. Reading it here rather
+    // than latching `isToggle = true` in a setter is what makes the form
+    // *switchable off*: a control that used `onCheckedChange` and now passes only
+    // `onPress` has to compose a `Button` again, and a latch could only ever
+    // answer "still a toggle". `prepareForRecycle` is not the other half of the
+    // story - a form flip is one prop update on a live view.
+    //
+    // Flipping redraws *and* resizes: a `Toggle(...).toggleStyle(.button)` is a
+    // bordered box where a `.borderless` `Button` is a bare glyph, which is why the
+    // wrapper puts the form in the size configuration.
+    let isToggle = model.defaultChecked != nil
+    if isToggle != model.isToggle {
+      model.isToggle = isToggle
+      if !isToggle {
+        // The value half belongs to the toggle form. Leaving a selection behind
+        // would let a control that returns to the toggle form show a value its
+        // previous toggle left there.
+        model.state = NitroUiControlledValue<Bool>(displayed: false)
+        model.didApplyDefault = false
+      }
+      host.markDirty()
+      host.noteContentSizeMayHaveChanged()
+    }
     // The handshake decides whether React's `checked` wins over what the user just
     // did - including a flip JS refused (§4). The press form has no value to
     // reconcile, so this is a no-op there.
