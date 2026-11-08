@@ -339,6 +339,15 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose text-field: a Host refuses it'
       );
     }
+    if (component === 'form') {
+      // Not hostable either, for the same reason it is not a `<Host>` child in an app:
+      // a Form is a container that owns a scroller and its own rows, and a Host
+      // composes controls, not containers. Named here rather than left to the catch-all
+      // below so a plan that ever asks for it fails with this sentence.
+      throw new Error(
+        'nitro-ui-host cannot compose form: a Host refuses a container'
+      );
+    }
     // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.

@@ -33,6 +33,7 @@ the layout engine, and React never sees a native node.
 | `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
+| `Form`               | `UICollectionView` in `.insetGrouped`, rows in cells           | rows in place behind M3 Expressive segmented-list shapes                                              | next  | [form.md](docs/components/form.md)                           |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
@@ -58,6 +59,7 @@ import {
   ConfirmationDialog,
   ContextMenu,
   DatePicker,
+  Form,
   Host,
   Menu,
   Picker,
@@ -905,6 +907,56 @@ action) or the app closes it. `onAction` comes before the close it causes. The
 tooltip follows its anchor through a layout change or a scroll. At most two
 actions; a title or an action makes Android's tooltip the rich one.
 [tooltip.md](docs/components/tooltip.md) has the platform details.
+
+### Form
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/form-ios.png" width="300" alt="A Form on iOS in the inset-grouped list style: a section titled Notifications with two switch rows and a footer line, then a section titled Quiet hours whose one row reads Set quiet hours with a disclosure chevron" /></td>
+    <td><img src="docs/images/components/form-android.png" width="300" alt="The same Form on Android: the same two sections, with the rows drawn as one connected segmented list whose end rows are rounded and a header above each group" /></td>
+  </tr>
+</table>
+
+A grouped, scrolling settings screen whose rows are ordinary React Native views.
+`Form.Section` adds a header and a footer, `Form.Row` the cell-level behaviour
+(`onPress`, `accessory`, `selected`); a bare child of a section is already a row.
+`measure()` of a row is right once scrolling has settled, and a row scrolled out
+of the list is not attached to a cell — `docs/components/form.md` has both.
+
+```tsx name=form
+export function NotificationForm({
+  onOpenQuietHours,
+}: {
+  onOpenQuietHours: () => void;
+}) {
+  const [push, setPush] = useState(true);
+  const [sound, setSound] = useState(false);
+
+  return (
+    <Form>
+      <Form.Section
+        title="Notifications"
+        footer="Push arrives on this device only."
+      >
+        <Form.Row>
+          <Text style={{ flex: 1 }}>Push notifications</Text>
+          <Switch value={push} onValueChange={setPush} />
+        </Form.Row>
+        <Form.Row>
+          <Text style={{ flex: 1 }}>Play a sound</Text>
+          <Switch value={sound} onValueChange={setSound} />
+        </Form.Row>
+      </Form.Section>
+      <Form.Section title="Quiet hours">
+        <Form.Row accessory="disclosure" onPress={onOpenQuietHours}>
+          <Text>Set quiet hours</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+```
 
 ### Host
 
