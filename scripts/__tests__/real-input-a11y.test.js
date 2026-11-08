@@ -113,6 +113,12 @@ describe('the a11y rule, on measured trees', () => {
       // written, this case had two named nodes and the actionable one was not the
       // control; see the mutation below.
       'checkbox',
+      // G23's IconButton, measured on pair-b: one `View` carries the name at the
+      // control's own 105x105 px box (the 40 dp `medium`/`uniform` container), inside
+      // the merged node that is `clickable|focusable` at 124x124 px — Material's 48 dp
+      // minimum interactive size around a 40 dp visual, which is the arrangement the
+      // ladder's own docs page prints. The Switch's shape, so no debt row.
+      'icon-button',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',

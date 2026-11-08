@@ -155,7 +155,103 @@ class IconButtonModelTest {
     assertEquals(2, toggle.state.user(false))
     assertEquals(2, toggle.state.nativeEvents)
   }
+
+  /**
+   * The half of the recycle reset that is not a prop: the resolved glyph.
+   *
+   * `androidIcon` is re-sent as a string on the next mount, so clearing the wire prop
+   * looks sufficient from the outside. It is not: the slot holds what the *previous*
+   * owner resolved and the read it started, and those are what the composition draws
+   * until the new owner resolves its own. Q9 C4 asks for exactly this line ("skip the
+   * reset → previous icon drawn"), and removing `iconSlot.reset()` from
+   * [IconButtonModel.reset] turns it red.
+   *
+   * The read is answered with real artwork rather than with `null`, because a failed
+   * answer would land on `Absent` either way and the second assertion would pass for
+   * the wrong reason. The last block is the same claim inverted: a callback for a
+   * control that was *not* recycled does paint, so a slot that never drew at all
+   * could not satisfy the test either.
+   */
+  @Test
+  fun aRecycledModelHandsOnAnEmptyGlyphSlotAndRetiresThePreviousOwnersRead() {
+    val leaving = WaitingArtwork()
+    val model =
+      IconButtonModel().apply {
+        // A Metro asset in a development build: a URL this process has not read, the
+        // one state that survives a missing reset as a box reserved for a file the
+        // next owner never asked for.
+        androidIcon = "url:http://localhost:8081/assets/star_24px"
+        resolveAndroidIcon(leaving)
+      }
+    assertEquals(NitroUiIconContent.Pending, model.androidIconContent)
+
+    model.reset()
+
+    assertEquals(
+      "a recycled control draws nothing until its own owner resolves",
+      NitroUiIconContent.Absent,
+      model.androidIconContent,
+    )
+    assertEquals(
+      "and the slot forgets which source that artwork was for",
+      null,
+      model.iconSlot.resolved,
+    )
+    // The previous owner's read is still in flight. `generation` is what retires it,
+    // so its answer must not paint the control it was started for.
+    leaving.answerWith(artwork)
+    assertEquals(
+      "a retired read cannot paint the next owner's control",
+      NitroUiIconContent.Absent,
+      model.androidIconContent,
+    )
+
+    val staying = WaitingArtwork()
+    val kept =
+      IconButtonModel().apply {
+        androidIcon = "url:http://localhost:8081/assets/star_24px"
+        resolveAndroidIcon(staying)
+      }
+    staying.answerWith(artwork)
+    assertEquals(
+      "the fixture can draw: a read that was not retired does paint",
+      true,
+      kept.androidIconContent is NitroUiIconContent.Vector,
+    )
+  }
 }
+
+/** An [artwork] whose reads wait for the test to answer them, like a network file does. */
+private class WaitingArtwork : NitroUiIconArtwork {
+  private var waiting: ((androidx.compose.ui.graphics.vector.ImageVector?) -> Unit)? = null
+
+  override fun forName(name: String): NitroUiIconContent = NitroUiIconContent.Absent
+
+  override fun cached(url: String): androidx.compose.ui.graphics.vector.ImageVector? = null
+
+  override fun knownBad(url: String): Boolean = false
+
+  override fun read(
+    url: String,
+    onLoaded: (androidx.compose.ui.graphics.vector.ImageVector?) -> Unit,
+  ) {
+    waiting = onLoaded
+  }
+
+  fun answerWith(image: androidx.compose.ui.graphics.vector.ImageVector) {
+    waiting?.invoke(image)
+    waiting = null
+  }
+}
+
+/** Artwork the callback can hand back: an empty vector is enough to be *something*. */
+private val artwork: androidx.compose.ui.graphics.vector.ImageVector =
+  androidx.compose.ui.graphics.vector.ImageVector.Builder(
+    defaultWidth = 24.dp,
+    defaultHeight = 24.dp,
+    viewportWidth = 24f,
+    viewportHeight = 24f,
+  ).build()
 
 /** One of Material's glyph sizes, spelled so a failure reads as "20 dp, not 24". */
 private fun IconButtonDefaultsIcon(value: Int) = value.dp
