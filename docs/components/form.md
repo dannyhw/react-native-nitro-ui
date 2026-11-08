@@ -9,7 +9,8 @@ can be a row, and a nitro-ui control inside one is the same standalone control i
 is anywhere else in the app.
 
 ```tsx
-import { Form, Switch, Text } from 'react-native-nitro-ui';
+import { Form, Switch } from 'react-native-nitro-ui';
+import { Text } from 'react-native';
 
 <Form>
   <Form.Section title="Notifications" footer="Push arrives on this device only.">
@@ -35,7 +36,7 @@ own gestures and its own controls (`docs/DECISIONS.md` D45).
 | ------------------- | ------------------------ | ------- | -------------------------------------------------------------------------- |
 | `children`          | `ReactNode`              | —       | `Form.Section`s, or rows directly.                                          |
 | `keyboardAvoidance` | `boolean \| undefined`   | `true`  | Keeps the focused row above the keyboard, on both platforms.                |
-| `style`             | `ViewStyle`              | —       | Give it `flex: 1`; the Form scrolls, so it wants the height it is given.    |
+| `style`             | `ViewStyle`              | —       | Already grows into the space it is given; `flex: 1` is how a screen hands that out. |
 | `hybridRef`         | `(view: handle) => void` | —       | **Internal.** Test seam for this repo's harness.                            |
 
 Everything else is `ViewProps`. `Form` is not a `<Host>` child, and it is not
@@ -69,6 +70,8 @@ app names the component only to add `onPress` or an accessory. A row without
 `onPress` leaves its content alone — a `Switch` inside it keeps its own
 accessibility element and its own touches.
 
+`Form.Row` is a direct child of `Form` or `Form.Section` — see Rows.
+
 ## Platform mapping
 
 | Concept      | iOS                                                        | Android                                                          |
@@ -86,6 +89,17 @@ accessibility element and its own touches.
 A row is one direct child of a section. The wrapper walks arrays and fragments, so
 a `map` produces one row per item and an app's own keys survive. A bare string is a
 row of text, the same rule React Native's lists use.
+
+The identity a row gets is the identity React gives it: the position it occupies in
+its parent, including the holes left by a falsy conditional, prefixed through any
+fragment or component in between. So a leading `{flag && <Banner/>}` that appears
+later does not re-key the rows after it, and two sibling arrays whose keys overlap
+do not collide — a row keeps its state through both.
+
+A `Form.Row` inside your own component would be a row inside the row that component
+is laid out in, and v1 gives that no meaning: it logs an error in development and
+renders as plain content. Extract the row's *content* into a component and leave the
+`<Form.Row>` in the list.
 
 A row's own content is laid out by Yoga at the width the row is given, which on iOS
 is the width a cell hands it — narrower than the list's own bounds by the grouped
