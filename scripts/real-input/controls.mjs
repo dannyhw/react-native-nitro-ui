@@ -137,6 +137,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the tooltip, a tap outside closes it, a tap on its action reports the action before the close, Back closes an actionable one, and a closed tooltip leaves the taps on its anchor alone',
     screen: 'tooltip',
   },
+  {
+    id: 'form',
+    title:
+      'real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard',
+    screen: 'form',
+  },
   // @end-generated
 ]);
 

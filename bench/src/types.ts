@@ -25,7 +25,8 @@ export type ComponentName =
   | 'date-picker'
   | 'picker'
   | 'menu'
-  | 'text-field';
+  | 'text-field'
+  | 'form';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -46,7 +47,8 @@ export type ScenarioName =
   | `${ScenarioAction}.date-picker`
   | `${ScenarioAction}.picker`
   | `${ScenarioAction}.menu`
-  | `${ScenarioAction}.text-field`;
+  | `${ScenarioAction}.text-field`
+  | `${ScenarioAction}.form`;
 // @end-generated
 
 /**

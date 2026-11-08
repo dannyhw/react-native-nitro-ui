@@ -38,6 +38,14 @@
 // generated iOS `.mm` gains the two overrides. Android needs no patch: its
 // hand-written `ViewGroupManager` already redirects the children.
 //
+// Fourth patch: a scroll-corrected shadow node (G24). A `Form`'s rows are laid out by Yoga at
+// their position in the list's content and drawn at that position minus the list's scroll
+// offset, and `measure` never asks a platform view where a view ended up - it walks the shadow
+// tree. So for every view in `SCROLL_SHADOW_VIEWS` the generated shadow-node alias is repointed
+// at `nitroui::ScrollShadowNode`, which answers `getContentOriginOffset` the way React Native's
+// own `ScrollViewShadowNode` does. Unlike the sizing patch this keeps nitrogen's state: the
+// offset is a prop.
+//
 // Called by `bun run nitrogen`, which bob's `custom` target also runs, so
 // `prepare`/`npm pack` always ship patched code.
 
@@ -409,8 +417,17 @@ export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
  * The Hybrid Views whose React Native children are mounted into their content
  * view (see the file header). A list here rather than a manifest key: it is a fact
  * about how the generated iOS component mounts, which only this file changes.
+ *
+ * `Form` and `FormSection` are in this list because on iOS both are *models*: a Form's
+ * children are its sections and a Section's are its rows, and in both cases what holds them
+ * is this library's own content view (a hidden holding view), not the component view that
+ * also carries the list.
  */
-export const CONTENT_CHILDREN_VIEWS = ['HybridNitroUiBottomSheet'];
+export const CONTENT_CHILDREN_VIEWS = [
+  'HybridNitroUiBottomSheet',
+  'HybridNitroUiForm',
+  'HybridNitroUiFormSection',
+];
 
 /**
  * Give the generated iOS component view `mountChildComponentView:index:` and
@@ -495,7 +512,11 @@ export function patchContentChildrenObjC(
     '- (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView',
     '                            index:(NSInteger)index {',
     '  UIView *content = self.contentView;',
-    '  if (content == nil || childComponentView.superview != content) {',
+    '  // The promise is only "not mounted afterwards", not "was mounted here": a Form hands',
+    '  // a row from its holding view to a list cell, so when Fabric unmounts it the row lives',
+    '  // in a superview this view does not own, and forwarding to `super` would detach the',
+    '  // row from the cell it is drawn in and leave that cell holding nothing.',
+    '  if (content == nil) {',
     '    [super unmountChildComponentView:childComponentView index:index];',
     '    return;',
     '  }',
@@ -507,6 +528,115 @@ export function patchContentChildrenObjC(
     code: `${source.slice(0, end)}${methods}${source.slice(end)}`,
     status: 'patched',
   };
+}
+
+// ---------------------------------------------------------------------------
+// Scroll-corrected shadow node (G24)
+// ---------------------------------------------------------------------------
+
+export const SCROLL_SHADOW_MARKER = '// nitro-ui: scroll-corrected shadow node';
+const SCROLL_SHADOW_INCLUDE = '#include "NitroUiScrollShadow.hpp"';
+
+/**
+ * The Hybrid Views whose React Native descendants live in content that their platform view
+ * scrolls without React Native knowing (see the file header). A `Form`'s rows are laid out by
+ * Yoga at their position in the list's content and drawn at that position minus the scroll
+ * offset, so its shadow node has to answer `getContentOriginOffset` the way React Native's own
+ * `ScrollViewShadowNode` does - otherwise `measure` on a row after a scroll reports where the
+ * row would be unscrolled (D45 items 3-4).
+ */
+export const SCROLL_SHADOW_VIEWS = ['HybridNitroUiForm'];
+
+/**
+ * Repoint the generated shadow-node alias at `nitroui::ScrollShadowNode`.
+ *
+ * Deliberately *not* the sizing patch: a `Form` is not self-sizing (`sizing: null`), so
+ * nitrogen's own `nitro::ViewPropsHolderState` stays, the descriptor keeps pointing at the
+ * alias, and the only thing that changes is the class of the node. The scroll offset is a
+ * prop, so this node needs no state, no descriptor and no push path.
+ *
+ * @param {string} source contents of a generated `*Component.hpp`
+ * @param {string} className spec class name, e.g. `HybridNitroUiForm`
+ * @param {string} fileName only used for error messages
+ * @returns {{ code: string, status: string, error?: string }}
+ */
+export function patchScrollShadowHeader(
+  source,
+  className,
+  fileName = 'Component.hpp'
+) {
+  const expected = [
+    `ScrollShadowNode<${className}ComponentName`,
+    SCROLL_SHADOW_INCLUDE,
+  ];
+  if (source.includes(SCROLL_SHADOW_MARKER)) {
+    const missing = expected.filter((part) => !source.includes(part));
+    return missing.length === 0
+      ? { code: source, status: 'already-patched' }
+      : {
+          code: source,
+          status: 'error',
+          error: `${fileName}: marker found but ${missing.join(', ')} is missing.`,
+        };
+  }
+
+  const C = escapeRegExp(className);
+  const shadowNodeRe = new RegExp(
+    `^([ \\t]*)using\\s+${C}ShadowNode\\s*=\\s*react::ConcreteViewShadowNode\\s*<[^;]*>\\s*;`,
+    'm'
+  );
+  const stateRe = new RegExp(
+    `^([ \\t]*)using\\s+${C}State\\s*=\\s*nitro::ViewPropsHolderState\\s*<\\s*${C}Props\\s*>\\s*;`,
+    'm'
+  );
+
+  const shapeError = (what) => ({
+    code: source,
+    status: 'error',
+    error: `${fileName}: ${what} not found - nitrogen changed its output shape, update patch-nitrogen.mjs (docs/upstream.md).`,
+  });
+
+  const shadowNodeMatch = source.match(shadowNodeRe);
+  if (shadowNodeMatch == null) {
+    return shapeError(`${className}ShadowNode alias`);
+  }
+  // Refuse to replace an alias we do not recognise: a missing piece here means the node we
+  // would build loses nitrogen's props, its event emitter or its state.
+  for (const part of [
+    `${className}ComponentName`,
+    `${className}Props`,
+    'ViewEventEmitter',
+    `${className}State`,
+  ]) {
+    if (!shadowNodeMatch[0].includes(part)) {
+      return shapeError(`${className}ShadowNode alias (no ${part})`);
+    }
+  }
+  // This node is *built on* the generated state rather than replacing it, so a tree where the
+  // state alias is something else (a sized view, say) must fail here instead of quietly losing
+  // one of the two patches.
+  if (!stateRe.test(source)) {
+    return shapeError(
+      `${className}State alias (this view is expected to be unsized)`
+    );
+  }
+  if (!source.includes(SIZING_INCLUDE_ANCHOR)) {
+    return shapeError(`"${SIZING_INCLUDE_ANCHOR}"`);
+  }
+
+  const code = source
+    .replace(
+      shadowNodeRe,
+      (_all, indent) =>
+        `${indent}${SCROLL_SHADOW_MARKER} (G24, see docs/components/form.md):\n` +
+        `${indent}using ${className}ShadowNode =\n` +
+        `${indent}    ${NITROUI}::ScrollShadowNode<${className}ComponentName, ${className}Props, ${className}State>;`
+    )
+    .replace(
+      SIZING_INCLUDE_ANCHOR,
+      `${SIZING_INCLUDE_ANCHOR}\n${SCROLL_SHADOW_INCLUDE}`
+    );
+  return { code, status: 'patched' };
 }
 
 /**
@@ -682,6 +812,32 @@ export function patchGeneratedViews(root = process.cwd(), options = {}) {
       path.slice(path.lastIndexOf('/') + 1),
       applyToFile(path, (source, name) =>
         patchContentChildrenObjC(source, className, name)
+      )
+    );
+  }
+
+  // 4. Scroll-corrected shadow node (G24). Same rule as the two steps above: in a tree that
+  // has a `nitro.json`, every listed view must be declared *and* generated.
+  for (const className of declared == null ? [] : SCROLL_SHADOW_VIEWS) {
+    if (!declared.has(className.slice('Hybrid'.length))) {
+      record(className, {
+        status: 'error',
+        error: `SCROLL_SHADOW_VIEWS lists ${className}, and nitro.json declares no ${className.slice('Hybrid'.length)} - remove it from the list, or declare the view.`,
+      });
+      continue;
+    }
+    const path = join(viewsDir, `${className}Component.hpp`);
+    if (!existsSync(path)) {
+      record(className, {
+        status: 'error',
+        error: `SCROLL_SHADOW_VIEWS lists ${className}, but ${path} does not exist - is the view generated?`,
+      });
+      continue;
+    }
+    record(
+      path.slice(path.lastIndexOf('/') + 1),
+      applyToFile(path, (source, name) =>
+        patchScrollShadowHeader(source, className, name)
       )
     );
   }

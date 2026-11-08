@@ -193,6 +193,36 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiTooltip"
       }
+    },
+    "NitroUiForm": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiForm"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiForm"
+      }
+    },
+    "NitroUiFormSection": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiFormSection"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiFormSection"
+      }
+    },
+    "NitroUiFormRow": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiFormRow"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiFormRow"
+      }
     }
   },
   "ignorePaths": [

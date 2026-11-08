@@ -1,0 +1,17 @@
+{
+  "name": "Form",
+  "hybridView": "NitroUiForm",
+  "implementation": "HybridNitroUiForm",
+  "id": "form",
+  "sizing": null,
+  "hostable": false,
+  "exampleTab": "form",
+  "exampleLabel": "Form",
+  "bench": true,
+  "benchUnsuffixed": false,
+  "smoke": false,
+  "realInput": true,
+  "realInputTitle": "real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard",
+  "androidViewManager": "NitroUiFormViewManager",
+  "subViews": ["Section", "Row"]
+}
