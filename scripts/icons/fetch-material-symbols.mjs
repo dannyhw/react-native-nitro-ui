@@ -133,6 +133,13 @@ const ICONS = [
     why: "the leading check of a selected filter Chip, a checked Menu row and Picker's selected row",
   },
   {
+    resource: 'nitroui_chevron_right',
+    symbol: 'chevron_right',
+    style: 'materialsymbolsoutlined',
+    file: 'chevron_right_24px.xml',
+    why: "a Form.Row's `disclosure` accessory (the Android twin of UIKit's `UICellAccessory.disclosureIndicator`)",
+  },
+  {
     resource: 'nitroui_keyboard_arrow_down',
     symbol: 'keyboard_arrow_down',
     style: 'materialsymbolsoutlined',
