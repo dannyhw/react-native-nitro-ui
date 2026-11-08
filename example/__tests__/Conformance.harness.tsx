@@ -1652,13 +1652,6 @@ const FORM_LABEL = 'Conformance form';
 const FORM_LABEL_SECOND = 'Second owner’s form';
 
 /**
- * One Form, with a row count that differs between the two owners.
- *
- * The counts differ by more than one on purpose: with 3 and 4, a reset that was off by a row
- * still looks like a layout that settled late. 4 and 2 also mean the second owner cannot be
- * satisfied by a leftover from the first.
- */
-/**
  * `captureFor` for a Form. A Form has no box of its own and so no `measureContent()`, and
  * it is not a control with an `accessibilityLabel` to read back - both members live on the
  * shared `Handle` type for the controls that do. Same arrangement as `captureDialog`.
@@ -1669,6 +1662,13 @@ const captureForm =
     handles.set(testId, view as unknown as Handle);
   };
 
+/**
+ * One Form, with a row count that differs between the two owners.
+ *
+ * The counts differ by more than one on purpose: with 3 and 4, a reset that was off by a row
+ * still looks like a layout that settled late. 4 and 2 also mean the second owner cannot be
+ * satisfied by a leftover from the first.
+ */
 function formFixtureProps(
   second: boolean,
   testId = 'conformance-form',
