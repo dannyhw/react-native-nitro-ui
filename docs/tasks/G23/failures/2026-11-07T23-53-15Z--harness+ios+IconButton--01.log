@@ -1,0 +1,78 @@
+# Failure excerpt — harness:ios:IconButton
+
+- Ran: 2026-11-07T23:53:15.419Z on code tree `1e1654fa92cf` at HEAD `6ab9448` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios IconButton`
+- Result: fail, exit 1, 16289 ms
+- Load: start 6.25, end 21.73, median 21.73, max 21.73
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-53-15.419Z.log` (<store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-53-15.419Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › lays every rung and width out at the size the control measured`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-53-15.419Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 21.73 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios IconButton
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 1e1654fa92cf, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.25/9.85 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-53-15.419Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › lays every rung and width out at the size the control measured
+
+    MEASURE grid={"rung-small-narrow":"20.33x19.00","rung-small-uniform":"20.33x19.00","rung-small-wide":"20.33x19.00","rung-medium-narrow":"25.00x23.00","rung-medium-uniform":"25.00x23.00","rung-medium-wide":"25.00x23.00","rung-large-narrow":"25.00x23.00","rung-large-uniform":"25.00x23.00","rung-large-wide":"25.00x23.00","rung-xlarge-narrow":"33.33x31.00","rung-xlarge-uniform":"33.33x31.00","rung-xlarge-wide":"33.33x31.00","rung-xxlarge-narrow":"40.67x38.00","rung-xxlarge-uniform":"40.67x38.00","rung-xxlarge-wide":"40.67x38.00"}
+
+      [0m [90m 506 |[39m     )[33m.[39mjoin([32m'\n  '[39m)[33m;[39m
+       [90m 507 |[39m     console[33m.[39mlog([32m`icon-button ladder:\n  ${grid}\n  corrections=${made}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 508 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 509 |[39m       [32m`MEASURE grid=${JSON.stringify([39m
+       [90m 510 |[39m [32m        Object.fromEntries([...boxes].map(([k, v]) => [k, `${v.width.toFixed(2)}x${v.height.toFixed(2)}`]))[39m
+       [90m 511 |[39m [32m      )}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 passed, 9 total
+Snapshots:   0 total
+Time:        14.654 s
+Ran all test suites matching IconButton.
+
+
+
+```

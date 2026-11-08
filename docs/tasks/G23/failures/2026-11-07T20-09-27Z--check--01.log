@@ -1,0 +1,139 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-07T20:09:27.741Z on code tree `aae100942c42` at HEAD `b8b6ef1` (branch `task/G23-icon-button`)
+- Command: `bun run check`
+- Result: fail, exit 1, 12648 ms
+- Load: start 6.58, end 5.95, median 6.27, max 6.58
+- Device: none recorded (not a device gate)
+- Full log: `task/G23-icon-button/check-2026-11-07T20-09-27.057Z.log` (<store>/task/G23-icon-button/check-2026-11-07T20-09-27.057Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 119 log line(s)
+
+```
+gate: check
+gate: bun run check (cwd .)
+gate: code tree aae100942c42 at HEAD b8b6ef1c
+gate: git tree 10f8b97b2ef7 with a DIRTY worktree (not reusable)
+gate: log task/G23-icon-button/check-2026-11-07T20-09-27.057Z.log
+gate:       <store>/task/G23-icon-button/check-2026-11-07T20-09-27.057Z.log
+$ node scripts/check.mjs
+check: 17 steps, 4 job(s) of 10 cores
+check: ✓ lock:check          pass        0.0s
+check: ✗ bench:typecheck     fail        1.2s - exit 2
+check: · test                skipped     0.0s - not started - bench:typecheck failed
+check: · test:native         skipped     0.0s - not started - bench:typecheck failed
+check: · test:native:android skipped     0.0s - not started - bench:typecheck failed
+check: · perf:renders        skipped     0.0s - not started - bench:typecheck failed
+check: · nitrogen:check      skipped     0.0s - not started - bench:typecheck failed
+check: · registry:check      skipped     0.0s - not started - bench:typecheck failed
+check: · autolinking:check   skipped     0.0s - not started - bench:typecheck failed
+check: · prepare             skipped     0.0s - not started - bench:typecheck failed
+check: · api-extractor:check skipped     0.0s - not started - bench:typecheck failed
+check: · publint             skipped     0.0s - not started - bench:typecheck failed
+check: · manifest:check      skipped     0.0s - not started - bench:typecheck failed
+check: · readme:check        skipped     0.0s - not started - bench:typecheck failed
+check: ✗ typecheck           fail        3.1s - exit 2
+──────── typecheck — fail, 3.1s ──────────────────────────────────────────────────
+──────── lock:check — pass, 0.0s ─────────────────────────────────────────────────
+$ node scripts/sync-example-lock.mjs
+example-lock: example/ios/Podfile.lock locks NitroUi (0.7.0) - in step with package.json.
+──────── bench:typecheck — fail, 1.2s ────────────────────────────────────────────
+check: ✗ format              fail        6.7s - exit 1
+check: ✗ lint                fail       12.5s - exit 1
+──────── lint — fail, 12.5s ──────────────────────────────────────────────────────
+──────── format — fail, 6.7s ─────────────────────────────────────────────────────
+──────── test — skipped, 0.0s ────────────────────────────────────────────────────
+──────── test:native — skipped, 0.0s ─────────────────────────────────────────────
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 1 passed, 4 failed, 12 skipped in 12.5s
+check: failed step(s): typecheck, bench:typecheck, lint, format
+check: not started after the first failure: test, test:native, test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: typecheck ─────────────────────────────────────────────────────
+$ tsc
+src/components/IconButton/IconButton.tsx(1,1): error TS6133: 'useState' is declared but its value is never read.
+src/components/IconButton/IconButton.tsx(2,10): error TS6133: 'Platform' is declared but its value is never read.
+──────── full log: bench:typecheck ───────────────────────────────────────────────
+$ bun --cwd bench typecheck && bun --cwd bench typecheck:android
+$ tsc -p tsconfig.json
+src/implementations/shared.ts(15,7): error TS2741: Property '"icon-button"' is missing in type '{ switch: number; slider: number; progress: number; 'text-field': number; }' but required in type 'Record<"switch" | "slider" | "progress" | "text-field" | "icon-button", number>'.
+../src/components/IconButton/IconButton.tsx(1,1): error TS6133: 'useState' is declared but its value is never read.
+../src/components/IconButton/IconButton.tsx(2,10): error TS6133: 'Platform' is declared but its value is never read.
+──────── full log: lint ──────────────────────────────────────────────────────────
+$ eslint "**/*.{js,mjs,ts,tsx}"
+
+<repo>/example/src/readme-examples.tsx
+  340:22  warning  Inline style: { padding: 24, gap: 12 }  react-native/no-inline-styles
+
+<repo>/scripts/__tests__/bench-baseline-merge.test.js
+  1113:11  warning  'built' is already declared in the upper scope on line 968 column 9  no-shadow
+
+<repo>/scripts/__tests__/build-speed.test.js
+  251:45  warning  Spaces are hard to count. Use {2}  no-regex-spaces
+
+<repo>/scripts/__tests__/ci-workflows.test.js
+    57:24  warning  [true] is better written in dot notation  dot-notation
+  1879:7   warning  Spaces are hard to count. Use {2}         no-regex-spaces
+
+<repo>/scripts/__tests__/conformance.test.js
+  1741:11  warning  'harness' is already declared in the upper scope on line 1644 column 9  no-shadow
+
+<repo>/scripts/__tests__/real-input-a11y-ios.test.js
+  499:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+  523:11  warning  'node' is already declared in the upper scope on line 51 column 10  no-shadow
+
+<repo>/scripts/__tests__/registry.test.js
+  760:13  warning  'manifests' is already declared in the upper scope on line 484 column 11  no-shadow
+  815:11  warning  'manifests' is already declared in the upper scope on line 484 column 11  no-shadow
+
+<repo>/scripts/harness-suite-timing.mjs
+  25:19  warning  'join' is defined but never used  no-unused-vars
+
+<repo>/scripts/real-input/png-pixel.mjs
+  204:35  warning  Unexpected use of '|'  no-bitwise
+  205:35  warning  Unexpected use of '|'  no-bitwise
+  208:16  warning  Unexpected use of '|'  no-bitwise
+  221:23  warning  Unexpected use of '&'  no-bitwise
+  264:5   warning  Unexpected use of '|'  no-bitwise
+
+<repo>/src/__tests__/iconSource.test.ts
+  24:11  warning  'react-native/Libraries/Image/AssetSourceResolver' React Native deep imports are deprecated. Please use the top level import instead  @react-native/no-deep-imports
+  35:11  warning  'react-native/Libraries/Image/resolveAssetSource' React Native deep imports are deprecated. Please use the top level import instead   @react-native/no-deep-imports
+
+<repo>/src/components/IconButton/IconButton.tsx
+  1:10  error  'useState' is defined but never used  @typescript-eslint/no-unused-vars
+  2:10  error  'Platform' is defined but never used  @typescript-eslint/no-unused-vars
+
+<repo>/src/components/IconButton/NativeNitroUiIconButton.ts
+  111:3  error  Replace `'NitroUiIconButton',·()·=>·NitroUiIconButtonConfig` with `⏎··'NitroUiIconButton',⏎··()·=>·NitroUiIconButtonConfig⏎`  prettier/prettier
+
+✖ 21 problems (3 errors, 18 warnings)
+  1 error and 3 warnings potentially fixable with the `--fix` option.
+
+error: script "lint" exited with code 1
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] src/components/IconButton/NativeNitroUiIconButton.ts
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 12.6 s
+gate: recorded in .gates/task/G23-icon-button.jsonl
+
+```

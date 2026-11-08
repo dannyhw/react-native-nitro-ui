@@ -51,6 +51,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiDialogComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiIconButtonSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiIconButtonComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
@@ -92,6 +94,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiDialogStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiIconButtonSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiIconButtonStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp

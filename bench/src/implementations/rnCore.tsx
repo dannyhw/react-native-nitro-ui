@@ -1,5 +1,6 @@
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Switch,
@@ -13,7 +14,10 @@ import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateLabel,
+  ICON_BUTTON_LABEL,
+  iconButtonGlyph,
   menuTitle,
+  onIconButtonPress,
   onPress,
   onValueChange,
   range,
@@ -71,6 +75,13 @@ import {
  *   `Text` trigger, drawn with the shared `menuTitle` and nothing else: no popup,
  *   no list, no native control. The ratio therefore reads "what does a real menu
  *   cost over a tappable label", and the `@expo/ui` arms answer the peer question.
+ * - `icon-button`: RN core has no icon button, so the floor is the `Pressable` +
+ *   `Image` pair every RN app writes when it needs one — the brief's own wording.
+ *   Also a *floor*, and a thinner one than the others: it is a tappable image with
+ *   a label, so it owns no container, no state layer, no ripple/highlight, and no
+ *   minimum touch target (the glyph box is 24 dp, below the 48 dp both platforms
+ *   enforce for the real controls, which is part of what those cost). The shared
+ *   glyph keeps the picture identical to the other arms' on each platform.
  */
 export function RnCoreList({ n, value, component }: BenchListProps) {
   const style = rowStyle(component);
@@ -236,6 +247,29 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
       </>
     );
   }
+  if (component === 'icon-button') {
+    // The glyph is sized by this arm because an `Image` has no size of its own in
+    // RN layout: 24 dp is the box every other arm's icon gets at the default rung,
+    // so the picture is the same size everywhere and only the control around it
+    // differs. `accessibilityLabel` is what the other arms' controls get for free.
+    const glyph = iconButtonGlyph(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <Pressable
+            key={index}
+            accessibilityRole="button"
+            accessibilityLabel={ICON_BUTTON_LABEL}
+            onPress={onIconButtonPress}
+            testID={`bench-rn-core-icon-button-${String(index)}`}
+            style={style}
+          >
+            <Image source={glyph.source} style={iconButtonStyles.glyph} />
+          </Pressable>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {range(n).map((index) => (
@@ -250,6 +284,16 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
     </>
   );
 }
+
+/**
+ * The glyph box for the `icon-button` floor: 24 dp, the size the other arms' icon
+ * gets at the default rung, and deliberately *not* 48 — RN core's pair has no
+ * minimum touch target, and padding one in here would hide the cost the platform
+ * controls pay for having one.
+ */
+const iconButtonStyles = StyleSheet.create({
+  glyph: { width: 24, height: 24 },
+});
 
 const buttonStyles = StyleSheet.create({
   background: {

@@ -1,0 +1,92 @@
+# Failure excerpt — harness:ios:IconButton
+
+- Ran: 2026-11-07T23:59:57.511Z on code tree `d736daa2ed97` at HEAD `90bcfe5` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios IconButton`
+- Result: fail, exit 1, 24740 ms
+- Load: start 9.45, end 18.86, median 18.86, max 21.11
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-59-57.511Z.log` (<store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-59-57.511Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › reverts a toggle JS refused, and shows the value JS wrote`
+- `● IconButton · G23 › presses once per tap, and takes none while disabled`
+- `expected [ 'press-once:press', …(3) ] to deeply equal [ 'press-once:press', …(1) ]`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-59-57.511Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 18.86 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 46 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios IconButton
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree d736daa2ed97, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.45/8.96 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-59-57.511Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › reverts a toggle JS refused, and shows the value JS wrote
+
+    "refusing" never drew displayed=0 - it reports "displayed=1;probes=0;a11y=none".
+
+      [0m [90m 262 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 263 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 264 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 265 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 266 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 267 |[39m       )[0m
+
+  ● IconButton · G23 › presses once per tap, and takes none while disabled
+
+    expected [ 'press-once:press', …(3) ] to deeply equal [ 'press-once:press', …(1) ]
+
+      [0m [90m 955 |[39m     [36mawait[39m pressButton([32m'press-disabled'[39m)[33m;[39m
+       [90m 956 |[39m     [36mawait[39m sleep([33mEVENT_QUIET_MS[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 957 |[39m     expect(events)[33m.[39mtoEqual([[32m'press-once:press'[39m[33m,[39m [32m'press-once:press'[39m])[33m;[39m
+       [90m     |[39m                           [31m[1m^[22m[39m
+       [90m 958 |[39m   })[33m;[39m
+       [90m 959 |[39m
+       [90m 960 |[39m   it([32m'names the control, and a toggle says whether it is checked'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 7 passed, 9 total
+Snapshots:   0 total
+Time:        22.502 s
+Ran all test suites matching IconButton.
+
+
+
+```

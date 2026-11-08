@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T06:07:27.796Z on code tree `9f36f4e52e97` at HEAD `bf14046` (branch `task/G23-icon-button`)
+- Command: `bun run check`
+- Result: fail, exit 1, 160247 ms
+- Load: start 9.56, end 13.31, median 10.72, max 14.90
+- Device: none recorded (not a device gate)
+- Full log: `task/G23-icon-button/check-2026-11-08T06-07-27.048Z.log` (<store>/task/G23-icon-button/check-2026-11-08T06-07-27.048Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "format" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2767 — the rest is in the full log above)
+
+```
+  ok    0...10 step 3: up again (got 6.0, want 6.0)
+  ok    0...10 step 3: up again (got 9.0, want 9.0)
+  ok    0...10 step 3: the last move is to the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: nothing above the maximum (got 10.0, want 10.0)
+  ok    0...10 step 3: down from the maximum (got 9.0, want 9.0)
+  ok    0...10 step 3: down again (got 6.0, want 6.0)
+  ok    0...10 step 3: down again (got 3.0, want 3.0)
+  ok    0...10 step 3: down to the bottom (got 0.0, want 0.0)
+  ok    0...10 step 3: nothing below the minimum (got 0.0, want 0.0)
+  ok    a step is always a whole step, whatever it starts from (got 3.0, want 3.0)
+  ok    0...100 step 25: up (got 25.0, want 25.0)
+  ok    0...100 step 25: up from the middle (got 75.0, want 75.0)
+  ok    0...100 step 25: up to the top (got 100.0, want 100.0)
+  ok    0...100 step 25: no overshoot (got 100.0, want 100.0)
+  ok    0...100 step 25: down (got 75.0, want 75.0)
+  ok    0...100 step 25: no undershoot (got 0.0, want 0.0)
+  ok    tenths: up from 0.3 clears the binary fraction (got 0.4, want 0.4)
+  ok    tenths: down from 0.3 (got 0.2, want 0.2)
+  ok    tenths: up to the top (got 1.0, want 1.0)
+  ok    continuous: one twentieth of the range up (got 0.05, want 0.05)
+  ok    continuous: back down to the bottom (got 0.0, want 0.0)
+  ok    continuous: down from the top (got 0.95, want 0.95)
+  ok    continuous: nothing above the top (got 1.0, want 1.0)
+  ok    continuous: nothing below the bottom (got 0.0, want 0.0)
+  ok    an empty range cannot be incremented (got 0.0, want 0.0)
+  ok    an inverted range cannot be incremented (got 5.0, want 5.0)
+  ok    a step past the range has two stops: up (got 1.0, want 1.0)
+  ok    ...and down (got 0.0, want 0.0)
+  ok    ...and nothing past the top (got 1.0, want 1.0)
+  ok    -10...-1 step 3: up (got -7.0, want -7.0)
+  ok    -10...-1 step 3: up to the maximum (got -1.0, want -1.0)
+  ok    -10...-1 step 3: down (got -4.0, want -4.0)
+  ok    -10...-1 step 3: nothing below (got -10.0, want -10.0)
+  ok    a step down from off-grid lands on a stop, not between (got -10.0, want -10.0)
+slider-value.test: PASS
+── text-limit.test (Swift)
+NitroUiTextLimit.fitting
+  ok    an insertion that fits is kept whole (got "cd", want "cd")
+  ok    at the end, the part that fits (got "e", want "e")
+  ok    mid-text, the part of the insertion that fits (got "xy", want "xy")
+  ok    mid-text, the text after the caret is kept (the backstop would give "abxyzc")
+  ok    a replaced selection frees its own length (got "WXY", want "WXY")
+  ok    an emoji with one unit free is refused whole (got nil, want nil)
+  ok    an emoji that ends inside the limit is kept (got "😀", want "😀")
+  ok    a ZWJ family is never cut inside (got nil, want nil)
+  ok    the cut falls before a family that does not fit (got "x", want "x")
+  ok    a flag is two regional indicators and is kept whole (got "🇯🇵", want "🇯🇵")
+  ok    half a flag is never inserted (got nil, want nil)
+  ok    a base and its combining mark go together (got nil, want nil)
+  ok    limit 0 takes nothing (got nil, want nil)
+  ok    limit 0 still allows an empty edit (got "", want "")
+  ok    a deletion from a field over its limit is allowed (got "", want "")
+  ok    an insertion into a field over its limit is not (got nil, want nil)
+NitroUiTextLimit.truncate
+  ok    under the limit, unchanged (got "abc", want "abc")
+  ok    cut to the limit (got "abcde", want "abcde")
+  ok    never through a surrogate pair (got "abcd", want "abcd")
+  ok    never through a ZWJ family (got "a", want "a")
+  ok    limit 0 is empty (got "", want "")
+NitroUiCommitDelta.clamped
+  ok    a commit in the middle takes the room the cap has, and the text past it stays -> "aかbcd"
+  ok    a commit in the middle that fits is taken whole -> "abかきcd"
+  ok    a ZWJ family that cannot fit is refused whole - never cut in half, never at the cost of the `cd` -> "abcd"
+  ok    an emoji that does not fit is refused, and nothing past it moves -> "abcd"
+  ok    a field already past the cap refuses new text and keeps what JS wrote -> "abcdefgh"
+  ok    a deletion from text past the cap is left alone -> "abcdefg"
+  ok    a selection replaced with text that fits is taken -> "aXd"
+  ok    a selection replaced with an emoji that does not fit keeps the selected text -> "abcd"
+  ok    a replacement in text JS wrote past the cap is refused, and the replaced text stays -> "abcdefgh"
+  ok    a combining mark that does not fit leaves the base letter it would have joined -> "e"
+NitroUiText ==
+  ok    the same code units are equal
+  ok    precomposed and decomposed é differ, as they do in JavaScript
+  ok    Swift's own == says they are equal (fixture sanity)
+text-limit.test: all passed
+── a11y-frame-stability.test (Swift)
+A11yFrameStability
+  ok    a stable tree settles
+  ok    a stable tree costs two reads, not six (got 2)
+  ok    `read` was called twice (got 2)
+  ok    a two-read wait keeps the first read for the log
+  ok    nothing moved between the two reads
+  ok    the pass settles once the snapshot stops being stale
+  ok    the disagreeing pair is not accepted (got 3)
+  ok    the snapshot handed back is the agreeing one, not the ⅓-scale one
+  ok    `first` is the stale read, not the agreeing read that preceded the settle
+  ok    moved counts first-vs-last frames, i.e. what one sample got wrong (got 2)
+  ok    the reads are separated in time (240 ms)
+  ok    a stably-wrong tree settles at once and is still graded (settled=true reads=2)
+  ok    the boxes it hands to the rule still disagree — the fix cannot make the finding go away
+  ok    a tree that will not hold still does not settle
+  ok    and stops at the read cap (got 5)
+  ok    `read` is called at most the cap (got 5)
+  ok    it reports what moved, for the log line
+  ok    the last read is the one printed — the freshest measurement available
+  ok    an out-of-budget wait is not a settle
+  ok    the budget stops the reads before the cap does (reads=4)
+  ok    and says how long it spent (1600 ms)
+  ok    the clock only ever pays for reads
+  ok    never more than the budget plus one read's cost (1600 ms)
+  ok    a budget smaller than one read's cost still buys the second read (reads=2)
+  ok    the ⅓-scale pair did not agree, so it is not a settle - it reads the next one
+  ok    past the pair the budget stops it (reads=2 settled=false)
+  ok    and prints the later read
+  ok    the ⅓-scale read is discarded at real cost
+  ok    and reported as the first read
+  ok    a changing element count is not a settle
+  ok    and it spends the same bounded wait (got 4)
+  ok    half a point is a move
+  ok    and so is a tenth
+  ok    a frame the platform cannot answer for never agrees with itself
+  ok    and the same CGRect does
+  ok    the moved count counts frames, for the log line
+  ok    a changed element count reports every frame
+  ok    a tree that flaps and holds still does settle
+  ok    on the fourth read (got 4)
+  ok    and the last box equals the first, so moved is 0 (got 0)
+  ok    a flapped-back tree is still reported - moved == 0 is not 'nothing happened'
+  ok    the ordinary two agreeing reads print nothing
+  ok    two reads that disagree and then settle are reported
+  ok    five quiet reads are reported
+  ok    an out-of-budget wait is reported even with nothing moved
+a11y-frame-stability.test: all checks passed
+── sizing.test (C++ / ASan + UBSan)
+sizing.test.cpp
+  382 checks passed
+test:native: PASS
+──────── test:native:android — skipped, 0.0s ─────────────────────────────────────
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — skipped, 0.0s ──────────────────────────────────────────
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 6 passed, 1 failed, 10 skipped in 160.1s
+check: failed step(s): format
+check: not started after the first failure: test:native:android, perf:renders, nitrogen:check, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: format ────────────────────────────────────────────────────────
+$ prettier --check .
+Checking formatting...
+[warn] CONTRIBUTING.md
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+error: script "format" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 160.2 s
+gate: recorded in .gates/task/G23-icon-button.jsonl
+
+```

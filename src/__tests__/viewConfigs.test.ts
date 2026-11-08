@@ -20,6 +20,7 @@ import { NitroUiCheckboxConfig } from '../components/Checkbox/NitroUiCheckboxCon
 import { NitroUiContextMenuConfig } from '../components/ContextMenu/NitroUiContextMenuConfig';
 import { NitroUiSearchFieldConfig } from '../components/SearchField/NitroUiSearchFieldConfig';
 import { NitroUiTooltipConfig } from '../components/Tooltip/NitroUiTooltipConfig';
+import { NitroUiIconButtonConfig } from '../components/IconButton/NitroUiIconButtonConfig';
 import { NitroUiPopoverConfig } from '../components/Popover/NitroUiPopoverConfig';
 // @end-generated
 // `<Host>` is a container rather than a control, so it has no manifest and the
@@ -59,6 +60,7 @@ const copies: Record<string, unknown> = {
   'NitroUiContextMenuConfig.json': NitroUiContextMenuConfig,
   'NitroUiSearchFieldConfig.json': NitroUiSearchFieldConfig,
   'NitroUiTooltipConfig.json': NitroUiTooltipConfig,
+  'NitroUiIconButtonConfig.json': NitroUiIconButtonConfig,
   'NitroUiPopoverConfig.json': NitroUiPopoverConfig,
   // @end-generated
   // `<Host>` again: no manifest, so no generated row.

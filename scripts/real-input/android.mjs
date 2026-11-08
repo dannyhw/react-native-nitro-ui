@@ -1941,6 +1941,243 @@ const CHECKS = {
   },
 
   /**
+   * An IconButton has no text, so a tap has exactly two witnesses: a counter that
+   * moved, and — on the toggle form — the node's own checked flag.
+   *
+   * The claims this makes, one per control on the screen's first row: a press
+   * reports one `onPress` per tap and nothing else; a toggle flips once per tap and
+   * says so once; a toggle JS keeps refusing stays unchecked and asks for `true`
+   * again on the second tap (Chip's and Checkbox's oracle for a refused change);
+   * and a disabled control moves no counter, so its silence is a refusal rather
+   * than an absent callback. The last tap is on the enabled toggle, which is the
+   * barrier: it says the silence above was a refusal, not a screen that stopped
+   * answering.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'icon-button': async (t) => {
+    const named = (label) => t.requireControl(label);
+    const BOX = 'Real-input icon button';
+    const TOGGLE = 'Real-input toggle icon button';
+    const REFUSING = 'Real-input refusing toggle icon button';
+    const DISABLED = 'Real-input disabled icon button';
+    const DISABLED_TOGGLE = 'Real-input disabled toggle icon button';
+
+    // 1. At rest. Every number is zero and the toggle's own node says unchecked, so
+    //    each later assertion is about a number that moved and not about a screen
+    //    that started mid-story.
+    t.log.checkEquals(
+      'no press has been reported before a touch',
+      t.requireEcho(ECHO.iconButtonPresses),
+      '0'
+    );
+    t.log.checkEquals(
+      'the toggle starts off (React renders "off")',
+      t.requireEcho(ECHO.iconButtonValue),
+      'off'
+    );
+    t.log.checkEquals(
+      'the toggle has reported no change before a touch',
+      t.requireEcho(ECHO.iconButtonEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the refusing toggle has been asked for nothing yet',
+      `${t.requireEcho(ECHO.iconButtonRefusedLast)} ${t.requireEcho(
+        ECHO.iconButtonRefusedEvents
+      )}`,
+      'none 0'
+    );
+    t.log.checkEquals(
+      'the counter the disabled controls report into starts at zero, so a stray ' +
+        'delivery is a number that moved rather than a callback nobody saw',
+      t.requireEcho(ECHO.iconButtonDisabledEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the toggle publishes a toggleable state, and it says unchecked',
+      t.nativeChecked(TOGGLE),
+      'off'
+    );
+    // The press form has no state of its own, so what its node can say is recorded
+    // rather than asserted — the same line Checkbox draws between the toggle it
+    // trusts and the `class=` it only records.
+    for (const node of t.nodesNamed(BOX)) {
+      t.log.note(
+        `name node "${node.contentDesc}": clickable=${node.clickable} ` +
+          `checkable=${node.checkable} enabled=${node.enabled} ` +
+          `class=${node.className}`
+      );
+    }
+
+    // 2. Pressed twice: two reports, one per tap, and nothing else moved. The
+    //    counter is asserted as an exact number rather than `atLeast`, which is the
+    //    point — a press that fired twice per tap is the bug this row is for.
+    for (const count of ['1', '2']) {
+      t.log.checkEquals(
+        `real tap ${count} on the press button reports one onPress`,
+        await t.tapUntilValue(
+          () => named(BOX),
+          ECHO.iconButtonPresses,
+          count,
+          `the real tap that makes press ${count}`
+        ),
+        count
+      );
+    }
+    t.log.checkEquals(
+      'two presses on the press button change no toggle: the value echo is where it started',
+      t.requireEcho(ECHO.iconButtonValue),
+      'off'
+    );
+    t.log.checkEquals(
+      'and the toggle still reports no change',
+      t.requireEcho(ECHO.iconButtonEvents),
+      '0'
+    );
+
+    // 3. The toggle, once per direction. `nativeLabel` is passed because the node
+    //    publishes its own state: without that witness a lost change event is
+    //    exactly what a retry would turn green (F1 M3).
+    t.log.checkEquals(
+      'one real tap checks the toggle (React renders "on")',
+      await t.tapUntilValue(
+        () => named(TOGGLE),
+        ECHO.iconButtonValue,
+        'on',
+        'the real tap that checks the toggle',
+        { nativeLabel: TOGGLE }
+      ),
+      'on'
+    );
+    t.log.checkEquals(
+      "the checked toggle's own node says it is checked",
+      t.nativeChecked(TOGGLE),
+      'on'
+    );
+    t.log.checkEquals(
+      'one real tap reports one change',
+      t.requireEcho(ECHO.iconButtonEvents),
+      '1'
+    );
+    t.log.checkEquals(
+      'a second real tap unchecks it (React renders "off")',
+      await t.tapUntilValue(
+        () => named(TOGGLE),
+        ECHO.iconButtonValue,
+        'off',
+        'the real tap that unchecks the toggle',
+        { nativeLabel: TOGGLE }
+      ),
+      'off'
+    );
+    t.log.checkEquals(
+      'the unchecked toggle reports it back',
+      t.nativeChecked(TOGGLE),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes, one per tap',
+      t.requireEcho(ECHO.iconButtonEvents),
+      '2'
+    );
+    t.log.checkEquals(
+      'a tap on the toggle is not also a press: the press counter stayed at 2',
+      t.requireEcho(ECHO.iconButtonPresses),
+      '2'
+    );
+
+    // 4. The refusing parent: two requests, both for `true`, and its node back at
+    //    unchecked after either. No `nativeLabel` on these taps — a refused control
+    //    is *meant* to be pushed back, and asserting its node below is what says it
+    //    went back.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onCheckedChange`,
+        await t.tapUntilValue(
+          () => named(REFUSING),
+          ECHO.iconButtonRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true — an icon button that kept the ` +
+          'refused change would ask for false on the second tap',
+        t.requireEcho(ECHO.iconButtonRefusedLast),
+        'true'
+      );
+      // Compose paints a tapped toggle before React has pushed the refused value
+      // back down, so reading the node the instant the echo moves can catch the flip
+      // the app is about to undo (Checkbox's wait, for Checkbox's reason).
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused toggle snaps back to unchecked after request ${request}`,
+        t.nativeChecked(REFUSING),
+        'off'
+      );
+    }
+
+    // 5. The disabled pair takes nothing. Both report into one counter the enabled
+    //    controls never touch, so a delivery that should not have happened is a
+    //    number that moved.
+    t.log.note(
+      `disabled node: enabled=${t.nativeEnabled(DISABLED)} for "${DISABLED}", ` +
+        `enabled=${t.nativeEnabled(DISABLED_TOGGLE)} for "${DISABLED_TOGGLE}" — ` +
+        'kept as evidence beside the counters below'
+    );
+    await t.tapNode(named(DISABLED));
+    t.log.checkEquals(
+      'a real tap on the disabled press button reports no onPress',
+      t.requireEchoToStay(
+        ECHO.iconButtonDisabledEvents,
+        '0',
+        'a tap on the disabled press button to be refused'
+      ),
+      '0'
+    );
+    await t.tapNode(named(DISABLED_TOGGLE));
+    t.log.checkEquals(
+      'a real tap on the disabled toggle reports no change either',
+      t.requireEchoToStay(
+        ECHO.iconButtonDisabledEvents,
+        '0',
+        'a tap on the disabled toggle to be refused'
+      ),
+      '0'
+    );
+    t.log.checkEquals(
+      'and the enabled controls were left alone throughout',
+      `${t.requireEcho(ECHO.iconButtonPresses)} ` +
+        `${t.requireEcho(ECHO.iconButtonValue)} ${t.requireEcho(
+          ECHO.iconButtonEvents
+        )}`,
+      '2 off 2'
+    );
+
+    // 6. The barrier: the same press on the enabled toggle still lands, so the
+    //    silence above was a refusal and not a screen that had stopped answering.
+    //    No `atLeast` here, unlike the chip's barrier: that one waits on a *counter*,
+    //    where a tap that stalls past the window lands with its retry and skips a
+    //    number (G12: 1 -> 3) while still proving the press arrived. This waits on a
+    //    state, and "on" has no "or more" - so the helper refuses the combination
+    //    instead of guessing at it, which is how this callsite's first device run
+    //    went red on the check's last line rather than answering the question.
+    t.log.checkEquals(
+      'the enabled toggle, tapped the same way, still answers',
+      await t.tapUntilValue(
+        () => named(TOGGLE),
+        ECHO.iconButtonValue,
+        'on',
+        'the barrier tap on the enabled toggle',
+        { nativeLabel: TOGGLE }
+      ),
+      'on'
+    );
+  },
+
+  /**
    * A real drag must move the thumb and report every phase.
    *
    * The phases Slider is uncontrolled and counts each callback separately, so a

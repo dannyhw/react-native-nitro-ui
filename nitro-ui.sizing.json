@@ -10,5 +10,6 @@
   "HybridNitroUiTextField": "fillWidth",
   "HybridNitroUiChip": "intrinsic",
   "HybridNitroUiSearchField": "fillWidth",
-  "HybridNitroUiCheckbox": "intrinsic"
+  "HybridNitroUiCheckbox": "intrinsic",
+  "HybridNitroUiIconButton": "intrinsic"
 }

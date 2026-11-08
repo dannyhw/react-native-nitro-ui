@@ -37,6 +37,7 @@ import { Tooltip } from '../Tooltip/Tooltip';
 import { Checkbox } from '../Checkbox/Checkbox';
 import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
+import { IconButton } from '../IconButton/IconButton';
 import { Popover } from '../Popover/Popover';
 
 /**
@@ -112,6 +113,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [Chip, 'Chip'],
   [Checkbox, 'Checkbox'],
   [SearchField, 'SearchField'],
+  [IconButton, 'IconButton'],
   [BottomSheet, 'BottomSheet'],
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
