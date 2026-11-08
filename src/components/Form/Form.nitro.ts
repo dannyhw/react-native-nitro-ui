@@ -107,8 +107,12 @@ export interface NitroUiFormMethods extends HybridViewMethods {
    * - `width`: the last reported content width; `box`/`boxReports`: the width a cell really
    *   draws a row at against the width it reported — the witness that a cell knows its Form,
    *   whose absence laid every row out 64 pt too wide and stopped UIKit hit-testing it;
-   * - `offset`: the last scroll offset published at a settle, and `origin`: what the shadow
-   *   tree was told;
+   * - `offset`: where the list's content actually is, and `origin`: the last offset a settle
+   *   published to React — the two disagree while a publish is in flight or was never heard,
+   *   which is the difference between "the list is at 300" and "the shadow tree was told 300";
+   *   `received`: the offset React sent back, so the number the shadow node is correcting by;
+   *   `listY`/`insetTop` (iOS): the two constants a section's placement is built from — how far
+   *   the list sits inside the Form's box, and the list's own top inset;
    * - `heights`: the first item heights, comma-joined (iOS: the layout's; Android: the rows'
    *   own Yoga heights);
    * - `taps`: row `onPress` calls delivered; `keyboard`: the bottom inset avoidance added;
