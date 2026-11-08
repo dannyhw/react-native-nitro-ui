@@ -95,7 +95,7 @@ function MenuContent({ onPick }: { onPick: (id: string) => void }) {
   return (
     <View style={styles.content}>
       <Text style={styles.title}>Share this list</Text>
-      {['Copy link', 'AirDrop', 'Messages'].map((title) => (
+      {['Copy link', 'Send a message', 'Print'].map((title) => (
         <Pressable
           key={title}
           accessibilityRole="button"
