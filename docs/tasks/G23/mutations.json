@@ -1,0 +1,242 @@
+{
+  "task": "G23",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it). Device rows ran on lease G23-zcs2m, pair-b (iPhone Air / iOS 27 and emulator-5570 / API 35); the filtered gate names satisfy nothing but their own name. Rows marked `organic` are not mutations: they are a new test going red against the real bug before its fix, which is the stronger evidence, and the logs are in `gate.mjs logs --branch task/G23-icon-button`. Rows 1-4 share one build and one run, so one red line is attributed to each of them by which assertion failed.",
+  "mutations": [
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "src/components/IconButton/IconButton.tsx",
+      "mutation": "the width option leaves the size configuration, so narrow, uniform and wide are one cached size",
+      "before": "  return [\n    variant,\n    size,\n    width,\n    isToggle ? 'toggle' : 'press',",
+      "after": "  return [\n    variant,\n    size,\n    isToggle ? 'toggle' : 'press',",
+      "run": "harness:android:IconButton — FAIL, 4 of 9",
+      "redTests": [
+        "lays every rung and width out at the size the control measured: testID \"rung-medium-narrow\" (rung-medium-narrow) never reached 48.00x48.00 - last box 52.19x48.00, control measured 48.00x48.00."
+      ],
+      "note": "Q9 C4's red proof for the key, and the failure is the interesting shape: the `narrow` control was served the `wide` configuration's size, which is what a key collision looks like from JS. The poisoned key and the collision are the same key, so the ladder test is the one that goes red rather than the width-key test — recorded because the report cites the line, not the test name."
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the control's own name leaves the composition, so the button has no contentDescription",
+      "before": "    val labelModifier =\n      if (label != null) Modifier.semantics { contentDescription = label } else Modifier",
+      "after": "    val labelModifier: Modifier = Modifier\n      .also { label?.let { it } }",
+      "run": "harness:android:IconButton — FAIL, 4 of 9 (the same build as the key row)",
+      "redTests": [
+        "names the control, and a toggle says whether it is checked: expected 'role=Checkbox,selected=none,toggle=Of…' to contain 'label=Bookmark this'"
+      ]
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the flip is reported without its event count, so JS cannot tell a fresh write from a stale one",
+      "before": "    model.onCheckedChange?.invoke(requested, eventCount.toDouble())",
+      "after": "    model.onCheckedChange?.invoke(requested, 0.0)",
+      "run": "harness:android:IconButton — FAIL, 4 of 9 (the same build)",
+      "redTests": [
+        "reverts a toggle JS refused, and shows the value JS wrote: \"refusing\" never drew displayed=0 - it reports \"displayed=1;probes=0;a11y=none\"."
+      ],
+      "note": "The handshake's own gate (core-architecture §4): the refusal is JS writing the old value back with a count native must accept, and with every count 0 it is refused instead."
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the tint is painted as a constant, so a disabled control keeps the pure colour instead of Material's 38% content colour",
+      "before": "      base.copy(contentColor = color)",
+      "after": "      base.copy(contentColor = color, disabledContentColor = color)",
+      "run": "harness:android:IconButton — FAIL, 4 of 9 (the same build)",
+      "redTests": [
+        "draws the glyph in the control content colour, at the size the rung asked for: expected 642 to be +0 // Object.is equality (the `expect(hitsOf('probe-disabled')).toBe(0)` line)"
+      ],
+      "note": "C4's tint row. The probe counts pixels of the exact tint: a correctly dimmed glyph contributes none, a constant-tinted one contributes 642."
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "a glyph that cannot be resolved throws instead of drawing nothing",
+      "before": "  if (painter == null) {\n    return\n  }",
+      "after": "  if (painter == null) {\n    throw IllegalStateException(\"mutation: no painter for a glyph that was asked for\")\n  }",
+      "run": "harness:android:IconButton — the suite could not run",
+      "redTests": [
+        "Test suite failed to run: The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running."
+      ],
+      "note": "C4's missing-drawable row, run alone because a crash takes the whole file with it. The shipped rule is that an unresolvable `androidIcon` draws nothing and reserves nothing; the failure mode it guards against is a control that crashes the app over a name the resource table does not have."
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/IconButtonModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the recycle reset skips the glyph slot, so the next owner inherits the previous owner's artwork",
+      "before": "    iconSlot.reset()\n    sizingKey = \"\"",
+      "after": "    sizingKey = \"\"",
+      "run": "bun run test:native:android — 156 tests, 1 failed",
+      "redTests": [
+        "aRecycledModelHandsOnAnEmptyGlyphSlotAndRetiresThePreviousOwnersRead FAILED — java.lang.AssertionError at IconButtonModelTest.kt:190 (\"a recycled control draws nothing until its own owner resolves\")"
+      ],
+      "note": "C4's recycle row. `androidIcon` is a wire prop that every mount re-sends, so the model's other fields look covered by the reset alone; the slot is the one recycled thing no prop re-sends an answer for. Proved on the JVM because the state is reachable there and the device cannot see a control that was never handed to a second owner."
+    },
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/IconButtonModelTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt",
+      "mutation": "the slot's reset clears the artwork but stops retiring in-flight reads",
+      "before": "    // Bump rather than reset: a load started by the previous owner is still in\n    // flight, and this is what retires it.\n    generation += 1",
+      "after": "    // mutation: no bump",
+      "run": "bun run test:native:android — 156 tests, 1 failed",
+      "redTests": [
+        "aRecycledModelHandsOnAnEmptyGlyphSlotAndRetiresThePreviousOwnersRead FAILED — java.lang.AssertionError at IconButtonModelTest.kt:203 (\"a retired read cannot paint the next owner's control\")"
+      ],
+      "note": "The second half of the same row, and the reason the test answers the in-flight read with real artwork rather than with null: a null answer lands on `Absent` either way and the assertion would pass for the wrong reason."
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift (a11y:icon-button)",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "the Label's title becomes a constant, so `.iconOnly` has no name to keep",
+      "before": "      Text(model.accessibilityLabel)",
+      "after": "      Text(\"mutation: unnamed\")",
+      "run": "real-input:ios:--control:icon-button — FAIL (10 min, filtered)",
+      "redTests": [
+        "a11y:icon-button: failed: NitroUiIconButton: no element other than the React Native wrapper is announced as \"Real-input icon button\" — the only node that carries the name is the box React Native made, which is a name on a wrapper rather than on the control (wrapper: other \"Real-input icon button\" at (16, 273, 39.67, 39))"
+      ],
+      "note": "C4's iOS a11y row, and it can only be proved by XCUITest: the in-process probe on iOS answers `unavailable` on purpose (IconButton.harness.tsx says why), so a harness-side name check would be a test reading a copied prop."
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx + the iOS real-input case",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "a press fires the callback twice",
+      "before": "    } else {\n      onPress?()\n    }\n  }",
+      "after": "    } else {\n      onPress?()\n      onPress?()\n    }\n  }",
+      "run": "harness:ios:IconButton — FAIL, 2 of 9; and real-input:ios:--control:icon-button — FAIL (the same build)",
+      "redTests": [
+        "harness: presses once per tap, and takes none while disabled: expected [ 'press-once:press', …(3) ] to deeply equal [ 'press-once:press', …(1) ]",
+        "real input: failed: XCUITest reported \"failed\" for testRealInputIconButton in 67.497s"
+      ]
+    },
+    {
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "the iOS twin of the handshake row: the flip is reported without its event count",
+      "before": "    onCheckedChange?(requested, Double(eventCount))",
+      "after": "    onCheckedChange?(requested, eventCount == -1 ? 1 : 0)",
+      "run": "harness:ios:IconButton — FAIL, 2 of 9 (the same build as the two rows above)",
+      "redTests": [
+        "reverts a toggle JS refused, and shows the value JS wrote: \"refusing\" never drew displayed=0 - it reports \"displayed=1;probes=0;a11y=none\"."
+      ]
+    },
+    {
+      "test": "the Android real-input case (scripts/real-input/android.mjs, control `icon-button`)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "a real tap fires the press callback twice",
+      "before": "    } else {\n      model.onPress?.invoke()\n    }\n  }",
+      "after": "    } else {\n      model.onPress?.invoke()\n      model.onPress?.invoke()\n    }\n  }",
+      "run": "real-input:android:--control:icon-button — FAIL (9 min, filtered)",
+      "redTests": [
+        "the real tap that makes press 1: 3 real taps left real-input-icon-button-presses at \"6\" rather than \"1\" - either the taps were never delivered (FOLLOWUPS.md:58) or the control ignores a real touch. One delivered tap was enough to pass, so this is not a control that answers sometimes."
+      ],
+      "note": "The tap counter is a screen-side tally, so six rather than three is the doubled callback counted, not a tap delivered twice."
+    },
+    {
+      "organic": true,
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "not a mutation: the rung sized the symbol with `.controlSize` alone, which is what the first draft did",
+      "run": "harness:ios (the branch's first full run) — FAIL, 4 of 9",
+      "redTests": [
+        "lays every rung and width out at the size the control measured: expected 15 to be greater than 15"
+      ],
+      "note": "Five rungs came back as two boxes, 15.33x15.00 and 17.67x16.00: an icon-only `Label` does not follow `.controlSize` the way a title does. The fix sizes the symbol's font per rung (commit `6ab9448`)."
+    },
+    {
+      "organic": true,
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "not a mutation: the container was asked for inside the control's content, which is what the first draft did",
+      "run": "harness:android (the branch's first full run) — FAIL",
+      "redTests": [
+        "lays every rung and width out at the size the control measured: expected 48 to be greater than 48"
+      ],
+      "note": "All fifteen configurations came back 48.00x48.00: each M3 composable's own Box is `minimumInteractiveComponentSize().size(smallContainerSize())`, and `Modifier.size` coerces into the constraints it is given, so a container asked for inside the content is measured under the `small` token. Fixed by putting the ask on the control's own modifier."
+    },
+    {
+      "organic": true,
+      "test": "example/__tests__/IconButton.harness.tsx",
+      "file": "src/components/IconButton/IconButton.tsx",
+      "mutation": "not a mutation: the size key did not carry the control's form",
+      "run": "harness:ios (the branch's first full run) — FAIL, 4 of 9",
+      "redTests": [
+        "keeps one box across the toggle states, and needs no correction for a state change: testID \"state-press\" (state-press) never reached 31.67x30.00 - last box 41.67x30.00, control measured 31.67x30.00."
+      ],
+      "note": "One cached size for a `Button` (31.67x30.00) and a `Toggle(.button)` (41.67x30.00): the press form was laid out at the toggle's box and never converged. `form` is in the key now, on both platforms."
+    },
+    {
+      "organic": true,
+      "test": "example/__tests__/Conformance.harness.tsx",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "not a mutation: the declared fallback was written from an off-device estimate (32x32)",
+      "run": "harness:ios:Conformance — 1 failed, 84 passed",
+      "redTests": [
+        "conformance · every control, four rules › · IconButton › has its own declared fallback, and still corrects a wrong guess: 1 conformance finding(s): - IconButton × declared-fallback: the fallback 32x32 is not the measured 25x23 for a control that declares its size — a mismatch means the declaration drifted from the component"
+      ],
+      "note": "The fixture's own rule caught a row that had never been measured. The row is 25x23 now (commit `90bcfe5`), and the docs page says so rather than repeating the estimate."
+    },
+    {
+      "organic": true,
+      "test": "scripts/__tests__/readme-components.test.js + scripts/__tests__/real-input-a11y.test.js",
+      "file": "docs/images/components/icon-button-{ios,android}.png",
+      "mutation": "not a mutation: the component shipped as prose before its screenshots and its a11y fixture existed",
+      "run": "check — FAIL (155.7s)",
+      "redTests": [
+        "the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width: expect(received).toEqual(expected) // deep equality",
+        "the a11y rule, on measured trees › passes the controls today's code gets right, and reports the rest as debt (fixture scripts/__tests__/fixtures/a11y/icon-button.xml did not exist)"
+      ],
+      "note": "D4 and the fixture rule working as intended: a component cannot land as prose, and the a11y list cannot grow by a control nobody dumped."
+    },
+    {
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js",
+      "file": "scripts/real-input/a11y.mjs",
+      "mutation": "the new icon-button debt row matches anything, so it excuses a name that has actually moved off the control as readily as the measured 2 px inset",
+      "before": "    matches:\n      /is announced by the element at \\\\(16\\\\.50, [\\\\d.]+, 39, 39\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 39\\\\.67, 39\\\\)/,",
+      "after": "    matches:\n      /^/,",
+      "run": "bun run jest scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 2 of 51",
+      "redTests": [
+        "the iOS debt rows › reports the shipped Button inset as its recorded debt, and only that: expect(moved.failures).toHaveLength(1) — Expected length: 1, Received length: 0 (a11y-ios.test.js:446)",
+        "the iOS debt rows › excuses the measured inset, not a box one point or ten wider: expect(row.matches.test(sentence(\"16, 273, 39.67, 39\", DRAWN))).toBe(false) — Expected: false, Received: true (a11y-ios.test.js:466)"
+      ],
+      "note": "The row is the difference between recorded debt and a disabled test; this row is the proof it is not one."
+    },
+    {
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js",
+      "file": "scripts/real-input/a11y.mjs",
+      "mutation": "the row quotes a sentence the rule never prints, so the measured finding stops being debt and comes back as a failure",
+      "before": "    matches:\n      /is announced by the element at \\\\(16\\\\.50, [\\\\d.]+, 39, 39\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 39\\\\.67, 39\\\\)/,",
+      "after": "    matches:\n      /no such finding/,",
+      "run": "bun run jest scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 2 of 51",
+      "redTests": [
+        "the iOS debt rows › reports the shipped Button inset as its recorded debt, and only that: expect(shipped.failures).toEqual([]) — Received: the measured finding, verbatim (a11y-ios.test.js:430)",
+        "the iOS debt rows › excuses the measured inset, not a box one point or ten wider: expect(row.matches.test(sentence(\"16.50, 273, 39, 39\", DRAWN))).toBe(true) — Expected: true, Received: false (a11y-ios.test.js:460)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js",
+      "file": "scripts/real-input/a11y.mjs",
+      "mutation": "the row pins the vertical coordinate as well, so the one number allowed to float (where the screen sits) makes it stale",
+      "before": "    matches:\n      /is announced by the element at \\\\(16\\\\.50, [\\\\d.]+, 39, 39\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 39\\\\.67, 39\\\\)/,",
+      "after": "    matches:\n      /is announced by the element at \\\\(16\\\\.50, 273, 39, 39\\\\) while the control is drawn at \\\\(16, 273, 39.67, 39\\\\)/,",
+      "run": "bun run jest scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 1 of 51",
+      "redTests": [
+        "the iOS debt rows › excuses the measured inset, not a box one point or ten wider: expect(row.matches.test(sentence(\"16.50, 412.67, 39, 39\", DRAWN))).toBe(true) — Expected: true, Received: false (a11y-ios.test.js:463)"
+      ]
+    },
+    {
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js + scripts/__tests__/real-input-a11y.test.js",
+      "file": "scripts/real-input/a11y.mjs",
+      "mutation": "the row is deleted — the same state as the device run before the debt was recorded, which is how the row was found",
+      "before": "  {\n    control: 'icon-button',\n    platform: 'ios',\n    …\n  },",
+      "after": "",
+      "run": "bun run jest scripts/__tests__/real-input-a11y.test.js scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 3 suites' worth: 2 + 1",
+      "redTests": [
+        "the iOS debt rows › reports the shipped Button inset as its recorded debt, and only that: expect(shipped.failures).toEqual([]) — Received: \"NitroUiIconButton: \\\"Real-input icon button\\\" is announced by the element at (16.50, 273, 39, 39) while the control is drawn at (16, 273, 39.67, 39)…\\\" (a11y-ios.test.js:430)",
+        "the iOS debt rows › excuses the measured inset, not a box one point or ten wider: TypeError: Cannot read properties of undefined (reading 'matches') (a11y-ios.test.js:460)",
+        "the debt list › is the measured findings, per platform, and nothing else: expect(...).toEqual([…, \"ios:icon-button\"]) — the list is one row short (a11y.test.js:387)"
+      ],
+      "note": "The third red is the point: the measured finding stays on the list of things the suite has to answer for, and a row that stops matching goes red through staleExemptions instead of quietly expiring."
+    }
+  ]
+}

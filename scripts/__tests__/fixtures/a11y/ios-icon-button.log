@@ -1,0 +1,7 @@
+Measured, not written (G23): the iOS a11y sweep lines for icon-button on the shipped code, iOS 27 (pair-b, iPhone Air), from .real-input/ios/xcodebuild-test.log of the run that first failed this case. The name is on the Button element, which is 39 pt wide inside a host React Native laid out at 39.67 pt.
+real-input a11y case=icon-button kind=anchor id=real-input-icon-button x=16.0 y=273.0 w=39.66666793823242 h=39.0 nodes=5
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="real-input-icon-button" label="Real-input icon button" value="" x=16.0 y=273.0 w=39.66666793823242 h=39.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="" label="" value="" x=16.0 y=273.0 w=39.66666793823242 h=39.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="" label="" value="" x=16.0 y=273.0 w=39.66666793823242 h=39.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=false id="" label="" value="" x=16.0 y=273.0 w=39.66666793823242 h=39.0
+real-input a11y case=icon-button kind=node trait="button" enabled=true hittable=true id="paperplane" label="Real-input icon button" value="" x=16.499999999999996 y=273.0 w=39.0 h=39.0
