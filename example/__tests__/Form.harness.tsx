@@ -875,12 +875,25 @@ describe('Form measure (E7)', () => {
     // numbers with nothing scrolled would pass on the at-rest readings.
     const height = 180;
     form.nuiTestScrollTo(height);
-    const scrolledBy = 0;
-    if (!IOS) {
+    // Asked of the device, not assumed on both sides of the comparison below: what the case
+    // measures is a shadow-tree number against a UIKit number, and it expects the difference
+    // to be the scroll. A list that never moved leaves the two agreeing and the case passing
+    // on the at-rest readings - which is what it did, until this line went in: with
+    // `nuiTestScrollTo` made to do nothing, every row still "matched". Each platform is asked
+    // where its own scroller got to: iOS answers with the list's content offset from the
+    // Form's report, Android with its scroll view's.
+    if (IOS) {
+      await formReport(
+        (r) => Math.abs(num(r, 'offset') - height) <= 2,
+        `the list to have scrolled to ${height} pt`,
+        'measure'
+      );
+    } else {
       expect(
         Math.abs((await formScrollY(height / 2)) - height)
       ).toBeLessThanOrEqual(2);
     }
+    const scrolledBy = 0;
     const scrolled = await until(
       () => compareRows(`after ${height} pt`, scrolledBy),
       (r) => r.bad.length === 0 && r.compared >= 10,
