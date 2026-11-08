@@ -43,12 +43,17 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiFormStateUpdater
  *   an offset here would subtract the scroll twice (D45 item 3);
  * - a section reports `onPlacement(0)` and flows in place, so a row's Yoga origin is already
  *   where it is drawn;
- * - the keyboard is React Native's problem too, and it half-solves it: `ReactScrollView`
- *   scrolls to whatever `requestChildRectangleOnScreen` reaches it with, and a Form's rows are
- *   not its direct children. [NitroUiFormView] and the section's view close that gap by
- *   forwarding the request with the rectangle moved into their own space (D45 item 1), and
+ * - the keyboard is React Native's problem too, and it solves neither half of it. A focused
+ *   field asks its scroller through `requestChildRectangleOnScreen`, which `ReactScrollView`
+ *   asks of its *direct* children only, so a Form's rows never reach it: [NitroUiFormView] and
+ *   the section's view forward the request with the rectangle moved into their own space. And
+ *   the scroller that is asked keeps its viewport where it was — `adjustResize` resizes
+ *   nothing under API 35's edge-to-edge, measured on the lease's API 35 AVD — so scrolling a
+ *   row "into the viewport" scrolls it to the bottom edge of the screen, *behind* the
+ *   keyboard. The two halves that make a field actually visible are both the Form's:
  *   [onImeInset] reserves the keyboard's height at the end of the scroll content so the last
- *   row can be scrolled clear of it at all.
+ *   row can be scrolled clear of it at all, and [NitroUiFormView.revealFocusedRow] moves it
+ *   into what is left above the keyboard.
  */
 internal class HybridNitroUiForm(
   private val reactContext: ThemedReactContext,
@@ -56,6 +61,10 @@ internal class HybridNitroUiForm(
   override val view: NitroUiFormView by lazy { NitroUiFormView(reactContext, this) }
 
   private var avoidsKeyboard = true
+
+  /** Whether the box may move a focused row for the keyboard — the `keyboardAvoidance` prop. */
+  internal val avoidsKeyboardForIme: Boolean
+    get() = avoidsKeyboard
   private var perfInstanceId = NitroUiPerf.NO_INSTANCE
   private var reportedWidthDp = -1f
   private var imeInsetCallback: ((inset: Double) -> Unit)? = null
@@ -304,8 +313,7 @@ internal class NitroUiFormView(
    */
   fun watchImeInset() {
     ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
-      val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
-      hybrid.noteImeInsetPx(ime.toFloat())
+      noteImeInsetPx(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
       ViewCompat.onApplyWindowInsets(v, insets)
     }
     ViewCompat.requestApplyInsets(this)
@@ -314,6 +322,154 @@ internal class NitroUiFormView(
   /** Drop the listener, so a recycled view cannot report into a dead Hybrid. */
   fun tagImeListenerToNothing() {
     ViewCompat.setOnApplyWindowInsetsListener(this, null)
+    removeCallbacks(revealFocusedRow)
+    imeInsetPx = 0
+    pendingImeReveal = false
+  }
+
+  // MARK: The keyboard (D45 item 1)
+
+  /** The `ime` inset the window has not consumed by resizing, in px. 0 with no keyboard up. */
+  private var imeInsetPx = 0
+
+  /** Whether the focused row still has to be moved clear of the keyboard. */
+  private var pendingImeReveal = false
+
+  /** Attempts spent on the current keyboard. See [IME_REVEAL_ATTEMPTS]. */
+  private var revealAttempts = 0
+
+  /**
+   * The Form's own answer to the keyboard, in px of [imeInsetPx].
+   *
+   * Two numbers come from one inset, and they go to different places: the height goes back to
+   * React through [HybridNitroUiForm.noteImeInsetPx], which reserves it at the end of the
+   * scroll content, and the same height is what this view measures "clear of the keyboard"
+   * against. Reserving without revealing leaves the field at the bottom edge of the screen,
+   * behind the keyboard, which is exactly the shape S6b measured red and this branch shipped
+   * red through two rounds: the row moved `ime=` from 0 to 336.48 dp and never moved itself.
+   */
+  fun noteImeInsetPx(px: Int) {
+    val inset = px.coerceAtLeast(0)
+    if (inset == imeInsetPx) return
+    imeInsetPx = inset
+    hybrid.noteImeInsetPx(inset.toFloat())
+    pendingImeReveal = inset > 0
+    revealAttempts = 0
+    if (pendingImeReveal) post(revealFocusedRow)
+  }
+
+  /**
+   * Move the focused row into the part of the scroll view above the keyboard.
+   *
+   * `deficit` is the whole claim: how far the focused view's bottom edge hangs below the
+   * bottom of the visible band. Zero or less means the field is already clear and nothing is
+   * scrolled — a Form that yanked the page every time a field was tapped would fail the
+   * same person who just scrolled somewhere else to read while typing.
+   *
+   * One attempt is rarely enough, because the reservation is a React round trip: the inset
+   * arrives here first, and until the content has grown by it the scroller cannot move the
+   * row as far as it has to. So an attempt that ended at the end of the content leaves the
+   * claim pending and asks again, a bounded number of times, and a form whose row is clear
+   * stops asking on the first try.
+   *
+   * The scroll is `scrollBy` on React Native's own `ScrollView`, so the offset the shadow
+   * tree reports and every `onScroll` event go through the path React Native already owns.
+   */
+  private val revealFocusedRow =
+    object : Runnable {
+      override fun run() {
+        if (!isShown || !isAttachedToWindow) return
+        if (!pendingImeReveal || !hybrid.avoidsKeyboardForIme || imeInsetPx == 0) {
+          pendingImeReveal = false
+          return
+        }
+        val scroller = scrollableView()
+        if (scroller == null) {
+          pendingImeReveal = false
+          return
+        }
+        val focused = findFocus()
+        if (focused == null || focused === this@NitroUiFormView) {
+          pendingImeReveal = false
+          return
+        }
+        val density = resources.displayMetrics.density
+        val here = IntArray(2)
+        focused.getLocationInWindow(here)
+        val there = IntArray(2)
+        scroller.getLocationInWindow(there)
+        val visibleBottom = there[1] + scroller.height - imeInsetPx
+        val margin = (IME_REVEAL_MARGIN_DP * density).toInt()
+        val deficit = here[1] + focused.height + margin - visibleBottom
+        if (deficit <= 0) {
+          pendingImeReveal = false
+          return
+        }
+        scroller.scrollBy(0, deficit)
+        revealAttempts += 1
+        if (revealAttempts < IME_REVEAL_ATTEMPTS) {
+          postDelayed(this, IME_REVEAL_INTERVAL_MS)
+        } else {
+          pendingImeReveal = false
+        }
+      }
+    }
+
+  /** React Native's `ScrollView` above this view, or null when the Form is not scrolling. */
+  private fun scrollableView(): ScrollView? {
+    var parent: Any? = this.parent
+    while (parent is View) {
+      if (parent is ScrollView) return parent
+      parent = parent.parent
+    }
+    return null
+  }
+
+  /**
+   * A field focused while the keyboard is already up wants the same treatment.
+   *
+   * `requestChildFocus` is the hook `ViewGroup` actually offers for this: a Form's rows are
+   * several levels below it, so the framework reports the focus here rather than to the row
+   * that took it. `ViewGroup` has no `onChildFocus` to override — it asks for the `child`
+   * whose branch the focus is in, which is why the signature reads like this.
+   */
+  override fun requestChildFocus(
+    child: View,
+    focused: View,
+  ) {
+    super.requestChildFocus(child, focused)
+    if (imeInsetPx <= 0 || !hybrid.avoidsKeyboardForIme) return
+    pendingImeReveal = true
+    revealAttempts = 0
+    post(revealFocusedRow)
+  }
+
+  /** The content grew — possibly by the reservation itself. Re-check a pending reveal. */
+  override fun onLayout(
+    changed: Boolean,
+    left: Int,
+    top: Int,
+    right: Int,
+    bottom: Int,
+  ) {
+    super.onLayout(changed, left, top, right, bottom)
+    if (pendingImeReveal) post(revealFocusedRow)
+  }
+
+  /**
+   * How many times one keyboard is answered for, and how far apart the attempts are.
+   *
+   * Bounded because the alternative is a `Runnable` that outlives the question: the React
+   * round trip the reservation needs is a couple of frames on an idle device, and 12 attempts
+   * at 50 ms is half a second, which is longer than the reservation and shorter than anything
+   * a person would notice as the page moving under their finger.
+   */
+  private companion object {
+    const val IME_REVEAL_ATTEMPTS = 12
+    const val IME_REVEAL_INTERVAL_MS = 50L
+
+    /** The gap left between the focused view and the top of the keyboard, in dp. */
+    const val IME_REVEAL_MARGIN_DP = 8f
   }
 
   /**
