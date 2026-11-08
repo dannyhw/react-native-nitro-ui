@@ -422,9 +422,13 @@ export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
  * children are its sections and a Section's are its rows, and in both cases what holds them
  * is this library's own content view (a hidden holding view), not the component view that
  * also carries the list.
+ *
+ * A Popover's React Native children are its content too, and iOS presents them from a
+ * popover controller's content view: the same redirect, for the same reason (G22).
  */
 export const CONTENT_CHILDREN_VIEWS = [
   'HybridNitroUiBottomSheet',
+  'HybridNitroUiPopover',
   'HybridNitroUiForm',
   'HybridNitroUiFormSection',
 ];

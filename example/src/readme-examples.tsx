@@ -22,9 +22,11 @@ import {
   Form,
   type DialogAction,
   Host,
+  IconButton,
   Menu,
   type MenuGroup,
   Picker,
+  Popover,
   Progress,
   SearchField,
   SegmentedControl,
@@ -124,6 +126,41 @@ export function ShareButton({ onShare }: { onShare: () => void }) {
       systemImage="square.and.arrow.up"
       androidIcon={require('./assets/icons/share_24px.xml')}
       onPress={onShare}
+    />
+  );
+}
+// #endregion
+
+// #region icon-button
+export function SearchButton({ onSearch }: { onSearch: () => void }) {
+  return (
+    <IconButton
+      accessibilityLabel="Search"
+      systemImage="magnifyingglass"
+      androidIcon={require('./assets/icons/search_24px.xml')}
+      variant="tonal"
+      onPress={onSearch}
+    />
+  );
+}
+// #endregion
+
+// #region icon-button-toggle
+export function BookmarkButton({
+  saved,
+  onSave,
+}: {
+  saved: boolean;
+  onSave: (next: boolean) => void;
+}) {
+  return (
+    <IconButton
+      accessibilityLabel="Bookmark this post"
+      systemImage={saved ? 'bookmark.fill' : 'bookmark'}
+      androidIcon="bookmark"
+      variant="filled"
+      checked={saved}
+      onCheckedChange={onSave}
     />
   );
 }
@@ -373,6 +410,31 @@ export function StarHint({ onStar }: { onStar: () => void }) {
         <Text>★</Text>
       </Pressable>
     </Tooltip>
+  );
+}
+// #endregion
+
+// #region popover
+export function ShareMenu() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      isPresented={open}
+      onIsPresentedChange={setOpen}
+      anchor={
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+          <Text>Share this list</Text>
+        </Pressable>
+      }
+    >
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>Copy link</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>AirDrop</Text>
+      </Pressable>
+    </Popover>
   );
 }
 // #endregion

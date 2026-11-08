@@ -1,0 +1,164 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T07:01:00.160Z on code tree `4d31b067206c` at HEAD `013cc74` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 773132 ms
+- Load: start 8.17, end 5.29, median 8.17, max 24.48
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log` (<store>/task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Console`
+- `● Popover › follows the content when it resizes while the popover is up`
+- `expected +0 to be 1 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.29 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 118 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 4d31b067206c at HEAD 013cc740
+gate: git tree d1430421286d
+gate: log task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log
+gate:       <store>/task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4d31b067206c, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.17/12.15 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+
+    console.log
+      first frame "narrow": asked=148x96, contentWaits=0, firstDrawMs=-, frames=60
+
+
+    console.log
+      first frame "tall": asked=220x244, contentWaits=0, firstDrawMs=-, frames=60
+
+
+    console.log
+      first frame "short": asked=276x52, contentWaits=0, firstDrawMs=-, frames=60
+
+
+    console.log
+      first frame "capped": asked=224x120, contentWaits=0, firstDrawMs=-, frames=60
+
+
+    console.log
+      first frame "window-capped": asked=388x84, contentWaits=0, firstDrawMs=-, frames=60
+
+
+    console.warn
+      react-native-nitro-ui: a Popover was closed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`.
+
+
+    console.warn
+      react-native-nitro-ui: a Popover was closed by the user but `isPresented` is still true, so it is presented again. Update `isPresented` in `onIsPresentedChange`.
+
+
+    console.log
+      recycle: new view drops=11 recycles=11
+
+  ● Popover › follows the content when it resizes while the popover is up
+
+    expected +0 to be 1 // Object.is equality
+
+      [0m [90m 891 |[39m     expect([33mMath[39m[33m.[39mabs(box[33m![39m[33m.[39mheight [33m-[39m grownPx))[33m.[39mtoBeLessThanOrEqual([35m2[39m)[33m;[39m
+       [90m 892 |[39m     expect(num(grownReport[33m,[39m [32m'presentCount'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 893 |[39m     expect(num(grownReport[33m,[39m [32m'live'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 894 |[39m   })[33m;[39m
+       [90m 895 |[39m
+       [90m 896 |[39m   it([32m'opens below its anchor, and above it when there is no room below'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › follows the content when it resizes while the popover is up
+
+    expected +0 to be 1 // Object.is equality
+
+      [0m [90m 891 |[39m     expect([33mMath[39m[33m.[39mabs(box[33m![39m[33m.[39mheight [33m-[39m grownPx))[33m.[39mtoBeLessThanOrEqual([35m2[39m)[33m;[39m
+       [90m 892 |[39m     expect(num(grownReport[33m,[39m [32m'presentCount'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 893 |[39m     expect(num(grownReport[33m,[39m [32m'live'[39m))[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 894 |[39m   })[33m;[39m
+       [90m 895 |[39m
+       [90m 896 |[39m   it([32m'opens below its anchor, and above it when there is no room below'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+
+Test Suites: 1 failed, 1 skipped, 24 passed, 25 of 26 total
+Tests:       1 failed, 2 skipped, 487 passed, 490 total
+Snapshots:   0 total
+Time:        733.134 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4d31b067206c, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.00/7.75 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        36.458 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 773.1 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+ios-2026-11-08T07-00-59.150Z.log (4 probe(s))
+
+```

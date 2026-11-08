@@ -242,6 +242,11 @@ internal class BottomSheetModel : NitroUiModel() {
  * The view the React Native children live in, inside the sheet's window: React Native's
  * `DialogRootViewGroup` with the state push taken out (the box goes to JS instead) and
  * its size driven by Compose.
+ *
+ * Popover reuses it (G22): a popup's window needs the same thing - a root with its own
+ * `JSTouchDispatcher`, because no `ReactRootView` is above it there either. Both live in
+ * this package, and one root class means the touch, layout and exception paths are tested
+ * once. Precedent: iOS's `NitroUiTouchRoot`, which ContextMenu uses as well.
  */
 internal class NitroUiSheetRootView(
   context: Context,

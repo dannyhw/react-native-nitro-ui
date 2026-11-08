@@ -135,6 +135,19 @@ export {
 // no chip. A filter chip's `selected` is controlled through the event-count
 // handshake; an assist chip is a press. `systemImage` is iOS-only, as Button's is.
 export { Chip, type ChipProps, type ChipVariant } from './components/Chip/Chip';
+// A single icon as a control (G23): Material 3's four icon buttons and their toggle
+// forms on Android, a SwiftUI `Button` / `Toggle(.button)` with `.iconOnly` on iOS.
+// `accessibilityLabel` is required — an IconButton has no text, so it is the only
+// name a screen reader has.
+export {
+  IconButton,
+  type IconButtonProps,
+  type IconButtonShape,
+  type IconButtonSize,
+  type IconButtonVariant,
+  type IconButtonWidth,
+} from './components/IconButton/IconButton';
+
 // A tooltip the app opens next to a view (G18, DECISIONS D38): Material 3's
 // `PlainTooltip` / `RichTooltip` on Android, a UIKit popover with SwiftUI content on
 // iOS, which has no tooltip. `isPresented` is controlled through the event-count
@@ -186,3 +199,10 @@ export {
   type FormSectionProps,
   type RowProps as FormRowProps,
 } from './components/Form/Form';
+// A popover with React Native content, anchored to one of your views (G22, DECISIONS
+// D44): `UIPopoverPresentationController` on iOS and a Compose `Popup` under a Material 3
+// `Surface` on Android, which has no popover control (D38 item 1). `isPresented` is
+// controlled through the event-count handshake, the `anchor` is laid out in place, and the
+// `children` lay themselves out in the app's own tree at up to `maxWidth` - the popover
+// shows that box rather than measuring it, so its first frame is its final size.
+export { type PopoverProps, Popover } from './components/Popover/Popover';

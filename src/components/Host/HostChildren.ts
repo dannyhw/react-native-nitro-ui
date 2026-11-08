@@ -37,6 +37,8 @@ import { Tooltip } from '../Tooltip/Tooltip';
 import { Checkbox } from '../Checkbox/Checkbox';
 import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
+import { IconButton } from '../IconButton/IconButton';
+import { Popover } from '../Popover/Popover';
 import { Form } from '../Form/Form';
 
 /**
@@ -100,6 +102,8 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  *   The ContextMenu (G16) is refused for the same reason: it *is* a `View` around React
  *   Native children (Q6 Appendix A, "Manifest"); and so is the Tooltip (G18), whose anchor
  *   is the app's own React Native views, wrapped in a React Native `View`.
+ *   The Popover (G22) is refused for both reasons at once: its content *and* its anchor are
+ *   React Native views, presented in a window of their own.
  *
  * The rows are hand-written rather than generated: the registry writes the imports and
  * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
@@ -110,9 +114,11 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [Chip, 'Chip'],
   [Checkbox, 'Checkbox'],
   [SearchField, 'SearchField'],
+  [IconButton, 'IconButton'],
   [BottomSheet, 'BottomSheet'],
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
+  [Popover, 'Popover'],
   [Form, 'Form'],
 ]);
 

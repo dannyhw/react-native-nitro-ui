@@ -1,0 +1,71 @@
+# Failure excerpt — harness:ios:PopoverModalHazard
+
+- Ran: 2026-11-08T06:18:57.997Z on code tree `6cee20c33092` at HEAD `bf64939` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios PopoverModalHazard`
+- Result: fail, exit 1, 1852 ms
+- Load: start 136.55, end 129.78, median 133.16, max 136.55
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log` (<store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 129.78 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 28 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:PopoverModalHazard
+gate: node ../scripts/harness.mjs --harnessRunner ios PopoverModalHazard (cwd example)
+gate: code tree 6cee20c33092 at HEAD bf649391
+gate: git tree ac6b24d75de1 with a DIRTY worktree (not reusable)
+gate: log task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log
+gate:       <store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios PopoverModalHazard
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 6cee20c33092, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 136.55/63.77 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  425 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 26 matches
+  testPathIgnorePatterns: \.(android)\.harness\.(?:[mc]?[jt]sx?)$ - 425 matches
+  testRegex:  - 0 matches
+Pattern: PopoverModalHazard - 0 matches
+gate: harness:ios:PopoverModalHazard FAIL in 1.9 s
+gate: recorded in .gates/task/G22-popover.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G22-popover/harness+ios+PopoverModalHazard-2026-11-08T06-18-56.964Z.log (4 probe(s))
+
+```

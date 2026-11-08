@@ -138,6 +138,18 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     screen: 'tooltip',
   },
   {
+    id: 'icon-button',
+    title:
+      'real tap presses the icon button once, a toggle flips once per tap, a refused toggle snaps back, and a disabled one takes neither',
+    screen: 'iconbutton',
+  },
+  {
+    id: 'popover',
+    title:
+      'a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it',
+    screen: 'popover',
+  },
+  {
     id: 'form',
     title:
       'real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard',

@@ -695,6 +695,22 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 48, height: 48 },
     ios: { width: 61, height: 28 },
   },
+  // `HybridNitroUiIconButton.kt` (`FALLBACK_SIZE_DP`) and
+  // `HybridNitroUiIconButton.swift` (`fallbackSize`), read off those sources.
+  //
+  // An IconButton is the rare control whose declaration *is* its default box on
+  // both platforms, so `boxRuleFor` keeps the whole comparison (`both`) and the run
+  // also insists a warm engine needs no correction from it. That is only honest
+  // because the conformance fixture is that default configuration — the press form
+  // at `medium`/`uniform`, the glyph named — and because the poisoned run replaces
+  // these numbers with `POISON_SIZES` before a cold mount, so "the guess was never
+  // corrected" still goes red. C4 predicted 48×48 dp for Android from Material's
+  // own tokens (the `medium` container is 40 dp and `minimumInteractiveComponentSize`
+  // will not publish anything smaller); the device run is what made it a fact.
+  NitroUiIconButton: {
+    android: { width: 48, height: 48 },
+    ios: { width: 44, height: 44 },
+  },
 });
 
 /**
@@ -780,19 +796,30 @@ export const CONTENT_SIZED_BOX = Object.freeze([
 export const HEIGHT_ONLY_FALLBACK = Object.freeze(['NitroUiCheckbox']);
 
 /**
- * Rows two components are allowed to share, because they are the same control.
+ * Rows two components are allowed to share, because one platform constant decides both.
  *
  * `checkFallbackTable` refuses any shared number otherwise, and that refusal is the
  * rule worth having: one number on two rows is the shape of a paste, and the suite can
- * no longer say which control a fallback belongs to. This is the one pair where sharing
- * is the truth rather than a copy — on iOS a Checkbox renders the same
- * `Toggle(isOn:).toggleStyle(.switch)` as a Switch (`docs/components/checkbox.md`,
- * Q5 Appendix D), so the two declare the same OS-dependent box and both read 61x28.
+ * no longer say which control a fallback belongs to. This is the pair of cases where
+ * sharing is the truth rather than a copy, and each names the constant it shares:
  *
- * The exception is narrow on purpose, and read by the check rather than only written
- * down (the difference between this and {@link DECLARED_FALLBACK_EXCEPTIONS}): it names
- * the platform, the size and exactly this set of owners. A third control arriving with
- * 61x28, or either of these two moving to another number while a third keeps this pair,
+ * - on iOS a Checkbox renders the same `Toggle(isOn:).toggleStyle(.switch)` as a Switch
+ *   (`docs/components/checkbox.md`, Q5 Appendix D), so the two declare the same
+ *   OS-dependent box and both read 61x28;
+ * - on Android a bare Checkbox and a default IconButton are each exactly Material 3's
+ *   `MinInteractiveComponentSize` — 48 dp on a side, one constant in the material3
+ *   artifact, read off two component sources
+ *   (`HybridNitroUiCheckbox.kt`'s `FALLBACK_*_DP` and `HybridNitroUiIconButton.kt`'s
+ *   `FALLBACK_SIZE_DP`). Neither control *is* the other; both boxes are that number
+ *   because Compose will not publish a smaller touch target, and an IconButton's
+ *   `medium` container token is 40 dp, which the same constant raises to 48. The
+ *   control's own ladder is what differs between them (`IconButton.harness.tsx`
+ *   measures the other four rungs), which is the thing a shared fallback cannot hide.
+ *
+ * The exceptions are narrow on purpose, and read by the check rather than only written
+ * down (the difference between this and {@link DECLARED_FALLBACK_EXCEPTIONS}): each names
+ * the platform, the size and exactly its set of owners. A third control arriving with
+ * 61x28 or 48x48, or either owner moving to another number while a third keeps the pair,
  * still goes red — `scripts/__tests__/conformance.test.js` holds it to that.
  *
  * @type {ReadonlyArray<{ platform: 'ios' | 'android', size: string, owners:
@@ -806,6 +833,15 @@ export const SHARED_FALLBACK_ROWS = Object.freeze([
     reason:
       'the same SwiftUI `Toggle(.switch)` box, declared twice because the two ' +
       'components are the same control on this platform',
+  },
+  {
+    platform: 'android',
+    size: '48x48',
+    owners: ['NitroUiCheckbox', 'NitroUiIconButton'],
+    reason:
+      'both default boxes *are* material3\u2019s `MinInteractiveComponentSize` (48 dp), ' +
+      'so the number is one platform constant read off two component sources, not one ' +
+      'row copied from the other',
   },
 ]);
 
