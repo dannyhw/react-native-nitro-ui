@@ -184,6 +184,22 @@ abstract class HybridNitroUiMenuSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestMenuProbe(): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelProbe(color: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelReport(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestMenuPixelProbe(color: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestMenuPixelReport(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

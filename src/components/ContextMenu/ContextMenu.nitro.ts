@@ -135,6 +135,30 @@ export interface NitroUiContextMenuMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestA11yLongClick(): void;
+
+  /**
+   * TEMPORARY, test-only: sample the pixels the **open menu** is drawing, looking for
+   * `color`, and keep the answer for ``nuiTestMenuPixelReport``. Returns at once.
+   *
+   * Menu's method of the same name, for the same reason: a row's `androidIcon` is a
+   * drawing contract, and the rows live in a popup window of their own, so nothing
+   * readable on this wrapper says whether a glyph was painted. With no popup open the
+   * report says `no popup`, and iOS - whose menu UIKit draws in a window this process
+   * cannot rasterise - says `no pixels`.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestMenuPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestMenuPixelProbe`` found, in Button's
+   * shape - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, plus the `no popup` / `no pixels` refusals. Empty before the
+   * first probe.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestMenuPixelReport(): string;
 }
 
 /**

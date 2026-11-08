@@ -93,6 +93,10 @@ namespace margelo::nitro::nitroui {
     void nuiTestSelectRow(const std::string& id) override;
     std::string nuiTestMenuReport() override;
     void nuiTestMenuProbe() override;
+    void nuiTestPixelProbe(double color) override;
+    std::string nuiTestPixelReport() override;
+    void nuiTestMenuPixelProbe(double color) override;
+    std::string nuiTestMenuPixelReport() override;
 
   private:
     jni::global_ref<JHybridNitroUiMenuSpec::JavaPart> _javaPart;

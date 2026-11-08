@@ -1,5 +1,12 @@
 import { useRef } from 'react';
 
+import {
+  androidIconResourceName,
+  androidIconUrl,
+  resolveAndroidIcon,
+  type AndroidIconProp,
+} from '../../iconSource';
+import { warnAndroidIconName } from '../../iconName';
 import type { NitroUiMenuRow } from './Menu.nitro';
 
 /*
@@ -9,6 +16,30 @@ import type { NitroUiMenuRow } from './Menu.nitro';
  * same struct array, so the Android `parseMenuRows` and the iOS row builders read one
  * shape, and a change to the rows is a change to both menus.
  */
+
+/**
+ * Resolve one row's `androidIcon` into the string native is sent.
+ *
+ * `Button`'s rules, applied per row (DECISIONS D43 item 2): an asset id becomes a
+ * `url:`/`res:` marked string, a typed name is normalised, and a name that could never
+ * be a resource name says so in development - native cannot tell that typo from a file
+ * the app did not ship, since both are resource id `0`. Named once per control, so the
+ * warning says which of the two menus asked.
+ */
+function resolveRowAndroidIcon(
+  componentName: string,
+  source: AndroidIconProp | null | undefined
+): string | null {
+  const resolved = resolveAndroidIcon(source);
+  if (
+    resolved != null &&
+    androidIconUrl(resolved) == null &&
+    androidIconResourceName(resolved) == null
+  ) {
+    warnAndroidIconName(componentName, 'androidIcon', resolved);
+  }
+  return resolved;
+}
 
 /**
  * A pickable row.
@@ -26,6 +57,17 @@ export interface MenuAction {
   destructive?: boolean | undefined;
   /** Leading SF Symbol name. iOS only - Android ignores it. */
   systemImage?: string | undefined;
+  /**
+   * Leading glyph for Android: an app-shipped vector drawable, as
+   * `require('./icons/share.xml')` or as its resource name (`"share"`), the two forms
+   * `Button`'s `androidIcon` takes (`docs/components/button.md`, "Android icons").
+   *
+   * Android only - iOS draws `systemImage` and ignores this, so a row with a glyph on
+   * both platforms names both and needs no `Platform.select`. It takes Material's own leading-icon slot
+   * (`MenuDefaults.LeadingIconSize`) in the row's content colour, and on a checked
+   * Android row the leading check keeps that slot: the check is what the row *means*.
+   */
+  androidIcon?: AndroidIconProp | undefined;
   /** Disable this one row. Default: `false`. */
   disabled?: boolean | undefined;
   /**
@@ -57,6 +99,12 @@ export interface MenuSubmenu {
   title: string;
   /** Leading SF Symbol name on the parent row. iOS only. */
   systemImage?: string | undefined;
+  /**
+   * Leading glyph on the parent row for Android, in either of `Button`'s forms. Android
+   * draws a submenu's rows inline (DECISIONS D29), so this row is a group row there and
+   * takes the same slot as an action does.
+   */
+  androidIcon?: AndroidIconProp | undefined;
   /** The rows inside it. */
   items: MenuAction[];
 }
@@ -105,7 +153,10 @@ function isSubmenu(row: MenuActionOrSubmenu): row is MenuSubmenu {
  * as its own group on Android - the shape the public type already refuses is
  * documented rather than silently redrawn.
  */
-export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
+export function flattenGroup(
+  group: MenuGroup | undefined,
+  componentName = 'Menu'
+): NitroUiMenuRow[] {
   const rows: NitroUiMenuRow[] = [];
   const pushAction = (action: MenuAction, parentId: string | null): void => {
     rows.push({
@@ -116,6 +167,10 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: action.disabled === true,
       destructive: action.destructive === true,
       systemImage: action.systemImage ?? null,
+      androidIcon: resolveRowAndroidIcon(
+        componentName,
+        action.androidIcon ?? null
+      ),
       subtitle:
         action.subtitle == null || action.subtitle === ''
           ? null
@@ -132,6 +187,7 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: false,
       destructive: false,
       systemImage: row.systemImage ?? null,
+      androidIcon: resolveRowAndroidIcon(componentName, row.androidIcon ?? null),
       subtitle: null,
       checked: null,
     });
@@ -150,6 +206,9 @@ export function flattenGroup(group: MenuGroup | undefined): NitroUiMenuRow[] {
       disabled: false,
       destructive: false,
       systemImage: null,
+      // A section header has no icon on either platform: iOS spells it a `Section`'s
+      // header text and Android a `DropdownMenuGroupLabel`, and neither has a slot.
+      androidIcon: null,
       subtitle: null,
       checked: null,
     });
@@ -178,6 +237,7 @@ function groupSignature(rows: readonly NitroUiMenuRow[]): string {
       row.disabled ? 'd' : '',
       row.destructive ? 'x' : '',
       row.systemImage ?? '',
+      row.androidIcon ?? '',
       row.subtitle ?? '',
       row.checked == null ? '' : row.checked ? 'c' : 'u'
     );
@@ -199,8 +259,11 @@ function groupSignature(rows: readonly NitroUiMenuRow[]): string {
  * passed in: it holds the last result and its signature, and a render that
  * describes the same menu gets the same array back.
  */
-export function useMenuRows(group: MenuGroup | undefined): NitroUiMenuRow[] {
-  const flattened = flattenGroup(group);
+export function useMenuRows(
+  group: MenuGroup | undefined,
+  componentName = 'Menu'
+): NitroUiMenuRow[] {
+  const flattened = flattenGroup(group, componentName);
   const signature = groupSignature(flattened);
   const cache = useRef<{ signature: string; rows: NitroUiMenuRow[] } | null>(
     null

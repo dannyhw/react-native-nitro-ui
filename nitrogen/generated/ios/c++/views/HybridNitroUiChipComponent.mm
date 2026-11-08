@@ -140,6 +140,12 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.systemImage.hasSameValue(oldViewProps->systemImage)) {
       swiftPart.setSystemImage(newViewProps.systemImage.get());
     }
+    // androidIcon: variant
+    if (oldViewProps == nullptr
+          ? newViewProps.androidIcon.isProvided()
+          : !newViewProps.androidIcon.hasSameValue(oldViewProps->androidIcon)) {
+      swiftPart.setAndroidIcon(newViewProps.androidIcon.get());
+    }
     // testID: variant
     if (oldViewProps == nullptr
           ? newViewProps.testID.isProvided()

@@ -120,7 +120,7 @@ export function ContextMenu({
   children,
   ...restProps
 }: ContextMenuProps) {
-  const rows = useMenuRows(group);
+  const rows = useMenuRows(group, 'ContextMenu');
   // Always functions, so every callback prop is always sent (D7b); the casts state what
   // each `??` guarantees, as in `Menu.tsx`.
   const selectCallback = useStableCallback(

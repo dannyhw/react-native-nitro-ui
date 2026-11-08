@@ -28,6 +28,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("disabled", &HybridNitroUiChipSpec::setDisabled);
       prototype.registerHybridGetter("systemImage", &HybridNitroUiChipSpec::getSystemImage);
       prototype.registerHybridSetter("systemImage", &HybridNitroUiChipSpec::setSystemImage);
+      prototype.registerHybridGetter("androidIcon", &HybridNitroUiChipSpec::getAndroidIcon);
+      prototype.registerHybridSetter("androidIcon", &HybridNitroUiChipSpec::setAndroidIcon);
       prototype.registerHybridGetter("testID", &HybridNitroUiChipSpec::getTestID);
       prototype.registerHybridSetter("testID", &HybridNitroUiChipSpec::setTestID);
       prototype.registerHybridGetter("accessibilityLabel", &HybridNitroUiChipSpec::getAccessibilityLabel);
@@ -46,6 +48,8 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridMethod("nuiTestPress", &HybridNitroUiChipSpec::nuiTestPress);
       prototype.registerHybridMethod("nuiTestProbeAccessibility", &HybridNitroUiChipSpec::nuiTestProbeAccessibility);
       prototype.registerHybridMethod("nuiTestStateReport", &HybridNitroUiChipSpec::nuiTestStateReport);
+      prototype.registerHybridMethod("nuiTestPixelProbe", &HybridNitroUiChipSpec::nuiTestPixelProbe);
+      prototype.registerHybridMethod("nuiTestPixelReport", &HybridNitroUiChipSpec::nuiTestPixelReport);
     });
   }
 

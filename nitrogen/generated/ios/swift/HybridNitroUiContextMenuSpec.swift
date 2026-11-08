@@ -24,6 +24,8 @@ public protocol HybridNitroUiContextMenuSpec_protocol: HybridObject, HybridView 
   func nuiTestMenuProbe() throws -> Void
   func nuiTestContextMenuReport() throws -> String
   func nuiTestA11yLongClick() throws -> Void
+  func nuiTestMenuPixelProbe(color: Double) throws -> Void
+  func nuiTestMenuPixelReport() throws -> String
 }
 
 public extension HybridNitroUiContextMenuSpec_protocol {
