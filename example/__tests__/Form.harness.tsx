@@ -863,7 +863,9 @@ describe('Form measure (S6b spike, question 4)', () => {
     form.nuiTestScrollTo(height);
     const scrolledBy = 0;
     if (!IOS) {
-      expect(Math.abs((await formScrollY(height / 2)) - height)).toBeLessThanOrEqual(2);
+      expect(
+        Math.abs((await formScrollY(height / 2)) - height)
+      ).toBeLessThanOrEqual(2);
     }
     const scrolled = await until(
       () => compareRows(`after ${height} pt`, scrolledBy),
