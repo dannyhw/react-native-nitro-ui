@@ -222,6 +222,8 @@ struct JHybridNitroUiIconButtonSpecImpl: public jni::JavaClass<JHybridNitroUiIco
     static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiIconButtonSpecImpl::javaobject()>();
     jni::local_ref<JHybridNitroUiIconButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
     return javaPart->getJHybridNitroUiIconButtonSpec();
+  }
+};
 struct JHybridNitroUiPopoverSpecImpl: public jni::JavaClass<JHybridNitroUiPopoverSpecImpl, JHybridNitroUiPopoverSpec::JavaPart> {
   static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiPopover;";
   static std::shared_ptr<JHybridNitroUiPopoverSpec> create() {
@@ -405,6 +407,9 @@ void registerAllNatives() {
     "NitroUiIconButton",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiIconButtonSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
     "NitroUiPopover",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiPopoverSpecImpl::create();

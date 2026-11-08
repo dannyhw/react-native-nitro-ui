@@ -172,6 +172,10 @@
     "NitroUiIconButton",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiIconButtonSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiIconButton();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
     "NitroUiPopover",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiPopoverSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiPopover();
