@@ -138,26 +138,6 @@ function runPatch(root) {
   });
 }
 
-/**
- * The views `patch-nitrogen.mjs` lists as content-children views, read out of its source.
- *
- * Read rather than imported: the script is an ESM module that touches `import.meta`, which
- * jest's CommonJS transform refuses, and a fixture that hardcoded the list would pass while
- * the real patch failed on a view it never wrote.
- */
-function contentChildrenViews() {
-  const source = readFileSync(script, 'utf8');
-  const list = /export const CONTENT_CHILDREN_VIEWS = \[([\s\S]*?)\];/.exec(
-    source
-  );
-  if (list == null) {
-    throw new Error(
-      'patch-nitrogen.mjs no longer writes CONTENT_CHILDREN_VIEWS as an array literal.'
-    );
-  }
-  return [...list[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
-}
-
 function withFixture(name, fn) {
   const workDir = mkdtempSync(join(tmpdir(), 'patch-nitrogen-'));
   try {
@@ -652,6 +632,8 @@ describe('patch-nitrogen: content children (G14)', () => {
     const mountsReactNativeChildren = [
       'HybridNitroUiBottomSheet',
       'HybridNitroUiPopover',
+      'HybridNitroUiForm',
+      'HybridNitroUiFormSection',
     ];
     const listed = contentChildrenViews();
     expect(listed).toEqual(mountsReactNativeChildren);
