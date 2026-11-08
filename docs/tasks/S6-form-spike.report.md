@@ -204,8 +204,8 @@ stays under it. That is one gap with a named fix, not a shape that does not work
 
 ### What was wrong before anything could be measured
 
-S6b's first pass had never been compiled and nothing in it had run on a device. Seven things were wrong
-on the way in:
+S6b's first pass had never been compiled and nothing in it had run on a device. Eight things were wrong on
+the way in:
 
 - Four of them were ordinary: `scrollOffsetDp()` dividing an `Int` by a `Float` and returning a `Double`
   (only `check`'s `test:native:android` compiles the library); an `override func setFrame(_:)` that is not an
@@ -229,8 +229,9 @@ on the way in:
   Back). And the keyboard's edge was read from `Window{… InputMethod}` in the window service, which is the
   whole floating IME layer: on the lease's API 35 AVD its `Frames: frame=` measured `[0,142][1080,2424]`
   *identically with GBoard up and dismissed*, so read as an edge it always says `top=142`. Round 2's first
-  run therefore asserted `a full software keyboard … occupies 2282 px of a 2424 px window` about a keyboard
-  it believed was not there, and a field "below" it. Both are fixed: the edge is the service's own
+  run therefore said the input view was *not* on screen and, from the same device, asserted
+  `a full software keyboard … occupies 2282 px of a 2424 px window` — the real band is 1025 px — and then
+  failed the field for sitting "below" a keyboard whose top it had placed at 142 px. Both are fixed: the edge is the service's own
   `Last computed insets` → `visibleTopInsets` (1399 px with GBoard up, its `touchableRegion`
   `SkRegion((0,1399,1080,2156))`) and is read **only** while `mInputShown=true`, because that line is the
   *last computed* one — with the keyboard down it still prints, `2156` with an empty region, which is
