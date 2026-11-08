@@ -37,6 +37,7 @@ const TAB_LABEL = {
   searchfield: 'Search',
   contextmenu: 'Context',
   checkbox: 'Checkbox',
+  form: 'Form',
 };
 
 function adb(args) {
