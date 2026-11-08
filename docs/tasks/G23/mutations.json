@@ -1,6 +1,6 @@
 {
   "task": "G23",
-  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it). Device rows ran on lease G23-zcs2m, pair-b (iPhone Air / iOS 27 and emulator-5570 / API 35); the filtered gate names satisfy nothing but their own name. Rows marked `organic` are not mutations: they are a new test going red against the real bug before its fix, which is the stronger evidence, and the logs are in `gate.mjs logs --branch task/G23-icon-button`. Rows 1-4 share one build and one run, so one red line is attributed to each of them by which assertion failed.",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it). Device rows ran on lease G23-zcs2m, pair-b (iPhone Air / iOS 27 and emulator-5570 / API 35); the filtered gate names satisfy nothing but their own name. Rows marked `organic` are not mutations: they are a new test going red against the real bug before its fix, which is the stronger evidence, and the logs are in `gate.mjs logs --branch task/G23-icon-button`. Rows 1-4 share one build and one run, so one red line is attributed to each of them by which assertion failed. Fix round 1 (rows with \"round\": 1) ran on lease G23-g3zrq, pair-a (`iPhone 17` / iOS 27 and emulator-5574 / API 35); rows that say \"with … one run, one red line each\" share a build and a run, and each is attributed by which assertion failed.",
   "mutations": [
     {
       "test": "example/__tests__/IconButton.harness.tsx",
@@ -250,6 +250,133 @@
         "icon-button: FAIL (no retries) — failed: the barrier tap on the enabled toggle: atLeast needs a counter, and \"on\" is not one"
       ],
       "note": "The full Android real-input pass is the first honest run of this check (the earlier filtered Android run in the ledger is the double-fire mutation, red by design), and it is what found the misuse. Fixed by dropping atLeast — \"on\" has no \"or more\", and the chip barrier keeps its atLeast because that one waits on a press counter, where a stalled tap landing with its retry proves the claim twice. The fixed check is green in real-input:android:--control:icon-button (666s) with the line \"the enabled toggle, tapped the same way, still answers — expected on, saw on\"."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — becomes a press button again when the app stops using the toggle form",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "the latch back: `let isToggle = model.defaultChecked != nil || model.isToggle`, so once a toggle always a toggle",
+      "before": "    let isToggle = model.defaultChecked != nil",
+      "after": "    let isToggle = model.defaultChecked != nil || model.isToggle",
+      "run": "harness:ios:IconButton — FAIL, 2 of 10 (22.5s, lease G23-g3zrq)",
+      "redTests": [
+        "\"form-off\" never drew displayed=none - it reports \"displayed=1;probes=0;a11y=none;control=40.67x38.00\"."
+      ],
+      "note": "The value half is the visible half: the control is still a Toggle, so it keeps drawing a selection and `onPress` never fires. Android's row is the same mutation in Kotlin, red on the same line."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — becomes a press button again when the app stops using the toggle form",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the latch back: `val isToggle = model.defaultChecked != null || model.isToggle`",
+      "before": "    val isToggle = model.defaultChecked != null",
+      "after": "    val isToggle = model.defaultChecked != null || model.isToggle",
+      "run": "harness:android:IconButton — FAIL, 2 of 10 (23.6s, lease G23-g3zrq) — with the pinned-glyph row below, one run, one red line each",
+      "redTests": [
+        "\"form-off\" never drew displayed=none - it reports \"displayed=1;probes=0;a11y=none\"."
+      ],
+      "note": "Android's box cannot see the form (both forms compose from one container), which is why the value read-out is the assertion that carries this on both platforms."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — lays every rung and width out at the size the control measured (the iOS half)",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "the 44 pt target floor removed: `minimumTouchTarget = 0`",
+      "before": "  private static let minimumTouchTarget: CGFloat = 44",
+      "after": "  private static let minimumTouchTarget: CGFloat = 0",
+      "run": "harness:ios:IconButton — FAIL, 2 of 10 (22.5s, lease G23-g3zrq) — with the iOS latch row above, one run, one red line each",
+      "redTests": [
+        "small: the glyph measures 20.33x19.00 and the touch target floors at 44 pt, so the box is 44.00x44.00 and not 20.33x19.00"
+      ],
+      "note": "The rewritten ladder asserts `box == max(glyph, 44)` from the control's own `control=` read-out, so the floor is what goes red and the glyph ladder stays provable underneath it."
+    },
+    {
+      "round": 1,
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift — step 7, the corner tap",
+      "file": "ios/components/IconButton/HybridNitroUiIconButton.swift",
+      "mutation": "the tappable layer behind a bordered control removed (the `Color.clear … onTapGesture` sibling of the `ZStack`)",
+      "before": "      Color.clear\n        .frame(\n          width: Self.minimumTouchTarget,\n          height: Self.minimumTouchTarget\n        )\n        .contentShape(Rectangle())\n        .onTapGesture { model.press() }\n        .accessibilityHidden(true)",
+      "after": "      // MUTATION: no hit layer",
+      "run": "real-input:ios:--control:icon-button — FAIL (498s, lease G23-g3zrq)",
+      "redTests": [
+        "RealInputTests.swift:3418: XCTAssertTrue failed - the fixture should be laid out at the 44 pt target before a corner is aimed at, got 39 x 39"
+      ],
+      "note": "The precondition assertion is what goes red, and that is the honest order: without the layer the `ZStack` is the control's own 39 x 39 pill, so the \"corner\" would be inside the artwork and a press there would prove nothing. The guard says so before either tap is aimed. The same run also brought back the a11y finding the 44 pt box retires (`announced by the element at (16.50, 267, 39, 39) while the control is drawn at (16, 267, 39.67, 39)`), which is the other half of why the box is a target and not a layout change."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — draws the glyph in the control content colour (the span line)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "the glyph pinned to one point size: `fun iconSize(): Dp = IconButtonDefaults.mediumIconSize`",
+      "before": "  fun iconSize(): Dp =\n    when (this) {\n      Small -> IconButtonDefaults.extraSmallIconSize\n      Medium -> IconButtonDefaults.smallIconSize\n      Large -> IconButtonDefaults.mediumIconSize\n      XLarge -> IconButtonDefaults.largeIconSize\n      XXLarge -> IconButtonDefaults.extraLargeIconSize\n    }",
+      "after": "  fun iconSize(): Dp = IconButtonDefaults.mediumIconSize",
+      "run": "harness:android:IconButton — FAIL, 2 of 10 (23.6s, lease G23-g3zrq) — with the Android latch row above, one run, one red line each",
+      "redTests": [
+        "expected 1 to be greater than 1.5"
+      ],
+      "note": "The span is exactly 1 — the same glyph painted five times. This is the red proof for the `ratio > 1.5` line, asserted before the step loop on purpose."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — draws the glyph in the control content colour (the step loop)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt",
+      "mutation": "one rung's glyph flattened to its neighbour's token: `XLarge -> IconButtonDefaults.mediumIconSize` (24 dp, where Material's token is 32)",
+      "before": "      XLarge -> IconButtonDefaults.largeIconSize",
+      "after": "      XLarge -> IconButtonDefaults.mediumIconSize",
+      "run": "harness:android:IconButton — FAIL, 1 of 10 (lease G23-g3zrq)",
+      "redTests": [
+        "large -> xlarge: Material's glyph token grows from 24 to 32 dp, so the tint must cover more pixels (642 -> 642): expected 1 to be greater than 1.05"
+      ],
+      "note": "The span stays over 1.5 (40/24), so only the per-step loop sees this — the reason the loop exists beside the span, and the reason probing only the two ends was a partial test."
+    },
+    {
+      "round": 1,
+      "test": "example/__tests__/IconButton.harness.tsx — draws the glyph in the control content colour (the imported asset)",
+      "file": "src/iconSource.ts",
+      "mutation": "the dev-server URL an imported drawable is loaded from points at nothing",
+      "before": "      return markAndroidIconUrl(metroAssetUrl(asset, origin, deviceScale));",
+      "after": "      return markAndroidIconUrl('http://localhost:1/nitroui-missing.xml');",
+      "run": "harness:android:IconButton — FAIL, 1 of 10 (lease G23-g3zrq)",
+      "redTests": [
+        "an `androidIcon` the app `require`s drew nothing in the content colour, so the imported artwork never reached this control's painter: expected 0 to be greater than 0"
+      ],
+      "note": "Two dead attempts came first and say something: appending to `metroAssetUrl(...)`'s return leaves the **path** intact (the URL carries `?platform=&scale=`, so the suffix lands in the query), and `androidDrawableNameForAsset` is not the road a development build takes at all — `Button.harness.tsx`'s `metro-star` test is right that the wire string starts with `url:` here. The asset control is also the only glyph that arrives rather than being there, which is why the probe waits for the file before reading its colour."
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js — reports the shipped IconButton inset as its recorded debt, and only that",
+      "mutation": "organic, not a mutation: the debt row absent, which is the state the fix round shipped into when the 44 pt target did not retire the finding",
+      "before": "  (row present in A11Y_EXEMPTIONS)",
+      "after": "  (row deleted)",
+      "run": "real-input:ios:--control:icon-button — FAIL (280s, lease G23-g3zrq)",
+      "redTests": [
+        "a11y:icon-button: failed: NitroUiIconButton: \"Real-input icon button\" is announced by the element at (18.67, 269.67, 38.67, 38.67) while the control is drawn at (16, 267, 44, 44) — the name is on a box that is not the control's, so VoiceOver stops somewhere else than the thing a person presses"
+      ],
+      "note": "The measurement the row was written from, and the reason it came back: `icon-button: PASS (no retries)` on the same run says the corner tap and the toggle flip pass, so the finding is the accessibility element's box and nothing else. The unit test that reads it is the re-added one, whose fixture is this run's tree."
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js — reports the shipped IconButton inset as its recorded debt, and only that",
+      "mutation": "the row's required element width moved by 2 pt, so it no longer describes the measured tree",
+      "before": "      /is announced by the element at \\\\(18\\\\.67, [\\\\d.]+, 38\\\\.67, 38\\\\.67\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 44, 44\\\\)/,",
+      "after": "      /is announced by the element at \\\\(18\\\\.67, [\\\\d.]+, 40\\\\.67, 38\\\\.67\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 44, 44\\\\)/,",
+      "run": "jest scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 1 of 50",
+      "redTests": [
+        "expect(shipped.failures).toEqual([]); — scripts/__tests__/real-input-a11y-ios.test.js:491, with the measured finding no longer matching any row"
+      ],
+      "note": "The row has to describe the tree it was measured on, or it is a skip list with a number in it."
+    },
+    {
+      "round": 1,
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js — excuses the measured inset, not a box one point or ten wider",
+      "mutation": "the row made permissive: any box in either slot",
+      "before": "      /is announced by the element at \\\\(18\\\\.67, [\\\\d.]+, 38\\\\.67, 38\\\\.67\\\\) while the control is drawn at \\\\(16, [\\\\d.]+, 44, 44\\\\)/,",
+      "after": "      /is announced by the element at \\\\([\\\\d., ]+\\\\) while the control is drawn at/",
+      "run": "jest scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 1 of 50",
+      "redTests": [
+        "expect(row.matches.test(sentence('16, 267, 44, 44', DRAWN))).toBe(false); — scripts/__tests__/real-input-a11y-ios.test.js:530: expected false, received true"
+      ],
+      "note": "The negative half: a row that excuses the boxes *agreeing* would excuse the fix, and `staleExemptions` could never retire it."
     }
   ]
 }

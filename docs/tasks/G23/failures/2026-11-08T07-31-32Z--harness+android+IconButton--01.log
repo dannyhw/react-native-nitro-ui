@@ -1,0 +1,79 @@
+# Failure excerpt — harness:android:IconButton
+
+- Ran: 2026-11-08T07:31:32.846Z on code tree `915b18b18cef` at HEAD `7e371cf` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android IconButton`
+- Result: fail, exit 1, 18279 ms
+- Load: start 11.83, end 13.27, median 13.27, max 13.27
+- Device: android / device `emulator-5574` / lease `G23-g3zrq`
+- Full log: `task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-32.846Z.log` (<store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-32.846Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-32.846Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-g3zrq (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 13.97 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android IconButton
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 915b18b18cef, 19 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.83/13.61 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-32.846Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for
+
+    large -> xlarge: Material's glyph token grows from 24 to 32 dp, so the tint must cover more pixels (642 -> 642): expected 1 to be greater than 1.05
+
+      [0m [90m 1375 |[39m               [32m`${MATERIAL_LADDER[previous].glyph} to ${MATERIAL_LADDER[size].glyph} dp, `[39m [33m+[39m
+       [90m 1376 |[39m               [32m`so the tint must cover more pixels (${was} -> ${now})`[39m
+      [31m[1m>[22m[39m[90m 1377 |[39m           )[33m.[39mtoBeGreaterThan([35m1.05[39m)[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1378 |[39m         } [36melse[39m {
+       [90m 1379 |[39m           [90m// The rung Material separates with its *container* (40 -> 56 dp) and not[39m
+       [90m 1380 |[39m           [90m// with its glyph: level here, and two different boxes in the ladder test.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        15.918 s, estimated 16 s
+Ran all test suites matching IconButton.
+
+
+
+```

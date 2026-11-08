@@ -202,9 +202,12 @@ the margin through the same `press()` the control's own gesture runs. Widening t
 label instead would widen the artwork, and a `filled` button's pill is design, not
 padding.
 
-The bordered variants are larger than their glyph by their style's own padding — the
-harness measures `tonal` at `xxlarge` as a wider box for a press button than for a
-toggle — and `variant` is in the size key so each is measured for itself.
+The bordered variants are larger than their glyph by their style's own padding, and the two
+forms pad differently: at `tonal`/`xxlarge` the harness measures 70.67 × 68.00 pt for the press
+control and 80.67 × 68.00 pt for the toggle, so those are two boxes and two keys. Lower down
+both styles measure under the target and lay out as one 44 × 44 pt box — correct, and the
+reason `form` is asserted through its own size key rather than through a box the floor has just
+hidden. `variant` is in the key for the same reason: each configuration is measured for itself.
 
 ## Accessibility
 
@@ -222,14 +225,22 @@ toggle — and `variant` is in the size key so each is measured for itself.
   suite reads after a real tap rather than what a design note would prefer.
 - `disabled` removes the control from interaction and reads as disabled on both
   platforms.
-- **The stop is the whole box.** The element a reader reaches is the laid-out control,
-  because the laid-out control is what the 44 pt target makes it (see "The touch
-  target"); the tappable margin added behind a bordered control is hidden from a
-  reader, and the accessibility element is combined onto the box, so the stop VoiceOver
-  lands on and the rect RN laid out are the same 44 pt square.
+- **The stop is the drawn control, and for a bezelled one that is smaller than the
+  target.** Measured by the real-input sweep: the `filled` case is announced by a button
+  element at `18.67, 269.67, 38.67 × 38.67 pt` inside the `16, 267, 44 × 44 pt` box
+  React Native laid out (see "The touch target"). A reader stops on the artwork's box; a
+  finger can land anywhere in the 44 pt target, because the tappable margin behind the
+  control is hidden from a reader on purpose. Two ways of moving the stop onto the
+  target were built and both measured worse — they left the name on two elements — so
+  the inset stop is recorded as debt (`docs/tasks/FOLLOWUPS.md`) with those numbers, and
+  the sweep keeps going red if the name moves anywhere else.
 
 ## Behaviour notes
 
+- **The form follows the props, every update.** Taking `checked`, `defaultChecked` and
+  `onCheckedChange` away from a rendered control turns that same control back into a press
+  button: `onPress` fires again, the selection read-out goes, and on iOS the control re-measures
+  as the `Button` it now is. The form is a prop, not a decision the control keeps.
 - **One press per tap**, on either form. The press form's `onPress` is a gesture,
   not a value: JS cannot refuse it, and neither can a `checked` prop.
 - **A refused flip reverts.** A controlled toggle paints the flip it was asked for
