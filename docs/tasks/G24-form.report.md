@@ -80,15 +80,30 @@ Host (each mutation applied to the source, reverted after the run):
 - `bench-gate.test.js` -> the Form's four quick-plan cells removed -> `schedules one complete component per --component, never a mix`
 - `readme-components.test.js` -> no `docs/images/components/form-ios.png` -> `Form: docs/images/components/form-ios.png does not exist`
 
-On device (each is the shipped bug, not a mutation — the case was red before the fix and green
-after it, on the same fixture):
+On device — the two shipped bugs, red before their fix on the fixture they ship with, and the
+two mutations that show the scroll half of `E7` can fail:
 
-- `Form.harness E7` -> the Section reporting `0` for the space between rows, as it did -> `m13:
+- `E7` -> the Section reporting `0` for the space between rows, as it did -> `m13:
   measureInWindow 40.0,612.3,340.0,44.0 vs UIKit 40.0,788.3,340.0,44.0 (off by 176.0 pt)`, the
   error growing exactly 8 pt per row (`harness:ios` at 11:13)
-- `Form.harness E7` -> the Form recording an offset before `onContentOffset` was attached, as it
-  did -> `geometry{offset=-68.00,origin=-68.00,received=0.00}` with all 14 rows `off by 72.0 pt`
+- `E7` -> the Form recording an offset it never published, as it did ->
+  `geometry{offset=-68.00,origin=-68.00,received=0.00}` with all 14 rows `off by 72.0 pt`
   (`harness:ios:Form` at 11:36)
+- `E7` -> `nuiContentOffsetY={null}` (the shadow node never told) -> all 14 rows `off by 68.0 pt`
+  at rest, `geometry{offset=-68.00,origin=-68.00,received=0.00}` (`harness:ios:Form` at 12:29)
+- `E7`'s "did the list move" ask -> `nuiTestScrollTo` made to do nothing -> `Form report never
+  satisfied "the list to have scrolled to 180 pt" - last was ...offset=-68.00`
+  (`harness:ios:Form` at 12:47)
+- `FormFidelity` -> the layer back on `fillMaxSize` instead of the section's box, as it shipped ->
+  `the section draws into a layer 54.1 dp tall while the section itself is 296.4 dp ... (out by
+  242.3 dp)` (`harness:android:FormFidelity` at 14:15)
+- `FormFidelity` -> the accessory's `align(TopStart)` back to `TopEnd`, as it shipped ->
+  `the accessory ends at x=707.0 dp, past its row's trailing edge at x=367.6 dp`
+  (`harness:android:FormFidelity` at 14:16)
+
+Two things were *dropped* rather than shipped because no mutation made them red: a read-back of
+the row list the layer drew (`drawnShapes`), and an `OnLayoutChangeListener` on the row that
+published its frame - both redundant against paths the case already exercises (round 2).
 
 ## Files changed
 
@@ -107,8 +122,24 @@ after it, on the same fixture):
 
 ## Follow-ups
 
-- `bun run bench -- --component Form` has arms, a plan and no numbers: this is not the bench
-  host, and the device pool was saturated for the whole round.
+- `real-input:ios` is red on two Form checks, on the tree this branch ends with. `a11y:form`: the
+  only node announced as "Row with onPress" is the React Native wrapper (trait `other` at
+  40,240,340,44), so `NitroUiFormRowCell` is not the one button element the component page claims -
+  the candidate cause to try first is that `refresh(cell:for:)` *snapshots* the aggregated label
+  when the cell is configured, before React Native has put the label on the row's content.
+- Same gate, question 5: three real taps on `form-note-field`, reached by scrolling the list to its
+  end, never give it the keyboard (`focusByTap`, `RealInputTests.swift:4043`). Both need a device
+  to iterate against; neither is visible to `check` or to the harness.
+- `real-input:android` has not reached a verdict on this branch: its own Form checks
+  (`requireControlOnScreen("Row with onPress")`) are untested by any run.
+- `NitroUiFormSectionView` drives its Compose host the way `ContextMenuView` does, and this round
+  showed what that costs: a decoration host has to be *told* its box, because a Nitro host measures
+  content with an unbounded height. `ContextMenuView` deserves the same look.
+- `bun run bench --platform <p> --plan quick --component form` has arms on both platforms
+  (`FormBenchActivity.kt`, `BenchViews.swift`), a plan (`mount`/`update`/`memory` at N=50/50/200,
+  64 launches) and still no numbers: the runner refuses to start above load1 10, and this box sits
+  in the 30s-50s while device gates run. It wants the separate `bench/` Expo app too, so it belongs
+  on the bench host.
 - iOS 15.1-16.3 has no `scrollViewDidChangeAdjustedContentInset:` (a protocol requirement cannot
   be answered behind `@available` at this deployment target), so an inset change there rides on
   `NitroUiFormHoldingView.safeAreaInsetsDidChange` — enough for a safe-area-driven inset, which
@@ -117,3 +148,20 @@ after it, on the same fixture):
   platform draws between rows and the margin each row takes have to stay equal, and `E7` is the
   case that notices when they do not. Anything that later lets an app set row spacing has to
   re-report it, not style it.
+
+## Fix round 2
+
+Android's `Form` shipped two drawing defects, both in the screenshot this round replaces.
+`createOutline` builds at the origin of the scope that asks for it, so one layer-wide canvas painted
+every row's container at the layer's top-left corner: a card over each header, nothing behind the
+rows. The accessory added a section-relative offset to `Alignment.TopEnd`, which adds it to the far
+edge, so no disclosure ever drew. Each row's container is now its own canvas, placed like its press
+box, and the accessory aligns `TopStart`. The layer is also *told* the section's box - a host's
+content is measured with an unbounded height, where `fillMaxSize` answers "one row tall" (54.1 dp
+measured inside a 296.4 dp section). `magick compare`: pixels unchanged. Round 1 blamed stale row
+rects; it was wrong, and the comments now say what is known. The frame listener those comments
+justified, and a read-back that could not be made red, are gone.
+
+`real-input:ios` would not run: its UI-test bundle had not compiled since this component's check was
+added (`formRowPresses` declared twice - `check` never compiles that bundle). Fixed, the gate
+reached the Form and failed two of its own checks, both open in Follow-ups.
