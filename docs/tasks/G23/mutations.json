@@ -225,18 +225,20 @@
       ]
     },
     {
-      "test": "scripts/__tests__/real-input-a11y-ios.test.js + scripts/__tests__/real-input-a11y.test.js",
+      "test": "scripts/__tests__/real-input-a11y-ios.test.js + scripts/__tests__/real-input-a11y.test.js + scripts/__tests__/conformance.test.js + scripts/__tests__/component-coverage.test.js",
       "file": "scripts/real-input/a11y.mjs",
       "mutation": "the row is deleted — the same state as the device run before the debt was recorded, which is how the row was found",
       "before": "  {\n    control: 'icon-button',\n    platform: 'ios',\n    …\n  },",
       "after": "",
-      "run": "bun run jest scripts/__tests__/real-input-a11y.test.js scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 3 suites' worth: 2 + 1",
+      "run": "bun run jest scripts/__tests__/real-input-a11y.test.js scripts/__tests__/real-input-a11y-ios.test.js — FAIL, 3 of 65; then bun run jest scripts/__tests__/conformance.test.js scripts/__tests__/component-coverage.test.js — FAIL, 2 of 163",
       "redTests": [
         "the iOS debt rows › reports the shipped Button inset as its recorded debt, and only that: expect(shipped.failures).toEqual([]) — Received: \"NitroUiIconButton: \\\"Real-input icon button\\\" is announced by the element at (16.50, 273, 39, 39) while the control is drawn at (16, 273, 39.67, 39)…\\\" (a11y-ios.test.js:430)",
         "the iOS debt rows › excuses the measured inset, not a box one point or ten wider: TypeError: Cannot read properties of undefined (reading 'matches') (a11y-ios.test.js:460)",
-        "the debt list › is the measured findings, per platform, and nothing else: expect(...).toEqual([…, \"ios:icon-button\"]) — the list is one row short (a11y.test.js:387)"
+        "the debt list › is the measured findings, per platform, and nothing else: expect(...).toEqual([…, \"ios:icon-button\"]) — the list is one row short (a11y.test.js:387)",
+        "the debt, as the matrix sees it › collapses the a11y cases onto their components, once per control: expect(failingKeys()).toEqual([…, \"IconButton|a11y-name-on-focusable-node\"]) — the list is one row short (conformance.test.js:1552)",
+        "every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports: the same expect(keys).toEqual([...]) one row short (component-coverage.test.js:389)"
       ],
-      "note": "The third red is the point: the measured finding stays on the list of things the suite has to answer for, and a row that stops matching goes red through staleExemptions instead of quietly expiring."
+      "note": "The point of the wider net: the debt is not only an exemption the device run prints. It is a failing cell in the coverage matrix, so removing the row cannot quietly make a component look covered - the matrix, the runner and the a11y list all go red together. And a row that stops matching goes red through staleExemptions instead of quietly expiring."
     }
   ]
 }
