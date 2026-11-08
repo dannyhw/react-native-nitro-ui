@@ -97,6 +97,12 @@ is read from the app's window rather than from the size Compose hands the provid
 is that frame's height with its origin thrown away: placing against the size alone leaves
 a popover pinned to the top of the screen (measured and fixed in G22).
 
+That frame comes back in *screen* coordinates, while the anchor box and the popup's own
+placement are the *window*'s, so where the host sits on the screen comes off it before the
+frame is used. The two agree only for a host at the screen's origin, which is where every
+fixture in this repo sits; a `Modal`, a freeform window or split screen is where they
+would not, and that is the case the JVM test puts a window at y = 1200 to stand for.
+
 iOS lets UIKit place the popover and permits the `.up` and `.down` arrows, which is the
 same rule with an arrow on it; a wide regular-width window is still placed by UIKit's
 own preference.
@@ -140,7 +146,10 @@ batch gets there first and reports nothing.
 
 The device suite checks 50 open/close cycles, drops at 0, 80 and 150 ms into the entry
 transition, a recycle while open and a drop of an open popover all leave no window, no
-controller and no React Native root behind.
+controller and no React Native root behind. It also takes the content back from a popover
+that was closed before it ever got up, presents one whose box arrives after native stopped
+waiting for it, follows a box that changes while the popover is up, and opens a popover
+inside a presented `BottomSheet` and beside a `Tooltip` closed in either order.
 
 ## Accessibility
 
