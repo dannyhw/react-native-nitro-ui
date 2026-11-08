@@ -652,7 +652,13 @@ has a selection: `selected` is controlled the way a Switch's `value` is, and
 `onPress`.
 
 ```tsx name=chip
-export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+export function PlaceFilters({
+  onDirections,
+  onStar,
+}: {
+  onDirections: () => void;
+  onStar: () => void;
+}) {
   const [openNow, setOpenNow] = useState(false);
 
   return (
