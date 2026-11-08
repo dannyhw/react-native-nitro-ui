@@ -39,7 +39,7 @@ import {
   Suite,
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
-import { imeFrameTop, imeWindowTop } from './ime-frame.mjs';
+import { imeInsetSample, imeInsetTop } from './ime-frame.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -3038,19 +3038,12 @@ const CHECKS = {
         t.imeShown(),
         true
       );
-      // The keyboard's frame only becomes the keyboard's once the IME window is drawn.
-      // `mInputShown` flips at the *start* of the show, and until the window is on screen
-      // its block reports a real, parseable frame laid out over the app - `[0,142][1080,2424]`
-      // on the API 35 image, whose top is the status bar. One read there is how a check
-      // comes to claim a field sits 1,400 px under a keyboard that is not there, so this
-      // waits for a frame from a window that says it is displayed, and reads the field
-      // afterwards: both ends of the comparison then describe one settled moment.
-      let imeTop = t.imeTopPx();
-      const frameDeadline = Date.now() + REACT_TIMEOUT;
-      while (imeTop == null && Date.now() < frameDeadline) {
-        await t.settle(250);
-        imeTop = t.imeTopPx();
-      }
+      // The inset animates in and the popover moves with it, so the keyboard's edge is read
+      // until it stops moving and the field's box only afterwards. `mInputShown` flips at the
+      // *start* of the show, and until the inset is up the source says nothing (`visible=false`
+      // over an empty frame), so one early read would measure a keyboard still on its way up
+      // and flatter a popover sitting half behind it.
+      const imeTop = await t.imeTopSettled();
       const afterField = t.nodeByTestId('popover-inner-field');
       if (afterField == null) {
         t.log.abort(
@@ -3059,7 +3052,7 @@ const CHECKS = {
       }
       if (imeTop == null) {
         t.log.abort(
-          `nothing reported the keyboard frame, so "above it" cannot be checked - ${t.imeFrameSample()}`
+          `nothing reported a settled keyboard edge, so "above it" cannot be checked - ${t.imeFrameSample()}`
         );
       }
       t.log.checkEquals(
@@ -5976,51 +5969,49 @@ class DeviceHarness {
    * @returns {number | null}
    */
   imeTopPx() {
-    const fromService = imeFrameTop(this.shell('dumpsys input_method').stdout);
-    if (fromService != null) {
-      return fromService;
-    }
-    for (const block of this.shell('dumpsys window windows').stdout.split(
-      'Window #'
-    )) {
-      if (!/InputMethod/.test(block.slice(0, 220))) {
-        continue;
-      }
-      const top = imeWindowTop(block);
-      if (top != null) {
-        return top;
-      }
-    }
-    return null;
+    return imeInsetTop(this.shell('dumpsys activity top').stdout);
   }
 
   /**
-   * The lines {@link imeTopPx} reads, for the check that fails when it says nothing.
+   * The `type=ime` lines {@link imeTopPx} reads, for the check that fails when it says
+   * nothing.
    *
-   * Every dumpsys scrape ends the same way: the format changes, the pattern stops
-   * matching, and a `null` quietly turns the rule into a no-op - or, as here, into a
-   * failure that reads like the control's fault. The abort names what the two dumps
-   * actually printed, so the next reader fixes the pattern instead of the claim.
+   * Every dumpsys scrape ends the same way: the format changes, the pattern stops matching,
+   * and a `null` quietly turns the rule into a no-op - or, as here, into a failure that reads
+   * like the control's fault. The abort names what the dump actually printed, so the next
+   * reader fixes the pattern instead of the claim.
    *
    * @returns {string}
    */
   imeFrameSample() {
-    const candidate = (/** @type {string} */ text) =>
-      text
-        .split('\n')
-        .filter((line) => /frame=|Rect\(/.test(line) && !/winConfig/.test(line))
-        .slice(0, 2)
-        .join(' ~ ')
-        .trim()
-        .slice(0, 160);
-    return [
-      `input_method: "${candidate(this.shell('dumpsys input_method').stdout)}"`,
-      `window windows: "${candidate(
-        this.shell('dumpsys window windows')
-          .stdout.split('Window #')
-          .find((block) => /InputMethod/.test(block.slice(0, 220))) ?? ''
-      )}"`,
-    ].join(' · ');
+    return `activity top: "${imeInsetSample(
+      this.shell('dumpsys activity top').stdout
+    )}"`;
+  }
+
+  /**
+   * The keyboard's top edge, once the inset has stopped moving.
+   *
+   * The inset animates in, so a single read is a frame of that animation: the keyboard's top
+   * on its way up is lower than where it ends, which would let a popover sitting half behind
+   * the keys pass. Two equal reads in a row mean it has arrived, and the field's box is
+   * measured after that, so both ends of the comparison describe the same settled moment.
+   *
+   * @returns {Promise<number | null>} the settled edge, or `null` when it never appeared or
+   *   never stopped moving
+   */
+  async imeTopSettled() {
+    const deadline = Date.now() + REACT_TIMEOUT;
+    let top = this.imeTopPx();
+    while (Date.now() < deadline) {
+      await sleep(250);
+      const next = this.imeTopPx();
+      if (next != null && next === top) {
+        return next;
+      }
+      top = next;
+    }
+    return null;
   }
 
   /**
@@ -7116,6 +7107,15 @@ function makeContext(harness, log) {
      */
     imeTopPx() {
       return harness.imeTopPx();
+    },
+
+    /**
+     * The same edge, once the inset has stopped animating.
+     *
+     * @returns {Promise<number | null>}
+     */
+    imeTopSettled() {
+      return harness.imeTopSettled();
     },
 
     /**

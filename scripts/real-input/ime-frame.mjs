@@ -1,79 +1,84 @@
 /**
- * The soft keyboard's frame, read out of the dumps that report it.
+ * The keyboard's top edge, read out of the insets the window manager publishes.
  *
  * `Popover`'s Android keyboard claim is "the content stays above the keyboard", which can
  * only be checked against the keyboard's own top edge: the keyboard is 306 px tall on one
- * system image and 420 on another, so a hardcoded number would pass on the shallow one
- * whatever the popover did. Two dumps know the frame, and they have never agreed on the
- * shape — the input method service and the older window dumps print
- * `mFrame=Rect(l, t - r, b)`, while the API 34+ window dump prints a single line,
- * `Frames: parent=[..][..] frame=[l,t][r,b] last=[..][..]`, with no `mFrame=` anywhere.
- * That second shape was measured in `dumpsys window windows` on the API 35 image the
- * harness runs on, after a check that knew only the first reported "no keyboard frame"
- * with the keyboard on screen: a scrape that silently stops matching reads exactly like a
- * control that never moved.
+ * system image and 883 on another, so a hardcoded number would pass on the shallow one
+ * whatever the popover did. The number the check wants is the one the popover itself has to
+ * honour — the `ime` `InsetsSource` of the app's window — and it is published in the
+ * `InsetsState` blocks of `dumpsys activity top`:
  *
- * A `null` means "this text never mentioned a frame", never "the keyboard is at the top".
- * Callers fail their own claim on `null`, so a parser that stops matching stays a red gate
- * rather than becoming a no-op.
+ *     InsetsSource id=3 type=ime frame=[0,1541][1080,2424] visibleFrame=[0,1541][1080,2424] visible=true …
+ *
+ * Reading it off a *window* instead does not work, and the two attempts before this one are
+ * the evidence. `dumpsys input_method` stopped printing a frame at all on the API 35 image,
+ * and the IME's own window in `dumpsys window windows` reports `frame=[0,142][1080,2424]`
+ * while the keyboard is plainly on screen: from API 30 the IME window is a full-height
+ * insets host and the keyboard is a surface positioned inside it, so that frame's top is the
+ * status bar. A check that read it claimed a field sat 1,400 px under a keyboard that was
+ * not there — which is how a scrape that stops matching is supposed to fail loudly, and this
+ * one nearly did not.
+ *
+ * A `null` means "this text never mentioned a visible keyboard", never "the keyboard is at
+ * the top". Callers fail their own claim on `null`, so a release that renames the line turns
+ * into a red gate rather than a no-op.
  */
-
-/** Every shape a frame has been printed in, most specific first. */
-const SHAPES = [
-  /(?:mInputBoundsOnScreen|mInputFrame|mFrame)=Rect\((-?\d+),\s*(-?\d+) - (-?\d+),\s*(-?\d+)\)/,
-  // Anchored on a boundary so that a `parentFrame=` or `displayFrame=` cannot answer for
-  // the window's own frame.
-  /(?:^|[\s{])frame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/,
-];
 
 /**
- * @param {string} text a whole dump, or one `Window #` block taken out of one
- * @returns {number | null} the frame's top edge in px, or `null` when this text says nothing
+ * One `InsetsSource` line for the IME, with the frame it carries.
+ *
+ * `type=ime` is matched exactly rather than as a substring of the type list: `navigationBars`
+ * and `mandatorySystemGestures` lines sit beside it and both carry a bottom frame that would
+ * make a wrong answer look plausible.
  */
-export function imeFrameTop(text) {
-  for (const shape of SHAPES) {
-    const frame = String(text).match(shape);
-    if (frame == null) {
+const IME_SOURCE =
+  /InsetsSource\b[^\n]*?\btype=ime\b[^\n]*?\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\][^\n]*?\bvisible=(true|false)/g;
+
+/**
+ * The keyboard's top edge in px, or `null` when this text says nothing.
+ *
+ * The smallest top among the visible sources wins: a dump can carry one block per activity,
+ * and the strictest answer is the one that cannot turn "above the keyboard" into a pass by
+ * measuring against a keyboard that is not the tallest one. A source that is not visible, or
+ * that has no height, says nothing — that is the IME's window sitting ready with no keyboard
+ * in it, whose frame is the whole screen.
+ *
+ * @param {string} text the output of `dumpsys activity top`, or one `InsetsState` block
+ * @returns {number | null}
+ */
+export function imeInsetTop(text) {
+  let top = null;
+  for (const match of String(text).matchAll(IME_SOURCE)) {
+    if (match[5] !== 'true') {
       continue;
     }
-    const top = Number(frame[2]);
-    const bottom = Number(frame[4]);
-    // A frame with no height is a window that is not on screen, which is not an answer
-    // to "where does the keyboard start".
-    if (bottom > top) {
-      return top;
+    const sourceTop = Number(match[2]);
+    const bottom = Number(match[4]);
+    if (bottom <= sourceTop) {
+      continue;
+    }
+    if (top === null || sourceTop < top) {
+      top = sourceTop;
     }
   }
-  return null;
+  return top;
 }
 
 /**
- * The keyboard's top edge from one `Window #` block for the IME window.
+ * The `type=ime` lines a dump carries, for the check that fails when there are none.
  *
- * `imeFrameTop` alone is not enough, and the difference is a whole release's worth of
- * wrong answers: the IME window exists whether or not a keyboard is on screen, and while
- * it is *not* being displayed it is laid out over the app - on the API 35 image,
- * `mViewVisibility=0x8`, `isReadyForDisplay()=false`, and `frame=[0,142][1080,2424]`. That
- * is a real parseable frame, and the top of it is the status bar. Read once, as the
- * keyboard's own `mInputShown` flips true but before the window is drawn, it turns into a
- * check that says the field is 1,400 px under a keyboard that is not there. So a block that
- * says it is not displayed is treated as saying nothing, and the caller waits for a block
- * that does.
+ * Every dumpsys scrape ends the same way: the format changes, the pattern stops matching, and
+ * a `null` quietly turns the rule into a no-op. The caller's failure names these lines, so the
+ * next reader fixes the pattern instead of the claim.
  *
- * A block that carries neither marker is parsed anyway: the two are what this release
- * prints, not a contract, and a dump that stops printing them should fall through to the
- * frame rather than silently fail a rule.
- *
- * @param {string} block one `Window #` block, IME window expected
- * @returns {number | null}
+ * @param {string} text the output of `dumpsys activity top`
+ * @returns {string} up to two of the lines, joined and shortened
  */
-export function imeWindowTop(block) {
-  const text = String(block);
-  if (
-    /isReadyForDisplay\(\)=false/.test(text) ||
-    /mViewVisibility=0x[1-9a-f]/.test(text)
-  ) {
-    return null;
-  }
-  return imeFrameTop(text);
+export function imeInsetSample(text) {
+  const lines = String(text)
+    .split('\n')
+    .filter((line) => /\btype=ime\b/.test(line))
+    .slice(0, 2)
+    .map((line) => line.trim().slice(0, 160));
+  return lines.length > 0 ? lines.join(' ~ ') : 'no type=ime line at all';
 }
