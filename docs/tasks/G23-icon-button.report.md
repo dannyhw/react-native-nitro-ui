@@ -82,12 +82,10 @@ merge (X14), so there are no numbers to report.
 | `real-input:ios:--control:icon-button` | stale | — | d736daa2ed97 (not this tree) | 9 m 56 s | start 16.5 / med 9.4 / max 30.9 |
 | `real-input:ios:icon-button` | stale | — | d736daa2ed97 (not this tree) | 0.5 s | start 17.4 / med 17.4 / max 17.4 |
 
-One code tree, `7c3724206844`: all five gates green on it, and
-`need --for merge` answers `merge is satisfied on this code tree.`. The filtered rows below satisfy only
-their own name — the four stale ones are the mutation runs and the pre-fix runs, left in the
-ledger because a round's red lines are evidence, not noise.
-
-`need: merge is satisfied on this code tree.`
+One code tree, `7c3724206844`, with all five gates green on it —
+`need: merge is satisfied on this code tree.` The filtered Android row is the barrier fix
+proved on its own before the full run behind it; the five stale rows are the mutation runs and
+the pre-fix runs, left in the ledger because a round's red lines are evidence, not noise.
 
 ## Red proofs
 
