@@ -87,6 +87,22 @@ class NitroUiFormHoldingView: UIView {
     super.didMoveToSuperview()
     onLayoutChange?()
   }
+
+  /// The safe area moved, which moves the list's *content* without moving its frame.
+  ///
+  /// The list is this view's sibling at the same frame, so it takes the same insets, and an
+  /// automatic adjustment turns them into an `adjustedContentInset` that shifts
+  /// `contentOffset.y` - the one number the shadow tree corrects every row by. Neither
+  /// `layoutSubviews` (the box did not change) nor any of the scroll settle callbacks runs
+  /// for it - UIKit's own callback for it,
+  /// `scrollViewDidChangeAdjustedContentInset:`, arrived in iOS 16.4 and cannot be answered
+  /// by a delegate built for this deployment target at all - so without this the Form keeps
+  /// publishing the offset from before the shift, which E7 measured as 72 pt on every row of
+  /// a form at rest.
+  override func safeAreaInsetsDidChange() {
+    super.safeAreaInsetsDidChange()
+    onLayoutChange?()
+  }
 }
 
 /// A Section's content view: its rows' holding view, and the way back to its model.

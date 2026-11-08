@@ -215,10 +215,19 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
     guard let metrics, let form else { return }
     let header = form.supplementaryHeight(footer: false, in: model)
     let footer = form.supplementaryHeight(footer: true, in: model)
-    // The x a row is drawn at, asked of the Form, which reads it off a cell. iOS has no
-    // space *between* shapes: the list's layout has one continuous background per section.
+    // The x a row is drawn at, asked of the Form, which reads it off a cell.
     let inset = reportedInset ?? 0
-    let next = [Double(header), Double(footer), inset, 0.0]
+    // The space *between* adjacent rows, which `Form.tsx` spends as a margin on each row
+    // (`marginVertical: gap / 2`) so that rows' Yoga pitch is the pitch they are drawn at.
+    // On Android that is the Material segmented list's gap. On iOS the list's layout has one
+    // continuous background per section, so there is no gap between *shapes* - but there is
+    // chrome between rows: `NitroUiFormRowCell` pins a row 4 pt below the cell's top and 4 pt
+    // above its bottom, so a cell is 8 pt taller than the row inside it and adjacent rows sit
+    // 8 pt apart. Reading `0` there - as this line did - is what made a `measure` of the 14th
+    // row 104 pt short of its pixels (E7), because the shadow tree stacked rows at 44 pt
+    // while the list drew them at 52. Read off the cell, so the number is the chrome.
+    let gap = NitroUiFormRowCell.rowChrome * 2
+    let next = [Double(header), Double(footer), inset, gap]
     if reportedMetrics == next { return }
     reportedMetrics = next
     metrics(next[0], next[1], next[2], next[3])

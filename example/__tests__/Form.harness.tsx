@@ -794,9 +794,20 @@ async function compareRows(
       );
     }
   }
+  // The two constants and the two offsets the comparison is built from, so a mismatch says
+  // which number moved rather than leaving the arithmetic to be reconstructed from points.
+  const geometry = need(forms.measure).nuiTestFormReport();
   console.log(
     `S6b MEASURE ${what}: compared=${compared} scroll=${round1(scrolledBy)} ` +
-      `mismatched=${bad.length}` +
+      `mismatched=${bad.length} geometry{${[
+        'offset',
+        'origin',
+        'received',
+        'listY',
+        'insetTop',
+      ]
+        .map((key) => `${key}=${raw(parse(geometry), key)}`)
+        .join(',')}}` +
       (bad.length > 0 ? ` - ${bad.join(' | ')}` : '')
   );
   return { compared, bad };
@@ -849,6 +860,16 @@ describe('Form measure (E7)', () => {
     await formReport(
       (r) => num(r, 'rows') === MEASURE_ROWS,
       `${MEASURE_ROWS} rows`,
+      'measure'
+    );
+
+    // The number the whole comparison rests on, asked rather than assumed: the offset the
+    // shadow tree is correcting by is the offset the list is actually at. A form at rest with
+    // a list inset it has not published fails here with both numbers named, before any of
+    // the per-row arithmetic gets a chance to blame the row.
+    await formReport(
+      (r) => Math.abs(num(r, 'origin') - num(r, 'offset')) <= 0.5,
+      'the published offset to be where the list is',
       'measure'
     );
 
