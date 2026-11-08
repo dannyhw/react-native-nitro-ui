@@ -359,6 +359,11 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   private var owesDismissal = false
   /// How many turns the present has waited for the content box to have a size.
   private var contentWaits = 0
+  /// The RN `Modal` host the anchor lived in, remembered while it had a window, and whether
+  /// its going away is what closed this popover - which closes it silently (see
+  /// ``windowChanged(_:)``).
+  private weak var enclosingModalHost: UIViewController?
+  private var closingWithTheModal = false
   /// How many times this mount presented, for the harness.
   private var presentCount = 0
   /// The box the popover was presented with, for the harness's "first frame is the size we
@@ -445,6 +450,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   func prepareForRecycle() {
     lifetimeRecycles += 1
     mark(.recycled)
+    closingWithTheModal = false
+    enclosingModalHost = nil
     teardown()
     state = NitroUiControlledValue<Bool>(displayed: false)
     maxWidthValue = 0
@@ -517,6 +524,18 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   /// Yoga gave the content box a size. While the popover is up that is a content resize in
   /// front of the user, and UIKit resizes a popover around its `preferredContentSize`.
   private func contentBoxChanged(_ size: CGSize) {
+    if popover == nil, state.displayed, awaitingPresent, size.width > 0, size.height > 0 {
+      // The box arrived late. `presentIfPossible` waits a bounded number of turns for it and
+      // then stands down rather than open a popover at UIKit's default size, and standing
+      // down used to be the last word: content that measured itself after that wait - a
+      // Suspense-like reveal, an image that sizes its own box - left `isPresented` true with
+      // nothing on screen (measured: `presentCount=0` forever after a 1.5 s box). The box is
+      // the only thing that was missing, so this is where the wait is picked up again.
+      contentWaits = 0
+      schedulePresent()
+      publishReport()
+      return
+    }
     guard let popover, popoverIsUp, size.width > 0, size.height > 0 else {
       publishReport()
       return
@@ -617,6 +636,8 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       return
     }
     awaitingPresent = false
+    // A presentation of its own: the next close of this one is a close to report.
+    closingWithTheModal = false
     let controller = NitroUiPopoverController()
     controller.adopt(container)
     sizeAtPresent = size
@@ -699,6 +720,15 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       presentation.forgetController()
     }
     restoreContent()
+    // A close taken with a closing `Modal` is a drop: nothing after it reaches the app, and
+    // the witness says so rather than counting an exit nobody caused.
+    let withTheModal = closingWithTheModal
+    closingWithTheModal = false
+    if withTheModal {
+      owesDismissal = state.displayed
+      publishReport()
+      return
+    }
     if !asked, !dropped {
       if controller.dismissedByUser {
         userDismissals += 1
@@ -721,6 +751,34 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
     publishReport()
   }
 
+  /// The nearest RN `Modal` host in `view`'s responder chain, by way of `next` - the walk
+  /// `NitroSwiftUIHost` uses for the same reason (`reactViewController()` is this walk, minus
+  /// the navigation/tab skipping). Read while the anchor still has a window: the chain is what
+  /// tells a `Modal`'s content from the app's own, and a view with no window is asked too late.
+  private static func enclosingModalHost(for view: UIView?) -> UIViewController? {
+    var responder: UIResponder? = view?.next
+    while let current = responder {
+      if let controller = current as? UIViewController {
+        if NitroUiPresenterChain.isModalHost(controller) { return controller }
+      }
+      responder = current.next
+    }
+    return nil
+  }
+
+  /// Whether the `Modal` this popover's anchor was in has gone or is going.
+  ///
+  /// `isBeingDismissed` is the transition itself; a `Modal` closed with `animationType: "none"`
+  /// is off the chain and out of the window before this is asked, which is why both shapes are
+  /// counted. Only ever true for a mount that had a `Modal` host to remember, so an ordinary
+  /// drop - an unmount in a screen that stays up - keeps reporting its close.
+  private func modalHostIsGoingAway() -> Bool {
+    guard let host = enclosingModalHost ?? Self.enclosingModalHost(for: anchor) else {
+      return false
+    }
+    return host.isBeingDismissed || (host.presentingViewController == nil && host.view.window == nil)
+  }
+
   /// Tell the wrapper its content can go: `ended` when a presentation really ended.
   ///
   /// The debt is what makes the second kind exact: it is taken on whenever React asks for a
@@ -741,6 +799,9 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
   /// popover drops this view in the same turn, and a dropped mount reports nothing.
   private func windowChanged(_ hasWindow: Bool) {
     if hasWindow {
+      if enclosingModalHost == nil {
+        enclosingModalHost = Self.enclosingModalHost(for: anchor)
+      }
       sync()
       publishReport()
       return
@@ -753,13 +814,25 @@ final class HybridNitroUiPopover: HybridNitroUiPopoverSpec, RecyclableView {
       else { return }
       // The close first, then the teardown: a non-animated dismissal can finish inside
       // `dismissForTeardown`, and the presentation's end should follow its reason.
-      if self.state.displayed {
+      //
+      // One case has no close to report: the window went because the React Native `Modal`
+      // the anchor was in is closing. RN takes that Modal's content with it, so this mount is
+      // being dropped, and a popover dropped while presented closes silently on both
+      // platforms (D44 item 2, and BottomSheet's rule). Which side wins the race is not
+      // something either platform hides: on Android the unmount is first, so the drop rule
+      // applies on its own; on iOS the anchor's window goes first (RN keeps a closing Modal's
+      // content mounted until its native dismissal has ended), and without this the same move
+      // reported `onIsPresentedChange(false)` there and nothing here.
+      let withTheModal = self.modalHostIsGoingAway()
+      if withTheModal {
+        self.closingWithTheModal = true
+      } else if self.state.displayed {
         let count = self.state.user(false)
         self.presentedChange?(false, Double(count))
       }
       if let popover = self.popover, self.presentation.controller === popover {
         self.presentation.dismissForTeardown()
-      } else if self.owesDismissal {
+      } else if self.owesDismissal, !withTheModal {
         self.awaitingPresent = false
         self.reportDismissed(ended: false)
       }

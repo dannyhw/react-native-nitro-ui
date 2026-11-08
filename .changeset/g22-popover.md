@@ -8,7 +8,11 @@ Add `Popover`: a platform popover whose content is React Native views.
 <Popover
   isPresented={open}
   onIsPresentedChange={setOpen}
-  anchor={<Text>Share</Text>}
+  anchor={
+    <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+      <Text>Share</Text>
+    </Pressable>
+  }
 >
   <Text>Anything React Native can render</Text>
 </Popover>

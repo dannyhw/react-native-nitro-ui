@@ -149,6 +149,13 @@ internal class PopoverModel : NitroUiModel() {
   /** Make the composition match [state]'s `displayed`. Returns whether it moved. */
   fun applyDisplayed(): Boolean {
     val next = state.displayed
+    // React asked for a popover: from this turn the wrapper has content mounted for it, and it
+    // has to be told that content can go - including a present that never gets on screen,
+    // whose box never sizes and whose popup is therefore never composed. BottomSheet takes the
+    // debt here (`HybridNitroUiBottomSheet.applyDisplayed`) and iOS's `sync()` does too; taken
+    // only when a presentation ends, a popover opened and then withdrawn at a box that never
+    // sized leaves its content mounted for good.
+    if (next) owesDismissal = true
     if (next == presented) {
       return false
     }
@@ -718,6 +725,21 @@ private class DrawWatch(
 }
 
 /**
+ * A box in one coordinate space, in px.
+ *
+ * Its own type rather than `android.graphics.Rect` because [PopoverPlacement] is the subject
+ * of a JVM unit test and the platform's `Rect` is a stubbed method body under plain JUnit;
+ * rather than Compose's `IntRect` because this is not a geometry the composition sees, it is
+ * one box the position provider converts on the way in.
+ */
+internal data class PopoverFrame(
+  val left: Int,
+  val top: Int,
+  val right: Int,
+  val bottom: Int,
+)
+
+/**
  * The popup's placement, as arithmetic rather than as Compose state.
  *
  * Three branches decide whether a `TextInput` inside the popover ends up above the keyboard
@@ -737,6 +759,42 @@ private class DrawWatch(
  * of a 2424 px screen, frame [142..1541], keyboard edge exactly the frame's bottom).
  */
 internal object PopoverPlacement {
+  /**
+   * The host window's visible display frame, in the coordinates the popup is placed in.
+   *
+   * The two are different spaces, and only a host window at the screen's origin hides it:
+   * `View.getWindowVisibleDisplayFrame` answers in *screen* coordinates, while Compose hands
+   * the position provider an `anchorBounds` from `LayoutCoordinates.positionInWindow` and
+   * puts this function's answer in the popup window's `LayoutParams`, measured from the host
+   * window's own top-left (`PopupLayout.updatePosition`). Every fixture in this repo has the
+   * host at (0, 0), where the two spaces read the same number; a host in split-screen or a
+   * freeform window does not, and there the unconverted frame sits a whole window's height
+   * below where the popup can go - it lets the popup hang past the bottom of the window it
+   * belongs to and stops treating that window's keyboard edge as an edge at all.
+   *
+   * @param frameLeft the frame's left edge, in screen coordinates
+   * @param frameTop the frame's top edge, in screen coordinates
+   * @param frameRight the frame's right edge, in screen coordinates
+   * @param frameBottom the frame's bottom edge, in screen coordinates
+   * @param windowLeft where the host window starts on screen, px
+   * @param windowTop where that window starts vertically, px
+   * @returns the same box in the host window's coordinates
+   */
+  fun windowFrame(
+    frameLeft: Int,
+    frameTop: Int,
+    frameRight: Int,
+    frameBottom: Int,
+    windowLeft: Int,
+    windowTop: Int,
+  ): PopoverFrame =
+    PopoverFrame(
+      left = frameLeft - windowLeft,
+      top = frameTop - windowTop,
+      right = frameRight - windowLeft,
+      bottom = frameBottom - windowTop,
+    )
+
   /**
    * @param anchorTop the anchor's top edge, in the host window's coordinates
    * @param anchorBottom the anchor's bottom edge
@@ -821,14 +879,25 @@ private class PopoverPositionProvider(
    * answers with an empty rect, and then the size Compose chose is the only thing left to go
    * on, taken from the window's own top edge.
    */
-  private fun visibleFrame(windowSize: IntSize): Rect {
+  private fun visibleFrame(windowSize: IntSize): PopoverFrame {
     val frame = Rect()
     host.getWindowVisibleDisplayFrame(frame)
-    return if (frame.bottom > frame.top && frame.right > frame.left) {
-      frame
-    } else {
-      Rect(0, 0, windowSize.width, windowSize.height)
+    if (frame.bottom <= frame.top || frame.right <= frame.left) {
+      // A view that is not attached answers with an empty rect, and `windowSize` - the
+      // frame's size, which Compose measured from the same window - is all that is left. It
+      // is already in the window's own coordinates, so it needs no conversion.
+      return PopoverFrame(0, 0, windowSize.width, windowSize.height)
     }
+    val at = IntArray(2)
+    host.rootView.getLocationOnScreen(at)
+    return PopoverPlacement.windowFrame(
+      frameLeft = frame.left,
+      frameTop = frame.top,
+      frameRight = frame.right,
+      frameBottom = frame.bottom,
+      windowLeft = at[0],
+      windowTop = at[1],
+    )
   }
 
   override fun calculatePosition(

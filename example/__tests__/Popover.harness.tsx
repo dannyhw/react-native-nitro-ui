@@ -36,7 +36,12 @@ import {
   it,
   render,
 } from 'react-native-harness';
-import { nitroUiCore, Popover } from 'react-native-nitro-ui';
+import {
+  BottomSheet,
+  nitroUiCore,
+  Popover,
+  Tooltip,
+} from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
 
 /** What `hybridRef` hands back - declared, not imported (D14). */
@@ -56,6 +61,12 @@ const captureHybrid =
   (view: PopoverHandle): void => {
     handles.set(testId, view);
   };
+
+/** A `BottomSheet`/`Tooltip` mount, for the fixtures that share a screen with one. */
+type SheetHandle = { nuiTestStateReport(): string };
+type TipHandle = { nuiTestStateReport(): string };
+const sheets = new Map<string, SheetHandle>();
+const tips = new Map<string, TipHandle>();
 
 /** Every event the app received, in order: `id:presented:false`, `id:dismiss`. */
 const eventLog: string[] = [];
@@ -98,6 +109,80 @@ function Content({
       style={{
         width: fill ? '100%' : width,
         height,
+        backgroundColor: '#9ec5fe',
+      }}
+    />
+  );
+}
+
+/**
+ * Content that has no box until `delayMs` after it mounts. The one shape of content that
+ * can outlast native's wait for a layout: a lazy list, an image that sizes its own box, a
+ * `Suspense` boundary that resolves after the popover was asked for.
+ */
+function LateContent({
+  testId,
+  width,
+  height,
+  delayMs,
+}: {
+  testId: string;
+  width: number;
+  height: number;
+  delayMs: number;
+}) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    bump(mounts, testId);
+    const timer = setTimeout(setReady, delayMs, true);
+    return () => {
+      clearTimeout(timer);
+      bump(unmounts, testId);
+    };
+  }, [testId, delayMs]);
+  return (
+    <View
+      testID={`${testId}-content`}
+      onLayout={(event) => layouts.set(testId, event.nativeEvent.layout)}
+      style={{
+        width: ready ? width : 0,
+        height: ready ? height : 0,
+        backgroundColor: '#9ec5fe',
+      }}
+    />
+  );
+}
+
+/**
+ * Content whose own height a test changes while the popover is up: the resize D44's
+ * "the popover follows its content" claim is about, told from the content's side.
+ */
+function GrowingContent({
+  testId,
+  width,
+  height,
+  grownHeight,
+}: {
+  testId: string;
+  width: number;
+  height: number;
+  grownHeight: number;
+}) {
+  const [grown, setGrown] = useState(false);
+  setters.set(`${testId}:grown`, (next: boolean) => setGrown(next));
+  useEffect(() => {
+    bump(mounts, testId);
+    return () => {
+      bump(unmounts, testId);
+    };
+  }, [testId]);
+  return (
+    <View
+      testID={`${testId}-content`}
+      onLayout={(event) => layouts.set(testId, event.nativeEvent.layout)}
+      style={{
+        width,
+        height: grown ? grownHeight : height,
         backgroundColor: '#9ec5fe',
       }}
     />
@@ -173,6 +258,29 @@ function Stage({
   );
 }
 
+/**
+ * A tooltip whose `isPresented` lives in a parent, exactly as `Stage` holds a popover's -
+ * the pair fixture needs the two controls opened and closed by the same kind of hand.
+ */
+function TipStage({ testId }: { testId: string }) {
+  const [open, setOpen] = useState(false);
+  setters.set(testId, setOpen);
+  return (
+    <Tooltip
+      testID={testId}
+      hybridRef={(view: TipHandle) => tips.set(testId, view)}
+      isPresented={open}
+      onIsPresentedChange={(next) => {
+        eventLog.push(`${testId}:presented:${String(next)}`);
+        setOpen(next);
+      }}
+      message="Both up at once"
+    >
+      <View style={{ width: 96, height: 34, backgroundColor: '#e5e5ea' }} />
+    </Tooltip>
+  );
+}
+
 /** The stage, plus a probe that can outlive it, and a switch that drops it. */
 function DropScene({
   testId,
@@ -197,14 +305,17 @@ function DropScene({
 
 type Report = Record<string, string>;
 
-function reportOf(testId: string): Report {
-  const raw = handles.get(testId)?.nuiTestStateReport() ?? '';
+function parseReport(raw: string): Report {
   const report: Report = { raw };
   for (const pair of raw.split(';')) {
     const at = pair.indexOf('=');
     if (at > 0) report[pair.slice(0, at)] = pair.slice(at + 1);
   }
   return report;
+}
+
+function reportOf(testId: string): Report {
+  return parseReport(handles.get(testId)?.nuiTestStateReport() ?? '');
 }
 
 const num = (report: Report, key: string): number => {
@@ -273,6 +384,43 @@ async function waitForFreshReport(
     testId,
     (r) => Number(r.seq ?? '0') > now && check(r),
     what,
+    timeoutMs
+  );
+}
+
+/**
+ * The same two questions of a handle that is not a popover's - a `BottomSheet`'s or a
+ * `Tooltip`'s, for the fixtures that share a screen with one. Same report shape, same rule
+ * about only believing a build newer than the one you read.
+ */
+function reportOfHandle(
+  map: Map<string, { nuiTestStateReport(): string }>,
+  testId: string
+): Report {
+  return parseReport(map.get(testId)?.nuiTestStateReport() ?? '');
+}
+
+async function waitForHandleReport(
+  map: Map<string, { nuiTestStateReport(): string }>,
+  testId: string,
+  check: (report: Report) => boolean,
+  what: string,
+  timeoutMs = 10000,
+  fresh = false
+): Promise<Report> {
+  const start = fresh ? Number(reportOfHandle(map, testId).seq ?? '0') : -1;
+  return pollUntil(
+    () => {
+      const report = reportOfHandle(map, testId);
+      if (Number(report.seq ?? '0') <= start) return null;
+      return check(report) ? report : null;
+    },
+    () =>
+      new Error(
+        `"${testId}" never reached ${what}; its report is "${
+          reportOfHandle(map, testId).raw
+        }"; events=[${eventLog.join(',')}]`
+      ),
     timeoutMs
   );
 }
@@ -626,6 +774,96 @@ describe('Popover', () => {
     expect(num(second, 'askedW')).toBeLessThanOrEqual(211);
   });
 
+  it('presents content that sizes itself after native stopped waiting', async () => {
+    // Both platforms refuse to ask for a popover at no size, and both wait a bounded
+    // number of turns for the box: iOS counts the turns and then stands down, Android
+    // composes on the layout that finally comes. A box that arrives *after* the wait is
+    // the case the wait cannot answer by waiting longer - iOS used to stand down for
+    // good, and the app was left with `isPresented` true and nothing on screen.
+    const id = 'late-box';
+    await render(
+      <Stage testId={id} initial>
+        <LateContent testId={id} width={184} height={112} delayMs={2500} />
+      </Stage>
+    );
+    await requireHandle(id);
+    // Past iOS's 60 turns (~1 s) and before the box: still nothing up, and the ask is
+    // not withdrawn - the app still wants the popover.
+    await sleep(1700);
+    const waiting = reportOf(id);
+    expect(waiting.presented).toBe('1');
+    expect(waiting.onScreen).toBe('0');
+    expect(num(waiting, 'presentCount')).toBe(0);
+    const up = await waitForUp(id, 15000);
+    expect(num(up, 'presentCount')).toBe(1);
+    // And it comes up at the box it finally measured, not at a default that then jumps.
+    const settled = await waitForDrawnSample(id);
+    const asked = askedPx(settled);
+    expect(asked.w).toBeLessThanOrEqual(
+      Math.round(num(settled, 'maxWidth') * 1.01)
+    );
+    const first = drawn(settled);
+    expect(isSize(first.last, asked.w, asked.h)).toBe(true);
+  });
+
+  it('follows the content when it resizes while the popover is up', async () => {
+    // `docs/components/popover.md` promises a popover that grows with its content, and the
+    // promise is one write per platform: iOS moves `preferredContentSize`, Android re-composes
+    // the popup at the new box. Two witnesses each, because the number the platform was
+    // *told* and the frame it *drew* are different claims - a write that never reaches the
+    // window is exactly the bug a single assertion would miss.
+    const id = 'grows';
+    const width = 180;
+    const grownHeight = 208;
+    await render(
+      <Stage testId={id} initial width={width} height={92}>
+        <GrowingContent
+          testId={id}
+          width={width}
+          height={92}
+          grownHeight={grownHeight}
+        />
+      </Stage>
+    );
+    await requireHandle(id);
+    const up = await waitForUp(id);
+    expect(num(up, 'presentCount')).toBe('1');
+    expect(Math.abs(num(up, 'askedH') - 92)).toBeLessThanOrEqual(1);
+    if (IOS) {
+      expect(Math.abs(num(up, 'prefH') - 92)).toBeLessThanOrEqual(1);
+      expect(Math.abs(num(up, 'viewH') - 92)).toBeLessThanOrEqual(1);
+    }
+
+    setters.get(`${id}:grown`)?.(true);
+    await settledLayout(
+      id,
+      (l) => Math.abs(l.height - grownHeight) <= 1,
+      `at its grown height of ${String(grownHeight)}`
+    );
+    const scale = scaleOf(up);
+    const grownPx = Math.round(grownHeight * scale);
+    const grownReport = await waitForFreshReport(
+      id,
+      (r) =>
+        Math.abs(num(r, 'askedH') - grownHeight) <= 1 &&
+        (IOS
+          ? Math.abs(num(r, 'prefH') - grownHeight) <= 1 &&
+            Math.abs(num(r, 'viewH') - grownHeight) <= 1
+          : isSize(r.lastDraw ?? '', Math.round(width * scale), grownPx)),
+      'the popover at the content height it grew to',
+      12000
+    );
+    // The frame the window drew moved with it, and this is still the same presentation: a
+    // resize that took the popover down and put it back would pass the two lines above.
+    const last = drawn(grownReport).last.split('x').map(Number);
+    expect(Math.abs((last[1] ?? 0) - grownPx)).toBeLessThanOrEqual(2);
+    const box = rectOf(grownReport.popRect);
+    expect(box).not.toBeNull();
+    expect(Math.abs(box!.height - grownPx)).toBeLessThanOrEqual(2);
+    expect(num(grownReport, 'presentCount')).toBe('1');
+    expect(num(grownReport, 'live')).toBe('1');
+  });
+
   it('opens below its anchor, and above it when there is no room below', async () => {
     const below = 'place-below';
     await render(<Stage testId={below} initial />);
@@ -877,6 +1115,36 @@ describe('Popover', () => {
       });
     }
 
+    it('takes the content back from a popover that never got up', async () => {
+      // `fill` is the content that cannot be honoured: `width: '100%'` of a box that has
+      // no width until the content gives it one, so neither platform ever composes a
+      // popover for it. React still asked, and the wrapper still mounted the content for
+      // the ask - so closing it owes the wrapper its second call, whether or not a
+      // presentation ever began. iOS and BottomSheet take that debt on the ask; Android
+      // took it only when a presentation ended, and this content stayed mounted forever.
+      const id = 'never-up';
+      await render(<Stage testId={id} fill />);
+      await requireHandle(id);
+      await waitForReport(id, (r) => r.raw !== '', 'a report');
+      setters.get(id)?.(true);
+      const waiting = await waitForReport(
+        id,
+        (r) =>
+          r.presented === '1' &&
+          num(r, 'onScreen') === 0 &&
+          num(r, 'askedW') === 0 &&
+          num(r, 'contentWaits') > 0,
+        'an ask that waited for a box and got none',
+        20000
+      );
+      expect(num(waiting, 'presentCount')).toBe(0);
+      expect(mounts.get(id)).toBe(1);
+      setters.get(id)?.(false);
+      await waitForUnmount(id, 1, 'its content after a close with nothing up');
+      // A withdrawal is not a dismissal: the app asked for the close, so no event.
+      expect(eventLog).toEqual([]);
+    });
+
     it('reports nothing for a popover dropped while it is presented (D44 item 2)', async () => {
       const id = 'drop-open';
       // Mounted closed and opened by hand: with `initial` the popover presents in the
@@ -982,6 +1250,30 @@ describe('Popover', () => {
       const up = await waitForUp('in-modal', 15000);
       expect(up.presentCount).toBe('1');
       expect(up.anchored).toBe('1');
+      // Android places the popup inside the window the anchor is in, and a `Modal` is where
+      // that window stops being the app's own: the frame the provider places against comes
+      // from the host view's window, the anchor box comes from Compose, and the two are read
+      // back here in a third space (both rects on screen). A popover placed in the wrong one
+      // is off the Modal, not merely a few px out.
+      const placed = await waitForReport(
+        'in-modal',
+        (r) => isUp(r) && rectOf(r.popRect) != null,
+        'the popover inside the Modal, with the frame it was given',
+        15000
+      );
+      const popup = rectOf(placed.popRect)!;
+      const anchor = rectOf(placed.anchorRect)!;
+      expect(popup.y).toBeGreaterThanOrEqual(anchor.y + anchor.height - 2);
+      expect(popup.height).toBeGreaterThan(0);
+      if (!IOS) {
+        // Our own provider is start-aligned (into the 16 dp margin when the anchor is at the
+        // edge, as it is here); UIKit centres its arrow on the anchor instead, which the
+        // placement test next door pins.
+        expect(
+          Math.abs(popup.x - Math.max(anchor.x, 16 * scaleOf(placed)))
+        ).toBeLessThanOrEqual(2);
+        expect(num(placed, 'placed')).toBeGreaterThanOrEqual(1);
+      }
       if (IOS) {
         // A popover in the app's own presentation chain is what UIKit takes down when
         // the `Modal` closes - and the thing that makes the next `Modal` be refused.
@@ -1001,6 +1293,199 @@ describe('Popover', () => {
       await sleep(700);
       await waitForNothingLeft('modal-probe', 'after the Modal closed');
     });
+  });
+
+  describe('beside another presenter', () => {
+    /** Up, by `BottomSheet.harness.tsx`'s own reading of its report. */
+    const sheetUp = (report: Report) =>
+      report.presented === '1' &&
+      report.live === '1' &&
+      Number(report.children) >= 1 &&
+      (IOS
+        ? report.onScreen === '1' && report.inSheet === '1'
+        : report.sheetValue !== 'none' &&
+          report.sheetValue !== 'Hidden' &&
+          Number(report.inSheet) >= 1);
+
+    /** Up, by `Tooltip.harness.tsx`'s own reading of its report. */
+    const tipUp = (report: Report) =>
+      report.presented === '1' &&
+      (IOS ? report.onScreen === '1' : report.kind === 'plain');
+
+    it('presents inside a presented BottomSheet, and neither takes the other down', async () => {
+      // The sheet is the other presenter that matters for a popover: like a `Modal` it is a
+      // window of its own over the app, and unlike a `Modal` it is opened by an app that
+      // then expects its own popovers to work inside it. iOS has the sharp edge - give the
+      // popover presentation a source view from the app's own tree and UIKit puts the
+      // presentation back into that tree's chain, `ownWindow=0`, which is the residue
+      // Decision 1 exists to prevent and which the popover-over-a-`Modal` case cannot see
+      // because there the app's chain is not what the popover is asked to sit on.
+      function InSheet() {
+        const [sheet, setSheet] = useState(true);
+        setters.set('sheet-host', setSheet);
+        return (
+          <BottomSheet
+            testID="sheet"
+            hybridRef={(view: SheetHandle) => sheets.set('sheet', view)}
+            isPresented={sheet}
+            onIsPresentedChange={(next) => {
+              eventLog.push(`sheet:presented:${String(next)}`);
+              setSheet(next);
+            }}
+            detents={['large']}
+          >
+            <View style={{ paddingTop: 170, paddingLeft: 64 }}>
+              <Stage testId="in-sheet" />
+            </View>
+          </BottomSheet>
+        );
+      }
+      await render(
+        <>
+          <Stage testId="sheet-probe" />
+          <InSheet />
+        </>
+      );
+      await requireHandle('sheet-probe');
+      const baseline = await waitForReport(
+        'sheet-probe',
+        (r) => r.raw !== '' && r.live === '0',
+        'a baseline with no popover up',
+        20000
+      );
+      await waitForHandleReport(
+        sheets,
+        'sheet',
+        sheetUp,
+        'the sheet, open',
+        20000
+      );
+      await requireHandle('in-sheet');
+      setters.get('in-sheet')?.(true);
+      const up = await waitForReport(
+        'in-sheet',
+        (r) => isUp(r) && rectOf(r.popRect) != null,
+        'a popover up inside the sheet',
+        20000
+      );
+      // Both up, and the popover in a window of its own rather than in the sheet's chain.
+      expect(sheetUp(reportOfHandle(sheets, 'sheet'))).toBe(true);
+      expect(num(up, 'presentCount')).toBe(1);
+      expect(num(up, 'children')).toBe(1);
+      if (IOS) {
+        requireYes(up, 'ownWindow', 'the popover inside the sheet');
+      }
+
+      clearEvents();
+      handles.get('in-sheet')?.nuiTestDismiss();
+      await waitForEvent('in-sheet:dismiss');
+      // Closing the popover is not closing the sheet.
+      expect(sheetUp(reportOfHandle(sheets, 'sheet'))).toBe(true);
+      await waitForFreshReport(
+        'sheet-probe',
+        nothingLeft(baseline),
+        'nothing of the popover left inside the sheet',
+        12000
+      );
+      setters.get('sheet-host')?.(false);
+      await waitForHandleReport(
+        sheets,
+        'sheet',
+        (r) => r.live === '0',
+        'the sheet closed',
+        20000,
+        true
+      );
+    });
+
+    for (const closeTooltipFirst of [true, false]) {
+      it(`presents a Tooltip and a Popover together, closing the ${
+        closeTooltipFirst ? 'tooltip' : 'popover'
+      } first`, async () => {
+        // Two of our own presentations on one screen is what an app ships (a hint and a menu
+        // on the same row), and both windows are ours - so a close that strands either is
+        // ours to fix. Both orders are pinned because the two go down by different paths: a
+        // tooltip's is a window UIKit or Material owns, a popover's a presentation.
+        const id = `pair-${closeTooltipFirst ? 'tip-first' : 'pop-first'}`;
+        await render(
+          <>
+            <Stage testId={`${id}-probe`} />
+            <View
+              style={{
+                flexDirection: 'row',
+                paddingTop: 220,
+                paddingLeft: 60,
+                gap: 24,
+              }}
+            >
+              <Stage testId={`${id}-pop`} />
+              <TipStage testId={`${id}-tip`} />
+            </View>
+          </>
+        );
+        await requireHandle(`${id}-probe`);
+        const baseline = await waitForReport(
+          `${id}-probe`,
+          (r) => r.raw !== '' && r.live === '0',
+          'a baseline with no popover up',
+          20000
+        );
+        await requireHandle(`${id}-pop`);
+        await waitForHandle(() => tips.get(`${id}-tip`), {
+          what: `"${id}-tip"`,
+        });
+        setters.get(`${id}-pop`)?.(true);
+        setters.get(`${id}-tip`)?.(true);
+        const popUp = await waitForReport(
+          `${id}-pop`,
+          (r) => isUp(r) && rectOf(r.popRect) != null,
+          'the popover up beside a tooltip',
+          20000
+        );
+        const tipReport = await waitForHandleReport(
+          tips,
+          `${id}-tip`,
+          tipUp,
+          'the tooltip up beside a popover',
+          20000
+        );
+        if (IOS) {
+          requireYes(popUp, 'ownWindow', 'the popover beside the tooltip');
+          expect(tipReport.presenter).toBe('ownWindow');
+        }
+
+        const closeTip = async () => {
+          setters.get(`${id}-tip`)?.(false);
+          await waitForHandleReport(
+            tips,
+            `${id}-tip`,
+            (r) => r.live === '0',
+            'the tooltip gone',
+            12000,
+            true
+          );
+        };
+        const closePop = async () => {
+          handles.get(`${id}-pop`)?.nuiTestDismiss();
+          await waitForEvent(`${id}-pop:dismiss`);
+        };
+        if (closeTooltipFirst) {
+          await closeTip();
+          expect(isUp(reportOf(`${id}-pop`))).toBe(true);
+          await closePop();
+        } else {
+          await closePop();
+          expect(tipUp(reportOfHandle(tips, `${id}-tip`))).toBe(true);
+          await closeTip();
+        }
+        await waitForFreshReport(
+          `${id}-probe`,
+          nothingLeft(baseline),
+          'nothing of the pair left on screen',
+          12000
+        );
+      });
+    }
   });
 
   it('puts the content where the popover is, not where the anchor is', async () => {
