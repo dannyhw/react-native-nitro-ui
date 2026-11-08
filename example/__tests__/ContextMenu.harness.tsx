@@ -1268,14 +1268,31 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     )}`;
   }
 
-  /** Open `testId` the way the platform is being tested, and wait for its popup. */
+  /**
+   * Open `testId` the way the platform can be asked to, and wait for its menu.
+   *
+   * Both platforms are opened by real input, and then each is read by the one witness it
+   * answers. Android shows a popup of its own window, so the witness's `menu=` rect is the
+   * proof its rows are on screen. iOS hands the menu to UIKit's system presentation and
+   * answers `menu=-1` for it forever (`HybridNitroUiContextMenu.swift`), so waiting for
+   * that rect there waits for a fact the platform never reports - a 15 s timeout, not a
+   * verdict. What iOS does answer is `drawn`: the probe builds the same `UIMenu`
+   * `configuration(at:)` hands UIKit and copies the tree, which is the stronger claim of
+   * the two - the rows UIKit was handed, rather than a window number.
+   */
   async function openMenu(testId: string): Promise<Record<string, string>> {
     const handle = await handleFor(testId);
     if (IOS) {
       await openedBy(`${testId}-target`);
-    } else {
-      handle.nuiTestA11yLongClick();
+      handle.nuiTestMenuProbe();
+      return await reportWhen(
+        testId,
+        (r) => r.open === '1' && r.drawn !== '-1',
+        `the menu of "${testId}"`,
+        15000
+      );
     }
+    handle.nuiTestA11yLongClick();
     return await reportWhen(
       testId,
       (r) => r.open === '1' && r.menu !== '-1',
@@ -1378,14 +1395,18 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     );
 
     if (IOS) {
-      // iOS's menu is UIKit's `UIMenu`: `androidIcon` has nothing to draw into there, and
-      // the probe says `no pixels` rather than answering 0. Both are the honest green.
-      await openMenu('glyph-asset');
-      const report = await settledReport('glyph-asset');
-      expect(fieldOf(report, 'iconTints')).toBe('-');
+      // iOS's menu is UIKit's `UIMenu`: `androidIcon` has nothing to draw into there, so
+      // `iconTints` stays `-` and the pixel probe says `no pixels` rather than answering
+      // 0. What is asserted is that these rows still reach UIKit - `drawn`, whose exact
+      // tree the suite above pins - and that opening them through a real hold works with
+      // an unresolvable name beside a Metro asset. Both refusals are the honest green.
+      const opened = await openMenu('glyph-asset');
+      expect(opened.iconTints).toBe('-');
+      expect(opened.drawn).toBe('Arrange by size,Sort by name');
       const handle = await handleFor('glyph-asset');
       handle.nuiTestMenuPixelProbe(0x000000);
       expect(handle.nuiTestMenuPixelReport()).toContain('no pixels');
+      await shut('glyph-asset');
       return;
     }
 
@@ -1445,8 +1466,17 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     );
 
     if (IOS) {
-      await openMenu('miss');
-      expect((await settledReport('miss')).iconTints).toBe('-');
+      // The name iOS cannot resolve is a name iOS never asked for: `androidIcon` is
+      // Android's prop, so UIKit gets the same two rows here as it does from the group
+      // with no icons at all, and `iconTints` is `-` for both. Android compares the two
+      // popups' frames; iOS has no popup rect, so the tree is the comparison it has.
+      const missing = await openMenu('miss');
+      expect(missing.iconTints).toBe('-');
+      await shut('miss');
+      const plain = await openMenu('miss-none');
+      expect(plain.iconTints).toBe('-');
+      expect(plain.drawn).toBe(missing.drawn);
+      await shut('miss-none');
       return;
     }
 
