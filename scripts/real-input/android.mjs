@@ -4111,28 +4111,46 @@ const CHECKS = {
         ),
         'yes'
       );
-      // A keyboard is not up the instant the field takes focus. The IME service has to
-      // attach a surface first, and both witnesses here - the service's own `mInputShown`
-      // and the window service's rectangle - answer "nothing yet" when they are read too
-      // early. S6b's first Android run read them on the same instant the focus echo landed
-      // and called that "no input view, no keyboard window"; so each is given a bounded
-      // settle, and what is reported is the last thing the device actually said.
+      // A keyboard is not up the instant the field takes focus: the IME service has to
+      // attach a surface first, and `mInputShown` answers "not yet" when it is read on the
+      // same instant the focus echo lands. S6b's first Android run read it then and called
+      // that "no input view". The two waits are separate, and in this order, because the
+      // second is only meaningful once the first is true - the service's insets are the
+      // *last computed* ones, so an edge read while the input view is down is the edge of a
+      // keyboard that is not on the screen.
       const imeDeadline = Date.now() + 5000;
       let imeIn = t.imeShown();
-      let imeTop = t.imeTopPx();
-      while ((!imeIn || imeTop == null) && Date.now() < imeDeadline) {
+      while (!imeIn && Date.now() < imeDeadline) {
         await sleep(250);
         imeIn = t.imeShown();
-        imeTop = t.imeTopPx();
       }
       t.log.check('the IME says its input view is on screen', imeIn);
+      if (!imeIn) {
+        // Nothing is up, so there is no keyboard edge to measure against and no band to
+        // claim. Round 2 claimed one anyway - `a full software keyboard ... occupies
+        // 2282 px of a 2424 px window` - from a window record belonging to a *hidden*
+        // keyboard, and printed a field "below" a keyboard that was never on screen.
+        t.log.warn(
+          'no input view came up, so the field-against-keyboard edge is UNMEASURED (the ' +
+            'focus above is measured; the keyboard itself working on this device is ' +
+            'witnessed separately, in the report)'
+        );
+        return;
+      }
+      let imeTop = t.imeTopPx();
+      const edgeDeadline = Date.now() + 2000;
+      while (imeTop == null && Date.now() < edgeDeadline) {
+        await sleep(250);
+        imeTop = t.imeTopPx();
+      }
       if (imeTop == null) {
         // A keyboard edge that cannot be read is not a pass: say it is unmeasured, in the
         // one channel the summary line carries, rather than let a missing window-service
         // record become a green "visible above the keyboard".
         t.log.warn(
-          'the window service named no keyboard window, so the field-against-keyboard ' +
-            'edge is UNMEASURED (the focus and the IME being up above are not)'
+          'the IME service published no insets while its input view was up, so the ' +
+          'field-against-keyboard edge is UNMEASURED (the focus and the IME being up above ' +
+          'are not)'
         );
         return;
       }
@@ -5906,10 +5924,16 @@ class DeviceHarness {
   /**
    * Whether the soft keyboard is on screen, as the input method service says.
    *
+   * `.stdout`, not the result itself: `shell()` answers `{ status, stdout, stderr }`, and
+   * `RegExp.test` coerces its argument, so testing the object asked whether
+   * `"[object Object]"` contained `mInputShown=true`. That reads `false` for a keyboard
+   * that is up, which turns every witness built on it - this check, and `hideKeyboard`'s
+   * decision to press Back - into one that can only ever say "no".
+   *
    * @returns {boolean}
    */
   imeShown() {
-    return /mInputShown=true/.test(this.shell('dumpsys input_method'));
+    return /mInputShown=true/.test(this.shell('dumpsys input_method').stdout);
   }
 
   /**
@@ -5917,9 +5941,25 @@ class DeviceHarness {
    *
    * Question 5 asks whether a field is still *above* the keyboard, which is a question about
    * two edges, and the accessibility tree only carries one of them: `uiautomator dump` walks
-   * the app's window, not the input method's. The keyboard's edge is in the window service -
-   * the IME is a window of its own, `Window #N Window{... u0 InputMethod}`, whose record
-   * prints `mFrame=Rect(left, top - right, bottom)`.
+   * the app's window, not the input method's. The edge the service itself publishes is the
+   * one to read: its dump ends the show with `Last computed insets:` and
+   * `visibleTopInsets=<n>`, which is where the keyboard's content starts - the
+   * `touchableRegion` printed beside it is the keyboard rectangle. Measured on the lease's
+   * API 35 AVD with GBoard up: `visibleTopInsets=1399` with
+   * `touchableRegion=SkRegion((0,1399,1080,2156))`, and `2156` with an empty region once
+   * dismissed.
+   *
+   * It is read only while the service says its input view is up, because the line is the
+   * *last computed* insets: it survives the hide and lags the show, so an unchecked value
+   * is the edge of a keyboard that may no longer be on screen.
+   *
+   * This replaced a scan of `dumpsys window windows` for the `Window{... InputMethod}`
+   * frame, which is the wrong rectangle. The IME window is a floating layer over the whole
+   * display, and its `Frames: ... frame=` line measured `[0,142][1080,2424]` identically
+   * with the keyboard up and hidden; read as a keyboard edge it always says `top=142`, so a
+   * field near the bottom "overflows" a keyboard occupying 94% of the screen and - with a
+   * looser band test - a *hidden* keyboard reads as a full one. S6b round 2 shipped exactly
+   * that false claim before the two witnesses were compared side by side.
    *
    * `null` rather than a guess when the shape is not there: a check that assumed a keyboard
    * edge would fail a field that is genuinely covered by reporting it as visible.
@@ -5927,45 +5967,16 @@ class DeviceHarness {
    * @returns {number | null}
    */
   imeTopPx() {
-    const dump = this.shell('dumpsys window windows').stdout;
-    let inIme = false;
-    let top = null;
-    const flush = (frame) => {
-      if (inIme && top == null && frame != null) top = frame;
-    };
-    for (const line of dump.split('\n')) {
-      const header = line.match(/^\s*Window #\d+ Window\{([^}]*)\}/);
-      if (header != null) {
-        flush(null);
-        inIme = header[1].includes('InputMethod');
-        if (!inIme) continue;
-      }
-      if (!inIme) continue;
-      const frame = line.match(
-        /mFrame=Rect\((\d+),\s*(\d+)\s*-\s*(\d+),\s*(\d+)\)/
-      );
-      const frames = line.match(/\bframe=\[(\d+),\s*(\d+)\]\[(\d+),\s*(\d+)\]/);
-      if (frame != null) {
-        // A keyboard that occupies nothing is a keyboard that is animating away; the
-        // caller wants the one that is up, so an empty band is not an answer.
-        const topPx = Number(frame[2]);
-        const bottomPx = Number(frame[4]);
-        if (bottomPx > topPx) flush(topPx);
-      }
-      if (top == null && frames != null) {
-        // API 35's `dumpsys window windows` no longer prints the window's own
-        // `mFrame=Rect(...)` line, only the aggregate `Frames: ... frame=[l,t][r,b]`
-        // one. It is the same rectangle, and the keyboard is not a rotated or offset
-        // window, so reading it here costs nothing a real edge would have answered
-        // differently. Without it the IME window is found and its edge is not, which is
-        // the difference between an UNMEASURED question 5 and a measured one.
-        const topPx = Number(frames[2]);
-        const bottomPx = Number(frames[4]);
-        if (bottomPx > topPx) flush(topPx);
-      }
-    }
-    flush(null);
-    return top;
+    const dump = this.shell('dumpsys input_method').stdout;
+    if (!/mInputShown=true/.test(dump)) return null;
+    const insets = dump.match(
+      /Last computed insets:\s*\n\s*contentTopInsets=\d+ visibleTopInsets=(\d+)/
+    );
+    if (insets == null) return null;
+    const top = Number(insets[1]);
+    // `0` is a legal answer - an IME in fullscreen extract mode really does start at the
+    // top - so only a value that is not a number at all is refused.
+    return Number.isFinite(top) ? top : null;
   }
 
   /**
