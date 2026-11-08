@@ -1,0 +1,127 @@
+# Failure excerpt — harness:ios:Popover
+
+- Ran: 2026-11-08T06:39:46.467Z on code tree `7b88f8c763c8` at HEAD `bf64939` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Popover`
+- Result: fail, exit 1, 158744 ms
+- Load: start 4.98, end 19.90, median 4.95, max 19.90
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log` (<store>/task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › follows the content when it resizes while the popover is up`
+- `● Popover › lifetime › cycles 10 more times (round 5)`
+- `● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does`
+- `● Popover › beside another presenter › presents inside a presented BottomSheet, and neither takes the other down`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 19.90 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 80 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Popover
+gate: node ../scripts/harness.mjs --harnessRunner ios Popover (cwd example)
+gate: code tree 7b88f8c763c8 at HEAD bf649391
+gate: git tree ac6b24d75de1 with a DIRTY worktree (not reusable)
+gate: log task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log
+gate:       <store>/task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Popover
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 7b88f8c763c8, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.66/6.45 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › follows the content when it resizes while the popover is up
+
+    "grows" never reached the popover at the content height it grew to; its report is "seq=461;presented=1;js=1;live=1;presentCount=1;onScreen=1;contentW=180;contentH=208;askedW=180;askedH=92;contentWaits=0;sampling=0;visibleFrames=60;firstW=180;firstH=92;finalW=180;finalH=208;sizes=180x92,180x208;maxWidth=320;nodeW=320;nodeH=208;prefW=180;prefH=208;viewW=180;viewH=208;arrow=up;ownWindow=1;windowLevel=2001;windowKey=1;popRect=10.0,49.0,180.0,208.0;id=grows-popover;anchorRect=0.0,0.0,72.0,36.0;inPopover=1;hidden=0;children=1;topPresented=-;modalHosts=0;windows=1;controllers=1;touchRoots=1;userDismissals=0;unasked=0;anchored=1;drops=4;recycles=4"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+  ● Popover › lifetime › cycles 10 more times (round 5)
+
+    "cycles-probe" never reached nothing left after 50 cycles; its report is "seq=1369;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=60;firstW=180;firstH=90;finalW=180;finalH=90;sizes=180x90;maxWidth=320;nodeW=0;nodeH=0;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=0;topPresented=-;modalHosts=0;windows=0;controllers=2;touchRoots=0;userDismissals=0;unasked=0;anchored=1;drops=22;recycles=22"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+  ● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does
+
+    "modal-probe" never reached nothing left after the popover closed inside the Modal; its report is "seq=787;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=1;firstW=180;firstH=90;finalW=180;finalH=90;sizes=180x90;maxWidth=320;nodeW=0;nodeH=0;anchorRect=-;inPopover=0;hidden=1;children=0;topPresented=-;modalHosts=0;windows=0;controllers=1;touchRoots=0;userDismissals=0;unasked=0;anchored=0;drops=12;recycles=12"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+  ● Popover › beside another presenter › presents inside a presented BottomSheet, and neither takes the other down
+
+    "sheet-probe" never reached nothing of the popover left inside the sheet; its report is "seq=1797;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=60;firstW=180;firstH=90;finalW=180;finalH=90;sizes=180x90;maxWidth=320;nodeW=0;nodeH=0;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=0;topPresented=NitroUiSheetController;modalHosts=0;windows=0;controllers=2;touchRoots=1;userDismissals=0;unasked=0;anchored=1;drops=28;recycles=28"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 26 passed, 30 total
+Snapshots:   0 total
+Time:        157.221 s
+Ran all test suites matching Popover.
+gate: harness:ios:Popover FAIL in 158.7 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+ios+Popover-2026-11-08T06-39-45.733Z.log (4 probe(s))
+
+```

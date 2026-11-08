@@ -25,6 +25,7 @@ import {
   Menu,
   type MenuGroup,
   Picker,
+  Popover,
   Progress,
   SearchField,
   SegmentedControl,
@@ -408,6 +409,31 @@ export function StarHint({ onStar }: { onStar: () => void }) {
         <Text>★</Text>
       </Pressable>
     </Tooltip>
+  );
+}
+// #endregion
+
+// #region popover
+export function ShareMenu() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      isPresented={open}
+      onIsPresentedChange={setOpen}
+      anchor={
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+          <Text>Share this list</Text>
+        </Pressable>
+      }
+    >
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>Copy link</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>AirDrop</Text>
+      </Pressable>
+    </Popover>
   );
 }
 // #endregion

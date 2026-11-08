@@ -1,0 +1,16 @@
+{
+  "uiViewClassName": "NitroUiPopover",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "presented": true,
+    "mostRecentEventCount": true,
+    "maxWidth": true,
+    "testID": true,
+    "nuiPerfId": true,
+    "onPresentedChange": true,
+    "onDismissed": true,
+    "hybridRef": true
+  }
+}

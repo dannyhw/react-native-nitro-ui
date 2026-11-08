@@ -29,6 +29,7 @@
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiTooltipSpecSwift.hpp"
 #include "HybridNitroUiIconButtonSpecSwift.hpp"
+#include "HybridNitroUiPopoverSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -171,6 +172,9 @@
     "NitroUiIconButton",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiIconButtonSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiIconButton();
+    "NitroUiPopover",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiPopoverSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiPopover();
       return hybridObject;
     }
   );

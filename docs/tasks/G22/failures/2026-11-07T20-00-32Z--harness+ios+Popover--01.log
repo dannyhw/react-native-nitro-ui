@@ -1,0 +1,209 @@
+# Failure excerpt — harness:ios:Popover
+
+- Ran: 2026-11-07T20:00:32.037Z on code tree `c9b51a8e6f77` at HEAD `4c0a78a` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Popover`
+- Result: fail, exit 1, 89791 ms
+- Load: start 3.64, end 4.22, median 4.89, max 6.77
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+ios+Popover-2026-11-07T20-00-31.676Z.log` (<store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-00-31.676Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › caps the content at the smaller of maxWidth and the window less its margins`
+- `● Popover › opens below its anchor, and above it when there is no room below`
+- `expected null not to be null`
+- `● Popover › puts the content where the popover is, not where the anchor is`
+- `expected '0' to be '1' // Object.is equality`
+- `● Popover › the first frame is the final size (D44) › presents "narrow" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "tall" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "short" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "capped" at its box, with one drawn size`
+- `● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size`
+- `● Popover › the handshake › presents again when nothing is listening for the close`
+- `expected [ 'unheard:dismiss' ] to deeply equal []`
+- `● Popover › the handshake › takes a close JS asked for without an event of its own`
+- `expected [] to deeply equal [ 'withdraw:dismiss' ]`
+- `● Popover › lifetime › leaves nothing after 50 open/close cycles`
+- `Error: Promise created`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-00-31.676Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.22 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 253 — the rest is in the full log above)
+
+```
+  ● Popover › the first frame is the final size (D44) › presents "window-capped" at its box, with one drawn size
+
+    "size-window-capped"'s content never laid out a box at all: {"x":0,"y":0,"width":0,"height":84}; report "seq=359;presented=1;js=1;live=0;presentCount=0;onScreen=0;contentW=0;contentH=84;askedW=0;askedH=0;contentWaits=61;sampling=0;visibleFrames=1;firstW=276;firstH=52;finalW=276;finalH=52;sizes=276x52;maxWidth=370;nodeW=370;nodeH=84;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=1;topPresented=-;modalHosts=0;windows=0;controllers=0;touchRoots=0;userDismissals=0;unasked=0;anchored=1;drops=8;recycles=8"
+
+      [0m [90m 307 |[39m     }[33m,[39m
+       [90m 308 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 309 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 310 |[39m         [32m`"${testId}"'s content never laid out ${what}: ${JSON.stringify([39m
+       [90m 311 |[39m [32m          layouts.get(testId) ?? null[39m
+       [90m 312 |[39m [32m        )}; report "${reportOf(testId).raw}"`[39m[0m
+
+  ● Popover › the handshake › presents again when nothing is listening for the close
+
+    expected [ 'unheard:dismiss' ] to deeply equal []
+
+      [0m [90m 692 |[39m       expect(again[33m.[39muserDismissals)[33m.[39mtoBe([32m'1'[39m)[33m;[39m
+       [90m 693 |[39m       [90m// Nothing reached JS as an app event, and the count moved all the same.[39m
+      [31m[1m>[22m[39m[90m 694 |[39m       expect(eventLog[33m.[39mfilter((e) [33m=>[39m e[33m.[39mstartsWith([32m'unheard:'[39m)))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                                                       [31m[1m^[22m[39m
+       [90m 695 |[39m       expect(handles[33m.[39m[36mget[39m([32m'unheard'[39m)[33m?[39m[33m.[39mmostRecentEventCount)[33m.[39mtoBe([35m1[39m)[33m;[39m
+       [90m 696 |[39m     })[33m;[39m
+       [90m 697 |[39m[0m
+
+  ● Popover › the handshake › takes a close JS asked for without an event of its own
+
+    expected [] to deeply equal [ 'withdraw:dismiss' ]
+
+      [0m [90m 710 |[39m       [90m// A change React asked for is not a native interaction: the app gets no[39m
+       [90m 711 |[39m       [90m// `onIsPresentedChange` back for its own write (D33).[39m
+      [31m[1m>[22m[39m[90m 712 |[39m       expect(eventLog)[33m.[39mtoEqual([[32m'withdraw:dismiss'[39m])[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 713 |[39m       expect(reportOf([32m'withdraw'[39m)[33m.[39muserDismissals)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 714 |[39m       expect(reportOf([32m'withdraw'[39m)[33m.[39munasked)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 715 |[39m     })[33m;[39m[0m
+
+  ● Popover › lifetime › leaves nothing after 50 open/close cycles
+
+    Test timed out after 30000ms: Popover lifetime leaves nothing after 50 open/close cycles
+
+    Pending promises at timeout: 4
+
+    Promise #4492, created 29800ms after test start:
+      Error: Promise created
+
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at waitForEvent (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90227:31)
+      at anonymous (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90625:29)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #4493, created 29800ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at pollUntil (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90163:28)
+      at anonymous (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90232:23)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26509:14)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88389:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27653)
+      at Promise (address at InternalBytecode.js:1:27764)
+      at construct (native)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88387:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at waitForEvent (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90227:31)
+      at anonymous (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90625:29)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #4508, created 30000ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90154:24)
+      at anonymous (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90172:20)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+      Promise #4509, created 30000ms after test start:
+        Error: Promise created
+      at createPromiseStack (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88249:23)
+      at registerPromise (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88269:32)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88384:43)
+      at proxy trap (native)
+      at ?anon_0_ (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90158:24)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26509:14)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88389:23)
+      at tryCallTwo (address at InternalBytecode.js:1:27653)
+      at Promise (address at InternalBytecode.js:1:27764)
+      at construct (native)
+      at construct (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88387:38)
+      at proxy trap (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26501:25)
+      at apply (native)
+      at sleep (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90154:24)
+      at anonymous (http:/localhost:8295/__tests__/Popover.harness.bundle/&modulesOnly=true&platform=ios:90172:20)
+      at asyncGeneratorStep (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26490:19)
+      at _next (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:26504:29)
+      at apply (native)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:81)
+      at runWithPromiseTrackerTestContext (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88309:18)
+      at anonymous (http:/localhost:8295/index.bundle/&platform=ios&dev=true&lazy=true&minify=false&inlineSourceMap=false&modulesOnly=false&runModule=true&excludeSource=true&sourcePaths=url-server&app=nitroui.example:88318:57)
+      at tryCallOne (address at InternalBytecode.js:1:27620)
+      at anonymous (address at InternalBytecode.js:1:37025)
+
+Test Suites: 1 failed, 1 total
+Tests:       11 failed, 6 skipped, 3 passed, 20 total
+Snapshots:   0 total
+Time:        88.034 s
+Ran all test suites matching Popover.
+gate: harness:ios:Popover FAIL in 89.8 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+ios+Popover-2026-11-07T20-00-31.676Z.log (4 probe(s))
+
+```

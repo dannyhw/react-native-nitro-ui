@@ -1,0 +1,90 @@
+# Failure excerpt — harness:android:FormTouch
+
+- Ran: 2026-11-07T20:32:14.304Z on code tree `9a587af75a80` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android FormTouch`
+- Result: fail, exit 1, 251455 ms
+- Load: start 4.34, end 4.20, median 5.40, max 16.94
+- Device: android / device `emulator-5570` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log` (<store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormTouch.harness.tsx`
+- `● Form real input (S6 spike, questions 4 and 7) › takes ten taps each on a row, a Pressable and a hosted Switch`
+- `expected 'outside=43 rows=0 pressable=0 switche…' to be 'all ten' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.20 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:FormTouch
+gate: node ../scripts/harness.mjs --harnessRunner android FormTouch (cwd example)
+gate: code tree 9a587af75a80 at HEAD 33749bf8
+gate: git tree 7057a799a09b with a DIRTY worktree (not reusable)
+gate: log task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log
+gate:       <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android FormTouch
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 9a587af75a80, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.15/7.25 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/FormTouch.harness.tsx
+  ● Form real input (S6 spike, questions 4 and 7) › takes ten taps each on a row, a Pressable and a hosted Switch
+
+    expected 'outside=43 rows=0 pressable=0 switche…' to be 'all ten' // Object.is equality
+
+      [0m [90m 189 |[39m     [90m// Q4: taps land on the row's own cell and on the content inside it; Q7: the hosted[39m
+       [90m 190 |[39m     [90m// control still gets its own touches, so ten presses of the Switch are ten changes.[39m
+      [31m[1m>[22m[39m[90m 191 |[39m     expect(enough [33m?[39m [32m'all ten'[39m [33m:[39m counts)[33m.[39mtoBe([32m'all ten'[39m)[33m;[39m
+       [90m     |[39m                                             [31m[1m^[22m[39m
+       [90m 192 |[39m   })[33m;[39m
+       [90m 193 |[39m })[33m;[39m
+       [90m 194 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        249.275 s
+Ran all test suites matching FormTouch.
+gate: harness:android:FormTouch FAIL in 251.5 s
+gate: recorded in .gates/task/S6-form-spike.jsonl
+
+
+gate: appended the device context to task/S6-form-spike/harness+android+FormTouch-2026-11-07T20-32-13.082Z.log (5 probe(s))
+
+```

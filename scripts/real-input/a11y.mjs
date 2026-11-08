@@ -453,6 +453,15 @@ export const A11Y_PRESENTATIONS = Object.freeze([
       "(scripts/real-input/android.mjs): the presented tooltip's title, message and " +
       'action are read and tapped through the accessibility tree',
   },
+  {
+    id: 'popover',
+    component: 'Popover',
+    hybridView: 'NitroUiPopover',
+    assertedBy:
+      "`testRealInputPopover` (RealInputTests.swift) and `CHECKS['popover']` " +
+      "(scripts/real-input/android.mjs): the popover's React Native content is read " +
+      'and pressed through the accessibility tree, and its content carries <testID>-popover',
+  },
 ]);
 
 /**

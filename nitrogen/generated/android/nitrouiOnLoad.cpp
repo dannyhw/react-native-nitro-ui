@@ -44,6 +44,8 @@
 #include "views/JHybridNitroUiMenuStateUpdater.hpp"
 #include "JHybridNitroUiPickerSpec.hpp"
 #include "views/JHybridNitroUiPickerStateUpdater.hpp"
+#include "JHybridNitroUiPopoverSpec.hpp"
+#include "views/JHybridNitroUiPopoverStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
 #include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSearchFieldSpec.hpp"
@@ -220,6 +222,12 @@ struct JHybridNitroUiIconButtonSpecImpl: public jni::JavaClass<JHybridNitroUiIco
     static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiIconButtonSpecImpl::javaobject()>();
     jni::local_ref<JHybridNitroUiIconButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
     return javaPart->getJHybridNitroUiIconButtonSpec();
+struct JHybridNitroUiPopoverSpecImpl: public jni::JavaClass<JHybridNitroUiPopoverSpecImpl, JHybridNitroUiPopoverSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiPopover;";
+  static std::shared_ptr<JHybridNitroUiPopoverSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiPopoverSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiPopoverSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiPopoverSpec();
   }
 };
 
@@ -257,6 +265,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiMenuStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiPickerSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiPickerStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiPopoverSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiPopoverStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSearchFieldSpec::CxxPart::registerNatives();
@@ -395,6 +405,9 @@ void registerAllNatives() {
     "NitroUiIconButton",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiIconButtonSpecImpl::create();
+    "NitroUiPopover",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiPopoverSpecImpl::create();
     }
   );
 }
