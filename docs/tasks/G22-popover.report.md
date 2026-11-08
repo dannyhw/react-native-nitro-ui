@@ -8,46 +8,37 @@
 **Shipped.** `<Popover isPresented onIsPresentedChange anchor children onDismiss maxWidth testID style>`
 (`src/components/Popover/Popover.tsx`), controlled through the event-count handshake with
 Tooltip's refusal warning; every native prop always passed, `testID`/`nuiPerfId` as `T | null`.
-`sizing: null`, `hostable: false`, `realInput: true`, `bench: false`. API table, platform
-mapping and limits in `docs/components/popover.md`; README row, import, Usage section and both
-screenshots.
+`sizing: null`, `hostable: false`, `realInput: true`, `bench: false`. `docs/components/popover.md`,
+the README row, import, Usage section, both screenshots and a minor changeset.
 
 **Sizing.** The content lays itself out in the app's own tree, capped at
 `min(maxWidth ?? 320, windowWidth - 32)`, and native shows that box - no measuring round-trip.
-iOS sets `preferredContentSize` from the content box *before*
-presenting and refuses to present at all until the box has a size (bounded to 60 turns);
-Android composes the popup only once the box is sized and passes
-`usePlatformDefaultWidth = false`. The suite asserts the first drawn frame equals the settled
-box for five fixtures (narrow, tall, short, `maxWidth`-capped, window-capped).
+iOS sets `preferredContentSize` before presenting and refuses to present until the box is sized;
+Android composes the popup only once it is. Five fixtures (narrow, tall, short, `maxWidth`-capped,
+window-capped) assert the first drawn frame equals the settled box, on both platforms.
 
-**Decision 1 — iOS presents from its own window**, as Tooltip does (D41), not through D35's
-presentation chain. *Why:* a popover in the app's chain is what UIKit dismisses when the app
-closes a `Modal`, and the next `Modal` is refused — measured for Tooltip (G18), re-measured
-here. *Tested by:* `example/__tests__/isolated/PopoverModalHazard.harness.tsx`,
-which asserts `ownWindow=1` with a `ModalHostViewController` on top while both are up, and that
-the window, controller and modal hosts are all gone afterwards. The source
-rectangle is the anchor's box converted into the presentation window's root, because using the
-anchor as source view puts the popover back in the chain.
+**Decision 1 - iOS presents from its own window**, as Tooltip does (D41), not through D35's
+chain: a popover in the app's chain is what UIKit dismisses when the app closes a `Modal`, and
+the next `Modal` is refused - measured for Tooltip (G18), re-measured here.
+`example/__tests__/isolated/PopoverModalHazard.harness.tsx` asserts `ownWindow=1` with a
+`ModalHostViewController` on top while both are up, and that all three are gone afterwards.
 
-**Decision 2 — Android reuses BottomSheet's `NitroUiSheetRootView`** for the presented RN root
-instead of extracting a shared class, as iOS already reuses `NitroUiTouchRoot` for both Tooltip
-and ContextMenu.
+**Decision 2 - Android reuses BottomSheet's `NitroUiSheetRootView`** for the presented RN root.
 
-**Keyboard (D44 item 1).** Android reads `WindowInsets.Type.ime()` and keys the position
-provider's `remember` on it, so the popup re-places above the keyboard and stays focusable
-enough for a `TextInput` inside to raise it; iOS leaves the move to UIKit. Documented as API 30+.
+**Keyboard (D44 item 1).** The placement is arithmetic in `PopoverPlacement`, keyed on the ime
+inset so an open popup places itself again; the inset is read from the window the popup is placed
+in - both it and the popup's own window trigger the read - and the popup is focusable so a
+`TextInput` inside can raise the keyboard. Documented as API 30+.
 
-**What the gates found.** Five bugs only a device run showed: three of the example
-screen's anchors rendered without an `onPress`, so no real tap could open their popover
-(`3ec7d8af`, found by `real-input:ios` before it had ever run green); the publish manifest did
-not list the built popover files, which `check`'s package step caught (`26aad5b5`); and two
-fixtures read their "nothing up" baseline in the same commit as the presentation they measure
-from, which reads as a leak under load (`6c1b82ff` opens them later instead). The last two were
-in the keyboard check itself: it asserted the event log *ends* with `typed:ab`, which the
-screen's own record of the popover's close makes impossible (`494dced2` reads the order
-instead), and its IME probes compared `[object Object]` — `shell()` returns `{ stdout }` — and
-knew only a dump shape API 34+ no longer prints, so the keyboard was never seen at all
-(`3aa02ef1`, `f817fcc6`).
+**What the gates found.** Seven bugs only a device run showed: three example anchors without
+`onPress` (`3ec7d8af`, caught by `real-input:ios` before it had ever run green); the publish
+manifest omitting the built popover files (`26aad5b5`, `check`); two fixtures reading their
+"nothing up" baseline in the commit that measures it (`6c1b82ff`); a keyboard check demanding a
+log *ending* in `typed:ab`, which the close it was told to do forbids (`494dced2`); an IME probe
+comparing `[object Object]`, then matching a dump shape API 34+ no longer prints (`3aa02ef1`,
+`f817fcc6`); **the popup flipping above an anchor that was itself behind the keyboard**, leaving
+its lower edge under the keys (`bce1fd8f`); and measuring that edge from the popup's own window,
+whose inset is 43 px short of the window the popup is placed in (`44330c62`).
 
 ## Gates
 
@@ -79,10 +70,16 @@ knew only a dump shape API 34+ no longer prints, so the keyboard was never seen 
   -> `Popover`'s manifest `realInput: false`
 - `scripts/__tests__/component-coverage.test.js` "every manifest is covered, or has a stated
   reason" -> `selfSizing: false` removed from the Popover fixture -> that test
-- `scripts/real-input/ime-frame.mjs` -> the API 34+ frame shape removed from `SHAPES` ->
-  `scripts/__tests__/real-input-ime-frame.test.js` "reads the API 34+ window dump, which has no
-  mFrame= anywhere" and "will not take a parent frame for the window's own" red,
-  `Expected: 1480 / Received: null`
+- `PopoverPlacementTest.kt` "an anchor behind the keyboard does not flip the popup into it" ->
+  the flip condition back to `above >= marginPx` -> that test: `expected 1085 but was 1228`, which
+  is 143 px of the popup behind the keys
+- `scripts/__tests__/real-input-ime-frame.test.js` "says nothing about a keyboard that is not up"
+  -> the `visible=true` filter dropped -> that test, `Received: 142` - the status bar, the number
+  the two window-frame readers answered with on a device and the reason it may never be answered
+- same file, "will not take another inset type for the keyboard" -> `type=ime` matched as any type
+  -> that test
+- same file, "takes the strictest answer when a dump carries more than one window" -> `<` -> `>` ->
+  that test
 - the keyboard check as shipped -> both real-input runs red on a claim that cannot be true:
   `real-input:ios` at "real keystrokes reach the field inside the popover: ... typed:a >
   typed:ab > field:presented:false" (the log it demanded *ends* with `typed:ab`, which the
@@ -129,7 +126,8 @@ knew only a dump shape API 34+ no longer prints, so the keyboard was never seen 
 - `ios/components/Popover/HybridNitroUiPopover.swift` — the popover controller, its own window,
   the sampler that watches the content box, and the report the harness reads.
 - `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPopover.kt` + `NitroUiPopoverViewManager.kt`
-  — the popup, the position provider, the IME inset, and the draw witnesses.
+  — the popup, `PopoverPlacement`, the IME inset and its two observers, and the draw witnesses.
+- `android/src/test/java/com/margelo/nitro/nitroui/PopoverPlacementTest.kt` — the placement rule, on the geometry a device produced.
 - `scripts/patch-nitrogen.mjs`, `scripts/__tests__/patch-nitrogen.test.js` — the content-children
   patch extended to the popover's generated `.mm`, with the expected set in the test.
 - `example/__tests__/Popover.harness.tsx`, `example/__tests__/isolated/PopoverModalHazard.harness.tsx`,
@@ -157,6 +155,16 @@ knew only a dump shape API 34+ no longer prints, so the keyboard was never seen 
 - a11y: `accessibilityLabel` still never reaches a presented window on either platform (D44
   records it); a Popover has no label prop of its own, so the content's own names are what a
   screen reader gets.
+
+## Appendix
+
+- iOS's source rectangle is the anchor's box converted into the presentation window's root:
+  `popoverSource.sourceView = source` (the anchor itself) puts the popover back in the app's
+  presentation chain, which is what Decision 1 exists to avoid.
+- Incident: while iterating on the keyboard check, a throwaway probe of mine force-stopped and
+  relaunched the example while `real-input:android:--control:popover` was in its a11y sweep, and
+  that sweep failed for that reason alone. Filtered runs are evidence only; the gate rows below
+  are runs with nothing else on the device.
 
 ## Questions for orchestrator
 
