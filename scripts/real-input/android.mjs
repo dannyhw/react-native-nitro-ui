@@ -5931,11 +5931,23 @@ class DeviceHarness {
       const frame = line.match(
         /mFrame=Rect\((\d+),\s*(\d+)\s*-\s*(\d+),\s*(\d+)\)/
       );
+      const frames = line.match(/\bframe=\[(\d+),\s*(\d+)\]\[(\d+),\s*(\d+)\]/);
       if (frame != null) {
         // A keyboard that occupies nothing is a keyboard that is animating away; the
         // caller wants the one that is up, so an empty band is not an answer.
         const topPx = Number(frame[2]);
         const bottomPx = Number(frame[4]);
+        if (bottomPx > topPx) flush(topPx);
+      }
+      if (top == null && frames != null) {
+        // API 35's `dumpsys window windows` no longer prints the window's own
+        // `mFrame=Rect(...)` line, only the aggregate `Frames: ... frame=[l,t][r,b]`
+        // one. It is the same rectangle, and the keyboard is not a rotated or offset
+        // window, so reading it here costs nothing a real edge would have answered
+        // differently. Without it the IME window is found and its edge is not, which is
+        // the difference between an UNMEASURED question 5 and a measured one.
+        const topPx = Number(frames[2]);
+        const bottomPx = Number(frames[4]);
         if (bottomPx > topPx) flush(topPx);
       }
     }
