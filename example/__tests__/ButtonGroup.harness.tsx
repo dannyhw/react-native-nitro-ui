@@ -186,15 +186,6 @@ function measured(testId: string): Size | null {
   return handles.get(testId)?.measureContent() ?? null;
 }
 
-function sameSize(a: Size | null, b: Size | null): boolean {
-  return (
-    a != null &&
-    b != null &&
-    Math.abs(a.width - b.width) < 0.6 &&
-    Math.abs(a.height - b.height) < 0.6
-  );
-}
-
 function describeSize(size: Size | null): string {
   return size == null
     ? 'null'
@@ -255,13 +246,29 @@ async function waitForMeasured(testId: string, what: string): Promise<Size> {
   );
 }
 
-async function waitForBox(testId: string, size: Size, what: string) {
+/**
+ * Wait for the box's **height** to reach the height the control measured.
+ *
+ * The height is the number a `fillWidth` control measures; its width belongs to the box
+ * (`docs/architecture/sizing.md`), and the two platforms report `measureContent().width`
+ * differently for exactly that reason — iOS answers the box's width, Android the
+ * content's. Only the height can be compared box to measurement.
+ */
+async function waitForBoxHeight(
+  testId: string,
+  height: number,
+  what: string
+): Promise<Size> {
   return pollUntil(
-    () => (sameSize(sizeOf(testId), size) ? sizeOf(testId) : null),
+    () => {
+      const box = sizeOf(testId);
+      return box != null && Math.abs(box.height - height) < 0.6 ? box : null;
+    },
     () =>
       new Error(
-        `testID "${testId}" (${what}) never reached ${describeSize(size)} - last ` +
-          `box ${describeSize(sizeOf(testId))}, control measured ` +
+        `testID "${testId}" (${what}) never reached height ${height.toFixed(
+          2
+        )} - last box ${describeSize(sizeOf(testId))}, control measured ` +
           `${describeSize(measured(testId))}.`
       )
   );
@@ -439,7 +446,7 @@ describe('ButtonGroup · G20', () => {
     );
     await waitForTestId('bg-default');
     const content = await waitForMeasured('bg-default', 'the default row');
-    await waitForBox('bg-default', content, 'the default row');
+    await waitForBoxHeight('bg-default', content.height, 'the default row');
 
     expect(sizeOf('bg-default')!.height).not.toBeCloseTo(WRONG_HEIGHT, 0);
     expect(corrections(before, stats())).toBeGreaterThanOrEqual(1);
@@ -448,10 +455,11 @@ describe('ButtonGroup · G20', () => {
     expect(sizeOf('bg-default')!.width).toBeGreaterThan(content.width * 0.99);
   });
 
-  it('moves the items a 220-point well cannot hold, and takes them back when it grows', async () => {
-    // The same six items, twice, at two widths. One of them must overflow and the
-    // other must not, or the test has not measured the box — it has measured the item
-    // count, which is the same in both.
+  it('moves the items a 220-point well cannot hold, and takes some back when it grows', async () => {
+    // The same six items, twice, at two widths, so the only variable is the box. Six
+    // items do not fit a phone either — the row draws four of them across a 402-point
+    // box (measured on the device this runs on) — so "a row with room to spare draws
+    // every item" is a separate claim, made by the three-item group at the end.
     poison([sizingKey('standard', 'filled', 'medium', 'automatic', MANY)]);
     const { rerender } = await render(
       <View style={WELL}>
@@ -474,8 +482,8 @@ describe('ButtonGroup · G20', () => {
     // to be named by the menu rather than by the row.
     expect((narrow.shown ?? 'none').split(',')).not.toContain('all');
 
-    // Widen the well to the whole screen: the same items now fit, and the control
-    // that was there is gone.
+    // Widen the well to the whole screen. Nothing moved in the props: the same control,
+    // the same six items, a wider box — and more of the row drawn.
     await rerender(
       <View style={{ width: '100%' }}>
         <ButtonGroup
@@ -485,23 +493,47 @@ describe('ButtonGroup · G20', () => {
         />
       </View>
     );
-    const wide = await pollUntil(
-      () => {
-        const report = reportOf('bg-narrow');
-        return Number(report.visible) === MANY.length && report.overflow === '0'
-          ? report
-          : null;
-      },
-      () =>
-        new Error(
-          `widening the well never brought all ${String(MANY.length)} items into the ` +
-            `row - the row reports "${handles
-              .get('bg-narrow')!
-              .nuiTestStateReport()}".`
-        ),
-      10000
+    // The report's `visible` is the last *probed* layout, so every look has to ask the
+    // row again rather than re-read the answer the narrow box gave.
+    let wide: Record<string, string> | null = null;
+    for (let attempt = 0; attempt < 40 && wide == null; attempt += 1) {
+      await sleep(100);
+      const probed = await probeRow('bg-narrow');
+      if (Number(probed.visible) > Number(narrow.visible)) {
+        wide = probed;
+      }
+    }
+    if (wide == null) {
+      throw new Error(
+        `widening the well from 220 pt brought no more of the ${String(
+          MANY.length
+        )} items into the row - the row reports "${handles
+          .get('bg-narrow')!
+          .nuiTestStateReport()}".`
+      );
+    }
+    const narrowShown = (narrow.shown ?? 'none').split(',');
+    const wideShown = (wide.shown ?? 'none').split(',');
+    expect(wideShown.length).toBeGreaterThan(narrowShown.length);
+    // An item that only existed in the menu at 220 pt is drawn in the row now.
+    expect(
+      wideShown.filter((id) => !narrowShown.includes(id)).length
+    ).toBeGreaterThan(0);
+
+    // The other half of "the box decides", which six long titles cannot show on a
+    // phone: a row with room to spare draws every item and composes no menu at all.
+    await render(
+      <ButtonGroup
+        items={ACTIONS}
+        testID="bg-fits"
+        hybridRef={captureHybrid('bg-fits')}
+      />
     );
-    expect((wide.shown ?? 'none').split(',')).toContain('all');
+    await waitForTestId('bg-fits');
+    const fits = await probeRow('bg-fits');
+    expect(fits.visible).toBe(String(ACTIONS.length));
+    expect(fits.overflow).toBe('0');
+    expect((fits.shown ?? 'none').split(',')).toEqual(ACTIONS.map((item) => item.id));
   });
 
   it('presses once per item, from the row and from the overflow menu', async () => {
@@ -606,7 +638,7 @@ describe('ButtonGroup · G20', () => {
       { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
     ];
     const [first] = items;
-    await render(
+    const { rerender } = await render(
       <ButtonGroup
         items={items}
         onCheckedChange={recordChecked('bg-seed')}
@@ -625,8 +657,10 @@ describe('ButtonGroup · G20', () => {
     ]);
 
     // A re-render that sends the *same* `defaultChecked` again must not re-apply it:
-    // the tap above is the user's, and the seed is a first-render value only.
-    await render(
+    // the tap above is the user's, and the seed is a first-render value only. A second
+    // `render()` would be a second mount, and a fresh control *should* seed itself, so
+    // this is `rerender` — the same view, new props, new array identities.
+    await rerender(
       <ButtonGroup
         items={[{ ...first! }]}
         onCheckedChange={recordChecked('bg-seed')}
@@ -658,10 +692,13 @@ describe('ButtonGroup · G20', () => {
     const report = await probeRow('bg-disabled-group');
     const shown = (report.shown ?? 'none').split(',');
     const all = MANY.map((item) => item.id);
+    // The row and the menu are two routes to the same six ids, so the probe presses
+    // every one of them; the report is what says which went through the row and which
+    // only exist as menu rows. Both routes must refuse.
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(MANY.length);
     const from = events.length;
-    const pressed = shown
-      .slice(0, 1)
-      .concat(all.filter((entry) => !shown.includes(entry)));
+    const pressed = all;
     expect(pressed.length).toBe(MANY.length);
     for (const entry of pressed) {
       handleOf('bg-disabled-group').nuiTestPressItem(entry);
@@ -762,7 +799,13 @@ describe('ButtonGroup · G20', () => {
     // title, and a toggle item is a checkbox rather than a button.
     expect(a11y).toContain('label=Copy');
     expect(a11y).toContain('label=Bold');
-    expect(a11y).toMatch(/Role\.Checkbox[^;]*label=Bold/);
+    // The report spells the role as `Checkbox`, with the M3 toggle's own state beside
+    // it (`Off` here): a reader is handed a checkbox named Bold, not a button.
+    expect(a11y).toMatch(/\[Checkbox,[^;]*label=Bold\]/);
+    // And the overflow control carries one name rather than two — Material's indicator
+    // arrives already labelled "More options", and this control replaces those words
+    // with the one iOS draws on the same control, instead of adding to them.
+    expect(a11y).toContain(',label=More]');
   });
 
   it('carries no items, checked state or event count across a remount', async () => {
@@ -778,10 +821,12 @@ describe('ButtonGroup · G20', () => {
     // (`jsEvents >= nativeEvents` is how §4 admits it) and keep drawing the old
     // selection; a model that had kept its checked set would draw it for the same
     // reason. Either way the row answers `checked=day,week` here instead of `none`.
+    // Every item is a toggle: the flip below has to be a flip, and a flip is the only
+    // thing that puts a number in the control's event count.
     const seeded: ButtonGroupItem[] = MANY.map((item) =>
       item.id === 'day' || item.id === 'week'
         ? { ...item, toggle: true, defaultChecked: true }
-        : item
+        : { ...item, toggle: true }
     );
     const { unmount } = await render(
       <View style={WELL}>
@@ -804,7 +849,8 @@ describe('ButtonGroup · G20', () => {
     expect(await waitForEvents(from, ['bg-recycle:check:month:true'])).toEqual([
       'bg-recycle:check:month:true',
     ]);
-    expect(reportOf('bg-recycle').checked).toBe('day,month,week');
+    // The report lists the checked set in item order, not in the order they were set.
+    expect(reportOf('bg-recycle').checked).toBe('day,week,month');
 
     unmount();
     await sleep(400);
@@ -823,19 +869,24 @@ describe('ButtonGroup · G20', () => {
       />
     );
     await waitForTestId('bg-recycle');
-    const fresh = await pollUntil(
-      () => {
-        const report = reportOf('bg-recycle');
-        return report.visible === '2' ? report : null;
-      },
-      () =>
-        new Error(
-          `the remount never laid out its own two items - it reports "${handleOf(
-            'bg-recycle'
-          ).nuiTestStateReport()}".`
-        ),
-      10000
-    );
+    // Ask the row rather than waiting for a layout of its own: the placement record is
+    // written as the row lays out, and a recycled host may answer before it has one.
+    let fresh: Record<string, string> | null = null;
+    for (let attempt = 0; attempt < 30 && fresh == null; attempt += 1) {
+      const probed = await probeRow('bg-recycle');
+      if (probed.visible === '2') {
+        fresh = probed;
+      } else {
+        await sleep(100);
+      }
+    }
+    if (fresh == null) {
+      throw new Error(
+        `the remount never laid out its own two items - it reports "${handleOf(
+          'bg-recycle'
+        ).nuiTestStateReport()}".`
+      );
+    }
     // The three fields that could carry the previous mount, and the quiet that says no
     // stale event was replayed into the new app.
     expect(fresh.checked).toBe('none');

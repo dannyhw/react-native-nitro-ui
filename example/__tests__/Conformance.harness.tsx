@@ -636,6 +636,18 @@ const recordRecycle =
     recycleEvents.push(`${testId}:${String(value)}`);
   };
 
+/**
+ * A ButtonGroup's `onCheckedChange` names the item *and* the new state, where Chip's and
+ * IconButton's events carry one value. The one-value recorder above would record the id
+ * alone, so a probe that reads `id:false` could never match what the control reported —
+ * this records the shape the event actually has.
+ */
+const recordRecycleChecked =
+  (testId: string) =>
+  (id: string, checked: boolean): void => {
+    recycleEvents.push(`${testId}:${id}:${String(checked)}`);
+  };
+
 /** Events recorded since `from`, so a probe reads only the effect of its own press. */
 const eventsSince = (from: number): string[] => recycleEvents.slice(from);
 
@@ -3968,22 +3980,24 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         <ButtonGroup
           accessibilityLabel="Conformance button group"
           items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
-          onCheckedChange={recordRecycle('conformance-button-group')}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
           testID="conformance-button-group"
           hybridRef={captureFor('conformance-button-group')}
         />
       ),
       act: async () => {
         await pressButtonGroupItem('conformance-button-group', 'bold');
+        // The item starts checked (`defaultChecked`), so the press that arms the probe
+        // reports it *unchecked* — the residue a missing reset would show.
         await waitFor(() =>
-          expect(eventsSince(0)).toEqual(['conformance-button-group:bold'])
+          expect(eventsSince(0)).toEqual(['conformance-button-group:bold:false'])
         );
       },
       second: () => (
         <ButtonGroup
           accessibilityLabel="Conformance button group"
           items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
-          onCheckedChange={recordRecycle('conformance-button-group')}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
           testID="conformance-button-group"
           hybridRef={captureFor('conformance-button-group')}
         />
@@ -4025,22 +4039,24 @@ const FIXTURES: ReadonlyArray<Fixture> = [
         <ButtonGroup
           accessibilityLabel="Conformance button group"
           items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
-          onCheckedChange={recordRecycle('conformance-button-group')}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
           testID="conformance-button-group"
           hybridRef={captureFor('conformance-button-group')}
         />
       ),
       act: async () => {
         await pressButtonGroupItem('conformance-button-group', 'bold');
+        // The item starts checked (`defaultChecked`), so the press that arms the probe
+        // reports it *unchecked* — the residue a missing reset would show.
         await waitFor(() =>
-          expect(eventsSince(0)).toEqual(['conformance-button-group:bold'])
+          expect(eventsSince(0)).toEqual(['conformance-button-group:bold:false'])
         );
       },
       second: () => (
         <ButtonGroup
           accessibilityLabel="Conformance button group"
           items={CONFORMANCE_BUTTON_GROUP_CONTROLLED}
-          onCheckedChange={recordRecycle('conformance-button-group')}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
           testID="conformance-button-group"
           hybridRef={captureFor('conformance-button-group')}
         />
