@@ -439,8 +439,9 @@ function wrapRows(
 
 /** A key the app wrote, made safe to embed in a path (`/` is the separator). */
 function escapeKey(key: string): string {
-  return key.replace(/[%/]/g, (character) =>
-    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  return key.replace(
+    /[%/]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`
   );
 }
 

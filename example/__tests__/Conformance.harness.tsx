@@ -105,7 +105,6 @@ import {
   DatePicker,
   Form,
   IconButton,
-
   Menu,
   Picker,
   Popover,
@@ -4021,7 +4020,6 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             expected: 'conformance-icon-button:true',
             actual: await eventsSettled(from, 'conformance-icon-button:true'),
           },
-
         ];
       },
     },

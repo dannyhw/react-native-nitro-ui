@@ -6575,7 +6575,6 @@ class DeviceHarness {
     return /1/.test(
       this.shell('settings get secure show_ime_with_hard_keyboard').stdout
     );
-
   }
 
   /**
@@ -7698,30 +7697,6 @@ function makeContext(harness, log) {
     },
 
     /**
-     * Take the soft keyboard down if it is up, and leave focus where it is.
-     *
-     * Only when it is up: Back is offered to the IME first, but with no keyboard it is
-     * the app's Back, which sends a React Native root to the background - and every
-     * later check then finds the launcher.
-     */
-    /** Whether the soft keyboard is on screen (`mInputShown`). */
-    imeShown() {
-      return harness.imeShown();
-    },
-
-    /**
-     * The y of the soft keyboard's top edge in px, or `null` when no source says.
-     *
-     * Callers must treat `null` as a failure of their own claim: see
-     * `DeviceHarness.imeTopPx` for why a missing frame cannot be a pass.
-     *
-     * @returns {number | null}
-     */
-    imeTopPx() {
-      return harness.imeTopPx();
-    },
-
-    /**
      * The same edge, once the inset has stopped animating.
      *
      * @returns {Promise<number | null>}
@@ -7752,6 +7727,13 @@ function makeContext(harness, log) {
       return previous;
     },
 
+    /**
+     * Take the soft keyboard down if it is up, and leave focus where it is.
+     *
+     * Only when it is up: Back is offered to the IME first, but with no keyboard it is
+     * the app's Back, which sends a React Native root to the background - and every
+     * later check then finds the launcher.
+     */
     async hideKeyboard() {
       if (harness.imeShown()) {
         harness.key(KEY_BACK);

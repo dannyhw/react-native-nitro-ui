@@ -155,34 +155,6 @@ function subtree(xml, label) {
   };
 }
 
-/**
- * The tab bar's node for `label`, scrolling the strip sideways until it shows.
- *
- * The bar is a horizontal scroller and the app now has more tabs than fit one
- * screen, so a control added late can sit off-screen at every vertical scroll
- * position: looking at one dump only was fine while the tabs fitted, and started
- * to answer "no <screen> tab" for the tail of the list once they did not. The strip
- * keeps its own scroll position between screens, and the controls are visited in
- * tab order, so this walks forward rather than hunting.
- */
-function findTab(label) {
-  for (let attempt = 0; attempt < 14; attempt += 1) {
-    const tab = parseHierarchy(dump()).find(
-      (node) =>
-        node.contentDesc === label &&
-        node.bounds.y1 > 100 &&
-        node.bounds.y1 < 300
-    );
-    if (tab != null) {
-      return tab;
-    }
-    // A leftward swipe on the bar's own row: the tab strip, not the page.
-    adb(['input', 'swipe', '900', '200', '120', '200', '300']);
-    sleep(600);
-  }
-  return null;
-}
-
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
 for (const control of A11Y_CONTROLS) {
