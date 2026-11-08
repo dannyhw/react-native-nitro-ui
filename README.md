@@ -409,8 +409,8 @@ what each platform does with a glyph it cannot resolve.
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><img src="docs/images/components/button-group-ios.png" width="300" alt="Button groups on iOS: a standard row of three bordered command buttons, the same three joined into one connected track, a row of formatting toggles with two showing their on state, and a row that has overflowed into a More menu" /></td>
-    <td><img src="docs/images/components/button-group-android.png" width="300" alt="Button groups on Android: a standard row of three filled command buttons, the same three joined into one connected group, a row of formatting toggle buttons with two showing their checked state, and a row that has overflowed into a More menu" /></td>
+    <td><img src="docs/images/components/button-group-ios.png" width="300" alt="Button groups on iOS: a standard row of three command buttons with glyphs, the same three joined into one connected track that draws the glyphs alone, a row of formatting toggles with Bold showing its on state, and the same toggles asked connected — which iOS draws as the standard row" /></td>
+    <td><img src="docs/images/components/button-group-android.png" width="300" alt="Button groups on Android: a standard row of three filled command buttons with a gap between each, the same three joined into one connected group, a row of formatting toggle buttons with Bold checked, and the same toggles asked connected — which Android keeps joined" /></td>
   </tr>
 </table>
 
