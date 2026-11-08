@@ -67,10 +67,11 @@ import kotlin.math.roundToInt
  *
  * **One composition for the whole section, not one per row.** Appendix C1 drew a
  * `SegmentedListItem` container behind each row, and each of those is a Compose runtime - the
- * cost `docs/components/host.md` measures at 2.75x mount UI CPU and 1.39x memory per control
- * against a shared composition, paid here for one `Box` and one shape. So this layer draws
- * every row's shape from the rows' own rects, read from the row views after each layout. It
- * is the spike's main API argument to G-Form, and the report carries the number.
+ * cost `docs/components/host.md` measures per control against a shared composition (2.75x the
+ * mount memory, 1.39x the mount UI-thread CPU per op). One such runtime is paid here for
+ * one `Box` and one shape, and the layer draws every row's shape from the rows' own rects,
+ * read from the row views after each layout. It is the spike's main API argument to G-Form,
+ * and the report carries the number.
  *
  * The header and footer are Compose text in the same layer, at the section's top and bottom.
  * The space they take is measured *in Compose* and reported through `onMetrics`, so Yoga
@@ -80,9 +81,10 @@ import kotlin.math.roundToInt
  * (visible in S6's `form-android.png`). The owner's answer was "give the header its own
  * Compose layer sized to the header band"; S6b sized the band instead and left the text
  * where it is, because a second composition per section is the exact cost this file exists
- * to avoid (2.75x mount UI CPU against a shared one, `docs/components/host.md`) and rows
- * only painted over the header because the reservation was short, not because of the
- * layer's place in the z-order. The report carries the screenshot that shows it.
+ * to avoid - 2.75x the mount memory and 1.39x the mount UI-thread CPU per op against a
+ * shared composition, `docs/components/host.md` - and rows only painted over the header
+ * because the reservation was short, not because of the layer's place in the z-order. The
+ * report carries the screenshot that shows it, and the deviation is a question, not a given.
  */
 internal class HybridNitroUiFormSection(
   private val reactContext: ThemedReactContext,
