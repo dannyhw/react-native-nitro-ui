@@ -187,7 +187,10 @@ export function flattenGroup(
       disabled: false,
       destructive: false,
       systemImage: row.systemImage ?? null,
-      androidIcon: resolveRowAndroidIcon(componentName, row.androidIcon ?? null),
+      androidIcon: resolveRowAndroidIcon(
+        componentName,
+        row.androidIcon ?? null
+      ),
       subtitle: null,
       checked: null,
     });
