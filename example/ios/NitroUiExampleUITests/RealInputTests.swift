@@ -4032,7 +4032,13 @@ final class RealInputTests: XCTestCase {
       field.fingerTap()
       let deadline = Date().addingTimeInterval(3)
       repeat {
+        // The focusable element is not always the one the app named. On a plain screen the
+        // `testID` is on the text input itself; a Form row reparents a *hosted* input, whose
+        // `testID` sits on the wrapper and whose focused element is a `TextField` descendant -
+        // so asking the wrapper alone reports an unfocused field while the dump on the next
+        // line says `Keyboard Focused` and shows the keyboard. Either one answers.
         let focused = (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
+          || Self.hasKeyboardFocus(field.descendants(matching: .textField).firstMatch)
         let moved = echo.map { echoText($0) != before } ?? true
         if focused, moved { return }
         Thread.sleep(forTimeInterval: 0.2)
@@ -4041,6 +4047,12 @@ final class RealInputTests: XCTestCase {
     dumpHierarchy("\(what) never took the keyboard focus")
     XCTFail("\(what) never took the keyboard focus after three real taps")
     throw RealInputCheckAborted(identifier: what)
+  }
+
+  /// `hasKeyboardFocus` is an accessibility attribute, and asking an element that does not
+  /// carry it answers `nil` rather than `false`.
+  private static func hasKeyboardFocus(_ element: XCUIElement) -> Bool {
+    element.exists && ((element.value(forKey: "hasKeyboardFocus") as? Bool) ?? false)
   }
 
   /// Poll `check` until it says yes or `window` runs out.
