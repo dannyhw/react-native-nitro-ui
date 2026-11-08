@@ -143,6 +143,51 @@ platform's tree; `need` names the example's harness/screen files as counting for
   anchor (popover-short-anchor) left it at 0 row(s) named \"Do the thing\"" - the check found the
   example screen's bug (`3ec7d8af`) before it could pass
 
+**Fix round 1** — one line each, in the same form. Two of them went red for the wrong reason
+first, and that is said too.
+
+- `Popover.harness.tsx` "takes the content back from a popover that never got up" -> Android
+  `applyDisplayed` without `if (next) owesDismissal = true` -> `"never-up" never counted its
+  content after a close with nothing up: mounts=1, unmounts=0`. Tree `ab48a6b5d8fb`. The same
+  fixture is green on iOS, where `sync()` already took the debt on the ask.
+- same file, "presents content that sizes itself after native stopped waiting" -> iOS
+  `contentBoxChanged` without the late-box restart -> `"late-box" never reached a popover on
+  screen` with `presentCount=0`, `contentWaits=61` and `contentW=184;contentH=112`: the box
+  arrived at 2.5 s and nothing ever presented. Tree `7c90a693e244`.
+- same file, "follows the content when it resizes while the popover is up" -> iOS drops the
+  `preferredContentSize` write in `contentBoxChanged` -> `askedH=92 … finalH=92 … sizes=180x92`
+  while the content reads `contentH=208`. Tree `724d1a36bce6`.
+- same fixture -> Android `noteContentSize` refuses a new box once the popup has drawn ->
+  `"grows" never reached the popover at the content height it grew to` with `askedH=92` against
+  `nodeH=208`, the popup still `lastDraw=473x242`. Tree `c4bb2d61af8d`.
+- `PopoverPlacementTest.theVisibleFrameIsConvertedIntoTheWindowThatHostsThePopover` ->
+  `windowFrame` returning the frame as read, with no host offset -> `expected:<PopoverFrame(left=0,
+  top=0, right=540, bottom=1000)> but was:<PopoverFrame(left=540, top=1200, right=1080,
+  bottom=2200)>`. Every other fixture in the file has the window at (0, 0) and stayed green, which
+  is exactly how the bug shipped.
+- `PopoverModalHazard.harness.tsx`, both Modal styles -> iOS `windowChanged(false)` with
+  `withTheModal = false` -> both cases red: the app is handed `pin:presented:false` by a screen
+  that is going away, where the rule on both platforms is `[]`. Tree `724d1a36bce6`. (The filtered
+  `harness:ios:PopoverModalHazard` lines in the ledger prove nothing: `-- PopoverModalHazard`
+  matches no file in the shared run, so Jest leaves with "No tests found" in 2 s. Isolated suites
+  only run inside a full platform run - the red above is from one.)
+- "presents inside a presented BottomSheet, and neither takes the other down" -> iOS `popoverGone`
+  never calling `presentation.forgetController()` -> red at "nothing of the popover left inside
+  the sheet". Tree `7b88f8c763c8`. **The review's suggested mutation does not redden this
+  fixture**: `popoverSource.sourceView = source` leaves `ownWindow=1` inside a sheet (measured,
+  tree `0330f05c49b5`); what it reddens is "caps the content…", "opens below its anchor…" and
+  "gives a recycled view none of its previous popover" - the second popover in a file never draws
+  (`viewW=0`, `popRect=-`) - and both Modal-hazard cases.
+- The two Tooltip-and-Popover pair fixtures were **not** shown red: neither mutation tried turns
+  them, and their `nothingLeft` witness compares against a baseline taken in the same app
+  instance, so a leak from an earlier test is inside the baseline rather than above it. They are
+  new coverage of a case that works, not a proved guard.
+- Two of the round's own fixtures went red for the wrong reason before they went red for the right
+  one: `onScreen` is "React asked" on Android (`model.presented`) and "the presentation is up" on
+  iOS (`popoverIsUp`), so the not-up checks now name each platform's own witness; and the sheet
+  fixture baselined its residue before the sheet opened, so the sheet's own touch root read as the
+  popover's remains.
+
 ## Files changed
 
 - `src/components/Popover/*`, `src/index.ts`, `src/components/Host/HostChildren.ts` — the
