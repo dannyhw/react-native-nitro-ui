@@ -80,8 +80,8 @@
  *       `example/jest.harness.config.mjs` matches any `*.harness.tsx` under a
  *       `__tests__` directory, so nothing here needed registering.
  */
-import type { ReactElement } from 'react';
-import { Platform, TurboModuleRegistry, View } from 'react-native';
+import type { ComponentProps, ReactElement } from 'react';
+import { Platform, Text, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -103,6 +103,7 @@ import {
   Chip,
   ContextMenu,
   DatePicker,
+  Form,
   Menu,
   Picker,
   Progress,
@@ -378,6 +379,14 @@ type Handle = {
    * `state.js`, which is what React sent, so it cannot show what the reset owns.
    */
   nuiTestDisplayedIndex?(): string;
+  /**
+   * The Form's line: `rows`/`sections` registered with this list, `orphans` in neither a
+   * cell nor their section's holding view, and the scroll the platform is showing. Both are
+   * the view's own answer about what it is holding, which is what a reset owns.
+   */
+  nuiTestFormReport?(): string;
+  /** Scroll the Form's list, so a probe can leave an offset behind for a reset to clear. */
+  nuiTestScrollTo?(y: number): void;
   /** Dialog's JS copy of `isPresented`, read back from the view's own props. */
   readonly presented?: boolean;
   /** Dialog's test hook: dismiss as a user would, through the real path. */
@@ -1636,6 +1645,63 @@ function tooltipShows(
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
  * it. `columnStyle` is what `Slider.harness.tsx` and the other suites use for the same reason.
  */
+
+// MARK: - Form's fixture
+
+const FORM_LABEL = 'Conformance form';
+const FORM_LABEL_SECOND = 'Second owner’s form';
+
+/**
+ * One Form, with a row count that differs between the two owners.
+ *
+ * The counts differ by more than one on purpose: with 3 and 4, a reset that was off by a row
+ * still looks like a layout that settled late. 4 and 2 also mean the second owner cannot be
+ * satisfied by a leftover from the first.
+ */
+/**
+ * `captureFor` for a Form. A Form has no box of its own and so no `measureContent()`, and
+ * it is not a control with an `accessibilityLabel` to read back - both members live on the
+ * shared `Handle` type for the controls that do. Same arrangement as `captureDialog`.
+ */
+const captureForm =
+  (testId: string) =>
+  (view: object): void => {
+    handles.set(testId, view as unknown as Handle);
+  };
+
+function formFixtureProps(
+  second: boolean,
+  testId = 'conformance-form',
+  label: string = second ? FORM_LABEL_SECOND : FORM_LABEL
+): ComponentProps<typeof Form> {
+  const rows = second ? 2 : 4;
+  return {
+    testID: testId,
+    accessibilityLabel: label,
+    hybridRef: captureForm(testId),
+    children: (
+      <Form.Section footer="One group, for the rule." title="Group">
+        {Array.from({ length: rows }, (_, index) => (
+          <Form.Row key={`row-${String(index)}`}>
+            <Text testID={`${testId}-row-${String(index)}`}>
+              Row {String(index)}
+            </Text>
+          </Form.Row>
+        ))}
+      </Form.Section>
+    ),
+  };
+}
+
+/** The Form's report, as `key -> value` — the shape every other report here has. */
+function formFields(handle: Handle): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const pair of (handle.nuiTestFormReport?.() ?? '').split(';')) {
+    const at = pair.indexOf('=');
+    if (at > 0) fields[pair.slice(0, at)] = pair.slice(at + 1);
+  }
+  return fields;
+}
 const FIXTURES: ReadonlyArray<Fixture> = [
   {
     name: 'Switch',
@@ -3496,6 +3562,98 @@ const FIXTURES: ReadonlyArray<Fixture> = [
             actual: report.selects,
           },
           { label: 'the menu is open', expected: '0', actual: report.open },
+        ];
+      },
+    },
+  },
+  {
+    name: 'Form',
+    component: 'NitroUiForm',
+    label: FORM_LABEL,
+    testId: 'conformance-form',
+    // A Form is laid out by its caller (D45): it has no intrinsic size to compare with a
+    // declared fallback, so it never joins the sizing engine's ledger. `isView` because the
+    // Form *is* the view that carries the label - the a11y rule reads its own box, not a row
+    // inside it.
+    selfSizing: false,
+    isView: true,
+    owner: (second) => <Form {...formFixtureProps(second)} />,
+    control: (testId, variant) => (
+      <Form
+        {...formFixtureProps(variant, testId, `Leak ${variant ? 'B' : 'A'}`)}
+      />
+    ),
+    // The Form's own account of what it is holding: `rows` is what registered with the list,
+    // and `orphans` is the shape a component view takes when a recycle moved it out and
+    // nothing moved it back.
+    state: (handle, second) => [
+      {
+        label: 'rows',
+        expected: second ? 2 : 4,
+        actual: Number(formFields(handle).rows),
+      },
+      {
+        label: 'orphans',
+        expected: 0,
+        actual: Number(formFields(handle).orphans),
+      },
+    ],
+    // The residue a Form leaves is its own bookkeeping: which rows are registered, and where
+    // its list is scrolled to. Four rows and a real scroll for the first owner, two rows for
+    // the second. A reset that skipped the bookkeeping reports `rows=4`, or - the shape the
+    // recycling path produces when a row is dropped on the floor - `orphans>0`. The scroll is
+    // logged rather than asserted: on Android the scroller is React Native's `ScrollView`,
+    // which belongs to the wrapper and not to the recycled view, so a zero there is not this
+    // component's own evidence on that platform.
+    probe: {
+      leaveBehind:
+        'four registered rows and a list scrolled 120 pt - the second owner mounts two, so ' +
+        'a reset that skipped the bookkeeping reports the first owner’s count, or a row that ' +
+        'is in no cell at all',
+      first: () => (
+        <Form {...formFixtureProps(false, 'conformance-form', FORM_LABEL)} />
+      ),
+      act: async () => {
+        const handle = await ensureHandle('conformance-form');
+        const until = Date.now() + 8000;
+        while (Number(formFields(handle).rows) !== 4) {
+          if (Date.now() > until) {
+            throw new Error(
+              `the first owner never registered four rows: ${
+                handle.nuiTestFormReport?.() ?? '(no report)'
+              }`
+            );
+          }
+          await sleep(100);
+        }
+        handle.nuiTestScrollTo?.(120);
+        // Wait for the list to say it moved, so the residue is real before the second owner
+        // arrives. Either platform's field counts: iOS publishes `offset`, Android `scroll`.
+        const moved = Date.now() + 4000;
+        while (Date.now() < moved) {
+          const report = formFields(handle);
+          const shown = Number(report.scroll ?? report.offset ?? '0');
+          if (shown > 10) break;
+          await sleep(100);
+        }
+      },
+      second: () => (
+        <Form
+          {...formFixtureProps(true, 'conformance-form', FORM_LABEL_SECOND)}
+        />
+      ),
+      read: async () => {
+        const handle = handleFor('conformance-form');
+        const report = formFields(handle);
+        console.log(
+          `    · the second owner's list: rows=${report.rows} ` +
+            `sections=${report.sections} orphans=${report.orphans} ` +
+            `scroll=${report.scroll ?? report.offset} offset=${report.offset}`
+        );
+        return [
+          { label: 'rows', expected: '2', actual: report.rows },
+          { label: 'sections', expected: '1', actual: report.sections },
+          { label: 'orphans', expected: '0', actual: report.orphans },
         ];
       },
     },

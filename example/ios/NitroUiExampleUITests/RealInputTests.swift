@@ -56,6 +56,7 @@ final class RealInputTests: XCTestCase {
     static let textFieldTab = "tab-textfield"
     static let searchFieldTab = "tab-searchfield"
     static let contextMenuTab = "tab-contextmenu"
+    static let formTab = "tab-form"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -114,6 +115,16 @@ final class RealInputTests: XCTestCase {
     static let searchFrozen = "search-frozen-echo"
     static let searchCapped = "search-capped-echo"
     static let searchFocus = "search-focus-echo"
+    // The Form screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
+    static let formScreenEcho = "form-screen-echo"
+    static let formRowPresses = "form-row-presses"
+    static let formInnerPresses = "form-inner-presses"
+    static let formOutsidePresses = "form-outside-presses"
+    static let formSwitchChanges = "form-switch-changes"
+    static let formSwitchValue = "form-switch-value"
+    static let formFieldFocus = "form-field-focus"
+    static let formFieldValue = "form-field-value"
+    static let formKeyboardInset = "form-keyboard-inset"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -5343,6 +5354,390 @@ final class RealInputTests: XCTestCase {
   private func dumpHierarchy(_ why: String) {
     print("real-input (ios): accessibility hierarchy - \(why)")
     print(app.debugDescription)
+  }
+// MARK: - Form
+
+  /// Ten real taps on a form row, on the `Pressable` inside a row and on the `Switch`
+  /// inside a row: every tap must be worth exactly one event, a row with no `onPress`
+  /// must be worth none, the cell must look pressed while the finger is down, and a
+  /// field near the bottom must still be visible when the keyboard is up.
+  ///
+  /// Why this case exists: S6 could only touch these rows with
+  /// `react-native-harness`, which delivers events by tag and never crosses UIKit's
+  /// hit-testing. The Form moves a row's Fabric view into a
+  /// `UICollectionViewListCell` — exactly where a touch can end up somewhere else —
+  /// and the press path S6 invented for it (`NitroUiFormRowCell.pressGesture`) had no
+  /// green run, because `real-input:ios` is driven off example screens and there was
+  /// no Form screen to drive. This is that screen's check.
+  func testRealInputForm() throws {
+    try goToTab(Tab.formTab, showing: Echo.formScreenEcho)
+
+    // Once each, in order, so an overshoot names the control that caused it.
+    try assertOnePressPerTap(
+      "form-row",
+      echo: Echo.formRowPresses,
+      times: 10,
+      as: "the form row with onPress"
+    )
+    try assertOnePressPerTap(
+      "form-inner",
+      echo: Echo.formInnerPresses,
+      times: 10,
+      as: "the Pressable inside a form row"
+    )
+    try assertSwitchToggledOncePerTap()
+
+    // A row that answers no tap must not answer one because its neighbour did. This is
+    // the negative half of "10/10": without it, a Form that pressed the last row it saw
+    // would pass every case above.
+    try assertTapsGoNowhere(
+      "form-row-plain",
+      echoes: [
+        Echo.formRowPresses,
+        Echo.formInnerPresses,
+        Echo.formSwitchChanges,
+        Echo.formOutsidePresses,
+      ],
+      taps: 10,
+      as: "the form row with no onPress"
+    )
+
+    try assertRowShowsCellHighlight("form-row", echo: Echo.formRowPresses, as: "the form row with onPress")
+    try assertFormKeepsFieldAboveKeyboard()
+  }
+
+  /// Tap `identifier` ten times and require the echo to read exactly 1…10.
+  ///
+  /// Deliberately one tap, then one wait — not ten taps then a read. Ten taps and a
+  /// final count of 10 would also be what a screen looks like after two taps landed
+  /// twice and eight were dropped, and the difference is the whole question.
+  private func assertOnePressPerTap(
+    _ identifier: String,
+    echo: String,
+    times: Int,
+    as what: String
+  ) throws {
+    for attempt in 1...times {
+      let wanted = String(attempt)
+      guard pressOnce(identifier) != nil else {
+        dumpHierarchy("\(what): \(identifier) is gone before tap \(attempt)")
+        XCTFail(
+          "\(what) (\(identifier)) was not on screen before tap \(attempt) of \(times), so "
+            + "nothing was tapped and every count after this says nothing about a touch."
+        )
+        throw RealInputCheckAborted(identifier: identifier)
+      }
+      if !waitUntil({ self.echoText(echo) == wanted }, window: reactTimeout) {
+        let shown = echoText(echo)
+        dumpHierarchy("\(what): tap \(attempt) did not arrive as \(wanted)")
+        XCTFail(
+          "tap \(attempt) of \(times) on \(what) (\(identifier)) should make \"\(echo)\" read "
+            + "\(wanted); it reads \"\(shown)\" after \(Int(reactTimeout))s — "
+            + ((Int(shown) ?? 0) > attempt
+              ? "it is ahead, so a tap answered more than once."
+              : "it is behind, so a tap was dropped before it reached the content.")
+        )
+        throw RealInputCheckAborted(identifier: identifier)
+      }
+    }
+  }
+
+  /// Ten taps on the hosted `Switch`: ten accepted changes, and the *value* still in
+  /// step. The counter alone would be satisfied by a control that fired an event and
+  /// kept its old state; the parity of the value echo is what says the two agree.
+  private func assertSwitchToggledOncePerTap() throws {
+    let control = "form-switch"
+    for attempt in 1...10 {
+      guard pressOnce(control) != nil else {
+        dumpHierarchy("the hosted Switch is gone before tap \(attempt)")
+        XCTFail(
+          "the Switch inside the form row (\(control)) was not on screen before tap \(attempt) "
+            + "of 10 — nothing was tapped, so the counts below are not evidence."
+        )
+        throw RealInputCheckAborted(identifier: control)
+      }
+      let wanted = String(attempt)
+      if !waitUntil({ self.echoText(Echo.formSwitchChanges) == wanted }, window: reactTimeout) {
+        let shown = echoText(Echo.formSwitchChanges)
+        dumpHierarchy("hosted Switch change \(attempt) did not arrive")
+        XCTFail(
+          "tap \(attempt) of 10 on the Switch inside a form row should make "
+            + "\"\(Echo.formSwitchChanges)\" read \(wanted); it reads \"\(shown)\" after "
+            + "\(Int(reactTimeout))s."
+        )
+        throw RealInputCheckAborted(identifier: control)
+      }
+      let parity = attempt.isMultiple(of: 2) ? "off" : "on"
+      XCTAssertEqual(
+        try read(Echo.formSwitchValue),
+        parity,
+        "after \(attempt) taps the Switch inside the row should read \"\(parity)\", so the "
+          + "change React accepted and the state it renders are the same event"
+      )
+    }
+  }
+
+  /// Tap something inert ten times and require that no counter moved.
+  private func assertTapsGoNowhere(
+    _ identifier: String,
+    echoes: [String],
+    taps: Int,
+    as what: String
+  ) throws {
+    let before = echoes.map { ($0, echoText($0)) }
+    for attempt in 1...taps {
+      guard pressOnce(identifier) != nil else {
+        dumpHierarchy("\(what): \(identifier) is gone before tap \(attempt)")
+        XCTFail("\(what) (\(identifier)) disappeared before tap \(attempt) of \(taps).")
+        throw RealInputCheckAborted(identifier: identifier)
+      }
+    }
+    // Anything still on its way to JS has to have landed before "nothing changed" means
+    // anything, so wait for a change and use the window as the settle.
+    _ = waitUntil(
+      {
+        echoes.contains { name in
+          self.echoText(name) != (before.first { $0.0 == name }?.1 ?? "")
+        }
+      },
+      window: 1.5
+    )
+    let moved = before.compactMap { name, was -> String? in
+      let now = echoText(name)
+      return now == was ? nil : "\(name) went \"\(was)\" -> \"\(now)\""
+    }
+    XCTAssertEqual(
+      moved,
+      [],
+      "\(taps) taps on \(what) (\(identifier)) moved counters it had no business moving: "
+        + "\(moved.joined(separator: "; ")). A row with no onPress has to be inert, or every "
+        + "press above could have come from the row next to it."
+    )
+  }
+
+  /// The cell's own highlight: the pixels of one row, at rest and with the finger down.
+  ///
+  /// UIKit paints it (`pressed` -> `.quaternarySystemFill` in the cell's
+  /// `configurationUpdateHandler`) and React never hears about it, so the witness is the
+  /// screen: the same element's average luminance at rest and inside a held press. The two
+  /// numbers are printed either way, because the gate log is the evidence file.
+  ///
+  /// The sample is taken from a background thread (the main one is the thread holding the
+  /// finger down) and with a *bounded* wait, and it records when it landed: an XCUITest
+  /// screenshot asked for during a press may be served after the press, and a late sample is
+  /// indistinguishable from a row that never highlighted. So the assertion runs only when the
+  /// timestamp says the sample is genuinely mid-press, and a sample that could not be taken
+  /// in time is reported as UNSAMPLED in the log rather than folded into a pass.
+  private func assertRowShowsCellHighlight(
+    _ identifier: String,
+    echo: String,
+    as what: String
+  ) throws {
+    let element = try required(identifier, as: what)
+    guard let atRest = element.frame.width > 0 ? meanLuminance(of: element.screenshot().image) : nil else {
+      XCTFail("could not read the pixels of \(what) (\(identifier)) at rest, so the highlight cannot be measured.")
+      return
+    }
+
+    let hold: TimeInterval = 2.5
+    let sampleAfter: TimeInterval = 0.8
+    let group = DispatchGroup()
+    var held: CGFloat?
+    var sampledAt: Date?
+    group.enter()
+    DispatchQueue.global().asyncAfter(deadline: .now() + sampleAfter) {
+      held = self.meanLuminance(of: element.screenshot().image)
+      sampledAt = Date()
+      group.leave()
+    }
+    let before = echoText(echo)
+    let pressBegan = Date()
+    element.press(forDuration: hold)
+    let pressEnded = Date()
+    _ = group.wait(timeout: .now() + 10)
+
+    let after = echoText(echo)
+    XCTAssertEqual(
+      after,
+      String((Int(before) ?? 0) + 1),
+      "a held press on \(what) should arrive as exactly one more press: \"\(echo)\" went "
+        + "\"\(before)\" -> \"\(after)\"."
+    )
+
+    guard let held, let sampledAt else {
+      print(
+        "real-input form highlight: UNSAMPLED \(what) (\(identifier)) - the screenshot "
+          + "requested \(sampleAfter)s into a \(hold)s press never came back. Rest luminance "
+          + "\(atRest). Not a pass: the highlight is unmeasured on iOS."
+      )
+      return
+    }
+    guard sampledAt < pressEnded else {
+      print(
+        "real-input form highlight: UNSAMPLED \(what) (\(identifier)) - the screenshot was "
+          + "served \(sampledAt.timeIntervalSince(pressBegan))s after the press began, i.e. "
+          + "after it released, so it cannot show a highlight. Rest \(atRest), late sample "
+          + "\(held). Not a pass: the highlight is unmeasured on iOS."
+      )
+      return
+    }
+    print(
+      "real-input form highlight: \(what) (\(identifier)) luminance rest=\(atRest) "
+        + "held=\(held) sampled \(sampledAt.timeIntervalSince(pressBegan))s into a \(hold)s press"
+    )
+    XCTAssertLessThan(
+      held,
+      atRest - 0.01,
+      "\(what) (\(identifier)) is no darker with the finger down than at rest: luminance "
+        + "\(held) held against \(atRest) at rest, sampled inside the press. UIKit is not "
+        + "highlighting the cell, so a row's press arrives without the feedback that says it did."
+    )
+  }
+
+  /// Question 5 on iOS: a field near the bottom of a long form, focused by a real tap,
+  /// is still on screen above the keyboard.
+  private func assertFormKeepsFieldAboveKeyboard() throws {
+    let identifier = "form-note-field"
+    // A Form is not a page: the list realises a row only while it is drawing one, so
+    // unlike every other screen here the field is not merely off-screen, it is not in the
+    // accessibility tree at all until the list has been scrolled to it. (It is also the
+    // answer to "can anything anchor to a row that is not visible": no, and a shipped Form
+    // needs a scroll-to before a measure.)
+    let field = app.descendants(matching: .any)[identifier].firstMatch
+    var revealed = false
+    for _ in 0..<14 {
+      app.swipeUp()
+      if field.waitForExistence(timeout: 1) {
+        revealed = true
+        break
+      }
+    }
+    guard revealed else {
+      dumpHierarchy("the note field never appeared, however far the list was scrolled")
+      XCTFail(
+        "the note field near the bottom of the form never became a realised row, so the list "
+          + "never drew it: question 5 has nothing to focus."
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+
+    // Then to the end of the list, the way the Date screen does it: the page is at the end
+    // when another swipe stops moving the field — a field in the middle of the screen tests
+    // nothing about a keyboard.
+    var position = field.frame
+    for _ in 0..<12 {
+      app.swipeUp()
+      let after = field.frame
+      if after == position { break }
+      position = after
+    }
+    let screen = app.windows.firstMatch.frame
+    XCTAssertGreaterThan(
+      field.frame.minY,
+      screen.midY,
+      "the note field ended up at y \(field.frame.minY) of a \(screen.height)pt screen — not "
+        + "in its lower half, so this cannot see the keyboard covering it."
+    )
+
+    XCTAssertEqual(
+      try read(Echo.formFieldFocus),
+      "no",
+      "the field should not be focused before it is tapped"
+    )
+    // `focusByTap` retries a dropped delivery (three taps, like every other control here),
+    // because question 5 is about the keyboard, not about the tap rate: a single tap that the
+    // InputManager swallowed would otherwise be reported as a field the keyboard covered.
+    try focusByTap(field, echo: Echo.formFieldFocus, as: "the note field at the bottom of the form")
+    if !waitUntil({ self.echoText(Echo.formFieldFocus) == "yes" }, window: reactTimeout) {
+      dumpHierarchy("the note field's focus never reached React")
+      XCTFail(
+        "the field took the keyboard focus but \"\(Echo.formFieldFocus)\" still reads "
+          + "\"\(echoText(Echo.formFieldFocus))\" after \(Int(reactTimeout))s, so question 5 has "
+          + "nothing to measure."
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
+
+    // What the keyboard actually is has two possible witnesses, and they do not always both
+    // exist. The Form's own report carries the inset UIKit told it (`keyboardWillChangeFrame`
+    // -> the list's bottom inset), which is the number the avoidance was built from and which
+    // a simulator with a connected hardware keyboard still has. XCUITest's keyboard *window*
+    // is the better witness when the simulator bothers to expose one, so it is used when it
+    // is there and the inset is used when it is not. Neither is assumed.
+    _ = waitUntil({ self.echoText(Echo.formKeyboardInset) != "-" }, window: 4)
+    let insetText = echoText(Echo.formKeyboardInset)
+    let inset = CGFloat(Double(insetText) ?? 0)
+    let keyboard = app.keyboards.firstMatch
+    let keyboardTop: CGFloat
+    let from: String
+    if keyboard.waitForExistence(timeout: 5) {
+      keyboardTop = keyboard.frame.minY
+      from = "window"
+    } else if inset > 0 {
+      // A correct avoidance leaves the row above `listBottom - inset`, and the list's bottom
+      // is never below the window's, so `screen.maxY - inset` is a line the field must be
+      // above whenever the keyboard is what UIKit says it is - and cannot be met by accident.
+      keyboardTop = screen.maxY - inset
+      from = "inset"
+    } else {
+      dumpHierarchy("no keyboard window and no keyboard inset after focusing \(identifier)")
+      throw XCTSkip(
+        "nothing says a keyboard came up: XCUITest sees no keyboard window (a simulator with "
+          + "its hardware keyboard connected shows none) and the Form's own report reads "
+          + "keyboard=\(insetText), so there is no keyboard for the field to stay above. Not a "
+          + "pass: iOS question 5 is unmeasured on this host."
+      )
+    }
+    let frame = field.frame
+    XCTAssertGreaterThan(
+      inset,
+      0,
+      "the Form's report reads keyboard=\(insetText) — UIKit never told it a keyboard is up, "
+        + "so the \(from)-derived line at \(keyboardTop) is not a keyboard's top edge and "
+        + "nothing here has measured question 5."
+    )
+    XCTAssertGreaterThanOrEqual(
+      frame.maxY,
+      screen.minY,
+      "the focused field scrolled off the top of the window: it is at \(frame)."
+    )
+    XCTAssertLessThanOrEqual(
+      frame.maxY,
+      keyboardTop + 1,
+      "the keyboard covers the focused field: it is at \(frame) with the keyboard's top edge at "
+        + "\(keyboardTop) (from \(from)) — keyboardAvoidance left a field under the keys."
+    )
+    print(
+      "real-input form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from \(from)) "
+        + "inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
+    )
+  }
+
+  /// The average luminance of one screenshot, 0 (black) to 1 (white).
+  ///
+  /// Core Graphics draws the whole element into a 1x1 bitmap, which box-averages it —
+  /// enough to see a translucent grey laid over the whole row, and immune to where in
+  /// the row the aim happens to land.
+  private func meanLuminance(of image: UIImage) -> CGFloat? {
+    guard let cg = image.cgImage else { return nil }
+    var pixel = [UInt8](repeating: 0, count: 4)
+    guard
+      let space = CGColorSpace(name: CGColorSpace.sRGB),
+      let context = CGContext(
+        data: &pixel,
+        width: 1,
+        height: 1,
+        bitsPerComponent: 8,
+        bytesPerRow: 4,
+        space: space,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      )
+    else { return nil }
+    context.draw(cg, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+    let red = CGFloat(pixel[0]) / 255
+    let green = CGFloat(pixel[1]) / 255
+    let blue = CGFloat(pixel[2]) / 255
+    return red * 0.299 + green * 0.587 + blue * 0.114
   }
 }
 

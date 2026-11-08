@@ -3976,6 +3976,216 @@ const CHECKS = {
         'kept as evidence, not asserted'
     );
   },
+
+  /**
+   * The `Form` screen (G24): real fingers on rows that iOS lifts out of the React tree, and
+   * the software keyboard over a field near the bottom of a long form.
+   *
+   * Android is the platform where a row stays exactly where Yoga put it, so these taps are
+   * the control group for the iOS half: a row's own `onPress`, a `Pressable` inside a row and
+   * a hosted `Switch` inside a row each have to answer ten taps with ten events, and a row
+   * without `onPress` has to answer none. Every tap is `adb shell input tap`, not the
+   * harness's tag-addressed driver — which is the difference between "the view is wired" and
+   * "a finger reaches it after the platform moved it".
+   *
+   * Counters, not values, are the evidence for the two press cases: `rows=10` after ten taps
+   * says one press per tap, where a value echo would also be satisfied by a row that pressed
+   * twice, or once in five. Each tap is still confirmed before the next (`tapUntilValue`), so
+   * a delivery the InputManager dropped is retried and logged as a retry rather than read as
+   * a row that refuses a finger.
+   *
+   * The keyboard case is last because it is the one that changes the viewport.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'form': async (t) => {
+    const counters = () => ({
+      rows: t.requireEcho(ECHO.formRowPresses),
+      inner: t.requireEcho(ECHO.formInnerPresses),
+      outside: t.requireEcho(ECHO.formOutsidePresses),
+      changes: t.requireEcho(ECHO.formSwitchChanges),
+      value: t.requireEcho(ECHO.formSwitchValue),
+    });
+    const start = counters();
+    t.log.checkEquals(
+      `the Form screen starts with nothing pressed (${JSON.stringify(start)})`,
+      `${start.rows}/${start.inner}/${start.outside}/${start.changes}/${start.value}`,
+      '0/0/0/0/off'
+    );
+
+    // 1. A row with `onPress`: ten taps, ten presses, aimed at the row a person aims at.
+    const pressed = await t.requireControlOnScreen('Row with onPress');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => pressed,
+        ECHO.formRowPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a form row`
+      );
+    }
+    const afterRow = counters();
+    t.log.checkEquals(
+      'ten real taps on a row are ten presses, and nothing else fired',
+      `${afterRow.rows}/${afterRow.inner}/${afterRow.changes}`,
+      '10/0/0'
+    );
+
+    // 2. A `Pressable` inside a row: the row must not steal its content's touch, and the
+    //    content must not press the row on the way out.
+    const inner = await t.requireControlOnScreen('Press me inside a row');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => inner,
+        ECHO.formInnerPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a Pressable inside a row`
+      );
+    }
+    const afterInner = counters();
+    t.log.checkEquals(
+      'ten real taps inside a row are ten presses, and its row stayed put',
+      `${afterInner.inner}/${afterInner.rows}`,
+      '10/10'
+    );
+
+    // 3. A hosted `Switch` inside a row: the value alternates and the change counter says
+    //    each one was one event. `nativeLabel` is what stops a *lost* change event from
+    //    being retried into green (F1 M3): the Switch published its own new state, so a tap
+    //    that arrived without an event is a finding, not a dropped delivery.
+    const toggle = await t.requireControlOnScreen('Airplane mode');
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => toggle,
+        ECHO.formSwitchValue,
+        tap % 2 === 1 ? 'on' : 'off',
+        `real tap ${String(tap)} of 10 on the Switch in a row`,
+        { nativeLabel: 'Airplane mode' }
+      );
+    }
+    const afterSwitch = counters();
+    t.log.checkEquals(
+      'ten real taps on the Switch are ten changes and are back where they started',
+      `${afterSwitch.changes}/${afterSwitch.value}`,
+      '10/off'
+    );
+
+    // 4. A row with no `onPress` is inert, and the inertness has to be distinguishable from
+    //    the app having stopped listening - which is what the outside control answers right
+    //    after it. Deliberately not retried: the claim is that a window of taps changes
+    //    nothing, and re-pressing is the one thing that would change it.
+    const plain = await t.requireControlOnScreen('Row with no onPress');
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(plain);
+    }
+    const inert = t.requireEchoToStay(
+      ECHO.formRowPresses,
+      '10',
+      'three taps on a row without onPress to press nothing'
+    );
+    t.log.checkEquals('a row without onPress does not press', inert, '10');
+    t.log.checkEquals(
+      'and input is alive: a tap outside the Form is one press',
+      await t.tapUntilValue(
+        () => t.requireControl('Outside the form'),
+        ECHO.formOutsidePresses,
+        '1',
+        'a real tap outside the Form'
+      ),
+      '1'
+    );
+
+    // 5. Question 5, Android: the note field is below the fold, so getting to it is the
+    //    scroll a person would do, and the keyboard that follows is the *software* one -
+    //    which needs the preference raised, because every AVD has a hardware keyboard and
+    //    Android then shows a focused field nothing (S5 hit the same wall). The claim is
+    //    about two edges: the field's box and the keyboard's top.
+    await t.withFullSoftwareKeyboard(async () => {
+      const field = await t.requireControlOnScreen('Note');
+      t.log.checkEquals(
+        'the note field starts unfocused',
+        t.requireEcho(ECHO.formFieldFocus),
+        'no'
+      );
+      // `tapUntilValue` retries a tap the InputManager dropped, the way every other
+      // control here does: question 5 is about the keyboard, not about the tap rate, and a
+      // single swallowed tap would be reported as a field the keyboard covered.
+      t.log.checkEquals(
+        'a real tap focuses the field at the bottom of a long Form',
+        await t.tapUntilValue(
+          () => field,
+          ECHO.formFieldFocus,
+          'yes',
+          'a real tap on the note field at the bottom of the Form'
+        ),
+        'yes'
+      );
+      // A keyboard is not up the instant the field takes focus: the IME service has to
+      // attach a surface first, and `mInputShown` answers "not yet" when it is read on the
+      // same instant the focus echo lands. S6b's first Android run read it then and called
+      // that "no input view". The two waits are separate, and in this order, because the
+      // second is only meaningful once the first is true - the service's insets are the
+      // *last computed* ones, so an edge read while the input view is down is the edge of a
+      // keyboard that is not on the screen.
+      const imeDeadline = Date.now() + 5000;
+      let imeIn = t.imeShown();
+      while (!imeIn && Date.now() < imeDeadline) {
+        await sleep(250);
+        imeIn = t.imeShown();
+      }
+      t.log.check('the IME says its input view is on screen', imeIn);
+      if (!imeIn) {
+        // Nothing is up, so there is no keyboard edge to measure against and no band to
+        // claim. Round 2 claimed one anyway - `a full software keyboard ... occupies
+        // 2282 px of a 2424 px window` - from a window record belonging to a *hidden*
+        // keyboard, and printed a field "below" a keyboard that was never on screen.
+        t.log.warn(
+          'no input view came up, so the field-against-keyboard edge is UNMEASURED (the ' +
+            'focus above is measured; the keyboard itself working on this device is ' +
+            'witnessed separately, in the report)'
+        );
+        return;
+      }
+      let imeTop = t.imeTopPx();
+      const edgeDeadline = Date.now() + 2000;
+      while (imeTop == null && Date.now() < edgeDeadline) {
+        await sleep(250);
+        imeTop = t.imeTopPx();
+      }
+      if (imeTop == null) {
+        // A keyboard edge that cannot be read is not a pass: say it is unmeasured, in the
+        // one channel the summary line carries, rather than let a missing window-service
+        // record become a green "visible above the keyboard".
+        t.log.warn(
+          'neither keyboard reader answered while the input view was up, so the ' +
+            'field-against-keyboard edge is UNMEASURED (the focus and the IME being up ' +
+            'above are not): ' +
+            t.imeEdgeSample()
+        );
+        return;
+      }
+      const { height } = t.screenSize();
+      // A fifth of the window is the loosest reading of "the keyboard" that excludes a
+      // floating toolbar (a strip, not a keyboard): the brief asks for the full software
+      // keyboard, so the band is measured rather than assumed.
+      const band = height - imeTop;
+      t.log.check(
+        `a full software keyboard, not a toolbar: it occupies ${String(band)} px of a ` +
+          `${String(height)} px window`,
+        band > height * 0.2
+      );
+      const visible = t.requireControl('Note');
+      t.log.note(
+        `field box ${String(visible.bounds.y1)}..${String(visible.bounds.y2)} px, ` +
+          `keyboard top ${String(imeTop)} px`
+      );
+      t.log.check(
+        `the focused field is still on screen above the keyboard (field bottom ` +
+          `${String(visible.bounds.y2)}, keyboard top ${String(imeTop)})`,
+        visible.bounds.height > 0 && visible.bounds.y2 <= imeTop
+      );
+    });
+    await t.hideKeyboard();
+  },
 };
 
 // ---------------------------------------------------------------------------
