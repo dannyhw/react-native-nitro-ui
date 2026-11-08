@@ -182,6 +182,9 @@ final class NitroUiFormRowHostView: UIView {
 final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDelegate {
   private let container = NitroUiFormRowContainer()
   private var height: NSLayoutConstraint!
+  /// The width this cell gives its row - the box the row's React side has to be laid out
+  /// at, and the number a `measure` of the row has to agree with.
+  var rowBoxWidth: CGFloat { container.bounds.width }
   /// The row's press, delivered by ``pressGesture`` instead of by UIKit's cell selection.
   var onPressTap: (() -> Void)?
   /// Whether the finger is down on this row right now, which is what makes it look pressed.
