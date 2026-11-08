@@ -58,6 +58,7 @@ final class RealInputTests: XCTestCase {
     static let searchFieldTab = "tab-searchfield"
     static let contextMenuTab = "tab-contextmenu"
     static let iconButtonTab = "tab-iconbutton"
+    static let buttonGroupTab = "tab-buttongroup"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -97,6 +98,13 @@ final class RealInputTests: XCTestCase {
     static let iconButtonRefusedLast = "real-input-icon-button-refused-last"
     static let iconButtonRefusedEvents = "real-input-icon-button-refused-events"
     static let iconButtonDisabledEvents = "real-input-icon-button-disabled-events"
+    static let buttonGroupPresses = "button-group-presses"
+    static let buttonGroupPressedId = "button-group-pressed-id"
+    static let buttonGroupToggleEvents = "button-group-toggle-events"
+    static let buttonGroupToggleState = "button-group-toggle-state"
+    static let buttonGroupRefusedLast = "button-group-refused-last"
+    static let buttonGroupRefusedEvents = "button-group-refused-events"
+    static let buttonGroupDisabledEvents = "button-group-disabled-events"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -446,6 +454,9 @@ final class RealInputTests: XCTestCase {
       A11yCase(id: "icon-button", testId: "real-input-icon-button",
                label: "Real-input icon button",
                tab: Tab.iconButtonTab, screenAnchor: Echo.iconButtonValue),
+      A11yCase(id: "button-group", testId: "real-input-button-group",
+               label: "Real-input actions",
+               tab: Tab.buttonGroupTab, screenAnchor: Echo.buttonGroupPresses),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -3204,6 +3215,328 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(
       waitForNativeSwitchState("real-input-checkbox", "off"), "off",
       "the tapped glyph's own element should report the value it was tapped into"
+    )
+  }
+
+
+  /// Poll one item's element until it reports `expected`, and return its last word.
+  private func waitForItemState(
+    _ identifier: String,
+    _ title: String,
+    _ expected: String
+  ) -> String? {
+    let deadline = Date().addingTimeInterval(3)
+    var shown = nativeItemState(of: identifier, title)
+    while shown != expected && Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.2)
+      shown = nativeItemState(of: identifier, title)
+    }
+    if shown != expected {
+      dumpHierarchy("\(identifier) item \"\(title)\" never announced \(expected)")
+    }
+    return shown
+  }
+
+  // MARK: - ButtonGroup
+
+  /// One item of a ButtonGroup, found inside that group's own container by title.
+  ///
+  /// Scoped to the container because four groups on this screen draw an item called
+  /// "Copy": a query for the title across the whole app would tap whichever one the
+  /// tree happened to list first, and a tap that lands in the wrong row is a wrong-place
+  /// tap that blames the wrong control.
+  ///
+  /// `.any` rather than `.button` because an action item is a `Button` and a toggle item
+  /// is a `Toggle(.button)`, which XCUITest reports as a switch (G12 measured it) — the
+  /// one query has to find both.
+  private func buttonGroupItem(_ identifier: String, titled title: String) -> XCUIElement {
+    app
+      .descendants(matching: .any)[identifier].firstMatch
+      .descendants(matching: .any)
+      .matching(NSPredicate(format: "label == %@", title))
+      .firstMatch
+  }
+
+  /// Like `required`, for one item inside a group: waits for it, and fails with both
+  /// names when the row never drew it.
+  private func requiredItem(
+    _ identifier: String,
+    _ title: String,
+    timeout: TimeInterval = 10
+  ) throws -> XCUIElement {
+    let item = buttonGroupItem(identifier, titled: title)
+    if !item.waitForExistence(timeout: timeout) {
+      dumpHierarchy("no item \"\(title)\" inside \"\(identifier)\" after \(timeout)s")
+      XCTFail(
+        "the group \"\(identifier)\" drew no item labelled \"\(title)\" within \(timeout)s, "
+          + "so no real tap can be aimed at it"
+      )
+      throw RealInputCheckAborted(identifier: "\(identifier)/\(title)")
+    }
+    return item
+  }
+
+  /// Whether one item's own element says it is checked, as "on"/"off".
+  ///
+  /// The same reading `nativeChipState` makes, aimed at one item instead of at the
+  /// control behind a testID: the group's container holds three toggles, so "the first
+  /// switch inside the identifier" would answer about whichever one the tree listed
+  /// first.
+  private func nativeItemState(of identifier: String, _ title: String) -> String? {
+    let item = buttonGroupItem(identifier, titled: title)
+    guard item.exists else { return nil }
+    if item.isSelected { return "on" }
+    let raw = item.value
+    let text = (raw as? NSNumber)?.stringValue ?? (raw as? String) ?? ""
+    switch text {
+    case "1", "1.0", "true": return "on"
+    case "0", "0.0", "false": return "off"
+    default: return nil
+    }
+  }
+
+  /// Tap one item until the echo it should move arrives.
+  private func tapItemUntilValue(
+    _ identifier: String,
+    _ title: String,
+    echo: String,
+    expected: String,
+    waitingFor: String,
+    nativeState: (() -> String?)? = nil,
+    attempts: Int = 3
+  ) throws -> String {
+    return try pressUntil(
+      named: "\"\(title)\" in \(identifier)",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { _ in try self.requiredItem(identifier, title).fingerTap() },
+      reading: { self.echoText(echo) },
+      nativeState: nativeState
+    ) { shown in
+      shown == expected
+    }
+  }
+
+  /// A real tap presses each ButtonGroup item once, a toggle item flips once per tap, and
+  /// an overflowed item is reachable through the overflow menu (G20).
+  ///
+  /// The `pressed-id` echo is what makes this a check about *items*: three taps and a
+  /// counter reading `3` is also exactly what a group that reports `items[0]` for every
+  /// tap looks like, and that group presses perfectly. So each tap asserts the counter
+  /// and the id together.
+  ///
+  /// A toggle item's own element is the witness beside the echo (Checkbox's and
+  /// IconButton's reason): a native toggle that always requested `true` would light the
+  /// "on" echo on the first tap all the same, so it is the *second* tap that has to ask
+  /// for `false`, and the echo back at the old set with the element back at `0` and the
+  /// counter at exactly `2` is what says so.
+  func testRealInputButtonGroup() throws {
+    try goToTab(Tab.buttonGroupTab, showing: Echo.buttonGroupPresses)
+    let actions = "real-input-button-group"
+    let toggles = "real-input-button-group-toggles"
+    let refusing = "real-input-button-group-refusing"
+    let disabledItem = "real-input-button-group-disabled-item"
+    let disabledGroup = "real-input-button-group-disabled"
+    let overflow = "real-input-button-group-overflow"
+
+    // 1. At rest: every counter at zero and the controlled toggles showing the set
+    //    React gave them, so every number below is one that moved.
+    XCTAssertEqual(
+      try read(Echo.buttonGroupPresses), "0",
+      "no press should be reported before a touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupPressedId), "none",
+      "no item should have been named by a press before a touch"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupToggleState), "bold",
+      "the toggles should start at the set React rendered"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupToggleEvents), "0",
+      "no change should be reported before a tap"
+    )
+    XCTAssertEqual(
+      "\(try read(Echo.buttonGroupRefusedLast)) \(try read(Echo.buttonGroupRefusedEvents))",
+      "none 0",
+      "the refusing group should have been asked for nothing yet"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupDisabledEvents), "0",
+      "the counter the disabled group and its disabled item report into should start at "
+        + "zero, so a stray delivery is a number that moved"
+    )
+    XCTAssertEqual(
+      nativeItemState(of: toggles, "Bold"), "on",
+      "the checked toggle item's own element should report value 1"
+    )
+
+    // 2. One tap per item, and each item names itself. Exact numbers, not "at least".
+    for (title, id, count) in [("Copy", "copy", "1"), ("Cut", "cut", "2"), ("Paste", "paste", "3")] {
+      XCTAssertEqual(
+        try tapItemUntilValue(
+          actions,
+          title,
+          echo: Echo.buttonGroupPresses,
+          expected: count,
+          waitingFor: "the real tap on the \"\(title)\" item"
+        ),
+        count,
+        "a real tap on \"\(title)\" should report exactly one onPress"
+      )
+      XCTAssertEqual(
+        try read(Echo.buttonGroupPressedId), id,
+        "the press should name the item that was tapped, not merely some item"
+      )
+    }
+    XCTAssertEqual(
+      "\(try read(Echo.buttonGroupToggleEvents)) \(try read(Echo.buttonGroupToggleState))",
+      "0 bold",
+      "three presses on the action row should move no toggle"
+    )
+
+    // 3. A toggle item flips once per tap, in both directions, with its own element as
+    //    the witness that tells a dropped press from a lost change event.
+    XCTAssertEqual(
+      try tapItemUntilValue(
+        toggles,
+        "Italic",
+        echo: Echo.buttonGroupToggleState,
+        expected: "bold,italic",
+        waitingFor: "the real tap that checks \"Italic\"",
+        nativeState: { self.nativeItemState(of: toggles, "Italic") }
+      ),
+      "bold,italic",
+      "one real tap should check an unchecked toggle item"
+    )
+    XCTAssertEqual(
+      nativeItemState(of: toggles, "Italic"), "on",
+      "the checked item's own element should report value 1"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupToggleEvents), "1",
+      "one tap should report exactly one change"
+    )
+    XCTAssertEqual(
+      try tapItemUntilValue(
+        toggles,
+        "Italic",
+        echo: Echo.buttonGroupToggleState,
+        expected: "bold",
+        waitingFor: "the real tap that unchecks \"Italic\"",
+        nativeState: { self.nativeItemState(of: toggles, "Italic") }
+      ),
+      "bold",
+      "a second real tap should ask for false: the echo back at the old set and the "
+        + "element back at value 0 is what rules out a toggle that always requests true"
+    )
+    XCTAssertEqual(
+      nativeItemState(of: toggles, "Italic"), "off",
+      "the unchecked item's own element should report value 0 again"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupToggleEvents), "2",
+      "two taps should report two changes — a flip is not a one-way press"
+    )
+
+    // 4. The refusing group: two requests, both for `true`, and the item back at
+    //    unchecked after either. No `nativeState` witness on these taps — a refused item
+    //    is meant to move and be pushed back, so its value would call a dropped press a
+    //    lost event. The element is asserted below instead.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapItemUntilValue(
+          refusing,
+          "Bold",
+          echo: Echo.buttonGroupRefusedEvents,
+          expected: request,
+          waitingFor: "refused request \(request)"
+        ),
+        request,
+        "each real tap on the refusing group should reach onCheckedChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.buttonGroupRefusedLast), "bold:1",
+        "refused request \(request) should ask for true: a group that kept the refused "
+          + "change would ask for false on the second tap"
+      )
+      XCTAssertEqual(
+        waitForItemState(refusing, "Bold", "off"), "off",
+        "the refused item should snap back to value 0 after request \(request)"
+      )
+    }
+
+    // 5. The disabled pair takes nothing: the group that is disabled, and the group with
+    //    one disabled item. Both report into one counter the enabled items never touch.
+    try requiredItem(disabledItem, "Cut").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonGroupDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap on the disabled item should be refused"
+    )
+    try requiredItem(disabledGroup, "Copy").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonGroupDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap inside the disabled group should be refused too"
+    )
+    XCTAssertEqual(
+      "\(try read(Echo.buttonGroupPresses)) \(try read(Echo.buttonGroupToggleEvents))",
+      "3 2",
+      "nothing else should answer a tap on the disabled pair"
+    )
+    // The barrier: the enabled sibling in the *same* group, tapped the same way, still
+    // lands — so the silence above was a refusal and not a screen that stopped answering.
+    XCTAssertEqual(
+      try tapItemUntilValue(
+        disabledItem,
+        "Copy",
+        echo: Echo.buttonGroupPresses,
+        expected: "4",
+        waitingFor: "the barrier tap beside the disabled item"
+      ),
+      "4",
+      "the enabled item of a group with a disabled sibling should still answer"
+    )
+
+    // 6. Overflow. Six titles cannot share the 220 pt well, so some items are not drawn;
+    //    the check names one, finds it absent from the group, and reaches it through the
+    //    overflow control. The witness is the same counter-and-id pair as step 2, which
+    //    is the point: an item that arrives through a menu has to report like the item it
+    //    replaced.
+    XCTAssertFalse(
+      buttonGroupItem(overflow, titled: "Quarter").exists,
+      "the narrow well should hide \"Quarter\" — the row overflows rather than shrinking"
+    )
+    XCTAssert(
+      buttonGroupItem(overflow, titled: "Day").exists,
+      "while an item that fits should still be drawn"
+    )
+    try tapUntilOption(
+      "real-input-button-group-overflow",
+      as: "the overflow control",
+      option: "Quarter",
+      waitingFor: "the overflow menu to open"
+    )
+    XCTAssertEqual(
+      try tapOptionUntilValue(
+        option: "Quarter",
+        echo: Echo.buttonGroupPresses,
+        expected: "5",
+        waitingFor: "picking the overflowed row"
+      ),
+      "5",
+      "a real tap on the overflowed row should report onPress for it, once"
+    )
+    XCTAssertEqual(
+      try read(Echo.buttonGroupPressedId), "quarter",
+      "and it should name the item that came out of the menu"
+    )
+    waitUntilOptionGone("Quarter", "the overflow menu to close after the pick")
+    XCTAssertEqual(
+      "\(try read(Echo.buttonGroupPresses)) \(try read(Echo.buttonGroupToggleEvents)) "
+        + "\(try read(Echo.buttonGroupDisabledEvents))",
+      "5 2 0",
+      "five presses, five reports, and no delivery to a disabled control"
     )
   }
 

@@ -39,6 +39,7 @@ import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
 import { IconButton } from '../IconButton/IconButton';
 import { Popover } from '../Popover/Popover';
+import { ButtonGroup } from '../ButtonGroup/ButtonGroup';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -103,6 +104,10 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  *   is the app's own React Native views, wrapped in a React Native `View`.
  *   The Popover (G22) is refused for both reasons at once: its content *and* its anchor are
  *   React Native views, presented in a window of their own.
+ * - **refused until a round measures it** again - the ButtonGroup (G20): its own
+ *   Compose `ButtonGroup` opens its overflow menu in a popup of its own, and no round
+ *   has measured a second popup inside the Host's shared composition (G20 report,
+ *   check 3).
  *
  * The rows are hand-written rather than generated: the registry writes the imports and
  * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
@@ -118,6 +123,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
   [Popover, 'Popover'],
+  [ButtonGroup, 'ButtonGroup'],
 ]);
 
 /**

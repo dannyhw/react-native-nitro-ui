@@ -711,6 +711,23 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 48, height: 48 },
     ios: { width: 44, height: 44 },
   },
+  // `HybridNitroUiButtonGroup.kt` (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`) and
+  // `HybridNitroUiButtonGroup.swift` (`fallbackSize`), read off those sources.
+  //
+  // A ButtonGroup is `fillWidth` — overflow can only be decided at the width the row is
+  // actually given, so an intrinsic group would measure unbounded, never overflow, and be
+  // clamped into a box it draws outside of — which makes the width the parent's and the
+  // height the control's own: `boxRuleFor` compares the height alone.
+  //
+  // The heights are the two rungs' own rows, not one number shared across platforms:
+  // Material 3 will not publish a group row under `minimumInteractiveComponentSize`'s
+  // 48 dp, and SwiftUI's `.bordered` row measures 34.33 pt at the `medium` rung (34.4
+  // declares it, so a cold frame is never short). The `connected` track is 31 pt on iOS
+  // and the same 48 dp on Android, which is the one configuration corrected once.
+  NitroUiButtonGroup: {
+    android: { width: 300, height: 48 },
+    ios: { width: 300, height: 34.4 },
+  },
 });
 
 /**

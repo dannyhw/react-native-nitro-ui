@@ -15,6 +15,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  ButtonGroup,
   Checkbox,
   Chip,
   ContextMenu,
@@ -160,6 +161,36 @@ export function BookmarkButton({
       variant="filled"
       checked={saved}
       onCheckedChange={onSave}
+    />
+  );
+}
+// #endregion
+
+// #region button-group
+export function FormatToolbar({
+  spellcheck,
+  onSpellcheck,
+  onCommand,
+}: {
+  spellcheck: boolean;
+  onSpellcheck: (next: boolean) => void;
+  onCommand: (id: string) => void;
+}) {
+  return (
+    <ButtonGroup
+      items={[
+        { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc' },
+        { id: 'paste', title: 'Paste', systemImage: 'doc.on.clipboard' },
+        // Controlled: this render decides what is drawn.
+        { id: 'spellcheck', title: 'Spellcheck', toggle: true, checked: spellcheck },
+        // Uncontrolled: native owns it after the first render.
+        { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
+      ]}
+      appearance="connected"
+      onCheckedChange={(id, checked) => {
+        if (id === 'spellcheck') onSpellcheck(checked);
+      }}
+      onPress={onCommand}
     />
   );
 }
