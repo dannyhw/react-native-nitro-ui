@@ -8,10 +8,10 @@
  * corner radius, separator start, supplementary frames - never a constant, and the go line is
  * 1 pt.
  *
- * The two `hold()`s are screenshot windows: the fidelity question wants our list and the
- * reference at the same traits, and this is the one place both are on screen with the same
- * width. The suite runs once per trait set (light, dark, the largest content size), which is
- * why it is its own gate rather than a case inside `Form.harness`.
+ * The two lists are on screen with the same width and the same traits, which is the one
+ * place the fidelity question can be answered; the suite runs once per trait set (light,
+ * dark, the largest content size), which is why it is its own gate rather than a case
+ * inside `Form.harness`.
  *
  * Android has no platform `Form` to compare with, so the case there only checks that the
  * Form measured itself, and the report says the Android half of question 2 is the
@@ -44,10 +44,10 @@ type SectionHandle = { nuiTestSectionReport(): string };
 
 const sections: Record<string, SectionHandle> = {};
 
-/** Names what is on screen, so a screenshot says what it shows. Set by `hold()`. */
+/** Names what is on screen, so a screenshot or a log says which list is up. */
 let setPhase: (phase: string) => void = () => {};
 
-/** The line under the form. `hold()` names the phase before it opens its window. */
+/** The line under the form, naming the phase `showPhase()` just set. */
 function Banner() {
   const [phase, name] = useState('mounting');
   setPhase = name;
@@ -138,13 +138,18 @@ async function readSection(
   }
 }
 
-/** Name the phase on screen, then hold a window wide enough to screenshot it. */
-async function hold(marker: string): Promise<void> {
+/**
+ * Name on screen which list is being measured, and let the banner reach the screen.
+ *
+ * The spike held this open for nine seconds so a person could photograph the two screens at
+ * the same traits. What settles the question now is the table this case prints - every
+ * number is the layout's own answer - so the wait is a settle, not a photo window; the log
+ * line stays because whoever does want a picture still needs to know which list is up.
+ */
+async function showPhase(marker: string): Promise<void> {
   setPhase(marker);
   await new Promise((resolve) => setTimeout(resolve, 400));
-
-  console.log(`S6 SHOOT ${marker}`);
-  await new Promise((resolve) => setTimeout(resolve, 9000));
+  console.log(`FORM FIDELITY phase ${marker}`);
 }
 
 /** The same nine rows the reference shows, as our Form renders them. */
@@ -252,8 +257,8 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
       'the nitro-ui Form list'
     );
 
-    console.log(`S6 GEOM prototype ${theForm().nuiTestFormReport()}`);
-    await hold('prototype: nitro-ui Form');
+    console.log(`FORM GEOM nitro-ui ${theForm().nuiTestFormReport()}`);
+    await showPhase('nitro-ui Form');
 
     if (!IOS) {
       // No platform Form on Android: measuring our own list is the whole iOS-free half.
@@ -270,7 +275,7 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
         num(r, 'footerBand');
         return true;
       });
-      console.log(`S6 BANDS first section ${JSON.stringify(bands)}`);
+      console.log(`FORM BANDS first section ${JSON.stringify(bands)}`);
       const padding = (band: string, text: string) =>
         num(bands, band) - num(bands, text);
       expect(padding('headerBand', 'headerText')).toBeGreaterThanOrEqual(8);
@@ -302,8 +307,8 @@ describe('Form fidelity against a SwiftUI Form (E2)', () => {
       'the SwiftUI Form reference'
     );
 
-    console.log(`S6 GEOM reference ${theForm().nuiTestFormReport()}`);
-    await hold('reference: SwiftUI Form');
+    console.log(`FORM GEOM reference ${theForm().nuiTestFormReport()}`);
+    await showPhase('SwiftUI Form');
     theForm().nuiTestCommand('hide-reference');
 
     // The container's own geometry has to match a SwiftUI list to the point, because that

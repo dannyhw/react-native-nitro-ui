@@ -567,7 +567,7 @@ describe('Form (G24)', () => {
     const toggle = await boxOf('switch-silent');
 
     console.log(
-      `S6 TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
+      `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
       // Question 4, the half that is not a finger. The row view is reparented into a cell,
@@ -633,7 +633,7 @@ describe('Form (G24)', () => {
       cleanup();
 
       console.log(
-        `S6 COST N=${count} form=${native}ms plain=${plain}ms ${raw(report, 'applies')}`
+        `FORM COST N=${count} form=${native}ms plain=${plain}ms ${raw(report, 'applies')}`
       );
       expect(num(report, 'orphans')).toBe(0);
       expect(num(report, 'alive')).toBe(count);
