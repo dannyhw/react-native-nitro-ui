@@ -1,0 +1,80 @@
+# Failure excerpt — harness:android:Popover
+
+- Ran: 2026-11-07T20:23:11.846Z on code tree `a620780becd0` at HEAD `91b9dbc` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover`
+- Result: fail, exit 1, 35387 ms
+- Load: start 12.39, end 8.13, median 9.77, max 12.39
+- Device: android / device `emulator-5574` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+android+Popover-2026-11-07T20-23-11.846Z.log` (<store>/task/G22-popover/harness+android+Popover-2026-11-07T20-23-11.846Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › opens below its anchor, and above it when there is no room below`
+- `expected 42 to be less than or equal to 2`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover-2026-11-07T20-23-11.846Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.13 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Popover
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a620780becd0, 19 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.39/12.22 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+android+Popover-2026-11-07T20-23-11.846Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › opens below its anchor, and above it when there is no room below
+
+    expected 42 to be less than or equal to 2
+
+      [0m [90m 655 |[39m       [90m// Our own provider: below the anchor, start-aligned.[39m
+       [90m 656 |[39m       expect(popup[33m![39m[33m.[39my)[33m.[39mtoBeGreaterThanOrEqual(anchor[33m![39m[33m.[39my [33m+[39m anchor[33m![39m[33m.[39mheight [33m-[39m [35m2[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 657 |[39m       expect([33mMath[39m[33m.[39mabs(popup[33m![39m[33m.[39mx [33m-[39m anchor[33m![39m[33m.[39mx))[33m.[39mtoBeLessThanOrEqual([35m2[39m)[33m;[39m
+       [90m     |[39m                                                                 [31m[1m^[22m[39m
+       [90m 658 |[39m       expect(num(up[33m,[39m [32m'placed'[39m))[33m.[39mtoBeGreaterThanOrEqual([35m1[39m)[33m;[39m
+       [90m 659 |[39m     }
+       [90m 660 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        33.819 s, estimated 89 s
+Ran all test suites matching Popover.
+
+
+
+```

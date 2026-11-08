@@ -1,0 +1,89 @@
+# Failure excerpt — harness:ios:Conformance
+
+- Ran: 2026-11-07T23:44:20.427Z on code tree `95f0b1ddd95a` at HEAD `6ab9448` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Conformance`
+- Result: fail, exit 1, 168866 ms
+- Load: start 36.29, end 12.16, median 13.48, max 36.29
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log` (<store>/task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● conformance · every control, four rules › · IconButton › has its own declared fallback, and still corrects a wrong guess`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 12.47 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Conformance
+gate: node ../scripts/harness.mjs --harnessRunner ios Conformance (cwd example)
+gate: code tree 95f0b1ddd95a at HEAD 6ab94485
+gate: git tree 0e5cae7c82fd
+gate: log task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log
+gate:       <store>/task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Conformance
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 95f0b1ddd95a, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 36.29/29.26 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · IconButton › has its own declared fallback, and still corrects a wrong guess
+
+    1 conformance finding(s):
+
+        - IconButton × declared-fallback: the fallback 32x32 is not the measured 25x23 for a control that declares its size — a mismatch means the declaration drifted from the component
+      [0m [90m 1279 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1280 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1281 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1282 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1283 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1284 |[39m [32m        .join('\n')}`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 84 passed, 85 total
+Snapshots:   0 total
+Time:        166.978 s
+Ran all test suites matching Conformance.
+gate: harness:ios:Conformance FAIL in 168.9 s
+gate: recorded in .gates/task/G23-icon-button.jsonl
+
+
+gate: appended the device context to task/G23-icon-button/harness+ios+Conformance-2026-11-07T23-44-19.997Z.log (4 probe(s))
+
+```

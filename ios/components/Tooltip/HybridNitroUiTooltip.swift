@@ -647,6 +647,9 @@ final class HybridNitroUiTooltip: HybridNitroUiTooltipSpec, RecyclableView {
       fields.append("anchorRect=\(Self.screenRect(of: anchor))")
       fields.append("popRect=\(Self.screenRect(of: popover.viewIfLoaded))")
       fields.append("contentId=\(popover.viewIfLoaded?.accessibilityIdentifier ?? "-")")
+      // Whether the window the card is drawn in is the key window - what another
+      // presentation closing has to leave alone (`NitroUiPresentation.close`).
+      fields.append("windowKey=\(popover.viewIfLoaded?.window?.isKeyWindow == true ? 1 : 0)")
     } else {
       fields.append("kind=none")
     }

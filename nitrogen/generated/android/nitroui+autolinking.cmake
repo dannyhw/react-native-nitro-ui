@@ -57,10 +57,14 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiFormRowComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiHostSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiHostComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiIconButtonSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiIconButtonComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiPopoverSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiPopoverComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
@@ -102,10 +106,14 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiFormRowStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiHostSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiHostStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiIconButtonSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiIconButtonStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiPopoverSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiPopoverStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp

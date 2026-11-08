@@ -1,0 +1,92 @@
+# Failure excerpt — real-input:android:--control:popover
+
+- Ran: 2026-11-07T23:06:32.398Z on code tree `f5f45ab4c570` at HEAD `494dced` (branch `task/G22-popover`)
+- Command: `node scripts/real-input/android.mjs --control popover`
+- Result: fail, exit 1, 310501 ms
+- Load: start 11.43, end 3.84, median 6.89, max 14.32
+- Device: android / device `emulator-5574` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/real-input+android+--control+popover-2026-11-07T23-06-32.398Z.log` (<store>/task/G22-popover/real-input+android+--control+popover-2026-11-07T23-06-32.398Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ a real tap on the TextInput inside the popover brings up the keyboard — expected true, saw false`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/real-input+android+--control+popover-2026-11-07T23-06-32.398Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.84 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 47 log line(s)
+
+```
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  popover: a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it
+    ✓ no popover has reported anything before a touch — expected none, saw none
+    ✓ nothing is up and nothing has been pressed inside — expected 0 up, inner presses: 0, saw 0 up, inner presses: 0
+    ✓ the presented popover is the node named popover-short-popover — expected true, saw true
+    ✓ a tap outside closes the popover and reports it — expected short:presented:false > short:dismiss, saw short:presented:false > short:dismiss
+    ✓ one injected tap inside reaches JS exactly once (open 1) — expected inner presses: 1, saw inner presses: 1
+    ✓ the press inside reports, then the dismiss its own close causes — expected true, saw true
+    ✓ one injected tap inside reaches JS exactly once (open 2) — expected inner presses: 2, saw inner presses: 2
+    ✓ one injected tap inside reaches JS exactly once (open 3) — expected inner presses: 3, saw inner presses: 3
+    ✓ one injected tap inside reaches JS exactly once (open 4) — expected inner presses: 4, saw inner presses: 4
+    ✓ one injected tap inside reaches JS exactly once (open 5) — expected inner presses: 5, saw inner presses: 5
+    ✓ one injected tap inside reaches JS exactly once (open 6) — expected inner presses: 6, saw inner presses: 6
+    ✓ one injected tap inside reaches JS exactly once (open 7) — expected inner presses: 7, saw inner presses: 7
+    ✓ one injected tap inside reaches JS exactly once (open 8) — expected inner presses: 8, saw inner presses: 8
+    ✓ one injected tap inside reaches JS exactly once (open 9) — expected inner presses: 9, saw inner presses: 9
+    ✓ one injected tap inside reaches JS exactly once (open 10) — expected inner presses: 10, saw inner presses: 10
+    ✓ ten opens, ten presses inside, and no more — expected inner presses: 10, saw inner presses: 10
+    ✗ a real tap on the TextInput inside the popover brings up the keyboard — expected true, saw false
+
+real-input (android): TypeError: text.match is not a function
+
+
+
+```

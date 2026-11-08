@@ -31,6 +31,8 @@
 #include "HybridNitroUiFormSpecSwift.hpp"
 #include "HybridNitroUiFormSectionSpecSwift.hpp"
 #include "HybridNitroUiFormRowSpecSwift.hpp"
+#include "HybridNitroUiIconButtonSpecSwift.hpp"
+#include "HybridNitroUiPopoverSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -187,6 +189,20 @@
     "NitroUiFormRow",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiFormRowSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiFormRow();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiIconButton",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiIconButtonSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiIconButton();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiPopover",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiPopoverSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiPopover();
       return hybridObject;
     }
   );

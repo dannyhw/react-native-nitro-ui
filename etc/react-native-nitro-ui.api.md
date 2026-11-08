@@ -10,7 +10,9 @@ import type { ImageURISource } from 'react-native';
 import { JSX } from 'react';
 import { ReactNode } from 'react';
 import { Ref } from 'react';
+import { StyleProp } from 'react-native';
 import { ViewProps } from 'react-native';
+import { ViewStyle } from 'react-native';
 
 // @public
 export function AlertDialog(props: AlertDialogProps): JSX.Element;
@@ -353,6 +355,63 @@ export interface HostProps extends ViewProps {
 }
 
 // @public
+export function IconButton(input: IconButtonProps): JSX.Element;
+
+// @public
+export interface IconButtonProps extends ViewProps {
+    accessibilityLabel: string;
+    androidIcon?: AndroidIconProp | undefined;
+    checked?: boolean | undefined;
+    defaultChecked?: boolean | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly accessibilityLabel: string;
+        readonly systemImage: string | null;
+        readonly androidIcon: string | null;
+        readonly variant: string;
+        readonly size: string;
+        readonly width: string;
+        readonly shape: string;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly checked: boolean | null;
+        readonly mostRecentEventCount: number;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPress(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
+    }) => void) | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onCheckedChange?: ((checked: boolean) => void) | undefined;
+    onPress?: (() => void) | undefined;
+    shape?: ButtonShape | null | undefined;
+    size?: IconButtonSize | undefined;
+    systemImage?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    variant?: IconButtonVariant | undefined;
+    width?: IconButtonWidth | undefined;
+}
+
+// @public
+export type IconButtonShape = ButtonShape;
+
+// @public
+export type IconButtonSize = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge';
+
+// @public
+export type IconButtonVariant = 'standard' | 'filled' | 'tonal' | 'outlined';
+
+// @public
+export type IconButtonWidth = 'narrow' | 'uniform' | 'wide';
+
+// @public
 export type MaterialTheme = 'expressive' | 'baseline';
 
 // @public
@@ -542,6 +601,27 @@ export interface PickerProps extends ViewProps {
 
 // @public
 export type PickerVariant = 'menu' | 'wheel';
+
+// @public
+export function Popover(input: PopoverProps): JSX.Element;
+
+// @public
+export interface PopoverProps {
+    anchor: ReactNode;
+    children?: ReactNode;
+    // Warning: (ae-forgotten-export) The symbol "NitroUiPopoverHandle" needs to be exported by the entry point index.d.ts
+    //
+    // @internal
+    hybridRef?: ((view: NitroUiPopoverHandle) => void) | undefined;
+    isPresented: boolean;
+    maxWidth?: number | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onDismiss?: (() => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    style?: StyleProp<ViewStyle> | undefined;
+    testID?: string | undefined;
+}
 
 // @public
 export function prewarm(componentNames: readonly string[]): number;

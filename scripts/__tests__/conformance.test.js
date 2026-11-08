@@ -189,8 +189,10 @@ describe('coverage', () => {
       'DatePicker',
       'Dialog',
       'Form',
+      'IconButton',
       'Menu',
       'Picker',
+      'Popover',
       'Progress',
       'SearchField',
       'SegmentedControl',
@@ -1369,11 +1371,12 @@ describe('the a11y presentation cases', () => {
   const withDialog = (patch) =>
     repoManifests().map((m) => (m.name === 'Dialog' ? { ...m, ...patch } : m));
 
-  it('covers Dialog, BottomSheet and Tooltip, and only through their real-input checks', () => {
+  it('covers Dialog, BottomSheet, Tooltip and Popover, and only through their real-input checks', () => {
     expect(A11Y_PRESENTATIONS.map((entry) => entry.component)).toEqual([
       'Dialog',
       'BottomSheet',
       'Tooltip',
+      'Popover',
     ]);
     expect(checkA11yTable(repoManifests(), read)).toEqual([]);
   });
@@ -1533,9 +1536,10 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Nine cases across five components: `slider` and `hosted-slider` both guard `Slider`,
-    // and the debt list carries both platforms' rows for a control. The matrix is about
-    // components, so every row for one control makes exactly one failing cell.
+    // The debt list carries both platforms' rows for one control, and `slider` and
+    // `hosted-slider` both guard `Slider`. The matrix is about components, so every row for
+    // one control makes exactly one failing cell — which is why the expected list below is
+    // shorter than the debt list it collapses.
     //
     // `Picker` is here because the real accessibility tree says so, not because a rule was
     // widened to reach it: measured under XCUITest, a hosted Picker's control announces
@@ -1544,9 +1548,15 @@ describe('the debt, as the matrix sees it', () => {
     // printed on every run rather than asserted away. `ContextMenu` is the same kind of
     // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
     // as an element of its own under the wrapper that carries the label (G16).
-    // `Form` is the third measurement of that kind: on iOS a Form row keeps its name on the
-    // React Native wrapper (`other`), where Android's dump announces one `button` — so the
-    // row is a stop with a named text inside it, not the button itself (G24 round 3).
+    // `Form` is a second measurement of that kind: on iOS a Form row keeps its name on the
+    // React Native wrapper (`other`) instead of the cell, so the row is a stop with a named
+    // text inside it, not the button itself (G24).
+    // `IconButton` is a third kind of the same record: the name is on the right element and
+    // the box is the drawn control's, inset inside the 44 pt touch target the component adds
+    // around it (G23). Nothing was widened for it — the box rule still says what it said, and
+    // the row quotes the numbers it was measured with, so the cell is a measurement and goes
+    // back to `covered` when the geometry does. Round 0 expected the 44 pt target to retire
+    // this cell; the sweep measured a wider inset instead, and the row came back with it.
     expect(failingKeys()).toEqual([
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
@@ -1554,6 +1564,7 @@ describe('the debt, as the matrix sees it', () => {
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
       'Form|a11y-name-on-focusable-node',
+      'IconButton|a11y-name-on-focusable-node',
     ]);
   });
 
@@ -2063,6 +2074,7 @@ describe('the a11y sweep, against a fake device', () => {
         'menu',
         'chip',
         'checkbox',
+        'iconbutton',
         'host',
         'textfield',
         'searchfield',

@@ -26,6 +26,7 @@ export type ComponentName =
   | 'picker'
   | 'menu'
   | 'text-field'
+  | 'icon-button'
   | 'form';
 // @end-generated
 
@@ -48,6 +49,7 @@ export type ScenarioName =
   | `${ScenarioAction}.picker`
   | `${ScenarioAction}.menu`
   | `${ScenarioAction}.text-field`
+  | `${ScenarioAction}.icon-button`
   | `${ScenarioAction}.form`;
 // @end-generated
 

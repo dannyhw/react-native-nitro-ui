@@ -104,8 +104,11 @@ import {
   ContextMenu,
   DatePicker,
   Form,
+  IconButton,
+
   Menu,
   Picker,
+  Popover,
   Progress,
   SearchField,
   SegmentedControl,
@@ -253,6 +256,16 @@ const SHARED = {
         "width": 61,
         "height": 28
       }
+    },
+    "NitroUiIconButton": {
+      "android": {
+        "width": 48,
+        "height": 48
+      },
+      "ios": {
+        "width": 44,
+        "height": 44
+      }
     }
   },
   "poisonSizes": {
@@ -278,7 +291,8 @@ const SHARED = {
     "NitroUiTextField": "height",
     "NitroUiSearchField": "height",
     "NitroUiChip": "none",
-    "NitroUiCheckbox": "height"
+    "NitroUiCheckbox": "height",
+    "NitroUiIconButton": "both"
   },
   "exemptions": [
     {
@@ -450,6 +464,43 @@ const pressCheckbox = async (testId: string): Promise<void> => {
       );
     }
     handle.nuiTestToggle();
+    return;
+  }
+  await pressControl(testId);
+};
+
+/**
+ * The glyph every IconButton fixture mounts, named on both platforms.
+ *
+ * A drawable *name* the library itself ships, not an app asset: the conformance
+ * suite runs against a release-less harness build on two platforms, and G19's
+ * drawable-name form needs no dev server and no Metro asset to resolve. `xmark`
+ * is the same drawing's iOS name — and it has to be named, because on iOS the
+ * symbol *is* the control's width, so a fixture that sent `null` would measure an
+ * empty label and the fallback row would be compared against nothing.
+ */
+const ICON_BUTTON_GLYPH = {
+  systemImage: 'xmark',
+  androidIcon: 'nitroui_close',
+};
+
+/**
+ * Press an IconButton: a real harness tap on Android, the control's own press path on
+ * iOS, where the harness's HID-less touch reaches no SwiftUI `Button` gesture (the
+ * Checkbox and Chip notes above say why). Both end in `press()`, so a probe and a
+ * finger cannot disagree about what a press means — including the fact that a disabled
+ * control takes neither.
+ */
+const pressIconButton = async (testId: string): Promise<void> => {
+  if (PLATFORM === 'ios') {
+    await screen.findByTestId(testId);
+    const handle = handleFor(testId);
+    if (handle.nuiTestPress == null) {
+      throw new Error(
+        `"${testId}" is not an IconButton - it has no nuiTestPress()`
+      );
+    }
+    handle.nuiTestPress();
     return;
   }
   await pressControl(testId);
@@ -1647,6 +1698,43 @@ function tooltipShows(
     report.live === '1' &&
     report.kind !== 'none' &&
     report.message === message
+  );
+}
+
+const POPOVER_LABEL = 'Conformance popover';
+/** The two owners' content heights: different, and neither the other's. */
+const POPOVER_FIRST_HEIGHT = 120;
+const POPOVER_SECOND_HEIGHT = 260;
+
+/**
+ * A Popover owner whose content is a box of a known height.
+ *
+ * It sends no `accessibilityLabel` because there is none to send: a Popover's `anchor`
+ * stays in the app's layout and keeps its own taps, so a name on the wrapper would be a
+ * real element on screen that the a11y rule would (correctly) find, and D44 records that
+ * an `accessibilityLabel` never reaches a presented window on either platform. The name a
+ * person hears is the content's own, which real input reads through the tree.
+ */
+function popoverOwner(presented: boolean, height: number): ReactElement {
+  return (
+    <Popover
+      isPresented={presented}
+      onIsPresentedChange={recordRecycle('conformance-popover')}
+      anchor={<View style={{ width: 140, height: 36 }} />}
+      testID="conformance-popover"
+      hybridRef={captureDialog('conformance-popover')}
+    >
+      <View style={{ width: 180, height }} />
+    </Popover>
+  );
+}
+
+/** Whether a popover's report says it is up holding content `height` tall. */
+function popoverShows(report: Record<string, string>, height: number): boolean {
+  return (
+    report.presented === '1' &&
+    report.live === '1' &&
+    Math.abs(Number(report.contentH) - height) <= 1
   );
 }
 
@@ -3223,6 +3311,89 @@ const FIXTURES: ReadonlyArray<Fixture> = [
     },
   },
   {
+    name: 'Popover',
+    component: 'NitroUiPopover',
+    label: POPOVER_LABEL,
+    testId: 'conformance-popover',
+    selfSizing: false,
+    owner: () => popoverOwner(false, POPOVER_FIRST_HEIGHT),
+    control: (testId, variant) => (
+      <Popover
+        isPresented={false}
+        anchor={<View style={{ width: variant ? 120 : 90, height: 32 }} />}
+        testID={testId}
+      >
+        <View
+          style={{ width: variant ? 140 : 100, height: variant ? 60 : 40 }}
+        />
+      </Popover>
+    ),
+    state: (handle) => [
+      { label: 'presented', expected: false, actual: handle.presented },
+    ],
+    // A popover's residue is the dialog's, plus its content: a user dismissal leaves one
+    // native event, so a reset that kept the count refuses the second owner's
+    // `isPresented` as stale; and a reset that kept the previous popover's content box
+    // would show the first owner's height in the second owner's popover. Both are read
+    // from the view (`nuiTestStateReport`).
+    probe: {
+      leaveBehind:
+        'a dismissal the first owner took (one native event), and the content the first ' +
+        "owner's popover held - the second owner presents with a fresh count and content " +
+        'of another height',
+      first: () => popoverOwner(true, POPOVER_FIRST_HEIGHT),
+      act: async () => {
+        const handle = await ensureHandle('conformance-popover');
+        const deadline = Date.now() + 8000;
+        while (!popoverShows(dialogReportOf(handle), POPOVER_FIRST_HEIGHT)) {
+          if (Date.now() > deadline) {
+            throw new Error(
+              'the first owner never presented its popover: ' +
+                (handle.nuiTestStateReport?.() ?? '(no report)')
+            );
+          }
+          await sleep(100);
+        }
+        await sleep(600);
+        const from = recycleEvents.length;
+        handle.nuiTestDismiss?.();
+        const seen = await eventsSettled(from, 'conformance-popover:false');
+        if (seen !== 'conformance-popover:false') {
+          throw new Error(
+            `the dismissal reported "${seen}", so the first owner has no native event ` +
+              'for a reset to clear'
+          );
+        }
+      },
+      second: () => popoverOwner(true, POPOVER_SECOND_HEIGHT),
+      read: async () => {
+        const handle = handleFor('conformance-popover');
+        const presented = dialogReportOf(handle).presented;
+        const deadline = Date.now() + 6000;
+        let report = dialogReportOf(handle);
+        while (
+          !popoverShows(report, POPOVER_SECOND_HEIGHT) &&
+          Date.now() < deadline
+        ) {
+          await sleep(100);
+          report = dialogReportOf(handle);
+        }
+        return [
+          {
+            label: 'the popover the second owner asked for is presented',
+            expected: '1',
+            actual: presented,
+          },
+          {
+            label: "the content height its popover holds (the second owner's)",
+            expected: String(POPOVER_SECOND_HEIGHT),
+            actual: report.contentH,
+          },
+        ];
+      },
+    },
+  },
+  {
     name: 'Chip',
     component: 'NitroUiChip',
     label: 'Conformance chip',
@@ -3698,6 +3869,159 @@ const FIXTURES: ReadonlyArray<Fixture> = [
           { label: 'rows', expected: '2', actual: report.rows },
           { label: 'sections', expected: '1', actual: report.sections },
           { label: 'orphans', expected: '0', actual: report.orphans },
+        ];
+      },
+    },
+  },
+  {
+    name: 'IconButton',
+    component: 'NitroUiIconButton',
+    label: 'Conformance icon button',
+    testId: 'conformance-icon-button',
+    // The **press** form, at every default the wrapper resolves: this is the
+    // configuration the fallback row claims, so it is the one the sizing rules
+    // measure. The toggle form's box is the same on Android (Material's toggle
+    // icon buttons take the same container tokens) and is what
+    // `IconButtonsKeepOneBoxAcrossStates` pins in `IconButton.harness.tsx`; iOS
+    // gives a `Toggle(.button)` its own padding, which `docs/components/icon-button.md`
+    // prints instead of pretending the two forms are one box.
+    owner: (second) => (
+      <IconButton
+        accessibilityLabel={
+          second
+            ? `Conformance icon button, ${SECOND}`
+            : 'Conformance icon button'
+        }
+        androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+        systemImage={ICON_BUTTON_GLYPH.systemImage}
+        testID="conformance-icon-button"
+        hybridRef={captureFor('conformance-icon-button')}
+      />
+    ),
+    control: (testId, variant) => (
+      <IconButton
+        accessibilityLabel={`Leak icon button ${String(variant)}`}
+        androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+        systemImage={ICON_BUTTON_GLYPH.systemImage}
+        disabled={variant}
+        testID={testId}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance icon button, ${SECOND}`
+          : 'Conformance icon button',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // An IconButton holds two things a prop cannot rewrite: the selection the last
+    // app pressed, and the parsed glyph. Both are on `reset()`
+    // (`IconButtonModel.reset()` / `HybridNitroUiIconButton.swift`'s
+    // `prepareForRecycle`), and the selection is the half a probe can read:
+    // `displayed` is written where the control is drawn, and the glyph's half is
+    // `IconButton.harness.tsx`'s pixel probe, which is where drawing is checked.
+    //
+    // The second owner's default is deliberately the *opposite* of the residue, so
+    // the answer cannot coincide with what a missing reset would also print —
+    // Chip's note above is the case where that coincidence kept a line unmeasured.
+    probe: {
+      leaveBehind:
+        'an uncontrolled toggle that started ON and was pressed off, then a second ' +
+        'owner whose own default is ON - a number the control can only be standing ' +
+        'on because `didApplyDefault` was re-armed and let the default apply',
+      first: () => (
+        <IconButton
+          accessibilityLabel="Conformance icon button"
+          androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-icon-button')}
+          systemImage={ICON_BUTTON_GLYPH.systemImage}
+          testID="conformance-icon-button"
+          hybridRef={captureFor('conformance-icon-button')}
+        />
+      ),
+      act: async () => {
+        await pressIconButton('conformance-icon-button');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-icon-button:false'])
+        );
+      },
+      second: () => (
+        <IconButton
+          accessibilityLabel="Conformance icon button"
+          androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+          defaultChecked
+          onCheckedChange={recordRecycle('conformance-icon-button')}
+          systemImage={ICON_BUTTON_GLYPH.systemImage}
+          testID="conformance-icon-button"
+          hybridRef={captureFor('conformance-icon-button')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressIconButton('conformance-icon-button');
+        // A second owner whose default was applied shows ON, so its first press
+        // reports `false`. One still believing it applied its default shows the
+        // `false` its previous owner pressed, and reports `true`.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-icon-button:false',
+            actual: await eventsSettled(from, 'conformance-icon-button:false'),
+          },
+        ];
+      },
+    },
+    // The other half of the reset: the handshake's event counts, which an
+    // uncontrolled owner never reads (`Fixture.controlledProbe`). A press asks for
+    // the opposite of what is showing on both platforms, which is what makes this
+    // read like Switch's and Checkbox's rather than Chip's.
+    controlledProbe: {
+      leaveBehind:
+        'a press that turns an uncontrolled toggle on, then a second owner that is ' +
+        '*controlled* at `false` - the only shape that reads the handshake\u2019s ' +
+        'counters, which is what `model.state = NitroUiControlledValue(\u2026)` ' +
+        'uniquely owns',
+      first: () => (
+        <IconButton
+          accessibilityLabel="Conformance icon button"
+          androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+          defaultChecked={false}
+          onCheckedChange={recordRecycle('conformance-icon-button')}
+          systemImage={ICON_BUTTON_GLYPH.systemImage}
+          testID="conformance-icon-button"
+          hybridRef={captureFor('conformance-icon-button')}
+        />
+      ),
+      act: async () => {
+        await pressIconButton('conformance-icon-button');
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual(['conformance-icon-button:true'])
+        );
+      },
+      second: () => (
+        <IconButton
+          accessibilityLabel="Conformance icon button"
+          androidIcon={ICON_BUTTON_GLYPH.androidIcon}
+          checked={false}
+          onCheckedChange={recordRecycle('conformance-icon-button')}
+          systemImage={ICON_BUTTON_GLYPH.systemImage}
+          testID="conformance-icon-button"
+          hybridRef={captureFor('conformance-icon-button')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressIconButton('conformance-icon-button');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-icon-button:true',
+            actual: await eventsSettled(from, 'conformance-icon-button:true'),
+          },
+
         ];
       },
     },

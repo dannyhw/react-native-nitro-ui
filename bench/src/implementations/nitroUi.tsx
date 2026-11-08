@@ -3,6 +3,7 @@ import {
   DatePicker,
   Form,
   Host,
+  IconButton,
   Menu,
   type MenuGroup,
   Picker,
@@ -21,6 +22,8 @@ import {
   SEGMENTED_SELECTION,
   buttonTitle,
   dateValue,
+  ICON_BUTTON_LABEL,
+  iconButtonGlyph,
   formRowKind,
   formRowLabel,
   formRowValue,
@@ -30,6 +33,7 @@ import {
   menuItems,
   menuTitle,
   onDateChange,
+  onIconButtonPress,
   onPress,
   onMenuSelect,
   onPickerChange,
@@ -339,6 +343,15 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose text-field: a Host refuses it'
       );
     }
+    if (component === 'icon-button') {
+      // Not hostable either, for the same reason as `text-field` and with the same
+      // loud failure: the plan never asks this arm for it, so reaching here means a
+      // manifest changed without the host arm's list, and rendering something else
+      // would publish a number nobody asked for.
+      throw new Error(
+        'nitro-ui-host cannot compose icon-button: a Host refuses it'
+      );
+    }
     if (component === 'form') {
       // Not hostable either, for the same reason it is not a `<Host>` child in an app:
       // a Form is a container that owns a scroller and its own rows, and a Host
@@ -519,6 +532,31 @@ export function NitroUiList({
             value={sliderValue(value)}
             onValueChange={onSliderChange}
             nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'icon-button') {
+    // The default `variant`/`size`/`width`, and the press form: the control G23 is
+    // asked to price. `update.icon-button` swaps the glyph (`iconButtonGlyph`), the
+    // one flip every other arm can be charged for too, and the icon is the whole
+    // control here, so it is a real redraw rather than a repaint of an unchanged box.
+    // `disabled` and `tintColor` stay at their defaults — the arms compare each
+    // control's platform default, including the box that default measures.
+    const glyph = iconButtonGlyph(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <IconButton
+            key={index}
+            accessibilityLabel={ICON_BUTTON_LABEL}
+            androidIcon={glyph.androidIcon}
+            systemImage={glyph.systemImage}
+            onPress={onIconButtonPress}
+            nuiPerfId={perfMarks ? index : null}
+            testID={`bench-nitro-ui-icon-button-${String(index)}`}
             style={style}
           />
         ))}

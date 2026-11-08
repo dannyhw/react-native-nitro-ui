@@ -45,10 +45,14 @@
 #include "views/JHybridNitroUiFormRowStateUpdater.hpp"
 #include "JHybridNitroUiHostSpec.hpp"
 #include "views/JHybridNitroUiHostStateUpdater.hpp"
+#include "JHybridNitroUiIconButtonSpec.hpp"
+#include "views/JHybridNitroUiIconButtonStateUpdater.hpp"
 #include "JHybridNitroUiMenuSpec.hpp"
 #include "views/JHybridNitroUiMenuStateUpdater.hpp"
 #include "JHybridNitroUiPickerSpec.hpp"
 #include "views/JHybridNitroUiPickerStateUpdater.hpp"
+#include "JHybridNitroUiPopoverSpec.hpp"
+#include "views/JHybridNitroUiPopoverStateUpdater.hpp"
 #include "JHybridNitroUiProgressSpec.hpp"
 #include "views/JHybridNitroUiProgressStateUpdater.hpp"
 #include "JHybridNitroUiSearchFieldSpec.hpp"
@@ -243,6 +247,22 @@ struct JHybridNitroUiFormRowSpecImpl: public jni::JavaClass<JHybridNitroUiFormRo
     return javaPart->getJHybridNitroUiFormRowSpec();
   }
 };
+struct JHybridNitroUiIconButtonSpecImpl: public jni::JavaClass<JHybridNitroUiIconButtonSpecImpl, JHybridNitroUiIconButtonSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiIconButton;";
+  static std::shared_ptr<JHybridNitroUiIconButtonSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiIconButtonSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiIconButtonSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiIconButtonSpec();
+  }
+};
+struct JHybridNitroUiPopoverSpecImpl: public jni::JavaClass<JHybridNitroUiPopoverSpecImpl, JHybridNitroUiPopoverSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiPopover;";
+  static std::shared_ptr<JHybridNitroUiPopoverSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiPopoverSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiPopoverSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiPopoverSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -279,10 +299,14 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiFormRowStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiHostSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiHostStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiIconButtonSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiIconButtonStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiMenuSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiMenuStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiPickerSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiPickerStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiPopoverSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiPopoverStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiProgressSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiProgressStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSearchFieldSpec::CxxPart::registerNatives();
@@ -433,6 +457,18 @@ void registerAllNatives() {
     "NitroUiFormRow",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiFormRowSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiIconButton",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiIconButtonSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiPopover",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiPopoverSpecImpl::create();
     }
   );
 }

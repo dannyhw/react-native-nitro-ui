@@ -121,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -252,6 +252,22 @@ export const A11Y_CONTROLS = Object.freeze([
     // `docs/components/checkbox.md`). Android's `Role.Checkbox` is read from the
     // uiautomator tree by `CHECKS.checkbox`, which asserts `checkable`/`checked`.
     iosTrait: 'switch',
+  },
+  {
+    id: 'icon-button',
+    component: 'IconButton',
+    hybridView: 'NitroUiIconButton',
+    screen: 'iconbutton',
+    label: 'Real-input icon button',
+    role: 'interactive',
+    anchorTestId: 'real-input-icon-button',
+    // The press form is a `Button` whose label is `.iconOnly`, so the element a
+    // reader stops on is the button and its name is the Label's title - which is
+    // the only text the control has (`docs/components/icon-button.md`). The toggle
+    // form carries the toggle trait instead, exactly as Chip's filter control does
+    // (G12 measured `switch` with value 0/1 for `Toggle(.button)`), and its state
+    // is what `real-input:ios` reads after a tap rather than a static type here.
+    iosTrait: 'button',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
@@ -458,6 +474,15 @@ export const A11Y_PRESENTATIONS = Object.freeze([
       "(scripts/real-input/android.mjs): the presented tooltip's title, message and " +
       'action are read and tapped through the accessibility tree',
   },
+  {
+    id: 'popover',
+    component: 'Popover',
+    hybridView: 'NitroUiPopover',
+    assertedBy:
+      "`testRealInputPopover` (RealInputTests.swift) and `CHECKS['popover']` " +
+      "(scripts/real-input/android.mjs): the popover's React Native content is read " +
+      'and pressed through the accessibility tree, and its content carries <testID>-popover',
+  },
 ]);
 
 /**
@@ -516,6 +541,21 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  *   announces. G24 round 3 measured the same tree with the cell's label derived on read
  *   instead of stored at configuration time, which rules out the first guess (a stale
  *   snapshot) and leaves the merge itself unfixed.
+ *
+ * **The `icon-button` iOS row** came back in G23's fix round, with different numbers, and the
+ * reason belongs here: the 44 pt touch target was expected to retire it and did not. Measured on
+ * pair-a (iOS 27, `iPhone 17`), the name is still on the right element — `button`, enabled,
+ * hittable — and it is inset further than before: React Native lays the host out at
+ * 44 x 44 pt (`measureContent()` answers with the target, so the box is integral) while SwiftUI
+ * reports its `Button` element at the style's own 38.67 pt, centred inside it. The target is a
+ * clear layer *behind* the control, so the element keeps the drawn control's geometry. That also
+ * retires G23 round 0's explanation — that a host a fraction of a point wider than the
+ * Button's own integral width produced the inset — because this host is integral and the inset
+ * stayed. So this is a target larger than the control it wraps, not two reads of one layout, and
+ * {@link IOS_FRAME_TOLERANCE_PT} cannot cover it. VoiceOver stops on the control. It is recorded
+ * rather than fixed because both ways of moving the stop onto the target were built and both left
+ * the name on two elements, which is a worse finding than the inset; `FOLLOWUPS.md` owns the
+ * measurement that retires the row.
  *
  * @type {ReadonlyArray<A11yExemption>}
  */
@@ -596,6 +636,22 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // no longer this sentence, so the row goes stale and the run says so.
     matches:
       /is announced as "Row with onPress" .*\(wrapper: other "Row with onPress"/,
+  },
+  {
+    control: 'icon-button',
+    platform: 'ios',
+    followups:
+      "G23 a11y: the iOS IconButton's accessibility element is the drawn control, inset inside its 44 pt touch target",
+    // The measured inset and nothing wider (G23 fix round, iOS 27, iPhone 17). `18.67`/`38.67`
+    // inside `16`/`44` *is* the finding, so a name that has actually moved — onto the wrapper,
+    // or off the centre of the target — is not excused by it. The vertical coordinate is the one
+    // number allowed to float: it is where the screen happens to sit, and pinning it would make
+    // this row stale whenever anything above IconButton changed height, which is a layout note and
+    // not a regression in the name. Every other number is the finding itself, so
+    // `staleExemptions` reports this row the moment the geometry changes for any reason —
+    // including being fixed.
+    matches:
+      /is announced by the element at \(18\.67, [\d.]+, 38\.67, 38\.67\) while the control is drawn at \(16, [\d.]+, 44, 44\)/,
   },
 ]);
 

@@ -393,7 +393,9 @@ describe('every component is covered by the conformance suite', () => {
     // cell was the fifth of those until F6 gave the fixture a read-out that can see the
     // residue; the a11y one stands, because that debt is about a name, not a state. The two
     // platforms fail some of the same controls for different reasons, which is why
-    // `A11Y_EXEMPTIONS` rows carry a platform.
+    // `A11Y_EXEMPTIONS` rows carry a platform. IconButton's cell is the 44 pt touch target's
+    // inset element: G23 round 0 expected the target to retire it and the sweep measured a
+    // wider inset, so the row was re-measured with the new numbers.
     const keys = failingKeys();
     expect(keys).toEqual([
       'Menu|recycle-reset',
@@ -402,6 +404,7 @@ describe('every component is covered by the conformance suite', () => {
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
       'Form|a11y-name-on-focusable-node',
+      'IconButton|a11y-name-on-focusable-node',
     ]);
     // …and every one of those cells really is marked failing in the matrix.
     const matrix = coverageMatrix(manifests, {

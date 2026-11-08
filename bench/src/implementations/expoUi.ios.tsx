@@ -17,6 +17,7 @@ import {
 } from '@expo/ui/swift-ui';
 import {
   buttonStyle,
+  labelStyle,
   labelsHidden,
   menuIndicator,
   menuStyle,
@@ -38,9 +39,12 @@ import {
   formRowLabel,
   formRowValue,
   formSwitchValue,
+  ICON_BUTTON_LABEL,
+  iconButtonGlyph,
   menuItems,
   menuTitle,
   onDateChange,
+  onIconButtonPress,
   onPress,
   onMenuSelect,
   onRowPress,
@@ -64,6 +68,14 @@ import {
  * of handing the host a fresh prop on every flip.
  */
 const LABELS_HIDDEN = [labelsHidden()];
+
+/**
+ * `.labelStyle(.iconOnly)`: the label keeps its text for the screen reader and
+ * SwiftUI draws only the symbol. Module-level for the same identity reason as
+ * `LABELS_HIDDEN`, and it is what makes an icon-only button out of `Button` —
+ * `@expo/ui` has no `IconButton` on iOS, so this is its equivalent surface.
+ */
+const ICON_ONLY = [labelStyle('iconOnly')];
 
 /**
  * `.borderedProminent` is what a plain SwiftUI `Button` already is, so this only
@@ -185,6 +197,28 @@ function BenchButton({ index, value }: { index: number; value: boolean }) {
       label={buttonTitle(value)}
       onPress={onPress}
       modifiers={BORDERED_PROMINENT}
+    />
+  );
+}
+
+/**
+ * A `Button` whose label is a symbol and nothing else — the iOS peer for the
+ * control under test.
+ *
+ * `label` stays set even though it is not drawn: it is the control's accessible
+ * name, which is the same string every other arm passes, and dropping it would
+ * leave this arm's button unnamed while the others are named. The default
+ * `.borderless` button style is kept (no `buttonStyle(...)`), which is nitro-ui's
+ * `standard` variant, so neither arm pays for a container the other avoids.
+ */
+function BenchIconButton({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Button
+      testID={`bench-expo-icon-button-${String(index)}`}
+      label={ICON_BUTTON_LABEL}
+      systemImage={iconButtonGlyph(value).systemImage}
+      onPress={onIconButtonPress}
+      modifiers={ICON_ONLY}
     />
   );
 }
@@ -422,6 +456,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
           </Host>
+        ) : component === 'icon-button' ? (
+          <Host key={index} style={style}>
+            <BenchIconButton index={index} value={value} />
+          </Host>
         ) : component === 'text-field' ? (
           <Host key={index} style={style}>
             <BenchTextField index={index} value={value} />
@@ -498,6 +536,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'slider' ? (
             <BenchSlider key={index} index={index} value={value} />
+          ) : component === 'icon-button' ? (
+            <BenchIconButton key={index} index={index} value={value} />
           ) : component === 'text-field' ? (
             <BenchTextField key={index} index={index} value={value} />
           ) : component === 'progress' ? (

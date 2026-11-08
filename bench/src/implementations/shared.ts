@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import type { SFSymbol } from 'sf-symbols-typescript';
 
 import type { ComponentName } from '../types';
 
@@ -31,6 +32,11 @@ const ROW_HEIGHTS: Record<
   // One line of text: UITextField's 22 pt, `TextInput`'s ~22 pt and Material 3
   // `bodyLarge`'s 24 dp all fit, and every arm lays out the identical area.
   'text-field': 44,
+  // Material 3's measured icon-button box at the default rung is 48 dp — its
+  // minimum interactive component size, which is larger than the 40 dp `small`
+  // container the rung's token asks for. The floor's glyph is 24 dp, so the row
+  // holds the tallest arm and every arm still lays out the identical area.
+  'icon-button': 48,
 };
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
@@ -365,6 +371,92 @@ export const SEGMENTED_SELECTION = 1;
  * callback identity per render.
  */
 export function onPress(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * One glyph, spelled the three ways the arms can name it.
+ *
+ * Three spellings because an icon is not one value across these runtimes: RN core
+ * loads a raster, `@expo/ui`'s Compose `Icon` takes a source too, and nitro-ui
+ * names a glyph per platform (`systemImage` for iOS, `androidIcon` for Android —
+ * DECISIONS D43). All three point at the same two drawings so no arm gets a
+ * cheaper picture than another.
+ */
+export interface IconButtonGlyph {
+  /**
+   * The raster the `rn-core` floor loads, and the Expo `Icon`'s source on Android.
+   *
+   * A PNG rather than the vector nitro-ui draws because RN's `Image` has no
+   * vector-drawable path on iOS and refuses an Android `.xml` asset from the dev
+   * server (DECISIONS D43, "Loading") — this is the shape it can draw on both
+   * platforms, and `circle.xml`/`square.xml` are the same two drawings for the arm
+   * that refuses a PNG by design. `bench/assets/README.md` says why one format
+   * cannot cover both; the asymmetry is the arms' icon support, not a choice.
+   */
+  source: number;
+  /**
+   * The SF Symbol both iOS arms name. Typed as `SFSymbol` so a typo in one of the
+   * two glyphs below is a compile error rather than a blank button on iOS.
+   */
+  systemImage: SFSymbol;
+  /**
+   * The Android glyph nitro-ui resolves, as the asset id
+   * `require('./icons/x.xml')` evaluates to — DECISIONS D43's headline form, and
+   * the same lookup a consumer pays: in the release build the bench runs that
+   * asset *is* a drawable resource.
+   */
+  androidIcon: number;
+}
+
+/**
+ * The two glyphs every IconButton arm draws, flipped by the `update.icon-button` cell.
+ *
+ * A glyph swap is the update an icon button really gets — play/pause, star/filled
+ * star — and it is the only one every arm can be charged for: the floor has no
+ * `checked` to flip and `@expo/ui` has no toggle icon button at all, so a
+ * checked-state flip would leave two arms repainting an unchanged box while
+ * nitro-ui ran its handshake (D16: the cell has to produce a transaction on every
+ * arm, the floor included). On iOS the symbol *is* the control's width, so the
+ * cell re-measures there; on Android the box is fixed per rung by Material's size
+ * token, so it repaints — which `docs/components/icon-button.md` documents as the
+ * platforms' difference, not an artefact of the bench.
+ *
+ * The two are deliberately different shapes at the same 24 dp box: a swap that
+ * changed nothing would be invisible. `bench/assets/README.md` says what they are.
+ */
+const ICON_BUTTON_GLYPHS: readonly IconButtonGlyph[] = [
+  {
+    source: require('../assets/circle.png'),
+    systemImage: 'circle.fill',
+    androidIcon: require('../assets/circle.xml'),
+  },
+  {
+    source: require('../assets/square.png'),
+    systemImage: 'square.fill',
+    androidIcon: require('../assets/square.xml'),
+  },
+];
+
+/** The glyph an IconButton arm should be drawing for this half of the flip. */
+export function iconButtonGlyph(value: boolean): IconButtonGlyph {
+  return ICON_BUTTON_GLYPHS[value ? 1 : 0] as IconButtonGlyph;
+}
+
+/**
+ * The name every IconButton arm gives its control.
+ *
+ * Constant across the flip and module-level for the usual reason: an IconButton
+ * has no text, so this string is the whole accessible name, and a fresh identity
+ * per render would be a prop change one arm pays and another does not.
+ */
+export const ICON_BUTTON_LABEL = 'Toggle layout';
+
+/**
+ * Stable no-op `onPress` for the IconButton arms, for the same reason as
+ * {@link onPress}.
+ */
+export function onIconButtonPress(): void {
   // Intentionally empty: state is driven by the runner.
 }
 
