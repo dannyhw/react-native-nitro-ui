@@ -4027,21 +4027,66 @@ final class RealInputTests: XCTestCase {
   /// Tap a field until it has the keyboard focus, retrying a dropped delivery the way
   /// `pressUntil` does for every other control. With `echo`, the witness is also that
   /// echo moving (the focus field's own `onFocus` count).
+  ///
+  /// Two witnesses are accepted, and each is the control's own answer rather than XCUITest's
+  /// opinion about the element it was handed:
+  ///
+  /// - `hasKeyboardFocus` on the wrapper or on anything inside it. The wrapper is *not* the
+  ///   control: React Native puts the app's `testID` on the view it makes, and the responder
+  ///   is the text field hosted under it. On a plain screen the flag reads through the wrapper,
+  ///   and this is the witness that answers. In a `Form` row the responder sits under a list
+  ///   cell as well, and the flag never turns true on the wrapper - measured on the note field
+  ///   with the keyboard on screen (`kbFrame=(0, 609, 420, 245)`), the field 321 pt higher than
+  ///   it had been, and its own `onFocus` reported to React.
+  /// - The field's own `onFocus` reaching React **and** a keyboard window on screen. The
+  ///   caller reads that echo as "no" before the first tap, so the one thing that can move it
+  ///   is this field taking the focus, and the window is what says a real keyboard came with it.
+  ///
+  /// Neither witness is "the tap did something": with no keyboard and no focus event the loop
+  /// retries and then fails, naming which witness was missing.
   private func focusByTap(_ field: XCUIElement, echo: String?, as what: String) throws {
     let before = echo.map { echoText($0) }
     for _ in 0..<3 {
       field.fingerTap()
       let deadline = Date().addingTimeInterval(3)
       repeat {
-        let focused = (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
         let moved = echo.map { echoText($0) != before } ?? true
-        if focused, moved { return }
+        if moved, holdsKeyboardFocus(field) { return }
+        if moved, echo != nil, app.keyboards.firstMatch.exists { return }
         Thread.sleep(forTimeInterval: 0.2)
       } while Date() < deadline
     }
+    // Which of the two witnesses is missing is the whole question, and the failure line
+    // alone cannot say: `hasKeyboardFocus` is XCUITest's private read of the element it was
+    // handed, while the echo is the control's own `onFocus` arriving in React. A tap that
+    // never reached the field moves neither; a field that focused and was not believed
+    // moves one. Printing the box too, because a tap that landed on the wrong row looks
+    // exactly like a field that ignores touches.
+    print(
+      "real-input focusByTap: FAILED \(what) - box=\(field.frame) "
+        + "hasKeyboardFocus=\(holdsKeyboardFocus(field)) "
+        + "echo=\(echo ?? "-") \"\(before ?? "-")\" -> \"\(echo.map { echoText($0) } ?? "-")\" "
+        + "keyboardWindow=\(app.keyboards.firstMatch.exists)"
+    )
     dumpHierarchy("\(what) never took the keyboard focus")
     XCTFail("\(what) never took the keyboard focus after three real taps")
     throw RealInputCheckAborted(identifier: what)
+  }
+
+  /// Whether the keyboard focus is on this element or on anything it hosts.
+  ///
+  /// Asked of the wrapper alone, `hasKeyboardFocus` is a question about the wrong view - see
+  /// `focusByTap`. Descendants are read because XCUITest has no "who has the focus" query: the
+  /// element that answers true is the responder, and it is inside this box or nowhere.
+  private func holdsKeyboardFocus(_ field: XCUIElement) -> Bool {
+    if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false {
+      return true
+    }
+    for one in field.descendants(matching: .any).allElementsBoundByIndex
+    where (one.value(forKey: "hasKeyboardFocus") as? Bool) ?? false {
+      return true
+    }
+    return false
   }
 
   /// Poll `check` until it says yes or `window` runs out.
