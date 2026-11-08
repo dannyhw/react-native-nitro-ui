@@ -421,6 +421,12 @@ final class NitroUiFormRowContainer: UIView {
   private func layoutRow() {
     guard let row else { return }
     row.frame = CGRect(x: 0, y: 0, width: bounds.width, height: row.frame.height)
+    // The Form has to lay this row's content out at the width it is *drawn* at, which is this
+    // container's, not the list's idea of a cell. Guarded on change inside the Form, so the
+    // per-layout call is a comparison rather than a round trip.
+    if bounds.width > 0, let cell = owningCell() {
+      cell.formOwner?.rowBoxWidthReported(bounds.width)
+    }
   }
 }
 
