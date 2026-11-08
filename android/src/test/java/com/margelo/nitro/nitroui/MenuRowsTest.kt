@@ -22,6 +22,7 @@ class MenuRowsTest {
     parentId: String? = null,
     subtitle: String? = null,
     checked: Boolean? = null,
+    androidIcon: String? = null,
   ) = NitroUiMenuRow(
     id = id,
     kind = kind,
@@ -30,6 +31,7 @@ class MenuRowsTest {
     disabled = false,
     destructive = false,
     systemImage = null,
+    androidIcon = androidIcon?.let { Variant_NullType_String.Second(it) },
     subtitle = subtitle?.let { Variant_NullType_String.Second(it) },
     checked = checked?.let { Variant_Boolean_NullType.First(it) },
   )
@@ -54,6 +56,37 @@ class MenuRowsTest {
     assertNull(items[2].subtitle)
     assertNull(items[2].checked)
     assertNull(items[3].subtitle)
+  }
+
+  @Test
+  fun `a row keeps its androidIcon as the wire string it was sent`() {
+    val entries =
+      parseMenuRows(
+        arrayOf(
+          // Both forms the wrapper builds, kept verbatim: a resource name and a
+          // dev-server file. Neither is native's to rewrite.
+          row("share", androidIcon = "share_24px"),
+          row("star", androidIcon = "url:http://localhost:8081/assets/star_24px"),
+          row("plain"),
+        )
+      )
+    val items = entries.map { (it as MenuEntry.Action).item }
+    assertEquals("share_24px", items[0].androidIcon)
+    assertEquals("url:http://localhost:8081/assets/star_24px", items[1].androidIcon)
+    assertNull(items[2].androidIcon)
+  }
+
+  @Test
+  fun `a child row keeps its androidIcon too`() {
+    val entries =
+      parseMenuRows(
+        arrayOf(
+          row("view", kind = "section", title = "View"),
+          row("grid", parentId = "view", androidIcon = "grid_24px"),
+        )
+      )
+    val item = (entries.single() as MenuEntry.Section).item.items.single()
+    assertEquals("grid_24px", item.androidIcon)
   }
 
   @Test

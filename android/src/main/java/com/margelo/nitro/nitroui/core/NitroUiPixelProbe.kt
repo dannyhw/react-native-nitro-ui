@@ -3,6 +3,8 @@ package com.margelo.nitro.nitroui.core
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import kotlin.math.absoluteValue
 
 /*
@@ -24,6 +26,62 @@ import kotlin.math.absoluteValue
 
 // Per-channel-sum budget for "this pixel is the colour"; see the iOS constant.
 private const val NITRO_UI_PIXEL_TOLERANCE = 30
+
+/**
+ * One control's stored pixel-probe answer.
+ *
+ * A probe runs on the UI thread (it has to draw the view) and a Nitro method may not
+ * block for it, so the answer is stored and polled - the reason every probe is a pair.
+ * The store exists because that pair is now more than one per view: `Menu` answers one
+ * for its trigger and one for its open popup, which are two windows and can therefore
+ * be in two different states while a harness reads both.
+ *
+ * The count is the harness's sentinel: `n=` is the only way a test can tell *its*
+ * answer from the previous control's, so it is bumped on every probe, including a probe
+ * that had nothing to sample and published a refusal.
+ */
+internal class NitroUiPixelProbes {
+  private val lock = Any()
+
+  private var probes = 0
+
+  private var report = ""
+
+  /** Store what a probe found. Safe from any thread. */
+  fun publish(
+    line: String,
+  ) {
+    synchronized(lock) {
+      probes += 1
+      report = "n=$probes $line"
+    }
+  }
+
+  /** Store a refusal - `no popup`, `no pixels` - for a probe with nothing to sample. */
+  fun refuse(
+    reason: String,
+  ) = publish(reason)
+
+  /** The last answer, or empty before the first probe. */
+  fun read(): String = synchronized(lock) { report }
+
+  /** Forget everything, as a recycle does: the next owner starts unread. */
+  fun clear() {
+    synchronized(lock) {
+      probes = 0
+      report = ""
+    }
+  }
+}
+
+/**
+ * A Compose colour as `RRGGBB`, the shape [nitroUiSamplePixels] asks a harness for.
+ *
+ * Both probe reports that name a colour the test then samples for use it - a row's
+ * leading-icon tint and a chip's icon tint - so the two spell the colour identically and
+ * one helper owns the alpha-mask and the casing.
+ */
+internal fun Color.toRgbHex(): String = String.format("%06X", toArgb() and 0xFFFFFF)
 
 /**
  * What the pixels this view is drawing say about [color], as one line for a test's

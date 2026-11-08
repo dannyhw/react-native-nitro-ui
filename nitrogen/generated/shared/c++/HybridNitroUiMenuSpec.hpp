@@ -97,6 +97,10 @@ namespace margelo::nitro::nitroui {
       virtual void nuiTestSelectRow(const std::string& id) = 0;
       virtual std::string nuiTestMenuReport() = 0;
       virtual void nuiTestMenuProbe() = 0;
+      virtual void nuiTestPixelProbe(double color) = 0;
+      virtual std::string nuiTestPixelReport() = 0;
+      virtual void nuiTestMenuPixelProbe(double color) = 0;
+      virtual std::string nuiTestMenuPixelReport() = 0;
 
     protected:
       // Hybrid Setup

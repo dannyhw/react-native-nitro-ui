@@ -115,6 +115,13 @@ namespace margelo::nitro::nitroui {
     inline void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) noexcept override {
       _swiftPart.setSystemImage(systemImage);
     }
+    inline std::variant<nitro::NullType, std::string> getAndroidIcon() noexcept override {
+      auto __result = _swiftPart.getAndroidIcon();
+      return __result;
+    }
+    inline void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) noexcept override {
+      _swiftPart.setAndroidIcon(androidIcon);
+    }
     inline std::variant<nitro::NullType, std::string> getTestID() noexcept override {
       auto __result = _swiftPart.getTestID();
       return __result;
@@ -188,6 +195,20 @@ namespace margelo::nitro::nitroui {
     }
     inline std::string nuiTestStateReport() override {
       auto __result = _swiftPart.nuiTestStateReport();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+      auto __value = std::move(__result.value());
+      return __value;
+    }
+    inline void nuiTestPixelProbe(double color) override {
+      auto __result = _swiftPart.nuiTestPixelProbe(std::forward<decltype(color)>(color));
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
+    inline std::string nuiTestPixelReport() override {
+      auto __result = _swiftPart.nuiTestPixelReport();
       if (__result.hasError()) [[unlikely]] {
         std::rethrow_exception(__result.error());
       }

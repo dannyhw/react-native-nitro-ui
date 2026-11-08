@@ -28,7 +28,9 @@ import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.NitroUiPixelProbes
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -112,6 +114,57 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
   ) {
     iconSlot.resolve(androidIcon, artwork)
   }
+
+  /**
+   * The rows' `androidIcon`s, resolved, for this menu.
+   *
+   * One slot per row that asked for a glyph, not one slot for the menu: twenty rows can
+   * name twenty different files, and a file arrives on its own schedule, so the row that
+   * is waiting cannot share a slot with the row that already drew. The rows arrive as
+   * one struct array, which is why this is keyed by row id rather than held on each
+   * [MenuActionItem] - the item is compared by value and `remember`ed as a list key,
+   * and artwork has neither.
+   *
+   * [resolveRowIcons] feeds it, from `afterUpdate()` only.
+   */
+  val rowIcons = MenuRowIcons()
+
+  /**
+   * Resolve every action row's `androidIcon`, once per change.
+   *
+   * Only action rows: Android draws a submenu's parent as its group's label and a
+   * section's header as a label too, and a Material group label has no leading slot for
+   * a glyph to live in - which is why `docs/components/menu.md` calls a submenu's
+   * `androidIcon` iOS-only. Reading the glyph of a row nobody draws would open a socket
+   * for artwork nobody sees.
+   */
+  fun resolveRowIcons(
+    artwork: NitroUiIconArtwork,
+  ) {
+    rowIcons.apply(
+      rawRows
+        .filter { row -> row.kind == "action" }
+        .map { row -> row.id to row.androidIcon?.asSecondOrNull() },
+      artwork,
+    )
+  }
+
+  /** The probe pair for the trigger - Button's pair, for the split button's leading half. */
+  val triggerProbes = NitroUiPixelProbes()
+
+  /** The probe pair for the open popup's window, which is where the rows are drawn. */
+  val menuProbes = NitroUiPixelProbes()
+
+  /**
+   * The open menu's own view, or `null`.
+   *
+   * The rows are not in this control's view - a `DropdownMenuPopup` is a window of its
+   * own - so sampling them means sampling the view [MenuWitness] recorded, and only
+   * while the menu is actually composed: a dismissed popup's view would answer for a
+   * window nobody can see.
+   */
+  val openMenuView: View?
+    get() = menuView?.takeIf { expanded }
 
   /** The items, as the popup draws them. Observed: writing them recomposes the list. */
   var entries by mutableStateOf<List<MenuEntry>>(emptyList())
@@ -426,7 +479,11 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
         // measure a layout it does not have (see its `nuiTestMenuReport`).
         ";split=${if (splitDrawn) 1 else 0}" +
         ";leading=${halfBox(leadingLeft, leadingTop, leadingRight, leadingBottom)}" +
-        ";trailing=${halfBox(trailingLeft, trailingTop, trailingRight, trailingBottom)}"
+        ";trailing=${halfBox(trailingLeft, trailingTop, trailingRight, trailingBottom)}" +
+        // What each row that drew a glyph tinted it with (`MenuRowIcons.noteTint`), so a
+        // harness can sample for a colour of this device's dynamic palette it cannot
+        // otherwise name. `-` when no row has drawn one.
+        ";iconTints=${rowIcons.tintsReport()}"
     }
   }
 
@@ -579,6 +636,12 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
     // and puts the slot back to "nothing asked for" — the same reset `ButtonModel`
     // does, from the same class.
     iconSlot.reset()
+    // Every row's slot too, with the file loads its previous owner started retired
+    // along with them - a recycled menu that kept its rows' artwork would draw the
+    // previous owner's glyphs beside the next owner's titles.
+    rowIcons.reset()
+    triggerProbes.clear()
+    menuProbes.clear()
     entries = emptyList()
     rawRows = emptyArray()
     hasPrimaryAction = false
@@ -721,6 +784,7 @@ private class MenuHost(
           entries = entries,
           menuTitle = null,
           enabled = enabled,
+          icons = model.rowIcons,
           onPick = { id -> choose(id) },
           onRowsComposed = model::noteMenuRows,
         )
@@ -1118,6 +1182,11 @@ class HybridNitroUiMenu(
     // the setter would repeat a resource lookup or a socket read for every prop of the
     // batch (AGENTS' perf contract).
     model.resolveAndroidIcon(iconArtwork)
+    // Then the rows', for the same reason and in the same batch: a name resolves here and
+    // is drawn by the popup this commit composes; a file reserves its row's slot here and
+    // fills it when the read lands. Kept out of the `rows` setter, which would pay a
+    // resource table lookup per row per unrelated prop of the batch.
+    model.resolveRowIcons(iconArtwork)
     // No controlled value and no handshake, so there is nothing to reconcile: one
     // commit per React commit (`docs/architecture/core.md` section 12). A pick
     // changes no rendered box either, so no size report is held against a batch.
@@ -1144,6 +1213,47 @@ class HybridNitroUiMenu(
     // while the menu is open" case that has to hold on both platforms.
     host.drop()
   }
+
+  /**
+   * Sample the trigger, for Button's reasons (`docs/components/button.md`): whether a
+   * glyph is painted in the control's content colour is a fact only its pixels hold, and
+   * a split trigger's leading half is where the trigger's glyph now lives.
+   */
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { model.triggerProbes.publish(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  override fun nuiTestPixelReport(): String = model.triggerProbes.read()
+
+  /**
+   * Sample the open menu's window, or refuse when no menu of this mount is composed.
+   *
+   * The popup's view is the one the witness already keeps for the menu's frame, so this
+   * adds no new witness to tear down - and it is sampled on the UI thread, posted rather
+   * than waited for, like every other probe here.
+   */
+  override fun nuiTestMenuPixelProbe(color: Double) {
+    val run = {
+      val view = model.openMenuView
+      if (view == null) {
+        model.menuProbes.refuse("no popup")
+      } else {
+        model.menuProbes.publish(view.nitroUiSamplePixels(color))
+      }
+    }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  override fun nuiTestMenuPixelReport(): String = model.menuProbes.read()
 
   // MARK: - Methods
 

@@ -39,6 +39,8 @@ export interface NitroUiChipHandle {
   readonly disabled: boolean;
   /** The SF Symbol name, or `null`. */
   readonly systemImage: string | null;
+  /** The `androidIcon` wire string React sent, or `null`. */
+  readonly androidIcon: string | null;
   /** The control's accessibility label, or `null` when it falls back to `label`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
@@ -49,6 +51,10 @@ export interface NitroUiChipHandle {
   nuiTestProbeAccessibility(): void;
   /** Test-only: `displayed=…;probes=…;a11y=…` (see the spec). */
   nuiTestStateReport(): string;
+  /** Test-only: sample this chip's pixels for `color` (see the spec). */
+  nuiTestPixelProbe(color: number): void;
+  /** Test-only: the last pixel probe's line (see the spec). */
+  nuiTestPixelReport(): string;
 }
 
 /**
@@ -69,6 +75,7 @@ export interface NativeNitroUiChipProps
   mostRecentEventCount: number;
   disabled: boolean;
   systemImage: string | null;
+  androidIcon: string | null;
   testID: string | null;
   accessibilityLabel: string | null;
   nuiPerfId: number | null;
