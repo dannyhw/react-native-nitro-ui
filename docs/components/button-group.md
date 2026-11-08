@@ -199,19 +199,26 @@ on the same track. The selection thumb is the difference, and so is what VoiceOv
 
 ## Which iOS versions this was checked on
 
-The connected appearance depends on a control Apple has changed before, so it was probed
-rather than assumed:
+The connected appearance depends on a control Apple has changed before, so it was
+probed rather than read off a release note:
 
-- **iOS 27.0** (iPhone 17 simulator, Xcode 27) — every measurement in this page, including
-  the three `ControlGroup` rules above, taken during the design task that produced it.
-- **iOS 26.5** — the same probe, on the current shipping release. The connected row is the
-  same control at the same 31 pt, and it keeps ignoring size, tint and variant.
+- **iOS 27.0** (iPhone 17 simulator, Xcode 27) — every number on this page. Taken
+  during the design task, whose probe row is
+  `docs/tasks/Q9-buttongroup-iconbutton-design.report.md` Appendix A, and again here on
+  the shipped control.
+- **iOS 26.5** and **iOS 27.1** — the two runs Apple ships now. Both were checked on
+  the shipped control: the same `connected` row, the same ladder and the same
+  `labelStyle` rows, photographed in the example app. The connected row is
+  `ControlGroup` at 31 pt on all three, and it keeps ignoring `size`, `tint` and
+  `variant` on all three; nothing in this page needed a version condition.
 - **iOS 15.1** is the deployment target. There is no `ViewThatFits` there, so the row
-  clips instead of overflowing; the rest of the control — the row, the toggles, the
-  handshake — is the same code.
+  clips instead of overflowing; the row, the toggles and the handshake are the same
+  code. This was not run on a 15.x device — the pool has none — so the clipping is a
+  reading of the code path, not a measurement.
 
-Behaviour this page claims on iOS 26.5 is the probe's; the harness and real-input suites run
-on the pool's iOS 27.0 device, which is why the numbers quoted above are 27.0's.
+The harness and real-input suites run on the pool's iOS 27.0 device, which is why the
+numbers quoted above are 27.0's and the other two runtimes are photographic evidence
+that the same control is drawn the same way.
 
 ## Limits
 

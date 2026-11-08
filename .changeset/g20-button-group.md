@@ -2,7 +2,7 @@
 'react-native-nitro-ui': minor
 ---
 
-`ButtonGroup`: a row of commands — *Copy | Paste | Share* — optionally with independent toggles — *Bold | Italic | Underline* — that moves the items it cannot fit into an overflow menu.
+`ButtonGroup`: a row of commands — _Copy | Paste | Share_ — optionally with independent toggles — _Bold | Italic | Underline_ — that moves the items it cannot fit into an overflow menu.
 
 - **Items are data, and the row reports their ids.** `{ id, title, systemImage, androidIcon, disabled, toggle, checked, defaultChecked }`, in render order: `onPress(id)` for an action, `onCheckedChange(id, checked)` for a toggle, and the same event whether the item was in the row or reached through the overflow menu. The items cross to native as one typed struct array — no JSON string, no `AnyMap` — and every field is always sent, so a recycled view can never be handed half a row.
 - **Each item decides its own controlled-ness.** An item whose `checked` is a boolean is controlled; one where it is `null` or absent is not, and native keeps whatever the user gave it, seeded once from `defaultChecked` and then forgotten so a re-render cannot undo the tap that just happened. A toggle is painted _before_ React sees the event and snaps back if the app refuses it — `docs/architecture/core-architecture.md` §4's handshake, with one event count for the whole group rather than one per item, so one item's stale write cannot be accepted on another's confirmation.
