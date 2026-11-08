@@ -81,7 +81,6 @@ final class RealInputTests: XCTestCase {
     static let contextMenu = "ctx-echo"
     static let contextMenuOrder = "ctx-order"
     static let formScreen = "form-screen-echo"
-    static let formRowPresses = "form-row-presses"
     static let chipValue = "real-input-chip-value"
     static let chipEvents = "real-input-chip-events"
     static let chipRefusedLast = "real-input-chip-refused-last"
