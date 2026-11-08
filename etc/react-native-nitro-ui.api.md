@@ -10,7 +10,9 @@ import type { ImageURISource } from 'react-native';
 import { JSX } from 'react';
 import { ReactNode } from 'react';
 import { Ref } from 'react';
+import { StyleProp } from 'react-native';
 import { ViewProps } from 'react-native';
+import { ViewStyle } from 'react-native';
 
 // @public
 export function AlertDialog(props: AlertDialogProps): JSX.Element;
@@ -540,6 +542,27 @@ export interface PickerProps extends ViewProps {
 
 // @public
 export type PickerVariant = 'menu' | 'wheel';
+
+// @public
+export function Popover(input: PopoverProps): JSX.Element;
+
+// @public
+export interface PopoverProps {
+    anchor: ReactNode;
+    children?: ReactNode;
+    // Warning: (ae-forgotten-export) The symbol "NitroUiPopoverHandle" needs to be exported by the entry point index.d.ts
+    //
+    // @internal
+    hybridRef?: ((view: NitroUiPopoverHandle) => void) | undefined;
+    isPresented: boolean;
+    maxWidth?: number | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onDismiss?: (() => void) | undefined;
+    onIsPresentedChange?: ((isPresented: boolean) => void) | undefined;
+    style?: StyleProp<ViewStyle> | undefined;
+    testID?: string | undefined;
+}
 
 // @public
 export function prewarm(componentNames: readonly string[]): number;

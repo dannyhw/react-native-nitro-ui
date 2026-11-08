@@ -22,6 +22,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiIconButton.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMaterialTheme.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiMenu.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPopover.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
@@ -36,6 +37,7 @@ android/src/main/java/com/margelo/nitro/nitroui/NitroUiContextMenuViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiHostViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiIcon.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt
+android/src/main/java/com/margelo/nitro/nitroui/NitroUiPopoverViewManager.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiSliderValue.kt
 android/src/main/java/com/margelo/nitro/nitroui/NitroUiVectorDrawable.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroComposeHost.kt
@@ -72,6 +74,7 @@ ios/components/Host/HybridNitroUiHost.swift
 ios/components/IconButton/HybridNitroUiIconButton.swift
 ios/components/Menu/HybridNitroUiMenu.swift
 ios/components/Picker/HybridNitroUiPicker.swift
+ios/components/Popover/HybridNitroUiPopover.swift
 ios/components/Progress/HybridNitroUiProgress.swift
 ios/components/SearchField/HybridNitroUiSearchField.swift
 ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
@@ -191,6 +194,14 @@ lib/module/components/Picker/Picker.js
 lib/module/components/Picker/Picker.js.map
 lib/module/components/Picker/Picker.nitro.js
 lib/module/components/Picker/Picker.nitro.js.map
+lib/module/components/Popover/NativeNitroUiPopover.js
+lib/module/components/Popover/NativeNitroUiPopover.js.map
+lib/module/components/Popover/NitroUiPopoverConfig.js
+lib/module/components/Popover/NitroUiPopoverConfig.js.map
+lib/module/components/Popover/Popover.js
+lib/module/components/Popover/Popover.js.map
+lib/module/components/Popover/Popover.nitro.js
+lib/module/components/Popover/Popover.nitro.js.map
 lib/module/components/Progress/NativeNitroUiProgress.js
 lib/module/components/Progress/NativeNitroUiProgress.js.map
 lib/module/components/Progress/NitroUiProgressConfig.js
@@ -367,6 +378,14 @@ lib/typescript/src/components/Picker/Picker.d.ts
 lib/typescript/src/components/Picker/Picker.d.ts.map
 lib/typescript/src/components/Picker/Picker.nitro.d.ts
 lib/typescript/src/components/Picker/Picker.nitro.d.ts.map
+lib/typescript/src/components/Popover/NativeNitroUiPopover.d.ts
+lib/typescript/src/components/Popover/NativeNitroUiPopover.d.ts.map
+lib/typescript/src/components/Popover/NitroUiPopoverConfig.d.ts
+lib/typescript/src/components/Popover/NitroUiPopoverConfig.d.ts.map
+lib/typescript/src/components/Popover/Popover.d.ts
+lib/typescript/src/components/Popover/Popover.d.ts.map
+lib/typescript/src/components/Popover/Popover.nitro.d.ts
+lib/typescript/src/components/Popover/Popover.nitro.d.ts.map
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts
 lib/typescript/src/components/Progress/NativeNitroUiProgress.d.ts.map
 lib/typescript/src/components/Progress/NitroUiProgressConfig.d.ts
@@ -475,6 +494,8 @@ nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiMenuSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiPickerSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiPopoverSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiPopoverSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiProgressSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSearchFieldSpec.cpp
@@ -533,6 +554,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiMenuStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiPickerStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiPopoverStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiPopoverStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiProgressStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSearchFieldStateUpdater.cpp
@@ -566,6 +589,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiIconBut
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMaterialThemeSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiMenuSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPickerSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiPopoverSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgressSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSearchFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
@@ -615,6 +639,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiM
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiMenuStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPickerManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPickerStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiPopoverStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiProgressStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSearchFieldManager.kt
@@ -661,6 +687,8 @@ nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiMenuSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiPickerSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiPickerSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiPopoverSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiPopoverSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiProgressSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSearchFieldSpecSwift.cpp
@@ -686,6 +714,7 @@ nitrogen/generated/ios/c++/views/HybridNitroUiHostComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiIconButtonComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiMenuComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiPickerComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiPopoverComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSearchFieldComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
@@ -722,6 +751,8 @@ nitrogen/generated/ios/swift/HybridNitroUiMenuSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiMenuSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiPickerSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiPickerSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiPopoverSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiPopoverSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiProgressSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSearchFieldSpec.swift
@@ -781,6 +812,8 @@ nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiMenuSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiPickerSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiPopoverSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiPopoverSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiProgressSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSearchFieldSpec.cpp
@@ -836,6 +869,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiMenuComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiPickerComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiPopoverComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiPopoverComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiProgressComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSearchFieldComponent.cpp
@@ -861,6 +896,7 @@ nitrogen/generated/shared/json/NitroUiHostConfig.json
 nitrogen/generated/shared/json/NitroUiIconButtonConfig.json
 nitrogen/generated/shared/json/NitroUiMenuConfig.json
 nitrogen/generated/shared/json/NitroUiPickerConfig.json
+nitrogen/generated/shared/json/NitroUiPopoverConfig.json
 nitrogen/generated/shared/json/NitroUiProgressConfig.json
 nitrogen/generated/shared/json/NitroUiSearchFieldConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
@@ -919,6 +955,10 @@ src/components/Picker/NativeNitroUiPicker.ts
 src/components/Picker/NitroUiPickerConfig.ts
 src/components/Picker/Picker.nitro.ts
 src/components/Picker/Picker.tsx
+src/components/Popover/NativeNitroUiPopover.ts
+src/components/Popover/NitroUiPopoverConfig.ts
+src/components/Popover/Popover.nitro.ts
+src/components/Popover/Popover.tsx
 src/components/Progress/NativeNitroUiProgress.ts
 src/components/Progress/NitroUiProgressConfig.ts
 src/components/Progress/Progress.nitro.ts

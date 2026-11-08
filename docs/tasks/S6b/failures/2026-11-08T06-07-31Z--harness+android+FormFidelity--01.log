@@ -1,0 +1,80 @@
+# Failure excerpt — harness:android:FormFidelity
+
+- Ran: 2026-11-08T06:07:31.493Z on code tree `d9ae917ae4d7` at HEAD `d94a594` (branch `task/S6b-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android FormFidelity`
+- Result: fail, exit 1, 21925 ms
+- Load: start 9.83, end 10.04, median 10.04, max 10.65
+- Device: android / device `emulator-5574` / lease `S6b-44a80`
+- Full log: `task/S6b-form-spike/harness+android+FormFidelity-2026-11-08T06-07-31.493Z.log` (<store>/task/S6b-form-spike/harness+android+FormFidelity-2026-11-08T06-07-31.493Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormFidelity.harness.tsx`
+- `● Form fidelity (S6 spike, question 2) › measures the prototype and a SwiftUI Form the same way (E2)`
+- `expected 0 to be greater than or equal to 8`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6b-form-spike/harness+android+FormFidelity-2026-11-08T06-07-31.493Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6b-44a80 (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 10.04 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android FormFidelity
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree d9ae917ae4d7, 21 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.83/7.72 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6b-form-spike/harness+android+FormFidelity-2026-11-08T06-07-31.493Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/FormFidelity.harness.tsx
+  ● Form fidelity (S6 spike, question 2) › measures the prototype and a SwiftUI Form the same way (E2)
+
+    expected 0 to be greater than or equal to 8
+
+      [0m [90m 274 |[39m       [36mconst[39m padding [33m=[39m (band[33m:[39m string[33m,[39m text[33m:[39m string) [33m=>[39m
+       [90m 275 |[39m         num(bands[33m,[39m band) [33m-[39m num(bands[33m,[39m text)[33m;[39m
+      [31m[1m>[22m[39m[90m 276 |[39m       expect(padding([32m'headerBand'[39m[33m,[39m [32m'headerText'[39m))[33m.[39mtoBeGreaterThanOrEqual([35m8[39m)[33m;[39m
+       [90m     |[39m                                                                         [31m[1m^[22m[39m
+       [90m 277 |[39m       expect(padding([32m'footerBand'[39m[33m,[39m [32m'footerText'[39m))[33m.[39mtoBeGreaterThanOrEqual([35m4[39m)[33m;[39m
+       [90m 278 |[39m       [36mreturn[39m[33m;[39m
+       [90m 279 |[39m     }[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        20.088 s
+Ran all test suites matching FormFidelity.
+
+
+
+```

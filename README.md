@@ -34,14 +34,15 @@ the layout engine, and React never sees a native node.
 | `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
+| `Popover`            | `UIPopoverPresentationController` with React Native content    | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
 | `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
 except `Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`,
-`BottomSheet`, `ContextMenu` and `Tooltip`, and refuses those eight with an error
-that names them. The first five wait for a round that measures them inside a
-Host; the last three are refused by design, because each is a `View` around React
+`BottomSheet`, `ContextMenu`, `Tooltip` and `Popover`, and refuses those nine with an
+error that names them. The first five wait for a round that measures them inside a
+Host; the last four are refused by design, because each is a `View` around React
 Native children, not a control a composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
 
@@ -63,6 +64,7 @@ import {
   IconButton,
   Menu,
   Picker,
+  Popover,
   Progress,
   SearchField,
   SegmentedControl,
@@ -978,12 +980,60 @@ tooltip follows its anchor through a layout change or a scroll. At most two
 actions; a title or an action makes Android's tooltip the rich one.
 [tooltip.md](docs/components/tooltip.md) has the platform details.
 
+### Popover
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/popover-ios.png" width="300" alt="A Popover open from its Share this list anchor, with three rows of React Native content, on iOS" /></td>
+    <td><img src="docs/images/components/popover-android.png" width="300" alt="A Popover open from its Share this list anchor, with three rows of React Native content, on Android" /></td>
+  </tr>
+</table>
+
+A bubble anchored to one of your views, whose content is React Native views rather
+than a string: `UIPopoverPresentationController` on iOS, and a popup window under a
+Material 3 surface on Android, which has no popover of its own. The `anchor` stays in
+your layout and keeps its own taps.
+
+```tsx name=popover
+export function ShareMenu() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      isPresented={open}
+      onIsPresentedChange={setOpen}
+      anchor={
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}>
+          <Text>Share this list</Text>
+        </Pressable>
+      }
+    >
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>Copy link</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" onPress={() => setOpen(false)}>
+        <Text>AirDrop</Text>
+      </Pressable>
+    </Popover>
+  );
+}
+```
+
+Your content is laid out in your own tree at up to `maxWidth` before the popover shows
+it, so its first frame is already its final size — nothing is measured on the native
+side. It goes below the anchor and above it when there is no room, clear of the
+keyboard on Android. `onIsPresentedChange` is not called for a change you made, and a
+close you refuse presents it again.
+[popover.md](docs/components/popover.md) has the platform details.
+
 ### Host
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu` and `Tooltip`; one
-of those six, an RN view, plain text or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`, `BottomSheet`,
+`ContextMenu`, `Tooltip` and `Popover`; one of those nine, an RN view, plain text
+or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -1159,8 +1209,8 @@ The full list per control is in its doc; these are the ones that bite.
   the trigger is wider.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
   one except `Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`,
-  `BottomSheet`, `ContextMenu` and `Tooltip`. Any other child — one of those
-  eight, an RN view, text, another `<Host>` — throws in development. Give
+  `BottomSheet`, `ContextMenu`, `Tooltip` and `Popover`. Any other child — one of
+  those nine, an RN view, text, another `<Host>` — throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules

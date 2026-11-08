@@ -203,6 +203,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiIconButton"
       }
+    },
+    "NitroUiPopover": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiPopover"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiPopover"
+      }
     }
   },
   "ignorePaths": [

@@ -1,0 +1,88 @@
+# Failure excerpt — harness:ios:Popover
+
+- Ran: 2026-11-07T20:17:30.000Z on code tree `4dd9978616f8` at HEAD `04747c5` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Popover`
+- Result: fail, exit 1, 111083 ms
+- Load: start 8.47, end 6.45, median 6.21, max 8.47
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log` (<store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.45 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 44 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Popover
+gate: node ../scripts/harness.mjs --harnessRunner ios Popover (cwd example)
+gate: code tree 4dd9978616f8 at HEAD 04747c51
+gate: git tree 53ab73b7e944
+gate: log task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log
+gate:       <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Popover
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4dd9978616f8, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.47/8.50 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › over an RN Modal › presents inside a Modal and closes cleanly before the Modal does
+
+    "in-modal" never reached a popover on screen; its report is "seq=1056;presented=0;js=0;live=0;presentCount=0;onScreen=0;contentW=0;contentH=0;askedW=0;askedH=0;contentWaits=0;sampling=0;visibleFrames=1;firstW=180;firstH=90;finalW=180;finalH=90;sizes=180x90;maxWidth=320;nodeW=0;nodeH=0;anchorRect=0.0,0.0,72.0,36.0;inPopover=0;hidden=1;children=0;topPresented=RCTFabricModalHostViewController;modalHosts=1;windows=0;controllers=0;touchRoots=0;userDismissals=0;unasked=0;anchored=1;drops=25;recycles=25"
+
+      [0m [90m 251 |[39m     }[33m,[39m
+       [90m 252 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 253 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 254 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 255 |[39m       )[33m,[39m
+       [90m 256 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 23 passed, 24 total
+Snapshots:   0 total
+Time:        109.321 s
+Ran all test suites matching Popover.
+gate: harness:ios:Popover FAIL in 111.1 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+ios+Popover-2026-11-07T20-17-29.626Z.log (4 probe(s))
+
+```

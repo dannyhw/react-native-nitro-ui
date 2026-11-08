@@ -1,0 +1,68 @@
+# Failure excerpt — real-input:android:--control:popover
+
+- Ran: 2026-11-08T01:09:23.975Z on code tree `e6dfa212e3b4` at HEAD `929c1d8` (branch `task/G22-popover`)
+- Command: `node scripts/real-input/android.mjs --control popover`
+- Result: fail, exit 1, 494 ms
+- Load: start 4.11, end 4.11, median 4.11, max 4.11
+- Device: android / device `emulator-5574` / lease `G22-q9eoq`
+- Full log: `task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log` (<store>/task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-q9eoq (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.11 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:popover
+gate: node scripts/real-input/android.mjs --control popover (cwd .)
+gate: code tree e6dfa212e3b4 at HEAD 929c1d85
+gate: git tree 818fb2e9a8de
+gate: log task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log
+gate:       <store>/task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 6040835e at 380514a74091318d021b31636a0077a876725507, now e6dfa212 at 929c1d852d53a5d7d0f0cf9899bc2f139b9b2145)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 6040835e at 380514a74091318d021b31636a0077a876725507, now e6dfa212 at 929c1d852d53a5d7d0f0cf9899bc2f139b9b2145)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:popover FAIL in 0.5 s
+gate: recorded in .gates/task/G22-popover.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G22-popover/real-input+android+--control+popover-2026-11-08T01-09-23.369Z.log (5 probe(s))
+
+```

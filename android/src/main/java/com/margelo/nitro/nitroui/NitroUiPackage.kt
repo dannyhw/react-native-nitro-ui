@@ -80,6 +80,11 @@ class NitroUiPackage : BaseReactPackage() {
     // manager is a `ReactViewManager` that keeps the menu's 0 x 0 compose host out of
     // Fabric's child indices. See `NitroUiContextMenuViewManager`.
     NitroUiContextMenuViewManager(),
+    // A Popover's React Native children are mounted into the popup's window, so it needs
+    // the `IViewGroupManager` half as a sheet does: its manifest names this class
+    // (`androidViewManager`), and the registry checks it is registered here instead of the
+    // generated manager. See `NitroUiPopoverViewManager`.
+    NitroUiPopoverViewManager(),
   )
 
   companion object {

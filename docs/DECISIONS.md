@@ -603,3 +603,27 @@ orchestrator decided its questions:
    both platforms, tested on both. Today iOS reports `onIsPresentedChange(false)` and Android reports nothing.
 3. **iOS entrance animation:** UIKit's own zoom-and-fade is kept. The layout is final from the first frame; the
    animation is the platform's, not a resize. No prop to turn it off in v1.
+
+## D45 — Form and Section: build it, as native containers with React Native rows (2026-11-08)
+
+Q10 recommended Form and Section as native containers holding ordinary React Native rows (a UIKit `.insetGrouped`
+list on iOS, Material 3 Expressive segmented list shapes behind in-place rows on Android), and no virtualized native
+List with React-rendered rows. S6 and S6b (`docs/tasks/S6-form-spike.report.md`, both rounds; prototype on
+`task/S6b-form-spike`, never merged) measured it: rows move into and out of cells with nothing left behind; real taps
+land 10/10 on both platforms (a `Switch`, a `Pressable`, a row's own press); 9 of 12 fidelity metrics match SwiftUI's
+`Form` exactly and the row box now matches its 52 pt; `measure()` of a row is right on both platforms, at rest and
+after a scroll; the iOS keyboard clears a field near the bottom. The one red line is the Android keyboard, which
+covers a focused field. The orchestrator decided S6b's questions:
+
+1. **GO.** The Android keyboard is the build's first item (IME insets and scrolling the focused row into view), with
+   the real-input keyboard check S6b made trustworthy as its gate. No third spike round.
+2. **Android section headers:** S6b's reserved header band is accepted instead of a second Compose layer per section.
+   The fidelity assertion that the band is exact stays, since the header sits under the rows.
+3. **`measure()`:** the shadow-node fix ships, with S6b's row-measure case as the gate.
+4. **`measure()` is right once scrolling settles**, not on every scroll frame. The docs say so.
+5. **Rows outside the visible cells** aren't attached to a cell. An anchored surface (Tooltip, Popover, ContextMenu)
+   on a row scrolled out of view behaves as it would for any scrolled-away anchor. v1 has no scroll-to step; the docs
+   say so.
+6. **No virtualized native List** with React-rendered rows (Q10 question B): the docs point long lists to FlashList
+   and Legend List, which work with nitro-ui controls in their rows. A data-template native List is reconsidered only
+   on demand. Q10 question C (a `ListItem` row-content control) is decided after Form ships.

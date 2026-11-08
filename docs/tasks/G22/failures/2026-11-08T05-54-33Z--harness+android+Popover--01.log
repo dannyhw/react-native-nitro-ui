@@ -1,0 +1,89 @@
+# Failure excerpt — harness:android:Popover
+
+- Ran: 2026-11-08T05:54:33.199Z on code tree `c4bb2d61af8d` at HEAD `58ae7c8` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover`
+- Result: fail, exit 1, 56924 ms
+- Load: start 12.42, end 14.64, median 12.42, max 14.64
+- Device: android / device `emulator-5570` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log` (<store>/task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Popover.harness.tsx`
+- `● Popover › follows the content when it resizes while the popover is up`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 14.64 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:Popover
+gate: node ../scripts/harness.mjs --harnessRunner android Popover (cwd example)
+gate: code tree c4bb2d61af8d at HEAD 58ae7c87
+gate: git tree 5f209c32b7a9 with a DIRTY worktree (not reusable)
+gate: log task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log
+gate:       <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Popover
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree c4bb2d61af8d, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.42/11.07 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Popover.harness.tsx
+  ● Popover › follows the content when it resizes while the popover is up
+
+    "grows" never reached the popover at the content height it grew to; its report is "seq=379;presented=1;js=1;live=1;presentCount=1;onScreen=1;roots=1;askedW=180;askedH=92;maxWidth=320;imePx=0;contentWaits=1;placed=2;placedAt=42,106,473,242;contentW=180;contentH=92;nodeW=320;nodeH=208;children=1;inPopup=1;density=2.625;anchorRect=0,0,189,95;draws=4;firstDraw=473x242;lastDraw=473x242;drawSizes=473x242;firstDrawMs=23;popRect=42,142,473,242;windowFocused=0;lifecycleObservers=12;userDismissals=0;unasked=0;anchored=1;guards=strategy,preDraw|live:strategy;drops=3;recycles=3;measuresAfterDrop=0;layoutsAfterDrop=0;giveUps=0;floatingFlushes=0"
+
+      [0m [90m 362 |[39m     }[33m,[39m
+       [90m 363 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 364 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 365 |[39m         [32m`"${testId}" never reached ${what}; its report is "${reportOf(testId).raw}"`[39m
+       [90m 366 |[39m       )[33m,[39m
+       [90m 367 |[39m     timeoutMs[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 29 passed, 30 total
+Snapshots:   0 total
+Time:        55.221 s
+Ran all test suites matching Popover.
+gate: harness:android:Popover FAIL in 56.9 s
+gate: recorded in .gates/task/G22-popover.jsonl
+
+
+gate: appended the device context to task/G22-popover/harness+android+Popover-2026-11-08T05-54-32.517Z.log (5 probe(s))
+
+```

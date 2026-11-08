@@ -410,7 +410,12 @@ export const CONTENT_CHILDREN_MARKER = '// nitro-ui: content children';
  * view (see the file header). A list here rather than a manifest key: it is a fact
  * about how the generated iOS component mounts, which only this file changes.
  */
-export const CONTENT_CHILDREN_VIEWS = ['HybridNitroUiBottomSheet'];
+// A Popover's React Native children are its content too, and iOS presents them from a
+// popover controller's content view: the same redirect, for the same reason (G22).
+export const CONTENT_CHILDREN_VIEWS = [
+  'HybridNitroUiBottomSheet',
+  'HybridNitroUiPopover',
+];
 
 /**
  * Give the generated iOS component view `mountChildComponentView:index:` and

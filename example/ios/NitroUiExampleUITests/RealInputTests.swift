@@ -52,6 +52,7 @@ final class RealInputTests: XCTestCase {
     static let dialogTab = "tab-dialog"
     static let sheetTab = "tab-sheet"
     static let tooltipTab = "tab-tooltip"
+    static let popoverTab = "tab-popover"
     static let hostTab = "tab-host"
     static let textFieldTab = "tab-textfield"
     static let searchFieldTab = "tab-searchfield"
@@ -101,6 +102,8 @@ final class RealInputTests: XCTestCase {
     static let sheetPresses = "sheet-presses"
     static let tooltipLog = "tooltip-log"
     static let tooltipPresses = "tooltip-anchor-presses"
+    static let popoverLog = "popover-log"
+    static let popoverPresses = "popover-inner-presses"
     static let dropArm = "real-input-drop-button"
     static let dropRemount = "real-input-drop-remount"
     static let dropGone = "real-input-drop-gone"
@@ -3743,6 +3746,176 @@ final class RealInputTests: XCTestCase {
     Thread.sleep(forTimeInterval: 0.8)
     XCTAssertEqual(optionLabels(containing: message), 0, "and opens nothing")
     XCTAssertEqual(try read(Echo.tooltipLog), afterAction, "and reports nothing")
+  }
+
+  /// A real finger on a Popover (G22, DECISIONS D44): a real tap on the app's own anchor
+  /// opens it, its React Native content is in the popover's window and findable by id, a
+  /// tap outside closes it and reports the close, a `Pressable` *inside* reaches JS
+  /// exactly once over ten separate opens, and a `TextInput` inside takes the keyboard and
+  /// stays visible above it.
+  ///
+  /// The popover is a UIKit popover in a window of its own (D41's reason, and measured by
+  /// `example/__tests__/isolated/PopoverModalHazard.harness.tsx`), so "up" is read as its
+  /// own content on screen and the screen's log only with the popover down — the same
+  /// reads the tooltip check makes. "Exactly once" is arithmetic: the screen counts every
+  /// press that reaches JS, so ten opens with one injected tap inside each end on
+  /// `inner presses: 10`, and a touch root that also delivered the press would end it on
+  /// 11.
+  func testRealInputPopover() throws {
+    try goToTab(Tab.popoverTab, showing: Echo.popoverLog)
+    let content = "Do the thing"
+    let fieldContent = "Rename this list"
+
+    // Outside: the log line, a `Text` with no press of its own at the top of the page,
+    // above every anchor. Taken while the popover is down and tapped where it was — a
+    // fixed point on the screen could be a tab, or the Reset button, which would zero the
+    // very counter the ten opens are read from.
+    let logFrame = try required(Echo.popoverLog, as: "the log line").frame
+    let outside = app.coordinate(withNormalizedOffset: .zero)
+      .withOffset(CGVector(dx: logFrame.midX, dy: logFrame.minY + 4))
+    func openPopover(_ waitingFor: String) throws {
+      try tapUntilOption(
+        "popover-short-anchor",
+        as: "the popover's anchor",
+        option: content,
+        waitingFor: waitingFor
+      )
+    }
+
+    // 1. Before a touch: nothing reported, nothing pressed inside, nothing up.
+    XCTAssertEqual(try read(Echo.popoverLog), "none", "no popover has reported anything before a touch")
+    XCTAssertEqual(optionLabels(containing: content), 0, "no popover is up before a touch")
+    XCTAssertEqual(echoText(Echo.popoverPresses), "inner presses: 0", "nothing has been pressed inside")
+
+    // 2. A real tap on the app's own anchor opens it, and the popover's React Native
+    //    content is in the popover's window — readable by a screen reader and findable by
+    //    id, which is the half of the rule no in-app query can state (a11y.mjs,
+    //    A11Y_PRESENTATIONS).
+    try openPopover("the real tap that opens the popover")
+    XCTAssertTrue(
+      app.descendants(matching: .any)["popover-short-popover"].exists,
+      "the presented content carries <testID>-popover, for a test or an a11y tool to find"
+    )
+    let rowFrame = try required("popover-short-inner-press", as: "the row inside the popover").frame
+    print(
+      "real-input (ios): popover: \(app.descendants(matching: .popover).count) UIKit "
+        + "popover(s); the row inside it is at \(rowFrame)"
+    )
+
+    // 3. A tap outside closes it and reports the close, then the dismiss. A later attempt
+    //    taps only while it is still up: once it is down, the log is merely slow.
+    let outsideClose = "short:presented:false > short:dismiss"
+    XCTAssertEqual(
+      try pressUntil(
+        named: "the log line outside the popover",
+        waitingFor: "the tap outside the popover to close it",
+        press: { attempt in
+          if attempt > 1 && optionLabels(containing: content) == 0 {
+            return
+          }
+          outside.tap()
+        },
+        reading: { self.echoText(Echo.popoverLog) }
+      ) { shown in
+        shown == outsideClose
+      },
+      outsideClose,
+      "a tap outside closes the popover and reports the close, then the dismiss"
+    )
+    waitUntilOptionGone(content, "the tap outside to take the popover down")
+
+    // 4. Ten opens, one injected tap inside each: the press reaches JS exactly once, and
+    //    the re-read after a settle is what tells a second press that arrives late apart
+    //    from one that never arrives.
+    for opened in 1...10 {
+      try openPopover("the real tap that opens the popover for open number \(opened)")
+      try required("popover-short-inner-press", as: "the Pressable inside the popover").fingerTap()
+      waitUntilOptionGone(content, "the press inside the popover to close it (open \(opened))")
+      let once = "inner presses: \(opened)"
+      XCTAssertTrue(
+        waitUntil({ self.echoText(Echo.popoverPresses) == once }, window: 8),
+        "one injected tap inside reaches JS exactly once (open \(opened)): "
+          + "the screen says \"\(echoText(Echo.popoverPresses))\""
+      )
+      Thread.sleep(forTimeInterval: 0.8)
+      XCTAssertEqual(
+        echoText(Echo.popoverPresses),
+        once,
+        "and no second press arrives after open \(opened)"
+      )
+      if opened == 1 {
+        // D32's order from outside: the press reports, then the dismiss its own close
+        // causes. That close is the app's, so it reports no `presented:false` — only a
+        // close the popover decided for itself does (DECISIONS D44 item 2).
+        XCTAssertTrue(
+          try read(Echo.popoverLog).hasSuffix("press:popover-short > short:dismiss"),
+          "the press inside reports, then the dismiss its own close causes"
+        )
+      }
+    }
+    XCTAssertEqual(echoText(Echo.popoverPresses), "inner presses: 10", "ten opens, ten presses inside, and no more")
+
+    // 5. The keyboard. A `TextInput` inside has to take the keyboard focus, and the
+    //    content has to end up above the keyboard rather than under it. UIKit moves a
+    //    popover that has no room, so the claim asserted is the one the brief states —
+    //    visible above the keyboard — and how it got there is printed rather than
+    //    demanded: a popover that was already clear of the keyboard has no reason to move.
+    try tapUntilOption(
+      "popover-field-anchor",
+      as: "the field popover's anchor",
+      option: fieldContent,
+      waitingFor: "the real tap that opens the popover with a field"
+    )
+    let field = try required("popover-inner-field", as: "the TextInput inside the popover")
+    let beforeField = field.frame
+    try focusByTap(field, echo: nil, as: "the TextInput inside the popover")
+    let keyboard = app.keyboards.firstMatch
+    XCTAssertTrue(keyboard.waitForExistence(timeout: 8), "a real tap on the field inside the popover brings up the keyboard")
+    let afterField = try required("popover-inner-field", as: "the field with the keyboard up").frame
+    let keyboardTop = keyboard.frame.minY
+    print(
+      "real-input (ios): popover: field \(beforeField) -> \(afterField) with the keyboard "
+        + "top at \(keyboardTop)"
+    )
+    XCTAssertLessThanOrEqual(
+      afterField.maxY,
+      keyboardTop + 1,
+      "the field stays visible above the keyboard (field bottom \(afterField.maxY), keyboard top \(keyboardTop))"
+    )
+    // And the keystrokes reach the field - read while the popover is still up. A keystroke
+    // still in React Native's queue is lost when the close unmounts the field, and the full
+    // run on 2026-11-08 lost the second of `ab` that way (the log carried `typed:a` and then
+    // the close, with no `typed:ab`) at load1 ~13; the same control passed on its own at
+    // load1 ~5. Waiting here keeps the claim - JS received both keystrokes - and takes the
+    // close out of the race: a character that never arrives still goes red.
+    field.typeText("ab")
+    var typedWhileUp = ""
+    let keystrokesArrived = waitUntil({
+      typedWhileUp = echoText(Echo.popoverLog)
+      return typedWhileUp.contains("typed:ab")
+    }, window: 10)
+    XCTAssertTrue(
+      keystrokesArrived,
+      "real keystrokes reach the field inside the popover while it is still up: "
+        + typedWhileUp
+    )
+    outside.tap()
+    waitUntilOptionGone(fieldContent, "the outside tap to take the field popover down")
+    // The screen records the field popover's own close after that outside tap, so what this
+    // can claim is the order the log carries - the keystrokes, then the close. A bare
+    // `hasSuffix("typed:ab")` could only ever fail on a popover that closed as told.
+    let typedLog = try read(Echo.popoverLog)
+    let typedAt = typedLog.range(of: "typed:ab")
+    let closedAt = typedLog.range(of: "field:presented:false", options: .backwards)
+    XCTAssertTrue(
+      typedAt != nil && closedAt != nil && typedAt!.lowerBound < closedAt!.lowerBound,
+      "real keystrokes reach the field inside the popover, before its own close: "
+        + "\(echoText(Echo.popoverLog))"
+    )
+
+    // 6. Nothing left up for the next control.
+    XCTAssertEqual(optionLabels(containing: content), 0, "nothing is left up at the end")
+    XCTAssertEqual(optionLabels(containing: fieldContent), 0, "and no field popover either")
   }
 
   /// A real finger on a BottomSheet (G14, D35 item 4): a tap opens it from a plain RN

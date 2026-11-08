@@ -1,0 +1,106 @@
+# Failure excerpt — harness:android:Form.harness
+
+- Ran: 2026-11-07T19:12:57.433Z on code tree `63c5794b21d8` at HEAD `387d3bd` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Form.harness`
+- Result: fail, exit 1, 12921 ms
+- Load: start 12.51, end 10.48, median 11.50, max 12.51
+- Device: android / device `emulator-5570` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+android+Form.harness-2026-11-07T19-12-57.433Z.log` (<store>/task/S6-form-spike/harness+android+Form.harness-2026-11-07T19-12-57.433Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (S6 spike) › mounts every row into the list with none stranded (E1)`
+- `● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `● Form (S6 spike) › gives a row the height its content needs, before and after it grows (E3)`
+- `expected 0 to be greater than 0`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+android+Form.harness-2026-11-07T19-12-57.433Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G19-pxe0p                G19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 10.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 57 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Form.harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 63c5794b21d8, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.75/8.59 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+android+Form.harness-2026-11-07T19-12-57.433Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (S6 spike) › mounts every row into the list with none stranded (E1)
+
+    report has no "shapes": {}
+
+      [0m [90m 64 |[39m   [36mconst[39m raw [33m=[39m report[key][33m;[39m
+       [90m 65 |[39m   [36mif[39m (raw [33m==[39m [36mnull[39m)
+      [31m[1m>[22m[39m[90m 66 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`report has no "${key}": ${JSON.stringify(report)}`[39m)[33m;[39m
+       [90m    |[39m                    [31m[1m^[22m[39m
+       [90m 67 |[39m   [36mreturn[39m [33mNumber[39m(raw)[33m;[39m
+       [90m 68 |[39m }
+       [90m 69 |[39m[0m
+
+  ● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    report has no "shapes": {}
+
+      [0m [90m 64 |[39m   [36mconst[39m raw [33m=[39m report[key][33m;[39m
+       [90m 65 |[39m   [36mif[39m (raw [33m==[39m [36mnull[39m)
+      [31m[1m>[22m[39m[90m 66 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`report has no "${key}": ${JSON.stringify(report)}`[39m)[33m;[39m
+       [90m    |[39m                    [31m[1m^[22m[39m
+       [90m 67 |[39m   [36mreturn[39m [33mNumber[39m(raw)[33m;[39m
+       [90m 68 |[39m }
+       [90m 69 |[39m[0m
+
+  ● Form (S6 spike) › gives a row the height its content needs, before and after it grows (E3)
+
+    expected 0 to be greater than 0
+
+      [0m [90m 486 |[39m     [90m// Yoga", and it is a comparison rather than a threshold.[39m
+       [90m 487 |[39m     [36mconst[39m chrome [33m=[39m nth(items[33m,[39m [35m0[39m) [33m-[39m num(wifi[33m,[39m [32m'h'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 488 |[39m     expect(chrome)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 489 |[39m     expect([33mMath[39m[33m.[39mabs(nth(items[33m,[39m [35m1[39m) [33m-[39m num(bt[33m,[39m [32m'h'[39m) [33m-[39m chrome))[33m.[39mtoBeLessThanOrEqual(
+       [90m 490 |[39m       [35m1[39m
+       [90m 491 |[39m     )[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 2 passed, 5 total
+Snapshots:   0 total
+Time:        11.26 s
+Ran all test suites matching Form.harness.
+
+
+
+```
