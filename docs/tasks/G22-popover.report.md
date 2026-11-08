@@ -246,6 +246,9 @@ first, and that is said too.
   saying it. The claim was an Activity-wide count - any other control on the screen raises it -
   which is why it was dropped rather than re-proved; the witnesses that stay (window, controller,
   RN root, and Fabric's own drop/recycle counts) are per-mount.
+- docs: the retaken README pair opens *above* its anchor on iOS and *below* it on Android -
+  `OpenMenu`'s anchor lands ~73 % down an iPhone screen, so UIKit runs out of room below; the
+  story comment says "with room below it", and nothing asserts the story's geometry.
 
 ## Appendix
 
@@ -276,3 +279,33 @@ first, and that is said too.
 ## Questions for orchestrator
 
 None.
+
+## Fix round 1
+
+Seven findings, none refused. **Android took its close-debt only when a presentation ended**,
+so a popover closed before it got up kept its content mounted (`mounts=1, unmounts=0`); the
+debt is taken on the ask now. **iOS stood down** after 60 content waits: a late box left
+`isPresented` true with nothing up (`presentCount=0`, `contentWaits=61`);
+`contentBoxChanged` resumes the wait. **Android placed popovers in screen coordinates**
+against window-relative `anchorBounds` and popup - every fixture sat at the origin, so
+nothing showed it. `PopoverPlacement.windowFrame` converts it; its JVM test runs a window at
+y = 1200, where the answers are 275 and 897. **A closing `Modal` is a drop on iOS too**: `[]`
+on both platforms. Five new fixtures - never-up, late box, resize while up, a popover inside
+a presented `BottomSheet`, Tooltip + Popover closed either way - each red before green.
+Docs: `Pressable` anchors, four refusals, the lifecycle-observer claim retired with
+`35e427a4`, the README pair retaken.
+
+Gates on the final code tree (`9ca8d0014867`); the ledger is exported to
+`docs/tasks/G22/gates.jsonl` with round 0's lines kept:
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1870 tests / 77 suites | `9ca8d0014867` | 2 m 44 s | start 7.5 / med 8.1 / max 10.8 |
+| `harness:ios` | **PASS** | 490 tests / 26 suites + isolated 6 tests / 3 suites | `9ca8d0014867` (ios tree) | 13 m 02 s | start 12.8 / med 17.5 / max 121.4 |
+| `harness:android` | **PASS** | 546 tests / 26 suites + isolated 6 tests / 3 suites | `9ca8d0014867` (android tree) | 16 m 12 s | start 16.5 / med 6.5 / max 17.7 |
+| `real-input:ios` | **PASS** | — | `9ca8d0014867` (ios tree) | 31 m 58 s | start 5.5 / med 13.4 / max 126.3 |
+| `real-input:android` | **PASS** | — | `9ca8d0014867` (android tree) | 47 m 00 s | start 16.2 / med 3.5 / max 16.2 |
+
+Lease `G22-d5myp`. `need --for review` and `--for merge` are both satisfied (exit 0). The
+first Android `real-input` run went red on Menu's own late tap; that row is the clean
+re-run, green with no retries.
