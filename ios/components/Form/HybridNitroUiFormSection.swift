@@ -19,6 +19,11 @@
 //  `onMetrics` so Yoga can reserve it - the header is drawn natively but React Native lays
 //  the section out, and those two facts need a round trip to coexist.
 //
+//  `onPlacement` is the other half of that round trip: where the list put this section, which
+//  JavaScript sends back as the section's absolute `top`. With it, a row's Yoga origin *is*
+//  its position in the list's content, and the Form's single scroll-offset correction reaches
+//  every row (D45 item 3). UIKit never reads it back — the list owns where a cell draws.
+//
 
 import NitroModules
 import UIKit
@@ -37,6 +42,11 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
   private var rawFooter: String?
   private var perfInstanceId: Int32 = nitroUiPerfNoInstance
   private var metrics: ((Double, Double, Double, Double) -> Void)?
+  private var placement: ((Double) -> Void)?
+  /// The placement last handed to JavaScript, so a settle that moved nothing sends nothing.
+  private var reportedPlacement: Double?
+  /// The x the Form says a row is drawn at, folded into the next `onMetrics`.
+  private var reportedInset: Double?
   /// The last `[header, footer, inset, gap]` handed to JavaScript. An array, not a tuple:
   /// a tuple is not `Equatable`, so an optional tuple cannot be compared with a new one.
   private var reportedMetrics: [Double]?
@@ -89,6 +99,11 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
     set { metrics = newValue }
   }
 
+  var onPlacement: ((Double) -> Void)? {
+    get { placement }
+    set { placement = newValue }
+  }
+
   func afterUpdate() {
     nitroUiAssertMainThread()
     // One application for both strings: the section's items change (the header and footer
@@ -103,16 +118,22 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
       for row in model.rows + pendingRows { row.removeFromSuperview() }
     }
     model.rows.removeAll()
+    pendingRows.removeAll()
     rawTitle = nil
     rawFooter = nil
     model.title = nil
     model.footerText = nil
+    reportedMetrics = nil
+    reportedPlacement = nil
+    reportedInset = nil
     form?.rowsChanged(in: model)
   }
 
   func onDropView() {
     nitroUiAssertMainThread()
+    prepareForRecycle()
     metrics = nil
+    placement = nil
     form = nil
   }
 
@@ -190,18 +211,37 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
   /// The space the header and footer take, asked of UIKit's layout - the same configuration
   /// the supplementary cell is built with, measured at the list's width. A typed constant
   /// here would be an imitation (D38.1) and would go stale the day Dynamic Type changes.
-  private func reportMetrics() {
-    guard let metrics, let form, model.title?.isEmpty == false || model.footerText?.isEmpty == false
-    else { return }
+  func reportMetrics() {
+    guard let metrics, let form else { return }
     let header = form.supplementaryHeight(footer: false, in: model)
     let footer = form.supplementaryHeight(footer: true, in: model)
-    // iOS: the list's layout supplies the inset-grouped margins and the space between
-    // sections, so React Native is told to add nothing. That is the answer to "what must JS
-    // reserve, on iOS", not a guess at what it might want.
-    let next = [Double(header), Double(footer), 0.0, 0.0]
+    // The x a row is drawn at, asked of the Form, which reads it off a cell. iOS has no
+    // space *between* shapes: the list's layout has one continuous background per section.
+    let inset = reportedInset ?? 0
+    let next = [Double(header), Double(footer), inset, 0.0]
     if reportedMetrics == next { return }
     reportedMetrics = next
     metrics(next[0], next[1], next[2], next[3])
+  }
+
+  /// What the Form worked out about this section when the list settled.
+  ///
+  /// Both numbers arrive together because both are properties of *this section's* box, and
+  /// either can move without the other (a header appears; a resize changes the margins). Each
+  /// is compared against what was last sent, so a settle that changed neither is silent —
+  /// which is the difference between one re-render per settle and one per section per settle.
+  func applyPlacement(top: CGFloat, inset: CGFloat) {
+    nitroUiAssertMainThread()
+    let nextTop = Double(top)
+    if placement != nil, reportedPlacement != nextTop {
+      reportedPlacement = nextTop
+      placement?(nextTop)
+    }
+    let nextInset = Double(inset)
+    if reportedInset != nextInset {
+      reportedInset = nextInset
+      reportMetrics()
+    }
   }
 
   // MARK: - Report
@@ -242,6 +282,13 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
       "form=\(form == nil ? "none" : "set")",
       "width=\(String(format: "%.2f", holding.bounds.width))",
       "height=\(String(format: "%.2f", holding.bounds.height))",
+      // What the shadow tree was told, as opposed to where the list actually put the section:
+      // `top=-` is a Form that has never settled.
+      "placed=\(reportedPlacement.map { String(format: "%.2f", $0) } ?? "-")",
+      "headerBand=\(reportedMetrics.map { String(format: "%.2f", $0[0]) } ?? "-")",
+      "footerBand=\(reportedMetrics.map { String(format: "%.2f", $0[1]) } ?? "-")",
+      "inset=\(reportedMetrics.map { String(format: "%.2f", $0[2]) } ?? "-")",
+      "headerText=\(form?.headerTextHeight(in: model).map { String(format: "%.2f", $0) } ?? "-")",
     ].joined(separator: ";")
   }
 }

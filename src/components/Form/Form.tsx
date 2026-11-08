@@ -31,6 +31,16 @@ import {
 const IOS = Platform.OS === 'ios';
 
 /**
+ * The room an Android accessory takes at a row's trailing edge: the section draws the glyph
+ * there (`FormListMetrics` in `HybridNitroUiFormSection.kt`, whose comment says this file
+ * reserves the room), and a row's content is React Native's, so only this file can move it
+ * out of the way. Values mirror that object plus an 8 dp gap, the Material spacing between
+ * content and an accessory; `androidRow` already carries the 16 dp edge padding, so what a
+ * row adds is the glyph and the gap.
+ */
+const ANDROID_ACCESSORY_RESERVE = 24 + 8;
+
+/**
  * `Form`, `Form.Section` and `Form.Row` — grouped settings-style lists whose rows are
  * ordinary React Native views (D45, Q10 Appendix C1).
  *
@@ -152,9 +162,7 @@ function FormRoot({
       // page colour, which belongs to the Form's own view (read from the M3 scheme, not a
       // hex constant) rather than to a colour this file would have to invent.
       contentContainerStyle={
-        imeInset > 0
-          ? { flexGrow: 1, paddingBottom: imeInset }
-          : { flexGrow: 1 }
+        imeInset > 0 ? [styles.fill, { paddingBottom: imeInset }] : styles.fill
       }
       // A tap outside a focused field should reach the control under it, not merely dismiss
       // the keyboard (React Native's own `handled` mode).
@@ -257,15 +265,17 @@ function SectionRoot({
       hybridRef={hybridRefCallback ?? undefined}
     >
       <View
-        style={{
-          // The header and footer are drawn by the platform in these bands, and a row must
-          // never paint over them: the reservation is what keeps the two apart, so the
-          // harness compares the band with the text it holds instead of trusting it.
-          paddingTop: metrics.headerHeight,
-          paddingBottom: metrics.footerHeight,
-          paddingHorizontal: metrics.inset,
-          flexDirection: 'column',
-        }}
+        style={[
+          styles.band,
+          {
+            // The header and footer are drawn by the platform in these bands, and a row must
+            // never paint over them: the reservation is what keeps the two apart, so the
+            // harness compares the band with the text it holds instead of trusting it.
+            paddingTop: metrics.headerHeight,
+            paddingBottom: metrics.footerHeight,
+            paddingHorizontal: metrics.inset,
+          },
+        ]}
       >
         {wrapRows(children, contentWidth, metrics.gap)}
       </View>
@@ -383,12 +393,18 @@ function RowRoot({
   const hybridRefCallback = useStableCallback(hybridRef);
   // iOS: the row is drawn by its cell, at the width the cell gives it — that width has to be
   // the row's own, or the row's Yoga height would not be the cell's height either. Android:
-  // rows sit in a segmented list, so each takes half the gap above and below it.
+  // rows sit in a segmented list, so each takes half the gap above and below it, and a row
+  // with an accessory gives up the trailing room the section is going to draw in.
   const box: ViewStyle = IOS
     ? width > 0
       ? { width }
       : { width: '100%' }
-    : { marginVertical: gap / 2 };
+    : accessory === 'none'
+      ? { marginVertical: gap / 2 }
+      : {
+          marginVertical: gap / 2,
+          paddingRight: 16 + ANDROID_ACCESSORY_RESERVE,
+        };
   return (
     <NativeNitroUiFormRow
       {...rest}
@@ -406,6 +422,15 @@ function RowRoot({
 }
 
 const styles = StyleSheet.create({
+  // Both platforms put the rows in this box, whose paddings are the bands the platform
+  // draws the header and footer into.
+  band: {
+    flexDirection: 'column',
+  },
+  fill: {
+    // A short form still fills the viewport, so the grouped page colour reaches the bottom.
+    flexGrow: 1,
+  },
   androidBox: {
     flexDirection: 'column',
   },

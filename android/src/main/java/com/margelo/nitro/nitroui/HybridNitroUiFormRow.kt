@@ -42,6 +42,10 @@ import kotlin.math.hypot
  *
  * The row does not draw and does not clip: `ListItemDefaults.segmentedShapes` gives the shape
  * and the layer draws it, one composition behind a whole section's rows.
+ *
+ * The row reports no position either. Here the row is where Yoga put it, so the shadow tree
+ * and the screen agree without being told (the reason Android sends no scroll offset and no
+ * placement of its own, and the reason iOS has to say both).
  */
 internal class HybridNitroUiFormRow(
   private val reactContext: ThemedReactContext,
@@ -86,14 +90,6 @@ internal class HybridNitroUiFormRow(
 
   override var onPress: (() -> Unit)? = null
 
-  /**
-   * iOS-only in effect (S6b question 4): there the Form has to tell a row where its cell
-   * came to rest, because React Native's `measure` reads the shadow tree and the view has
-   * moved into a cell. Here the row stays where Yoga put it - the two trees agree by
-   * construction - so nothing ever calls it. Declared because the spec declares it.
-   */
-  override var onFrameMoved: ((x: Double, y: Double) -> Unit)? = null
-
   override fun afterUpdate() {
     view.applyChrome(rawAccessory, rawSelected, rawPressable)
   }
@@ -107,7 +103,6 @@ internal class HybridNitroUiFormRow(
 
   override fun onDropView() {
     onPress = null
-    onFrameMoved = null
   }
 
   /** The cell's press reached React. */
