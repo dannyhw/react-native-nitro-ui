@@ -45,7 +45,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.getAllSemanticsNodes
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.isTraversalGroup
@@ -870,8 +874,19 @@ private class ButtonGroupHost(
             modifier =
               Modifier
                 .onPlaced { model.ledger.recordIndicatorPlaced() }
-                .semantics {
+                .clearAndSetSemantics {
+                  // Material's indicator already carries "More options", and a second
+                  // description in the same modifier chain *concatenates* — measured as
+                  // `label=More More options`, which is what a reader would hear. The
+                  // Menu split button's fix (MenuSplitButton.halfModifier) is the house
+                  // answer: clear the subtree's semantics, say the label once, and
+                  // restate what the clear drops — the role and the press action.
                   contentDescription = model.overflowAccessibilityLabel ?: DEFAULT_OVERFLOW_LABEL
+                  role = Role.Button
+                  onClick(label = null, action = {
+                    if (state.isShowing) state.dismiss() else state.show()
+                    true
+                  })
                 },
             enabled = enabled,
           )
