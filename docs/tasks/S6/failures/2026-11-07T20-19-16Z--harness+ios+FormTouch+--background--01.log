@@ -1,0 +1,59 @@
+# Failure excerpt — harness:ios:FormTouch:--background
+
+- Ran: 2026-11-07T20:19:16.059Z on code tree `e48bcb2acb5b` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios FormTouch --background`
+- Result: fail, exit 1, 1422 ms
+- Load: start 6.05, end 6.05, median 6.05, max 6.05
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+FormTouch+--background-2026-11-07T20-19-16.059Z.log` (<store>/task/S6-form-spike/harness+ios+FormTouch+--background-2026-11-07T20-19-16.059Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+FormTouch+--background-2026-11-07T20-19-16.059Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.05 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios FormTouch --background
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree e48bcb2acb5b, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.05/7.51 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+FormTouch+--background-2026-11-07T20-19-16.059Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```

@@ -41,5 +41,47 @@
       "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/LICENSE",
       "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"
     }
+  ],
+  "exampleFiles": [
+    {
+      "path": "example/src/assets/icons/star_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/star/materialsymbolsoutlined/star_24px.xml",
+      "sha256": "49d8cf2a439f18bcafc0c9e765ac04cf52edc7105f82c637c50b4e8890fd00b2",
+      "symbol": "star",
+      "style": "materialsymbolsoutlined",
+      "why": "the Metro asset the Button and Menu harnesses require, and the file docs/components/button.md shows an app requiring"
+    },
+    {
+      "path": "example/src/assets/icons/share_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/share/materialsymbolsoutlined/share_24px.xml",
+      "sha256": "e68cc51976886c8395e3317d8bea0b8324e98d365ed8a15fc8c67767c2241931",
+      "symbol": "share",
+      "style": "materialsymbolsoutlined",
+      "why": "a second upstream file, whose path fills the same 960-unit viewport differently from star: two icons in one row prove an icon slot comes from the size ladder and not from the artwork"
+    },
+    {
+      "path": "example/src/assets/icons/close_24px.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/close/materialsymbolsoutlined/close_24px.xml",
+      "sha256": "31644025d94b5a5637d75660ebdcb93c398f2620bfc12f7a7a9362965e271288",
+      "symbol": "close",
+      "style": "materialsymbolsoutlined",
+      "why": "a 2 dp diagonal stroke, which is what shows up a glyph drawn at the wrong size: the sharpness case in example/__tests__/Button.harness.tsx measures it. Loaded by no other test, so its file arrives cold"
+    },
+    {
+      "path": "example/android/app/src/main/res/drawable/nitroui_test_close.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/close/materialsymbolsoutlined/close_24px.xml",
+      "sha256": "31644025d94b5a5637d75660ebdcb93c398f2620bfc12f7a7a9362965e271288",
+      "symbol": "close",
+      "style": "materialsymbolsoutlined",
+      "why": "the same 2 dp glyph as a compiled drawable, so the release form and the development form of one glyph can be probed against each other at the same size"
+    },
+    {
+      "path": "example/android/app/src/main/res/drawable/nitroui_test_star.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/star/materialsymbolsoutlined/star_24px.xml",
+      "sha256": "49d8cf2a439f18bcafc0c9e765ac04cf52edc7105f82c637c50b4e8890fd00b2",
+      "symbol": "star",
+      "style": "materialsymbolsoutlined",
+      "why": "the resource-name form: the star above, compiled into the example APK, so a test can measure the release build's artwork against the development one"
+    }
   ]
 }

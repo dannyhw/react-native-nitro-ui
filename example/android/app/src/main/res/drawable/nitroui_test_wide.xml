@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A deliberately wide icon (32 x 12 dp), the counterpart of `nitroui_test_star`.
+
+  What it is for: an icon slot is sized by the control's ladder
+  (`ButtonDefaults.iconSizeFor`), not by the artwork's intrinsic box, and a fix
+  that reserved `intrinsicWidth` instead of the token would still pass a
+  square-only test. With this file in the same test, the two names must produce
+  *the same* control width — which they only do if the slot ignores the art.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="32dp"
+  android:height="12dp"
+  android:viewportWidth="32"
+  android:viewportHeight="12">
+  <path
+    android:fillColor="#FF000000"
+    android:pathData="M2,2h28v8h-28z" />
+</vector>

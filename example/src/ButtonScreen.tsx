@@ -216,6 +216,36 @@ export default function ButtonScreen() {
         </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>
+          App icon (Android)
+        </Text>
+        <View style={styles.wrapRow}>
+          {/* The form D43 adds: the app owns the file and imports it, and Metro
+              carries it — an ordinary drawable in a release build, a dev-server
+              file while you develop. The SF Symbol beside it is what iOS draws;
+              each platform ignores the other's prop. */}
+          <Button
+            title="Share"
+            systemImage="square.and.arrow.up"
+            androidIcon={require('../src/assets/icons/share_24px.xml')}
+            testID="icon-imported"
+          />
+          {/* The form that was here first, for an app that already ships
+              drawables: `example/android/app/src/main/res/drawable/`. */}
+          <Button
+            title="Star"
+            systemImage="star"
+            androidIcon="nitroui_test_star"
+            testID="icon-drawable"
+          />
+          <Button
+            title="Not shipped"
+            systemImage="star"
+            androidIcon="nitroui_test_never_built"
+            testID="icon-missing"
+          />
+        </View>
+
+        <Text style={[styles.section, { color: ink.ink }]}>
           Long title (truncates into a caller's box)
         </Text>
         <Button

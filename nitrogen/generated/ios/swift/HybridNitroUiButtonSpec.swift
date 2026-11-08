@@ -17,6 +17,7 @@ public protocol HybridNitroUiButtonSpec_protocol: HybridObject, HybridView {
   var disabled: Bool { get set }
   var tintColor: Variant_NullType_Double { get set }
   var systemImage: Variant_NullType_String { get set }
+  var androidIcon: Variant_NullType_String { get set }
   var testID: Variant_NullType_String { get set }
   var accessibilityLabel: Variant_NullType_String { get set }
   var nuiPerfId: Variant_NullType_Double { get set }
@@ -26,6 +27,8 @@ public protocol HybridNitroUiButtonSpec_protocol: HybridObject, HybridView {
 
   // Methods
   func measureContent() throws -> NitroUiButtonSize
+  func nuiTestPixelProbe(color: Double) throws -> Void
+  func nuiTestPixelReport() throws -> String
 }
 
 public extension HybridNitroUiButtonSpec_protocol {

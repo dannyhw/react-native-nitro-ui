@@ -142,6 +142,9 @@ final class MenuModel: NitroUiModel {
   var disabled = false
   var tint: UIColor?
   var systemImage: String?
+  /// The Android icon string React sent. Stored, never drawn — see
+  /// ``HybridNitroUiMenu/androidIcon``.
+  var androidIcon: String?
   /// The items as React sent them, kept so the `rows` prop reads back what was set.
   var rawRows: [NitroUiMenuRow] = []
   /// The flattened items, as the content draws them.
@@ -624,6 +627,19 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     }
   }
 
+  /// Accepted and ignored, exactly as `Button` does it: `androidIcon` names an
+  /// Android drawable, and iOS draws `systemImage` instead.
+  ///
+  /// Stored rather than dropped so `hybridRef` can read back what React sent, and
+  /// because the prop is always sent (nitro#1184), so the native side has to hold
+  /// whatever it is handed. No `markDirty()`: nothing observes it, and a Menu's
+  /// trigger must not pay for a render — or a size report — because of a string this
+  /// platform never draws.
+  var androidIcon: Variant_NullType_String {
+    get { model.androidIcon.map { .second($0) } ?? .first(.null) }
+    set { model.androidIcon = newValue.asType(String.self) }
+  }
+
   var hasPrimaryAction: Bool {
     get { model.hasPrimaryAction }
     set {
@@ -743,6 +759,7 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     model.disabled = false
     model.tint = nil
     model.systemImage = nil
+    model.androidIcon = nil
     model.rawRows = []
     model.entries = []
     model.hasPrimaryAction = false

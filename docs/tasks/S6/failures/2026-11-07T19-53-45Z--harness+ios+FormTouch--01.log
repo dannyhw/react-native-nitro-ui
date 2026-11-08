@@ -1,0 +1,79 @@
+# Failure excerpt — harness:ios:FormTouch
+
+- Ran: 2026-11-07T19:53:45.449Z on code tree `a336c7908afe` at HEAD `33749bf` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios FormTouch`
+- Result: fail, exit 1, 100730 ms
+- Load: start 3.89, end 5.03, median 5.22, max 6.07
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+FormTouch-2026-11-07T19-53-45.449Z.log` (<store>/task/S6-form-spike/harness+ios+FormTouch-2026-11-07T19-53-45.449Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormTouch.harness.tsx`
+- `● Form real input (S6 spike, questions 4 and 7) › takes ten taps each on a row, a Pressable and a hosted Switch`
+- `expected 4 to be greater than or equal to 10`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+FormTouch-2026-11-07T19-53-45.449Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G22-q9eoq                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.03 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios FormTouch
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree a336c7908afe, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.89/4.00 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+FormTouch-2026-11-07T19-53-45.449Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/FormTouch.harness.tsx
+  ● Form real input (S6 spike, questions 4 and 7) › takes ten taps each on a row, a Pressable and a hosted Switch
+
+    expected 4 to be greater than or equal to 10
+
+      [0m [90m 137 |[39m
+       [90m 138 |[39m     [90m// Q4: taps land, on the row's own cell and on the content inside it.[39m
+      [31m[1m>[22m[39m[90m 139 |[39m     expect(log[33m.[39mrows)[33m.[39mtoBeGreaterThanOrEqual([33mTARGET[39m)[33m;[39m
+       [90m     |[39m                                            [31m[1m^[22m[39m
+       [90m 140 |[39m     expect(log[33m.[39mpressable)[33m.[39mtoBeGreaterThanOrEqual([33mTARGET[39m)[33m;[39m
+       [90m 141 |[39m     [90m// Q7: the hosted control still gets its own touches, and the row's press did not eat[39m
+       [90m 142 |[39m     [90m// them - ten presses of the Switch are ten value changes.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        99.206 s
+Ran all test suites matching FormTouch.
+
+
+
+```

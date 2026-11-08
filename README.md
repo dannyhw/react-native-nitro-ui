@@ -303,6 +303,33 @@ export function SaveButton() {
 }
 ```
 
+iOS takes its icons from SF Symbols; Android has no system icon set, so the app
+owns them and `androidIcon` points at the file:
+
+```tsx name=button-icon
+export function ShareButton({ onShare }: { onShare: () => void }) {
+  // iOS draws the SF Symbol; Android draws the `.xml` the app imports. Each
+  // platform ignores the other's prop, so one Button reads the same on both.
+  return (
+    <Button
+      title="Share"
+      systemImage="square.and.arrow.up"
+      androidIcon={require('./assets/icons/share_24px.xml')}
+      onPress={onShare}
+    />
+  );
+}
+```
+
+`require`ing the `.xml` is the whole setup — Metro carries the file, a release
+build turns it into an ordinary drawable, and development loads it from the dev
+server. An app that already ships drawables can name one instead
+(`androidIcon="share"` for `res/drawable/share.xml`). Either way the glyph is
+sized by the size ladder and tinted with the label's own colour, and artwork that
+cannot be resolved draws nothing and reserves nothing.
+[button.md](docs/components/button.md), "Android icons", has Material Symbols,
+`@expo/material-symbols` for Expo apps, and the failure table.
+
 ### SegmentedControl
 
 <table>
