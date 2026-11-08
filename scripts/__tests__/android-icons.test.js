@@ -57,6 +57,10 @@ const EXAMPLE_FIXTURES = {
     "well-formed XML that is no drawable at all - the reader's negative case (NitroUiVectorDrawableTest.kt)",
   'example/android/app/src/main/res/drawable/nitroui_test_wide.xml':
     "a 32 x 12 dp rectangle: Material ships only 24 x 24 canvases, and the point of this file is that the artwork's own box is not the slot's. A rectangle, not a glyph",
+  'example/android/app/src/main/res/drawable/nitroui_test_slab.xml':
+    "a square that fills its canvas: not a glyph, the fixture that makes a pixel probe measure a slot's *area* (G21) - 20 dp in a menu row, 18 dp in a chip",
+  'example/src/assets/icons/slab_24px.xml':
+    'the same slab through Metro, so the dev-server road is measured with the same file the drawable road is (G21)',
   'example/android/app/src/main/res/drawable/nitroui_test_shape.xml':
     'a <shape> with no intrinsic size: the "resolves but cannot be an icon" branch',
   'example/android/app/src/main/res/drawable-nodpi/nitroui_test_raster.png':
