@@ -79,8 +79,11 @@ it above the finger. The popup, groups, rows and
 the popup witness are Menu's own (`MenuRows.kt`, D36 item 4): each section and each run
 of top-level actions is a Material group, a submenu draws inline as a group of its own,
 as Menu's does (D29), and a row's `subtitle` and `checked` draw as they do in Menu
-([menu.md](menu.md#the-group)). On iOS a row's `subtitle` is `UIAction.subtitle` and
-`checked` its `state`. Because a ContextMenu row is a `UIAction`, which carries a
+([menu.md](menu.md#the-group)). A row's `androidIcon` draws there too, in Material's
+20 dp leading slot: it is Menu's row struct, so [Menu, "The rows'
+glyphs"](menu.md#the-rows-glyphs) is the whole story — including why iOS ignores it and
+why a checked row's check takes the slot.
+On iOS a row's `subtitle` is `UIAction.subtitle` and `checked` its `state`. Because a ContextMenu row is a `UIAction`, which carries a
 `.destructive` attribute and a `state` together, a row on iOS can be both destructive and
 checked: the action keeps both. Menu draws a checked row as a SwiftUI `Toggle`,
 which takes no role, so Menu drops `destructive` on a checked row
@@ -184,7 +187,9 @@ the actions a screen reader is handed, not what it does with them.
 - **No custom preview**, no `previewBackgroundColor`, no tap-to-open, no `open()`.
 - **Android: no mouse or stylus right-click** (`performContextClick`); iOS gets a
   pointer's secondary click from UIKit.
-- **`systemImage` is iOS-only**, and a submenu is inline on Android, as on Menu (D29).
+- **`systemImage` is iOS-only** and **`androidIcon` is Android-only**, on the rows as on
+  Menu; a row that wants a glyph on both platforms names both. A submenu is inline on
+  Android, as on Menu (D29).
 - **Android `removeClippedSubviews`** on the ContextMenu itself is ignored, with a dev
   warning.
 - **Not hostable**: a `<Host>` refuses it, because it is a `View` around React Native
