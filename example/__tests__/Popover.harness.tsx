@@ -731,6 +731,15 @@ describe('Popover', () => {
         // counts its polling turns and stops asking at 60; Android counts the compositions
         // it refused to build a popup from, which a healthy mount needs none or one of.
         expect(num(up, 'contentWaits')).toBeLessThan(IOS ? 12 : 24);
+        // The same numbers, printed: `bench: false` means no bench row is minted for a
+        // popover, and the first-frame claim has to be carried by the run that measures it.
+        console.log(
+          `first frame "${fixture.name}": asked=${String(asked.w)}x${String(
+            asked.h
+          )}, contentWaits=${String(up.contentWaits)}, firstDrawMs=${String(
+            up.firstDrawMs ?? '-'
+          )}, frames=${String(up.visibleFrames ?? up.draws)}`
+        );
       });
     }
   });
@@ -796,14 +805,15 @@ describe('Popover', () => {
     expect(num(waiting, 'presentCount')).toBe(0);
     const up = await waitForUp(id, 15000);
     expect(num(up, 'presentCount')).toBe(1);
-    // And it comes up at the box it finally measured, not at a default that then jumps.
+    // And it comes up at the box it finally measured, not at a default it then jumps from.
     const settled = await waitForDrawnSample(id);
+    const scale = scaleOf(settled);
     const asked = askedPx(settled);
-    expect(asked.w).toBeLessThanOrEqual(
-      Math.round(num(settled, 'maxWidth') * 1.01)
-    );
-    const first = drawn(settled);
-    expect(isSize(first.last, asked.w, asked.h)).toBe(true);
+    expect(asked.w).toBe(Math.round(184 * scale));
+    expect(asked.h).toBe(Math.round(112 * scale));
+    const seen = drawn(settled);
+    expect(seen.distinct).toHaveLength(1);
+    expect(isSize(seen.first, asked.w, asked.h)).toBe(true);
   });
 
   it('follows the content when it resizes while the popover is up', async () => {
