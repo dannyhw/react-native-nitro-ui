@@ -211,6 +211,15 @@ fix inside this control.
 - `disabled` removes the control from interaction and reads as disabled on both
   platforms.
 
+**The iOS box gap (known debt).** The name is on the right element — a `button`, enabled
+and hittable — two pixels off the box: React Native lays the host out at 39.67 pt and
+SwiftUI reports its `Button` element at its own integral 39 pt, inset half a point from
+the left (measured on iOS 27, iPhone Air, the real-input fixture's row). Real input
+reports it on every run as known debt — `A11Y_EXEMPTIONS` and FOLLOWUPS — anchored on
+those numbers, so a name that has actually *moved*, rather than been inset by the
+platform, still goes red. A person hears the control; the stop sits a pixel and a half
+inside the pill's edge.
+
 ## Behaviour notes
 
 - **One press per tap**, on either form. The press form's `onPress` is a gesture,

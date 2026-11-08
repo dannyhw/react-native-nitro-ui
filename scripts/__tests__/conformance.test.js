@@ -1533,9 +1533,9 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Eight cases across four controls: `slider` and `hosted-slider` both guard `Slider`,
-    // and the debt list carries both platforms' rows for a control. The matrix is about
-    // controls, so every row for one control makes exactly one failing cell.
+    // Nine rows across five controls: `slider` and `hosted-slider` both guard `Slider`,
+    // and the debt list carries both platforms' rows for a control. The matrix is
+    // about controls, so every row for one control makes exactly one failing cell.
     //
     // `Picker` is here because the real accessibility tree says so, not because a rule was
     // widened to reach it: measured under XCUITest, a hosted Picker's control announces
@@ -1544,12 +1544,18 @@ describe('the debt, as the matrix sees it', () => {
     // printed on every run rather than asserted away. `ContextMenu` is the same kind of
     // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
     // as an element of its own under the wrapper that carries the label (G16).
+    // `IconButton` is a third kind of the same record: the name is on the right element and
+    // the box is 2 px off, because SwiftUI keeps a Button's own integral width inside a host
+    // React Native laid out at a fraction of a point more (G23). Nothing was widened for it —
+    // the box rule still says what it said, and the row quotes the numbers it was measured
+    // with, so the cell is a measurement and goes back to `covered` when the geometry does.
     expect(failingKeys()).toEqual([
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
+      'IconButton|a11y-name-on-focusable-node',
     ]);
   });
 
