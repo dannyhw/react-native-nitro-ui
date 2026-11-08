@@ -2178,6 +2178,353 @@ const CHECKS = {
   },
 
   /**
+   * A ButtonGroup is a row of commands, so this check has three things to prove and
+   * every one of them names an *item* rather than the group: a tap on each item
+   * reports `onPress` once with **that item's** id, a toggle item flips once per tap,
+   * and an item the row could not fit is reachable through the overflow menu.
+   *
+   * The id is why `button-group-pressed-id` exists beside the counter. Three taps and
+   * a counter reading `3` is also exactly what a group that reports the same item
+   * three times looks like, and a group wired to `items[0]` presses perfectly.
+   *
+   * Items are looked up inside their own group's box rather than by name: `Copy` is
+   * drawn by four groups on this screen, and an unqualified text match would tap
+   * whichever node the dump happened to write first — which is a wrong-place tap that
+   * blames the wrong control.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'button-group': async (t) => {
+    const ACTIONS = 'Real-input actions';
+    const TOGGLES = 'Real-input formatting toggles';
+    const REFUSING = 'Real-input refusing toggles';
+    const DISABLED_ITEM = 'Real-input group with a disabled item';
+    const DISABLED_GROUP = 'Real-input disabled group';
+    const OVERFLOW = 'Real-input overflowing group';
+    const OVERFLOW_CONTROL = 'Real-input overflow control';
+
+    /**
+     * The node a tap on one item has to be aimed at, or `null` when the group is not
+     * drawing that item at all — which is the *normal* answer for an overflowed row,
+     * and the reason this returns null instead of aborting.
+     *
+     * Both spellings of "name" are accepted because an item carries its title as the
+     * `Text` it paints when the label style shows titles, and as the
+     * `contentDescription` the component sets when it does not.
+     *
+     * @param {string} groupLabel the group's `accessibilityLabel`
+     * @param {string} title the item's title
+     */
+    const itemOf = (groupLabel, title) => {
+      const group = t.requireControl(groupLabel);
+      const candidates = t.dump().filter((node) => {
+        const { bounds } = node;
+        return (
+          (node.text === title || node.contentDesc === title) &&
+          bounds.width > 0 &&
+          bounds.height > 0 &&
+          bounds.x1 >= group.bounds.x1 - 1 &&
+          bounds.y1 >= group.bounds.y1 - 1 &&
+          bounds.x2 <= group.bounds.x2 + 1 &&
+          bounds.y2 <= group.bounds.y2 + 1
+        );
+      });
+      if (candidates.length === 0) {
+        return null;
+      }
+      // The clickable one, which is the button itself: a `Text` inside it is a tighter
+      // box and a tap on either lands on the button, but only the button's node says
+      // whether the item is enabled, and the enabled reading is what step 5 asserts.
+      return (
+        candidates.find((node) => node.clickable === 'true') ?? candidates[0]
+      );
+    };
+
+    /** Like {@link itemOf}, and aborts with the group and item named when absent. */
+    const requireItem = (groupLabel, title) => {
+      const node = itemOf(groupLabel, title);
+      if (node == null) {
+        t.log.abort(
+          `group "${groupLabel}" draws no item titled "${title}" in its own box - ` +
+            'the row either did not compose it or named it something else, so no ' +
+            'real tap can be aimed at it'
+        );
+      }
+      return node;
+    };
+
+    /**
+     * Whether one item's own node publishes a checked state, as `"on"` / `"off"`.
+     *
+     * Read from the item node rather than through `nativeChecked`, which needs a
+     * `contentDescription` to start from and an item drawn with its title has none —
+     * and "which `Bold`?" is answered by geometry, not by a name four nodes share.
+     */
+    const itemChecked = (groupLabel, title) => {
+      const node = itemOf(groupLabel, title);
+      if (node == null || node.checkable !== 'true') {
+        return null;
+      }
+      return node.checked === 'true' ? 'on' : 'off';
+    };
+
+    // 1. At rest: every counter at zero and the controlled toggles showing the set
+    //    React gave them, so every number below is one that moved.
+    t.log.checkEquals(
+      'no press has been reported before a touch',
+      t.requireEcho(ECHO.buttonGroupPresses),
+      '0'
+    );
+    t.log.checkEquals(
+      'no item has been named by a press',
+      t.requireEcho(ECHO.buttonGroupPressedId),
+      'none'
+    );
+    t.log.checkEquals(
+      'the toggles start at the set React rendered ("bold")',
+      t.requireEcho(ECHO.buttonGroupToggleState),
+      'bold'
+    );
+    t.log.checkEquals(
+      'and have reported no change before a touch',
+      t.requireEcho(ECHO.buttonGroupToggleEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the refusing group has been asked for nothing yet',
+      `${t.requireEcho(ECHO.buttonGroupRefusedLast)} ` +
+        `${t.requireEcho(ECHO.buttonGroupRefusedEvents)}`,
+      'none 0'
+    );
+    t.log.checkEquals(
+      'the counter the disabled group and its disabled item report into starts at ' +
+        'zero, so a stray delivery is a number that moved',
+      t.requireEcho(ECHO.buttonGroupDisabledEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the controlled toggle publishes a checkable state, and it says checked',
+      itemChecked(TOGGLES, 'Bold'),
+      'on'
+    );
+
+    // 2. One tap per item, and each item names itself. The counter is asserted as an
+    //    exact number and the id alongside it: the pair is what says *this* item
+    //    answered *this* tap, which a counter alone cannot.
+    for (const [title, id, count] of [
+      ['Copy', 'copy', '1'],
+      ['Cut', 'cut', '2'],
+      ['Paste', 'paste', '3'],
+    ]) {
+      t.log.checkEquals(
+        `a real tap on "${title}" reports one onPress, for "${id}"`,
+        `${await t.tapUntilValue(
+          () => requireItem(ACTIONS, title),
+          ECHO.buttonGroupPresses,
+          count,
+          `the real tap on the "${title}" item`
+        )} ${t.requireEcho(ECHO.buttonGroupPressedId)}`,
+        `${count} ${id}`
+      );
+    }
+    t.log.checkEquals(
+      'three presses on the action row move no toggle',
+      `${t.requireEcho(ECHO.buttonGroupToggleEvents)} ` +
+        `${t.requireEcho(ECHO.buttonGroupToggleState)}`,
+      '0 bold'
+    );
+
+    // 3. A toggle flips once per tap, in both directions, and says so once. The
+    //    item's own checkable node is the second witness, so a change React heard and
+    //    Compose did not (or the reverse) cannot pass on the echo alone.
+    t.log.checkEquals(
+      'one real tap checks an unchecked toggle',
+      await t.tapUntilValue(
+        () => requireItem(TOGGLES, 'Italic'),
+        ECHO.buttonGroupToggleState,
+        'bold,italic',
+        'the real tap that checks "Italic"'
+      ),
+      'bold,italic'
+    );
+    t.log.checkEquals(
+      'the item publishes its own checked state',
+      itemChecked(TOGGLES, 'Italic'),
+      'on'
+    );
+    t.log.checkEquals(
+      'one tap reported one change',
+      t.requireEcho(ECHO.buttonGroupToggleEvents),
+      '1'
+    );
+    t.log.checkEquals(
+      'a second real tap unchecks it again',
+      await t.tapUntilValue(
+        () => requireItem(TOGGLES, 'Italic'),
+        ECHO.buttonGroupToggleState,
+        'bold',
+        'the real tap that unchecks "Italic"'
+      ),
+      'bold'
+    );
+    t.log.checkEquals(
+      'the item publishes that back',
+      itemChecked(TOGGLES, 'Italic'),
+      'off'
+    );
+    t.log.checkEquals(
+      'two taps report two changes — a flip is not a one-way press',
+      t.requireEcho(ECHO.buttonGroupToggleEvents),
+      '2'
+    );
+
+    // 4. The refusing group: two taps, two requests, both for `true`, and the item
+    //    back at unchecked after either. A group that had kept the refused change would
+    //    ask for `false` on the second tap, which is what makes tapping twice the
+    //    oracle rather than a repeat (Chip's and Checkbox's, for the same reason).
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onCheckedChange`,
+        await t.tapUntilValue(
+          () => requireItem(REFUSING, 'Bold'),
+          ECHO.buttonGroupRefusedEvents,
+          request,
+          `refused request ${request}`
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for true, not for the state it kept`,
+        t.requireEcho(ECHO.buttonGroupRefusedLast),
+        'bold:1'
+      );
+      // Compose paints a tapped toggle before the refused value comes back down, so
+      // reading the node the instant the echo moves catches a flip the app undoes.
+      await t.settle(500);
+      t.log.checkEquals(
+        `the refused item snapped back to unchecked after request ${request}`,
+        itemChecked(REFUSING, 'Bold'),
+        'off'
+      );
+    }
+    t.log.checkEquals(
+      'a refused group moves the group next to it not at all',
+      t.requireEcho(ECHO.buttonGroupToggleState),
+      'bold'
+    );
+
+    // 5. The disabled pair: the group that is disabled, and the group with one
+    //    disabled item. Both report into one counter the enabled items never touch.
+    t.log.note(
+      `disabled item: enabled=${
+        itemOf(DISABLED_ITEM, 'Cut')?.enabled
+      } for "Cut", enabled=${
+        itemOf(DISABLED_GROUP, 'Copy')?.enabled
+      } for the whole group — evidence beside the counters below`
+    );
+    await t.tapNode(requireItem(DISABLED_ITEM, 'Cut'));
+    t.log.checkEquals(
+      'a real tap on the disabled item reports no onPress',
+      t.requireEchoToStay(
+        ECHO.buttonGroupDisabledEvents,
+        '0',
+        'a tap on the disabled item to be refused'
+      ),
+      '0'
+    );
+    await t.tapNode(requireItem(DISABLED_GROUP, 'Copy'));
+    t.log.checkEquals(
+      'a real tap inside the disabled group reports no onPress either',
+      t.requireEchoToStay(
+        ECHO.buttonGroupDisabledEvents,
+        '0',
+        'a tap on the disabled group to be refused'
+      ),
+      '0'
+    );
+    t.log.checkEquals(
+      'and nothing else answered: the counters are where step 2 left them',
+      `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
+        `${t.requireEcho(ECHO.buttonGroupToggleEvents)}`,
+      '3 2'
+    );
+    // The barrier: the enabled sibling in the *same* group, tapped the same way, still
+    // lands — so the silence above was a refusal and not a screen that stopped answering.
+    t.log.checkEquals(
+      'the enabled item of the half-disabled group still answers',
+      await t.tapUntilValue(
+        () => requireItem(DISABLED_ITEM, 'Copy'),
+        ECHO.buttonGroupPresses,
+        '4',
+        'the barrier tap beside the disabled item'
+      ),
+      '4'
+    );
+
+    // 6. Overflow. Six titles cannot share the 220 dp well, so some items are not
+    //    drawn; the check names one of them, finds it absent from the group's box, and
+    //    reaches it through the overflow control instead. The witness is the same
+    //    counter and id pair as step 2, which is the point: an item that arrives
+    //    through a menu has to report like the item it replaced.
+    const hidden = 'Quarter';
+    t.log.checkEquals(
+      `the narrow well hides "${hidden}" — the row overflows rather than shrinks`,
+      itemOf(OVERFLOW, hidden) == null,
+      true
+    );
+    t.log.checkEquals(
+      'while an item that fits is drawn',
+      itemOf(OVERFLOW, 'Day') != null,
+      true
+    );
+    const overflowControl = await t.requireControlOnScreen(OVERFLOW_CONTROL);
+    t.log.checkEquals(
+      'the overflow control announces itself, so a reader can find the menu',
+      overflowControl.contentDesc,
+      OVERFLOW_CONTROL
+    );
+    for (const node of t.nodesNamed(OVERFLOW)) {
+      t.log.note(
+        `overflow group node: "${node.contentDesc}" clickable=${node.clickable} ` +
+          `class=${node.className}`
+      );
+    }
+    t.log.checkEquals(
+      'no popup window belongs to the app before the overflow is opened',
+      t.popupWindowCount(),
+      0
+    );
+    t.log.checkEquals(
+      'a real tap on the overflow control opens the menu as a popup window',
+      await t.tapUntilUp(
+        () => t.requireControlOnScreen(OVERFLOW_CONTROL),
+        'a real tap on the overflow control',
+        () => t.popupWindowCount(),
+        { pollMs: DUMP_POLL_MS }
+      ),
+      '1'
+    );
+    t.log.checkEquals(
+      `a real tap on the overflowed row "${hidden}" reports onPress for it, once`,
+      `${await t.tapOptionUntilValue(
+        hidden,
+        ECHO.buttonGroupPresses,
+        '5',
+        'picking the overflowed row'
+      )} ${t.requireEcho(ECHO.buttonGroupPressedId)}`,
+      '5 quarter'
+    );
+    t.waitForPopupCount(0, 'the menu to close after the pick');
+    t.log.checkEquals(
+      'and the row it came out of is left alone: five presses, five reports',
+      `${t.requireEcho(ECHO.buttonGroupPresses)} ` +
+        `${t.requireEcho(ECHO.buttonGroupToggleEvents)} ` +
+        `${t.requireEcho(ECHO.buttonGroupDisabledEvents)}`,
+      '5 2 0'
+    );
+  },
+
+  /**
    * A real drag must move the thumb and report every phase.
    *
    * The phases Slider is uncontrolled and counts each callback separately, so a

@@ -60,6 +60,20 @@ export {
   type AndroidIconProp,
 } from './components/Button/Button';
 
+// A row of commands, optionally with independent toggles (G20): Material 3's
+// `ButtonGroup` on Android and a row of bordered `Button`s / SwiftUI's `ControlGroup`
+// on iOS. Items are data, so the ones that do not fit in the box move into an overflow
+// menu - which is why the control is `fillWidth` and only its height is measured. A
+// toggle item's state is a *set* controlled through the same event-count handshake
+// `Switch` uses; `onPress`/`onCheckedChange` report the item's `id`.
+export {
+  ButtonGroup,
+  type ButtonGroupAppearance,
+  type ButtonGroupItem,
+  type ButtonGroupLabelStyle,
+  type ButtonGroupProps,
+} from './components/ButtonGroup/ButtonGroup';
+
 export {
   Picker,
   type PickerChange,

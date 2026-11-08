@@ -21,6 +21,7 @@ the layout engine, and React never sees a native node.
 | `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
 | `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`         | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
+| `ButtonGroup`          | a row of bordered controls, or `ControlGroup` when connected   | M3 `ButtonGroup` with `customItem` and its overflow menu                             | next  | [button-group.md](docs/components/button-group.md)              |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
@@ -55,6 +56,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  ButtonGroup,
   Checkbox,
   Chip,
   ConfirmationDialog,
@@ -401,6 +403,61 @@ a tappable layer behind the control instead of a wider bezel. `width` (`narrow` 
 all three.
 [icon-button.md](docs/components/icon-button.md) has both columns measured, and
 what each platform does with a glyph it cannot resolve.
+
+### ButtonGroup
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/button-group-ios.png" width="300" alt="Button groups on iOS: a standard row of three bordered command buttons, the same three joined into one connected track, a row of formatting toggles with two showing their on state, and a row that has overflowed into a More menu" /></td>
+    <td><img src="docs/images/components/button-group-android.png" width="300" alt="Button groups on Android: a standard row of three filled command buttons, the same three joined into one connected group, a row of formatting toggle buttons with two showing their checked state, and a row that has overflowed into a More menu" /></td>
+  </tr>
+</table>
+
+A row of **commands** — *Copy | Paste | Share* — optionally with independent
+toggles — *Bold | Italic | Underline*. Items are data, `onPress` reports the id you
+gave them, and the items that do not fit move into an overflow menu. It has no
+selected value: one-of-a-few is `SegmentedControl`, and
+[button-group.md](docs/components/button-group.md#buttongroup-or-segmentedcontrol)
+says how to tell them apart.
+
+```tsx name=button-group
+export function FormatToolbar({
+  spellcheck,
+  onSpellcheck,
+  onCommand,
+}: {
+  spellcheck: boolean;
+  onSpellcheck: (next: boolean) => void;
+  onCommand: (id: string) => void;
+}) {
+  return (
+    <ButtonGroup
+      items={[
+        { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc' },
+        { id: 'paste', title: 'Paste', systemImage: 'doc.on.clipboard' },
+        // Controlled: this render decides what is drawn.
+        { id: 'spellcheck', title: 'Spellcheck', toggle: true, checked: spellcheck },
+        // Uncontrolled: native owns it after the first render.
+        { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
+      ]}
+      appearance="connected"
+      onCheckedChange={(id, checked) => {
+        if (id === 'spellcheck') onSpellcheck(checked);
+      }}
+      onPress={onCommand}
+    />
+  );
+}
+```
+
+`appearance="connected"` is Material's joined group on Android and SwiftUI's
+`ControlGroup` on iOS — one track rather than one control per item. Three of this
+control's props do nothing in the iOS connected look, because `ControlGroup`
+ignores `.controlSize`, `.tint` and `.buttonStyle` (all measured): `variant`,
+`size` and `tintColor`. A connected iOS group that contains a toggle goes back to
+the standard row for the same reason — `ControlGroup` draws no on state, so a
+toggle in one cannot show what it is.
 
 ### SegmentedControl
 

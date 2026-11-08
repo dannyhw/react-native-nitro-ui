@@ -38,6 +38,7 @@ const TAB_LABEL = {
   contextmenu: 'Context',
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
+  buttongroup: 'Groups',
 };
 
 function adb(args) {

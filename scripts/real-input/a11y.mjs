@@ -270,6 +270,26 @@ export const A11Y_CONTROLS = Object.freeze([
     iosTrait: 'button',
   },
   {
+    id: 'button-group',
+    component: 'ButtonGroup',
+    hybridView: 'NitroUiButtonGroup',
+    screen: 'buttongroup',
+    label: 'Real-input actions',
+    role: 'interactive',
+    anchorTestId: 'real-input-button-group',
+    // No `iosTrait`, for ContextMenu's reason rather than as debt: a group is not one
+    // control, so there is no single kind to be told — its *items* are the buttons, and
+    // each carries its own title. What is graded here is the group's own name: one
+    // element announces "Real-input actions", it is on the anchor's box, and it is
+    // enabled. Measured (G20, iOS 27), the `ControlGroup` under the wrapper is exactly
+    // that one element, and the items stay separate stops under it.
+    //
+    // Android is the sharper half, and the reason this case exists: the group's name has
+    // to reach a node that is *not* the row's layout box, while each item keeps its own
+    // name too. Material's `ButtonGroup` merges its items into one semantics container,
+    // so a name landing on the wrapper (the G5/G6 shape) is a finding here, not a pass.
+  },
+  {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
     // (see the header — `uiautomator dump` never idles while an indeterminate
     // indicator animates, the same refusal that makes the manifest say

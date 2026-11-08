@@ -2,6 +2,7 @@ import {
   Button,
   DatePicker,
   Host,
+  HStack,
   Menu,
   Picker,
   ProgressView,
@@ -29,6 +30,7 @@ import type { BenchListProps } from '../types';
 import {
   onPickerChange,
   SEGMENTED_SELECTION,
+  buttonGroupItems,
   buttonTitle,
   dateValue,
   ICON_BUTTON_LABEL,
@@ -36,6 +38,7 @@ import {
   menuItems,
   menuTitle,
   onDateChange,
+  onButtonGroupPress,
   onIconButtonPress,
   onPress,
   onMenuSelect,
@@ -74,6 +77,12 @@ const ICON_ONLY = [labelStyle('iconOnly')];
  * same control.
  */
 const BORDERED_PROMINENT = [buttonStyle('borderedProminent')];
+
+/**
+ * `.bordered` — the look nitro-ui's `ButtonGroup` gives its `standard` items, and the
+ * default its `Button` arm does *not* use. Module-level for the identity reason.
+ */
+const BORDERED = [buttonStyle('bordered')];
 
 /**
  * Module-level for the same reason as `LABELS_HIDDEN`.
@@ -211,6 +220,37 @@ function BenchIconButton({ index, value }: { index: number; value: boolean }) {
       onPress={onIconButtonPress}
       modifiers={ICON_ONLY}
     />
+  );
+}
+
+/**
+ * The row nitro-ui's `ButtonGroup` draws at its defaults, rebuilt from `@expo/ui`'s
+ * primitives: an `HStack` of three bordered `Button`s at the same 8 pt gap.
+ *
+ * Not `ControlGroup`, which `@expo/ui` does ship. `ControlGroup` is SwiftUI's
+ * *connected* track — the peer of nitro-ui's `appearance: 'connected'`, which the plan
+ * does not mount — and it collapses a `Button`'s chrome and drops trailing labels, so
+ * this arm would price a different control from the one under test
+ * (T02 review B3; `ios/components/ButtonGroup/HybridNitroUiButtonGroup.swift` draws the
+ * `standard` row as exactly this HStack). Same reasoning as `MENU_TRIGGER_MODIFIERS`:
+ * both sides ask the toolkit for the same box.
+ *
+ * `buttonStyle('bordered')` is nitro-ui's `standard` variant, pinned rather than left
+ * automatic, and the item count is the row `buttonGroupItems` builds — module-level, so
+ * the flip changes the titles and not only the props.
+ */
+function BenchButtonGroup({ index, value }: { index: number; value: boolean }) {
+  return (
+    <HStack spacing={8} testID={`bench-expo-button-group-${String(index)}`}>
+      {buttonGroupItems(value).map((item) => (
+        <Button
+          key={item.id}
+          label={item.title}
+          onPress={onButtonGroupPress}
+          modifiers={BORDERED}
+        />
+      ))}
+    </HStack>
   );
 }
 
@@ -402,6 +442,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchProgress index={index} value={value} />
           </Host>
+        ) : component === 'button-group' ? (
+          <Host key={index} style={style}>
+            <BenchButtonGroup index={index} value={value} />
+          </Host>
         ) : (
           <Host key={index} style={style}>
             <BenchToggle index={index} value={value} />
@@ -461,6 +505,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchTextField key={index} index={index} value={value} />
           ) : component === 'progress' ? (
             <BenchProgress key={index} index={index} value={value} />
+          ) : component === 'button-group' ? (
+            <BenchButtonGroup key={index} index={index} value={value} />
           ) : (
             <BenchToggle key={index} index={index} value={value} />
           )
