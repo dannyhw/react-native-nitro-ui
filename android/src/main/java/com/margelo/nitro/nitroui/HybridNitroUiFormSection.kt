@@ -11,7 +11,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,14 +27,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect as GeometryRect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -203,6 +201,19 @@ internal class HybridNitroUiFormSection(
   private fun buildSectionReport(): String {
     val density = view.resources.displayMetrics.density
     val rows = view.rowViews
+    val accessory = view.model.drawnAccessory
+    val accessoryFrame =
+      if (accessory == null) {
+        ""
+      } else {
+        String.format(
+          "%.1f,%.1f,%.1f,%.1f",
+          accessory.left / density,
+          accessory.top / density,
+          (accessory.right - accessory.left) / density,
+          accessory.height / density,
+        )
+      }
     val rects =
       view.model.rects.joinToString(",") {
         String.format("%.0f-%.0f", it.top / density, it.height / density)
@@ -224,7 +235,17 @@ internal class HybridNitroUiFormSection(
       "footerBand=${String.format("%.1f", view.model.footerPx / density)}",
       "headerText=${String.format("%.1f", view.model.headerTextPx / density)}",
       "footerText=${String.format("%.1f", view.model.footerTextPx / density)}",
+      // The section's own height, and the height the layer that draws its chrome was last
+      // measured at. Equal is the whole point: the layer is placed by Compose, and Compose
+      // places inside the box it was measured under.
+      "boxH=${String.format("%.1f", view.height / density)}",
+      "layerH=${String.format("%.1f", view.model.layerPx / density)}",
       "rects=${rects.ifEmpty { "-" }}",
+      // Where the layer last *placed* an accessory, which comes out of the layout pass rather
+      // than out of the numbers that were asked for: `rects`/`shapes` say what the layer was
+      // given, this says where it ended up on screen. Same encoding as the row's own `frame`, so
+      // a test can put the two side by side.
+      "drawnAccessory=${accessoryFrame.ifEmpty { "-" }}",
     ).joinToString(";")
   }
 }
@@ -244,6 +265,19 @@ internal class FormSectionModel : NitroUiModel() {
 
   /** `ListItemDefaults.SegmentedGap`, in px, once the layer has read it. */
   var gapPx = 0f
+  /**
+   * The section's own box, in px, as the layout pass last saw it.
+   *
+   * The layer has to be told this rather than inherit it: `NitroUiMeasuredRoot` measures a
+   * host's content with `maxHeight = Infinity`, which is right for a control whose size is its
+   * content's and wrong for a decoration that fills its box - `fillMaxSize` there answers "as
+   * tall as my content", and this layer's content is one row's press box. Measured: the layer
+   * came out 54.1 dp tall in a section 296.4 dp tall, so the footer, bottom-aligned in it, drew
+   * over the header, and the row shapes and accessories clipped to it never drew.
+   */
+  var boxW by mutableStateOf(0f)
+  /** As [boxW], vertically. The section report calls this `layerH` from the other side. */
+  var boxH by mutableStateOf(0f)
 
   /** What the header and footer text took, in px, as Compose measured them. */
   var headerPx = 0f
@@ -256,6 +290,24 @@ internal class FormSectionModel : NitroUiModel() {
   /** As [headerTextPx], for the footer. */
   var footerTextPx = 0f
   var footerPx = 0f
+  /**
+   * Where an accessory was last *placed*, in the section's px.
+   *
+   * Placed, not asked for: an accessory's position is a section-relative offset plus the Box's
+   * alignment, and that sum is what a person sees.
+   */
+  var drawnAccessory: FormRowRect? = null
+
+  /**
+   * How tall the drawing layer was when Compose last measured it, in px.
+   *
+   * Reported beside the section's own height because everything in the layer is placed inside
+   * *this* box, not the View's: a footer aligned to its bottom and a row's container offset
+   * against its top both say where the layer thinks the section is. The two disagree exactly
+   * when the layer was never told the section's size, which is the one way this file's pixel
+   * layout can be wrong while every View frame in `dumpsys` is right.
+   */
+  var layerPx = 0f
 
   /** Leaves those numbers for JavaScript. Set by the Hybrid View, which owns the Fabric node. */
   var onMetrics: ((headerPx: Float, footerPx: Float, insetPx: Float, gapPx: Float) -> Unit)? = null
@@ -267,6 +319,10 @@ internal class FormSectionModel : NitroUiModel() {
     footerTextPx = 0f
     footerText = null
     pressedIndex = -1
+    boxW = 0f
+    boxH = 0f
+    drawnAccessory = null
+    layerPx = 0f
   }
 }
 
@@ -382,29 +438,54 @@ internal class NitroUiFormSectionView(
   /**
    * Measure and lay the Compose host over this whole box, then hand it the rows' boxes.
    *
-   * The measure-then-layout order and the force-layout guard are [ContextMenuView]'s, for the
-   * same reason: `ReactViewGroup.requestLayout` is a no-op, so a request from the host has to
-   * be answered here or the composition stops being laid out.
+   * The measure-then-layout order is [ContextMenuView]'s, for the reason it gives:
+   * `ReactViewGroup.requestLayout` is a no-op, so a request from the host has to be answered
+   * here or the composition stops being laid out. The size itself goes in as state, because a
+   * host's content is measured with an unbounded height - see [FormSectionModel.boxH].
    */
   private fun layoutHost() {
     val host = composeHost ?: return
     if (host.parent !== this) return
     if (width > 0 && height > 0) {
+      // The box the layer has to draw in, as the layer's own state. It cannot ask for this
+      // through its constraints: `NitroUiMeasuredRoot` measures a host's content with an
+      // unbounded height - on purpose, for the controls whose size is their content's - so
+      // `fillMaxSize` here answers "as tall as my content", which for this layer is one row.
+      model.boxW = width.toFloat()
+      model.boxH = height.toFloat()
       val widthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY)
       val heightSpec = MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY)
       host.measure(widthSpec, heightSpec)
       host.layout(0, 0, width, height)
+      // ... and ask for the draw a real parent gives for free. A measure driven from here is
+      // not followed by one of its own, so whatever the layout pass just changed would wait for
+      // something else to invalidate the host. Nothing in `FormFidelity` can see a frame that
+      // never came - it reads numbers, not pixels - so this line is a guarantee rather than a
+      // fix with a test behind it: it is here because a hand-driven measure should not depend on
+      // someone else redrawing, and the `Sections` screenshot is the only thing that would notice
+      // if it were wrong.
+      host.invalidate()
     }
     publishRects()
   }
 
   /**
-   * Give the layer the rows' boxes. Called from `onLayout`, which is where Fabric's writes to a
-   * row's frame have just happened - so a shape and its content cannot disagree.
+   * Give the layer the rows' boxes. Called from the `onLayout` of the section and of every row,
+   * which is where Fabric's writes to a row's frame have just happened - so a shape and its
+   * content cannot disagree.
+   *
+   * It also has to pay for the frame that shows the change. The layer reads
+   * [FormSectionModel.rects] where it places its children, so a row that moved reaches the
+   * screen only through a fresh measure of the host, and the way Compose would ask for one -
+   * `requestLayout` - dies at `ReactViewGroup` like every other request in this subtree. The
+   * section's own layout pass usually follows a row's anyway, which is why no test catches this
+   * drive being missing; it is here so a move does not depend on whose pass happens to be next.
+   *
+   * So: write only when the boxes actually moved, and drive [layoutHost] once when they do.
    */
   fun publishRects() {
     val gap = model.gapPx
-    model.rects =
+    val next =
       rowViews.map { row ->
         FormRowRect(
           left = row.left.toFloat(),
@@ -415,6 +496,15 @@ internal class NitroUiFormSectionView(
           accessory = row.rowAccessory,
         )
       }
+    if (next == model.rects) return
+    model.rects = next
+    if (composeHost != null && !hostLayoutPosted) {
+      hostLayoutPosted = true
+      post {
+        hostLayoutPosted = false
+        layoutHost()
+      }
+    }
   }
 
   fun refreshChrome() {
@@ -572,18 +662,47 @@ internal fun FormSegmentedLayer(
   val rows = model.rects
   val count = rows.size
   val pressed = model.pressedIndex
+  // Record the list this composition read, before anything can read it back: it is what the
+  // canvases below will draw, whatever `model.rects` has become by the time they do.
   // `segmentedShapes` and `ripple` are @Composable, so the shapes resolve here and the two
   // canvases below only draw what this list already resolved.
   val shapes = rows.indices.map { ListItemDefaults.segmentedShapes(it, count) }
 
-  Box(Modifier.fillMaxSize()) {
+  Box(
+    Modifier
+      // Not `fillMaxSize`: a host's content is measured with an unbounded height, so filling
+      // the height here means filling one row. The box arrives as state, from the layout pass.
+      .withPixelSize(model.boxW, model.boxH)
+      // The layer's own answer for the box it draws in, so a layer that is not the section's
+      // size stops being invisible here: `layerH` in the section report is this number.
+      .onSizeChanged { model.layerPx = it.height.toFloat() }
+  ) {
     // 1. The row containers. Drawn rather than composed: a row's shape is
     //    `segmentedShapes(index, count)`, resolved for its pressed/selected state the way
     //    material3's own `InteractiveListItem` resolves it.
-    Canvas(Modifier.fillMaxSize()) {
-      if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
-      rows.forEachIndexed { index, rect ->
-        drawRowContainer(rect, resolvedShape(shapes[index], rect.selected, index == pressed), colors)
+    //
+    //
+    // One canvas per row, placed by the same `align`/`offset` pair as the press box and the
+    // accessory under it. That is deliberate: `createOutline` builds an outline at the origin of
+    // the scope that asks for it, so a single canvas over the whole layer has to move every
+    // shape into place by hand, and a shape that forgot where it came from shows up in no number
+    // a test can read - only in the pixels. The `Sections` story shipped exactly that, each
+    // section's rows drawn over its own header. Placed by Compose, a row's container can only
+    // sit where the row sits, and it shares the placement with the accessory, whose box the
+    // `FormFidelity` case reads back out of the layout pass and puts next to the row's own.
+    rows.forEachIndexed { index, rect ->
+      Canvas(
+        Modifier
+          .align(Alignment.TopStart)
+          .offset { IntOffset(rect.left.roundToInt(), rect.top.roundToInt()) }
+          .withPixelSize(rect.right - rect.left, rect.height),
+      ) {
+        if (model.gapPx != gap.toPx()) model.gapPx = gap.toPx()
+        drawRowContainer(
+          resolvedShape(shapes[index], rect.selected, index == pressed),
+          colors,
+          rect.selected,
+        )
       }
     }
     // 2. The press indication. material3's clickable `SegmentedListItem` draws
@@ -622,12 +741,31 @@ internal fun FormSegmentedLayer(
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier =
           Modifier
-            .align(Alignment.TopEnd)
+            // TopStart, like the press box above: the offset below is measured from the
+            // section's edge, and an end-aligned child has it added to the far edge instead -
+            // which is how a disclosure landed a section-width outside the layer and no
+            // `Form.Row` showed a chevron on Android.
+            .align(Alignment.TopStart)
             .offset {
               IntOffset(
                 (rect.right - size.toPx() - FormListMetrics.TrailingPadding.toPx()).roundToInt(),
                 (rect.top + (rect.height - size.toPx()) / 2f).roundToInt(),
               )
+            }
+            // Where it actually ended up, in the section's px, for the report. Placement is the
+            // sum of the alignment above and the offset, and the two can add up to somewhere
+            // outside the layer while every number that went into them is right.
+            .onPlaced { placed ->
+              val at = placed.positionInParent()
+              model.drawnAccessory =
+                FormRowRect(
+                  left = at.x,
+                  top = at.y,
+                  right = at.x + placed.size.width.toFloat(),
+                  height = placed.size.height.toFloat(),
+                  selected = false,
+                  accessory = rect.accessory,
+                )
             }
             .size(size),
       )
@@ -725,20 +863,24 @@ private fun resolvedShape(
     else -> shapes.shape
   }
 
-/** Draw one row's container the way material3 draws a segmented item's. */
+/**
+ * Draw one row's container the way material3 draws a segmented item's, into the canvas the
+ * caller placed over that row.
+ *
+ * The canvas *is* the row's box, and the outline is built at the origin of the scope that asks
+ * for it, so this has nowhere to get the row's position wrong: the row's offset belongs to the
+ * layout pass ([FormSegmentedLayer]'s `offset`), not to a number copied into a draw call. The
+ * box is the row's own, not the row's minus `SegmentedGap` - the gap is cut out of the
+ * segmented shape itself, which is what makes two rows in a column read as one card.
+ */
 private fun DrawScope.drawRowContainer(
-  rect: FormRowRect,
   shape: androidx.compose.ui.graphics.Shape,
   colors: androidx.compose.material3.ListItemColors,
+  selected: Boolean,
 ) {
-  val box =
-    GeometryRect(
-      Offset(rect.left, rect.top),
-      Offset(rect.right, rect.top + rect.height),
-    )
   drawOutline(
-    outline = shape.createOutline(Size(box.width, box.height), layoutDirection, this),
-    color = colors.containerColor(enabled = true, selected = rect.selected, dragged = false),
+    outline = shape.createOutline(size, layoutDirection, this),
+    color = colors.containerColor(enabled = true, selected = selected, dragged = false),
     alpha = 1f,
   )
 }
