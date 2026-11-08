@@ -57,6 +57,7 @@ final class RealInputTests: XCTestCase {
     static let textFieldTab = "tab-textfield"
     static let searchFieldTab = "tab-searchfield"
     static let contextMenuTab = "tab-contextmenu"
+    static let iconButtonTab = "tab-iconbutton"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -90,6 +91,12 @@ final class RealInputTests: XCTestCase {
     static let checkboxRefusedLast = "real-input-checkbox-refused-last"
     static let checkboxRefusedEvents = "real-input-checkbox-refused-events"
     static let checkboxDisabledEvents = "real-input-checkbox-disabled-events"
+    static let iconButtonPresses = "real-input-icon-button-presses"
+    static let iconButtonValue = "real-input-icon-button-value"
+    static let iconButtonEvents = "real-input-icon-button-events"
+    static let iconButtonRefusedLast = "real-input-icon-button-refused-last"
+    static let iconButtonRefusedEvents = "real-input-icon-button-refused-events"
+    static let iconButtonDisabledEvents = "real-input-icon-button-disabled-events"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -436,6 +443,9 @@ final class RealInputTests: XCTestCase {
                tab: Tab.chipTab, screenAnchor: Echo.chipValue),
       A11yCase(id: "checkbox", testId: "real-input-checkbox", label: "Real-input checkbox",
                tab: Tab.checkboxTab, screenAnchor: Echo.checkboxValue),
+      A11yCase(id: "icon-button", testId: "real-input-icon-button",
+               label: "Real-input icon button",
+               tab: Tab.iconButtonTab, screenAnchor: Echo.iconButtonValue),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -3194,6 +3204,249 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(
       waitForNativeSwitchState("real-input-checkbox", "off"), "off",
       "the tapped glyph's own element should report the value it was tapped into"
+    )
+  }
+
+  // MARK: - IconButton
+
+  /// A real tap presses an IconButton once, a toggle flips once per tap, a toggle its
+  /// parent refuses snaps back, and a disabled control takes neither (G23).
+  ///
+  /// iOS has no icon button, so the press form is a `Button` whose `Label` is drawn
+  /// `.iconOnly` and the toggle form is `Toggle(isOn:)` with the `.button` style — the
+  /// same element a filter chip is (G12 measured it), which is why the state witness
+  /// here is `nativeChipState`: it reads a `Toggle(.button)` element's `value` 1/0 and
+  /// falls back to `isSelected`, and an icon toggle button is that element again, only
+  /// without a label to make the row wide.
+  ///
+  /// The value is asserted beside the echo for the Checkbox's reason: a native
+  /// implementation that always requested `true` would light the "on" echo on the first
+  /// tap all the same, so it is the *second* tap that has to ask for `false`, and the
+  /// echo back at `off` with the element back at `0` and the counter at exactly `2` is
+  /// what says so. The press form has no value to read, so its claim is the counter:
+  /// exactly one report per tap, asserted as an exact number rather than "at least".
+  func testRealInputIconButton() throws {
+    try goToTab(Tab.iconButtonTab, showing: Echo.iconButtonValue)
+    let pressButton = try required(
+      "real-input-icon-button", as: "the press icon button")
+    let toggle = try required("real-input-icon-button-toggle", as: "the toggle icon button")
+    let disabled = try required(
+      "real-input-icon-button-disabled", as: "the disabled icon button")
+    let disabledToggle = try required(
+      "real-input-icon-button-disabled-toggle", as: "the disabled toggle icon button")
+    XCTAssert(
+      pressButton.isHittable && toggle.isHittable,
+      "both enabled controls should be touchable before any tap is delivered"
+    )
+
+    // 1. At rest: every number at zero and the toggle's element at 0, so each claim
+    //    below is about a number that moved.
+    XCTAssertEqual(
+      try read(Echo.iconButtonPresses), "0",
+      "no press should be reported before a touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonValue), "off",
+      "the toggle should start off before any touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "0",
+      "no change should be reported before a tap"
+    )
+    XCTAssertEqual(
+      "\(try read(Echo.iconButtonRefusedLast)) \(try read(Echo.iconButtonRefusedEvents))",
+      "none 0",
+      "the refusing toggle should have been asked for nothing yet"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonDisabledEvents), "0",
+      "the counter the disabled controls report into should start at zero, so a stray "
+        + "delivery is a number that moved rather than a callback nobody saw"
+    )
+    XCTAssertEqual(
+      nativeChipState(of: "real-input-icon-button-toggle"), "off",
+      "the toggle's own element should start by reporting value 0"
+    )
+
+    // 2. Pressed twice: two reports, one per tap. Exact numbers, not `atLeast` — a
+    //    button that fired twice per tap is the failure this step exists for.
+    for count in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-icon-button",
+          echo: Echo.iconButtonPresses,
+          expected: count,
+          as: "the press icon button",
+          waitingFor: "the real tap that makes press \(count)"
+        ),
+        count,
+        "real tap \(count) on the press form should report exactly one onPress"
+      )
+    }
+    XCTAssertEqual(
+      try read(Echo.iconButtonValue), "off",
+      "a press on the press form should change no toggle"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "0",
+      "and the toggle should still report no change"
+    )
+
+    // 3. The toggle, once per direction, with the element as the witness that tells a
+    //    dropped press from a lost change event.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-icon-button-toggle",
+        echo: Echo.iconButtonValue,
+        expected: "on",
+        as: "the toggle icon button",
+        waitingFor: "the real tap that checks the toggle",
+        nativeState: { self.nativeChipState(of: "real-input-icon-button-toggle") }
+      ),
+      "on",
+      "one real tap should check the toggle, and React should render \"on\""
+    )
+    XCTAssertEqual(
+      waitForChipState("real-input-icon-button-toggle", "on"), "on",
+      "the checked toggle's own element should report value 1"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "1",
+      "one tap should report exactly one change"
+    )
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-icon-button-toggle",
+        echo: Echo.iconButtonValue,
+        expected: "off",
+        as: "the toggle icon button",
+        waitingFor: "the real tap that unchecks the toggle",
+        nativeState: { self.nativeChipState(of: "real-input-icon-button-toggle") }
+      ),
+      "off",
+      "a second real tap should ask for false: the echo back at \"off\" and the element "
+        + "back at value 0 is what rules out a native toggle that always requests true"
+    )
+    XCTAssertEqual(
+      waitForChipState("real-input-icon-button-toggle", "off"), "off",
+      "the unchecked toggle's own element should report value 0 again"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "2",
+      "two taps should report two changes, one per tap"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonPresses), "2",
+      "a tap on the toggle should not also be a press on the press form"
+    )
+
+    // 4. The refusing parent: two requests, both for `true`, and the element back at 0
+    //    after either. No `nativeState` witness on these taps — a refused toggle is
+    //    meant to move and be pushed back, so its value would call a dropped press a
+    //    lost event. The element is asserted below instead.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-icon-button-refusing",
+          echo: Echo.iconButtonRefusedEvents,
+          expected: request,
+          as: "the refusing toggle icon button",
+          waitingFor: "refused request \(request)"
+        ),
+        request,
+        "each real tap on the refusing toggle should reach onCheckedChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.iconButtonRefusedLast), "true",
+        "refused request \(request) should ask for true: a toggle that kept the refused "
+          + "selection would ask for false on the second tap"
+      )
+      XCTAssertEqual(
+        waitForChipState("real-input-icon-button-refusing", "off"), "off",
+        "the refused toggle should snap back to value 0 after request \(request)"
+      )
+    }
+
+    // 5. The disabled pair takes nothing. Both report into one counter the enabled
+    //    controls never touch, so a delivery that should not have happened is a number
+    //    that moved — and the counter staying put is also what says the press landed on
+    //    the disabled control rather than one row away.
+    disabled.fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.iconButtonDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap on the disabled press form should be refused"
+    )
+    disabledToggle.fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.iconButtonDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap on the disabled toggle should be refused too"
+    )
+    XCTAssertEqual(
+      "\(try read(Echo.iconButtonPresses)) \(try read(Echo.iconButtonValue)) "
+        + "\(try read(Echo.iconButtonEvents))",
+      "2 off 2",
+      "the enabled controls should be left alone by taps on the disabled pair"
+    )
+
+    // 6. The barrier: the same press on the enabled toggle still lands, so the silence
+    //    above was a refusal and not a screen that had stopped answering.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-icon-button-toggle",
+        echo: Echo.iconButtonValue,
+        expected: "on",
+        as: "the toggle icon button",
+        waitingFor: "the barrier tap on the enabled toggle",
+        nativeState: { self.nativeChipState(of: "real-input-icon-button-toggle") }
+      ),
+      "on",
+      "the enabled toggle, tapped the same way, should still answer"
+    )
+    XCTAssert(disabled.isHittable, "the disabled control should still be touchable")
+
+    // 7. The touch target: a real tap in the **corner** of the laid-out box, where no
+    //    artwork is. Both fixtures are bordered (`filled` and `tonal`), so their glyphs
+    //    and their bezels measure under Apple's 44 pt minimum and the box they are laid
+    //    out in is 44 pt with the control centred inside it. A tap 2% in from the corner
+    //    is therefore outside the pill on every axis, and the only thing that can answer
+    //    it is the tappable layer `targetLayered` puts behind a control whose own style
+    //    cannot reach the target — which is why this step is the proof and a box
+    //    measurement is not: before that layer, the same box measured 39.67 x 39 pt and
+    //    the corner belonged to nobody, so the two numbers below stay exactly where they
+    //    are and no assertion about a size can see the difference.
+    //
+    // One press, and one flip, again as exact numbers: a hit layer that also let the
+    // control's own gesture answer the same touch would report two.
+    let targetBox = pressButton.frame
+    XCTAssert(
+      targetBox.width >= 43.5 && targetBox.height >= 43.5,
+      "the fixture should be laid out at the 44 pt target before a corner is aimed at, "
+        + "got \(Int(targetBox.width)) x \(Int(targetBox.height))"
+    )
+    pressButton.atFraction(0.02, dy: 0.02).fingerTap()
+    XCTAssertEqual(
+      try read(Echo.iconButtonPresses), "3",
+      "a real tap in the corner of the press form's box should press exactly once"
+    )
+    XCTAssertEqual(
+      readUntil(Echo.iconButtonPresses, timeout: 1.0) { $0 != "3" }, "3",
+      "and the corner tap should not also reach the control underneath it"
+    )
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-icon-button-toggle",
+        echo: Echo.iconButtonValue,
+        expected: "off",
+        as: "the toggle icon button",
+        waitingFor: "the real corner tap that flips the toggle",
+        nativeState: { self.nativeChipState(of: "real-input-icon-button-toggle") }
+      ),
+      "off",
+      "a real tap in the corner of the toggle's box should flip it once"
+    )
+    XCTAssertEqual(
+      try read(Echo.iconButtonEvents), "4",
+      "one flip, one event - a corner tap that reached both layers would report two"
     )
   }
 

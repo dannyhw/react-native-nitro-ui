@@ -194,6 +194,16 @@
         "implementationClassName": "HybridNitroUiTooltip"
       }
     },
+    "NitroUiIconButton": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiIconButton"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiIconButton"
+      }
+    },
     "NitroUiPopover": {
       "ios": {
         "language": "swift",

@@ -1,0 +1,120 @@
+# Failure excerpt — harness:android:IconButton
+
+- Ran: 2026-11-07T23:55:44.277Z on code tree `1ea827a1b5f0` at HEAD `90bcfe5` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android IconButton`
+- Result: fail, exit 1, 30003 ms
+- Load: start 6.50, end 5.77, median 6.37, max 6.50
+- Device: android / device `emulator-5570` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+android+IconButton-2026-11-07T23-55-44.277Z.log` (<store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-55-44.277Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › lays every rung and width out at the size the control measured`
+- `● IconButton · G23 › reverts a toggle JS refused, and shows the value JS wrote`
+- `● IconButton · G23 › names the control, and a toggle says whether it is checked`
+- `expected 'role=Checkbox,selected=none,toggle=Of…' to contain 'label=Bookmark this'`
+- `● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for`
+- `expected 642 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-55-44.277Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.77 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 69 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android IconButton
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1ea827a1b5f0, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.50/10.82 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+android+IconButton-2026-11-07T23-55-44.277Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › lays every rung and width out at the size the control measured
+
+    testID "rung-medium-narrow" (rung-medium-narrow) never reached 48.00x48.00 - last box 52.19x48.00, control measured 48.00x48.00.
+
+      [0m [90m 220 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 221 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 222 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 223 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 224 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 225 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● IconButton · G23 › reverts a toggle JS refused, and shows the value JS wrote
+
+    "refusing" never drew displayed=0 - it reports "displayed=1;probes=0;a11y=none".
+
+      [0m [90m 262 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 263 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 264 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 265 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 266 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 267 |[39m       )[0m
+
+  ● IconButton · G23 › names the control, and a toggle says whether it is checked
+
+    expected 'role=Checkbox,selected=none,toggle=Of…' to contain 'label=Bookmark this'
+
+      [0m [90m  997 |[39m       [90m// IconButton has no text — so a missing `contentDescription` here is a button[39m
+       [90m  998 |[39m       [90m// TalkBack announces as "button", which is the whole failure this line is for.[39m
+      [31m[1m>[22m[39m[90m  999 |[39m       expect(off)[33m.[39mtoContain([32m'label=Bookmark this'[39m)[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1000 |[39m       expect(off)[33m.[39mtoContain([32m'toggle=Off'[39m)[33m;[39m
+       [90m 1001 |[39m       expect(on)[33m.[39mtoContain([32m'toggle=On'[39m)[33m;[39m
+       [90m 1002 |[39m       expect(on)[33m.[39mtoContain([32m'label=Bookmark this'[39m)[33m;[39m[0m
+
+  ● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for
+
+    expected 642 to be +0 // Object.is equality
+
+      [0m [90m 1092 |[39m       [90m// screen. A glyph tinted with a constant instead of the control's content colour[39m
+       [90m 1093 |[39m       [90m// keeps its exact colour here and fails this line — C4's red proof for the tint.[39m
+      [31m[1m>[22m[39m[90m 1094 |[39m       expect(hitsOf([32m'probe-disabled'[39m))[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                            [31m[1m^[22m[39m
+       [90m 1095 |[39m       [90m// The rung sizes the art: the top rung's glyph is 40 dp against the medium[39m
+       [90m 1096 |[39m       [90m// rung's 24, so the same colour covers more pixels. A slot pinned to one size[39m
+       [90m 1097 |[39m       [90m// makes this ratio 1 and goes red.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       4 failed, 5 passed, 9 total
+Snapshots:   0 total
+Time:        28.625 s
+Ran all test suites matching IconButton.
+
+
+
+```

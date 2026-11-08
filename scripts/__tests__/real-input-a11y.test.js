@@ -113,6 +113,12 @@ describe('the a11y rule, on measured trees', () => {
       // written, this case had two named nodes and the actionable one was not the
       // control; see the mutation below.
       'checkbox',
+      // G23's IconButton, measured on pair-b: one `View` carries the name at the
+      // control's own 105x105 px box (the 40 dp `medium`/`uniform` container), inside
+      // the merged node that is `clickable|focusable` at 124x124 px — Material's 48 dp
+      // minimum interactive size around a 40 dp visual, which is the arrangement the
+      // ladder's own docs page prints. The Switch's shape, so no debt row.
+      'icon-button',
       'hosted-switch',
       'hosted-button',
       'hosted-picker',
@@ -370,10 +376,14 @@ describe('the a11y rule, on measured trees', () => {
 
 describe('the debt list', () => {
   it('is the measured findings, per platform, and nothing else', () => {
-    // Four Android rows (two controls, one finding each) and three iOS rows: the Slider's
-    // name is announced as the wrong kind of control, and a hosted Picker's name is
-    // announced twice. A row that named no platform would let one measurement excuse both
-    // halves, so each row says which one it was measured on.
+    // Four Android rows (two controls, one finding each) and the iOS rows, each measured
+    // on a simulator: the Slider's name is announced as the wrong kind of control, a
+    // hosted Picker's name is announced twice, an accessible ContextMenu still lists a
+    // child as a stop, and an IconButton's element is the drawn control inside its 44 pt
+    // touch target rather than the target. A row that named no platform would let one
+    // measurement excuse both halves, so each row says which one it was measured on. The
+    // IconButton row is that rule working: G23 expected its 44 pt target to retire it and
+    // the sweep came back with a bigger inset, so the row was re-measured, not widened.
     expect(
       A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)
     ).toEqual([
@@ -385,6 +395,7 @@ describe('the debt list', () => {
       'ios:hosted-slider',
       'ios:hosted-picker',
       'ios:context-menu',
+      'ios:icon-button',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.

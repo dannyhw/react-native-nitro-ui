@@ -1,0 +1,48 @@
+# Failure excerpt — real-input:ios:icon-button
+
+- Ran: 2026-11-08T00:00:29.781Z on code tree `d736daa2ed97` at HEAD `90bcfe5` (branch `task/G23-icon-button`)
+- Command: `node scripts/real-input/ios.mjs icon-button`
+- Result: fail, exit 1, 490 ms
+- Load: start 17.43, end 17.43, median 17.43, max 17.43
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/real-input+ios+icon-button-2026-11-08T00-00-29.781Z.log` (<store>/task/G23-icon-button/real-input+ios+icon-button-2026-11-08T00-00-29.781Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/real-input+ios+icon-button-2026-11-08T00-00-29.781Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 17.43 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 5 log line(s)
+
+```
+
+real-input (ios): Error: real-input: unknown argument "icon-button".
+
+
+
+```

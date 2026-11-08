@@ -1,0 +1,79 @@
+# Failure excerpt — harness:ios:IconButton
+
+- Ran: 2026-11-08T10:22:59.589Z on code tree `651e8b4370d0` at HEAD `49e2c9e` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios IconButton`
+- Result: fail, exit 1, 15794 ms
+- Load: start 13.82, end 14.21, median 14.21, max 14.21
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G23-g3zrq`
+- Full log: `task/G23-icon-button/harness+ios+IconButton-2026-11-08T10-22-59.589Z.log` (<store>/task/G23-icon-button/harness+ios+IconButton-2026-11-08T10-22-59.589Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › keeps one box across the toggle states, and needs no correction for a state change`
+- `expected 1 to be 2 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-08T10-22-59.589Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-g3zrq (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 14.21 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios IconButton
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 651e8b4370d0, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 13.82/7.59 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-08T10-22-59.589Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › keeps one box across the toggle states, and needs no correction for a state change
+
+    expected 1 to be 2 // Object.is equality
+
+      [0m [90m 882 |[39m     )[33m;[39m
+       [90m 883 |[39m     [90m// TEMPORARY PROBE (reverted): fail here so jest prints the console line above.[39m
+      [31m[1m>[22m[39m[90m 884 |[39m     expect([35m1[39m)[33m.[39mtoBe([35m2[39m)[33m;[39m
+       [90m     |[39m                   [31m[1m^[22m[39m
+       [90m 885 |[39m     expect(sameSize(off[33m,[39m on))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 886 |[39m     [90m// The press form too, on the platform whose press and toggle are different[39m
+       [90m 887 |[39m     [90m// composables with the same tokens. Android composes `IconButton` vs[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 9 passed, 10 total
+Snapshots:   0 total
+Time:        14.359 s
+Ran all test suites matching IconButton.
+
+
+
+```

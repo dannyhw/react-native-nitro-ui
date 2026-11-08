@@ -20,6 +20,7 @@ the layout engine, and React never sees a native node.
 | `Slider`             | `Slider(value:in:step:onEditingChanged:)`                      | `androidx.compose.material3.Slider`                                                                   | 0.1.0 | [slider.md](docs/components/slider.md)                       |
 | `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
+| `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`         | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
@@ -38,11 +39,11 @@ the layout engine, and React never sees a native node.
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
-except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu`, `Tooltip`
-and `Popover`, and refuses those seven with an error that names them. The first three
-wait for a round that measures them inside a Host; the last four are refused by
-design, because each is a `View` around React Native children, not a control a
-composition could draw.
+except `Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`,
+`BottomSheet`, `ContextMenu`, `Tooltip` and `Popover`, and refuses those nine with an
+error that names them. The first five wait for a round that measures them inside a
+Host; the last four are refused by design, because each is a `View` around React
+Native children, not a control a composition could draw.
 See [Performance](#performance) for what it buys and what it costs.
 
 Everything is exported from the package root, along with `nitroUiCore` (a
@@ -60,6 +61,7 @@ import {
   ContextMenu,
   DatePicker,
   Host,
+  IconButton,
   Menu,
   Picker,
   Popover,
@@ -329,6 +331,76 @@ sized by the size ladder and tinted with the label's own colour, and artwork tha
 cannot be resolved draws nothing and reserves nothing.
 [button.md](docs/components/button.md), "Android icons", has Material Symbols,
 `@expo/material-symbols` for Expo apps, and the failure table.
+
+### IconButton
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/icon-button-ios.png" width="300" alt="Icon buttons in the four variants at the large rung on iOS: a bare glyph, a filled, a tonal and an outlined capsule, the same four disabled, and the four toggle forms with two showing their selected state" /></td>
+    <td><img src="docs/images/components/icon-button-android.png" width="300" alt="Icon buttons in the four variants at the large rung on Android: a bare glyph, a filled, a tonal and an outlined circle, the same four disabled, and the four toggle forms with two showing their selected state" /></td>
+  </tr>
+</table>
+
+A single glyph as a control. It has no text, so `accessibilityLabel` is the one
+prop this component requires — it is all a screen reader gets, and an empty one
+warns in development. `variant` is Material's four icon buttons under Material's
+own names (`standard` is the bare glyph with no container); iOS has no icon-button
+control, so it draws a `Button` whose label is `.iconOnly` and maps the four looks
+onto its four button styles.
+
+```tsx name=icon-button
+export function SearchButton({ onSearch }: { onSearch: () => void }) {
+  return (
+    <IconButton
+      accessibilityLabel="Search"
+      systemImage="magnifyingglass"
+      androidIcon={require('./assets/icons/search_24px.xml')}
+      variant="tonal"
+      onPress={onSearch}
+    />
+  );
+}
+```
+
+Pass `checked` / `onCheckedChange` and the same control is a toggle: Material's
+`…IconToggleButton` on Android, `Toggle(…).toggleStyle(.button)` on iOS. It
+behaves like `Switch` and `Chip` — the tap is painted at once, the value React
+pushes afterwards is the one that stays, and a flip the app refuses reverts.
+
+```tsx name=icon-button-toggle
+export function BookmarkButton({
+  saved,
+  onSave,
+}: {
+  saved: boolean;
+  onSave: (next: boolean) => void;
+}) {
+  return (
+    <IconButton
+      accessibilityLabel="Bookmark this post"
+      systemImage={saved ? 'bookmark.fill' : 'bookmark'}
+      androidIcon="bookmark"
+      variant="filled"
+      checked={saved}
+      onCheckedChange={onSave}
+    />
+  );
+}
+```
+
+`size` is the same ladder as `Button`'s, and on Android a rung is Material's own
+icon-button container token — with Material's 48 dp minimum touch target
+measured rather than assumed, so the two smallest rungs sit in a box larger than
+the token they are drawn from. iOS floors its box at Apple's 44 pt target the
+same way, so a `small` IconButton is a 20 pt glyph inside a 44 pt target rather
+than a 20 pt control, and the styles that draw a bezel reach that target through
+a tappable layer behind the control instead of a wider bezel. `width` (`narrow` /
+`uniform` / `wide`) is Material's three width options for a rung and is
+**Android-only**: it costs width and never height there, and iOS keeps one box for
+all three.
+[icon-button.md](docs/components/icon-button.md) has both columns measured, and
+what each platform does with a glyph it cannot resolve.
 
 ### SegmentedControl
 
@@ -959,9 +1031,9 @@ close you refuse presents it again.
 
 Opt-in. On Android its direct hosted children share one Compose composition; on
 iOS it is a plain `View`. Its only children may be nitro-ui controls other than
-`Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu`, `Tooltip` and
-`Popover`; one of those seven, an RN view, plain text or a nested `<Host>` throws
-in development. A hosted `Picker`'s menu,
+`Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`, `BottomSheet`,
+`ContextMenu`, `Tooltip` and `Popover`; one of those nine, an RN view, plain text
+or a nested `<Host>` throws in development. A hosted `Picker`'s menu,
 `DatePicker`'s dialog and `Menu`'s list open under the box the Host drew; they
 and a hosted dialog are the Host composition's own windows, and close with it.
 Give it a height.
@@ -1136,9 +1208,9 @@ The full list per control is in its doc; these are the ones that bite.
   tap runs it and a long press opens the list; on Android they are two halves, and
   the trigger is wider.
 - **`<Host>` only helps on Android, and holds nitro-ui controls only** — every
-  one except `Chip`, `TextField`, `Checkbox`, `BottomSheet`, `ContextMenu`,
-  `Tooltip` and `Popover`. Any other child — one of those seven, an RN view,
-  text, another `<Host>` — throws in development. Give
+  one except `Chip`, `TextField`, `Checkbox`, `SearchField`, `IconButton`,
+  `BottomSheet`, `ContextMenu`, `Tooltip` and `Popover`. Any other child — one of
+  those nine, an RN view, text, another `<Host>` — throws in development. Give
   a Host a height; per-child sizes, `gap`, `flexDirection` and `alignItems` do
   not reach what it draws.
 - **Expo Go is not supported** — a dev build is required, because Nitro Modules

@@ -1,0 +1,93 @@
+# Failure excerpt — harness:android:IconButton
+
+- Ran: 2026-11-08T07:31:00.294Z on code tree `635b473716f3` at HEAD `7e371cf` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android IconButton`
+- Result: fail, exit 1, 23625 ms
+- Load: start 9.58, end 8.89, median 9.51, max 9.58
+- Device: android / device `emulator-5574` / lease `G23-g3zrq`
+- Full log: `task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-00.294Z.log` (<store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-00.294Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● IconButton · G23 › becomes a press button again when the app stops using the toggle form`
+- `● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for`
+- `expected 1 to be greater than 1.5`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-00.294Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-g3zrq (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.89 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android IconButton
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 635b473716f3, 19 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.58/13.60 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+android+IconButton-2026-11-08T07-31-00.294Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/IconButton.harness.tsx
+  ● IconButton · G23 › becomes a press button again when the app stops using the toggle form
+
+    "form-off" never drew displayed=none - it reports "displayed=1;probes=0;a11y=none".
+
+      [0m [90m 284 |[39m     () [33m=>[39m (reportOf(testId)[33m.[39mdisplayed [33m===[39m displayed [33m?[39m [36mtrue[39m [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 285 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 286 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 287 |[39m         [32m`"${testId}" never drew displayed=${displayed} - it reports `[39m [33m+[39m
+       [90m 288 |[39m           [32m`"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`[39m
+       [90m 289 |[39m       )[0m
+
+  ● IconButton · G23 › draws the glyph in the control content colour, at the size the rung asked for
+
+    expected 1 to be greater than 1.5
+
+      [0m [90m 1354 |[39m       [36mconst[39m span [33m=[39m hitsOf(rungId([32m'xxlarge'[39m)) [33m/[39m hitsOf(rungId([32m'medium'[39m))[33m;[39m
+       [90m 1355 |[39m       console[33m.[39mlog([32m`glyph grows with the rung: span=${span.toFixed(2)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1356 |[39m       expect(span)[33m.[39mtoBeGreaterThan([35m1.5[39m)[33m;[39m
+       [90m      |[39m                                   [31m[1m^[22m[39m
+       [90m 1357 |[39m
+       [90m 1358 |[39m       [90m// The ladder, one step at a time, in Material's own token order.[39m
+       [90m 1359 |[39m       [33mRUNGS[39m[33m.[39mforEach((size[33m,[39m index) [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 8 passed, 10 total
+Snapshots:   0 total
+Time:        21.868 s
+Ran all test suites matching IconButton.
+
+
+
+```
