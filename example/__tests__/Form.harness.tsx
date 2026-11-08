@@ -794,6 +794,14 @@ describe('Form (G24)', () => {
     if (!IOS) {
       expect(num(second, 'headerBand')).toBeGreaterThan(0);
     }
+    if (IOS) {
+      // The other half of the same recycled section: a *changed* title string. The section's
+      // identity is its model and the model did not change, so the snapshot the Section applies
+      // is a no-op and UIKit never runs the provider that fills the band in — the old heading
+      // stays painted, at the old height. `drawnTitle` is what the band is painted with, the
+      // only field here that separates a title the Form stored from one it drew (fix round 1).
+      expect(second.drawnTitle).toBe('Second');
+    }
 
     // A title that goes to null leaves nothing behind to measure, and Android reported the band
     // from the heading's own `onSizeChanged` - which stops running the moment the `Text` is
@@ -807,6 +815,13 @@ describe('Form (G24)', () => {
         'the gone title to give its band back'
       );
       expect(num(untitled, 'headerBand')).toBe(0);
+    }
+    if (IOS) {
+      await reportUntil(
+        () => sections.one?.nuiTestSectionReport(),
+        (r) => r.drawnTitle === '',
+        'the gone title to come off the band'
+      );
     }
   });
 

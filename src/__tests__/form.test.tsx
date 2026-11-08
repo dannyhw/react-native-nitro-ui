@@ -153,9 +153,7 @@ describe('Form.Row as a direct child only', () => {
 describe('an unstyled Form still takes the space its parent offers', () => {
   /** The style React Native is asked to lay the Form's own view out with. */
   async function formStyle(children: ReactNode): Promise<unknown> {
-    const view = await render(
-      <Form testID="the-form">{children}</Form>
-    );
+    const view = await render(<Form testID="the-form">{children}</Form>);
     const host = view.getByTestId('the-form') as unknown as {
       props: Record<string, unknown>;
     };
