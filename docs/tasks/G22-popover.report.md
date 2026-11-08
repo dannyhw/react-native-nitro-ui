@@ -182,11 +182,16 @@ first, and that is said too.
   them, and their `nothingLeft` witness compares against a baseline taken in the same app
   instance, so a leak from an earlier test is inside the baseline rather than above it. They are
   new coverage of a case that works, not a proved guard.
-- Two of the round's own fixtures went red for the wrong reason before they went red for the right
-  one: `onScreen` is "React asked" on Android (`model.presented`) and "the presentation is up" on
-  iOS (`popoverIsUp`), so the not-up checks now name each platform's own witness; and the sheet
+- Three of the round's own fixtures went red for the wrong reason before they went red for the
+  right one: `onScreen` is "React asked" on Android (`model.presented`) and "the presentation is
+  up" on iOS (`popoverIsUp`), so the not-up checks now name each platform's own witness; the sheet
   fixture baselined its residue before the sheet opened, so the sheet's own touch root read as the
-  popover's remains.
+  popover's remains; and the resize fixture first asserted the process-wide `live`, which iOS moves
+  in UIKit's presentation *completion* - it reads 0 while a popover is still animating in, measured
+  as `live=0` beside `onScreen=1;windows=1;controllers=1` (`4d31b067206c`). A popover grown as
+  early as that fixture grows one is still entering, so that claim belongs to the mount
+  (`onScreen` + `inPopover`/`inPopup`), not to the counter; the counter stays what it always was,
+  the post-entry leak witness the `nothingLeft` reads use.
 
 ## Files changed
 
@@ -220,11 +225,13 @@ first, and that is said too.
   about still reports the presentation that ended. Suppressing it would be a spec change, so the
   suite reads it as shipped.
 - bench: `bench: false`, so the brief's comparison against `react-native-popover-view` and the
-  component's bench cells are left for the merge mint (X14), and no Popover row is minted on
-  this machine either. The first-frame claim is therefore only carried here as the harness
-  measurement it is: five fixtures x two platforms, each asserting one distinct drawn size
-  equal to the box (`firstDrawMs`/`contentWaits` in each report), which is a correctness claim
-  and not a benchmark.
+  component's bench cells are left for the merge mint (X14): no Popover cell is minted on this
+  machine at all. What the run does measure is printed per fixture and stays a correctness claim:
+  in the round's iOS run at `013cc740` each of the five first-frame fixtures printed
+  `contentWaits=0` and one distinct drawn size across 60 sampled frames - native never waited for a
+  box, and never drew a second size - while iOS has no `firstDrawMs` at all; Android's own pair of
+  witnesses, `firstDrawMs` and `drawSizes`, is what each of its five fixtures asserts.
+  Neither number is a benchmark, and nothing here should be read as one.
 - core: `NitroUiSheetRootView` is now shared by BottomSheet and Popover on Android; a shared
   "presented RN root" class for both platforms is worth extracting when a third control needs it.
 - a11y: `accessibilityLabel` still never reaches a presented window on either platform (D44
