@@ -19,6 +19,7 @@ import {
   Chip,
   ContextMenu,
   DatePicker,
+  Form,
   type DialogAction,
   Host,
   Menu,
@@ -434,6 +435,40 @@ export function ProductSearch({
           : `Searching for ${query}…`}
       </Text>
     </>
+  );
+}
+// #endregion
+
+// #region form
+export function NotificationForm({
+  onOpenQuietHours,
+}: {
+  onOpenQuietHours: () => void;
+}) {
+  const [push, setPush] = useState(true);
+  const [sound, setSound] = useState(false);
+
+  return (
+    <Form>
+      <Form.Section
+        title="Notifications"
+        footer="Push arrives on this device only."
+      >
+        <Form.Row>
+          <Text style={{ flex: 1 }}>Push notifications</Text>
+          <Switch value={push} onValueChange={setPush} />
+        </Form.Row>
+        <Form.Row>
+          <Text style={{ flex: 1 }}>Play a sound</Text>
+          <Switch value={sound} onValueChange={setSound} />
+        </Form.Row>
+      </Form.Section>
+      <Form.Section title="Quiet hours">
+        <Form.Row accessory="disclosure" onPress={onOpenQuietHours}>
+          <Text>Set quiet hours</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
   );
 }
 // #endregion
