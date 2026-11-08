@@ -94,7 +94,7 @@ it; `need --for review` is satisfied on it. The stale rows are this round's filt
 runs — the two `IconButton` harness rows are the glyph/form mutations, `harness:ios:IconButton`
 also carries the throwaway assertion that measured the two forms at `xxlarge`, and
 `real-input:ios:--control:icon-button` is the run that measured the a11y inset with the debt row
-deleted. They stay in the ledger because a round's red lines are evidence, not noise.e.
+deleted. They stay in the ledger because a round's red lines are evidence, not noise. The merge round's table is in "Merge round" below.
 
 ## Red proofs
 
@@ -237,6 +237,33 @@ get a clear tappable layer behind the control. Real input taps a box corner (pre
 the name, so the row came back re-measured and the fractional-width explanation died.
 
 **Also:** the glyph probe covers five rungs and a `require`'d drawable; the false claims now say what was measured; harness prose moved to CONTRIBUTING; the screenshot is retaken.
+
+## Merge round
+
+`origin/main` (Popover, G22) merged in from `4cead7b5`. Both components are kept in every shared
+list: the README Components table, import block and `<Host>` prose, the example's screen tabs,
+`viewConfigs.test.ts`, `controls.mjs` and `nitro.json`; `FOLLOWUPS.md` keeps both sides' lines.
+`nitro.json` was resolved by hand, every generated file regenerated — codegen, `bun run regen`,
+`api-extractor`, `manifest:update` — which is what caught two hand-merge faults: nitrogen's
+registries left the IconButton registration unclosed, and `controls.mjs` had folded the popover
+row into the icon-button row, so real input would have tapped sixteen controls and never an
+IconButton. The README's `<Host>` section named seven refused controls where `HostChildren` names
+nine; it names nine now. `registry:check`, `nitrogen:check`, `readme:check` and `manifest:check`
+are clean, and the merge changes no platform source of its own.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1927 tests / 80 suites | `b820d8ee4628` | 2 m 55 s | start 9.0 / med 12.4 / max 22.2 |
+| `harness:ios` | **PASS** | 518 tests / 27 suites + isolated 6 tests / 3 suites | `b820d8ee4628` (ios tree) | 13 m 24 s | start 28.6 / med 5.7 / max 28.6 |
+| `harness:android` | **PASS** | 574 tests / 27 suites + isolated 6 tests / 3 suites | `b820d8ee4628` (android tree) | 16 m 48 s | start 5.9 / med 4.5 / max 36.5 |
+| `real-input:ios` | **PASS** | — | `b820d8ee4628` (ios tree) | 33 m 46 s | start 3.6 / med 9.8 / max 42.1 |
+| `real-input:android` | **PASS** | — | `b820d8ee4628` (android tree) | 49 m 32 s | start 3.1 / med 3.4 / max 28.8 |
+| `real-input:android:--control:menu` | **PASS** | — | `b820d8ee4628` (android tree) | 10 m 29 s | start 2.8 / med 3.4 / max 7.0 |
+
+All five green on `b820d8ee4628` (lease `G23-xcdn8`, pair-a); `need --for merge` is satisfied. The
+first Android sweep took the `menu` read race already in `FOLLOWUPS.md` — 23/24 controls, with
+`icon-button` and `popover` PASS — and the re-run of the same tree is green, its excerpt
+committed. Those rows and the fix round's stay in the ledger beside the 63 earlier lines.
 
 ## Appendix: the iOS a11y stop, measured
 
