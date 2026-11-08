@@ -40,6 +40,7 @@ import {
 } from './support.mjs';
 import { REAL_INPUT_CONTROLS } from './controls.mjs';
 import { imeInsetSample, imeInsetTop } from './ime-frame.mjs';
+import { judgePopupPlacement } from './popover-placement.mjs';
 import { ECHO, gestureCounts, gestureReported, screenTab } from './screens.mjs';
 import {
   findAllByDescription,
@@ -3016,6 +3017,10 @@ const CHECKS = {
     //    fraction of the screen. An emulator answers `hw.keyboard=yes`, which hides the
     //    soft keyboard, so the case asks for one and puts the setting back either way.
     const hardKeyboard = t.setImeWithHardKeyboard(true);
+    // The anchor's box has to be read before the popover is up: a focusable popup takes the
+    // uiautomator dump for itself, so once it is presented the app's own window — and the
+    // anchor with it — is simply not in the tree (measured, G22).
+    const anchorBox = t.nodeByTestId('popover-field-anchor')?.bounds ?? null;
     try {
       await openWith(
         'popover-field-anchor',
@@ -3065,7 +3070,6 @@ const CHECKS = {
       // three branches, and the only way to tell which one ran is to see where the popup put
       // its box relative to the anchor it was placed against.
       const popupBox = t.nodeByTestId('popover-field-popover')?.bounds;
-      const anchorBox = t.nodeByTestId('popover-field-anchor')?.bounds;
       t.log.checkEquals(
         // A wrong number here has always been a measurement problem rather than a popover
         // one, so the failure names the dump the number came from.
@@ -3077,6 +3081,23 @@ const CHECKS = {
           anchorBox ? `${String(anchorBox.y1)}..${String(anchorBox.y2)}` : '-'
         })${aboveIme ? '' : ` - ${t.imeFrameSample()}`}`,
         aboveIme,
+        true
+      );
+      // And the popup is where the placement model says it has to be: against its anchor, or
+      // — with the keyboard leaving room for neither of those — against the keyboard's edge.
+      // Without this the claim above is half-blind, and it was: a popup pinned to the top of
+      // the screen keeps the field above the keyboard *better* than a placed one does, so the
+      // run passed on a popover 985 px away from the thing it points at (G22).
+      const placement = judgePopupPlacement({
+        popupBox,
+        anchorBox,
+        imeTopPx: imeTop,
+        marginPx: Math.round(16 * t.density()),
+        spacingPx: Math.round(4 * t.density()),
+      });
+      t.log.checkEquals(
+        `the popup sits against its anchor or the keyboard (${placement.branch}: ${placement.detail})`,
+        placement.ok,
         true
       );
       // And the keystrokes reach the field: the log, read once the popover is down,
