@@ -17,6 +17,7 @@ public protocol HybridNitroUiMenuSpec_protocol: HybridObject, HybridView {
   var rows: [NitroUiMenuRow] { get set }
   var tintColor: Variant_NullType_Double { get set }
   var systemImage: Variant_NullType_String { get set }
+  var androidIcon: Variant_NullType_String { get set }
   var hasPrimaryAction: Bool { get set }
   var testID: Variant_NullType_String { get set }
   var accessibilityLabel: Variant_NullType_String { get set }

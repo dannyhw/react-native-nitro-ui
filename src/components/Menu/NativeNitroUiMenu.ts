@@ -43,6 +43,8 @@ export interface NitroUiMenuHandle {
   readonly tintColor: number | null;
   /** The SF Symbol name, or `null`. */
   readonly systemImage: string | null;
+  /** The Android icon string the wrapper built, or `null`. */
+  readonly androidIcon: string | null;
   /** The control's accessibility label, or `null` when it falls back to `title`. */
   readonly accessibilityLabel: string | null;
   /** The fitting size of the hosted control, in platform units. */
@@ -91,6 +93,7 @@ export interface NativeNitroUiMenuProps
   rows: NitroUiMenuRow[];
   tintColor: number | null;
   systemImage: string | null;
+  androidIcon: string | null;
   hasPrimaryAction: boolean;
   testID: string | null;
   accessibilityLabel: string | null;

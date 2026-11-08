@@ -26,6 +26,7 @@ export const NitroUiButtonConfig: ViewConfig<NativeNitroUiButtonProps> = {
     disabled: true,
     tintColor: true,
     systemImage: true,
+    androidIcon: true,
     testID: true,
     accessibilityLabel: true,
     nuiPerfId: true,

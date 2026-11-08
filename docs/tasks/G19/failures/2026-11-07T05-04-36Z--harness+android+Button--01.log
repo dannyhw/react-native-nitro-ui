@@ -1,0 +1,94 @@
+# Failure excerpt — harness:android:Button
+
+- Ran: 2026-11-07T05:04:36.571Z on code tree `58c402f1ec6d` at HEAD `be57090` (branch `task/G19-android-icon-iconbutton`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Button`
+- Result: fail, exit 1, 52378 ms
+- Load: start 5.38, end 5.88, median 6.30, max 7.22
+- Device: android / device `emulator-5570` / lease `G19-w2v9t`
+- Full log: `task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-04-36.571Z.log` (<store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-04-36.571Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Button.harness.tsx`
+- `● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive`
+- `expected 0 to be greater than 0`
+- `● androidIcon · an icon the app imports (D43) › widens the control by the ladder, not by the file it loaded`
+- `expected 28.19047619047619 to be less than 0.6`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-04-36.571Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G19-w2v9t (still live)
+  |   E5-onhkl                 E5           both              pair-a
+  |   G19-w2v9t                G19          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.88 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Button
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 58c402f1ec6d, 18 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.38/3.65 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G19-android-icon-iconbutton/harness+android+Button-2026-11-07T05-04-36.571Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Button.harness.tsx
+  ● androidIcon · an icon the app imports (D43) › draws the imported icon, and does not move the box when the bytes arrive
+
+    expected 0 to be greater than 0
+
+      [0m [90m 1858 |[39m       [90m// 0 the dev server won the race with the first layout and the trace below is[39m
+       [90m 1859 |[39m       [90m// the whole claim - it is the reading that does not depend on timing.[39m
+      [31m[1m>[22m[39m[90m 1860 |[39m       expect(probeHits(drawn))[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m      |[39m                                               [31m[1m^[22m[39m
+       [90m 1861 |[39m       [90m// 2. The box the control measured before the glyph and after it are one box.[39m
+       [90m 1862 |[39m       expect(sameSize(first[33m,[39m after))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1863 |[39m       [90m// 3. And every box the sizing engine published for this mount is that box.[39m[0m
+
+  ● androidIcon · an icon the app imports (D43) › widens the control by the ladder, not by the file it loaded
+
+    expected 28.19047619047619 to be less than 0.6
+
+      [0m [90m 1938 |[39m
+       [90m 1939 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+      [31m[1m>[22m[39m[90m 1940 |[39m       expect([33mMath[39m[33m.[39mabs(metro[33m.[39mwidth [33m-[39m drawable[33m.[39mwidth))[33m.[39mtoBeLessThan([35m0.6[39m)[33m;[39m
+       [90m      |[39m                                                                  [31m[1m^[22m[39m
+       [90m 1941 |[39m       expect([33mMath[39m[33m.[39mabs(metro[33m.[39mheight [33m-[39m drawable[33m.[39mheight))[33m.[39mtoBeLessThan([35m0.6[39m)[33m;[39m
+       [90m 1942 |[39m       expect(metro[33m.[39mwidth)[33m.[39mtoBeGreaterThan(plain[33m.[39mwidth [33m+[39m [35m0.6[39m)[33m;[39m
+       [90m 1943 |[39m     } [36melse[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 19 passed, 21 total
+Snapshots:   0 total
+Time:        50.463 s
+Ran all test suites matching Button.
+
+
+
+```

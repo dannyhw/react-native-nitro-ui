@@ -68,6 +68,8 @@ namespace margelo::nitro::nitroui {
       virtual void setTintColor(const std::variant<nitro::NullType, double>& tintColor) = 0;
       virtual std::variant<nitro::NullType, std::string> getSystemImage() = 0;
       virtual void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) = 0;
+      virtual std::variant<nitro::NullType, std::string> getAndroidIcon() = 0;
+      virtual void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) = 0;
       virtual bool getHasPrimaryAction() = 0;
       virtual void setHasPrimaryAction(bool hasPrimaryAction) = 0;
       virtual std::variant<nitro::NullType, std::string> getTestID() = 0;

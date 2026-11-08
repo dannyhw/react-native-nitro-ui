@@ -1,0 +1,145 @@
+# Failure excerpt — harness:ios:Form.harness
+
+- Ran: 2026-11-07T18:23:10.825Z on code tree `4403e874f611` at HEAD `5922b8e` (branch `task/S6-form-spike`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form.harness`
+- Result: fail, exit 1, 42087 ms
+- Load: start 4.51, end 5.00, median 5.12, max 5.93
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `S6-mpdf2`
+- Full log: `task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-23-10.825Z.log` (<store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-23-10.825Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Form (S6 spike) › mounts every row into the list with none stranded (E1)`
+- `● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `expected 10 to be 9 // Object.is equality`
+- `● Form (S6 spike) › gives a wrapping row the height its content needs (E3)`
+- `expected NaN to be greater than 0`
+- `● Form (S6 spike) › follows a row that grows after its first frame (E3)`
+- `● Form (S6 spike) › delivers taps to a Switch and a Pressable inside a row (E4, in-app events)`
+- `● Form (S6 spike) › mounts 20 and 50 rows in one apply and no more views than rows (E6)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-23-10.825Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6-mpdf2 (still live)
+  |   S6-mpdf2                 S6           both              pair-b
+  |   G19-pxe0p                G19          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.00 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 94 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form.harness
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4403e874f611, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.55/11.94 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/S6-form-spike/harness+ios+Form.harness-2026-11-07T18-23-10.825Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Form (S6 spike) › mounts every row into the list with none stranded (E1)
+
+    report has no "rows": {}
+
+      [0m [90m 64 |[39m   [36mconst[39m raw [33m=[39m report[key][33m;[39m
+       [90m 65 |[39m   [36mif[39m (raw [33m==[39m [36mnull[39m)
+      [31m[1m>[22m[39m[90m 66 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`report has no "${key}": ${JSON.stringify(report)}`[39m)[33m;[39m
+       [90m    |[39m                    [31m[1m^[22m[39m
+       [90m 67 |[39m   [36mreturn[39m [33mNumber[39m(raw)[33m;[39m
+       [90m 68 |[39m }
+       [90m 69 |[39m[0m
+
+  ● Form (S6 spike) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    expected 10 to be 9 // Object.is equality
+
+      [0m [90m 345 |[39m     expect(after[33m.[39morphans)[33m.[39mtoBe([32m'0'[39m)[33m;[39m
+       [90m 346 |[39m     expect(num(after[33m,[39m [32m'rows'[39m))[33m.[39mtoBe([35m9[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 347 |[39m     expect(num(after[33m,[39m [32m'alive'[39m))[33m.[39mtoBe([35m9[39m)[33m;[39m
+       [90m     |[39m                                     [31m[1m^[22m[39m
+       [90m 348 |[39m     [36mif[39m ([33mIOS[39m) {
+       [90m 349 |[39m       [90m// The witness that cells actually handed rows back rather than dropping them.[39m
+       [90m 350 |[39m       expect(num(after[33m,[39m [32m'reclaims'[39m))[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m[0m
+
+  ● Form (S6 spike) › gives a wrapping row the height its content needs (E3)
+
+    expected NaN to be greater than 0
+
+      [0m [90m 363 |[39m     [36mawait[39m formReport((r) [33m=>[39m num(r[33m,[39m [32m'rows'[39m) [33m===[39m [35m9[39m[33m,[39m [32m'nine rows'[39m)[33m;[39m
+       [90m 364 |[39m     [36mconst[39m short [33m=[39m parse(need(rows[33m.[39mwifi)[33m.[39mnuiTestRowReport())[33m;[39m
+      [31m[1m>[22m[39m[90m 365 |[39m     expect([33mNumber[39m(short[33m.[39mh))[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m     |[39m                                            [31m[1m^[22m[39m
+       [90m 366 |[39m     [36mconst[39m heights [33m=[39m (before[33m.[39mheights [33m?[39m[33m?[39m [32m''[39m)[33m.[39msplit([32m','[39m)[33m.[39mmap([33mNumber[39m)[33m;[39m
+       [90m 367 |[39m     expect(heights[33m.[39mlength)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m 368 |[39m     [90m// The layout's own height for a row is the height Fabric gave that row, to the pt.[39m[0m
+
+  ● Form (S6 spike) › follows a row that grows after its first frame (E3)
+
+    Form report never satisfied "nine rows" - last was sections=3;rows=10;items=10;inCells=10;orphans=0;alive=10;reparents=10;reclaims=10;applies=10;width=380.00;listWidth=420.00;heights=60.00,60.00,60.00,60.00,60.00,60.00;taps=0;keyboard=0.00;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=60.00;h1=60.00;h2=60.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=14.00;radius=0.00;sep=20.00
+
+      [0m [90m 86 |[39m     }
+       [90m 87 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 88 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 89 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 90 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 91 |[39m [32m        )}`[39m[0m
+
+  ● Form (S6 spike) › delivers taps to a Switch and a Pressable inside a row (E4, in-app events)
+
+    Form report never satisfied "nine rows" - last was sections=3;rows=10;items=10;inCells=10;orphans=0;alive=10;reparents=10;reclaims=10;applies=12;width=380.00;listWidth=420.00;heights=60.00,60.00,60.00,60.00,60.00,60.00;taps=0;keyboard=0.00;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=60.00;h1=60.00;h2=60.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=14.00;radius=0.00;sep=20.00
+
+      [0m [90m 86 |[39m     }
+       [90m 87 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 88 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 89 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 90 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 91 |[39m [32m        )}`[39m[0m
+
+  ● Form (S6 spike) › mounts 20 and 50 rows in one apply and no more views than rows (E6)
+
+    no hybridRef handle for "the Form" within 5000ms. A box can exist before its ref callback has run — the callback lands on a commit after the view is created — so this is the handle being late, not the control being broken; if it never arrives at all, the control has stopped handing back its state.
+
+      [0m [90m 53 |[39m     [36mif[39m (handle [33m!=[39m [36mnull[39m) [36mreturn[39m handle[33m;[39m
+       [90m 54 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 55 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m    |[39m                      [31m[1m^[22m[39m
+       [90m 56 |[39m         [32m`no hybridRef handle for ${options.what} within ${String(timeoutMs)}ms. `[39m [33m+[39m
+       [90m 57 |[39m           [32m'A box can exist before its ref callback has run — the callback lands on '[39m [33m+[39m
+       [90m 58 |[39m           [32m'a commit after the view is created — so this is the handle being late, '[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       6 failed, 6 total
+Snapshots:   0 total
+Time:        40.253 s
+Ran all test suites matching Form.harness.
+
+
+
+```

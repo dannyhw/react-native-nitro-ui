@@ -1,0 +1,174 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-07T02:46:28.134Z on code tree `34bbc3eb53af` at HEAD `66ae73b` (branch `task/G19-android-icon-iconbutton`)
+- Command: `bun run check`
+- Result: fail, exit 1, 155774 ms
+- Load: start 14.01, end 7.62, median 11.85, max 14.71
+- Device: none recorded (not a device gate)
+- Full log: `task/G19-android-icon-iconbutton/check-2026-11-07T02-46-27.548Z.log` (<store>/task/G19-android-icon-iconbutton/check-2026-11-07T02-46-27.548Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/ci-workflows.test.js (75.299 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check`
+- `expect(received).toEqual(expected) // deep equality`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2933 — the rest is in the full log above)
+
+```
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:248:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:248:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:96:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:248:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:74:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:13)
+
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/readme-components.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/task-ready.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/lease-pool-cli.test.js (54.056 s)
+PASS scripts/__tests__/gate.test.js (58.487 s)
+PASS scripts/__tests__/gate-logs.test.js (65.204 s)
+FAIL scripts/__tests__/ci-workflows.test.js (75.299 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2161,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+PASS scripts/__tests__/bench-baseline-merge.test.js (82.705 s)
+PASS scripts/__tests__/bench-gate.test.js (150.145 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/ci-workflows.test.js (75.299 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2161,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+
+Test Suites: 1 failed, 72 passed, 73 total
+Tests:       1 failed, 1838 passed, 1839 total
+Snapshots:   0 total
+Time:        150.52 s, estimated 151 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 155.8 s
+gate: recorded in .gates/task/G19-android-icon-iconbutton.jsonl
+
+```
