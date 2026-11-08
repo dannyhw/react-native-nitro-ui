@@ -1,0 +1,181 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T07:59:53.899Z on code tree `e91d45721854` at HEAD `bcc16bf` (branch `task/G24-form`)
+- Command: `bun run check`
+- Result: fail, exit 1, 164428 ms
+- Load: start 36.35, end 14.87, median 28.04, max 36.35
+- Device: none recorded (not a device gate)
+- Full log: `task/G24-form/check-2026-11-08T07-59-53.148Z.log` (<store>/task/G24-form/check-2026-11-08T07-59-53.148Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/readme-components.test.js`
+- `● the README shows every component with both screenshots › has a Components row, an import line and an img for every screenshot`
+- `expect(received).toEqual(expected) // deep equality`
+- `● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width`
+- `FAIL scripts/__tests__/component-coverage.test.js`
+- `● every bench component is implemented by every arm › bench/src/implementations/nitroUi.tsx handles every component in each of its render paths`
+- `● Console`
+- `FAIL scripts/__tests__/real-input-a11y-ios.test.js`
+- `● the Swift case list against the shared table › has one case per row of the shared table, in the same order`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/real-input-a11y.test.js`
+- `● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3211 — the rest is in the full log above)
+
+```
+          at Array.map (<anonymous>)
+      at Object.map (scripts/__tests__/real-input-a11y.test.js:89:36)
+
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/gate.test.js (59.159 s)
+PASS scripts/__tests__/gate-logs.test.js (65.875 s)
+PASS scripts/__tests__/ci-workflows.test.js (73.574 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (84.477 s)
+PASS scripts/__tests__/bench-gate.test.js (155.834 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/readme-components.test.js
+  ● the README shows every component with both screenshots › has a Components row, an import line and an img for every screenshot
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   "Form: no row in the README's Components table",
+    +   "Form: not named in the README's import block",
+    +   "Form: the README has no <img src=\"docs/images/components/form-ios.png\"> for ios",
+    +   "Form: the README has no <img src=\"docs/images/components/form-android.png\"> for android",
+    + ]
+
+      226 |     }
+      227 |
+    > 228 |     expect(problems).toEqual([]);
+          |                      ^
+      229 |   });
+      230 |
+      231 |   it('ships each screenshot as a PNG of the documented width', () => {
+
+      at Object.toEqual (scripts/__tests__/readme-components.test.js:228:22)
+
+  ● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 4
+
+    - Array []
+    + Array [
+    +   "Form: docs/images/components/form-ios.png does not exist",
+    +   "Form: docs/images/components/form-android.png does not exist",
+    + ]
+
+      252 |     }
+      253 |
+    > 254 |     expect(problems).toEqual([]);
+          |                      ^
+      255 |   });
+      256 | });
+      257 |
+
+      at Object.toEqual (scripts/__tests__/readme-components.test.js:254:22)
+
+FAIL scripts/__tests__/component-coverage.test.js
+  ● every bench component is implemented by every arm › bench/src/implementations/nitroUi.tsx handles every component in each of its render paths
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "export function NitroUiHostList({",
+    + ]
+
+      170 |         )
+      171 |         .map((group) => group.name);
+    > 172 |       expect(narrow).toEqual([]);
+          |                      ^
+      173 |     });
+      174 |   }
+      175 |
+
+      at Object.toEqual (scripts/__tests__/component-coverage.test.js:172:22)
+
+FAIL scripts/__tests__/real-input-a11y-ios.test.js
+  ● the Swift case list against the shared table › has one case per row of the shared table, in the same order
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 5
+    + Received  + 0
+
+    @@ -92,11 +92,6 @@
+        Object {
+          "id": "context-menu",
+          "label": "Message from Grace",
+          "testId": "ctx-accessible",
+        },
+    -   Object {
+    -     "id": "form",
+    -     "label": "Row with onPress",
+    -     "testId": "form-row",
+    -   },
+      ]
+
+      950 |     // asked about and its own case silently reports "not measured" — and a control that
+      951 |     // quietly leaves the suite is the failure this whole file is built to prevent.
+    > 952 |     expect(swiftCases()).toEqual(
+          |                          ^
+      953 |       A11Y_CONTROLS.map((entry) => ({
+      954 |         id: entry.id,
+      955 |         testId: entry.anchorTestId,
+
+      at Object.toEqual (scripts/__tests__/real-input-a11y-ios.test.js:952:26)
+
+FAIL scripts/__tests__/real-input-a11y.test.js
+  ● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt
+
+    ENOENT: no such file or directory, open '<repo>/scripts/__tests__/fixtures/a11y/form.xml'
+
+      41 |       id,
+      42 |       parseHierarchy(
+    > 43 |         readFileSync(`${__dirname}/fixtures/a11y/${id}.xml`, 'utf8')
+         |                     ^
+      44 |       )
+      45 |     );
+      46 |   }
+
+      at tree (scripts/__tests__/real-input-a11y.test.js:43:21)
+      at tree (scripts/__tests__/real-input-a11y.test.js:90:46)
+          at Array.map (<anonymous>)
+      at Object.map (scripts/__tests__/real-input-a11y.test.js:89:36)
+
+
+Test Suites: 4 failed, 73 passed, 77 total
+Tests:       5 failed, 1905 passed, 1910 total
+Snapshots:   0 total
+Time:        156.303 s, estimated 179 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 164.4 s
+gate: recorded in .gates/task/G24-form.jsonl
+
+```

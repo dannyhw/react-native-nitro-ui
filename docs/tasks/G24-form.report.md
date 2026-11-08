@@ -59,8 +59,25 @@ fails in `check` rather than on a device.
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1910 tests / 77 suites | `9065d0b56466` | 2 m 43 s | start 5.6 / med 7.2 / max 9.1 |
+| `harness:ios` | **PASS** | 480 tests / 27 suites + isolated 4 tests / 2 suites | `9065d0b56466` (ios tree) | 11 m 29 s | start 4.8 / med 5.9 / max 11.6 |
+| `harness:android` | **PASS** | 536 tests / 27 suites + isolated 4 tests / 2 suites | `9065d0b56466` (android tree) | 15 m 58 s | start 3.2 / med 3.3 / max 7.6 |
+| `real-input:ios` | **PASS** | — | `9065d0b56466` (ios tree) | 32 m 23 s | start 4.6 / med 11.7 / max 302.2 |
+| `real-input:android` | **FAIL** | — | `9065d0b56466` (android tree) | 47 m 11 s | start 3.2 / med 3.6 / max 10.1 |
+| `harness:android:Conformance:-t:previous%20owner%20under%20one%20identity` | stale | 85 tests / 1 suites | cb8f18ca9456 (not this tree) | 1 m 33 s | start 6.3 / med 4.4 / max 6.3 |
+| `harness:android:Form` | stale | 1 failed of 92 tests / 3 suites | c9cd6ce52171 (not this tree) | 2 m 56 s | start 39.4 / med 15.2 / max 39.4 |
+| `harness:android:FormFidelity` | stale | 1 tests / 1 suites | 1e1a18c02e58 (not this tree) | 11.8 s | start 4.9 / med 4.9 / max 5.0 |
+| `harness:ios:Form` | stale | 1 failed of 92 tests / 3 suites | ad3fcd50b903 (not this tree) | 3 m 09 s | start 14.3 / med 7.2 / max 16.3 |
+| `real-input:android:--control:a11y` | **FAIL** | — | `9065d0b56466` (android tree) | 0.2 s | start 3.6 / med 3.6 / max 3.6 |
+| `real-input:android:--control:form` | **PASS** | — | `9065d0b56466` (android tree) | 12 m 17 s | start 2.3 / med 3.5 / max 9.9 |
+| `real-input:ios:--control:form` | stale | — | 158227605a8d (not this tree) | 12 m 12 s | start 3.3 / med 16.2 / max 37.7 |
 
-`need --for review`: <pending>
+`need --for review`: `need: review is satisfied on this code tree.` `need --for merge` still names
+`real-input:android`, which is red on one check (`a11y:form`) and green on all 23 control sequences;
+the filtered `--control a11y` row is the run that asked for a control that is not a control, and is
+recorded only because it was run. The filtered `--control form` row is the measurement in the Questions
+section: the same app on this tree, with the a11y sweep following only the Form's own control run, is
+green — `a11y:form` included.
 
 ## Red proofs
 
@@ -122,16 +139,28 @@ published its frame - both redundant against paths the case already exercises (r
 
 ## Follow-ups
 
-- `real-input:ios` is red on two Form checks, on the tree this branch ends with. `a11y:form`: the
-  only node announced as "Row with onPress" is the React Native wrapper (trait `other` at
-  40,240,340,44), so `NitroUiFormRowCell` is not the one button element the component page claims -
-  the candidate cause to try first is that `refresh(cell:for:)` *snapshots* the aggregated label
-  when the cell is configured, before React Native has put the label on the row's content.
-- Same gate, question 5: three real taps on `form-note-field`, reached by scrolling the list to its
-  end, never give it the keyboard (`focusByTap`, `RealInputTests.swift:4043`). Both need a device
-  to iterate against; neither is visible to `check` or to the harness.
-- `real-input:android` has not reached a verdict on this branch: its own Form checks
-  (`requireControlOnScreen("Row with onPress")`) are untested by any run.
+- `a11y:form` on iOS is recorded debt now, not a red gate: the only element carrying a Form row's name
+  is the React Native wrapper for the row's own `Text` (`other`, 40,240,340,44) and the `.insetGrouped`
+  cell answers nothing for the row - storing its label when the cell is configured and deriving it on
+  every read give a byte-identical XCUITest tree, so the stale-snapshot theory is out and the merge into
+  one button element is the open item. `FOLLOWUPS.md` names the measurement that would settle it.
+- `a11y:form` on Android is red at the end of a full sweep and green without one: both full runs' dumps
+  carry "Row with onPress" twice - once on the row `[42,660][1038,775]` and once on a node whose box is
+  the whole scroll content `[0,268][1080,2424]` - byte for byte the same finding in both, while the same
+  app, reached by the same sweep after only the Form's own control run, announces it once on a node a
+  person can act on (green twice filtered: at 17:54 on the pre-dedup tree and, this round, in 737.2 s on
+  this tree). No `android/`, `src/`, `cpp/` or `example/` source differs between those runs - only
+  `scripts/real-input/*` - so the second node is not something the Form screen draws: it is a node that
+  survives the other 23 controls, answering with a row's name and the scroll content's box, which is the
+  shape a recycled view left in the tree takes (`enableViewRecycling` has been on in the example app
+  since F6). The rule grades `named[0]`, and in these dumps that is the container, so the "not
+  actionable" half is graded against the wrong node and the extra node is the only thing to find.
+- The Android reveal scrolls React Native's `ScrollView` only: a Form in a `FlatList` or a `FlashList` -
+  what `docs/components/form.md` tells a long-list reader to reach for - gets no reveal, because
+  `scrollableView()` answers for nothing else.
+- `Conformance > Progress x no-leak-on-drop` went red once on iOS (`5 ledger entry(ies) survived 50
+  drops`) and green on the immediate re-run of the same tree; the rule's own comment records CI
+  producing that shape under load. The settle window, not the Form, owns that question.
 - `NitroUiFormSectionView` drives its Compose host the way `ContextMenuView` does, and this round
   showed what that costs: a decoration host has to be *told* its box, because a Nitro host measures
   content with an unbounded height. `ContextMenuView` deserves the same look.
@@ -165,3 +194,59 @@ justified, and a read-back that could not be made red, are gone.
 `real-input:ios` would not run: its UI-test bundle had not compiled since this component's check was
 added (`formRowPresses` declared twice - `check` never compiles that bundle). Fixed, the gate
 reached the Form and failed two of its own checks, both open in Follow-ups.
+
+## Fix round 3
+
+`form` was in the real-input control table twice — hand-written and generated — so each platform ran
+the Form's sequence twice and the second run inherited the viewport the first left: with the list
+scrolled by the keyboard case it resolved "Row with onPress" below the fold, tapped empty space three
+times and reported a control that ignores a finger. The duplicate row is gone, and a coverage test
+refuses a repeated id.
+
+Round 2's Android Kotlin never compiled: `?: run {}` widened the scroller to `Any?`, and `ViewGroup`
+has no `onChildFocus`. Compiling it exposed the rest — `adjustResize` resizes nothing under API 35's
+edge-to-edge, so a row scrolled "into the viewport" lands behind the keyboard. The Form now measures
+the deficit against its own IME inset and scrolls by it (field bottom 2301 -> 1446, keyboard top 1541).
+iOS asked `hasKeyboardFocus` of the wrapper, which is not the responder inside a row.
+
+Red: the guard test with the row left in twice; the keyboard check before the reveal against `form:
+PASS` after; the debt row against `[]`; iOS question 5 before the focus witness. `real-input:ios` is
+green; `real-input:android` is green on 23/23 controls and red on `a11y:form`, twice, byte-identical.
+
+## Questions for orchestrator
+
+The branch is review-green on `9065d0b56466`; `need --for merge` names one gate,
+`real-input:android`, red on a single check (`a11y:form`) and green on all 23 control sequences. It is
+not a flake: both full runs printed the same finding, and the extra stop is React Native's node, not
+the row's. Deciding what to do with it is a call above this task, because the fix is either shared
+tooling or a component behaviour other rows of the same table depend on.
+
+What the evidence adds. The finding is **sweep-order dependent, not a property of the Form screen**:
+the a11y sweep runs after the control runs, and on this tree the Form reached alone is green
+(`real-input:android:--control:form`, PASS, `a11y:form` "named on one node a person can act on") while
+the Form reached after all 23 controls is red, twice, byte-identical. No `android/`, `src/`, `cpp/` or
+`example/` source differs between those runs — only `scripts/real-input/*`, which is the only reason
+the android tree hash moves at all. What to hunt is therefore a node that *survives a long session*,
+still answering with a row's name and the scroll content's box; a recycled view left in the tree is the
+obvious suspect. Second: the rule grades `named[0]` only, and in the red dumps `named[0]` is the
+container, so the "not actionable" half is graded against the wrong node and deduplicating the name is
+the whole fix. Third: anything under `scripts/real-input/` is unmapped and belongs to *both* platform
+trees, so touching `a11y.mjs` costs the whole merge bar again — ~106 min of device gates (11 + 16 + 32
++ 47) plus `check`. That is more than this lease had left once the second android run finished, so
+nothing was changed rather than guessed at.
+
+1. **Accept review-green**, and hand the android `a11y:form` red to the round that owns the `X4 a11y`
+   series — the same table already carries debt for Slider and SegmentedControl for exactly this
+   "name with nothing actionable" shape. Merge stays blocked until then. *Recommended.*
+2. **Record android debt rows** for both findings and re-run the merge bar (~110 min, one lease).
+   Green at merge, but it writes into a table G5/G6/X4 read that a Form row whose `onPress` nobody
+   can act on is intended behaviour, and nobody has measured that.
+3. **Find the second node**: dump at the end of a full run (the sweep keeps no dump today, which is
+   why two 47-minute runs produced a bounds and no class), confirm what still answers for the row, and
+   stop it — then re-run the merge bar. The only option that fixes what a screen reader user meets:
+   the row is announced twice, and the stop that carries the name may be the whole page.
+
+Recommend 1 now and 3 as its own round. One thing wants fixing in whichever round touches `a11y.mjs`
+first: `CHECKS.form` still comments "Android keeps that promise — the dump makes the row one node and
+this label is on it", which these two runs falsify; it is a content-hashed file, so correcting it here
+would have bought the same ~106 min.
