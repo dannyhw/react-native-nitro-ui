@@ -116,6 +116,38 @@ function need<T>(handle: T | undefined): T {
   return handle;
 }
 
+/**
+ * Assert the Form holds these rows in this relative order, judged by the words inside each
+ * row - the `order=` field of its report. Relative rather than absolute because the field is
+ * the rows' own labels joined, and a label is whatever the aggregated text of a row is; the
+ * claim this makes is only that one row sits after another, which is the claim a keyed
+ * insert or reorder has to satisfy.
+ */
+function expectOrder(
+  report: Record<string, string>,
+  names: readonly string[]
+): void {
+  const order = report.order;
+  if (order == null) throw new Error('the Form report has no "order=" field');
+  const at = names.map((name) => order.indexOf(name));
+  const missing = names.filter((_, index) => (at[index] ?? -1) < 0);
+  if (missing.length > 0) {
+    throw new Error(
+      `the Form's order "${order}" does not name ${missing.join(', ')} - every row is named ` +
+        'by the words inside it, so a row that answers to nothing is its own finding'
+    );
+  }
+  for (let index = 1; index < names.length; index += 1) {
+    const before = at[index - 1];
+    const now = at[index];
+    if (before == null || now == null || now <= before) {
+      throw new Error(
+        `the Form holds "${names[index]}" before "${names[index - 1]}" - its order is "${order}"`
+      );
+    }
+  }
+}
+
 async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
 }
@@ -533,10 +565,12 @@ describe('Form (G24)', () => {
       // row arrived; this says where. The index the Form was handed used to be the holding
       // view's position among the subviews still in it, and by the time a third row has been
       // shown that is 0 - so a keyed insert jumped to the front of the section.
-      const inserted = parse(need(forms.form).nuiTestFormReport());
-      expect(inserted.order).toContain(
-        'Wi-Fi|Bluetooth|Personal hotspot|Cellular data'
-      );
+      expectOrder(parse(need(forms.form).nuiTestFormReport()), [
+        'Wi-Fi',
+        'Bluetooth',
+        'Personal hotspot',
+        'Cellular data',
+      ]);
     }
 
     await rerender(<Probe mode="removed" {...counters()} />);
@@ -563,9 +597,12 @@ describe('Form (G24)', () => {
     );
     expect(reordered.orphans).toBe('0');
     if (IOS) {
-      expect(reordered.order).toContain(
-        'Cellular data|Wi-Fi|Bluetooth|Ring on receipt'
-      );
+      expectOrder(reordered, [
+        'Cellular data',
+        'Wi-Fi',
+        'Bluetooth',
+        'Ring on receipt',
+      ]);
     }
     if (!IOS) {
       // Question 2 again: the shapes follow the new index/count, not the old ones.
