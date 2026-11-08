@@ -295,7 +295,6 @@ describe('Form fidelity (S6 spike, question 2)', () => {
       );
     }
 
-
     theForm().nuiTestCommand('show-reference');
 
     const reference = await read(

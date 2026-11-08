@@ -4149,8 +4149,8 @@ const CHECKS = {
         // record become a green "visible above the keyboard".
         t.log.warn(
           'the IME service published no insets while its input view was up, so the ' +
-          'field-against-keyboard edge is UNMEASURED (the focus and the IME being up above ' +
-          'are not)'
+            'field-against-keyboard edge is UNMEASURED (the focus and the IME being up above ' +
+            'are not)'
         );
         return;
       }
