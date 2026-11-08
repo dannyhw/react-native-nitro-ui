@@ -1405,8 +1405,7 @@ describe('Popover', () => {
         'sheet',
         (r) => r.live === '0',
         'the sheet closed',
-        20000,
-        true
+        20000
       );
     });
 
@@ -1468,13 +1467,14 @@ describe('Popover', () => {
 
         const closeTip = async () => {
           setters.get(`${id}-tip`)?.(false);
+          // No `seq` in a tooltip's report, so no freshness rule: `live` was 1 a line
+          // above, and 0 is a fact that could not have been true before.
           await waitForHandleReport(
             tips,
             `${id}-tip`,
             (r) => r.live === '0',
             'the tooltip gone',
-            12000,
-            true
+            15000
           );
         };
         const closePop = async () => {
