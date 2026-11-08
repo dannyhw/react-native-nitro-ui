@@ -317,10 +317,16 @@ struct IconButtonContent: NitroUIContent {
   /// corner and a tap on the glyph cannot disagree about what a press is. A tap
   /// landing inside both goes to the control, which is on top of the `ZStack`.
   ///
-  /// `.accessibilityElement(children: .combine)` then makes the *one* element a
-  /// reader stops on the `ZStack` - the 44 pt box - rather than the control inside
-  /// it, which is what `scripts/real-input/a11y.mjs` compares against the laid-out
-  /// box. The layer itself is hidden, so combining it in adds a frame and no name.
+  /// What a reader stops on is the control, not the layer: the layer is hit area, so
+  /// it is hidden from a11y and the SwiftUI control keeps its own element. Two ways of
+  /// moving that stop onto the 44 pt box were tried and both measured worse:
+  /// `.accessibilityElement(children: .combine)` on the `ZStack` leaves the label on
+  /// **both** the box and the `Button` inside it - the sweep reports 2 elements under
+  /// `real-input-icon-button` announced as the control's name - and hiding the control
+  /// and naming the box leaves that `Button` element in the tree all the same, so the
+  /// name is doubled either way. One stop on the drawn control, inset from the target
+  /// it sits in, is what ships: `A11Y_EXEMPTIONS` carries the measured inset and
+  /// `scripts/real-input/a11y.mjs` says what it means.
   private var targetLayered: some View {
     ZStack {
       Color.clear
@@ -336,7 +342,6 @@ struct IconButtonContent: NitroUIContent {
         .disabled(model.disabled)
         .modifier(OptionalIconButtonTint(color: model.tint))
     }
-    .accessibilityElement(children: .combine)
   }
 
   /// The control, in the style its form has on iOS.

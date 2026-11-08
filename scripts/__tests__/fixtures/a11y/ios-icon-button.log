@@ -1,0 +1,8 @@
+Measured, not written (G23 fix round 1): the iOS a11y sweep lines for icon-button on the shipped code, iOS 27 (pair-a, iPhone 17), from .real-input/ios/xcodebuild-test.log of the run that first failed this case after the 44 pt touch target. The name is on the Button element, which keeps the style's own 38.67 pt box centred inside the 44 x 44 pt host React Native laid out: the target is a clear layer behind the control, so the element does not grow to it.
+real-input a11y case=icon-button kind=anchor id=real-input-icon-button x=16.0 y=267.0 w=44.0 h=44.0 nodes=6
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="real-input-icon-button" label="Real-input icon button" value="" x=16.0 y=267.0 w=44.0 h=44.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="" label="" value="" x=16.0 y=267.0 w=44.0 h=44.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=true id="" label="" value="" x=16.0 y=267.0 w=44.0 h=44.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=false id="" label="" value="" x=16.0 y=267.0 w=44.0 h=44.0
+real-input a11y case=icon-button kind=node trait="other" enabled=true hittable=false id="" label="" value="" x=16.0 y=267.0 w=44.0 h=44.0
+real-input a11y case=icon-button kind=node trait="button" enabled=true hittable=true id="paperplane" label="Real-input icon button" value="" x=18.666666666666664 y=269.6666666666667 w=38.66666666666667 h=38.66666666666663
