@@ -72,7 +72,7 @@ merge (X14), so there are no numbers to report.
 
 ## Red proofs
 
-Twenty rows, each with the verbatim `before`/`after` text and the failing line, in
+Twenty-one rows, each with the verbatim `before`/`after` text and the failing line, in
 `docs/tasks/G23/mutations.json`. The short form (`test -> mutation -> red line`):
 
 - `harness:android` ladder -> `width` leaves the size key -> `rung-medium-narrow … never reached
@@ -105,6 +105,11 @@ Twenty rows, each with the verbatim `before`/`after` text and the failing line, 
 - the same row -> deleted -> the measured finding is a failure again, and the debt list is
   one row short in `real-input-a11y` *and* in the matrix's two views of it
   (`conformance.test.js`, `component-coverage.test.js`)
+- the barrier step, organic again -> the helper's own guard against this callsite: the step
+  waited on the toggle's `"on"` and passed `atLeast`, a counter-only option -> `icon-button:
+  FAIL (no retries) — failed: the barrier tap on the enabled toggle: atLeast needs a counter,
+  and "on" is not one`. Fixed by dropping `atLeast`; green in
+  `real-input:android:--control:icon-button` as `expected on, saw on`.
 - organic, i.e. the test red against the real bug before its fix: the iOS glyph ladder
   (`expected 15 to be greater than 15`), the Android container asked for inside the content
   (`expected 48 to be greater than 48`), `form` missing from the key
@@ -124,6 +129,8 @@ Twenty rows, each with the verbatim `before`/`after` text and the failing line, 
   `.changeset/*` — the docs page, the README row, the pair, the changeset.
 - `example/src/stories/IconButton.stories.tsx` — the asset path that broke the Storybook bundle.
 - `scripts/conformance/make-a11y-fixtures.mjs` — scroll the tab bar before giving up on a tab.
+- `scripts/real-input/android.mjs` — the icon-button check, and the `atLeast`-on-a-state
+  misuse its first full run went red on.
 - `bench/src/*` — the `mount.icon-button` arms.
 
 ## Follow-ups

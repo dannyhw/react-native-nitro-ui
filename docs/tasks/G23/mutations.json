@@ -239,6 +239,17 @@
         "every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports: the same expect(keys).toEqual([...]) one row short (component-coverage.test.js:389)"
       ],
       "note": "The point of the wider net: the debt is not only an exemption the device run prints. It is a failing cell in the coverage matrix, so removing the row cannot quietly make a component look covered - the matrix, the runner and the a11y list all go red together. And a row that stops matching goes red through staleExemptions instead of quietly expiring."
+    },
+    {
+      "organic": true,
+      "test": "real-input:android (the icon-button check)",
+      "file": "scripts/real-input/android.mjs",
+      "mutation": "not a mutation: the helper's own shape guard fired against this task's callsite. The barrier at the end of the check waited on the toggle's value echo (\"on\") and passed atLeast as well, which is a counter-only option — so tapUntilValue refused the combination rather than guess at it",
+      "run": "real-input:android — FAIL, 22/23 controls (2748.8s, lease G23-zcs2m)",
+      "redTests": [
+        "icon-button: FAIL (no retries) — failed: the barrier tap on the enabled toggle: atLeast needs a counter, and \"on\" is not one"
+      ],
+      "note": "The full Android real-input pass is the first honest run of this check (the earlier filtered Android run in the ledger is the double-fire mutation, red by design), and it is what found the misuse. Fixed by dropping atLeast — \"on\" has no \"or more\", and the chip barrier keeps its atLeast because that one waits on a press counter, where a stalled tap landing with its retry proves the claim twice. The fixed check is green in real-input:android:--control:icon-button (666s) with the line \"the enabled toggle, tapped the same way, still answers — expected on, saw on\"."
     }
   ]
 }
