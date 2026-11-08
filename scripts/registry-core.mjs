@@ -942,8 +942,10 @@ export function regionsFor(manifests) {
       // these regions feed fails on a generated config nobody imported a copy of.
       entries: withSubViews(manifests),
       keyOf: NAME,
+      // The config is named after the entry (that is the key) and lives in the parent's
+      // directory for a sub-view, so only the file name is tied to the key here.
       entryStart:
-        /^import \{ NitroUi([A-Z]\w*)Config \} from '\.\.\/components\/\1\/NitroUi\1Config';$/,
+        /^import \{ NitroUi([A-Z]\w*)Config \} from '\.\.\/components\/[A-Z]\w*\/NitroUi\1Config';$/,
       render: (m) =>
         `import { NitroUi${m.name}Config } from '../components/${DIRECTORY(m)}/NitroUi${m.name}Config';`,
     }),
