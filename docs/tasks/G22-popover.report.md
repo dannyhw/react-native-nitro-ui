@@ -307,3 +307,32 @@ Gates on the final code tree (`9ca8d0014867`); the exported ledger keeps round 0
 
 Lease `G22-d5myp`; `need` is satisfied for review and for merge. The first Android run went
 red on Menu's own late tap; that row is the clean re-run.
+
+## Merge round
+
+**The pair fixtures now have a red proof, and a claim they cannot carry.** Handing key back to
+the app window instead of the window that held it first puts `pair-pop-first` red
+(`windowKey=0`). The same mutation leaves `pair-tip-first` green: when a key window hides,
+UIKit re-keys the highest visible window itself, so "the survivor is still key" is not ours
+alone to break. The teardown is, and it reddens both: iOS letting `popoverGone` keep its
+controller (`controllers=1`) and Android skipping the popup root's release (`roots=1`) — 2
+failed, 28 skipped each, filtered to `together`.
+
+`origin/main` brought 89 commits (G19's `androidIcon`, X21, E5, 0.8.0, the Form/IconButton
+briefs); the one conflict, `FOLLOWUPS.md`, kept both sides. Codegen, `regen`, `api-extractor`
+and `manifest:update` produced no drift.
+
+The first full `real-input:ios` lost the second of two keystrokes into the controlled field:
+the check read the echo only after the close, so a queued character left with the field. It
+waits while the popover is up now — same claim, no race — and this row is the clean re-run.
+`9cdb72c2` (one `STATUS.md` line) merged after the runs; docs-only, nothing stale.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1907 tests / 79 suites | `0226a5ab0306` | 2 m 46 s | start 13.2 / med 9.6 / max 14.7 |
+| `harness:ios` | **PASS** | 503 tests / 26 suites + isolated 6 tests / 3 suites | `0226a5ab0306` | 13 m 04 s | start 7.0 / med 6.3 / max 11.0 |
+| `harness:android` | **PASS** | 559 tests / 26 suites + isolated 6 tests / 3 suites | `0226a5ab0306` | 16 m 29 s | start 3.1 / med 4.1 / max 7.0 |
+| `real-input:ios` | **PASS** | — | `0226a5ab0306` | 30 m 53 s | start 10.3 / med 6.8 / max 38.1 |
+| `real-input:android` | **PASS** | — | `0226a5ab0306` | 47 m 14 s | start 4.8 / med 3.8 / max 16.7 |
+
+Lease `G22-p8rhv`; merge `need` satisfied; the exported ledger keeps both rounds.
