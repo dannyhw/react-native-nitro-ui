@@ -17,6 +17,7 @@
  * and wired, while `testRealInputForm` (`example/ios/NitroUiExampleUITests`) and the `form`
  * check in `scripts/real-input/android.mjs` synthesise the same taps through the OS.
  */
+import type { ReactElement } from 'react';
 import {
   Platform,
   Pressable,
@@ -47,7 +48,10 @@ type FormHandle = {
   nuiTestCommand(command: string): void;
 };
 type SectionHandle = { nuiTestSectionReport(): string };
-type RowHandle = { nuiTestRowReport(): string };
+type RowHandle = {
+  nuiTestRowReport(): string;
+  nuiTestA11yClick(): void;
+};
 
 const forms: Record<string, FormHandle> = {};
 const sections: Record<string, SectionHandle> = {};
@@ -135,7 +139,23 @@ const LONG_TEXT =
   'Airplane mode turns off every radio at once, including Bluetooth, Wi-Fi and cellular.';
 
 /** What `Probe` renders, and the counters a case reads back. */
-type Mode = 'base' | 'inserted' | 'removed' | 'grown';
+type Mode = 'base' | 'inserted' | 'removed' | 'grown' | 'reordered';
+
+/**
+ * The first section's row order, per mode.
+ *
+ * Written as an order rather than five JSX children so that `reordered` is a *move* and not a
+ * rebuild: every row keeps its key, so React asks Fabric to move the child, which is the path
+ * a "pinned rows first" toggle takes. It is also what turns the order into an assertion - the
+ * mode picks the order, and the case reads the Form's own list back.
+ */
+const FIRST_ROWS: Record<Mode, readonly string[]> = {
+  base: ['wifi', 'bt', 'cell', 'pressable'],
+  inserted: ['wifi', 'bt', 'hotspot', 'cell', 'pressable'],
+  removed: ['wifi', 'bt', 'pressable'],
+  grown: ['wifi', 'bt', 'cell', 'pressable'],
+  reordered: ['cell', 'wifi', 'bt', 'pressable'],
+};
 
 function counters() {
   const log = {
@@ -173,6 +193,53 @@ function Probe({
   onPressablePress,
   onSwitchChange,
 }: ProbeProps) {
+  // The first section's rows, built here so the handlers above stay the fixture's own, and
+  // keyed so `reordered` moves a row rather than rebuilding it. See {@link FIRST_ROWS}.
+  const firstSectionRows: Record<string, ReactElement> = {
+    wifi: (
+      <Form.Row
+        hybridRef={(view) => (rows.wifi = view)}
+        key="wifi"
+        onPress={onRowPress}
+      >
+        <Text testID="label-wifi">Wi-Fi</Text>
+      </Form.Row>
+    ),
+    bt: (
+      <Form.Row
+        accessory="disclosure"
+        hybridRef={(view) => (rows.bt = view)}
+        key="bt"
+        onPress={onRowPress}
+      >
+        <Text testID="label-bt">Bluetooth</Text>
+      </Form.Row>
+    ),
+    hotspot: (
+      <Form.Row key="hotspot" onPress={onRowPress}>
+        <Text testID="label-hotspot">Personal hotspot</Text>
+      </Form.Row>
+    ),
+    cell: (
+      <Form.Row key="cell" onPress={onRowPress}>
+        <Text testID="label-cell">Cellular data</Text>
+      </Form.Row>
+    ),
+    pressable: (
+      <Form.Row hybridRef={(view) => (rows.pressable = view)} key="pressable">
+        <Text style={styles.wrapped}>
+          {mode === 'grown' ? `${LONG_TEXT} ${LONG_TEXT}` : 'Ring on receipt'}
+        </Text>
+        <Pressable
+          onPress={onPressablePress}
+          testID="inner-press"
+          style={styles.pressable}
+        >
+          <Text>Press me</Text>
+        </Pressable>
+      </Form.Row>
+    ),
+  };
   return (
     <Form hybridRef={(view) => (forms.form = view)} style={styles.form}>
       <Form.Section
@@ -180,43 +247,7 @@ function Probe({
         hybridRef={(view) => (sections.first = view)}
         title="Connectivity"
       >
-        <Form.Row
-          hybridRef={(view) => (rows.wifi = view)}
-          key="wifi"
-          onPress={onRowPress}
-        >
-          <Text testID="label-wifi">Wi-Fi</Text>
-        </Form.Row>
-        <Form.Row
-          accessory="disclosure"
-          hybridRef={(view) => (rows.bt = view)}
-          key="bt"
-          onPress={onRowPress}
-        >
-          <Text testID="label-bt">Bluetooth</Text>
-        </Form.Row>
-        {mode === 'inserted' ? (
-          <Form.Row key="hotspot" onPress={onRowPress}>
-            <Text testID="label-hotspot">Personal hotspot</Text>
-          </Form.Row>
-        ) : null}
-        {mode === 'removed' ? null : (
-          <Form.Row key="cell" onPress={onRowPress}>
-            <Text testID="label-cell">Cellular data</Text>
-          </Form.Row>
-        )}
-        <Form.Row hybridRef={(view) => (rows.pressable = view)} key="pressable">
-          <Text style={styles.wrapped}>
-            {mode === 'grown' ? `${LONG_TEXT} ${LONG_TEXT}` : 'Ring on receipt'}
-          </Text>
-          <Pressable
-            onPress={onPressablePress}
-            testID="inner-press"
-            style={styles.pressable}
-          >
-            <Text>Press me</Text>
-          </Pressable>
-        </Form.Row>
+        {FIRST_ROWS[mode].map((key) => firstSectionRows[key])}
       </Form.Section>
       <Form.Section
         hybridRef={(view) => (sections.second = view)}
@@ -271,6 +302,55 @@ function CostForm({ count }: { count: number }) {
     </Form>
   );
 }
+
+/** A press that asks for nothing, so no case mounts an inline closure as a native callback. */
+function pressNow(): void {
+  // The harness counts what it likes; this row's `onPress` exists to make the row pressable.
+}
+
+/**
+ * One titled, pressable row - for the cases that care about what a *previous* mount left on a
+ * recycled view.
+ *
+ * React Native hands the next mount the same section and row views (`setupViewRecycling`, the
+ * F6 gate), so anything the first mount did not take back off them is the second mount's
+ * problem: a disposed Compose layer is a section that draws nothing, and a `contentDescription`
+ * React Native did not clear is a row announced under a name its own app never gave it. Both
+ * were found by mounting this twice.
+ */
+function OneRow({
+  title,
+  label,
+  styled,
+}: {
+  title: string | null;
+  label: string | null;
+  /** `false` leaves the `Form` with no `style` at all - the README's `<Form>`. */
+  styled: boolean;
+}) {
+  return (
+    <Form
+      hybridRef={(view) => (forms.one = view)}
+      onLayout={(event) => {
+        formBox.height = event.nativeEvent.layout.height;
+      }}
+      style={styled ? styles.form : undefined}
+    >
+      <Form.Section hybridRef={(view) => (sections.one = view)} title={title}>
+        <Form.Row
+          accessibilityLabel={label ?? undefined}
+          hybridRef={(view) => (rows.one = view)}
+          onPress={pressNow}
+        >
+          <Text testID="one-row">One row</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+
+/** What the last `OneRow` Form reported for its own box. */
+const formBox = { height: Number.NaN };
 
 const styles = StyleSheet.create({
   form: { flex: 1 },
@@ -448,11 +528,45 @@ describe('Form (G24)', () => {
     await boxOf('label-hotspot');
     expect(parse(need(forms.form).nuiTestFormReport()).orphans).toBe('0');
 
+    if (IOS) {
+      // ...and the insert landed *third*, which is where React put it. A count of ten says a
+      // row arrived; this says where. The index the Form was handed used to be the holding
+      // view's position among the subviews still in it, and by the time a third row has been
+      // shown that is 0 - so a keyed insert jumped to the front of the section.
+      const inserted = parse(need(forms.form).nuiTestFormReport());
+      expect(inserted.order).toContain(
+        'Wi-Fi|Bluetooth|Personal hotspot|Cellular data'
+      );
+    }
+
     await rerender(<Probe mode="removed" {...counters()} />);
     await formReport(
       (r) => num(r, 'rows') === 8,
       'eight rows after the removal'
     );
+    if (IOS) {
+      // The same field, asked *after* a removal rather than at first mount. `stale` is a row
+      // view sitting in a section's holding view that this Form never agreed to hold: on a
+      // clean mount it is 0 by definition, and it is after a removal - when a cell hands back
+      // a row another cell has already adopted - that it can become a row drawn in one place
+      // and mounted in another.
+      expect(parse(need(forms.form).nuiTestFormReport()).stale).toBe('0');
+    }
+
+    // A keyed reorder: the same four rows, `cell` moved from third to first, every key
+    // intact - so React moves the child instead of rebuilding it, which is the path a
+    // "pinned rows first" toggle takes and the one the Form's index used to lose.
+    await rerender(<Probe mode="reordered" {...counters()} />);
+    const reordered = await formReport(
+      (r) => num(r, 'rows') === 9,
+      'nine rows after the reorder'
+    );
+    expect(reordered.orphans).toBe('0');
+    if (IOS) {
+      expect(reordered.order).toContain(
+        'Cellular data|Wi-Fi|Bluetooth|Ring on receipt'
+      );
+    }
     if (!IOS) {
       // Question 2 again: the shapes follow the new index/count, not the old ones.
       const section = await reportUntil(
@@ -642,6 +756,147 @@ describe('Form (G24)', () => {
         // The cell-reuse claim, measured: on screen, not mounted-and-visible, is a window.
         expect(num(report, 'inCells')).toBeLessThan(count);
       }
+    }
+  });
+
+  it('composes a recycled Section, and drops the band of a gone title', async () => {
+    // The mount -> unmount -> mount cycle React Native's view pool makes real.
+    const first = await render(
+      <OneRow label="Named" styled={true} title="First" />
+    );
+    await reportUntil(
+      () => sections.one?.nuiTestSectionReport(),
+      (r) => Number(r.rows) === 1,
+      'the first section to hold its row'
+    );
+    first.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+    const again = await render(
+      <OneRow label="Named" styled={true} title="Second" />
+    );
+    const second = await reportUntil(
+      () => sections.one?.nuiTestSectionReport(),
+      // `layerH` is what the Compose layer was last measured at and `boxH` the section's own
+      // height. Equal is the whole claim that the layer came back: a section whose composition
+      // was dropped *with its view* - which is what `onDropView` used to do, one turn before
+      // React Native put the view in the pool - reports a box and no layer at all, and draws
+      // its rows over the page background forever. iOS has no Compose layer to lose, so the
+      // case asks it only for the rows.
+      (r) =>
+        Number(r.rows) === 1 &&
+        (IOS || Math.abs(num(r, 'layerH') - num(r, 'boxH')) < 1),
+      'the recycled section to draw its layer again'
+    );
+    if (!IOS) {
+      expect(num(second, 'headerBand')).toBeGreaterThan(0);
+    }
+
+    // A title that goes to null leaves nothing behind to measure, and Android reported the band
+    // from the heading's own `onSizeChanged` - which stops running the moment the `Text` is
+    // gone. Without a second path the height of a heading that no longer exists stays reserved
+    // in the layout forever, so a section keeps a blank band where its title used to be.
+    await again.rerender(<OneRow label="Named" styled={true} title={null} />);
+    if (!IOS) {
+      const untitled = await reportUntil(
+        () => sections.one?.nuiTestSectionReport(),
+        (r) => r.headerBand != null && num(r, 'headerBand') === 0,
+        'the gone title to give its band back'
+      );
+      expect(num(untitled, 'headerBand')).toBe(0);
+    }
+  });
+
+  it('presses a row from the accessibility path and names it for its own mount', async () => {
+    await render(<OneRow label="Named row" styled={true} title="A" />);
+    const named = await reportUntil(
+      () => rows.one?.nuiTestRowReport(),
+      (r) => r.desc != null,
+      'the row to carry its label'
+    );
+    if (!IOS) expect(named.desc).toBe('Named row');
+
+    // Unmount, and let a row with no label arrive - the shape that leaves a recycled
+    // `ReactViewGroup` answering for a mount that ended, because React Native's
+    // `prepareToRecycleView` clears its own tag and not the framework's name.
+    cleanup();
+    for (const map of [forms, sections, rows]) {
+      for (const key of Object.keys(map)) delete map[key];
+    }
+    await render(<OneRow label={null} styled={true} title="B" />);
+    const plain = await reportUntil(
+      () => rows.one?.nuiTestRowReport(),
+      (r) => r.where != null && r.desc != null,
+      'the second row to be laid out'
+    );
+    if (!IOS) {
+      expect(plain.desc).toBe('-');
+      // The other half of the promise: a row that is one clickable element to TalkBack has to
+      // answer the action the framework offers. `isClickable` only *offers* it - the press came
+      // from `dispatchTouchEvent`, which a screen reader never sends.
+      const before = num(plain, 'presses');
+      need(rows.one).nuiTestA11yClick();
+      await reportUntil(
+        () => rows.one?.nuiTestRowReport(),
+        (r) => num(r, 'presses') === before + 1,
+        '`ACTION_CLICK` to reach `onPress`'
+      );
+    }
+  });
+
+  it('has a height when the app gave it no style at all', async () => {
+    // Every iOS section is `position: 'absolute'` inside the Form, so before the base style an
+    // unstyled `<Form>` had nothing in flow and was 0 pt tall: the README, `form.md` and
+    // `readme-examples.tsx` snippets all drew nothing at all.
+    formBox.height = Number.NaN;
+    await render(<OneRow label={null} styled={false} title="Unstyled" />);
+    const deadline = Date.now() + 8000;
+    for (;;) {
+      if (formBox.height > 0) break;
+      if (Date.now() > deadline) {
+        throw new Error(
+          `an unstyled Form measured height ${String(formBox.height)} - it takes no space, so ` +
+            'its rows cannot be seen'
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(formBox.height).toBeGreaterThan(0);
+  });
+
+  it('reports a settle that no drag announced', async () => {
+    // The delegate had a `scrollViewDidLayout`, which is not a `UIScrollViewDelegate` method,
+    // so nothing ran it: a settle that was not a drag ending was reported only by the one hop
+    // a snapshot apply queues. Move the content from inside the library *without* reporting it
+    // and the shadow tree is left with the offset from before the move - the same 72 pt class
+    // of wrong that E7 measures, reached by a different door.
+    render(<MeasureForm />);
+    const form = await handleOf(() => forms.measure, 'the measuring Form');
+    await formReport(
+      (r) => num(r, 'rows') === MEASURE_ROWS,
+      `${MEASURE_ROWS} rows`,
+      'measure'
+    );
+    if (IOS) {
+      const atRest = await formReport(
+        (r) => r.origin !== undefined,
+        'the Form to have published an offset',
+        'measure'
+      );
+      expect(num(atRest, 'origin')).toBeCloseTo(num(atRest, 'offset'), 0);
+      form.nuiTestCommand('scroll-no-report');
+      const moved = await formReport(
+        (r) => num(r, 'offset') > num(atRest, 'offset') + 20,
+        'the list to have scrolled',
+        'measure'
+      );
+      await formReport(
+        (r) => Math.abs(num(r, 'origin') - num(moved, 'offset')) < 0.5,
+        'the shadow tree to be told the offset the list is at'
+      );
     }
   });
 });

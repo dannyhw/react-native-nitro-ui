@@ -6170,6 +6170,25 @@ final class RealInputTests: XCTestCase {
         + "so the \(from)-derived line at \(keyboardTop) is not a keyboard's top edge and "
         + "nothing here has measured question 5."
     )
+    if from == "window" {
+      // The echoed inset has to *be* the keyboard's overlap, not merely a positive number that
+      // came out of the keyboard notification. This screen gives the Form `flex: 1` under a top
+      // inset and no bottom padding, so the list's box runs to the bottom of the window and the
+      // overlap UIKit was asked to reserve is exactly `screen.maxY - keyboardTop`. The bug this
+      // catches (fix round 1) compared the keyboard rect, which `list.convert(_, from: nil)`
+      // hands back in *content* space, with the list's *frame* bottom — so the inset was wrong
+      // by however far the list had been scrolled, and by the time question 5 asks the list has
+      // been dragged all the way to a field near the end of a long form.
+      let overlap = screen.maxY - keyboardTop
+      XCTAssertLessThanOrEqual(
+        abs(inset - overlap),
+        2,
+        "the Form reserves a bottom inset of \(insetText) for a keyboard whose top edge is at "
+          + "\(keyboardTop) of a window ending at \(screen.maxY): the overlap is \(overlap), so "
+          + "the inset is off by \(inset - overlap) — it describes the scroll offset as much as "
+          + "the keyboard, and every row the avoidance moves is placed from that number."
+      )
+    }
     XCTAssertGreaterThanOrEqual(
       frame.maxY,
       screen.minY,
@@ -6184,6 +6203,33 @@ final class RealInputTests: XCTestCase {
     print(
       "real-input form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from \(from)) "
         + "inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
+    )
+
+    // Then a finger's scroll, because the list's offset is the variable the inset was once
+    // mixing with the keyboard's geometry. Drag *down* — the check has just scrolled to the end
+    // of the content, so a drag up would move nothing and prove nothing. The inset must survive
+    // it unchanged: a scroll is not a keyboard event, and an inset that is recomputed on one
+    // (or dropped) moves every row the avoidance has placed.
+    let anchor = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0)).withOffset(
+      CGVector(dx: 0, dy: -10)
+    )
+    anchor.press(forDuration: 0.3, thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: 40)))
+    let afterDrag = field.frame
+    let insetAfter = CGFloat(Double(echoText(Echo.formKeyboardInset)) ?? -1)
+    XCTAssertLessThanOrEqual(
+      abs(insetAfter - inset),
+      2,
+      "the reserved keyboard inset changed from \(insetText) to \(insetAfter) when the list was "
+        + "scrolled by the hand, without the keyboard moving — the field then sat \(afterDrag)."
+    )
+    XCTAssertLessThan(
+      afterDrag.minY,
+      keyboardTop,
+      "after a scroll the focused field (\(afterDrag)) is wholly below the keyboard's top edge "
+        + "\(keyboardTop): the inset it was placed with no longer keeps it on screen."
+    )
+    print(
+      "real-input form keyboard after a scroll: field=\(afterDrag) inset=\(insetAfter)"
     )
   }
 
