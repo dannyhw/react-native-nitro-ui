@@ -234,6 +234,18 @@ export interface NitroUiFormRowMethods extends HybridViewMethods {
    * @internal Not app API (D14).
    */
   nuiTestRowReport(): string;
+  /**
+   * TEMPORARY, test-only: perform `ACTION_CLICK` on the row's own view, the way TalkBack's
+   * double-tap does — the accessibility path to `onPress`, not a touch.
+   *
+   * Android only, because that is where the promise has a second half to test: the row is
+   * `clickable`, so the framework offers the action, and a `ReactViewGroup` has no click
+   * listener for it to reach. iOS activation is answered by UIKit's synthesised centre tap on
+   * the cell, which no method can invoke from here — see `docs/tasks/FOLLOWUPS.md`.
+   *
+   * @internal Not app API (D14).
+   */
+  nuiTestA11yClick(): void;
 }
 
 /** The Hybrid View React renders as `NitroUiForm`. @internal Not semver surface (D14). */

@@ -85,6 +85,8 @@ export interface NitroUiFormRowHandle {
   readonly pressable: boolean;
   /** Test-only - see `NitroUiFormRowMethods.nuiTestRowReport`. @internal */
   nuiTestRowReport(): string;
+  /** Test-only - see `NitroUiFormRowMethods.nuiTestA11yClick`. @internal */
+  nuiTestA11yClick(): void;
 }
 
 // MARK: - Form

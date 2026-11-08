@@ -131,12 +131,14 @@ internal class HybridNitroUiForm(
   override fun prepareForRecycle() {
     reportedWidthDp = -1f
     reportedImeInsetDp = -1f
+    view.resetAccessibility()
   }
 
   override fun onDropView() {
     onContentBox = null
     onContentOffset = null
     onImeInset = null
+    view.resetAccessibility()
     view.tagImeListenerToNothing()
   }
 
@@ -317,6 +319,21 @@ internal class NitroUiFormView(
       ViewCompat.onApplyWindowInsets(v, insets)
     }
     ViewCompat.requestApplyInsets(this)
+  }
+
+  /**
+   * Take the previous mount's accessibility identity off before this view goes to the pool.
+   *
+   * Same rule as the Row's and the Section's: React Native's `prepareToRecycleView` clears its
+   * own `accessibility_label` tag and leaves `contentDescription` and
+   * `importantForAccessibility` alone, so a pooled Form comes back still named by whoever had
+   * one before (fix round 1).
+   */
+  fun resetAccessibility() {
+    contentDescription = null
+    isClickable = false
+    isLongClickable = false
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
   /** Drop the listener, so a recycled view cannot report into a dead Hybrid. */

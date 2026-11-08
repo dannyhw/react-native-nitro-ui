@@ -64,6 +64,7 @@ namespace margelo::nitro::nitroui {
   public:
     // Methods
     std::string nuiTestRowReport() override;
+    void nuiTestA11yClick() override;
 
   private:
     jni::global_ref<JHybridNitroUiFormRowSpec::JavaPart> _javaPart;

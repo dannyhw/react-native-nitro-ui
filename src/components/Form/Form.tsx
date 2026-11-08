@@ -471,6 +471,7 @@ export interface RowProps extends ViewProps {
         readonly selected: boolean;
         readonly pressable: boolean;
         nuiTestRowReport(): string;
+        nuiTestA11yClick(): void;
       }) => void)
     | undefined;
 }

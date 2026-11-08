@@ -115,6 +115,23 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
 
   // MARK: - Events
 
+  /// Ask UIKit to activate the accessibility element this row is part of.
+  ///
+  /// The harness does not assert on iOS: a person's activation there is UIKit's synthesised
+  /// centre tap on the cell, which no in-process call reproduces, and a seam that called
+  /// `cellPressed()` itself would prove only that this file can call itself. The debt is in
+  /// `docs/tasks/FOLLOWUPS.md` (override `accessibilityActivate`).
+  func nuiTestA11yClick() throws {
+    DispatchQueue.main.async { [weak self] in
+      guard let component = self?.componentView else { return }
+      for candidate in sequence(first: component, next: { $0?.superview }) {
+        guard candidate.isAccessibilityElement else { continue }
+        candidate.accessibilityActivate()
+        return
+      }
+    }
+  }
+
   /// The cell's press reached this row.
   func cellPressed() {
     presses += 1

@@ -70,6 +70,10 @@ abstract class HybridNitroUiFormRowSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestRowReport(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestA11yClick(): Unit
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

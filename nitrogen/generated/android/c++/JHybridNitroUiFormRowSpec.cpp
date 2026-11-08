@@ -112,5 +112,9 @@ namespace margelo::nitro::nitroui {
     auto __result = method(_javaPart);
     return __result->toStdString();
   }
+  void JHybridNitroUiFormRowSpec::nuiTestA11yClick() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestA11yClick");
+    method(_javaPart);
+  }
 
 } // namespace margelo::nitro::nitroui

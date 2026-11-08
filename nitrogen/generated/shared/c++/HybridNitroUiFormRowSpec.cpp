@@ -25,6 +25,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridGetter("onPress", &HybridNitroUiFormRowSpec::getOnPress);
       prototype.registerHybridSetter("onPress", &HybridNitroUiFormRowSpec::setOnPress);
       prototype.registerHybridMethod("nuiTestRowReport", &HybridNitroUiFormRowSpec::nuiTestRowReport);
+      prototype.registerHybridMethod("nuiTestA11yClick", &HybridNitroUiFormRowSpec::nuiTestA11yClick);
     });
   }
 

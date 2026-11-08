@@ -148,12 +148,20 @@ internal class HybridNitroUiFormSection(
     rawFooter = null
     reported = null
     view.prepareSection()
+    view.resetAccessibility()
   }
 
   override fun onDropView() {
     onMetrics = null
     onPlacement = null
+    view.resetAccessibility()
     view.dropSection()
+  }
+
+  /** Take the previous mount's accessibility identity off before this view goes to the pool. */
+  fun resetAccessibility() {
+    contentDescription = null
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
   /** What the layer measured, in px; reported in dp once per change. */
@@ -312,11 +320,29 @@ internal class FormSectionModel : NitroUiModel() {
   /** Leaves those numbers for JavaScript. Set by the Hybrid View, which owns the Fabric node. */
   var onMetrics: ((headerPx: Float, footerPx: Float, insetPx: Float, gapPx: Float) -> Unit)? = null
 
+  /**
+   * Send the four numbers JavaScript reserves space for, as the layer currently measured them.
+   *
+   * One funnel for both callers: the layer's own `LaunchedEffect`, and `refreshChrome` when a
+   * band has just lost the text that used to measure it and no recomposition is coming.
+   */
+  fun publishMetrics(insetPx: Float) {
+    onMetrics?.invoke(headerPx, footerPx, insetPx, gapPx)
+  }
+
   override fun reset() {
     rects = emptyList()
     headerText = null
     headerTextPx = 0f
     footerTextPx = 0f
+    // The *bands*, too. They are what JavaScript reserves space for, and a recycled section
+    // that keeps the previous mount's band measures its first row under a header that no
+    // longer exists (fix round 1). `headerTextPx`/`footerTextPx` were already cleared here and
+    // the bands were not, which is the difference between a report that looks reset and a
+    // section that is.
+    headerPx = 0f
+    footerPx = 0f
+    gapPx = 0f
     footerText = null
     pressedIndex = -1
     boxW = 0f
@@ -508,19 +534,64 @@ internal class NitroUiFormSectionView(
   }
 
   fun refreshChrome() {
-    model.headerText = hybrid.title.asSecondOrNull()
-    model.footerText = hybrid.footer.asSecondOrNull()
+    val header = hybrid.title.asSecondOrNull()
+    val footer = hybrid.footer.asSecondOrNull()
+    model.headerText = header
+    model.footerText = footer
+    // A band whose text has just gone has no `Text` left to measure: the two `onSizeChanged`
+    // modifiers that normally report a band run on the view that draws it, and that view is
+    // gone. Without this the old height goes to Yoga forever and the section reserves a header
+    // over nothing (fix round 1).
+    if (header.isNullOrEmpty()) {
+      model.headerPx = 0f
+      model.headerTextPx = 0f
+    }
+    if (footer.isNullOrEmpty()) {
+      model.footerPx = 0f
+      model.footerTextPx = 0f
+    }
     composeHost?.perfInstanceId = hybrid.nuiPerfId.asSecondOrNull()?.toInt() ?: NitroUiPerf.NO_INSTANCE
     publishRects()
+    // And publish it now, from here. The layer's own `LaunchedEffect` is what normally sends
+    // these four numbers, and a band that shrank to nothing may never recompose to say so —
+    // `HybridNitroUiFormSection.reportMetrics` compares against what it last sent, so a repeat
+    // of a number that did not move costs a comparison.
+    model.publishMetrics(FormListMetrics.ContainerInset.value * resources.displayMetrics.density)
   }
 
+  /**
+   * Re-arm the layer for the mount that follows this one.
+   *
+   * `host.prepareForRecycle()` is ContextMenu's pattern, and it is the whole reset: the model
+   * with it, and the host's own "this mount has rendered nothing yet" flags. The composition
+   * was disposed by [dropSection], which `onDropViewInstance` calls first, and the host
+   * composes again from its `onAttachedToWindow` for whoever pulls this view out of the pool.
+   */
   fun prepareSection() {
-    model.reset()
+    val host = composeHost
+    if (host == null) {
+      model.reset()
+      return
+    }
+    host.prepareForRecycle()
   }
 
+  /**
+   * Release the composition, and keep the view.
+   *
+   * React Native calls `onDropViewInstance` as the front door of *recycling* as well as of a
+   * real unmount, and this view outlives the mount: it goes back to the pool and the next
+   `Form.Section` is handed the same object. Removing the host from it — which is what this did
+   * — left a pooled section with no layer at all: the shapes, the header band and the pressed
+   * state were gone for good, and every section mounted after an unmounted one drew its rows
+   * over the page background, blank (fix round 1).
+   *
+   * Disposing the composition is still right, and it is what `NitroComposeHost.drop` does
+   * properly: composition, strategy, pre-draw watches. The view stays where it is, ready for
+   * [prepareSection] to re-arm it.
+   */
   fun dropSection() {
-    composeHost?.let { removeView(it) }
-    composeHost = null
+    composeHost?.drop()
   }
 
   /** The finger is on this row, or is no longer. */
@@ -824,7 +895,7 @@ internal fun FormSegmentedLayer(
   val gapPx = with(density) { gap.toPx() }
   val insetPx = with(density) { inset.toPx() }
   LaunchedEffect(model.headerPx, model.footerPx, gapPx, insetPx) {
-    model.onMetrics?.invoke(model.headerPx, model.footerPx, insetPx, gapPx)
+    model.publishMetrics(insetPx)
   }
 }
 

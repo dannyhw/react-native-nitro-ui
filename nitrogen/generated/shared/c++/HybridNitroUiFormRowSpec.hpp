@@ -64,6 +64,7 @@ namespace margelo::nitro::nitroui {
     public:
       // Methods
       virtual std::string nuiTestRowReport() = 0;
+      virtual void nuiTestA11yClick() = 0;
 
     protected:
       // Hybrid Setup

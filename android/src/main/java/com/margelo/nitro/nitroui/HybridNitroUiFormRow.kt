@@ -1,8 +1,10 @@
 package com.margelo.nitro.nitroui
 
+import android.os.Bundle
 import android.os.Looper
 import android.os.Handler
 import android.view.MotionEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.view.ViewConfiguration
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.ui.geometry.Offset
@@ -105,6 +107,16 @@ internal class HybridNitroUiFormRow(
     onPress = null
   }
 
+  override fun nuiTestA11yClick() {
+    // The framework's own path from a double-tap to `performClick`, asked of the view rather
+    // than synthesised here: what the harness is testing is whether ACTION_CLICK reaches
+    // `onPress`, and a call that called `firePress` itself would answer that question with
+    // whatever this line did instead of with what the row does.
+    view.post {
+      view.performAccessibilityAction(AccessibilityNodeInfo.ACTION_CLICK, null)
+    }
+  }
+
   /** The cell's press reached React. */
   fun firePress() {
     onPress?.invoke()
@@ -145,6 +157,9 @@ internal class HybridNitroUiFormRow(
       "window=" + windowField(density),
       "h=${String.format("%.1f", view.height / density)}",
       "presses=${view.taps}",
+      // What a screen reader would read out for this row. A recycled view that still answers
+      // with the previous mount's label is invisible in every other number here.
+      "desc=${view.contentDescription ?: "-"}",
       "pressesPending=${if (view.pressed) 1 else 0}",
       "accessory=${rawAccessory.name.lowercase()}",
       "pressable=${if (rawPressable) 1 else 0}",
@@ -230,6 +245,42 @@ internal class NitroUiFormRowView(
     pressed = false
     pending = false
     taps = 0
+    // Take the *person-facing* identity off, not just the props.
+    //
+    // React Native's `BaseViewManager.prepareToRecycleView` clears its own
+    // `accessibility_label` tag and nothing else, so a view that goes back to the pool still
+    // answers for the mount that just ended: `contentDescription` carries the old label, and
+    // `importantForAccessibility` is still `YES` because a pressable row set it. The next
+    // mount to pull this view out of the pool is then announced with a name its own app never
+    // gave it — which is what made the Form's own screen name a plain row (fix round 1). The
+    // label the *new* mount wants arrives from its own `applyChrome`, after this.
+    contentDescription = null
+    isClickable = false
+    isLongClickable = false
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
+  }
+
+  /**
+   * Answer a screen reader's activation.
+   *
+   * `isClickable` is what makes the framework *offer* `ACTION_CLICK`, and it was the only
+   * thing this row did about accessibility — but a `ReactViewGroup` has no `OnClickListener`,
+   * so `View.performClick` had nothing to call and TalkBack's double-tap on a pressable row
+   * did nothing at all. The press only ever came from `dispatchTouchEvent`, which a screen
+   * reader never sends. This is the other half of the promise a pressable row makes: one
+   * element, and a person who cannot see it can press it (fix round 1).
+   */
+  override fun performAccessibilityAction(
+    action: Int,
+    args: Bundle?,
+  ): Boolean {
+    if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+      if (!hybrid.pressable) return false
+      taps += 1
+      hybrid.firePress()
+      return true
+    }
+    return super.performAccessibilityAction(action, args)
   }
 
   override fun onLayout(
