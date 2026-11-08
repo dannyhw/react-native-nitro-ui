@@ -1514,10 +1514,44 @@ describe('Popover', () => {
         if (closeTooltipFirst) {
           await closeTip();
           expect(isUp(reportOf(`${id}-pop`))).toBe(true);
+          if (IOS) {
+            // Up is not enough: a close hands the key window back to whatever held it
+            // before, and a popover left visible in a window that is no longer key is a
+            // menu that is on screen and deaf to everything. The tooltip opened last, so
+            // its own window was key, and closing it is what must give the popover back.
+            const keyBack = await waitForReport(
+              `${id}-pop`,
+              (r) => r.windowKey === '1',
+              'the popover holding the key window again after the tooltip closed',
+              10000
+            );
+            requireYes(
+              keyBack,
+              'windowKey',
+              'the popover beside a closed tooltip'
+            );
+          }
           await closePop();
         } else {
           await closePop();
           expect(tipUp(reportOfHandle(tips, `${id}-tip`))).toBe(true);
+          if (IOS) {
+            // The other half of the same rule: the popover was not key when it went
+            // (the tooltip's window was), so closing it has to leave the tooltip's
+            // window key - not hand key-ness back to the app behind both of them.
+            const keyBack = await waitForHandleReport(
+              tips,
+              `${id}-tip`,
+              (r) => r.windowKey === '1',
+              'the tooltip holding the key window again after the popover closed',
+              10000
+            );
+            requireYes(
+              keyBack,
+              'windowKey',
+              'the tooltip beside a closed popover'
+            );
+          }
           await closeTip();
         }
         await waitForFreshReport(
