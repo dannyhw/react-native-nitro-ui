@@ -188,6 +188,7 @@ describe('coverage', () => {
       'ContextMenu',
       'DatePicker',
       'Dialog',
+      'Form',
       'Menu',
       'Picker',
       'Progress',
@@ -2062,6 +2063,7 @@ describe('the a11y sweep, against a fake device', () => {
         'textfield',
         'searchfield',
         'contextmenu',
+        'form',
       ]);
     });
   });

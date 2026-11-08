@@ -383,6 +383,23 @@ export const A11Y_CONTROLS = Object.freeze([
     // derived from the interaction, and not a type. The name, the box and the single
     // element are still graded.
   },
+  {
+    id: 'form',
+    component: 'Form',
+    hybridView: 'NitroUiForm',
+    screen: 'form',
+    // A row with `onPress` is the element, not its two `Text`s: iOS turns the cell into
+    // one button whose label is gathered from the row's content (and stops at the first
+    // labelled view, which is why this label survives the walk), and Android merges the
+    // row into one node. What is being graded is that the merge kept the name.
+    label: 'Row with onPress',
+    role: 'interactive',
+    anchorTestId: 'form-row',
+    // The cell is a button because the row presses. `other` would be what a list cell
+    // with no press gesture announces itself as, and recording that here would freeze it.
+    iosTrait: 'button',
+  },
+
 ]);
 
 /**

@@ -198,10 +198,25 @@ const HOST_CONTROL_ROWS = Object.freeze([
   },
 ]);
 
+/**
+ * The `Form` scenario: hand-written like `<Host>`'s, because a `Form` has rows the platform
+ * lifts out of the React tree, and the harness's tag-addressed touches cannot tell a row that
+ * is wired from a row a finger can actually reach. UIKit's own hit-testing is the claim here.
+ */
+const FORM_CONTROL_ROWS = Object.freeze([
+  {
+    id: 'form',
+    title:
+      'real tap presses a form row, its own Pressable and its hosted Switch once each, leaves a row without onPress alone, and keeps a field near the bottom visible over the keyboard',
+    screen: 'form',
+  },
+]);
+
 /** Every control the suite proves, in the order it proves them. */
 export const REAL_INPUT_CONTROLS = Object.freeze([
   ...REAL_INPUT_CONTROL_ROWS,
   ...HOST_CONTROL_ROWS,
+  ...FORM_CONTROL_ROWS,
 ]);
 
 /**

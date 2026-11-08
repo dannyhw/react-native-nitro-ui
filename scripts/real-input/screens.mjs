@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'form'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -37,6 +37,7 @@ export const SCREEN_FILE = Object.freeze({
   searchfield: 'example/src/SearchFieldScreen.tsx',
   checkbox: 'example/src/CheckboxScreen.tsx',
   contextmenu: 'example/src/ContextMenuScreen.tsx',
+  form: 'example/src/FormScreen.tsx',
 });
 
 /**
@@ -113,6 +114,18 @@ export const ECHO = Object.freeze({
   searchCapped: 'search-capped-echo',
   searchFocus: 'search-focus-echo',
   ctxEcho: 'ctx-echo',
+  // The Form screen's counters: each is a <Text> in the echo bar above the list, so a tap
+  // can be read back without scrolling the form away to look at the answer.
+  formScreenEcho: 'form-screen-echo',
+  formRowPresses: 'form-row-presses',
+  formInnerPresses: 'form-inner-presses',
+  formOutsidePresses: 'form-outside-presses',
+  formSwitchChanges: 'form-switch-changes',
+  formSwitchValue: 'form-switch-value',
+  formFieldFocus: 'form-field-focus',
+  formFieldValue: 'form-field-value',
+  // iOS only: the keyboard inset the Form's list is reserving, as UIKit told it.
+  formKeyboardInset: 'form-keyboard-inset',
 });
 
 /**
@@ -219,6 +232,7 @@ export const SCREEN_TAB = Object.freeze({
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
   host: { anchor: ECHO.hostValue },
+  form: { anchor: ECHO.formScreenEcho },
 });
 
 /**
