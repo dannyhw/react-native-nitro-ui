@@ -587,6 +587,8 @@ function rectOf(field: string | undefined): Rect | null {
 function reset() {
   cleanup();
   handles.clear();
+  sheets.clear();
+  tips.clear();
   setters.clear();
   layouts.clear();
   mounts.clear();
