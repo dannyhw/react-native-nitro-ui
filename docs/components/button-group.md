@@ -159,10 +159,11 @@ same six items that overflow at 220 pt are a full row across the screen.
 - On **iOS 15** there is no `ViewThatFits`, so every item is drawn and the row clips to
   its box. Nothing overflows and nothing moves into a menu there.
 
-`overflowAccessibilityLabel` names the control on both platforms. Android could have left
-it to Material — which draws an ellipsis with no description at all — so the library
-labels it `'More'` itself unless you say otherwise. The person who needs the menu most is
-the one who cannot find it.
+`overflowAccessibilityLabel` names the control on both platforms. Android's own indicator
+arrives already named — Material calls it "More options" — and two descriptions on one
+node are read one after the other, so the library *replaces* Material's words with `'More'`
+unless you say otherwise: one name, the same word iOS draws. The person who needs the menu
+most is the one who cannot find it.
 
 ## Accessibility
 
