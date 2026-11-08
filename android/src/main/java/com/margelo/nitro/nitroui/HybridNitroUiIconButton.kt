@@ -238,7 +238,11 @@ internal class IconButtonModel : NitroUiModel() {
   /** What a toggle shows. Snapshot-observed, so writing it recomposes. */
   var displayed by mutableStateOf(false)
 
-  /** Whether the control is a toggle at all - see [IconButtonModel.isToggle]'s note. */
+  /**
+   * Whether the control is a toggle at all. Observed: it decides which composable is
+   * composed. Written from `defaultChecked != null` in `afterUpdate()`, never by a
+   * prop setter, so that the form can be switched off as well as on.
+   */
   var isToggle by mutableStateOf(false)
 
   /** `!disabled`, spelled positively for M3. */
@@ -1009,14 +1013,10 @@ class HybridNitroUiIconButton(
         ?: Variant_Boolean_NullType.Second(NullType.NULL)
     set(next) {
       val value = next.asFirstOrNull()
-      if (value != null) {
-        // A non-null `checked` is the toggle form, whichever way it arrived: the
-        // wrapper sends both form signals together, and reading either one keeps
-        // the two from disagreeing if that ever stops being true.
-        model.isToggle = true
-      }
       // Not visual on its own: `displayed` follows once the event count says JS has
-      // caught up. See `afterUpdate()`.
+      // caught up. See `afterUpdate()`. Not a form signal either: `afterUpdate()`
+      // re-reads the form from `defaultChecked` on every batch, which is the only
+      // reading that also says the caller has *stopped* using the toggle form.
       model.state.js = value
     }
 
@@ -1027,11 +1027,9 @@ class HybridNitroUiIconButton(
     set(next) {
       val seed = next.asFirstOrNull()
       model.defaultChecked = seed
-      if (seed != null) {
-        // The one signal that tells an uncontrolled toggle (both values null) from
-        // a press button (both null too).
-        model.isToggle = true
-      }
+      // The form itself is decided in `afterUpdate()`, from this value: a `null`
+      // here is the signal that the caller has stopped using the toggle form, and
+      // only `afterUpdate()` can act on it without racing the other setter.
       if (model.state.js != null || model.didApplyDefault || seed == null) {
         return
       }
@@ -1110,6 +1108,37 @@ class HybridNitroUiIconButton(
     // commit, and a file that has to be read reserves its slot in this commit and
     // fills it later (G19's rule, and AGENTS' perf contract).
     model.resolveAndroidIcon(iconArtwork)
+    // The form, re-read every batch.
+    //
+    // `defaultChecked` is non-null exactly when the wrapper is in the toggle form
+    // (`IconButton.tsx`: `defaultChecked={isToggle ? controlled.defaultValue :
+    // null}`, and `useControlled` answers a `Boolean` for `defaultValue` in that
+    // form, never `null`), so it is a signal that goes both ways. Reading it here
+    // rather than latching `isToggle = true` in a setter is what makes the form
+    // *switchable off*: a control that used `onCheckedChange` and now passes only
+    // `onPress` has to compose a press button again, and a latch could only ever
+    // answer "still a toggle". `prepareForRecycle` is not the other half of that
+    // story - a form flip is one prop update on a live view.
+    //
+    // It is observed, so writing it recomposes: the two forms are different
+    // composables, and the wrapper puts the form in the size configuration for the
+    // same reason.
+    val isToggle = model.defaultChecked != null
+    if (isToggle != model.isToggle) {
+      model.isToggle = isToggle
+      if (!isToggle) {
+        // The value half belongs to the toggle form. Leaving a selection behind
+        // would let a control that returns to the toggle form show a value its
+        // previous toggle left there.
+        model.state.displayed = false
+        model.state.js = null
+        model.state.nativeEvents = 0
+        model.state.jsEvents = 0
+        model.didApplyDefault = false
+        model.displayed = false
+      }
+      host.markDirty()
+    }
     // The handshake decides whether React's `checked` wins over what the user just
     // did - including a flip JS refused (§4). The press form has no value to
     // reconcile, so this is a no-op there.
