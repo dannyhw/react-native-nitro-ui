@@ -1533,9 +1533,9 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Eight cases across four controls: `slider` and `hosted-slider` both guard `Slider`,
+    // Nine cases across five components: `slider` and `hosted-slider` both guard `Slider`,
     // and the debt list carries both platforms' rows for a control. The matrix is about
-    // controls, so every row for one control makes exactly one failing cell.
+    // components, so every row for one control makes exactly one failing cell.
     //
     // `Picker` is here because the real accessibility tree says so, not because a rule was
     // widened to reach it: measured under XCUITest, a hosted Picker's control announces
@@ -1544,12 +1544,16 @@ describe('the debt, as the matrix sees it', () => {
     // printed on every run rather than asserted away. `ContextMenu` is the same kind of
     // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
     // as an element of its own under the wrapper that carries the label (G16).
+    // `Form` is the third measurement of that kind: on iOS a Form row keeps its name on the
+    // React Native wrapper (`other`), where Android's dump announces one `button` — so the
+    // row is a stop with a named text inside it, not the button itself (G24 round 3).
     expect(failingKeys()).toEqual([
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
+      'Form|a11y-name-on-focusable-node',
     ]);
   });
 

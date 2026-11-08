@@ -197,6 +197,38 @@ describe('the iOS a11y rule', () => {
       expect(row.matches.test(sentence(22))).toBe(false);
     });
 
+    it('records a Form row that is named only on its wrapper as debt', () => {
+      // Measured twice on pair-b (G24 rounds 2 and 3), and identical both times: the
+      // row's name reaches the React Native wrapper for the row's own `Text` and nowhere
+      // else, so the row is not the one element the component page says it is. Recorded,
+      // printed on every run, and narrow: with the row taken away the same measured tree
+      // is a failure, which is the proof the case can still go red - and a name that
+      // arrives on a *second* element, or on the wrapper as a button, matches nothing here
+      // and goes red as well.
+      const read = parseIosA11yLog(
+        readFileSync(`${__dirname}/fixtures/a11y/ios-form.log`, 'utf8')
+      ).get('form');
+      expect(read).toHaveLength(2);
+      const shipped = checkIosControlA11y(control('form'), read);
+      expect(shipped.failures).toEqual([]);
+      expect(shipped.known).toHaveLength(1);
+      expect(
+        checkIosControlA11y(control('form'), read, []).failures
+      ).toHaveLength(1);
+      const [row] = exemptionsFor('form', 'ios');
+      expect(row.matches.test(shipped.known[0])).toBe(true);
+      expect(
+        row.matches.test(
+          'NitroUiForm: "Row with onPress" is announced as an other and not as a button'
+        )
+      ).toBe(false);
+      expect(
+        row.matches.test(
+          'NitroUiForm: the element under "form-row" announces the control\'s name twice'
+        )
+      ).toBe(false);
+    });
+
     it('is the only case that may grade its wrapper', () => {
       // Every other control keeps the exclusion: React Native puts the label on the
       // wrapper whatever the control does, so for them it proves nothing.

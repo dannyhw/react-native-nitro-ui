@@ -377,10 +377,11 @@ describe('the a11y rule, on measured trees', () => {
 
 describe('the debt list', () => {
   it('is the measured findings, per platform, and nothing else', () => {
-    // Four Android rows (two controls, one finding each) and three iOS rows: the Slider's
-    // name is announced as the wrong kind of control, and a hosted Picker's name is
-    // announced twice. A row that named no platform would let one measurement excuse both
-    // halves, so each row says which one it was measured on.
+    // Four Android rows (two controls, one finding each) and four iOS rows: the Slider's
+    // name is announced as the wrong kind of control, a hosted Picker's name is announced
+    // twice, and an accessible ContextMenu still lists one Text of its own. A row that
+    // named no platform would let one measurement excuse both halves, so each row says
+    // which one it was measured on.
     expect(
       A11Y_EXEMPTIONS.map((entry) => `${entry.platform}:${entry.control}`)
     ).toEqual([
@@ -392,6 +393,7 @@ describe('the debt list', () => {
       'ios:hosted-slider',
       'ios:hosted-picker',
       'ios:context-menu',
+      'ios:form',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {
       // Each row names the FOLLOWUPS line that owns the fix, so debt has an address.
