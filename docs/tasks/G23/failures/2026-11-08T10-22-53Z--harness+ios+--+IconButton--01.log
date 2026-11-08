@@ -1,0 +1,79 @@
+# Failure excerpt — harness:ios:--:IconButton
+
+- Ran: 2026-11-08T10:22:53.460Z on code tree `651e8b4370d0` at HEAD `49e2c9e` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios -- IconButton`
+- Result: fail, exit 1, 2488 ms
+- Load: start 13.88, end 14.85, median 14.36, max 14.85
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G23-g3zrq`
+- Full log: `task/G23-icon-button/harness+ios+--+IconButton-2026-11-08T10-22-53.460Z.log` (<store>/task/G23-icon-button/harness+ios+--+IconButton-2026-11-08T10-22-53.460Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/IconButton.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+--+IconButton-2026-11-08T10-22-53.460Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-g3zrq (still live)
+  |   G22-d5myp                G22          both              pair-b
+  |   G23-g3zrq                G23          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 14.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 35 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios -- IconButton
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 651e8b4370d0, 18 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 14.85/7.69 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G23-icon-button/harness+ios+--+IconButton-2026-11-08T10-22-53.460Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+FAIL __tests__/IconButton.harness.tsx
+  ● Test suite failed to run
+
+    Must use import to load ES Module: <repo>/node_modules/react-native/index.js
+
+    The file contains ESM syntax (import/export) that could not be executed as CommonJS. Either:
+      - Configure a transform (e.g. babel-jest) that compiles this file to CommonJS (see https://jestjs.io/docs/code-transformation)
+      - If the file is in "node_modules", allow it to be transformed by adjusting "transformIgnorePatterns" (see https://jestjs.io/docs/configuration#transformignorepatterns-arraystring)
+      - Use Node v24.9+ where Jest supports require(esm) natively (see https://jestjs.io/docs/ecmascript-modules#require-of-esm)
+
+      36 |  */
+      37 | import { useState } from 'react';
+    > 38 | import {
+         | ^
+      39 |   Platform,
+      40 |   processColor,
+      41 |   TurboModuleRegistry,
+
+      at createRequireEsmError (../node_modules/@react-native-harness/cli/node_modules/jest-cli/node_modules/jest-config/node_modules/jest-runner/node_modules/jest-runtime/build/index.js:452:17)
+      at Object.require (__tests__/IconButton.harness.tsx:38:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        0.583 s
+Ran all test suites matching IconButton|--config|jest.harness.config.mjs|--testPathIgnorePatterns|\.(android)\.harness\.(?:[mc]?[jt]sx?)$.
+
+
+
+```
