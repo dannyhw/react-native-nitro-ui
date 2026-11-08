@@ -563,26 +563,46 @@ internal class PopoverHost(
   }
 
   /**
-   * The keyboard's height, read from the popup's own window - the window the input method is
-   * attached to - and pushed into the model, which places the open popup again above it
-   * (D44 item 1).
+   * The keyboard's height, and the open popup placed again above it (D44 item 1).
+   *
+   * The number comes from the *host's* window, not from the popup's own. The popup's window
+   * is the one the input method attaches to, so it is a good signal that a keyboard has
+   * arrived, but the insets it reports are its own: on the API 35 image it stopped 43 px
+   * short of the settled inset - `WindowInsets.Type.ime()` there said 840 against the 883 the
+   * activity's `InsetsState` published - and a popup clamped to that edge put the field's
+   * last pixel behind the keys. The placement is arithmetic inside the host's window (it is
+   * the window whose size the position provider is handed), so that window's root insets are
+   * the only ones the popup may be placed against. Both are watched, because whichever
+   * dispatches first should trigger the read; only the host's are trusted for the value.
+   *
+   * `rootWindowInsets` is read rather than the dispatched argument because an ancestor that
+   * consumes the ime inset would leave the argument reaching this view at zero.
    */
   @Composable
   private fun KeyboardInsets(model: PopoverModel) {
-    val view = LocalView.current
-    DisposableEffect(view, model) {
+    val popupView = LocalView.current
+    // The host view: this class, which lives in the window the popup is placed inside.
+    val hostView: View = this
+    DisposableEffect(popupView, model, hostView) {
       // Plain platform APIs, not `androidx.core`: this module does not put `androidx.core`
       // on its own compile classpath, and `View.setOnApplyWindowInsetsListener` is API 21.
-      val listener =
-        View.OnApplyWindowInsetsListener { _, insets ->
-          noteKeyboard(model, insets)
-          insets
+      // Both listeners hand back what they were given, so neither stops the dispatch - they
+      // are triggers, and the value they read is the host window's own.
+      val observer =
+        View.OnApplyWindowInsetsListener { view, incoming ->
+          noteKeyboard(
+            model,
+            hostView.rootWindowInsets ?: view.rootWindowInsets ?: incoming
+          )
+          incoming
         }
-      view.setOnApplyWindowInsetsListener(listener)
-      view.requestApplyInsets()
-      noteKeyboard(model, view.rootWindowInsets)
+      popupView.setOnApplyWindowInsetsListener(observer)
+      hostView.setOnApplyWindowInsetsListener(observer)
+      hostView.requestApplyInsets()
+      noteKeyboard(model, hostView.rootWindowInsets)
       onDispose {
-        view.setOnApplyWindowInsetsListener(null)
+        popupView.setOnApplyWindowInsetsListener(null)
+        hostView.setOnApplyWindowInsetsListener(null)
         if (model.noteImeBottom(0)) {
           applyModelWrites()
         }

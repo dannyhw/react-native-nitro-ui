@@ -90,9 +90,10 @@ A content box that changes while the popover is up resizes it on both platforms.
 
 Both platforms put the popover below the anchor, start-aligned, and above it when there
 is no room below. Android's position provider also keeps the popover inside the window
-and above the keyboard: it reads the keyboard's height from the popup's own window and
-places the open popover again when it changes, so a `TextInput` inside a popover is
-never under the keyboard (DECISIONS D44 item 1).
+and above the keyboard: it reads the keyboard's height from the window the popup is
+placed in — the app's own, not the popup's, which reports its own and slightly different
+inset — and places the open popover again when it changes, so a `TextInput` inside a
+popover is never under the keyboard (DECISIONS D44 item 1).
 
 iOS lets UIKit place the popover and permits the `.up` and `.down` arrows, which is the
 same rule with an arrow on it; a wide regular-width window is still placed by UIKit's
