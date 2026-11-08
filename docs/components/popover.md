@@ -89,11 +89,13 @@ A content box that changes while the popover is up resizes it on both platforms.
 ## Placement
 
 Both platforms put the popover below the anchor, start-aligned, and above it when there
-is no room below. Android's position provider also keeps the popover inside the window
-and above the keyboard: it reads the keyboard's height from the window the popup is
-placed in — the app's own, not the popup's, which reports its own and slightly different
-inset — and places the open popover again when it changes, so a `TextInput` inside a
-popover is never under the keyboard (DECISIONS D44 item 1).
+is no room below. Android's position provider keeps the popover inside the *visible frame*
+of the app's own window — the region below the status bar that stops at the keyboard once
+the keyboard is up — and places the open popover again when that frame moves, so a
+`TextInput` inside a popover is never under the keyboard (DECISIONS D44 item 1). The frame
+is read from the app's window rather than from the size Compose hands the provider, which
+is that frame's height with its origin thrown away: placing against the size alone leaves
+a popover pinned to the top of the screen (measured and fixed in G22).
 
 iOS lets UIKit place the popover and permits the `.up` and `.down` arrows, which is the
 same rule with an arrow on it; a wide regular-width window is still placed by UIKit's
@@ -159,5 +161,6 @@ copied — so a `Pressable` inside is a button and a `TextInput` inside is a fie
   Android has no arrow.
 - **Not for a `Host`.** Its content *and* its anchor are React Native views presented in
   a window of their own; a `<Host>` refuses it by name.
-- **The Android keyboard path is API 30+.** `WindowInsets.Type.ime()` does not exist
-  below it, and there the popover is placed as it was before: with the keyboard ignored.
+- **The Android keyboard path is API 30+.** The frame is available on every version, but
+  what moves an open popover into it is `WindowInsets.Type.ime()`, which does not exist
+  below API 30; there the popover is placed as it was before: with the keyboard ignored.

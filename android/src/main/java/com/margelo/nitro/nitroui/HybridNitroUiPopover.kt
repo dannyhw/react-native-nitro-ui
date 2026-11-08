@@ -1,6 +1,7 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -76,9 +77,9 @@ import kotlin.math.min
  *    parent - a view the component itself renders, never one it guessed at.
  *
  * D44 item 1 is [PopoverPositionProvider]: below the anchor, start-aligned, above it when
- * there is no room below, and clear of the keyboard. The keyboard's height is read from the
- * popup's own window - the one the input method is attached to - by [KeyboardInsets], and a
- * change to it places the open popup again.
+ * there is no room below, and clear of the keyboard. What it is placed against is the host
+ * window's visible display frame - whose bottom edge *is* the keyboard's edge once the
+ * keyboard is up - and [KeyboardInsets] is what has the open popup placed again when it moves.
  */
 
 /** State of one popover. See [NitroUiModel] for the shape this has to have. */
@@ -98,7 +99,14 @@ internal class PopoverModel : NitroUiModel() {
   var contentHpx by mutableIntStateOf(0)
     private set
 
-  /** The keyboard's height, px, as the popup's window reports it (D44 item 1). */
+  /**
+   * The keyboard's height, px, as the host's window reports it (D44 item 1).
+   *
+   * It places nothing by itself: [PopoverPositionProvider] is placed against the frame the
+   * keyboard has already moved. What it does is make the keyboard part of what the popup's
+   * composition observes, so that an open popup is placed again - and carry the number into
+   * [HybridNitroUiPopover.nuiTestStateReport], where a device run can see it.
+   */
   var imeBottomPx by mutableIntStateOf(0)
     private set
 
@@ -165,7 +173,7 @@ internal class PopoverModel : NitroUiModel() {
     return true
   }
 
-  /** The keyboard's height in the popup's window, px. */
+  /** The keyboard's height in the host's window, px. */
   fun noteImeBottom(heightPx: Int): Boolean {
     val next = max(0, heightPx)
     if (next == imeBottomPx) {
@@ -490,12 +498,13 @@ internal class PopoverHost(
     val heightPx = model.contentHpx
     // Read here, not only inside the provider: the popup is placed again when the keyboard
     // changes, which needs the keyboard to be part of what this composition observes. The
-    // provider is remembered, so a provider that only read it in `calculatePosition` would
-    // never be asked again.
+    // provider is remembered, so a provider that only read the frame in `calculatePosition`
+    // would never be asked again - and by the time this composition runs, the frame the
+    // provider reads has moved with the keyboard.
     val imePx = model.imeBottomPx
     val provider =
       remember(this, model, spacingPx, marginPx, imePx) {
-        PopoverPositionProvider(this, model, spacingPx, marginPx, imePx)
+        PopoverPositionProvider(this, model, spacingPx, marginPx)
       }
     Popup(
       popupPositionProvider = provider,
@@ -563,17 +572,22 @@ internal class PopoverHost(
   }
 
   /**
-   * The keyboard's height, and the open popup placed again above it (D44 item 1).
+   * Watches the keyboard so that an open popup is placed again when it arrives or leaves
+   * (D44 item 1).
    *
-   * The number comes from the *host's* window, not from the popup's own. The popup's window
-   * is the one the input method attaches to, so it is a good signal that a keyboard has
-   * arrived, but the insets it reports are its own: on the API 35 image it stopped 43 px
+   * Nothing here computes where the popup goes: [PopoverPositionProvider.visibleFrame] reads
+   * the frame the keyboard has already shrunk, which is the host window's own. What this
+   * adds is the *change* - Compose places a popup again when the state its position provider
+   * was built from moves, and the keyboard has to be part of that state or an open popup
+   * stays where the screen was before the keys came up.
+   *
+   * The value is taken from the *host's* window rather than the popup's own. The popup's
+   * window is the one the input method attaches to, so it is as good a signal that a keyboard
+   * has arrived, but the insets it reports are its own: on the API 35 image it stopped 43 px
    * short of the settled inset - `WindowInsets.Type.ime()` there said 840 against the 883 the
-   * activity's `InsetsState` published - and a popup clamped to that edge put the field's
-   * last pixel behind the keys. The placement is arithmetic inside the host's window (it is
-   * the window whose size the position provider is handed), so that window's root insets are
-   * the only ones the popup may be placed against. Both are watched, because whichever
-   * dispatches first should trigger the read; only the host's are trusted for the value.
+   * activity's `InsetsState` published - so the host's are watched and trusted, which is also
+   * the number the report carries. Both are watched, because whichever dispatches first
+   * triggers the re-placement.
    *
    * `rootWindowInsets` is read rather than the dispatched argument because an ancestor that
    * consumes the ime inset would leave the argument reaching this view at zero.
@@ -704,36 +718,33 @@ private class DrawWatch(
 }
 
 /**
- * The popup's vertical placement, as arithmetic rather than as Compose state.
+ * The popup's placement, as arithmetic rather than as Compose state.
  *
  * Three branches decide whether a `TextInput` inside the popover ends up above the keyboard
  * or under it, which is the one part of D44 item 1 a device run can only read after the
  * fact. `PopoverPlacementTest` runs the fixtures the harness measures, including the one the
  * first version got wrong: an anchor that is itself behind the keyboard, where flipping the
  * popup above the anchor still left its lower edge under the keys.
+ *
+ * Both edges of the frame are parameters rather than one height, because the coordinates this
+ * answers in are the host window's own while the region a popup may fill inside them is that
+ * window's *visible display frame*: it starts below the status bar and stops at the keyboard.
+ * The size of that frame is what Compose hands the position provider as `windowSize`, and its
+ * origin is what that size throws away. Subtracting the keyboard from the size counted the
+ * keyboard twice - the frame has already lost it - and put the popup a status bar's height too
+ * high, where the window manager pinned it to the top of the screen and left a thousand pixels
+ * of room unused (measured on the API 35 emulator, G22: keyboard up, `windowSize.height` 1399
+ * of a 2424 px screen, frame [142..1541], keyboard edge exactly the frame's bottom).
  */
 internal object PopoverPlacement {
   /**
-   * The lowest edge the popup may put content below: the window's bottom margin, or the
-   * keyboard's own top edge once the keyboard is up.
-   *
-   * @param windowHeightPx the height of the window the popup lives in
-   * @param imeBottomPx the keyboard's inset at the bottom of that window, 0 when it is away
-   * @param marginPx how far inside the window's edges the popup may not cross
-   */
-  fun usableBottom(
-    windowHeightPx: Int,
-    imeBottomPx: Int,
-    marginPx: Int,
-  ): Int = windowHeightPx - imeBottomPx - marginPx
-
-  /**
-   * @param anchorTop the anchor's top edge, in the popup's window
+   * @param anchorTop the anchor's top edge, in the host window's coordinates
    * @param anchorBottom the anchor's bottom edge
    * @param contentHeight the height the popup was composed at
    * @param spacingPx the gap kept between the anchor and the popup
-   * @param marginPx how far inside the window's edges the popup may not cross
-   * @param usableBottom [usableBottom] for this frame
+   * @param marginPx how far inside the frame's edges the popup may not cross
+   * @param frameTopPx where the frame the popup may use starts, in the same coordinates
+   * @param frameBottomPx where it ends - the keyboard's own edge once the keyboard is up
    * @returns the popup's top edge
    */
   fun placeTop(
@@ -742,8 +753,11 @@ internal object PopoverPlacement {
     contentHeight: Int,
     spacingPx: Int,
     marginPx: Int,
-    usableBottom: Int,
+    frameTopPx: Int,
+    frameBottomPx: Int,
   ): Int {
+    val minTop = frameTopPx + marginPx
+    val usableBottom = frameBottomPx - marginPx
     val below = anchorBottom + spacingPx
     val above = anchorTop - spacingPx - contentHeight
     return when {
@@ -751,17 +765,38 @@ internal object PopoverPlacement {
       // Flipping above the anchor is only an answer while the keyboard leaves the popup's
       // lower edge alone. The anchor can be behind the keyboard itself - the field that
       // raised it usually is - and then the flip parks the content under the keys.
-      above >= marginPx && above + contentHeight <= usableBottom -> above
-      // Neither placement has the room: sit as high as the screen and the keyboard allow.
-      // Android gives the popup the height it asked for, so the alternative is content the
-      // user cannot reach at all.
-      else -> max(marginPx, min(below, usableBottom - contentHeight))
+      above >= minTop && above + contentHeight <= usableBottom -> above
+      // Neither placement has the room: sit as high as the frame allows. Android gives the
+      // popup the height it asked for, so the alternative is content the user cannot reach
+      // at all.
+      else -> max(minTop, min(below, usableBottom - contentHeight))
     }
   }
+
+  /**
+   * The popup's left edge: the anchor's, moved inside the frame.
+   *
+   * @param anchorLeft the anchor's left edge, in the host window's coordinates
+   * @param contentWidth the width the popup was composed at
+   * @param marginPx how far inside the frame's edges the popup may not cross
+   * @param frameLeftPx where the frame starts horizontally
+   * @param frameRightPx where it ends
+   */
+  fun placeLeft(
+    anchorLeft: Int,
+    contentWidth: Int,
+    marginPx: Int,
+    frameLeftPx: Int,
+    frameRightPx: Int,
+  ): Int =
+    min(
+      max(anchorLeft, frameLeftPx + marginPx),
+      max(frameLeftPx + marginPx, frameRightPx - contentWidth - marginPx),
+    )
 }
 
 /**
- * Below the anchor, start-aligned, kept inside the window, and above the anchor when there is
+ * Below the anchor, start-aligned, kept inside the frame, and above the anchor when there is
  * no room below - where "room below" is the room left *after* the keyboard, which is what
  * moves a popover sitting under a keyboard up above its anchor instead (D44 item 1).
  *
@@ -774,9 +809,28 @@ private class PopoverPositionProvider(
   private val model: PopoverModel,
   private val spacingPx: Int,
   private val marginPx: Int,
-  /** Snapshotted with the provider, so a keyboard change places the open popup again. */
-  private val imeBottomPx: Int,
 ) : PopupPositionProvider {
+  /**
+   * The frame the popup may use, read from the host view rather than from [windowSize].
+   *
+   * It is the same frame Compose measures `windowSize` from - `PopupLayout` asks the host's
+   * window for its visible display frame and keeps only the size - and the platform puts a
+   * popup window inside that frame, so it is the one edge worth placing against: with the
+   * keyboard up its bottom *is* the keyboard's edge ([0,142]..[1080,1541] measured on the API
+   * 35 emulator, [0,142]..[1080,2361] with the keyboard away). A view that is not attached
+   * answers with an empty rect, and then the size Compose chose is the only thing left to go
+   * on, taken from the window's own top edge.
+   */
+  private fun visibleFrame(windowSize: IntSize): Rect {
+    val frame = Rect()
+    host.getWindowVisibleDisplayFrame(frame)
+    return if (frame.bottom > frame.top && frame.right > frame.left) {
+      frame
+    } else {
+      Rect(0, 0, windowSize.width, windowSize.height)
+    }
+  }
+
   override fun calculatePosition(
     anchorBounds: IntRect,
     windowSize: IntSize,
@@ -791,10 +845,14 @@ private class PopoverPositionProvider(
         anchorBounds.left + box.width,
         anchorBounds.top + box.height,
       )
+    val frame = visibleFrame(windowSize)
     val x =
-      min(
-        max(anchor.left, marginPx),
-        max(marginPx, windowSize.width - popupContentSize.width - marginPx),
+      PopoverPlacement.placeLeft(
+        anchorLeft = anchor.left,
+        contentWidth = popupContentSize.width,
+        marginPx = marginPx,
+        frameLeftPx = frame.left,
+        frameRightPx = frame.right,
       )
     val y =
       PopoverPlacement.placeTop(
@@ -803,8 +861,8 @@ private class PopoverPositionProvider(
         contentHeight = popupContentSize.height,
         spacingPx = spacingPx,
         marginPx = marginPx,
-        usableBottom =
-          PopoverPlacement.usableBottom(windowSize.height, imeBottomPx, marginPx),
+        frameTopPx = frame.top,
+        frameBottomPx = frame.bottom,
       )
     model.notePlaced(x, y, popupContentSize)
     return IntOffset(x, y)
