@@ -515,6 +515,20 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     return list.bounds.width
   }
 
+  /// The width a *laid-out cell* gives its row, reported by that cell's container.
+  ///
+  /// `contentWidth()` is what the list's attributes say a cell is; this is what the row is
+  /// actually drawn in, and the two differ by the cell's own content margins (16 pt on each
+  /// side of an inset-grouped list). A row whose React side is laid out at the wider number
+  /// draws its right-aligned content - a `Switch`, a chevron, a value - past the cell's edge,
+  /// and UIKit stops hit-testing at that edge: S6b measured a hosted `Switch` in a row taking
+  /// 0 of 10 real taps for exactly this reason, while content on the row's left worked.
+  func rowBoxWidthReported(_ width: CGFloat) {
+    guard width > 0, abs(width - reportedWidth) > 0.25 else { return }
+    reportedWidth = width
+    contentBox?(Double(width))
+  }
+
   // MARK: - What the layout knows (a Section asks, rather than typing constants)
 
   /// The width a cell gets, for measuring the space a header needs.
