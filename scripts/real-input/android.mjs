@@ -3061,14 +3061,21 @@ const CHECKS = {
         true
       );
       const aboveIme = afterField.bounds.y2 <= imeTop;
+      // The popup's own box and the anchor's go into the message because the placement has
+      // three branches, and the only way to tell which one ran is to see where the popup put
+      // its box relative to the anchor it was placed against.
+      const popupBox = t.nodeByTestId('popover-field-popover')?.bounds;
+      const anchorBox = t.nodeByTestId('popover-field-anchor')?.bounds;
       t.log.checkEquals(
         // A wrong number here has always been a measurement problem rather than a popover
-        // one, so the failure names the two dumps the number came from.
+        // one, so the failure names the dump the number came from.
         `the field stays above the keyboard (field bottom ${String(
           afterField.bounds.y2
-        )}, keyboard top ${String(imeTop)})${
-          aboveIme ? '' : ` - ${t.imeFrameSample()}`
-        }`,
+        )}, keyboard top ${String(imeTop)}, popup ${
+          popupBox ? `${String(popupBox.y1)}..${String(popupBox.y2)}` : '-'
+        }, anchor ${
+          anchorBox ? `${String(anchorBox.y1)}..${String(anchorBox.y2)}` : '-'
+        })${aboveIme ? '' : ` - ${t.imeFrameSample()}`}`,
         aboveIme,
         true
       );
