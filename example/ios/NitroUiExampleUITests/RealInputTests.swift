@@ -5601,11 +5601,32 @@ final class RealInputTests: XCTestCase {
   /// is still on screen above the keyboard.
   private func assertFormKeepsFieldAboveKeyboard() throws {
     let identifier = "form-note-field"
-    let field = try required(identifier, as: "the note field near the bottom of the form")
+    // A Form is not a page: the list realises a row only while it is drawing one, so
+    // unlike every other screen here the field is not merely off-screen, it is not in the
+    // accessibility tree at all until the list has been scrolled to it. (It is also the
+    // answer to "can anything anchor to a row that is not visible": no, and a shipped Form
+    // needs a scroll-to before a measure.)
+    let field = app.descendants(matching: .any)[identifier].firstMatch
+    var revealed = false
+    for _ in 0..<14 {
+      app.swipeUp()
+      if field.waitForExistence(timeout: 1) {
+        revealed = true
+        break
+      }
+    }
+    guard revealed else {
+      dumpHierarchy("the note field never appeared, however far the list was scrolled")
+      XCTFail(
+        "the note field near the bottom of the form never became a realised row, so the list "
+          + "never drew it: question 5 has nothing to focus."
+      )
+      throw RealInputCheckAborted(identifier: identifier)
+    }
 
-    // Scroll to the end of the list, the way the Date screen does it: the page is at
-    // the end when another swipe stops moving the field, not when the field first
-    // becomes hittable — a field in the middle of the screen tests nothing.
+    // Then to the end of the list, the way the Date screen does it: the page is at the end
+    // when another swipe stops moving the field — a field in the middle of the screen tests
+    // nothing about a keyboard.
     var position = field.frame
     for _ in 0..<12 {
       app.swipeUp()
