@@ -684,6 +684,63 @@ private class DrawWatch(
 }
 
 /**
+ * The popup's vertical placement, as arithmetic rather than as Compose state.
+ *
+ * Three branches decide whether a `TextInput` inside the popover ends up above the keyboard
+ * or under it, which is the one part of D44 item 1 a device run can only read after the
+ * fact. `PopoverPlacementTest` runs the fixtures the harness measures, including the one the
+ * first version got wrong: an anchor that is itself behind the keyboard, where flipping the
+ * popup above the anchor still left its lower edge under the keys.
+ */
+internal object PopoverPlacement {
+  /**
+   * The lowest edge the popup may put content below: the window's bottom margin, or the
+   * keyboard's own top edge once the keyboard is up.
+   *
+   * @param windowHeightPx the height of the window the popup lives in
+   * @param imeBottomPx the keyboard's inset at the bottom of that window, 0 when it is away
+   * @param marginPx how far inside the window's edges the popup may not cross
+   */
+  fun usableBottom(
+    windowHeightPx: Int,
+    imeBottomPx: Int,
+    marginPx: Int,
+  ): Int = windowHeightPx - imeBottomPx - marginPx
+
+  /**
+   * @param anchorTop the anchor's top edge, in the popup's window
+   * @param anchorBottom the anchor's bottom edge
+   * @param contentHeight the height the popup was composed at
+   * @param spacingPx the gap kept between the anchor and the popup
+   * @param marginPx how far inside the window's edges the popup may not cross
+   * @param usableBottom [usableBottom] for this frame
+   * @returns the popup's top edge
+   */
+  fun placeTop(
+    anchorTop: Int,
+    anchorBottom: Int,
+    contentHeight: Int,
+    spacingPx: Int,
+    marginPx: Int,
+    usableBottom: Int,
+  ): Int {
+    val below = anchorBottom + spacingPx
+    val above = anchorTop - spacingPx - contentHeight
+    return when {
+      below + contentHeight <= usableBottom -> below
+      // Flipping above the anchor is only an answer while the keyboard leaves the popup's
+      // lower edge alone. The anchor can be behind the keyboard itself - the field that
+      // raised it usually is - and then the flip parks the content under the keys.
+      above >= marginPx && above + contentHeight <= usableBottom -> above
+      // Neither placement has the room: sit as high as the screen and the keyboard allow.
+      // Android gives the popup the height it asked for, so the alternative is content the
+      // user cannot reach at all.
+      else -> max(marginPx, min(below, usableBottom - contentHeight))
+    }
+  }
+}
+
+/**
  * Below the anchor, start-aligned, kept inside the window, and above the anchor when there is
  * no room below - where "room below" is the room left *after* the keyboard, which is what
  * moves a popover sitting under a keyboard up above its anchor instead (D44 item 1).
@@ -719,18 +776,16 @@ private class PopoverPositionProvider(
         max(anchor.left, marginPx),
         max(marginPx, windowSize.width - popupContentSize.width - marginPx),
       )
-    val below = anchor.bottom + spacingPx
-    val above = anchor.top - spacingPx - popupContentSize.height
-    val usableBottom = windowSize.height - imeBottomPx - marginPx
     val y =
-      when {
-        below + popupContentSize.height <= usableBottom -> below
-        above >= marginPx -> above
-        // Neither side has the room: sit as low as the screen and the keyboard allow. Android
-        // gives the popup the height it asked for, so the alternative is content the user
-        // cannot reach at all.
-        else -> max(marginPx, min(below, usableBottom - popupContentSize.height))
-      }
+      PopoverPlacement.placeTop(
+        anchorTop = anchor.top,
+        anchorBottom = anchor.bottom,
+        contentHeight = popupContentSize.height,
+        spacingPx = spacingPx,
+        marginPx = marginPx,
+        usableBottom =
+          PopoverPlacement.usableBottom(windowSize.height, imeBottomPx, marginPx),
+      )
     model.notePlaced(x, y, popupContentSize)
     return IntOffset(x, y)
   }
