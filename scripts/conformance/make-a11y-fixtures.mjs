@@ -80,6 +80,47 @@ function scrollToTop() {
   sleep(500);
 }
 
+/** Slide the example's horizontal tab bar, so a tab scrolled away comes back. */
+function scrollTabs(direction) {
+  const y = '205';
+  adb(
+    direction === 'forward'
+      ? ['input', 'swipe', '900', y, '180', y, '300']
+      : ['input', 'swipe', '180', y, '900', y, '300']
+  );
+  sleep(400);
+}
+
+/**
+ * The tab for a screen, scrolling the bar until it is laid out.
+ *
+ * The bar is a `HorizontalScrollView` (X19), so a tab that is scrolled off is not in a
+ * dump at all - `uiautomator` reports what is laid out, not what a list could draw. The
+ * one-dump lookup predates X19, when every tab fitted; it now finds only the first
+ * screenful, which is why every control added after the seventh could not be reached.
+ * The bar is rewound first, so this works whichever side of the last screen the tab is on.
+ *
+ * @param {string} label the `content-desc` the tab carries
+ */
+function findTab(label) {
+  const onScreen = () =>
+    parseHierarchy(dump()).find(
+      (node) =>
+        node.contentDesc === label &&
+        node.bounds.y1 > 100 &&
+        node.bounds.y1 < 300
+    ) ?? null;
+  for (let i = 0; i < 6; i += 1) scrollTabs('back');
+  const atStart = onScreen();
+  if (atStart != null) return atStart;
+  for (let i = 0; i < 14; i += 1) {
+    scrollTabs('forward');
+    const candidate = onScreen();
+    if (candidate != null) return candidate;
+  }
+  return null;
+}
+
 /**
  * The named node's real ancestors, in document order, plus the named node itself.
  *
@@ -119,12 +160,7 @@ for (const control of A11Y_CONTROLS) {
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();
-    const tab = parseHierarchy(dump()).find(
-      (node) =>
-        node.contentDesc === TAB_LABEL[control.screen] &&
-        node.bounds.y1 > 100 &&
-        node.bounds.y1 < 300
-    );
+    const tab = findTab(TAB_LABEL[control.screen]);
     if (tab == null) throw new Error(`no ${control.screen} tab`);
     tapAt(tab.bounds.cx, tab.bounds.cy);
     sleep(2500);
