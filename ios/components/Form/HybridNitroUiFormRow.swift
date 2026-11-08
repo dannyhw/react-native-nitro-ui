@@ -124,7 +124,7 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
   func nuiTestA11yClick() throws {
     DispatchQueue.main.async { [weak self] in
       guard let component = self?.componentView else { return }
-      for candidate in sequence(first: component, next: { $0?.superview }) {
+      for candidate in sequence(first: component, next: { $0.superview }) {
         guard candidate.isAccessibilityElement else { continue }
         candidate.accessibilityActivate()
         return
