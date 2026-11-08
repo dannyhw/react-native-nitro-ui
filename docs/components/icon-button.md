@@ -232,8 +232,8 @@ hidden. `variant` is in the key for the same reason: each configuration is measu
   finger can land anywhere in the 44 pt target, because the tappable margin behind the
   control is hidden from a reader on purpose. Two ways of moving the stop onto the
   target were built and both measured worse — they left the name on two elements — so
-  the inset stop is recorded as debt (`docs/tasks/FOLLOWUPS.md`) with those numbers, and
-  the sweep keeps going red if the name moves anywhere else.
+  the inset stop is what ships, and the real-input sweep prints it on every run and goes
+  red the moment the name lands somewhere else.
 
 ## Behaviour notes
 
