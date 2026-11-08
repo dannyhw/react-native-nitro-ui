@@ -3338,6 +3338,7 @@ final class RealInputTests: XCTestCase {
     let disabledItem = "real-input-button-group-disabled-item"
     let disabledGroup = "real-input-button-group-disabled"
     let overflow = "real-input-button-group-overflow"
+    let overflowControl = "Real-input overflow control"
 
     // 1. At rest: every counter at zero and the controlled toggles showing the set
     //    React gave them, so every number below is one that moved.
@@ -3517,9 +3518,9 @@ final class RealInputTests: XCTestCase {
       buttonGroupItem(overflow, titled: "Day").exists,
       "while an item that fits should still be drawn"
     )
-    try tapUntilOption(
-      "real-input-button-group-overflow",
-      as: "the overflow control",
+    try tapItemUntilOption(
+      overflow,
+      titled: overflowControl,
       option: "Quarter",
       waitingFor: "the overflow menu to open"
     )
@@ -5787,6 +5788,35 @@ final class RealInputTests: XCTestCase {
       reading: { String(describing: popovers.count) }
     ) { shown in
       shown != "0"
+    }
+  }
+
+  /// The same retry loop, aimed at one *item* of a group instead of at the element
+  /// carrying an identifier.
+  ///
+  /// A group's overflow control has no identifier of its own: it is a `Menu` inside the
+  /// group's container, named by `overflowAccessibilityLabel`. Pressing the container
+  /// lands in the middle of the row - on an ordinary item - so the menu never opens and
+  /// the check blames the touch. Measured on iOS 27: three presses on
+  /// `real-input-button-group-overflow` left `0 row(s) named "Quarter"`, the tap having
+  /// gone to whatever item shared the group's centre. The Android half already presses
+  /// the control by its own name and its menu opens on the first tap, which is the
+  /// reading this matches.
+  private func tapItemUntilOption(
+    _ identifier: String,
+    titled itemTitle: String,
+    option title: String,
+    waitingFor: String,
+    attempts: Int = 3
+  ) throws {
+    try pressUntil(
+      named: "\"\(itemTitle)\" in \(identifier)",
+      waitingFor: waitingFor,
+      attempts: attempts,
+      press: { _ in try self.requiredItem(identifier, itemTitle).fingerTap() },
+      reading: { "\(self.optionLabels(containing: title)) row(s) named \"\(title)\"" }
+    ) { shown in
+      !shown.hasPrefix("0 ")
     }
   }
 
