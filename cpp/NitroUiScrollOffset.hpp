@@ -19,6 +19,7 @@
 #pragma once
 
 #include <cmath>
+#include <optional>
 #include <type_traits>
 #include <variant>
 
@@ -38,6 +39,16 @@ namespace margelo::nitro::nitroui::detail {
       }
     }, value);
     return offset;
+  }
+
+  /// An optional prop (`nuiContentOffsetY?: number`) generates an `optional`, and nitrogen
+  /// has moved a nullable union between "variant" and "optional of variant" between
+  /// versions. Without this the reader would fail to compile rather than be wrong, which is
+  /// loud enough -- but the same shape rule covers it for free, and an absent optional is a
+  /// "not told yet" exactly like a `null` is.
+  template <typename TValue>
+  inline double scrollOffsetOf(const std::optional<TValue>& value) {
+    return value.has_value() ? scrollOffsetOf(*value) : 0.0;
   }
 
 } // namespace margelo::nitro::nitroui::detail
