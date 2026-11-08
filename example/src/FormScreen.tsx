@@ -8,14 +8,15 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Switch, TextField } from 'react-native-nitro-ui';
+import { Form, Switch, TextField } from 'react-native-nitro-ui';
 
-// The spike prototype, not a shipped component: no manifest and no export from the
-// entry point, so this is the one screen that imports a component by path. It exists
-// because `real-input` can only prove what the example app actually renders - and
-// S6's iOS taps had nothing to tap. See docs/tasks/S6b-form-spike-ios.md.
-import { Form } from '../../src/components/Form/Form';
-import type { NitroUiFormMethods } from '../../src/components/Form/Form.nitro';
+// The one thing this screen reads that app code has no business reading: the Form's own
+// report, whose `keyboard=` field is UIKit's number for the keyboard. `hybridRef` and its
+// test seams are internal (D14), so the handle is named by the methods this screen calls,
+// the way `example/__tests__/Form.harness.tsx` names it.
+type FormHandle = {
+  nuiTestFormReport(): string;
+};
 
 /** How often the screen asks the Form's own report for its keyboard inset. */
 const REPORT_POLL_MS = 150;
@@ -101,7 +102,7 @@ export default function FormScreen() {
   const [note, setNote] = useState('');
   const [focused, setFocused] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
-  const formRef = useRef<NitroUiFormMethods | null>(null);
+  const formRef = useRef<FormHandle | null>(null);
 
   // Question 5 needs the keyboard's own number, not a guess at it. UIKit tells the Form
   // how tall the keyboard is (it sets its list's bottom inset from
