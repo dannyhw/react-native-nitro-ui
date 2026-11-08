@@ -391,6 +391,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       return UICollectionViewCell()
     }
     let model = sections[indexPath.section]
+    // Name this Form to the cell here, where the cell is *configured*. A
+    // `UICollectionViewCell` has no back-reference to its collection view, so everything a
+    // cell has to ask its Form - the box it draws a row in, a chrome refresh - goes through
+    // this one reference, and it used to be set only as a side effect of `rowResized`,
+    // which a row reaches by way of it. Nothing reported anything: the width a row was laid
+    // out at stayed at the last guess the list's layout made, and a hosted `Switch` ended up
+    // past the cell's edge, where UIKit stops hit-testing (S6b question 4, 0 of 10 taps).
+    cell.formOwner = self
     cell.onGiveBack = { [weak self] given in
       self?.reclaims += 1
       // Back to its section's holding view, where Fabric put it. The Form's own move, so
