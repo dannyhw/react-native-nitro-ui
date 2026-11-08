@@ -295,8 +295,7 @@ a presented `BottomSheet`, Tooltip + Popover closed either way - each red before
 Docs: `Pressable` anchors, four refusals, the lifecycle-observer claim retired with
 `35e427a4`, the README pair retaken.
 
-Gates on the final code tree (`9ca8d0014867`); the ledger is exported to
-`docs/tasks/G22/gates.jsonl` with round 0's lines kept:
+Gates on the final code tree (`9ca8d0014867`); the exported ledger keeps round 0's lines:
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
@@ -306,6 +305,5 @@ Gates on the final code tree (`9ca8d0014867`); the ledger is exported to
 | `real-input:ios` | **PASS** | — | `9ca8d0014867` (ios tree) | 31 m 58 s | start 5.5 / med 13.4 / max 126.3 |
 | `real-input:android` | **PASS** | — | `9ca8d0014867` (android tree) | 47 m 00 s | start 16.2 / med 3.5 / max 16.2 |
 
-Lease `G22-d5myp`. `need --for review` and `--for merge` are both satisfied (exit 0). The
-first Android `real-input` run went red on Menu's own late tap; that row is the clean
-re-run, green with no retries.
+Lease `G22-d5myp`; `need` is satisfied for review and for merge. The first Android run went
+red on Menu's own late tap; that row is the clean re-run.
