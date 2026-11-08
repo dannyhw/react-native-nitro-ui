@@ -1,5 +1,5 @@
 /**
- * Question 2 of Q10 Appendix E, on iOS: the prototype's inset-grouped list against the same
+ * Question 2 of Q10 Appendix E, on iOS: the Form's inset-grouped list against the same
  * three sections in a SwiftUI `Form`, measured by the same Swift code reading the
  * `UICollectionView` that is currently in the Form's box.
  *
@@ -8,13 +8,13 @@
  * corner radius, separator start, supplementary frames - never a constant, and the go line is
  * 1 pt.
  *
- * The two `hold()`s are screenshot windows: `docs/tasks/S6/` wants the prototype and the
+ * The two `hold()`s are screenshot windows: the fidelity question wants our list and the
  * reference at the same traits, and this is the one place both are on screen with the same
  * width. The suite runs once per trait set (light, dark, the largest content size), which is
  * why it is its own gate rather than a case inside `Form.harness`.
  *
  * Android has no platform `Form` to compare with, so the case there only checks that the
- * prototype measured itself, and the report says the Android half of question 2 is the
+ * Form measured itself, and the report says the Android half of question 2 is the
  * `SegmentedListItem` shape check in `Form.harness`.
  */
 import { useState } from 'react';
@@ -147,7 +147,7 @@ async function hold(marker: string): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 9000));
 }
 
-/** The same nine rows the reference shows, as the prototype renders them. */
+/** The same nine rows the reference shows, as our Form renders them. */
 function FidelityForm() {
   return (
     <Form
@@ -229,14 +229,14 @@ const CONTAINER_BOUND_PT = 1;
  */
 const ROW_BOX_BOUND_PT = 0.5;
 
-describe('Form fidelity (S6 spike, question 2)', () => {
+describe('Form fidelity against a SwiftUI Form (E2)', () => {
   afterEach(() => {
     cleanup();
     for (const key of Object.keys(forms)) delete forms[key];
     for (const key of Object.keys(sections)) delete sections[key];
   });
 
-  it('measures the prototype and a SwiftUI Form the same way (E2)', async () => {
+  it('measures the Form and a SwiftUI Form the same way (E2)', async () => {
     // The banner is the only way to tell the two screens apart in a screenshot, and a
     // screenshot is the evidence question 2 asks for.
     render(
@@ -249,14 +249,14 @@ describe('Form fidelity (S6 spike, question 2)', () => {
       // `kind` is iOS-only: it names which list the probe measured. Android has one list,
       // so its report has nothing of the kind to match on.
       (r) => num(r, 'rows') === 8 && (!IOS || r.kind === 'prototype'),
-      'the prototype list'
+      'the nitro-ui Form list'
     );
 
     console.log(`S6 GEOM prototype ${theForm().nuiTestFormReport()}`);
     await hold('prototype: nitro-ui Form');
 
     if (!IOS) {
-      // No platform Form on Android: measuring the prototype is the whole iOS-free half.
+      // No platform Form on Android: measuring our own list is the whole iOS-free half.
       expect(num(proto, 'rows')).toBe(8);
       // ...except the one thing only Android can get wrong. The header and footer are
       // Compose text in a layer *under* the rows, so the rows cover whatever Yoga failed

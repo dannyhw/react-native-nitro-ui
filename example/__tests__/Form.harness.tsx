@@ -1,7 +1,10 @@
 /**
- * On-device tests for the S6 Form spike (Q10 Appendix E's seven questions).
+ * On-device tests for `Form`, `Form.Section` and `Form.Row` (G24, DECISIONS D45).
  *
- * The prototype is a `UICollectionView` inset-grouped list on iOS and a Material 3
+ * The `(E…)` on each case is the question of Q10 Appendix E that the case answers, kept
+ * because `docs/tasks/Q10-form-list-research.report.md` is where the answers are read.
+ *
+ * The container is a `UICollectionView` inset-grouped list on iOS and a Material 3
  * segmented column on Android, so the honest channel is the test seams
  * (`nuiTestFormReport`, `nuiTestSectionReport`, `nuiTestRowReport`, whose fields
  * `src/components/Form/Form.nitro.ts` documents) plus React's own counters. The report is
@@ -11,8 +14,8 @@
  *
  * What these cases *cannot* prove is a finger's touch: `react-native-harness` delivers
  * events by tag, so they show that a reparented row and its hosted Switch are addressable
- * and wired, while `docs/tasks/S6/real-input.md` records the same taps synthesised by the
- * OS. Both are named in the report.
+ * and wired, while `testRealInputForm` (`example/ios/NitroUiExampleUITests`) and the `form`
+ * check in `scripts/real-input/android.mjs` synthesise the same taps through the OS.
  */
 import {
   Platform,
@@ -386,7 +389,7 @@ async function until<T>(
   }
 }
 
-describe('Form (S6 spike)', () => {
+describe('Form (G24)', () => {
   afterEach(() => {
     cleanup();
     forgetPromisedHandles();
@@ -574,8 +577,8 @@ describe('Form (S6 spike)', () => {
       // content). Ten presses of the Pressable and ten of the hosted Switch, aimed through
       // that geometry, reach neither: the counters stay at zero while the same case on
       // Android counts ten of each. A touch the operating system aims at the screen does
-      // reach them, and that is what FormTouch.harness.tsx + docs/tasks/S6/real-input.md
-      // measure. G-Form must not build anything on a row's measured position on iOS.
+      // reach them, and that is what `testRealInputForm` measures, ten taps per control,
+      // with the counters read back out of the screen.
       for (let index = 0; index < 10; index += 1) {
         await userEvent.press(pressable);
         await userEvent.press(toggle);
@@ -835,7 +838,7 @@ function round1(value: number): string {
   return value.toFixed(1);
 }
 
-describe('Form measure (S6b spike, question 4)', () => {
+describe('Form measure (E7)', () => {
   afterEach(() => {
     cleanup();
   });
