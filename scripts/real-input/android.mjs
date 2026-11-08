@@ -2156,6 +2156,12 @@ const CHECKS = {
 
     // 6. The barrier: the same press on the enabled toggle still lands, so the
     //    silence above was a refusal and not a screen that had stopped answering.
+    //    No `atLeast` here, unlike the chip's barrier: that one waits on a *counter*,
+    //    where a tap that stalls past the window lands with its retry and skips a
+    //    number (G12: 1 -> 3) while still proving the press arrived. This waits on a
+    //    state, and "on" has no "or more" - so the helper refuses the combination
+    //    instead of guessing at it, which is how this callsite's first device run
+    //    went red on the check's last line rather than answering the question.
     t.log.checkEquals(
       'the enabled toggle, tapped the same way, still answers',
       await t.tapUntilValue(
@@ -2163,7 +2169,7 @@ const CHECKS = {
         ECHO.iconButtonValue,
         'on',
         'the barrier tap on the enabled toggle',
-        { nativeLabel: TOGGLE, atLeast: true }
+        { nativeLabel: TOGGLE }
       ),
       'on'
     );
