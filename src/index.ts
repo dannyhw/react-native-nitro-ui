@@ -180,6 +180,8 @@ export {
 // of a section is a row too, so an app writes the wrapper only when it wants one.
 export {
   Form,
+  type FormAccessory,
+  type FormComponent,
   type FormProps,
   type FormSectionProps,
   type RowProps as FormRowProps,

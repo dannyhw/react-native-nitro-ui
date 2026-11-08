@@ -5,6 +5,7 @@ import {
   useContext,
   useMemo,
   useState,
+  type JSX,
   type ReactNode,
 } from 'react';
 import {
@@ -18,10 +19,7 @@ import {
 
 import { useStableCallback } from '../../core/useStableCallback';
 import type { NitroCallbackProp } from '../../core/useStableCallback';
-import type { NitroUiFormHandle } from './NativeFormViews';
-import type { NitroUiFormSectionHandle } from './NativeFormViews';
-import type { NitroUiFormRowHandle } from './NativeFormViews';
-import type { NitroUiFormAccessory } from './Form.nitro';
+import type { NitroUiFormAccessory as FormAccessory } from './Form.nitro';
 import {
   NativeNitroUiForm,
   NativeNitroUiFormRow,
@@ -29,6 +27,19 @@ import {
 } from './NativeFormViews';
 
 const IOS = Platform.OS === 'ios';
+
+/**
+ * The trailing accessory of a form row, as an app names it.
+ *
+ * `disclosure` is UIKit's `UICellAccessory.disclosureIndicator` and Material Symbols'
+ * `chevron_right`; `checkmark` is `UICellAccessory.checkmark` and `check`. Neither is
+ * drawn from a typed-out path (D43).
+ *
+ * The public name of `NitroUiFormAccessory` in `Form.nitro.ts`, which the native side
+ * answers to — the same three strings, one definition, exported under the name the
+ * entry point publishes so api-extractor does not ask for the internal one.
+ */
+export type { FormAccessory };
 
 /**
  * The room an Android accessory takes at a row's trailing edge: the section draws the glyph
@@ -93,8 +104,22 @@ export interface FormProps extends ViewProps {
    * visible (D45 item 1).
    */
   keyboardAvoidance?: boolean | undefined;
-  /** The Hybrid View handle, as every control's `hybridRef` gives it. @internal Test seam. */
-  hybridRef?: ((view: NitroUiFormHandle) => void) | undefined;
+  /**
+   * The Hybrid View handle, as every control's `hybridRef` gives it.
+   *
+   * @internal Not app API (DECISIONS D14). The shape is `NitroUiFormHandle` in
+   * `NativeFormViews.ts`, written inline (as `TextField.tsx` does) so api-extractor does
+   * not demand that an internal native type be exported.
+   */
+  hybridRef?:
+    | ((view: {
+        readonly keyboardAvoidance: boolean;
+        readonly nuiContentOffsetY: number | null;
+        nuiTestFormReport(): string;
+        nuiTestScrollTo(y: number): void;
+        nuiTestCommand(command: string): void;
+      }) => void)
+    | undefined;
 }
 
 /**
@@ -182,8 +207,18 @@ export interface FormSectionProps extends ViewProps {
   title?: string | null | undefined;
   /** The footer below the rows, as text. */
   footer?: string | null | undefined;
-  /** The Hybrid View handle. @internal Test seam. */
-  hybridRef?: ((view: NitroUiFormSectionHandle) => void) | undefined;
+  /**
+   * The Hybrid View handle.
+   *
+   * @internal Not app API (D14). The shape of `NitroUiFormSectionHandle`, inline.
+   */
+  hybridRef?:
+    | ((view: {
+        readonly title: string | null;
+        readonly footer: string | null;
+        nuiTestSectionReport(): string;
+      }) => void)
+    | undefined;
 }
 
 /** What a section has to reserve, as the platform measured it. */
@@ -356,11 +391,23 @@ export interface RowProps extends ViewProps {
    */
   onPress?: (() => void) | undefined;
   /** The trailing accessory. Default `'none'`. */
-  accessory?: NitroUiFormAccessory | undefined;
+  accessory?: FormAccessory | undefined;
   /** Selected state. Default `false`. */
   selected?: boolean | undefined;
-  /** The Hybrid View handle. @internal Test seam. */
-  hybridRef?: ((view: NitroUiFormRowHandle) => void) | undefined;
+  /**
+   * The Hybrid View handle.
+   *
+   * @internal Not app API (D14). The shape of `NitroUiFormRowHandle`, inline — hence
+   * `FormAccessory` rather than the internal name it aliases.
+   */
+  hybridRef?:
+    | ((view: {
+        readonly accessory: FormAccessory;
+        readonly selected: boolean;
+        readonly pressable: boolean;
+        nuiTestRowReport(): string;
+      }) => void)
+    | undefined;
 }
 
 /**
@@ -458,8 +505,23 @@ const styles = StyleSheet.create({
   },
 });
 
+/**
+ * `Form`, with `Form.Section` and `Form.Row` on it (C1).
+ *
+ * Named because the entry point exports the value: a `const` written as
+ * `Object.assign(FormRoot, …)` would otherwise put three unexported functions in the API
+ * report, and a grouped list is one component with two sub-components, not three exports.
+ */
+export interface FormComponent {
+  (props: FormProps): JSX.Element;
+  /** The group: a header, the rows, a footer. */
+  Section(props: FormSectionProps): JSX.Element;
+  /** One row: the cell-level behaviour around React Native content. */
+  Row(props: RowProps): JSX.Element;
+}
+
 /** The public shape: `Form`, with `Form.Section` and `Form.Row` on it (C1). */
-export const Form = Object.assign(FormRoot, {
+export const Form: FormComponent = Object.assign(FormRoot, {
   Row: RowRoot,
   Section: SectionRoot,
 });
