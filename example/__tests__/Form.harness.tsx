@@ -648,6 +648,12 @@ describe('Form (S6 spike)', () => {
 /** 24 rows: enough that the list scrolls on any phone, which is half the question. */
 const MEASURE_ROWS = 24;
 
+/**
+ * How many rows one pass compares. The go line is ten; this is ten with room, and it is what
+ * keeps the case inside the suite's 30 s per-test budget rather than a claim about speed.
+ */
+const COMPARE_LIMIT = 14;
+
 /** The row content of `MeasureForm`, kept by ref so a case can `measureInWindow` it. */
 const measured: Record<
   string,
@@ -722,6 +728,12 @@ function windowOf(
  * read for a recycled row. That is also why the case insists on a minimum count - "all zero
  * rows agree" is a pass that proves nothing.
  *
+ * The pass is bounded at {@link COMPARE_LIMIT} comparisons. Every comparison is two round
+ * trips - one to a report refreshed on main, one to the shadow tree - and the suite's per-test
+ * budget is 30 s, which this case shares with the scroll and the settle poll. Ten in-cell rows
+ * is the go line; fourteen is the same claim with a margin, and a pass that stops at the limit
+ * is still a pass on rows it actually read.
+ *
  * `scrolledBy` is how far the Form has scrolled, and it is the one thing the two platforms
  * cannot share here. React Native's `measure` sums Yoga origins and subtracts no scroll
  * offset (0.88: `UIManagerBinding.cpp` -> `dom::measureInWindow`, whose
@@ -738,7 +750,11 @@ async function compareRows(
 ): Promise<{ compared: number; bad: string[] }> {
   let compared = 0;
   const bad: string[] = [];
-  for (let index = 0; index < MEASURE_ROWS; index += 1) {
+  for (
+    let index = 0;
+    index < MEASURE_ROWS && compared < COMPARE_LIMIT;
+    index += 1
+  ) {
     const id = `m${index}`;
     const report = await reportUntil(
       () => rows[id]?.nuiTestRowReport(),
@@ -840,7 +856,7 @@ describe('Form measure (S6b spike, question 4)', () => {
     const scrolled = await until(
       () => compareRows(`after ${height} pt`, scrolledBy),
       (r) => r.bad.length === 0 && r.compared >= 10,
-      20000,
+      12000,
       'every row in a cell to measure where UIKit put it'
     );
     expect(scrolled.bad).toEqual([]);
