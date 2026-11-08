@@ -89,6 +89,25 @@ const EMPTY_LAYOUT: FormLayout = { contentWidth: 0 };
 
 const FormLayoutContext = createContext<FormLayout>(EMPTY_LAYOUT);
 
+/**
+ * Whether the nearest wrapper above is already a `Form.Row`.
+ *
+ * Only {@link RowRoot} sets it, for its own children. It exists so a Row written inside a Row
+ * says so instead of drawing a cell inside a cell: on iOS the inner row's content ends up in
+ * the outer cell and the inner row never reaches a cell of its own; on Android it gets a row
+ * rect inside a row rect.
+ */
+const InsideRowContext = createContext(false);
+
+/** What a Row inside a Row is told, once per process — a 50-row list should not log 50 lines. */
+const NESTED_ROW_WARNING =
+  'nitro-ui: a `Form.Row` was rendered inside another `Form.Row`. v1 supports `Form.Row` ' +
+  'only as a direct child of a `Form` or a `Form.Section`: the outer row is the cell, and a ' +
+  'row inside it never reaches a cell of its own. Move the inner row out of the outer one.';
+
+/** Set the first time {@link NESTED_ROW_WARNING} is logged. */
+let warnedNestedRow = false;
+
 function onPressNotProvided(): void {
   // The caller asked for nothing.
 }
@@ -169,7 +188,7 @@ function FormRoot({
   const native = (
     <NativeNitroUiForm
       {...rest}
-      style={IOS ? style : styles.androidBox}
+      style={IOS ? [styles.iosBox, style] : styles.androidBox}
       keyboardAvoidance={keyboardAvoidance}
       nuiContentOffsetY={contentOffsetY}
       nuiPerfId={null}
@@ -330,6 +349,23 @@ function SectionRoot({
  * an array, a `Fragment` from a `map`, or the `Form.Row` the app wrote for `onPress`. A
  * `Fragment` child would otherwise become one row holding several children, and a key the
  * app set would be lost by `Children.map` over a fragment.
+ *
+ * The keys are the ones React itself would build, and that is the whole point: this function
+ * flattens the app's tree into one array, so it becomes the thing deciding which row is the
+ * same row from one render to the next.
+ *
+ * - **a slot, not a counter.** An unkeyed child's key is its position in its own list,
+ *   *including* the slots taken by `null` and `false`. Counting only the rows emitted — which
+ *   is what this did — means `{showBanner && <Text/>}` above a list re-keys every row below it
+ *   when the banner appears, and React remounts them: a `TextField` in row four loses its
+ *   text, its focus and its caret because row one changed.
+ * - **scoped by nesting.** React gives a nested array or a `Fragment` its own key scope, so
+ *   two `{items.map(...)}`s whose items share keys do not collide. A flattened list without
+ *   that prefix hands React two children with one key, which is a dev warning and a row that
+ *   may be reconciled against the wrong one.
+ *
+ * So a row's key is the path to it: slot indices and `$key` parts joined by `/`, exactly the
+ * shape React's own traversal builds, with the same `$` mark on a key the app wrote.
  */
 function wrapRows(
   children: ReactNode,
@@ -337,32 +373,43 @@ function wrapRows(
   gap: number
 ): ReactNode {
   const out: ReactNode[] = [];
-  let anonymous = 0;
-  const visit = (node: ReactNode): void => {
+  /** The path of one child: its slot in this scope, with the app's key marked `$`. */
+  const slot = (path: string, index: number, key: string | null): string => {
+    // `/` is this function's nesting separator, so a key that contains one is escaped:
+    // React escapes the separators it uses (`:` and `=`) for exactly this reason.
+    const own = key != null ? `$${escapeKey(key)}` : `${String(index)}`;
+    return path === '' ? own : `${path}/${own}`;
+  };
+  const visitOne = (node: ReactNode, path: string, index: number): void => {
+    // Slot first, then the skip: a `false` from `{flag && <Row/>}` still holds its slot,
+    // which is the only reason the rows below it keep their keys.
+    const here = slot(path, index, isValidElement(node) ? node.key : null);
     if (node == null || typeof node === 'boolean') return;
     if (Array.isArray(node)) {
-      for (const child of node) visit(child);
+      visitChildren(node, here);
       return;
     }
     if (!isValidElement(node)) {
-      // A bare string or number is a row of text, the same rule RN's lists use. It has no
-      // key of its own, so the position is its identity here.
+      // A bare string or number is a row of text, the same rule RN's lists use. Its slot is
+      // its identity, and React agrees: an unkeyed child is its index.
       out.push(
-        <RowRoot key={`row-${anonymous++}`} width={contentWidth} gap={gap}>
+        <RowRoot key={here} width={contentWidth} gap={gap}>
           {node}
         </RowRoot>
       );
       return;
     }
     if (node.type === Fragment) {
-      visit((node.props as { children?: ReactNode }).children);
+      // Expanded, but into *its* scope: the fragment's slot is the prefix its children's keys
+      // hang off, so two fragments whose children share keys stay apart.
+      visitChildren((node.props as { children?: ReactNode }).children, here);
       return;
     }
     if (node.type === RowRoot) {
       // The app's own `Form.Row`: the same props, plus the box this platform needs.
       out.push(
         <RowRoot
-          key={node.key ?? `row-${anonymous++}`}
+          key={here}
           width={contentWidth}
           gap={gap}
           {...(node.props as RowProps)}
@@ -371,17 +418,30 @@ function wrapRows(
       return;
     }
     out.push(
-      <RowRoot
-        key={node.key ?? `row-${anonymous++}`}
-        width={contentWidth}
-        gap={gap}
-      >
+      <RowRoot key={here} width={contentWidth} gap={gap}>
         {node}
       </RowRoot>
     );
   };
-  visit(children);
+  const visitChildren = (node: ReactNode, path: string): void => {
+    if (Array.isArray(node)) {
+      node.forEach((child, index) => visitOne(child, path, index));
+      return;
+    }
+    // One child is slot 0 of its own scope. It has no index of its own from React's point of
+    // view, and the path it inherits from its parent is what keeps it out of the way of a
+    // sibling two levels up with the same key.
+    visitOne(node, path, 0);
+  };
+  visitChildren(children, '');
   return out;
+}
+
+/** A key the app wrote, made safe to embed in a path (`/` is the separator). */
+function escapeKey(key: string): string {
+  return key.replace(/[%/]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
 }
 
 // MARK: - Row
@@ -443,6 +503,11 @@ function RowRoot({
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
+  const insideRow = useContext(InsideRowContext);
+  if (__DEV__ && insideRow && !warnedNestedRow) {
+    warnedNestedRow = true;
+    console.error(NESTED_ROW_WARNING);
+  }
   // Every platform draws a row at exactly its Yoga box, so every platform has to be paid
   // for the space it leaves *between* rows: `gap` is that space as the platform measured it
   // (the Material segmented list's gap on Android, the list cell's 4 pt chrome above and
@@ -475,12 +540,24 @@ function RowRoot({
       onPress={press}
       hybridRef={hybridRefCallback ?? undefined}
     >
-      {children}
+      <InsideRowContext.Provider value={true}>
+        {children}
+      </InsideRowContext.Provider>
     </NativeNitroUiFormRow>
   );
 }
 
 const styles = StyleSheet.create({
+  // iOS only: what an *unstyled* `<Form>` gets. Every iOS section is `position: 'absolute'`
+  // (see `iosSection`), so the Form's own view has no in-flow content to be measured against
+  // and an unstyled Form is 0 pt tall — which is a Form that draws nothing in a README
+  // example. `flexGrow` takes the space the parent offers and `flexShrink` keeps a Form
+  // taller than its parent from pushing past it; Android gets both from the `ScrollView` this
+  // file wraps the native view in.
+  iosBox: {
+    flexGrow: 1,
+    flexShrink: 1,
+  },
   // Both platforms put the rows in this box, whose paddings are the bands the platform
   // draws the header and footer into.
   band: {
