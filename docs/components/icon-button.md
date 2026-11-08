@@ -87,9 +87,16 @@ not compose a toggle that happens to be off.
 
 `intrinsic`: the control measures itself, so a parent's width does not decide its
 box (`docs/architecture/sizing.md`). The size configuration is
-`variant | size | width | systemImage | androidIcon` — the four fields that can
+`variant | size | width | form | systemImage | androidIcon` — the fields that can
 change the box, plus the glyph, which decides the width on iOS and cannot on
 Android and is in the key so both platforms read one key.
+
+`form` is the press form or the toggle form, and it is in the key because the two
+are different native controls: the first device run measured the same
+`tonal`/`large`/`uniform`/`xmark` configuration at 31.67 x 30.00 pt as a `Button`
+and 41.67 x 30.00 pt as a `Toggle(.button)`, and one cached size cannot be both.
+Android composes both forms from the same container and is unaffected; it shares
+the field because the platforms read one key.
 
 `shape`, `checked`, `disabled` and `tintColor` are *not* in the key. They repaint
 and do not resize, and that is measured rather than assumed: the two states of a
@@ -102,7 +109,7 @@ corrected the turn it measures. The fallback for IconButton:
 | Platform | Declared fallback | The default it stands for                                |
 | -------- | ----------------- | -------------------------------------------------------- |
 | Android  | 48 × 48 dp        | `standard` / `medium` / `uniform`, glyph named            |
-| iOS      | 32 × 32 pt        | `standard` / `medium` / `uniform`, `systemImage="xmark"`  |
+| iOS      | 25 × 23 pt        | `standard` / `medium` / `uniform`, `systemImage="xmark"`  |
 
 Android's is exact — the `medium` container is 40 dp and Material will not publish
 a touch target below `MinInteractiveComponentSize` (48 dp) — which is why the
@@ -110,33 +117,83 @@ conformance run also insists that a *warm* engine needs no correction from it. A
 exact fallback is only a fair claim because the conformance fixture is that default
 configuration, and because every other measurement below is taken from a fallback
 poisoned to 17.5 × 63.5 pt first: a correction that never arrives leaves a wrong box
-visible rather than a passing test.
+visible rather than a passing test. The iOS row is the default configuration's own
+box — the `standard` variant is `.borderless`, the tightest of the four styles, and
+it is the glyph plus that style's padding and nothing more. Its first version said
+32 × 32 from an off-device estimate and the conformance run went red against the
+real 25 × 23, which is the arrangement this row is supposed to have.
 
 ### The ladder, measured
 
 `example/__tests__/IconButton.harness.tsx` mounts every rung × width from a poisoned
-fallback and reports the laid-out box. Android (dp, from Material's container
-tokens, with the 48 dp floor applied):
+fallback and reports the laid-out box. Material's own container tokens, read out of
+the `material3` artifact — the test asserts *these* numbers rather than a copy of
+what a device said:
 
-| `size`  | token name | `narrow` | `uniform` | `wide` | height | glyph |
-| ------- | ---------- | -------- | --------- | ------ | ------ | ----- |
-| `small` | XS         | 28       | 32        | 40     | 32     | 20    |
-| `medium`| S          | 32       | 40        | 52     | 40     | 24    |
-| `large` | M          | 48       | 56        | 72     | 56     | 24    |
-| `xlarge`| L          | 64       | 96        | 128    | 96     | 32    |
-| `xxlarge`| XL        | 104      | 136       | 184    | 136    | 40    |
+| `size`   | token | `narrow` | `uniform` | `wide` | height | glyph |
+| -------- | ----- | -------- | --------- | ------ | ------ | ----- |
+| `small`  | XS    | 28       | 32        | 40     | 32     | 20    |
+| `medium` | S     | 32       | 40        | 52     | 40     | 24    |
+| `large`  | M     | 48       | 56        | 72     | 56     | 24    |
+| `xlarge` | L     | 64       | 96        | 128    | 96     | 32    |
+| `xxlarge`| XL    | 104      | 136       | 184    | 136    | 40    |
+
+And what the device lays out (`max(token, 48)` on each axis, which is Material's
+`minimumInteractiveComponentSize()` doing exactly what the token table says it
+should):
+
+| `size`   | `narrow`  | `uniform` | `wide`      | height |
+| -------- | --------- | --------- | ----------- | ------ |
+| `small`  | 48 × 48   | 48 × 48   | 48 × 48     | 48     |
+| `medium` | 48 × 48   | 48 × 48   | 52 × 48     | 48     |
+| `large`  | 48 × 56   | 56 × 56   | 72 × 56     | 56     |
+| `xlarge` | 64 × 96   | 96 × 96   | 128 × 96    | 96     |
+| `xxlarge`| 104 × 136 | 136 × 136 | 184 × 136   | 136    |
+
+Two things fall out of the second table, and both are printed rather than hidden:
+
+- the two bottom rungs are one 48 dp box for every width — Material's own floor, the
+  same one `Button` hits at the bottom of its ladder — so `width` only starts to
+  separate configurations from `medium` up, and `size` only starts to from `large`;
+- the token is not the box. Design against the right-hand table.
+
+`medium`/`wide` reads 52.19 dp on the lease's 2.625-density device: 137 px, because
+52 dp does not divide evenly at that density.
 
 ### iOS
 
-iOS draws the glyph at the `.controlSize` the rung selects and takes its width from
-the symbol, so the box is the glyph plus the style's own padding. Measured on the
-same run as the Android grid above, `medium` + `standard` with a 24 pt symbol is
-32 x 32 pt, and the three bordered variants land on that same box at that rung —
-which is why the declared fallback is one number for the whole component. The
-rungs above it are one box apart at most: iOS has four control sizes for a ladder
-with five rungs, so `xlarge` and `xxlarge` share a box, as they do on `Button`.
+iOS has no icon-button containers to ask, and `.controlSize` alone does not size an
+icon-only label: measured on the device, the five rungs with `.controlSize` only
+came back as **two** boxes — 15.33 × 15.00 pt and 17.67 × 16.00 pt. So the rung sets
+the symbol's point size directly, to Material's glyph token for that rung
+(20 / 24 / 24 / 32 / 40 pt), and the box is the glyph plus whatever the button style
+adds. That makes the iOS ladder Material's **glyph** ladder rather than its
+container ladder, and it inherits the token's one repeat: `medium` and `large` are
+both 24 pt and so one box, while every other step grows.
 
-IOS_MEASURED_TABLE
+Measured on the device, `standard` (`.borderless`) in the press form with `xmark`:
+
+| `size`   | glyph pt | `narrow` = `uniform` = `wide` |
+| -------- | -------- | ----------------------------- |
+| `small`  | 20       | 20.33 × 19.00                 |
+| `medium` | 24       | 25.00 × 23.00                 |
+| `large`  | 24       | 25.00 × 23.00                 |
+| `xlarge` | 32       | 33.33 × 31.00                 |
+| `xxlarge`| 40       | 40.67 × 38.00                 |
+
+All three `width` options are every one of those boxes: iOS has no counterpart to
+Material's width options, so the column is printed three times over in the harness
+and is one configuration in the engine.
+
+**The box is the glyph, so the touch target is the glyph too.** The bordered
+variants are larger by their style's own padding — the harness measures `tonal` at
+`large` as 31.67 × 30.00 pt for a press button and 41.67 × 30.00 pt for a toggle —
+and `variant` is in the size key so each is measured for itself. But the smallest
+rung of the tightest variant is 20 × 19 pt, under Apple's 44 pt guideline, where
+Android's 48 dp floor means no rung there is ever below Material's minimum. Closing
+that gap means a hit area larger than the visible box, which changes the size the
+sizing engine reports and is a decision for the ladder itself (D42) rather than a
+fix inside this control.
 
 ## Accessibility
 
@@ -183,10 +240,10 @@ IOS_MEASURED_TABLE
 
 ## Limits
 
-- `width` does nothing on iOS, and `size` has five heights on Android and fewer on
-  iOS: SwiftUI has fewer control sizes than the ladder has rungs, so the top rungs
-  share a box there (`docs/components/button.md` prints the same column). The
-  measured table is the arbiter.
+- `width` does nothing on iOS, and the ladder has ten distinct boxes on Android and
+  four on iOS: Material's glyph token repeats between `medium` and `large`
+  (24 pt both), so those two rungs are one box there. On Android the 48 dp floor
+  hides the bottom of the ladder instead. The measured tables are the arbiter.
 - On iOS the toggle form has one look, not four: `variant` is ignored by
   `Toggle(.button)` (see "Platform mapping"). Android's toggle forms do have all four.
 - The `outlined` ring on iOS is drawn by this library over a `.bordered` button,
