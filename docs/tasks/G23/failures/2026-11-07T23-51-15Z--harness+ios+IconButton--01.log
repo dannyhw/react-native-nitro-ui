@@ -1,0 +1,85 @@
+# Failure excerpt — harness:ios:IconButton
+
+- Ran: 2026-11-07T23:51:15.246Z on code tree `1e1654fa92cf` at HEAD `6ab9448` (branch `task/G23-icon-button`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios IconButton`
+- Result: fail, exit 1, 865 ms
+- Load: start 3.76, end 3.76, median 3.76, max 3.76
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G23-zcs2m`
+- Full log: `task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log` (<store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G23-zcs2m (still live)
+  |   G22-q9eoq                G22          both              pair-a
+  |   G23-zcs2m                G23          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.76 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:IconButton
+gate: node ../scripts/harness.mjs --harnessRunner ios IconButton (cwd example)
+gate: code tree 1e1654fa92cf at HEAD 6ab94485
+gate: git tree 0e5cae7c82fd with a DIRTY worktree (not reusable)
+gate: log task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log
+gate:       <store>/task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios IconButton
+bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp c288c893 at 6ab94485339ec317862d2699226381b91c7e1fa0, now 1e1654fa at 6ab94485339ec317862d2699226381b91c7e1fa0)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp c288c893 at 6ab94485339ec317862d2699226381b91c7e1fa0, now 1e1654fa at 6ab94485339ec317862d2699226381b91c7e1fa0)
+     rebuild it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:ios:IconButton FAIL in 0.9 s
+gate: recorded in .gates/task/G23-icon-button.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G23-icon-button/harness+ios+IconButton-2026-11-07T23-51-14.425Z.log (4 probe(s))
+
+```
