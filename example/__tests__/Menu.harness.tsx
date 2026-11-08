@@ -3504,6 +3504,23 @@ describe('Menu · the row glyphs (G21)', () => {
     return await waitForMenu(testId, (r) => r.expanded === true);
   }
 
+  /**
+   * The same "the rows are composed" wait, for the one platform that cannot see it.
+   *
+   * `expanded` is Android's: its popup is a window this process owns and its Compose
+   * state says whether it is showing. iOS hands a SwiftUI `Menu` to the system's
+   * presentation and answers `expanded=-1` for it (`HybridNitroUiMenu.swift`), so a wait
+   * for `true` there waits for a fact that platform never reports - a 12 s timeout read as
+   * a broken menu. The probe is the read iOS does answer: it presents the `UIMenu`, copies
+   * the tree UIKit built and dismisses it in one main-thread turn, so a tree here is
+   * evidence a press produced - which is more than the flag would have been.
+   */
+  async function probeIosRows(testId: string): Promise<MenuReport> {
+    const handle = await waitForHandle(testId, `the iOS menu "${testId}"`);
+    handle.nuiTestMenuProbe();
+    return await waitForMenu(testId, (r) => r.drawn != null, 12000);
+  }
+
   /** Close `testId` and wait for it to be gone, so the next popup has the screen. */
   async function shut(testId: string): Promise<void> {
     await closeQuietly(testId);
@@ -3620,9 +3637,13 @@ describe('Menu · the row glyphs (G21)', () => {
     if (Platform.OS !== 'android') {
       // iOS's menu is UIKit's, in a window this process cannot rasterise: the probe says
       // `no pixels` rather than answering 0, and `iconTints` stays `-` because iOS drew
-      // no Android glyph. Both are the honest version of a green.
-      const opened = await openRows('rows-asset');
+      // no Android glyph. Both are the honest version of a green - and the tree is what
+      // makes it green rather than empty: `androidIcon` beside a row must not cost that
+      // row its place in the menu UIKit built.
+      const opened = await probeIosRows('rows-asset');
       expect(opened.iconTints).toBe('-');
+      expect(opened.rows).toBe(3);
+      expect(opened.drawn).toContain('Arrange by size');
       const iosHandle = await waitForHandle('rows-asset', 'the iOS refusal');
       iosHandle.nuiTestMenuPixelProbe(0x000000);
       expect(iosHandle.nuiTestMenuPixelReport()).toContain('no pixels');
@@ -3704,7 +3725,15 @@ describe('Menu · the row glyphs (G21)', () => {
     }
 
     if (Platform.OS !== 'android') {
-      expect((await openRows('rows-missing')).iconTints).toBe('-');
+      // The name iOS cannot resolve is a name iOS never asked for: `androidIcon` is
+      // Android's prop. So the honest iOS claim is the one Android measures with popup
+      // frames - the menu built from a name nobody can look up is the same menu, row for
+      // row, as the group with no icons at all.
+      const missing = await probeIosRows('rows-missing');
+      expect(missing.iconTints).toBe('-');
+      const plain = await probeIosRows('rows-none2');
+      expect(plain.iconTints).toBe('-');
+      expect(plain.drawn).toBe(missing.drawn);
       return;
     }
 
@@ -3756,6 +3785,13 @@ describe('Menu · the row glyphs (G21)', () => {
       await waitForMeasured(testId, testId);
     }
     if (Platform.OS !== 'android') {
+      // iOS has no Material slot to keep, so the width claim below is Android's. What iOS
+      // can say is that the check reaches UIKit on the row that carries the glyph - the
+      // `+` the tree notation carries - which is the same fact the pixels make on Android.
+      const checked = await probeIosRows('rows-checked');
+      expect(checked.drawn).toContain('Arrange by size+');
+      const unchecked = await probeIosRows('rows-unchecked');
+      expect(unchecked.drawn).not.toContain('Arrange by size+');
       return;
     }
 
@@ -3815,11 +3851,17 @@ describe('Menu · the row glyphs (G21)', () => {
     }
 
     if (Platform.OS !== 'android') {
-      expect(
-        (
-          await waitForHandle('split-ink', 'the iOS split trigger')
-        ).nuiTestPixelReport()
-      ).toBe('');
+      // iOS has no split trigger to look at: a `primaryAction` there is a gesture on one
+      // button, so `split`/`leading`/`trailing` answer `-1` ("no second hit target to
+      // measure"), and the trigger's pixel probe answers `no pixels` because it has no
+      // Android glyph to sample. Refusing, where Android measures, is the whole claim.
+      expect(report('split-ink').split).toBeNull();
+      const iosHandle = await waitForHandle(
+        'split-ink',
+        'the iOS split trigger'
+      );
+      iosHandle.nuiTestPixelProbe(tint);
+      expect(iosHandle.nuiTestPixelReport()).toContain('no pixels');
       return;
     }
 
