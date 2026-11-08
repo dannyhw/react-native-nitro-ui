@@ -1,0 +1,61 @@
+# Failure excerpt — harness:android:Popover:--background
+
+- Ran: 2026-11-08T05:50:56.345Z on code tree `9312ea35f8fe` at HEAD `956792d` (branch `task/G22-popover`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Popover --background`
+- Result: fail, exit 1, 1180 ms
+- Load: start 4.89, end 4.89, median 4.89, max 4.89
+- Device: android / device `emulator-5570` / lease `G22-d5myp`
+- Full log: `task/G22-popover/harness+android+Popover+--background-2026-11-08T05-50-56.345Z.log` (<store>/task/G22-popover/harness+android+Popover+--background-2026-11-08T05-50-56.345Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G22-popover/harness+android+Popover+--background-2026-11-08T05-50-56.345Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G22-d5myp (still live)
+  |   S6b-44a80                S6b          both              pair-a
+  |   G22-d5myp                G22          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.82 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Popover --background
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 9312ea35f8fe, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.89/5.35 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G22-popover/harness+android+Popover+--background-2026-11-08T05-50-56.345Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```
