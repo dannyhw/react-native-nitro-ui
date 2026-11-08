@@ -110,6 +110,14 @@ cell adds 4 pt above and below, which is what lands a one-line row on the 52 pt 
 same row has in a SwiftUI `Form`. Compare a row with the platform's own list, not
 with the minimum: the harness measures exactly that pair.
 
+That chrome is the platform's, so the platform reports it — the section is told the
+space between adjacent rows along with its header and footer bands, and each row
+takes half of it above and below itself as a margin. Your row's own box stays the
+box you styled; the space around it is measured, never typed. It matters for more
+than the picture: rows are laid out by Yoga, and if the layout stacks them at 44 pt
+while the list draws them at 52, every measurement below the first row is wrong by
+8 pt more than the one above it.
+
 ## Keyboard
 
 Neither platform avoids the keyboard for an input hosted inside a row, so the Form

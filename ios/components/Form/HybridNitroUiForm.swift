@@ -716,12 +716,23 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// Called when the list settles, never per scroll frame — JS cannot be told about every
   /// frame of a flick. Between settles the published offset lags by the scroll distance, which
   /// is what `docs/components/form.md` says out loud.
+  ///
+  /// A settle includes the list's box *moving*: an adjusted content inset (the safe area
+  /// arriving, a keyboard inset) shifts `contentOffset` without scrolling, and nothing in the
+  /// `UIScrollViewDelegate` settle set fires for that — `scrollViewDidLayout` runs before the
+  /// same layout pass applies the shift, so the last published number is the one from before
+  /// it. E7 measured that gap as 72 pt on every row of a form at rest.
   func reportGeometry() {
     guard holding.superview != nil else { return }
     list.layoutIfNeeded()
 
     let offset = Double(list.contentOffset.y)
-    if reportedOffset != offset {
+    // `reportedOffset` records what JavaScript was *told*, so it moves only on a publish that
+    // had someone to tell: the first geometry pass of a list can run before the app's
+    // `onContentOffset` has been applied, and recording the number then would leave the
+    // shadow tree correcting by an offset from a tree that never heard it - every row of a
+    // form at rest wrong by the list's own top inset (E7).
+    if reportedOffset != offset, scrollOffsetReport != nil {
       reportedOffset = offset
       scrollOffsetReport?(offset)
     }
@@ -735,9 +746,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
   }
 
-  /// The y JavaScript has to put this section at, in the list's content coordinates, so that
-  /// every row's Yoga origin *is* its cell's position in that content — which is what makes
-  /// the Form's one `-contentOffset` correction enough for all of them (D45 item 3).
+  /// The y JavaScript has to put this section at, so that every row's Yoga origin *is* its
+  /// cell's position in the window — which is what makes the Form's one `-contentOffset`
+  /// correction enough for all of them (D45 item 3).
   ///
   /// Asked of the layout, not of a cell on screen. A cell's own position is in the window, so
   /// turning it back into content coordinates means adding the scroll offset and this
@@ -747,9 +758,22 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// `measure` disagree with the pixels. The layout also answers for a section that is off
   /// screen, which a cell cannot (D45 item 5).
   ///
-  /// The header band comes off because JavaScript reserves it *inside* the section
-  /// (`paddingTop`), and `reportMetrics` takes that band from this same query — so the two
-  /// halves of the invariant are read from one place, not from two that have to agree.
+  /// Three terms, all asked of the platform, none typed:
+  ///
+  /// - `holding.frame.minY`: the shadow tree measures a section from the *Form's* box, while
+  ///   the list is a sibling of the holding view at its frame, so it measures from a box
+  ///   `holding.frame.minY` lower. Zero for a Form with no padding and the padding for one
+  ///   that has it — the same difference the width is reported for (`onContentBox`).
+  /// - the header band, because JavaScript reserves it *inside* the section (`paddingTop`),
+  ///   and `reportMetrics` takes that band from this same query — so the two halves of the
+  ///   invariant are read from one place, not from two that have to agree.
+  /// The cell's chrome is *not* taken off, because JavaScript pays for it itself: the
+  /// Section reports it as the space between rows (`gap`, spent by `Form.tsx` as each row's
+  /// `marginVertical`), so the first row's own margin is already the 4 pt the cell puts above
+  /// it and every following row's margin pair is the 8 pt that separates two cells. Rows'
+  /// Yoga pitch then equals the cells' pitch, which is the E7 finding - measured without the
+  /// chrome, row 13 of a list of 44 pt rows landed 104 pt away from what `measure` said, 8 pt
+  /// per row of chrome the shadow tree had never been told about.
   ///
   /// `nil` means the layout has not worked this section out yet, and the caller leaves the
   /// section where the last settle put it rather than sending it a `0` to start from.
@@ -758,7 +782,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     guard let first = list.collectionViewLayout.layoutAttributesForItem(
       at: IndexPath(item: 0, section: sectionIndex)
     ) else { return nil }
-    return first.frame.minY - supplementaryHeight(footer: false, in: model)
+    return first.frame.minY + holding.frame.minY
+      - supplementaryHeight(footer: false, in: model)
   }
 
   /// The height the header's *text* needs, asked of the same content configuration the header
@@ -874,6 +899,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "ime=0.00",
       "offset=\(Self.number(list.contentOffset.y))",
       "origin=\(Self.number(reportedOffset ?? .nan))",
+      // What the shadow tree was *told*, as opposed to what was sent (`origin=`): the two
+      // differ while a re-render is in flight, and E7 is about the number the shadow node
+      // holds, not the number this class emitted.
+      "received=\(Self.number(receivedContentOffsetY ?? .nan))",
+      // The two constants the section placement is built from, so an E7 mismatch says which
+      // of them moved instead of leaving the arithmetic to be reconstructed from the log.
+      "listY=\(Self.number(holding.frame.minY))",
+      "insetTop=\(Self.number(list.adjustedContentInset.top))",
       "placed=\(reportedPlacement.count)",
     ] + geometryFields(of: list, kind: "prototype")).joined(separator: ";")
   }

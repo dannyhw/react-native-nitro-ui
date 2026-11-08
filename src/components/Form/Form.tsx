@@ -65,12 +65,15 @@ const ANDROID_ACCESSORY_RESERVE = 24 + 8;
  *
  * 1. **iOS lays rows out at the width a cell gives them**, which is narrower than the
  *    list's idea of a cell, so the Form reports it (`onContentBox`) and each row's
- *    `style.width` follows. A row's Yoga height is then the height of its cell.
- * 2. **A section reserves the space its header and footer take**, because those are drawn
- *    natively while the rows between them are laid out by Yoga (`onMetrics`); on iOS the
- *    section also takes the vertical position the list gave it (`onPlacement`), so a row's
- *    Yoga origin *is* its position in the list's content. That is what lets the Form's
- *    shadow node correct `measure` with one number — the scroll offset (D45 item 3).
+ *    `style.width` follows. A row's Yoga height is then the height of its content; the cell
+ *    adds its own chrome, which is the `gap` of item 2.
+ * 2. **A section reserves what the platform draws around its rows** — the header and footer
+ *    bands, because those are drawn natively while the rows between them are laid out by
+ *    Yoga, and the space between adjacent rows (`onMetrics`, spent as each row's
+ *    `marginVertical`). On iOS the section also takes the vertical position the list gave it
+ *    (`onPlacement`), so a row's Yoga origin *is* the position its cell is drawn at. That is
+ *    what lets the Form's shadow node correct `measure` with one number — the scroll offset
+ *    (D45 item 3) — and it is only true because all three numbers come from the platform.
  * 3. **Android has no platform `Form`**, so the scroller is React Native's own `ScrollView`
  *    and the rows sit in it in place. Everything else about Android — the shapes, the header
  *    band, the pressed state — is the Section's one Compose layer.
@@ -282,10 +285,12 @@ function SectionRoot({
   // Form's single scroll-offset correction is enough to make `measure` right (D45 item 3).
   // Android reports 0 and flows normally inside the scroll view.
   const [top, setTop] = useState(0);
+  // Not clamped at 0: this is a measured content coordinate, and a section one chrome above
+  // where the list starts is a section whose rows are still drawn where they are drawn. A
+  // `0` here would be a position the platform never reported, which is the difference
+  // between a `measure` that agrees with the pixels and one that is a few points out.
   const reportTop = useStableCallback((y: number): void => {
-    setTop((previous) =>
-      Math.abs(previous - y) < 0.25 ? previous : Math.max(0, y)
-    );
+    setTop((previous) => (Math.abs(previous - y) < 0.25 ? previous : y));
   }) as NitroCallbackProp<(y: number) => void>;
 
   return (
@@ -438,20 +443,27 @@ function RowRoot({
     onPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
-  // iOS: the row is drawn by its cell, at the width the cell gives it — that width has to be
-  // the row's own, or the row's Yoga height would not be the cell's height either. Android:
-  // rows sit in a segmented list, so each takes half the gap above and below it, and a row
-  // with an accessory gives up the trailing room the section is going to draw in.
-  const box: ViewStyle = IOS
-    ? width > 0
-      ? { width }
-      : { width: '100%' }
-    : accessory === 'none'
-      ? { marginVertical: gap / 2 }
-      : {
-          marginVertical: gap / 2,
-          paddingRight: 16 + ANDROID_ACCESSORY_RESERVE,
-        };
+  // Every platform draws a row at exactly its Yoga box, so every platform has to be paid
+  // for the space it leaves *between* rows: `gap` is that space as the platform measured it
+  // (the Material segmented list's gap on Android, the list cell's 4 pt chrome above and
+  // below a row on iOS), and half of it goes above and below each row. That is what makes
+  // the rows' pitch the pitch they are drawn at, which is what a `measure` of a row has to
+  // agree with — a Form that reported `0` here measured its 14th row 104 pt above its own
+  // pixels (E7).
+  //
+  // iOS also takes the *width* the cell gives the row, or the row's Yoga height would not be
+  // the cell's height either. Android gives up the trailing room a row's accessory is drawn
+  // in, which the section - not the row - paints.
+  const box: ViewStyle = {
+    marginVertical: gap / 2,
+    ...(IOS
+      ? width > 0
+        ? { width }
+        : { width: '100%' }
+      : accessory === 'none'
+        ? null
+        : { paddingRight: 16 + ANDROID_ACCESSORY_RESERVE }),
+  };
   return (
     <NativeNitroUiFormRow
       {...rest}
