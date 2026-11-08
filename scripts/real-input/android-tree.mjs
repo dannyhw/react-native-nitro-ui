@@ -11,6 +11,57 @@
  */
 
 /**
+ * The tightest node carrying a boolean flag that contains a target node.
+ *
+ * The dump is flat, so document order is an accident of how the tree happens to be
+ * written and "which node is the control" has to be answered by geometry. Measured
+ * across three control shapes so far, the name and the state live on different
+ * nodes: a hosted Switch keeps `checkable` on its own box with the label inside it,
+ * a Material 3 Chip keeps `enabled` on the 48 dp touch target with the label inside
+ * that, and a `ButtonGroup` item keeps `clickable`/`checkable`/`checked` on its own
+ * box with the *title* drawn as a separate `TextView` inside it. Reading whichever
+ * node happens to carry the name therefore answers the wrong question — `off` for a
+ * checked toggle, `enabled=true` for a disabled item.
+ *
+ * The tightest *containing* box is the answer because it is the smallest thing that
+ * still is the control. A decoration node does not carry the flag — Compose writes
+ * `Role.Checkbox` as an `android.widget.CheckBox` a hair inside the item, and that
+ * node says `checkable="false"` — and a larger box is somebody else's: the row, the
+ * screen.
+ *
+ * @param {ReadonlyArray<object>} tree the parsed dump
+ * @param {{bounds: {x1: number, y1: number, x2: number, y2: number}} | null} target
+ * @param {'checkable' | 'clickable'} flag
+ * @returns {object | null} the node, or null when nothing with that flag contains it
+ */
+export function tightestFlaggedNode(tree, target, flag) {
+  if (target == null) {
+    return null;
+  }
+  /** @type {{area: number, node: object} | null} */
+  let tightest = null;
+  for (const node of tree) {
+    if (node[flag] !== 'true') {
+      continue;
+    }
+    const { bounds } = node;
+    const contains =
+      bounds.x1 <= target.bounds.x1 &&
+      bounds.y1 <= target.bounds.y1 &&
+      bounds.x2 >= target.bounds.x2 &&
+      bounds.y2 >= target.bounds.y2;
+    if (!contains) {
+      continue;
+    }
+    const area = bounds.width * bounds.height;
+    if (tightest == null || area < tightest.area) {
+      tightest = { area, node };
+    }
+  }
+  return tightest == null ? null : tightest.node;
+}
+
+/**
  * The control's own answer to "what value do I hold": `checked` on the checkable
  * node that carries this labelled control.
  *
@@ -32,30 +83,8 @@ export function nativeChecked(tree, description) {
   const labelled = tree.find(
     (node) => node.contentDesc === description && node.bounds.height > 0
   );
-  if (labelled == null) {
-    return null;
-  }
-  /** @type {{area: number, checked: string} | null} */
-  let tightest = null;
-  for (const node of tree) {
-    if (node.checkable !== 'true') {
-      continue;
-    }
-    const { bounds } = node;
-    const contains =
-      bounds.x1 <= labelled.bounds.x1 &&
-      bounds.y1 <= labelled.bounds.y1 &&
-      bounds.x2 >= labelled.bounds.x2 &&
-      bounds.y2 >= labelled.bounds.y2;
-    if (!contains) {
-      continue;
-    }
-    const area = bounds.width * bounds.height;
-    if (tightest == null || area < tightest.area) {
-      tightest = { area, checked: node.checked };
-    }
-  }
-  return tightest == null ? null : tightest.checked === 'true' ? 'on' : 'off';
+  const control = tightestFlaggedNode(tree, labelled ?? null, 'checkable');
+  return control == null ? null : control.checked === 'true' ? 'on' : 'off';
 }
 
 /**
@@ -78,28 +107,6 @@ export function nativeEnabled(tree, description) {
   const labelled = tree.find(
     (node) => node.contentDesc === description && node.bounds.height > 0
   );
-  if (labelled == null) {
-    return null;
-  }
-  /** @type {{area: number, enabled: string} | null} */
-  let tightest = null;
-  for (const node of tree) {
-    if (node.clickable !== 'true') {
-      continue;
-    }
-    const { bounds } = node;
-    const contains =
-      bounds.x1 <= labelled.bounds.x1 &&
-      bounds.y1 <= labelled.bounds.y1 &&
-      bounds.x2 >= labelled.bounds.x2 &&
-      bounds.y2 >= labelled.bounds.y2;
-    if (!contains) {
-      continue;
-    }
-    const area = bounds.width * bounds.height;
-    if (tightest == null || area < tightest.area) {
-      tightest = { area, enabled: node.enabled };
-    }
-  }
-  return tightest == null ? null : tightest.enabled;
+  const control = tightestFlaggedNode(tree, labelled ?? null, 'clickable');
+  return control == null ? null : control.enabled;
 }
