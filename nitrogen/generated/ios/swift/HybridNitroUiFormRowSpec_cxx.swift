@@ -229,6 +229,17 @@ open class HybridNitroUiFormRowSpec_cxx {
     }
   }
   
+  @inline(__always)
+  public final func nuiTestA11yClick() -> bridge.Result_void_ {
+    do {
+      try self.__implementation.nuiTestA11yClick()
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
   public final func getView() -> UnsafeMutableRawPointer {
     return Unmanaged.passRetained(__implementation.view).toOpaque()
   }

@@ -18,6 +18,7 @@ public protocol HybridNitroUiFormRowSpec_protocol: HybridObject, HybridView {
 
   // Methods
   func nuiTestRowReport() throws -> String
+  func nuiTestA11yClick() throws -> Void
 }
 
 public extension HybridNitroUiFormRowSpec_protocol {

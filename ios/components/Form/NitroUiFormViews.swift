@@ -15,9 +15,12 @@
 //  cell leaves its holding view and draws from there. `didAddSubview` / `willRemoveSubview`
 //  are the mount and unmount signals, which is why the patch needed no new shape.
 //
-//  **A row's frame** is `(0, 0, w, h)` in both places, because `Form.tsx` lays every row out
-//  `position: 'absolute'` at `top: 0, left: 0` with the width the Form reported. That is the
-//  whole origin cancellation Appendix C1 asked a container for - with no container.
+//  **A row's frame** is `(0, 0, w, h)` *inside a cell*, which is where its pixels are, and
+//  that is the origin cancellation Appendix C1 asked a container for - with no container. It
+//  is not `(0, 0, w, h)` in the holding view: since S6b the row's absolute `top`/`left` carry
+//  where the list put its cell, so that a `measure` of the row answers where the row actually
+//  is (question 3), and `NitroUiFormRowContainer.layoutRow` is what takes the origin back off
+//  when the row is adopted. A row at rest in its holding view has a position and draws nothing.
 //
 
 import UIKit
@@ -68,7 +71,40 @@ class NitroUiFormHoldingView: UIView {
   override func didAddSubview(_ subview: UIView) {
     super.didAddSubview(subview)
     guard !NitroUiFormHoldingView.isMovingRow else { return }
-    onChildMount?(subview, subviews.firstIndex(of: subview) ?? subviews.count - 1)
+    onChildMount?(subview, mountIndex(for: subview))
+  }
+
+  /// Fabric's own index for `subview`, which is the only index that means "where React put it".
+  ///
+  /// The position among this view's *current* subviews is not that number, and the two diverge
+  /// the moment a row is shown: a row on screen is in a list cell, not here, so by the time a
+  /// fourth row mounts, a holding view holding two rows calls it child 0. The Form believed
+  /// that - `model.rows.insert(at: 0)` - and a keyed insert in the middle of a section landed
+  /// at the front of the list (fix round 1). `nil` means the child arrived some other way
+  /// (`addSubview`), where this view's own order is all there is.
+  private func mountIndex(for subview: UIView) -> Int {
+    if let pending = pendingMountIndex { return pending }
+    return subviews.firstIndex(of: subview) ?? subviews.count - 1
+  }
+
+  /// Fabric's index for the child being inserted, read by `mountIndex(for:)` while the
+  /// insertion is still on the stack.
+  private var pendingMountIndex: Int?
+
+  /// The patch in `scripts/patch-nitrogen.mjs` mounts a child with
+  /// `insertSubview(_:at:)`, and this is where Fabric's index survives the call: UIKit clamps
+  /// the index to its own subview count *inside* its implementation, so a `didAddSubview`
+  /// alone can only ever report a position in a list that is missing the rows a cell has
+  /// taken. Overriding the setter side of the same call sees the number as React wrote it.
+  override func insertSubview(_ view: UIView, at index: Int) {
+    let outer = pendingMountIndex
+    pendingMountIndex = index
+    defer { pendingMountIndex = outer }
+    let alreadyOurs = subviews.contains(where: { $0 === view })
+    super.insertSubview(view, at: index)
+    // A *move* of a child that was already here - the shape a Fabric reorder takes - is not
+    // guaranteed to announce itself again, and this is the one place it cannot be missed.
+    if alreadyOurs, !NitroUiFormHoldingView.isMovingRow { onChildMount?(view, index) }
   }
 
   override func willRemoveSubview(_ subview: UIView) {
@@ -93,12 +129,12 @@ class NitroUiFormHoldingView: UIView {
   /// The list is this view's sibling at the same frame, so it takes the same insets, and an
   /// automatic adjustment turns them into an `adjustedContentInset` that shifts
   /// `contentOffset.y` - the one number the shadow tree corrects every row by. Neither
-  /// `layoutSubviews` (the box did not change) nor any of the scroll settle callbacks runs
-  /// for it - UIKit's own callback for it,
-  /// `scrollViewDidChangeAdjustedContentInset:`, arrived in iOS 16.4 and cannot be answered
-  /// by a delegate built for this deployment target at all - so without this the Form keeps
-  /// publishing the offset from before the shift, which E7 measured as 72 pt on every row of
-  /// a form at rest.
+  /// `layoutSubviews` (the box did not change) cannot see it either. UIKit's own callback for
+  /// it, `scrollViewDidChangeAdjustedContentInset:`, has been on `UIScrollViewDelegate` since
+  /// iOS 11 and the Form's delegate answers it (fix round 1; the earlier note here claimed it
+  /// arrived in iOS 16.4, which is why a callback that existed went unimplemented) - this
+  /// remains as well, because the safe area also moves when the *list* is nowhere near a
+  /// settle, and both paths only ever report the same two numbers.
   override func safeAreaInsetsDidChange() {
     super.safeAreaInsetsDidChange()
     onLayoutChange?()
@@ -252,7 +288,14 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     automaticallyUpdatesContentConfiguration = false
     automaticallyUpdatesBackgroundConfiguration = false
     contentView.addSubview(container)
-    container.onRowRemoved = { [weak self] row in self?.onRowRemoved?(row) }
+    container.onRowRemoved = { [weak self] row in
+      // Fabric took the row out of this cell, so this cell must stop saying it is showing
+      // it. `row` is weak and a Fabric component view is pooled rather than freed, so a
+      // stale pointer here outlives the row's removal - and `apply(_:)` skips adopting a row
+      // it believes it already has, which is a cell that draws nothing (fix round 1).
+      if self?.row === row { self?.row = nil }
+      self?.onRowRemoved?(row)
+    }
     NSLayoutConstraint.activate([
       container.leadingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.leadingAnchor),
       container.trailingAnchor.constraint(equalTo: contentView.layoutMarginsGuide.trailingAnchor),
@@ -361,9 +404,21 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
   }
 
   /// Hand the row to whoever owns it, and forget it.
+  ///
+  /// Only a row this cell is still *holding* may be handed back. A row can be taken by
+  /// another cell without this cell being told - UIKit reuses a cell for a snapshot apply
+  /// while the old cell is still pointing at the row - and then `onGiveBack` reparents a row
+  /// that is being drawn elsewhere: the cell that took it keeps showing a row whose
+  /// superview is a hidden holding view, which is a blank row on screen and no wrong count
+  /// anywhere (fix round 1).
   func giveBack() {
     guard let row else { return }
     self.row = nil
+    guard row.superview === container else {
+      // Not ours any more. Let go of the pointer, and leave the row where it is.
+      container.releaseRow()
+      return
+    }
     // Give the row away *before* letting go of it: the taker `addSubview`s it, which moves
     // it in one step. Detaching first would leave a React Native view parentless for a
     // moment, and a row that loses its parent while Fabric still owns it trips the
@@ -467,7 +522,15 @@ final class NitroUiFormRowContainer: UIView {
 
 /// A section header or footer, drawn by UIKit's own grouped configuration.
 final class NitroUiFormSupplementaryCell: UICollectionViewListCell {
+  /// The text this band was last configured with.
+  ///
+  /// The harness reads it back (through the Form, which is what can find this view by its
+  /// section) as `drawnTitle=` / `drawnFooter=`: the model can hold a title the screen has
+  /// never been shown, and only this view knows what is painted.
+  private(set) var drawnText: String?
+
   func configure(text: String?, footer: Bool) {
+    drawnText = text
     var configuration = footer
       ? UIListContentConfiguration.groupedFooter()
       : UIListContentConfiguration.groupedHeader()
@@ -537,17 +600,45 @@ final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
 
   // MARK: Settling: where the list came to rest
 
-  /// The list laid out. Every scroll frame calls this, so the guard is the point: the Form
-  /// reports its geometry when the list is *at rest*, because JS cannot be told about each
-  /// frame of a flick and `measure` is a question about where something stopped.
+  /// The list scrolled. This is the only delegate method UIKit sends for a scroll, and the
+  /// only one that catches a list coming to rest without an ending to announce it: a
+  /// `setContentOffset(animated: false)`, a programmatic jump, or an inset that moved the
+  /// content all arrive as scroll frames with no drag and no deceleration around them. The
+  /// guard is therefore the whole method - the Form reports when the list is *at rest*,
+  /// because JS cannot be told about each frame of a flick and `measure` is a question about
+  /// where something stopped.
+  ///
+  /// The method that used to be here, `scrollViewDidLayout(_:)`, is not part of
+  /// `UIScrollViewDelegate`: a scroll view does not forward its own `layoutSubviews` to its
+  /// delegate, so nothing ever called it, and every settle that was not one of the three
+  /// endings below relied on the single hop `applySnapshotNow` queues (fix round 1, E7).
   ///
   /// `reportGeometry` sends at most one number per settle and nothing at all when the offset
-  /// did not move, so being reached twice from here and from the two endings below costs a
+  /// did not move, so being reached twice from here and from the endings below costs a
   /// comparison, not a re-render.
-  func scrollViewDidLayout(_ scrollView: UIScrollView) {
+  func scrollViewDidScroll(_ scrollView: UIScrollView) {
     guard !scrollView.isDragging, !scrollView.isTracking, !scrollView.isDecelerating else {
       return
     }
+    form?.reportGeometry()
+  }
+
+  /// The list was scrolled to the top - a real tap on the status bar, or a caller that asked
+  /// UIKit for it. The frames of that scroll are guarded out above while it animates, and
+  /// UIKit sends no drag ending for it, so this is where the new offset is reported.
+  func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+    form?.reportGeometry()
+  }
+
+  /// The list's *visible box* changed without its frame moving.
+  ///
+  /// An adjusted content inset - the safe area arriving or going, a keyboard inset, an
+  /// `additionalSafeAreaInsets` write - shifts `contentOffset` under the content, and no
+  /// other settle callback fires for it: the drag endings do not, because nobody dragged, and
+  /// a scroll frame may not even arrive. On iOS 11 and later this is UIKit's own callback for
+  /// exactly that shift, which is why the holding view's `safeAreaInsetsDidChange` is a
+  /// second path rather than the only one.
+  func scrollViewDidChangeAdjustedContentInset(_ scrollView: UIScrollView) {
     form?.reportGeometry()
   }
 

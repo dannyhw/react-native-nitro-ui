@@ -86,6 +86,12 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // A row's height constraint is the cell's height; this is what tells the layout that
       // it changed, instead of a hand-rolled invalidation for every text reflow.
       view.selfSizingInvalidation = .enabledIncludingConstraints
+      // Read back what the list was actually configured with, rather than trusting the OS
+      // version: the flag is the question "will UIKit notice a row's height constraint moving
+      // on its own", and `rowResized` is the fallback for every list where the answer is no -
+      // which below iOS 16 is all of them, and which the harness can also arrange on a modern
+      // system by putting the list in `.disabled` (fix round 1, E3).
+      listSelfSizesRows = view.selfSizingInvalidation != .disabled
     }
     view.register(
       NitroUiFormRowCell.self,
@@ -105,6 +111,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     )
     return view
   }()
+
+  /// Whether the list will notice a row's height constraint changing by itself.
+  private var listSelfSizesRows = false
 
   private var dataSource:
     UICollectionViewDiffableDataSource<NitroUiFormSectionModel, NitroUiFormItem>?
@@ -335,14 +344,25 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     applySnapshot()
   }
 
-  /// A row's Yoga height changed. If it is on screen its cell's height constraint follows
-  /// and `selfSizingInvalidation` re-runs the layout for that one item; if it is not, the
-  /// next dequeue reads the new height anyway.
+  /// A row's Yoga height changed. If it is on screen its cell's height constraint follows;
+  /// if it is not, the next dequeue reads the new height anyway.
+  ///
+  /// Who tells the layout is the part that needs a condition. On iOS 16 and later the list's
+  /// `selfSizingInvalidation` re-runs the layout for that one item when the constraint moves.
+  /// That property does not exist before iOS 16, so on those systems a row that grew was
+  /// drawn at its old height forever: the constraint moved, the cell's content hugging had
+  /// nothing to tell, and nothing asked the layout again (fix round 1). Asking for one
+  /// invalidation when UIKit has not been asked to do it is the whole fallback, and it is
+  /// gated on what the list was *configured* with rather than on the OS version, so the
+  /// harness can take the property away on a modern system and watch the fallback carry E3.
   func rowResized(_ row: UIView) {
     guard let path = path(for: row),
       let cell = list.cellForItem(at: path) as? NitroUiFormRowCell else { return }
     cell.formOwner = self
     cell.apply(row)
+    if !listSelfSizesRows {
+      list.collectionViewLayout.invalidateLayout()
+    }
   }
 
   func rowsChanged(in model: NitroUiFormSectionModel) {
@@ -406,9 +426,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     }
     dataSource?.apply(snapshot, animatingDifferences: false)
     // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
-    // now wrong. One turn later, when UIKit has placed the cells, they are read again
-    // (the delegate's own `scrollViewDidLayout` also covers this; the first apply of a
-    // brand-new list is the moment it can miss).
+    // now wrong. One turn later, when UIKit has placed the cells, they are read again. The
+    // delegate also reports a settle that moves the offset; this hop is the one that covers a
+    // snapshot that re-placed cells without scrolling anything, which no delegate method says.
     DispatchQueue.main.async { [weak self] in self?.reportGeometry() }
   }
 
@@ -499,6 +519,66 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // UIKit re-runs this on highlight and selection, which is the only way to follow them:
     // iOS 27's UIKit has no `selectionHighlightConfiguration` any more (see the cell).
     cell.setNeedsUpdateConfiguration()
+  }
+
+  /// A section's `title` or `footer` string changed while the section is in the list.
+  ///
+  /// Nothing UIKit does on its own can show this. The section's *identity* is the model, and
+  /// the model did not change, so the snapshot the Section's `afterUpdate` applies is a no-op
+  /// and UIKit never re-runs the provider that fills the band in: the old heading stays drawn,
+  /// at the old height, forever (fix round 1). Reloading the section would fix the drawing by
+  /// tearing down and re-dequeuing every cell in it - which for this library means handing
+  /// every row in the section back to its holding view and re-adopting it, a round trip
+  /// through Fabric for a string.
+  ///
+  /// So say it to the view that is on screen, and ask the layout for the band's height again:
+  /// `supplementaryHeight` - which is where the Section's `onMetrics` band comes from - reads
+  /// the layout's answer, and that answer is cached against the old text.
+  func chromeChanged(in model: NitroUiFormSectionModel) {
+    guard let index = sections.firstIndex(where: { $0 === model }) else { return }
+    let path = IndexPath(item: 0, section: index)
+    var changed = false
+    for kind in [
+      UICollectionView.elementKindSectionHeader,
+      UICollectionView.elementKindSectionFooter,
+    ] {
+      guard let view = list.supplementaryView(forElementKind: kind, at: path)
+        as? NitroUiFormSupplementaryCell else { continue }
+      let isFooter = kind == UICollectionView.elementKindSectionFooter
+      let text = isFooter ? model.footerText : model.title
+      guard view.drawnText != text else { continue }
+      view.configure(text: text, footer: isFooter)
+      changed = true
+    }
+    guard changed else { return }
+    list.collectionViewLayout.invalidateLayout()
+    // One turn later, when the invalidation has been answered: the band the shadow tree
+    // reserves is read from the layout, and the layout has only just been asked again.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      model.hybrid?.reportMetrics()
+      self.reportGeometry()
+    }
+  }
+
+  /// The text a section's visible band is actually painted with, or `-` when it is not on
+  /// screen to be read. The harness's `drawnTitle=` - the difference between a Section that
+  /// stored a title and a Form that drew one.
+  func drawnSupplementaryText(
+    footer: Bool,
+    in model: NitroUiFormSectionModel
+  ) -> String? {
+    guard let index = sections.firstIndex(where: { $0 === model }) else { return nil }
+    let kind = footer
+      ? UICollectionView.elementKindSectionFooter
+      : UICollectionView.elementKindSectionHeader
+    guard
+      let view = list.supplementaryView(
+        forElementKind: kind,
+        at: IndexPath(item: 0, section: index)
+      ) as? NitroUiFormSupplementaryCell
+    else { return nil }
+    return view.drawnText ?? ""
   }
 
   private func supplementary(
@@ -663,7 +743,13 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
         forName: UIResponder.keyboardDidHideNotification,
         object: nil,
         queue: .main
-      ) { [weak self] _ in self?.setBottomInset(0) },
+      ) { [weak self] _ in
+        // Taking the inset away moves the content back up, which is a change of the same kind
+        // the delegate's `scrollViewDidChangeAdjustedContentInset` answers for - and this
+        // observer does not go through the delegate, so the shadow tree is told from here.
+        self?.setBottomInset(0)
+        self?.reportGeometry()
+      },
     ]
   }
 
@@ -676,13 +762,31 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     guard let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?
       .cgRectValue
     else { return }
-    let inList = list.convert(end, from: nil)
-    let overlap = max(0, list.frame.maxY - inList.minY)
+    // One space per comparison, and they are two different spaces.
+    //
+    // `list.convert(end, from: nil)` answers in the list's *bounds* space, which for a scroll
+    // view is its content space: it travels with `contentOffset`. `list.frame.maxY` does not
+    // travel - it is where the box sits in the superview. Comparing them was right only while
+    // the list was at the top of its own content, and by the time question 5 is asked the list
+    // has been scrolled to a field near the bottom of a long form. The overlap then carried the
+    // whole scroll distance (or lost it, depending on direction) and the bottom inset stopped
+    // describing the keyboard at all (fix round 1).
+    //
+    // So: the overlap is asked in the window's space, where the keyboard's own frame already
+    // is, and the scroll decision below is asked in content space, where the row's frame
+    // already is.
+    let boxInWindow =
+      list.superview.map { $0.convert(list.frame, to: nil) } ?? list.frame
+    let overlap = max(0, boxInWindow.maxY - end.minY)
     setBottomInset(overlap)
     guard let focused = list.findFirstResponder(),
       let row = HybridNitroUiForm.rowAncestor(of: focused) else { return }
     let rect = list.convert(row.frame, from: row.superview)
-    let visibleBottom = list.frame.maxY - list.adjustedContentInset.bottom
+    // `list.bounds` *is* the visible box in content coordinates: its origin is the scroll
+    // offset and its height is the viewport, and the bottom of what a person can see is one
+    // adjusted inset above `bounds.maxY` - the safe area and the inset set just above, both
+    // of which UIKit has already folded into `adjustedContentInset`.
+    let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
     if rect.maxY > visibleBottom {
       list.setContentOffset(
         CGPoint(
@@ -718,10 +822,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// is what `docs/components/form.md` says out loud.
   ///
   /// A settle includes the list's box *moving*: an adjusted content inset (the safe area
-  /// arriving, a keyboard inset) shifts `contentOffset` without scrolling, and nothing in the
-  /// `UIScrollViewDelegate` settle set fires for that — `scrollViewDidLayout` runs before the
-  /// same layout pass applies the shift, so the last published number is the one from before
-  /// it. E7 measured that gap as 72 pt on every row of a form at rest.
+  /// arriving, a keyboard inset) shifts `contentOffset` without scrolling, and no drag ending
+  /// fires for it — UIKit's callback for that shift is `scrollViewDidChangeAdjustedContentInset`
+  /// (on the delegate since iOS 11), which the delegate answers, as does the holding view's
+  /// `safeAreaInsetsDidChange`. E7 measured the gap left by not answering either as 72 pt on
+  /// every row of a form at rest.
   func reportGeometry() {
     guard holding.superview != nil else { return }
     list.layoutIfNeeded()
@@ -908,8 +1013,44 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "listY=\(Self.number(holding.frame.minY))",
       "insetTop=\(Self.number(list.adjustedContentInset.top))",
       "placed=\(reportedPlacement.count)",
+      // The rows in the order this Form holds them, by their own words. A count cannot say
+      // whether a keyed insert landed where React put it, and a wrong index is invisible in
+      // every other field here (fix round 1).
+      "order=\(rowOrder())",
     ] + geometryFields(of: list, kind: "prototype")).joined(separator: ";")
   }
+
+  /// The rows, in the order the Form's models hold them, named by the words inside them.
+  ///
+  /// Read from the row rather than given one by the app on purpose: this is the Form's own
+  /// claim about React's order, checked against what the app actually rendered, so a Form that
+  /// inserted a row in the wrong place cannot agree with itself. `nitroUiAggregatedLabel` is
+  /// the same helper that names a pressable row for a screen reader, and the harness rows are
+  /// written so their first words differ.
+  ///
+  /// Capped and sanitised because it rides in the same `;`- and `=`-separated line as the
+  /// numbers: a form with 200 rows is not a 200-name line in every poll of the harness, and a
+  /// label containing a separator would desynchronise the parser at the other end.
+  private func rowOrder(limit: Int = 10) -> String {
+    var names: [String] = []
+    for section in sections {
+      for row in section.rows {
+        guard names.count < limit else { break }
+        let label = String((nitroUiAggregatedLabel(in: row) ?? "?").prefix(20))
+        names.append(
+          String(
+            label.unicodeScalars.map { Self.separatorScalars.contains($0) ? " " : Character($0) }
+          )
+          .trimmingCharacters(in: .whitespaces)
+        )
+      }
+      if names.count >= limit { break }
+    }
+    return names.joined(separator: "|")
+  }
+
+  /// The characters this report line is built out of, which a row's own words must not contain.
+  private static let separatorScalars: Set<Unicode.Scalar> = [";", "=", "|", ":"]
 
   /// The heights the layout gives the first few rows, so a harness compares the list's own
   /// answer rather than a screenshot.
@@ -967,6 +1108,15 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
         component.layoutIfNeeded()
       case "hide-reference":
         hideReference()
+      case "scroll-no-report":
+        // Move the content and *not* report it, from inside the library - the shape of every
+        // settle callback that used to be missing. E7 then has to notice the new offset by
+        // itself, which is what the delegate methods added in fix round 1 are for.
+        list.setContentOffset(
+          CGPoint(x: list.contentOffset.x, y: list.contentOffset.y + 60),
+          animated: false
+        )
+        list.layoutIfNeeded()
       default:
         break
     }

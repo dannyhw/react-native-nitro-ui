@@ -109,6 +109,9 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
     // One application for both strings: the section's items change (the header and footer
     // are items), and the space they need is re-reported from what the layout gives them.
     form?.rowsChanged(in: model)
+    // ...and the band that is already on screen is re-drawn, because the model's identity did
+    // not change and a snapshot that changes nothing tells UIKit nothing.
+    form?.chromeChanged(in: model)
     reportMetrics()
   }
 
@@ -127,6 +130,7 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
     reportedPlacement = nil
     reportedInset = nil
     form?.rowsChanged(in: model)
+    form?.chromeChanged(in: model)
   }
 
   func onDropView() {
@@ -298,6 +302,11 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
       "footerBand=\(reportedMetrics.map { String(format: "%.2f", $0[1]) } ?? "-")",
       "inset=\(reportedMetrics.map { String(format: "%.2f", $0[2]) } ?? "-")",
       "headerText=\(form?.headerTextHeight(in: model).map { String(format: "%.2f", $0) } ?? "-")",
+      // What the band on screen is painted with, as opposed to what this class holds: a title
+      // that reached `title=` but not `drawnTitle=` is a heading nobody can read. `-` is a
+      // band the list has not realised (the section is off screen), not a missing one.
+      "drawnTitle=\(form?.drawnSupplementaryText(footer: false, in: model) ?? "-")",
+      "drawnFooter=\(form?.drawnSupplementaryText(footer: true, in: model) ?? "-")",
     ].joined(separator: ";")
   }
 }
