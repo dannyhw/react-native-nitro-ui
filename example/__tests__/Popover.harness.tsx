@@ -868,14 +868,17 @@ describe('Popover', () => {
     );
     const scale = scaleOf(up);
     const grownPx = Math.round(grownHeight * scale);
+    // The live number each platform holds differs by more than its name: Android's `askedH`
+    // is the content box as it stands, iOS's is `sizeAtPresent` - the box the present happened,
+    // which never moves - and the number iOS is *currently* told is `prefH`.
     const grownReport = await waitForFreshReport(
       id,
       (r) =>
-        Math.abs(num(r, 'askedH') - grownHeight) <= 1 &&
-        (IOS
+        IOS
           ? Math.abs(num(r, 'prefH') - grownHeight) <= 1 &&
             num(r, 'viewH') - beforeViewH >= grownHeight - 92 - 2
-          : isSize(r.lastDraw ?? '', Math.round(width * scale), grownPx)),
+          : Math.abs(num(r, 'askedH') - grownHeight) <= 1 &&
+            isSize(r.lastDraw ?? '', Math.round(width * scale), grownPx),
       'the popover at the content height it grew to',
       12000
     );
