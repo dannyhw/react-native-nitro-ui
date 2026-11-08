@@ -278,7 +278,26 @@ describe('Form fidelity (S6 spike, question 2)', () => {
       return;
     }
 
+    // The width the Form tells JS a row is wide has to be the width a cell draws that row
+    // in. It is not a cosmetic number: the React side lays a row's content out at it, so a
+    // row told about a wider box puts its right-aligned content (a Switch, a chevron, a
+    // value) past the cell's edge, and UIKit stops hit-testing at that edge - a hosted
+    // `Switch` there takes no taps at all (S6b question 4, 0 of 10). `boxReports` is the
+    // other half: a `width` that is right only because the list's layout happened to be
+    // asked at the right moment is a number that will be wrong on the next device.
+    const reported = num(proto, 'width');
+    const drawn = num(proto, 'boxW');
+    if (reported !== drawn || num(proto, 'boxReports') < 1) {
+      throw new Error(
+        `question 4: the Form lays rows out at ${reported} pt and draws them at ${drawn} pt ` +
+          `(cell ${num(proto, 'w')} pt, list ${num(proto, 'listW')} pt, ` +
+          `${num(proto, 'boxReports')} cell report(s))`
+      );
+    }
+
+
     theForm().nuiTestCommand('show-reference');
+
     const reference = await read(
       (r) => r.kind === 'reference',
       'the SwiftUI Form reference'

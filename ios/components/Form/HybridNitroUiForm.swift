@@ -121,6 +121,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   private var taps = 0
   private var snapshotApplies = 0
   private var reportedWidth: CGFloat = .zero
+  /// How many times a laid-out cell has offered its row box. A witness, not a counter with
+  /// a bound: `width` right and `boxReports` zero means the cell never asked, and the row
+  /// was laid out at whatever an earlier, wider guess said.
+  private var boxReports = 0
   private var keyboardInset: CGFloat = .zero
 
   override init() {
@@ -499,8 +503,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   // MARK: - Content box
 
   private func reportContentBox() {
-    let width = contentWidth()
-    guard width > 0, abs(width - reportedWidth) > 0.25 else { return }
+    // Only what the layout *knows*. `contentWidth()`'s fallback is the list's own box,
+    // which is the window's width on an inset-grouped list: reported once before the
+    // layout had attributes, it laid every row out 64 pt wider than its cell, and the
+    // right-aligned content of a row (a Switch, a chevron) landed past the cell's edge -
+    // where UIKit stops hit-testing, which is S6b's 0-of-10 hosted `Switch`.
+    // And it is only a guess for the time before a cell exists: once one is on screen it
+    // reports its own box from `layoutSubviews`, which is the number the row is drawn in,
+    // and a later guess must not take the last word over it.
+    guard rowBoxWidth() < 0 else { return }
+    guard let width = attributesWidth(), abs(width - reportedWidth) > 0.25 else { return }
     reportedWidth = width
     contentBox?(Double(width))
   }
@@ -508,11 +520,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// The width a cell actually gets, asked of the layout - not four typed constants. The
   /// inset-grouped margins and the cell's own content margins live in the layout.
   private func contentWidth() -> CGFloat {
-    guard list.bounds.width > 0 else { return 0 }
-    if let attributes = list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0)) {
-      return attributes.frame.width
-    }
-    return list.bounds.width
+    attributesWidth() ?? 0
+  }
+
+  /// What the list's own layout says a cell is wide, or `nil` while it has not worked that
+  /// out yet. `nil` is the answer a caller has to be able to tell from `0`.
+  private func attributesWidth() -> CGFloat? {
+    guard list.bounds.width > 0 else { return nil }
+    return list.layoutAttributesForItem(at: IndexPath(item: 0, section: 0))?.frame.width
   }
 
   /// The width a *laid-out cell* gives its row, reported by that cell's container.
@@ -524,6 +539,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// and UIKit stops hit-testing at that edge: S6b measured a hosted `Switch` in a row taking
   /// 0 of 10 real taps for exactly this reason, while content on the row's left worked.
   func rowBoxWidthReported(_ width: CGFloat) {
+    boxReports += 1
     guard width > 0, abs(width - reportedWidth) > 0.25 else { return }
     reportedWidth = width
     contentBox?(Double(width))
@@ -534,6 +550,17 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// The width a cell gets, for measuring the space a header needs.
   func contentWidthForMetrics() -> CGFloat {
     contentWidth()
+  }
+
+  /// The width a row on screen is drawn in, or -1 while none is. This is the number the
+  /// React side has to lay a row's content out at; `width` in the report is what it was
+  /// told, and the two disagreeing is the row drawing past its cell.
+  private func rowBoxWidth() -> CGFloat {
+    for cell in list.visibleCells {
+      let width = (cell as? NitroUiFormRowCell)?.rowBoxWidth ?? 0
+      if width > 0 { return width }
+    }
+    return -1
   }
 
   /// The height UIKit's own layout gives this section's header, or 0. Asked of the layout
@@ -737,6 +764,8 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "applies=\(snapshotApplies)",
       "width=\(Self.number(reportedWidth))",
       "listWidth=\(Self.number(list.bounds.width))",
+      "boxW=\(Self.number(rowBoxWidth()))",
+      "boxReports=\(boxReports)",
       "heights=\(heights)",
       "taps=\(taps)",
       "keyboard=\(Self.number(keyboardInset))",
