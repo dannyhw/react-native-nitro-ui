@@ -21,7 +21,7 @@ import { fn } from 'storybook/test';
 
 import type { Meta, StoryObj } from '@storybook/react-native';
 
-import { Frame, Note, Row, Showcase } from './showcase';
+import { Column, Frame, Note, Row, Showcase } from './showcase';
 
 /** A drawable the example app ships in `res/drawable/` — the resource-name form. */
 const DRAWABLE = 'nitroui_test_star';
@@ -176,6 +176,8 @@ const meta = {
   },
 } satisfies Meta<typeof ButtonGroup>;
 
+export default meta;
+
 type Story = StoryObj<typeof meta>;
 
 /** The playground, with a readout — a tap is one event, and this shows it. */
@@ -209,35 +211,35 @@ export const Appearances: Story = {
 
     return (
       <Showcase>
-        <Row label="standard — a gap between each command">
+        <Column label="standard — a gap between each command">
           <ButtonGroup
             accessibilityLabel="Standard commands"
             items={COMMANDS}
           />
-        </Row>
-        <Row label="connected — one track">
+        </Column>
+        <Column label="connected — one track">
           <ButtonGroup
             accessibilityLabel="Connected commands"
             appearance="connected"
             items={COMMANDS}
           />
-        </Row>
-        <Row label="standard toggles, two on">
+        </Column>
+        <Column label="standard toggles, two on">
           <ButtonGroup
             accessibilityLabel="Formatting"
             items={toggles}
             onCheckedChange={onChecked}
           />
-        </Row>
-        <Row label="asked connected, with toggles — iOS falls back, Android joins">
+        </Column>
+        <Column label="asked connected, with toggles — iOS falls back, Android joins">
           <ButtonGroup
             accessibilityLabel="Formatting, connected"
             appearance="connected"
             items={toggles}
             onCheckedChange={onChecked}
           />
-        </Row>
-        <Row label="each variant, at the medium rung">
+        </Column>
+        <Column label="each variant, at the medium rung">
           {VARIANTS.map((variant) => (
             <ButtonGroup
               key={variant}
@@ -246,15 +248,15 @@ export const Appearances: Story = {
               variant={variant}
             />
           ))}
-        </Row>
-        <Row label="the whole group disabled">
+        </Column>
+        <Column label="the whole group disabled">
           <ButtonGroup
             accessibilityLabel="Disabled commands"
             disabled
             items={COMMANDS}
           />
-        </Row>
-        <Row label="one item disabled beside two live ones">
+        </Column>
+        <Column label="one item disabled beside two live ones">
           <ButtonGroup
             accessibilityLabel="One disabled"
             items={COMMANDS.map((item) => ({
@@ -262,7 +264,7 @@ export const Appearances: Story = {
               disabled: item.id === 'cut',
             }))}
           />
-        </Row>
+        </Column>
       </Showcase>
     );
   },
@@ -274,7 +276,7 @@ export const SizesAndLabels: Story = {
     return (
       <Showcase>
         {SIZES.map((size) => (
-          <Row key={size} label={size}>
+          <Column key={size} label={size}>
             {APPEARANCES.map((appearance) => (
               <ButtonGroup
                 key={appearance}
@@ -284,23 +286,23 @@ export const SizesAndLabels: Story = {
                 size={size}
               />
             ))}
-          </Row>
+          </Column>
         ))}
         <Note>
-          The connected column does not change with the rung on iOS:
+          The second row of each pair does not change with the rung on iOS:
           `ControlGroup` measured 174.00 × 31.00 pt at every `.controlSize`. It
-          is kept here so the two columns are read together.
+          is kept here so the two appearances are read together.
         </Note>
         {LABEL_STYLES.map((labelStyle) => (
-          <Row key={labelStyle} label={labelStyle}>
+          <Column key={labelStyle} label={labelStyle}>
             <ButtonGroup
               accessibilityLabel={`Label style ${labelStyle}`}
               items={COMMANDS}
               labelStyle={labelStyle}
             />
-          </Row>
+          </Column>
         ))}
-        <Row label="iconOnly with nothing to draw — the title stays">
+        <Column label="iconOnly with nothing to draw — the title stays">
           <ButtonGroup
             accessibilityLabel="No glyphs"
             items={COMMANDS.map(
@@ -308,7 +310,7 @@ export const SizesAndLabels: Story = {
             )}
             labelStyle="iconOnly"
           />
-        </Row>
+        </Column>
       </Showcase>
     );
   },
@@ -346,9 +348,9 @@ export const Overflow: Story = {
             items={MANY}
           />
         </Frame>
-        <Row label="across the screen — every item is in the row">
+        <Column label="across the screen — every item is in the row">
           <ButtonGroup accessibilityLabel="All dates" items={MANY} />
-        </Row>
+        </Column>
         <Row label="taps, from the row or from the menu">
           <Text style={styles.readout}>
             {presses.length === 0 ? 'nothing yet' : presses.join(' · ')}
@@ -378,7 +380,7 @@ export const Toggles: Story = {
 
     return (
       <Showcase>
-        <Row label="one controlled, one uncontrolled, one action">
+        <Column label="one controlled, one uncontrolled, one action">
           <ButtonGroup
             accessibilityLabel="Editor toggles"
             appearance="connected"
@@ -395,8 +397,8 @@ export const Toggles: Story = {
             onCheckedChange={onCheckedChange}
             testID="storybook-button-group-toggles"
           />
-        </Row>
-        <Row label="the app refuses every change">
+        </Column>
+        <Column label="the app refuses every change">
           <ButtonGroup
             accessibilityLabel="Refused group"
             items={[
@@ -410,8 +412,8 @@ export const Toggles: Story = {
             ]}
             onCheckedChange={() => undefined}
           />
-        </Row>
-        <Row label="refuse the write above">
+        </Column>
+        <Column label="refuse the write above">
           <ButtonGroup
             items={[
               {
@@ -423,7 +425,7 @@ export const Toggles: Story = {
             ]}
             onPress={() => setRefuse((current) => !current)}
           />
-        </Row>
+        </Column>
         <Note>
           A tap is painted before React sees it. When the app does not move the
           value the next render sends, the item snaps back — the tap twice is
