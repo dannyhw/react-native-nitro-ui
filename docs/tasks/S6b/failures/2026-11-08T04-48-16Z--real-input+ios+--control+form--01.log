@@ -1,0 +1,81 @@
+# Failure excerpt — real-input:ios:--control:form
+
+- Ran: 2026-11-08T04:48:16.340Z on code tree `6fca6801da4c` at HEAD `fb860df` (branch `task/S6b-form-spike`)
+- Command: `node scripts/real-input/ios.mjs --control form`
+- Result: fail, exit 1, 1631 ms
+- Load: start 3.93, end 4.10, median 4.02, max 4.10
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `S6b-44a80`
+- Full log: `task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log` (<store>/task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error: setTypeOfService EINVAL`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: S6b-44a80 (still live)
+  |   G23-zcs2m                G23          both              pair-b
+  |   S6b-44a80                S6b          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.10 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 38 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:form
+gate: node scripts/real-input/ios.mjs --control form (cwd .)
+gate: code tree 6fca6801da4c at HEAD fb860dff
+gate: git tree 6038db958a0d
+gate: log task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log
+gate:       <store>/task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+node:net:975
+      throw new ErrnoException(err, 'setTypeOfService');
+      ^
+
+Error: setTypeOfService EINVAL
+    at Socket.setTypeOfService (node:net:975:13)
+    at writeH1 (node:internal/deps/undici/undici:8066:16)
+    at Object.write (node:internal/deps/undici/undici:7804:18)
+    at _resume (node:internal/deps/undici/undici:9745:54)
+    at resume (node:internal/deps/undici/undici:9678:7)
+    at Client.<computed> (node:internal/deps/undici/undici:9455:35)
+    at node:internal/deps/undici/undici:9628:26
+    at Socket.<anonymous> (node:internal/deps/undici/undici:3375:13)
+    at Socket.wrapper (node:events:639:12)
+    at Socket.emit (node:events:514:28) {
+  errno: -22,
+  code: 'EINVAL',
+  syscall: 'setTypeOfService'
+}
+
+Node.js v24.22.1
+gate: stopped the Metro this run started (51782) on port 8295 - the next gate on this lease gets a free port
+gate: stopped the Metro this run started (51782) on port 8295 - the next gate on this lease gets a free port
+gate: real-input:ios:--control:form FAIL in 1.6 s
+gate: recorded in .gates/task/S6b-form-spike.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/S6b-form-spike/real-input+ios+--control+form-2026-11-08T04-48-15.690Z.log (4 probe(s))
+
+```
