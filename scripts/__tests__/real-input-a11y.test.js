@@ -127,6 +127,13 @@ describe('the a11y rule, on measured trees', () => {
       // the field's box — so the rule's box test finds the actionable node too.
       'search-field',
       'context-menu',
+      // G24's Form row, measured on pair-b: the row Compose merged for `onPress` is the
+      // `clickable` node, and the one node carrying "Row with onPress" sits inside it at
+      // the content box (933x116 px inside the row's own 1017x147 px touch target). So a
+      // screen reader stops once, and the stop it hears presses. Not the Checkbox shape -
+      // there the named node *is* the control's box - but the shape the rule exists to
+      // accept: an actionable node wrapping the name it announces.
+      'form',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
