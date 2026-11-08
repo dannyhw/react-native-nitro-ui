@@ -189,6 +189,11 @@ platform's tree; `need` names the example's harness/screen files as counting for
   size-without-an-origin (`PopupLayout.getDisplayBounds`) and so has the same blind spot Popover
   had; worth a look at whether either of their placements is a status bar out on a device whose
   frame is not its window.
+- docs: the drop fixtures used to claim they leave "no lifecycle observer behind", and
+  `35e427a4` deleted the assertion that counted them, so `docs/components/popover.md` stopped
+  saying it. The claim was an Activity-wide count - any other control on the screen raises it -
+  which is why it was dropped rather than re-proved; the witnesses that stay (window, controller,
+  RN root, and Fabric's own drop/recycle counts) are per-mount.
 
 ## Appendix
 
