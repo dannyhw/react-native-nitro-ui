@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import {
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -158,6 +159,16 @@ export default function ButtonGroupScreen() {
     setDisabledEvents((count) => count + 1);
   }, []);
 
+  // The overflow group's own `disabled`, flipped by a control the real-input suite
+  // taps. D29's rule is that a disabled group cannot keep a menu open, and iOS has no
+  // way to open a SwiftUI `Menu` from code (`isExpanded` is iOS 18; the target is
+  // 15.1), so the iOS half of the proof is a real tap on the real indicator followed by
+  // a real prop change: `testRealInputButtonGroup` step 7.
+  const [overflowDisabled, setOverflowDisabled] = useState(false);
+  const onOverflowDisabled = useCallback(() => {
+    setOverflowDisabled((current) => !current);
+  }, []);
+
   // ---- The gallery below the real-input block. ----
   const [toggled, setToggled] = useState<string[]>(['bold']);
   const onToggled = useCallback((id: string, checked: boolean) => {
@@ -234,11 +245,24 @@ export default function ButtonGroupScreen() {
             items={MANY_ITEMS}
             appearance="connected"
             onPress={onPress}
+            disabled={overflowDisabled}
             testID="real-input-button-group-overflow"
             accessibilityLabel="Real-input overflowing group"
             overflowAccessibilityLabel="Real-input overflow control"
           />
         </View>
+        <Pressable
+          accessibilityRole="button"
+          testID="button-group-overflow-disable"
+          onPress={onOverflowDisabled}
+          style={[styles.opener, { backgroundColor: ink.well }]}
+        >
+          <Text style={{ color: ink.ink }}>
+            {overflowDisabled
+              ? 'Enable the overflowing group'
+              : 'Disable the overflowing group'}
+          </Text>
+        </Pressable>
         <View style={styles.echoes}>
           <Echo
             label="presses"
@@ -280,6 +304,12 @@ export default function ButtonGroupScreen() {
             label="disabled: requests"
             testID="button-group-disabled-events"
             value={String(disabledEvents)}
+            ink={ink}
+          />
+          <Echo
+            label="overflowing group"
+            testID="button-group-overflow-disabled"
+            value={overflowDisabled ? 'disabled' : 'enabled'}
             ink={ink}
           />
         </View>
@@ -429,5 +459,11 @@ const styles = StyleSheet.create({
   narrowWell: {
     width: 220,
     marginTop: 8,
+  },
+  opener: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
 });
