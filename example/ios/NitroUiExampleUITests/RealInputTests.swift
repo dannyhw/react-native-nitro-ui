@@ -344,6 +344,8 @@ final class RealInputTests: XCTestCase {
 
     let settled = A11yFrameStability.settle(
       framesOf: { $0.frames },
+      identitiesOf: { $0.identities },
+      confirmationNeeded: { $0.mergedChildrenInQuestion },
       read: readCase
     )
     // Printed before the tree, so a reader sees the provenance of the boxes below it. The rule for
@@ -500,14 +502,46 @@ final class RealInputTests: XCTestCase {
 
   /// One read of one control's whole tree — the snapshot the stability wait compares.
   ///
-  /// `frames` is what agreement is judged on: the anchor's box plus every node's, in print order.
-  /// Everything not in that list is deliberately not stability-checked — the labels, traits and
-  /// values are copied from whichever read settled, and the only thing observed to go wrong is a
-  /// box read out of a stale snapshot.
+  /// Agreement is judged on `frames` **and** `identities`: the boxes in print order, and which
+  /// elements the tree actually holds. Boxes alone were not enough (X22) — React Native publishes
+  /// and withdraws a child accessibility element without moving a pixel, so two reads of two
+  /// different trees can agree on every frame and the pass prints whichever one it sampled. The
+  /// `context-menu` case read 5 elements on two branches and 3 on `main` on one simulator in one
+  /// day — byte-identical boxes, byte-identical component code — and 1 when it is the only case the
+  /// pass runs. Which other cases ran first is the only thing that changed.
+  ///
+  /// Everything else — `enabled`, `hittable`, the trait — is copied from whichever read settled,
+  /// and is deliberately not stability-checked: nothing has been observed to go wrong with them.
   private struct A11ySnapshot {
     let nodes: [A11yNode]
 
     var frames: [CGRect] { nodes.map(\.frame) }
+
+    /// What the subtree contains: one string per element, trait + name + value. Not the box (that
+    /// is the frame question) and not deduplicated (the duplicates are what the sweep counts, so
+    /// `Grace Hopper` twice has to stay twice — see `A11yFrameStability.identitiesAgree`).
+    var identities: [String] {
+      nodes.map { "\($0.traitName)|\($0.label)|\($0.valueText)" }
+    }
+
+    /// Is this the shape where an accessibility **merge** is what a finding turns on?
+    ///
+    /// It is the shape `a11y:context-menu` exists to grade: the wrapper is a named element in its
+    /// own right and the tree *still* lists a differently named piece of text inside it. Either the
+    /// children really are stops of their own — the finding — or React Native has not finished
+    /// publishing the merged element, which is what the 4-stop reading looked like. A control whose
+    /// child text simply repeats its own name (`Button`, `Chip`, a Form row) is not in question:
+    /// merging it changes nothing about what is listed.
+    ///
+    /// Measured on today's example app, six of the pass's 22 cases answer yes (`picker`, `menu`,
+    /// `checkbox`, `hosted-picker`, `context-menu`, `form`), and each pays one extra read and one
+    /// window for it: ~+50 s on the whole a11y pass, against the 35-minute gate it sits inside.
+    var mergedChildrenInQuestion: Bool {
+      guard let wrapper = nodes.first, !wrapper.label.isEmpty else { return false }
+      return nodes.dropFirst().contains { node in
+        node.traitName == "static text" && !node.label.isEmpty && node.label != wrapper.label
+      }
+    }
   }
 
   /// One read of one accessibility element.

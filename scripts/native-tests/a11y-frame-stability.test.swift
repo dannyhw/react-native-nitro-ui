@@ -70,9 +70,18 @@ struct A11yFrameStabilityTest {
   private struct Snapshot {
     let anchor: CGRect
     let nodes: [CGRect]
+    /// What the tree holds, one string per element — the channel `measure` supplies as
+    /// `A11ySnapshot.identities`. Empty means "this fixture asks the frame question only".
+    var identities: [String] = []
 
     var frames: [CGRect] { [anchor] + nodes }
   }
+
+  /// The accessible `ContextMenu`'s wrapper and its first line, as the sweep measured them on
+  /// pair-a (`ctx-accessible`, iOS 27): `(12, 446.667, 378×68)` with `Grace Hopper` at
+  /// `(25, 459.667, 352×17)`, published twice.
+  private static let contextBox = CGRect(x: 12, y: 446.666_671_752_929_7, width: 378, height: 68)
+  private static let textRow = CGRect(x: 25, y: 459.666_671_752_929_7, width: 352, height: 17)
 
   /// The measured pair-a Switch: wrapper and hosted element at the same box.
   private static let switchBox = CGRect(x: 325, y: 217.3333282470703, width: 61, height: 28)
@@ -433,6 +442,168 @@ struct A11yFrameStabilityTest {
       )
     }
 
+    // Item 4b: membership is part of agreement (X22).
+    //
+    // Two trees, one set of boxes. React Native publishes a child accessibility element and
+    // withdraws it without moving anything: here the subtree under an `accessible` wrapper holds
+    // `Grace Hopper` twice, and holds `Grace Hopper` plus the second `Text` once each, at the same
+    // two boxes. Frames alone call those two reads the same tree, which is how one `ContextMenu`
+    // came to be graded as 2 stops on one run and 4 on the next with nothing in the component
+    // different. The 5-vs-3 pair the branches actually hit is already refused by the count rule;
+    // this channel is what the count rule cannot see, and it is what makes the confirmation read
+    // below worth taking — a confirmation that only compares boxes could agree while the elements
+    // underneath it swapped.
+    do {
+      let merged = Snapshot(
+        anchor: contextBox,
+        nodes: [textRow, textRow],
+        identities: ["static text|Grace Hopper|", "static text|Grace Hopper|"]
+      )
+      let unmerged = Snapshot(
+        anchor: contextBox,
+        nodes: [textRow, textRow],
+        identities: ["static text|Grace Hopper|", "static text|With the menu on it.|"]
+      )
+      check(
+        A11yFrameStability.movedFrameCount(merged.frames, unmerged.frames) == 0,
+        "the two memberships sit on identical frames — the premise, not an accident"
+      )
+      check(
+        !A11yFrameStability.identitiesAgree(merged.identities, unmerged.identities),
+        "and the identity channel is the only thing that tells them apart"
+      )
+      check(
+        !A11yFrameStability.identitiesAgree(["a", "a"], ["a", "b"]),
+        "duplicates count: two of one element is not one of each"
+      )
+      check(
+        A11yFrameStability.identitiesAgree(["a", "b"], ["b", "a"]),
+        "a subtree walked in the other order is still the same tree"
+      )
+      check(
+        A11yFrameStability.identitiesAgree([], []),
+        "a caller with no identity channel asks the frame question only"
+      )
+
+      let scripted = script([merged, unmerged, merged, merged])
+      let clock = fakeClock()
+      let outcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        identitiesOf: { $0.identities },
+        read: scripted.read,
+        nowMs: clock.now,
+        pause: clock.pause
+      )
+      check(
+        outcome.reads == 4,
+        "a same-boxed, swapped-membership pair is not agreement (got \(outcome.reads) reads)"
+      )
+      check(
+        outcome.snapshot.identities == merged.identities && outcome.settled,
+        "the wait settles on the tree that repeated itself"
+      )
+
+      // …and the same shape costs the ordinary two reads when nothing swaps, so the channel is not
+      // a cost the healthy cases pay.
+      let quiet = script([merged, merged])
+      let quietOutcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        identitiesOf: { $0.identities },
+        read: quiet.read,
+        nowMs: clock.now,
+        pause: clock.pause
+      )
+      check(
+        quietOutcome.reads == 2 && quietOutcome.settled,
+        "a stable membership still costs two reads (got \(quietOutcome.reads))"
+      )
+    }
+
+    // Item 4c: the confirmation read. Two reads are ~3 s apart, which is a snapshot-rebuild window
+    // and not a JS-thread window: on a loaded machine React Native can still be publishing an
+    // element's merged children seconds later, and both reads then agree on the pre-merge tree.
+    // For the shape where the merge is what the finding turns on, the pair has to be confirmed by
+    // a third read taken after a real window.
+    do {
+      let disputed = Snapshot(
+        anchor: contextBox,
+        nodes: [textRow, textRow],
+        identities: ["static text|Grace Hopper|", "static text|Grace Hopper|"]
+      )
+      let scripted = script([disputed, disputed, disputed])
+      let clock = fakeClock()
+      let outcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        identitiesOf: { $0.identities },
+        confirmationNeeded: { _ in true },
+        read: scripted.read,
+        nowMs: clock.now,
+        pause: clock.pause
+      )
+      check(outcome.settled, "the disputed shape settles")
+      check(
+        outcome.reads == 3,
+        "and pays one confirmation read for it (got \(outcome.reads))"
+      )
+      check(outcome.confirmed, "the outcome says the pair was confirmed, not just agreed")
+      check(
+        clock.state() >= A11yFrameStability.defaultConfirmMs,
+        "the confirmation is a window (\(clock.state()) ms), not the 120 ms snapshot pause"
+      )
+
+      // The cost guard: every other control in the pass is not this shape and does not pay.
+      let notInQuestion = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        identitiesOf: { $0.identities },
+        read: script([disputed, disputed]).read,
+        nowMs: clock.now,
+        pause: clock.pause
+      )
+      check(
+        notInQuestion.reads == 2 && !notInQuestion.confirmed,
+        "a shape that does not ask is not confirmed (got \(notInQuestion.reads) reads)"
+      )
+
+      // A confirmation that disagrees is the reason for taking one: the tree changed under the
+      // pair, so the wait keeps going on the new baseline instead of printing the first shape.
+      let lateMerge = Snapshot(
+        anchor: contextBox,
+        nodes: [textRow, textRow],
+        identities: ["static text|Grace Hopper|", "static text|Grace Hopper|"]
+      )
+      let beforeMerge = Snapshot(
+        anchor: contextBox,
+        nodes: [textRow, textRow],
+        identities: ["static text|Grace Hopper|", "static text|With the menu on it.|"]
+      )
+      let late = script([beforeMerge, beforeMerge, lateMerge, lateMerge, lateMerge])
+      let lateClock = Clock()
+      let lateOutcome = A11yFrameStability.settle(
+        framesOf: { $0.frames },
+        identitiesOf: { $0.identities },
+        confirmationNeeded: { _ in true },
+        read: late.read,
+        nowMs: lateClock.now,
+        pause: { _ in lateClock.spend(A11yFrameStability.defaultConfirmMs) }
+      )
+      check(
+        lateOutcome.reads == 5,
+        "a tree that published under the confirmation is chased, not printed (got \(lateOutcome.reads))"
+      )
+      check(
+        lateOutcome.settled && lateOutcome.confirmed,
+        "and it settles confirmed once the published tree repeats"
+      )
+      check(
+        lateOutcome.snapshot.identities == lateMerge.identities,
+        "the snapshot handed back is the published tree"
+      )
+      check(
+        A11yFrameStability.shouldReport(lateOutcome),
+        "reads past the designed confirmation are news, and this run has them (reads=5)"
+      )
+    }
+
     // Item 5: the print decision. The ordinary wait is two reads that agree, and it prints nothing -
     // fourteen healthy cases stay quiet and a printed line means something. The hole this closes is
     // the tree that flaps and lands back where it started: reads A, B, A, A settle on the fourth
@@ -470,7 +641,7 @@ struct A11yFrameStabilityTest {
     do {
       let quiet = A11yFrameStability.Outcome(
         snapshot: switchBox, first: switchBox, reads: 2, settled: true, moved: 0,
-        elapsedMs: 4_000
+        elapsedMs: 4_000, confirmed: false
       )
       check(
         !A11yFrameStability.shouldReport(quiet),
@@ -478,7 +649,7 @@ struct A11yFrameStabilityTest {
       )
       let moved = A11yFrameStability.Outcome(
         snapshot: switchBox, first: scaledBox, reads: 2, settled: true, moved: 1,
-        elapsedMs: 4_000
+        elapsedMs: 4_000, confirmed: false
       )
       check(
         A11yFrameStability.shouldReport(moved),
@@ -486,12 +657,30 @@ struct A11yFrameStabilityTest {
       )
       let many = A11yFrameStability.Outcome(
         snapshot: switchBox, first: switchBox, reads: 5, settled: true, moved: 0,
-        elapsedMs: 20_000
+        elapsedMs: 20_000, confirmed: false
       )
       check(A11yFrameStability.shouldReport(many), "five quiet reads are reported")
       let never = A11yFrameStability.Outcome(
         snapshot: switchBox, first: switchBox, reads: 2, settled: false, moved: 0,
-        elapsedMs: 1_500
+        elapsedMs: 1_500, confirmed: false
+      )
+      // The designed third read. `context-menu` is confirmed on every healthy run, and a note that
+      // fires on every healthy run is a note nobody reads; a fourth read is still news.
+      let confirmedQuiet = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: switchBox, reads: 3, settled: true, moved: 0,
+        elapsedMs: 6_000, confirmed: true
+      )
+      check(
+        !A11yFrameStability.shouldReport(confirmedQuiet),
+        "the confirmation read a disputed shape always pays prints nothing"
+      )
+      let confirmedPast = A11yFrameStability.Outcome(
+        snapshot: switchBox, first: switchBox, reads: 4, settled: true, moved: 0,
+        elapsedMs: 9_000, confirmed: true
+      )
+      check(
+        A11yFrameStability.shouldReport(confirmedPast),
+        "reads past the designed confirmation are still reported"
       )
       check(
         A11yFrameStability.shouldReport(never),

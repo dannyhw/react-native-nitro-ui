@@ -1,0 +1,37 @@
+{
+  "task": "X22",
+  "how": "One source mutation applied to the shipping file `example/ios/NitroUiExampleUITests/A11yFrameStability.swift`, `bun run test:native` run against it, then the file restored from a copy taken before the mutation (X14/X15's convention). `before` is the text as it ships at 98020fe3 and `after` is what replaced it. Both rows were run on maintainer-mac-1 (pair-a, lease X22-inlap), 2026-11-09. The check names are the lines `a11y-frame-stability.test` prints; the whole run exits 1 with `FAILED: N check(s)`.",
+  "mutations": [
+    {
+      "test": "scripts/native-tests/a11y-frame-stability.test.swift (bun run test:native)",
+      "file": "example/ios/NitroUiExampleUITests/A11yFrameStability.swift",
+      "mutation": "membership stops being part of agreement — frames only, as before X22",
+      "before": "    return left.sorted() == right.sorted()",
+      "after": "    return true",
+      "redTests": [
+        "and the identity channel is the only thing that tells them apart",
+        "duplicates count: two of one element is not one of each",
+        "a same-boxed, swapped-membership pair is not agreement (got 2 reads)",
+        "the wait settles on the tree that repeated itself",
+        "a tree that published under the confirmation is chased, not printed (got 3)",
+        "reads past the designed confirmation are news, and this run has them (reads=5)"
+      ]
+    },
+    {
+      "test": "scripts/native-tests/a11y-frame-stability.test.swift (bun run test:native)",
+      "file": "example/ios/NitroUiExampleUITests/A11yFrameStability.swift",
+      "mutation": "the confirmation read is never taken — a pair is accepted on the 120 ms pause alone",
+      "before": "        if !confirmed && confirmationNeeded(current) {",
+      "after": "        if false && confirmationNeeded(current) {",
+      "redTests": [
+        "and pays one confirmation read for it (got 2)",
+        "the outcome says the pair was confirmed, not just agreed",
+        "the confirmation is a window (120 ms), not the 120 ms snapshot pause",
+        "a tree that published under the confirmation is chased, not printed (got 2)",
+        "and it settles confirmed once the published tree repeats",
+        "the snapshot handed back is the published tree",
+        "reads past the designed confirmation are news, and this run has them (reads=5)"
+      ]
+    }
+  ]
+}
