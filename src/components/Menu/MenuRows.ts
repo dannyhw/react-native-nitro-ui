@@ -100,12 +100,14 @@ export interface MenuSubmenu {
   /** Leading SF Symbol name on the parent row. iOS only. */
   systemImage?: string | undefined;
   /**
-   * Leading glyph on the parent row for Android, in either of `Button`'s forms. Android
-   * draws a submenu's rows inline (DECISIONS D29), so this row is a group row there and
-   * takes the same slot as an action does.
+   * The rows inside it.
+   *
+   * There is deliberately no `androidIcon` here. A submenu's own row is a *group label*
+   * on Android (`DropdownMenuGroupLabel`, DECISIONS D29) and a `UIMenu` title on iOS, and
+   * neither has a leading slot for a glyph to live in — the prop would be one a reader
+   * sets and no platform ever draws. `MenuAction` takes it; that is every row either
+   * platform can paint.
    */
-  androidIcon?: AndroidIconProp | undefined;
-  /** The rows inside it. */
   items: MenuAction[];
 }
 
@@ -187,10 +189,9 @@ export function flattenGroup(
       disabled: false,
       destructive: false,
       systemImage: row.systemImage ?? null,
-      androidIcon: resolveRowAndroidIcon(
-        componentName,
-        row.androidIcon ?? null
-      ),
+      // No glyph for a group label on either platform, so nothing is resolved and
+      // nothing is asked for: the field is present (nitro#1184) and `null`.
+      androidIcon: null,
       subtitle: null,
       checked: null,
     });

@@ -9,8 +9,9 @@
 JS resolves the asset or drawable name (`src/iconSource.ts`), native gets a string, and
 `NitroUiIcon.kt` turns it into artwork. No second resolver was built.
 
-- **Rows** (`Menu` + `ContextMenu`, one shared `MenuRowIcons`): every row that takes
-  `systemImage` now takes `androidIcon` — actions, submenu rows, section items — as Material's
+- **Rows** (`Menu` + `ContextMenu`, one shared `MenuRowIcons`): every action row that takes
+  `systemImage` now takes `androidIcon` — actions and the rows inside a submenu or a section —
+  as Material's
   `leadingIcon`, so size, colour, gap and group insets stay Material's. The slot is
   `MenuDefaults.LeadingIconSize` = **20 dp**, not 24; the colour is read from
   `LocalContentColor` **as the row draws**, so a disabled row dims its glyph with its title; and
@@ -146,4 +147,4 @@ the four device gates and `check` already green.
 - tooling: `bun run api-extractor` is not part of `check`'s repair loop — `check` goes red on `api-extractor:check` and names the copy, which is right, but a task that has never hit it loses a cycle.
 - harness: `Host.harness` F8 has a 30 s budget and no load allowance; on a box shared with another
   task's `real-input` it times out and takes a whole `harness:android` run with it.
-- menu: `MenuSection` has no `androidIcon` (a section has no row of its own to draw one on); only `MenuAction` and `MenuSubmenu` take it.
+- menu: a submenu's label and a section's header take no `androidIcon` — neither has a leading slot on either platform, so only `MenuAction` does.

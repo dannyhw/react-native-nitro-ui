@@ -1521,12 +1521,25 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     }
     const { rerender } = await render(<Owner id="first" />);
     await openMenu('recycle-first');
-    await reportWhen(
+    const first = await reportWhen(
       'recycle-first',
       (r) => tintsOf(r).has('slab'),
       'the first owner’s glyph',
       15000
     );
+    // The colour the *first* owner painted its glyph with, which is the only colour worth
+    // asking the second owner about. The claim is "a slot kept from the first owner would
+    // draw its square beside these titles" - so the sample has to be for the ink that
+    // square would have. This used to probe `0x123456`, a colour no chip, row or label on
+    // this screen is ever drawn in, and an always-empty sample passes whether or not the
+    // square is there: `expect(ink).toBe(0)` could not have gone red.
+    const firstTint = tintsOf(first).get('slab');
+    if (firstTint == null) {
+      throw new Error(
+        `the first owner recorded no tint to sample: ${first.iconTints}`
+      );
+    }
+    const color = parseInt(firstTint.slice(1), 16);
     await shut('recycle-first');
     await rerender(<Owner id="none" />);
     await sleep(300);
@@ -1541,9 +1554,11 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     const opened = await openMenu('recycle-second');
     expect(opened.iconTints).toBe('-');
     const frame = frameOf(fieldOf(opened, 'menu'));
-    const ink = await stableHits(second, 0x123456, 'the second owner’s popup');
+    const ink = await stableHits(second, color, 'the second owner’s popup');
     await shut('recycle-second');
-    console.log(`    · second owner: menu=${frame} ink=${String(ink)}`);
+    console.log(
+      `    · second owner: menu=${frame} ink=${String(ink)} sampled=${firstTint}`
+    );
     expect(ink).toBe(0);
   });
 });

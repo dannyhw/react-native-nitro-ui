@@ -69,8 +69,7 @@ width unless the app asks for one.
 interface MenuGroup    { actions?: (MenuAction | MenuSubmenu)[]; sections?: MenuSection[] }
 interface MenuAction   { id: string; title: string; disabled?: boolean; destructive?: boolean; systemImage?: string;
                          androidIcon?: AndroidIconProp; subtitle?: string | null; checked?: boolean | null }
-interface MenuSubmenu  { id: string; title: string; systemImage?: string; androidIcon?: AndroidIconProp;
-                         items: MenuAction[] }
+interface MenuSubmenu  { id: string; title: string; systemImage?: string; items: MenuAction[] }
 interface MenuSection  { id: string; title?: string; items: MenuAction[] }
 ```
 
@@ -92,7 +91,8 @@ interface MenuSection  { id: string; title?: string; items: MenuAction[] }
   any other row, and the check is whatever the app sends next — flip your own state in
   `onSelect`. Nothing is toggled locally.
 - `androidIcon` puts a leading glyph beside a row's title, on Android only. It takes the
-  same two forms `Button`'s prop takes, and a submenu's own row takes it too.
+  same two forms `Button`'s prop takes. A submenu's own row has no such prop: on Android
+  it is a group label and on iOS a `UIMenu` title, and neither has a slot to draw into.
   [The rows' glyphs](#the-rows-glyphs).
 - A submenu holds actions only. Depth stops at one level — the public type cannot
   express a submenu inside a submenu, and the wrapper has nothing to normalise into.
@@ -276,8 +276,7 @@ The measured run for this round is in `docs/tasks/G19-android-icon-iconbutton.re
 
 ## The rows' glyphs
 
-`MenuAction.androidIcon` (and `MenuSubmenu.androidIcon`, on a submenu's own row) is the
-same prop with the same two forms — `require('./icons/share.xml')` or `"share"` — and all
+`MenuAction.androidIcon` is the same prop with the same two forms — `require('./icons/share.xml')` or `"share"` — and all
 of `docs/components/button.md`, "Android icons" applies to it: the file format, the
 resource-name form, where Material Symbols come from and the failure table. What is
 Menu's own is the slot it lands in.
@@ -304,9 +303,11 @@ Menu's own is the slot it lands in.
   draws nothing would still cost 20 dp, which is why the decision is made before the
   lambda exists rather than inside it.) In development the wrapper warns once per name,
   as `Button` does.
-- **Submenus take it on Android because Android flattens them.** A submenu's rows are
-  drawn inline as a group (D29), so its own row is a row like any other and takes the
-  same slot. On iOS the nested menu's label is the system's to draw.
+- **A submenu's label takes it nowhere, on either platform.** Android flattens a submenu
+  into a group whose label is a `DropdownMenuGroupLabel` (D29) and iOS draws a `UIMenu`
+  title; neither has a leading slot, so `MenuSubmenu` has no `androidIcon` at all and the
+  flattened submenu row is sent `null` — a row inside one takes the prop like any other
+  action does. The prop was removed before a release, so nothing has to be deprecated.
 - **The rows travel in the rows array**, not as a prop of the control: the trigger's
   `androidIcon` and a row's are different glyphs in different places, and the
   wrapper's sizing key does not gain a field for the rows because a row is not what makes

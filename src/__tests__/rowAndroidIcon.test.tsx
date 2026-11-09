@@ -11,7 +11,11 @@ import { resetAndroidIconSourceForTests } from '../iconSource';
 import { Chip } from '../components/Chip/Chip';
 import { ContextMenu } from '../components/ContextMenu/ContextMenu';
 import { Menu } from '../components/Menu/Menu';
-import { flattenGroup, type MenuGroup } from '../components/Menu/MenuRows';
+import {
+  flattenGroup,
+  type MenuGroup,
+  type MenuSubmenu,
+} from '../components/Menu/MenuRows';
 
 /*
  * Wrapper-level tests for `androidIcon` on menu rows and chips (G21).
@@ -115,12 +119,38 @@ describe('menu rows - androidIcon on the wire', () => {
     const group: MenuGroup = {
       actions: [
         { id: 'share', title: 'Share', androidIcon: 'share' },
-        { id: 'move', title: 'Move To', androidIcon: 'folder', items: [] },
+        {
+          id: 'move',
+          title: 'Move To',
+          items: [],
+          // The shape a cast, plain JS or an old compiled group can still hand the
+          // wrapper: `flattenGroup` has to answer it with `null`, because a group label
+          // has no leading slot on either platform and the name would otherwise open a
+          // socket for artwork nobody can draw. A spread, not a literal field, because
+          // the point of this case is the value the *wire* carries.
+          ...({ androidIcon: 'folder' } as Record<string, unknown>),
+        },
       ],
       sections: [
         { id: 'more', title: 'More', items: [{ id: 'copy', title: 'Copy' }] },
       ],
     };
+    // And the type itself refuses it: with a `MenuSubmenu` annotation there is no union
+    // member left to absorb the field, so the excess-property check is what answers, and
+    // this directive only compiles because `MenuSubmenu` has no `androidIcon`. Delete the
+    // marked line and `bun run typecheck` goes red on an unused directive; put the field
+    // back on the interface and it goes red the same way.
+    const forced: MenuSubmenu = {
+      id: 'x',
+      title: 'X',
+      items: [],
+      // @ts-expect-error MenuSubmenu has no androidIcon, on purpose.
+      androidIcon: 'folder',
+    };
+    // The refusal is a type-level one, so the object still carries what JS put in it -
+    // which is exactly the input the wire case above has to survive.
+    expect('androidIcon' in forced).toBe(true);
+
     const rows = flattenGroup(group);
     // the action, the submenu parent, the section header, the row inside the section
     expect(rows).toHaveLength(4);
@@ -135,10 +165,10 @@ describe('menu rows - androidIcon on the wire', () => {
     }
     expect(rows.map((row) => row.androidIcon)).toEqual([
       'share',
-      // A submenu parent's name travels too: iOS draws it on the parent row, and
-      // Android resolves only the rows it has a slot for. Which platform wants the
-      // string is not this function's decision.
-      'folder',
+      // The submenu's own row is a group label on Android and a `UIMenu` title on iOS,
+      // and neither has a leading slot - so the name sent above is dropped here, which
+      // is what keeps the resolver from opening a socket for artwork nobody can draw.
+      null,
       // A section header has no icon on either platform, so it is sent none.
       null,
       null,
