@@ -431,7 +431,6 @@ export interface MenuSection {
 
 // @public
 export interface MenuSubmenu {
-    androidIcon?: AndroidIconProp | undefined;
     id: string;
     items: MenuAction[];
     systemImage?: string | undefined;

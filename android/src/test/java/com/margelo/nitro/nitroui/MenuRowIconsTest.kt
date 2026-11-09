@@ -1,5 +1,6 @@
 package com.margelo.nitro.nitroui
 
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import java.io.File
 import java.io.FileInputStream
@@ -277,4 +278,28 @@ private val artworkImage: ImageVector by lazy(LazyThreadSafetyMode.NONE) {
     ).map { File(it) }.firstOrNull { it.isFile }
       ?: throw AssertionError("no example asset to build artwork from")
   NitroUiVectorDrawableReader.read(FileInputStream(path)).toImageVector("share")
+}
+
+/**
+ * Compile-only proof for the shape G21 gave [MenuRow]: the caller that holds an icon slot
+ * of its own - ButtonGroup's overflow rows, one `NitroUiIconContent` per item - names
+ * neither icon parameter and still compiles.
+ *
+ * This is never run: a `@Composable` cannot be invoked without a composer, and the claim
+ * was never about runtime. It is about the signature, and the way a signature is asserted
+ * is the compiler. Drop either default from [MenuRow] and this file stops building, which
+ * is the red this note is here to make available.
+ */
+@Composable
+internal fun overflowRowCompilesWithoutTheIconParameters(
+  item: MenuActionItem,
+  onPick: () -> Unit,
+) {
+  MenuRow(
+    item = item,
+    index = 0,
+    count = 1,
+    groupEnabled = true,
+    onPick = onPick,
+  )
 }

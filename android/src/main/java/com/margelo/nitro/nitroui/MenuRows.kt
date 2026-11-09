@@ -368,12 +368,19 @@ internal const val MENU_TITLE_TAG = "nitroui.menu.title"
  * screen reader. Either way a press is a pick - [onPick] - and never a local toggle: the
  * menu has no value, so the check is whatever the app sends next.
  *
- * [icons] answers what the row's `androidIcon` resolved to, and a row with something to
+ * [icon] answers what this row's `androidIcon` resolved to, and a row with something to
  * draw hands Material a `leadingIcon` and takes Material's slot, colour and gap; a row
  * without one hands it `null` and is laid out exactly as it was before the prop
  * existed. On a checkable row the check keeps the slot when the row is checked -
  * Material's own `checkedLeadingIcon` - because the check is what the row means, and
  * the glyph is what an unchecked one shows.
+ *
+ * Both icon parameters are defaulted, and that is the whole point: the caller that has a
+ * glyph hands over the resolved content plus [onIconTint] to hear what colour it drew
+ * with, and a caller that composes this row with a slot it already holds - ButtonGroup's
+ * overflow rows, one `NitroUiIconContent` per item - compiles and draws without either.
+ * Taking a whole `MenuRowIcons` here instead made this row unusable outside the two menus
+ * that own one, for no reason a caller can see.
  */
 @Composable
 internal fun MenuRow(
@@ -381,7 +388,8 @@ internal fun MenuRow(
   index: Int,
   count: Int,
   groupEnabled: Boolean,
-  icons: MenuRowIcons,
+  icon: NitroUiIconContent = NitroUiIconContent.Absent,
+  onIconTint: ((ComposeColor) -> Unit)? = null,
   onPick: () -> Unit,
 ) {
   val enabled = groupEnabled && !item.disabled
@@ -411,20 +419,21 @@ internal fun MenuRow(
     }
   val shapes = MenuDefaults.itemShape(index, count)
   val checked = item.checked
-  // Read here, not inside the lambda: the slot either exists for this row's layout or
-  // it does not, and `Absent` - the answer for "no icon", for a name the resource table
-  // does not know, and for a file that failed to load - must reach `leadingIcon` as
-  // `null`, which is the row's no-icon self down to the last dp.
-  val icon = icons.contentOf(item.id)
+  // `icon` arrives as a parameter and must be read outside the lambda either way: the
+  // slot either exists for this row's layout or it does not, and `Absent` - the answer
+  // for "no icon", for a name the resource table does not know, and for a file that
+  // failed to load - has to reach `leadingIcon` as `null`, which is the row's no-icon
+  // self down to the last dp.
   val leadingIcon: (@Composable () -> Unit)? =
     if (icon == NitroUiIconContent.Absent) {
       null
     } else {
       {
-        // What the row tinted its glyph with, recorded as it draws: the harness cannot
+        // What the row tinted its glyph with, reported as it draws: the harness cannot
         // name this device's dynamic Material palette, so it asks the row and then
-        // samples for that colour (`nuiTestMenuReport`'s `iconTints=`).
-        icons.noteTint(item.id, LocalContentColor.current)
+        // samples for that colour (`nuiTestMenuReport`'s `iconTints=`). A caller with no
+        // interest in the colour passes nothing.
+        onIconTint?.invoke(LocalContentColor.current)
         MenuRowIcon(icon)
       }
     }
@@ -522,7 +531,8 @@ internal fun MenuGroups(
               index = row,
               count = group.items.size,
               groupEnabled = enabled,
-              icons = icons,
+              icon = icons.contentOf(item.id),
+              onIconTint = { icons.noteTint(item.id, it) },
               onPick = { onPick(item.id) },
             )
           }

@@ -1215,11 +1215,21 @@ describe('Chip · the androidIcon (G21)', () => {
     const slot = ICON_DP * PixelRatio.get();
     expect(ink).toBeGreaterThan(slot * slot * 0.88);
     expect(ink).toBeLessThan(slot * slot * 1.12);
-    // The glyph widens the chip by the slot and its spacing, which is the same claim
-    // read off the box rather than the pixels.
-    expect(boxes.get('asset')!.width).toBeGreaterThan(
-      boxes.get('plain')!.width + 8
+    // And the same slot read off the *box*, which is the half `docs/components/chip.md`
+    // quotes a number for. It is not 18 + 8 + 8: `FilterChip` sets its own start padding
+    // to 16 dp and to 8 dp as soon as a leading icon exists, so the icon's 18 dp and the
+    // 8 dp that separates it from the label are paid for partly by padding the chip stops
+    // needing. The growth is logged because the doc states it, and asserted to the dp,
+    // because "from the box and the pixels, the same number" is only a claim if something
+    // reads the box: h4, the 1.2x slot mutation, moves the ink above *and* this.
+    const growth = boxes.get('asset')!.width - boxes.get('plain')!.width;
+    console.log(
+      `chip glyph width growth: ${growth.toFixed(2)} dp (asset ` +
+        `${boxes.get('asset')!.width.toFixed(2)} plain ` +
+        `${boxes.get('plain')!.width.toFixed(2)})`
     );
+    expect(growth).toBeGreaterThan(ICON_DP - 1);
+    expect(growth).toBeLessThan(ICON_DP + 1);
   });
 
   it('draws the named glyph the same pixels as the imported one', async () => {
@@ -1273,11 +1283,15 @@ describe('Chip · the androidIcon (G21)', () => {
       return;
     }
     expect(reportOf('missing').iconTint).toBe('-');
-    // A colour that some *other* chip recorded, probed here: the answer is the same
-    // count the plain chip gives, because the only thing of that colour on this chip is
-    // whatever the plain chip has too.
-    const color = 0x00a000;
-    expect(await hitsOf('missing', color)).toBe(await hitsOf('none', color));
+    // No pixel claim here, on purpose. The two counts this used to compare were both
+    // taken at `0x00a000`, a colour no chip on this screen is ever drawn in - not the
+    // label, not the outline, not a glyph, because the chip that could have drawn one
+    // resolved to nothing - so it was `0 === 0` whatever the code did, and no mutation of
+    // this path could have turned it red. The claim is carried by the two `sameSize`
+    // boxes above (the unresolved chip is its no-icon self to the dp, on both variants)
+    // and by `iconTint` being `-` (no row of it recorded painting anything); the ink
+    // itself is measured, against a colour a glyph really was tinted with, by the case
+    // above this one.
   });
 
   it('hands the check the slot when the filter chip is selected, without moving the box', async () => {

@@ -134,9 +134,10 @@ internal class MenuModel : NitroUiModel(), MenuWitnessSink {
    *
    * Only action rows: Android draws a submenu's parent as its group's label and a
    * section's header as a label too, and a Material group label has no leading slot for
-   * a glyph to live in - which is why `docs/components/menu.md` calls a submenu's
-   * `androidIcon` iOS-only. Reading the glyph of a row nobody draws would open a socket
-   * for artwork nobody sees.
+   * a glyph to live in - which is why `MenuSubmenu` has no `androidIcon` at all and the
+   * wrapper sends `null` for that row instead of a name this filter would throw away.
+   * Reading the glyph of a row nobody draws would open a socket for artwork nobody
+   * sees.
    */
   fun resolveRowIcons(
     artwork: NitroUiIconArtwork,
