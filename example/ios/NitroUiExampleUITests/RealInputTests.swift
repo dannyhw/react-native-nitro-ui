@@ -110,6 +110,8 @@ final class RealInputTests: XCTestCase {
     static let stepperValue = "real-input-stepper-value"
     static let stepperEvents = "real-input-stepper-events"
     static let stepperHoldValue = "real-input-stepper-hold-value"
+    static let stepperHoldEvents = "real-input-stepper-hold-events"
+    static let stepperSparseValue = "real-input-stepper-sparse-value"
     static let stepperRefusedLast = "real-input-stepper-refused-last"
     static let stepperRefusedEvents = "real-input-stepper-refused-events"
     static let stepperDisabledEvents = "real-input-stepper-disabled-events"
@@ -5934,6 +5936,29 @@ final class RealInputTests: XCTestCase {
         + "is what `docs/components/stepper.md` promises on iOS, and this is the only "
         + "check that can ask for it"
     )
+    // 4b. What a repeat is *worth*: the same press, counted. Every repeat is one step and
+    //     one `onValueChange`, so the event counter has moved exactly as far as the value
+    //     has, from the 5 the fixture starts at. The line above says a repeat happened;
+    //     this is the half it cannot say — a half that emitted twice per step repeats at
+    //     the same speed and passes `>= 7` with twice the events. Both echoes move in one
+    //     callback, so they are read together, after the last repeat has had time to
+    //     arrive: comparing a settled value with a count still in flight would be a
+    //     disagreement this control does not have.
+    usleep(400_000)
+    let heldValue = Int(try read(Echo.stepperHoldValue)) ?? -1
+    let heldEvents = Int(try read(Echo.stepperHoldEvents)) ?? -1
+    XCTAssertEqual(
+      heldEvents, heldValue - 5,
+      "a hold should report one event per step — the value moved from 5 to \(heldValue) "
+        + "(\(heldValue - 5) steps) while \(heldEvents) events were reported, so the two "
+        + "echoes of one callback disagree about what a repeat is worth"
+    )
+    XCTAssertGreaterThanOrEqual(
+      heldEvents, 2,
+      "the hold should have reported at least two events — the value alone proves the "
+        + "steps happened, and an echo that stayed at \(heldEvents) while they did is a "
+        + "control taking the steps without telling React about them"
+    )
 
     // 5. The refusing parent: React never moves `value`, so every step is refused and
     //    has to snap back. The oracle is what the *next* tap asks for — a stepper that
@@ -5985,6 +6010,29 @@ final class RealInputTests: XCTestCase {
       ),
       "1",
       "the live stepper, tapped on the half that can still move, should still step"
+    )
+
+    // 8. A range that does not end on its step. `0...1.05` by `0.1` is the one shape
+    //    where SwiftUI must supply a stride itself — handing it `step: 0.1` would stop it
+    //    at 1.0 and make `maximumValue` unreachable — and the stride it supplies is **1**,
+    //    ten of this control's steps. The write may contribute a direction and nothing
+    //    else, so one tap from the minimum owes `0.1`. The value rules cannot catch the
+    //    other reading, because `1` *is* a legal value on that range: `quantize` nods at
+    //    it, React renders it, and nothing disagrees. Only a finger on a range with an
+    //    off-grid top asks the question, which is what this fixture is for
+    //    (`NitroUiStepperBinding.swift` has the rule the host test runs).
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper-sparse",
+        echo: Echo.stepperSparseValue,
+        expected: "0.1",
+        as: "the sparse-range stepper",
+        waitingFor: "the first real tap on its plus half",
+        atFractionX: plusX
+      ),
+      "0.1",
+      "one plus tap on 0...1.05 by 0.1 should move one tenth, not SwiftUI's own stride "
+        + "of 1 — the control took the amount of the write instead of its direction"
     )
   }
 

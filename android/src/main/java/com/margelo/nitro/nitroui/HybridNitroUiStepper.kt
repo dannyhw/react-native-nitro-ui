@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
@@ -373,6 +374,15 @@ private class StepperHost(
           if (label != null) {
             contentDescription = label
           }
+          // The value a reader *hears*, spelled the way the control spells it
+          // everywhere else (`4`, not `4.0`). Left out, TalkBack announces the progress
+          // instead, and a progress is a percentage: measured on `0...10 step 1`, the
+          // value 4 was read as "40 percent" — a number the control never had, from a
+          // range nobody asked about. `ProgressBarRangeInfo` stays, because it is what
+          // makes the node scroll-adjustable and what the delegate builds its targets
+          // from; this is the sentence spoken over it. iOS sets the same half with
+          // `accessibilityValue` (`HybridNitroUiStepper.swift`).
+          stateDescription = nitroUiStepperValueText(displayed)
           progressBarRangeInfo =
             ProgressBarRangeInfo(
               displayed.toFloat(),
@@ -785,11 +795,14 @@ class HybridNitroUiStepper(
       "..${nitroUiStepperValueText(range.range.endInclusive.toDouble())}" +
       "@${nitroUiStepperValueText(range.current.toDouble())}/steps=${range.steps}"
       }
-    // The value as the *node* carries it, not as the model remembers it: a reader
-    // hears the progress this node publishes, and iOS spells its own
-    // `accessibilityValue` the same way, so the two platforms can be read alike.
-    val valueText =
-      range?.let { nitroUiStepperValueText(it.current.toDouble()) } ?: "none"
+    // What a reader is told the value is: the node's `StateDescription`, which is the
+    // property TalkBack speaks as the value of a progress node. Reading the range
+    // instead would report what the *track* is at, and that is what the `range=` field
+    // beside it is for — and it is exactly the mistake this control shipped with, where
+    // the node published a progress and no value, so the announcement was a percentage
+    // while this line still said `value=4`. iOS spells the same half with
+    // `accessibilityValue`, so the two readings of this line agree.
+    val valueText = config.getOrNull(SemanticsProperties.StateDescription) ?: "none"
     return candidates.size.toString() to
       "range=$rangeText,value=$valueText,clickable=$clickable,disabled=$disabled," +
       "label=$label"

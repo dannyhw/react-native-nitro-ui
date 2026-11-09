@@ -268,6 +268,17 @@ exemption list (`A11Y_EXEMPTIONS` in `scripts/real-input/a11y.mjs`, or
 control in an unrelated round — the suite then reports it as known debt instead of
 red, and the row goes red on its own once someone fixes it and forgets to delete it.
 
+**One measured box, written down three times.** A control's measured size is its declared
+fallback (`FALLBACK_WIDTH_DP` / `declaresFallback` in its own `HybridNitroUi*` file,
+registered from `ios/core/NitroUiDeclaredFallbacks.swift` and
+`.../nitroui/core/NitroUiDeclaredFallbacks.kt`), its row in `CONFORMANCE_RULES` in
+`scripts/conformance-core.mjs`, and the shared table inside
+`example/__tests__/Conformance.harness.tsx` — which is generated from the second of those by
+`node scripts/conformance/print-shared-table.mjs --write` and never hand-edited. The numbers
+are machine-local, measured on whatever devices the lease hands out ("pair-a" and "pair-b" are
+lease-pool names, not properties of a control), which is why a component doc quotes the box
+and leaves this plumbing here.
+
 And before the round is handed in — `bun run task-ready`. It is the definition-of-done
 list from AGENTS.md as one command, so a reviewer is not the first to find it: the
 registry agrees with the control set, every manifest has the conformance coverage above,

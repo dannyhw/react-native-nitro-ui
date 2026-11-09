@@ -86,6 +86,7 @@ ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
 ios/components/Slider/NitroUiSliderValue.swift
 ios/components/Stepper/HybridNitroUiStepper.swift
+ios/components/Stepper/NitroUiStepperBinding.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/components/TextField/HybridNitroUiTextField.swift
 ios/components/TextField/NitroUiTextEditing.swift

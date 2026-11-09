@@ -218,7 +218,7 @@ export const Steps: Story = {
           />
           <Value value={fives} />
         </Row>
-        <Row label="0…10 by 3 — the maximum is still reachable">
+        <Row label="1…10 by 3 — the maximum is still reachable">
           <Stepper
             accessibilityLabel="Odd grid stepper"
             defaultValue={1}
@@ -232,9 +232,11 @@ export const Steps: Story = {
           <Value value={odd} />
         </Row>
         <Note>
-          The same rule `Slider` uses, in the same code: `0…10` by `3` steps 1,
-          4, 7, 10 — the last step is a short one, because the maximum is a
-          value like any other.
+          The same rule `Slider` uses, in the same code: `1…10` by `3` steps 1,
+          4, 7, 10 — the grid is measured from `minimumValue`, so this row's
+          stops are `1 + 3n`, and the last step is a short one, because the
+          maximum is a value like any other. (`0…10` by `3` would step 0, 3, 6,
+          9, 10.)
         </Note>
       </Showcase>
     );
