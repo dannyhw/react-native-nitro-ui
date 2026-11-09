@@ -354,11 +354,19 @@ function OneRow({
   title,
   label,
   styled,
+  rowKey = 'single',
 }: {
   title: string | null;
   label: string | null;
   /** `false` leaves the `Form` with no `style` at all - the README's `<Form>`. */
   styled: boolean;
+  /**
+   * Swapping it asks Fabric for another row instance *in the same surface*, which is the
+   * drop-and-create pair RN's pool turns into a hand-back (F6's `oneSwitch`). A fresh
+   * `render` is a fresh surface, and the pool is per surface, so it is not the way to get a
+   * recycled view.
+   */
+  rowKey?: string;
 }) {
   return (
     <Form
@@ -370,6 +378,7 @@ function OneRow({
     >
       <Form.Section hybridRef={(view) => (sections.one = view)} title={title}>
         <Form.Row
+          key={rowKey}
           accessibilityLabel={label ?? undefined}
           hybridRef={(view) => (rows.one = view)}
           onPress={pressNow}
@@ -439,10 +448,13 @@ function describeBox(box: unknown): string {
 
 /** Mount the probe and wait for the Form's handle and first laid-out row. */
 async function mount(props: ProbeProps) {
-  render(<Probe {...props} />);
+  const { rerender } = render(<Probe {...props} />);
   await formRef();
   await boxOf('label-wifi');
-  return props;
+  // The `rerender` rides along so a case can keep working in *this* surface. A second
+  // `mount` is a second surface, in which every row mounts in document order - which for
+  // E1 would mean an insert always landing where React put it, by accident.
+  return Object.assign(props, { rerender });
 }
 
 /** Element `index` of a parsed height list, or a failure naming the list. */
@@ -549,13 +561,30 @@ describe('Form (G24)', () => {
   });
 
   it('keeps the tree intact through an insert, a removal and 50 scrolls (E1)', async () => {
-    await mount({ mode: 'base', ...counters() });
+    // One surface for the whole case, and every step a `rerender` of it. A second `render`
+    // would be a new surface mounting all ten rows in document order, where the index the
+    // holding view reports happens to be the one React used - so the case below would pass
+    // without ever asking the question (fix round 1).
+    const probe = await mount({ mode: 'base', ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
 
-    // A keyed insert in the middle of the first section.
-    const { rerender } = await render(
-      <Probe mode="inserted" {...counters()} />
-    );
+    const { rerender } = probe;
+
+    if (IOS) {
+      // Put rows into cells *before* the insert. A row on screen is drawn from a cell and no
+      // longer sits in the holding view, and that is the only state in which the holding
+      // view's own count can disagree with the index React used. Asking for it here is what
+      // stops the order assertion below passing because nothing had been adopted yet.
+      need(forms.form).nuiTestScrollTo(240);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      need(forms.form).nuiTestScrollTo(0);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const resting = parse(need(forms.form).nuiTestFormReport());
+      expect(num(resting, 'inCells')).toBeGreaterThan(1);
+    }
+
+    // A keyed insert in the middle of the first section, in this same surface.
+    await rerender(<Probe mode="inserted" {...counters()} />);
     await formReport((r) => num(r, 'rows') === 10, 'ten rows after the insert');
     await boxOf('label-hotspot');
     expect(parse(need(forms.form).nuiTestFormReport()).orphans).toBe('0');
@@ -863,7 +892,9 @@ describe('Form (G24)', () => {
   });
 
   it('presses a row from the accessibility path and names it for its own mount', async () => {
-    await render(<OneRow label="Named row" styled={true} title="A" />);
+    const { rerender } = await render(
+      <OneRow label="Named row" styled={true} title="A" rowKey="labelled" />
+    );
     const named = await reportUntil(
       () => rows.one?.nuiTestRowReport(),
       (r) => r.desc != null,
@@ -871,20 +902,25 @@ describe('Form (G24)', () => {
     );
     if (!IOS) expect(named.desc).toBe('Named row');
 
-    // Unmount, and let a row with no label arrive - the shape that leaves a recycled
+    // Unmount this row and let a row with no label arrive - the shape that leaves a recycled
     // `ReactViewGroup` answering for a mount that ended, because React Native's
-    // `prepareToRecycleView` clears its own tag and not the framework's name.
-    cleanup();
-    for (const map of [forms, sections, rows]) {
-      for (const key of Object.keys(map)) delete map[key];
-    }
-    await render(<OneRow label={null} styled={true} title="B" />);
+    // `prepareToRecycleView` clears its own tag and not the framework's name. It has to be a
+    // *key swap in this surface*: the pool RN keeps is per surface, so a second `render`
+    // would be handed a brand-new view and the case would pass with the reset deleted - which
+    // is what it did until fix round 1.
+    await rerender(
+      <OneRow label={null} styled={true} title="B" rowKey="plain" />
+    );
     const plain = await reportUntil(
       () => rows.one?.nuiTestRowReport(),
       (r) => r.where != null && r.desc != null,
       'the second row to be laid out'
     );
     if (!IOS) {
+      // The seam has to be able to see the bug at all. Only an instance the pool handed back
+      // can carry the previous mount's name, and `recycles=` is the one number that says this
+      // view was reused rather than built (F6's reason for counting it per object).
+      expect(num(plain, 'recycles')).toBeGreaterThanOrEqual(1);
       expect(plain.desc).toBe('-');
       // The other half of the promise: a row that is one clickable element to TalkBack has to
       // answer the action the framework offers. `isClickable` only *offers* it - the press came
