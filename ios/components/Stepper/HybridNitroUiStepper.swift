@@ -135,22 +135,58 @@ final class StepperModel: NitroUiModel {
     userStep(to: stepped(from: state.displayed, up: up))
   }
 
+  /// What the SwiftUI control's `Binding` was just written with - one tap, or one
+  /// repeat of a hold.
+  ///
+  /// When the control was handed this range's own step (``isStepped``), the number it
+  /// computed is one of the grid's stops and is taken as it stands. When it was not - a
+  /// range that does not end on a step, where handing it a `step:` would make
+  /// `maximumValue` unreachable - the control moves by its own default stride and the
+  /// result is a number the grid has never had: `quantize` would send it back to where
+  /// it started, the tap would report success and nothing would move, which is the
+  /// failure `NitroUiSliderValue.stepped` exists to prevent. So the *direction* is what
+  /// the platform may decide, and the destination is this control's rule.
+  func bindingWrite(_ requested: Double) {
+    guard !disabled else { return }
+    if quantize(requested) != state.displayed {
+      userStep(to: requested)
+      return
+    }
+    step(up: requested > state.displayed)
+  }
+
   // MARK: - Test read-outs
 
   /// Test-only read-outs (`nuiTestStateReport`), behind one lock: the probes arrive
   /// on main and a test may read the report from JS.
   private let reportLock = NSLock()
   private var drawn = "none"
+  private var up = "none"
+  private var down = "none"
   private var probes = 0
   private var merged = "unavailable"
   private var accessibilityReport = "none"
   private var stepCount = 0
   private var stepReport = "none"
 
-  /// Record what the drawing code was handed: the number the control is showing.
-  func recordDrawn(_ value: String) {
+  /// Whether a step in one direction would change anything - the same answer that
+  /// decides which of SwiftUI's two halves it disables, spelled here so the harness can
+  /// assert the bound rather than infer it from a missing event.
+  func canStep(up: Bool) -> Bool {
+    !disabled && stepped(from: state.displayed, up: up) != state.displayed
+  }
+
+  /// Record what the drawing code was handed: the number the control is showing, and
+  /// which half a tap could still move it.
+  ///
+  /// Android records the same two fields from the same rule
+  /// (`HybridNitroUiStepper.kt`), which is what lets one assertion cover both
+  /// platforms' bound behaviour.
+  func recordDrawn(_ value: String, canStepUp: Bool, canStepDown: Bool) {
     reportLock.lock()
     drawn = value
+    up = canStepUp ? "1" : "0"
+    down = canStepDown ? "1" : "0"
     reportLock.unlock()
   }
 
@@ -166,7 +202,7 @@ final class StepperModel: NitroUiModel {
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);up=\(up);down=\(down);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
   }
 
   /// Store an adjust-action report and count it, so two reports that do the same
@@ -189,6 +225,8 @@ final class StepperModel: NitroUiModel {
   func clearReports() {
     reportLock.lock()
     drawn = "none"
+    up = "none"
+    down = "none"
     probes = 0
     merged = "unavailable"
     accessibilityReport = "none"
@@ -219,11 +257,12 @@ struct StepperContent: NitroUIContent {
   @ViewBuilder var body: some View {
     // The reading `nuiTestStateReport()` answers with: taken where the control is
     // drawn, so it is what the control is handed rather than what React sent.
-    let drawn = model.accessibilityValueText
-    let _ = model.recordDrawn(drawn)
+    let canStepUp = model.canStep(up: true)
+    let canStepDown = model.canStep(up: false)
+    let _ = model.recordDrawn(model.accessibilityValueText, canStepUp: canStepUp, canStepDown: canStepDown)
     let value = Binding<Double>(
       get: { model.state.displayed },
-      set: { requested in model.userStep(to: requested) }
+      set: { requested in model.bindingWrite(requested) }
     )
     let bounds = model.trackBounds
 
