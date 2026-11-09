@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-09T00:54:22.954Z on code tree `5c281ae70240` at HEAD `b0b20c0` (branch `task/G20-button-group`)
+- Command: `bun run check`
+- Result: fail, exit 1, 170684 ms
+- Load: start 51.84, end 30.77, median 45.98, max 70.44
+- Device: none recorded (not a device gate)
+- Full log: `task/G20-button-group/check-2026-11-09T00-54-22.474Z.log` (<store>/task/G20-button-group/check-2026-11-09T00-54-22.474Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test:native:android" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2908 — the rest is in the full log above)
+
+```
+‼️   Added 725 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiPopoverComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiIconButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.mm
+nitrogen-check: patched HybridNitroUiIconButtonManager.kt
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.mm
+nitrogen-check: patched HybridNitroUiButtonGroupManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverComponent.mm
+nitrogen-check: no drift (470 generated files match, 64 view(s) patched).
+──────── registry:check — skipped, 0.0s ──────────────────────────────────────────
+──────── autolinking:check — skipped, 0.0s ───────────────────────────────────────
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — skipped, 0.0s ────────────────────────────────────────────
+check: 8 passed, 1 failed, 8 skipped in 170.5s
+check: failed step(s): test:native:android
+check: not started after the first failure: perf:renders, registry:check, autolinking:check, prepare, api-extractor:check, publint, manifest:check, readme:check
+──────── full log: test:native:android ───────────────────────────────────────────
+$ bash scripts/native-tests-android.sh
+Reusing configuration cache.
+> Task :react-native-nitro-ui:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-nitro-modules:prepareHeaders UP-TO-DATE
+> Task :react-native-nitro-modules:preBuild UP-TO-DATE
+> Task :react-native-nitro-modules:preDebugBuild UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-modules:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-modules:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugKotlin UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugJavaRes UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibRuntimeToJarDebug UP-TO-DATE
+
+> Task :react-native-nitro-ui:generateCodegenSchemaFromJavaScript
+No modules to process in combine-js-to-schema-cli. If this is unexpected, please check if you set up your NativeComponent correctly. See combine-js-to-schema.js for how codegen finds modules.
+
+> Task :react-native-nitro-ui:generateCodegenArtifactsFromSchema
+> Task :react-native-nitro-ui:preBuild
+> Task :react-native-nitro-ui:preDebugBuild
+> Task :react-native-nitro-ui:preDebugUnitTestBuild
+> Task :react-native-nitro-ui:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-ui:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugKotlin
+> Task :react-native-nitro-ui:processDebugJavaRes UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-ui:bundleLibRuntimeToJarDebug
+> Task :react-native-nitro-ui:bundleLibCompileToJarDebug
+> Task :react-native-nitro-ui:compileDebugUnitTestKotlin
+> Task :react-native-nitro-ui:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugUnitTestJavaWithJavac NO-SOURCE
+
+> Task :react-native-nitro-ui:testDebugUnitTest
+
+ButtonGroupModelTest > aRecycledModelForgetsTheRowTheSetTheCountsAndTheLedgerWithIt FAILED
+    org.junit.ComparisonFailure at ButtonGroupModelTest.kt:204
+
+172 tests completed, 1 failed
+
+> Task :react-native-nitro-ui:testDebugUnitTest FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':react-native-nitro-ui:testDebugUnitTest'.
+> There were failing tests. See the report at: file://<repo>/android/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 8s
+34 actionable tasks: 7 executed, 27 up-to-date
+Configuration cache entry reused.
+error: script "test:native:android" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 170.7 s - note: the code tree moved during the run (ef0091d105bf now), so this line describes 5c281ae70240
+gate: recorded in .gates/task/G20-button-group.jsonl
+
+```

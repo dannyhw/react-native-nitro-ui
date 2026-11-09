@@ -225,3 +225,49 @@ rather than read a release note.
 (`G21`, and `G24` on the pair this task released, with a 4 h TTL), so it did not happen here.
 Whoever takes it is on an iOS-only lease, and the Android half of check 3 — one shot of the
 overflow menu open, which needs only an ordinary emulator — is worth taking in the same pass.
+
+## Fix round 1 (review)
+
+Nine items, all taken. iOS decides `ControlGroup` once for the group in `body`
+(`ios/components/ButtonGroup/HybridNitroUiButtonGroup.swift:408`), so the width a row wins
+cannot also decide the row it draws; the witness now says which row it got
+(`row=controlGroup|standard`). An Android `iconOnly` item with no glyph draws its title with
+symmetric padding, and the a11y probe reports `text=` and `desc=` apart, which is what makes
+that visible. The overflow control keeps Material's localised "More options" unless
+`overflowAccessibilityLabel` names it, and the label is `mutableStateOf` + `markDirty()`, so
+words changed after mount reach the row; comments, changeset and docs table follow. iOS's
+`stateReport()` reads only strings published under `reportLock` — **that race could not be
+made to fail reliably**: no mutation turned it red, so it is fixed by construction.
+Disabled-closes-menu and seeds-once are now proved: Android opens Material's menu before
+`disabled` arrives, and the re-render adds an item. Early check 1 stands — `connected` reads
+31.00 pt as a `UISegmentedControl` and `standard` 34.67 pt, identically on 26.5, 27.0 and
+27.1 (shots in `docs/tasks/G20/`; iOS-only leases `G20-udnz5`, `G20-usy3e`, `G20-v5om7`, so
+`gate.mjs` rightly refused a gate there and it stayed a look check).
+
+### Gate table (fix round 1)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1945 tests / 81 suites | `6be475dbe11d` | 2 m 46 s | start 19.9 / med 11.1 / max 19.9 |
+| `harness:ios` | **PASS** | 532 tests / 28 suites + isolated 6 tests / 3 suites | `6be475dbe11d` (ios tree) | 13 m 43 s | start 5.8 / med 6.5 / max 25.9 |
+| `harness:android` | **PASS** | 588 tests / 28 suites + isolated 6 tests / 3 suites | `08759de94cdf` (android tree) | 17 m 12 s | start 19.3 / med 8.4 / max 33.1 |
+| `real-input:ios` | **PASS** | — | `6be475dbe11d` (ios tree) | 35 m 39 s | start 11.5 / med 8.4 / max 42.0 |
+| `real-input:android` | **PASS** | — | `6be475dbe11d` (android tree) | 53 m 19 s | start 3.9 / med 5.2 / max 13.1 |
+
+`need --for review` exits 0 on this tree. The table also lists nine stale filtered or
+mutation runs from this round's red proofs; they satisfy nothing.
+
+### Red proofs (fix round 1)
+
+- `ButtonGroup.harness › seeds an uncontrolled item once` -> `applyDefaults` ignoring `seeded` -> `expected 'checked=bold;visible=none;…' to contain 'checked=none'`
+- `… › takes nothing from a disabled group … and closes an open menu` -> drop `menuState?.dismiss()` in `afterUpdate` -> `menu="open" (expected "closed" on this platform)`
+- `… › names every item kind, and an icon-only item by its title` -> re-add the hard-coded `"More"` -> `expected 'nodes=7;0[Button,none,disabled=false,…' to contain 'More options'`
+- same test -> `buttonGlyphDrawsTitle` -> `glyph != ButtonGlyph.IconOnly` -> `expected 'nodes=4;…' to match /text=Paste,desc=none/`
+- same test -> drop the item's `contentDescription` -> `expected 'nodes=4;…' to match /text=none,desc=Copy/`
+- `… › lays the default row out at the size it measured` -> remove `NitroUiSizing.report(…)` in `NitroComposeHost` -> `never reached height 48.00 - last box 411.43x99.05, control measured 214.10x48.00`
+- `… › carries no items, checked state or event count across a remount` -> sizing policy `fillWidth` -> `intrinsic` -> `expected '0' to be '1'`
+- `… › keeps one row when the trailing toggle … overflows` -> the row decision back at the `ViewThatFits` call site -> `expected 'controlGroup' to be 'standard'`
+- `… › moves the items a 220-point well cannot hold` -> draw every item, no `ViewThatFits` -> `expected 6 to be less than 6`
+- sizing key drops `androidIcon` (round 0's proof, still the guard) -> key mismatch; `ButtonGroupModelTest` event-count guard -> `ButtonGroupModelTest.kt:75`; `seeded.add(id)` -> `id.isNotEmpty()` -> `:129`
+- `testRealInputPopover` (G22's fixture, not this control's) -> one `typeText("ab")` for two keystrokes -> `typed:a` and never `typed:ab`, red in three full `real-input:ios` runs (load1 medians 6.5-9.1) and green typed one character at a time, which is what the tree now does
+- iOS `stateReport()` race -> no mutation: it cannot be made to fail reliably; fixed by publishing `checkedReport` under `reportLock` instead
