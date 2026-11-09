@@ -361,7 +361,8 @@ resets the "am I inside a row" flag, so a `Form` inside a `Form.Row` no longer b
 The two new cases asked iOS questions of Android — its Form report answers under `scroll`, stubs
 `offset=0.00` and has no `offsetPublishes` — and now ask each platform its own.
 
-`form=held` is not reproducible as a red here, on either platform; both runs are in the appendix.
+`form=held` is not reproducible as a red on either platform, and one iOS tap case came red once and
+green twice on the same tree; both are in the appendix rather than papered over.
 
 Reds, the table and what did not go red: the appendix.
 
@@ -402,8 +403,18 @@ the source, the platform rebuilt, the gate ran filtered, and the file was revert
   section report runs `rows … headerBand/footerBand/headerText/footerText/boxH/layerH/rects`
   (`HybridNitroUiFormSection.kt:236-245`) — and with `onDropView()` emptied the case still passed
   (12:40Z, the run's only failure was this round's own `recycles` read). Both mutations were re-run
-  separately as the orchestrator asked; neither went red on `6a8c3606`. Reported, not chased: the
-  assertion exists, the field is iOS-only, and no mutation of the two reset points reached it here.
+  separately as the orchestrator asked; neither went red on `6a8c3606`. The promise that recycled
+  half really is graded, and its red is recorded: the recycled Section's `boxH == layerH` comparison
+  went red at 02:32Z and 02:39Z with `boxH=56.0;layerH=0.0` (`harness:android:Form`, tree
+  `6269387e687a`), which is `dropSection()` running after RN has put the view in the pool — a line
+  with no `form` field in it, on either platform.
+- One `harness:ios` on the final tree came in 561 of 564 with E4 red — `probe.log.pressable` was 10,
+  the number of taps aimed at the hosted `Switch`, where the case expects the row's own gesture
+  recogniser to miss (12:48Z) — and its retry on the same code tree 562 of 564 (13:10Z), with the
+  filtered `Form` run 115 of 115 (13:06Z). E1's settled `inCells` count wobbled once the same way
+  (5 against 6 at 03:55Z, 6 on nine other readings). Both are hit-test/geometry order, both are in
+  FOLLOWUPS, and neither is a fix-round regression: the tap reaches a different element depending on
+  where the list's offset has come to rest.
 - This round's own two Android reds, before they were fixed (12:34Z): `starts a recycled Form at the
   top of its own content` -> `report has no "recycles"`, and `publishes a settle …` -> `never
   satisfied "nine rows and a published offset"` — both because they read iOS fields off Android's
