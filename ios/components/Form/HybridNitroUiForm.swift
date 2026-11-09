@@ -174,11 +174,18 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   ///
   /// `prepareForRecycle` asks UIKit for it, and the answer does not always stick: a recycled
   /// list's offset comes back with the view as it re-enters a window, later than the recycle,
-  /// which is how a Form mounted into a recycled list was measured still sitting at 200 pt
-  /// against a 68 pt top inset. The reset is therefore repeated once by the first geometry
-  /// pass of the new mount — the first moment the list has a window, a layout and content
-  /// (fix round 2, item 2).
+  /// Which is how a Form mounted into a list another mount had scrolled was measured still
+  /// sitting at 200 pt against a 68 pt top inset (fix round 2, item 2).
   private var pendingTopReset = false
+
+  /// How many turns the reset above has spent on one mount, so a list that cannot reach the
+  /// offset it is being pushed to stops being pushed.
+  private var topResetTries = 0
+
+  /// Whether this list has carried content in a mount that has since ended. The rule for
+  /// owing a top reset: a Form's first mount has no scroll to inherit, and a second mount
+  /// into the same list has exactly that.
+  private var hasCarriedContent = false
 
   override init() {
     super.init()
@@ -270,6 +277,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       animated: false
     )
     pendingTopReset = true
+    topResetTries = 0
     applySnapshot()
   }
 
@@ -282,25 +290,44 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     imeInset = nil
   }
 
-  /// Put a list that came back from the pool at the top of its own content, once.
+  /// Put a list that another mount left scrolled back at the top of its own content.
   ///
-  /// The ask in `prepareForRecycle` is not enough on its own: at that moment the list has no
-  /// sections, so there is nothing for "the top" to mean, and UIKit answers the reset later
-  /// with the offset the previous mount left. Doing it here, when the new mount has sections,
-  /// a window and laid-out rows, is what the numbers below are taken against — and it is the
-  /// only place that can *see* the difference (fix round 2, item 2).
+  /// `prepareForRecycle` asks UIKit for it, and that ask cannot stick on its own: at that
+  /// moment the list has no sections, so "the top" has nothing to mean, and a snapshot that is
+  /// still being applied puts the old offset back after any later ask has run. The Form
+  /// therefore asks again from every geometry pass until the list is *verifiably* at the top,
+  /// and the ask is owed whenever a mount begins on a list that has carried content before —
+  /// whether the view came back from React Native's pool or Fabric kept this very view for a
+  /// keyed change (measured: a key swap leaves `recycles` where it was and the offset at the
+  /// 200 pt the previous mount left it, so a Form mounted into it inherited a scroll nobody
+  /// asked for, fix round 2, item 2).
   ///
-  /// Returns whether this is the pass that applied it.
+  /// Returns whether this is the pass that finished the job.
   @discardableResult
   private func takeTopResetIfNeeded() -> Bool {
     guard pendingTopReset, !sections.isEmpty, list.window != nil else { return false }
+    let top = -list.adjustedContentInset.top
+    if abs(list.contentOffset.y - top) > 0.5 {
+      list.setContentOffset(
+        CGPoint(x: list.contentOffset.x, y: top),
+        animated: false
+      )
+      list.collectionViewLayout.invalidateLayout()
+      list.layoutIfNeeded()
+    }
+    guard abs(list.contentOffset.y - top) <= 0.5 else {
+      // Not there: UIKit moved it back behind the ask. Another turn, a bounded number of
+      // them, so a list that cannot reach that offset stops being fought over.
+      topResetTries += 1
+      guard topResetTries < 40 else {
+        pendingTopReset = false
+        return false
+      }
+      DispatchQueue.main.async { [weak self] in self?.reportGeometry() }
+      return false
+    }
     pendingTopReset = false
-    list.setContentOffset(
-      CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
-      animated: false
-    )
-    list.collectionViewLayout.invalidateLayout()
-    list.layoutIfNeeded()
+    topResetTries = 0
     return true
   }
 
@@ -337,7 +364,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       return
     }
     guard !sections.contains(where: { $0 === model }) else { return }
+    // A mount beginning on a list that has carried content before inherits that content's
+    // scroll position unless something puts it back (fix round 2, item 2).
+    if sections.isEmpty, hasCarriedContent {
+      pendingTopReset = true
+      topResetTries = 0
+    }
     sections.insert(model, at: min(index, sections.count))
+    hasCarriedContent = true
     reindex()
     applySnapshot()
     // Fabric mounts a subtree bottom-up, so this section's rows were already handed to its
