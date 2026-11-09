@@ -204,7 +204,7 @@ jobs:
           # re-run safe is npm's own "cannot publish over the previously
           # published versions" rejection, handled below.
           STAGED="$(npm stage list --json "$PACKAGE" 2>/dev/null || true)"
-          if printf '%s' "$STAGED" | grep -qF "\"version\": \"$VERSION\""; then
+          if grep -qF "\"version\": \"$VERSION\"" <<<"$STAGED"; then
             say "**$PACKAGE@$VERSION** is already staged, waiting to be approved."
             exit 0
           fi
@@ -227,7 +227,7 @@ jobs:
           # A version that is staged but not yet approved is refused with
           # `E409 ... Cannot stage previously published version "x.y.z"` (seen
           # 2026-10-29, 0.3.2); one already live gets the older wording.
-          if printf '%s' "$OUTPUT" | grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version'; then
+          if grep -qiE 'cannot publish over the previously published versions|cannot stage previously published version' <<<"$OUTPUT"; then
             say "**$PACKAGE@$VERSION** is already known to the registry — staged or published, nothing more to do."
             exit 0
           fi
