@@ -268,6 +268,17 @@ internal class FormSectionModel : NitroUiModel() {
   /** `ListItemDefaults.SegmentedGap`, in px, once the layer has read it. */
   var gapPx = 0f
   /**
+   * The layer's horizontal inset, in px, as the composition last read it.
+   *
+   * It lives on the model so a band can publish all four numbers from inside its own
+   * `onSizeChanged`. `headerPx`, `footerPx` and `gapPx` are plain vars, so the layer's
+   * `LaunchedEffect` re-runs only when something *else* recomposes the layer — which races the
+   * layout pass that measured the band. Measured red: a section whose heading was measured
+   * after its last recomposition went on telling Yoga it had no header, and its rows drew
+   * under the heading (`FormFidelity`'s band check, fix round 1).
+   */
+  var insetPx = 0f
+  /**
    * The section's own box, in px, as the layout pass last saw it.
    *
    * The layer has to be told this rather than inherit it: `NitroUiMeasuredRoot` measures a
@@ -320,7 +331,7 @@ internal class FormSectionModel : NitroUiModel() {
    * One funnel for both callers: the layer's own `LaunchedEffect`, and `refreshChrome` when a
    * band has just lost the text that used to measure it and no recomposition is coming.
    */
-  fun publishMetrics(insetPx: Float) {
+  fun publishMetrics(insetPx: Float = this.insetPx) {
     onMetrics?.invoke(headerPx, footerPx, insetPx, gapPx)
   }
 
@@ -560,12 +571,29 @@ internal class NitroUiFormSectionView(
    * with it, and the host's own "this mount has rendered nothing yet" flags. The composition
    * was disposed by [dropSection], which `onDropViewInstance` calls first, and the host
    * composes again from its `onAttachedToWindow` for whoever pulls this view out of the pool.
+   *
+   * Putting the host back is not part of that pattern, and this view needs it. React Native's
+   * `ViewManager.onDropViewInstance` calls `prepareToRecycleView` before pushing the view onto
+   * the pool, `ReactViewManager.prepareToRecycleView` calls `ReactViewGroup.recycleView`, and
+   * `recycleView` runs `removeAllViews()` (RN 0.88: `ViewManager.java:269`,
+   * `ReactViewManager.kt:75`, `ReactViewGroup.kt:195`). The Compose layer is a child of this
+   * view like any other, so it goes to the pool detached — and `layoutHost` declines a host
+   * whose parent is not this view, so every section handed out after an unmounted one measured
+   * its layer at 0 x 0, drew no shapes, no header band and no pressed state, and reported a box
+   * with no layer inside it (`Form.harness`'s recycled case, fix round 1).
    */
   fun prepareSection() {
     val host = composeHost
     if (host == null) {
       model.reset()
       return
+    }
+    if (host.parent !== this) {
+      // Index 0, because the host-hiding rule in [addReactChild] wants the layer first, and
+      // RN has just emptied the view anyway. Re-attaching here is safe: the section is in the
+      // pool, so the host is attached with it and not before, and `NitroUiLifetimeGate` keeps
+      // a host that is not attached from composing.
+      addView(host, 0)
     }
     host.prepareForRecycle()
   }
@@ -874,7 +902,12 @@ internal fun FormSegmentedLayer(
             // text is pushed down by drew the lower half of every header under the first
             // row of its own section (S6's form-android.png, and the reason this line reads
             // the band and not the text).
-            .onSizeChanged { model.headerPx = it.height.toFloat() }
+            .onSizeChanged {
+              model.headerPx = it.height.toFloat()
+              // From the measurement itself, not from the next recomposition: this is the
+              // moment Yoga can still act on the number.
+              model.publishMetrics()
+            }
             .padding(start = inset, end = inset, top = FormListMetrics.HeaderTopPadding)
             .onSizeChanged { model.headerTextPx = it.height.toFloat() }
       )
@@ -891,7 +924,10 @@ internal fun FormSegmentedLayer(
             .align(Alignment.BottomStart)
             // The footer band, same as the header's: measured with its padding, or the
             // last row paints up over the footer text.
-            .onSizeChanged { model.footerPx = it.height.toFloat() }
+            .onSizeChanged {
+              model.footerPx = it.height.toFloat()
+              model.publishMetrics()
+            }
             .padding(start = inset, end = inset, bottom = FormListMetrics.FooterBottomPadding)
             .onSizeChanged { model.footerTextPx = it.height.toFloat() }
       )
@@ -901,6 +937,7 @@ internal fun FormSegmentedLayer(
   // What the text took, out to React Native, once per change.
   val gapPx = with(density) { gap.toPx() }
   val insetPx = with(density) { inset.toPx() }
+  model.insetPx = insetPx
   LaunchedEffect(model.headerPx, model.footerPx, gapPx, insetPx) {
     model.publishMetrics(insetPx)
   }
