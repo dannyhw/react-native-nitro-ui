@@ -184,16 +184,19 @@ function escapeOption(label: string): string {
  *   selection makes it wider (SegmentedControl deliberately leaves the selection
  *   out of *its* key: a segment row is the same width whichever segment is
  *   chosen. Copying that here would cache a narrow button against a wide one);
- * - the **label**, which on Android is part of the field's box.
+ * - the **label**, which on Android is part of the field's box - of the *field's*:
+ *   it names the box a menu draws and never appears in a radio group's box.
  *
- * A `radio` group is the exception to the third bullet: it paints every label at
- * once, so its box is as wide as the widest option and as tall as the option
- * count, and *which* row is selected moves nothing. The `sel:` field therefore
- * drops out of a radio key (Q7 Appendix D), which is what makes a pick in a
- * radio group not a cold configuration - a frame at the declared fallback and a
- * correction. It stays in every other key, including the `radio` key on iOS,
- * where the variant renders a menu (`resolveVariant`) and a menu is as wide as
- * the one title it shows.
+ * A `radio` group is the exception to the last two bullets, and drops out of both
+ * of their fields: it paints every label at once, so its box is as wide as the
+ * widest option and as tall as the option count, and *which* row is selected moves
+ * nothing (Q7 Appendix D: `radio|count|labels…`). Nor does it draw `label` at all -
+ * on Android that prop is the group's accessibility name - so a field that cannot
+ * move the box does not belong in its key either: keeping it would split the cache
+ * and make a rename cost a fallback frame and a correction. That is what makes a
+ * pick in a radio group not a cold configuration. Both fields stay in every other
+ * key — including the one a `radio` builds on iOS, where `resolveVariant` resolves
+ * it to `menu` and a menu is as wide as the one title it shows.
  *
  * `disabled` and `tintColor` repaint, they do not resize, and the text size /
  * density / OS control size are *not* here: native folds the environment in
@@ -207,13 +210,15 @@ function sizingVariantFor(
   variant: ResolvedPickerVariant
 ): string {
   const selected = options[selectedIndex] ?? '';
+  // A radio group is neither its selection nor its `label`: it shows every option
+  // and draws no field, so both fields leave its key - see the doc comment.
+  const drawnFromKey = variant !== 'radio';
   return [
     variant,
     String(options.length),
     ...options.map(escapeOption),
-    // A radio group's box does not depend on the selection - see the doc comment.
-    ...(variant === 'radio' ? [] : [`sel:${escapeOption(selected)}`]),
-    `lbl:${escapeOption(label ?? '')}`,
+    ...(drawnFromKey ? [`sel:${escapeOption(selected)}`] : []),
+    ...(drawnFromKey ? [`lbl:${escapeOption(label ?? '')}`] : []),
   ].join(OPTION_SEPARATOR);
 }
 

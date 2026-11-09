@@ -327,7 +327,7 @@ describe('Picker · variant', () => {
       expect(nativeProps(group, 'r-a').variant).toBe('radio');
       // The variant is the first field, like every other: a radio group and a menu
       // are different controls with different boxes.
-      expect(keyOf(group, 'r-a')).toBe('radio|3|One|Two|Three|lbl:');
+      expect(keyOf(group, 'r-a')).toBe('radio|3|One|Two|Three');
       expect(nativeProps(group, 'r-a').style).toEqual([
         { alignSelf: 'flex-start' },
         undefined,
@@ -370,7 +370,7 @@ describe('Picker · variant', () => {
         />
       );
       expect(keyOf(group, 'k')).toBe(before);
-      expect(keyOf(group, 'k')).toBe('radio|3|One|Two|Three|lbl:');
+      expect(keyOf(group, 'k')).toBe('radio|3|One|Two|Three');
 
       const menu = await render(
         <Picker options={OPTIONS} selectedIndex={0} testID="km" />
@@ -379,6 +379,42 @@ describe('Picker · variant', () => {
         <Picker options={OPTIONS} selectedIndex={2} testID="km" />
       );
       expect(keyOf(menu, 'km')).toBe('menu|3|One|Two|Three|sel:Three|lbl:');
+    });
+  });
+
+  it('keeps the accessibility label out of the radio key and in the menu key', async () => {
+    // The other field a group does not draw: on Android `label` is the group's
+    // accessibility name and appears in no box, so a rename is not a new size
+    // configuration. Leaving `lbl:` in would split the cache and make the rename
+    // cost a frame at the declared fallback and a correction.
+    const OPTIONS = ['One', 'Two', 'Three'];
+    await onOs('android', async () => {
+      const group = await render(
+        <Picker options={OPTIONS} variant="radio" label="First" testID="l-a" />
+      );
+      const before = keyOf(group, 'l-a');
+      await group.rerender(
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          label="Renamed"
+          testID="l-a"
+        />
+      );
+      expect(keyOf(group, 'l-a')).toBe(before);
+      expect(keyOf(group, 'l-a')).toBe('radio|3|One|Two|Three');
+      // The name still reaches the control, which is the only thing `label` does here.
+      expect(nativeProps(group, 'l-a').label).toBe('Renamed');
+
+      const menu = await render(
+        <Picker options={OPTIONS} label="First" testID="l-m" />
+      );
+      await menu.rerender(
+        <Picker options={OPTIONS} label="Renamed" testID="l-m" />
+      );
+      expect(keyOf(menu, 'l-m')).toBe(
+        'menu|3|One|Two|Three|sel:One|lbl:Renamed'
+      );
     });
   });
 
