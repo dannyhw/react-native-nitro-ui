@@ -289,6 +289,7 @@ lib/module/iconSource.js.map
 lib/module/index.js
 lib/module/index.js.map
 lib/module/package.json
+lib/typescript/package.json
 lib/typescript/src/MaterialTheme.d.ts
 lib/typescript/src/MaterialTheme.d.ts.map
 lib/typescript/src/NitroUiCore.d.ts
