@@ -30,6 +30,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
   type TextFieldHandle,
@@ -160,6 +161,45 @@ export function BookmarkButton({
       variant="filled"
       checked={saved}
       onCheckedChange={onSave}
+    />
+  );
+}
+// #endregion
+
+// #region stepper
+export function QuantityPicker({
+  quantity,
+  onQuantityChange,
+}: {
+  quantity: number;
+  onQuantityChange: (next: number) => void;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+      <Text style={{ fontSize: 20, minWidth: 32, textAlign: 'center' }}>
+        {quantity}
+      </Text>
+      <Stepper
+        accessibilityLabel="Quantity"
+        maximumValue={99}
+        minimumValue={1}
+        onValueChange={onQuantityChange}
+        value={quantity}
+      />
+    </View>
+  );
+}
+// #endregion
+
+// #region stepper-uncontrolled
+export function BrightnessStep({ onStep }: { onStep: (next: number) => void }) {
+  return (
+    <Stepper
+      accessibilityLabel="Brightness"
+      defaultValue={5}
+      maximumValue={10}
+      minimumValue={1}
+      onValueChange={onStep}
     />
   );
 }

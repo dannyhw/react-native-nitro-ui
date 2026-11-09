@@ -14,28 +14,29 @@ the layout engine, and React never sees a native node.
 
 ## Components
 
-| Component            | iOS                                                            | Android                                                                                               | Since | Docs                                                         |
-| -------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------ |
-| `Switch`             | `Toggle(…).toggleStyle(.switch)`                               | `androidx.compose.material3.Switch`                                                                   | 0.1.0 | [switch.md](docs/components/switch.md)                       |
-| `Slider`             | `Slider(value:in:step:onEditingChanged:)`                      | `androidx.compose.material3.Slider`                                                                   | 0.1.0 | [slider.md](docs/components/slider.md)                       |
-| `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`     | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
-| `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
-| `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`         | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
-| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
-| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
-| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
-| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`    | `DropdownMenuPopup` + `DropdownMenuGroup`; `SplitButtonLayout` with a `primaryAction` (M3 Expressive) | 0.4.0 | [menu.md](docs/components/menu.md)                           |
-| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`             | M3 Expressive `DropdownMenuPopup` opened at the finger                                                | next  | [context-menu.md](docs/components/context-menu.md)           |
-| `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button` | M3 `FilterChip` / `AssistChip`                                                                        | 0.6.0 | [chip.md](docs/components/chip.md)                           |
-| `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox    | M3 `Checkbox` / `TriStateCheckbox`                                                                    | next  | [checkbox.md](docs/components/checkbox.md)                   |
-| `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                                                              | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
-| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                                                         | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
-| `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                                                                      | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
-| `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
-| `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
-| `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
-| `Popover`            | `UIPopoverPresentationController` with React Native content    | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
-| `Host`               | a plain `View` (passthrough, by design)                        | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
+| Component            | iOS                                                                     | Android                                                                                               | Since | Docs                                                         |
+| -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------ |
+| `Switch`             | `Toggle(…).toggleStyle(.switch)`                                        | `androidx.compose.material3.Switch`                                                                   | 0.1.0 | [switch.md](docs/components/switch.md)                       |
+| `Slider`             | `Slider(value:in:step:onEditingChanged:)`                               | `androidx.compose.material3.Slider`                                                                   | 0.1.0 | [slider.md](docs/components/slider.md)                       |
+| `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`              | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
+| `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                         | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
+| `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`                  | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
+| `Stepper`            | `Stepper(value:in:step:)` + `.labelsHidden()` (hold-to-repeat included) | two Material 3 tonal icon buttons, 8 dp apart — Android has no stepper                                | next  | [stepper.md](docs/components/stepper.md)                     |
+| `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                                     | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
+| `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                                 | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
+| `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)                   | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
+| `Menu`               | `Menu(content:label:primaryAction:)`, `.menuStyle(.button)`             | `DropdownMenuPopup` + `DropdownMenuGroup`; `SplitButtonLayout` with a `primaryAction` (M3 Expressive) | 0.4.0 | [menu.md](docs/components/menu.md)                           |
+| `ContextMenu`        | `UIContextMenuInteraction` on the view, a `UIMenu`                      | M3 Expressive `DropdownMenuPopup` opened at the finger                                                | next  | [context-menu.md](docs/components/context-menu.md)           |
+| `Chip`               | `Toggle(…).toggleStyle(.button)` / a bordered capsule `Button`          | M3 `FilterChip` / `AssistChip`                                                                        | 0.6.0 | [chip.md](docs/components/chip.md)                           |
+| `Checkbox`           | `Toggle(isOn:…).toggleStyle(.switch)` — iOS has no checkbox             | M3 `Checkbox` / `TriStateCheckbox`                                                                    | next  | [checkbox.md](docs/components/checkbox.md)                   |
+| `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                             | `androidx.compose.material3.AlertDialog`                                                              | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
+| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`                       | M3 `ModalBottomSheet` with one row per action                                                         | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
+| `TextField`          | `UITextField` / `UITextView` (multi-line)                               | `BasicTextField(TextFieldState)`                                                                      | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
+| `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)                     | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
+| `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)                 | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
+| `Tooltip`            | a `.popover` presentation with SwiftUI content                          | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
+| `Popover`            | `UIPopoverPresentationController` with React Native content             | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
+| `Host`               | a plain `View` (passthrough, by design)                                 | one shared Compose composition for its hosted children                                                | 0.1.0 | [host.md](docs/components/host.md)                           |
 
 `Host` is a container, not a control: an opt-in way to give a batch of controls
 one Compose composition on Android instead of one each. It holds every control
@@ -69,6 +70,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
   Tooltip,
@@ -401,6 +403,78 @@ a tappable layer behind the control instead of a wider bezel. `width` (`narrow` 
 all three.
 [icon-button.md](docs/components/icon-button.md) has both columns measured, and
 what each platform does with a glyph it cannot resolve.
+
+### Stepper
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's two-arrow control mid-range, one at its minimum with the down half greyed, one at its maximum with the up half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+    <td><img src="docs/images/components/stepper-android.png" width="300" alt="Steppers on Android: two tonal circular icon buttons with a minus and a plus, mid-range, then one at each bound with the inert half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+  </tr>
+</table>
+
+Two halves that move a number by one `step` each. It draws **no number** — the
+value goes to your own text, the way iOS apps do it — and it announces the value
+itself, so `accessibilityLabel` is the half it cannot work out.
+
+```tsx name=stepper
+export function QuantityPicker({
+  quantity,
+  onQuantityChange,
+}: {
+  quantity: number;
+  onQuantityChange: (next: number) => void;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+      <Text style={{ fontSize: 20, minWidth: 32, textAlign: 'center' }}>
+        {quantity}
+      </Text>
+      <Stepper
+        accessibilityLabel="Quantity"
+        maximumValue={99}
+        minimumValue={1}
+        onValueChange={onQuantityChange}
+        value={quantity}
+      />
+    </View>
+  );
+}
+```
+
+Leave `value` out and native owns the displayed value, so a step costs no React
+render at all — the same three modes as `Switch` and `Chip`: controlled,
+uncontrolled, and a step the app refuses, which snaps back.
+
+```tsx name=stepper-uncontrolled
+export function BrightnessStep({ onStep }: { onStep: (next: number) => void }) {
+  return (
+    <Stepper
+      accessibilityLabel="Brightness"
+      defaultValue={5}
+      maximumValue={10}
+      minimumValue={1}
+      onValueChange={onStep}
+    />
+  );
+}
+```
+
+The value rules are `Slider`'s, in the same code: the value snaps to multiples of
+`step` measured from `minimumValue`, `maximumValue` is always reachable (`0…10` by
+`3` steps 1, 4, 7, 10), and a `0.1` step arrives as `0.3`, not as
+`0.30000000000000004`. `step` must be greater than `0` — that is not a small step,
+it is no step, and the wrapper says so in development.
+
+iOS is SwiftUI's own `Stepper`, so **hold-to-repeat works there and every repeat
+is one step and one event**. Android has no stepper control, so it is composed from
+two Material 3 tonal icon buttons with the 8 dp between them, each disabled at its
+own bound — which is also why **Android has no hold-to-repeat**: a tap steps once.
+At a bound the inert half produces no event at all, on both platforms, and a screen
+reader meets one adjustable value rather than two buttons.
+[stepper.md](docs/components/stepper.md) has the composition, the measurements and
+the accessibility tree.
 
 ### SegmentedControl
 
