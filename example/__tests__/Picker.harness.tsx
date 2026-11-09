@@ -2099,11 +2099,13 @@ describe('Picker · radio variant (G26)', () => {
       )} pick=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
     );
     // The choice happened, and it was a choice: this is the selection path, not a
-    // prop write.
+    // prop write, and the count says so. `mostRecentEventCount` is what *JS sent*,
+    // and an uncontrolled pick sends nothing back - the app was told, the control
+    // painted, and no props batch went down. A wrapper that adopted the pick and
+    // re-sent it would read 1 here, which is the same reading the menu cases at the
+    // read-back and press-me tests use for the opposite claim.
     expect(eventLog).toEqual(['radio-warm:2']);
-    expect(
-      handles.get('radio-warm')?.mostRecentEventCount
-    ).toBeGreaterThanOrEqual(1);
+    expect(handles.get('radio-warm')?.mostRecentEventCount).toBe(0);
     expect(after.corrections).toBe(0);
     expect(after.cachedSizes).toBe(0);
     // The box never moved, which is the same fact read from the other end.
@@ -2112,6 +2114,17 @@ describe('Picker · radio variant (G26)', () => {
   });
 
   it('picks a row through the selection path and rolls back a refused one', async () => {
+    // Android's, because the two claims here are about a group whose box does not
+    // move. On iOS this variant *is* a menu, where a pick changes the title and
+    // therefore the box, and a second pick of the pinned row is the no-op the menu
+    // refuses to report - both already covered for menus by the suite above, so a
+    // guard here states the difference instead of duplicating the menu's tests.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'radio selection path: Android only - iOS picks a menu, and a menu resizes'
+      );
+      return;
+    }
     // `nuiTestSelect` runs the model's own selection path, which for a radio group
     // is the row's own `selectable` press. The refusing parent is the interesting
     // half: the control paints 2 optimistically, the parent keeps sending 0, and
@@ -2264,6 +2277,20 @@ describe('Picker · radio variant (G26)', () => {
     await waitForBox('radio-switch', asGroup, 'the group');
     await pickRow('radio-switch', 2);
     eventLog.length = 0;
+    // The size the change must survive. On Android a pick in a group moves nothing,
+    // so `asGroup` is already the right reference; on iOS this variant is a menu,
+    // and the pick just moved its title and with it the box. The number a remount
+    // would erase is therefore the one *after* the pick: a remount re-seeds an
+    // uncontrolled picker at `defaultSelectedIndex` (index 0, "Small") and an iOS
+    // menu is as wide as the title it shows, so a re-seed shrinks it back.
+    const beforeChange =
+      Platform.OS === 'android'
+        ? asGroup
+        : await waitForRemeasure(
+            'radio-switch',
+            asGroup,
+            'the picked title in the menu'
+          );
 
     await rerender(
       <Picker
@@ -2278,11 +2305,11 @@ describe('Picker · radio variant (G26)', () => {
       const same = await waitForMeasured('radio-switch', 'the same menu');
       await settle(300);
       console.log(
-        `radio->menu (ios): ${describeSize(asGroup)} -> ${describeSize(same)} ` +
-          `events=${JSON.stringify(eventLog)}`
+        `radio->menu (ios): ${describeSize(beforeChange)} -> ` +
+          `${describeSize(same)} events=${JSON.stringify(eventLog)}`
       );
       // Not a remount: still the title the pick chose, and nothing reported.
-      expect(sameSize(same, asGroup)).toBe(true);
+      expect(sameSize(same, beforeChange)).toBe(true);
       expect(handles.get('radio-switch')?.variant).toBe('menu');
       expect(eventLog).toEqual([]);
       unmount();
