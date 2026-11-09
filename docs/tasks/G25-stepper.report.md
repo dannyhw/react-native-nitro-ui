@@ -156,3 +156,32 @@ version, documented as such.
   `check` failure for anyone who builds. Refreshed here rather than investigated further.
 - bench: the `mount.stepper` arm exists in `bench/src/plan.ts`; no numbers here — benches
   belong to the bench host (D15) and this lease went to the device suites first.
+
+## Fix round 1 (review)
+
+Merged `origin/main` (ButtonGroup, G21): 28 conflicts, resolved as unions so both controls stay in
+every shared list — README, registry, both fallback tables, the bench plan,
+`screens`/`controls`/`a11y`, the harness fixtures, both real-input drivers. What a generator owns
+was regenerated, not hand-merged: the shared conformance table and the nitrogen output. The a11y
+case list went back into generated tab order, which is what the navigation expectation and the iOS
+`A11yCase` list describe, and the debt counts were re-derived from the merged table: 22 cases, 4
+Android rows, 5 stale.
+
+iOS takes only the **direction** of a `Binding` write, so one tap on `0…1.05` by `0.1` moves one
+tenth: a new UIKit-free `NitroUiStepperBinding`, run by `test:native` against the shipping value
+rule. Android's node says its value and the probe reads `StateDescription`, so "carries its value"
+is what a reader hears. `0…10` by `3` is `0, 3, 6, 9, 10` in all three places; the Storybook row
+that called its own `1…10` fixture `0…10` now does not. The hold is counted: its events equal its
+steps. Sizing plumbing moved out of the component doc into CONTRIBUTING; four lines went
+to `FOLLOWUPS.md`.
+
+## Gates (fix round 1)
+
+<!-- gate table -->
+
+## Red proofs (fix round 1)
+
+- `test:native › stepper-binding.test` -> put the round-1 branch back in
+  `NitroUiStepperBinding.value` (take the write when `quantize` recognises it) -> 5 of 15 vectors
+  red, first `FAIL one plus tap on 0...1.05 by 0.1 moves one tenth (got 1.0, want 0.1; a literal
+  write would land on 1.0)`, exit 1.
