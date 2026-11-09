@@ -122,6 +122,15 @@ nothing), reverted after; the mutation is in the shipping file, not in the test.
   all` -> same mutation -> sizing id `Expected: 31 / Received: 32` (iOS would remount).
 - `picker.test.tsx › keeps a radio selection out of the key and a menu selection in it` ->
   `sel:` put back into the radio key -> `radio|3|One|Two|Three|sel:One|lbl:`.
+- `picker.test.tsx › keeps the accessibility label out of the radio key and in the menu key`
+  and the variant case, with their expected keys updated (fix round 1) -> `lbl:` back in the
+  radio key -> `Expected: "radio|3|One|Two|Three" / Received: "radio|3|One|Two|Three|lbl:"`;
+  3 of 19 red, reverted after.
+- `Picker · radio variant (G26) › costs no correction when the group is renamed` (new, fix
+  round 1) -> the same `lbl:` mutation, app rebuilt, `harness:android -- Picker.harness` ->
+  `expected 1 to be +0` at `expect(after.corrections).toBe(0)` (`Picker.harness.tsx:2164`),
+  the box unmoved at 133.33x144.00 with 45 other tests green: the rename cost a
+  configuration, a fallback frame and a correction on a box that cannot have changed.
 - `PickerModelTest.theVariantResolvesToTheThreeControlsThisComponentHas` -> the
   `"radio" -> "radio"` arm removed from `resolvedVariant` -> `ComparisonFailure` at
   `PickerModelTest.kt:218`.
@@ -163,6 +172,10 @@ nothing), reverted after; the mutation is in the shipping file, not in the test.
   in `HybridNitroUiPicker.swift` (dropping the D38 guard) leaves the *device* suite green —
   verified, the filtered iOS run passed with it dropped — which is why that rule is a host
   test and not a harness claim.
+  The barrier twin added in fix round 1 (the `radio-noop` case ending with a pick that *is* a
+  choice, asserting `['radio-noop:1']`) needs no mutation of its own: `eventLog` is what two
+  dozen assertions across this suite already read, so a recorder that never arms cannot keep
+  the suite green, and the twin is the first to fail if only the row-pick path goes quiet.
 
 ## Files changed
 
