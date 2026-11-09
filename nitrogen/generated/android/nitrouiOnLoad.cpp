@@ -55,6 +55,8 @@
 #include "views/JHybridNitroUiSegmentedControlStateUpdater.hpp"
 #include "JHybridNitroUiSliderSpec.hpp"
 #include "views/JHybridNitroUiSliderStateUpdater.hpp"
+#include "JHybridNitroUiStepperSpec.hpp"
+#include "views/JHybridNitroUiStepperStateUpdater.hpp"
 #include "JHybridNitroUiSwitchSpec.hpp"
 #include "views/JHybridNitroUiSwitchStateUpdater.hpp"
 #include "JHybridNitroUiTextFieldSpec.hpp"
@@ -232,6 +234,14 @@ struct JHybridNitroUiPopoverSpecImpl: public jni::JavaClass<JHybridNitroUiPopove
     return javaPart->getJHybridNitroUiPopoverSpec();
   }
 };
+struct JHybridNitroUiStepperSpecImpl: public jni::JavaClass<JHybridNitroUiStepperSpecImpl, JHybridNitroUiStepperSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiStepper;";
+  static std::shared_ptr<JHybridNitroUiStepperSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiStepperSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiStepperSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiStepperSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -278,6 +288,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiSegmentedControlStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSliderSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSliderStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiStepperSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiStepperStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiSwitchSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiSwitchStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiTextFieldSpec::CxxPart::registerNatives();
@@ -413,6 +425,12 @@ void registerAllNatives() {
     "NitroUiPopover",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiPopoverSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiStepper",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiStepperSpecImpl::create();
     }
   );
 }

@@ -149,6 +149,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it',
     screen: 'popover',
   },
+  {
+    id: 'stepper',
+    title:
+      'real taps step the stepper once each, a tap at a bound does nothing, and on iOS a hold repeats',
+    screen: 'stepper',
+  },
   // @end-generated
 ]);
 

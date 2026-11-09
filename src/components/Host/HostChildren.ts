@@ -39,6 +39,7 @@ import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
 import { IconButton } from '../IconButton/IconButton';
 import { Popover } from '../Popover/Popover';
+import { Stepper } from '../Stepper/Stepper';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -118,6 +119,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
   [Popover, 'Popover'],
+  [Stepper, 'Stepper'],
 ]);
 
 /**

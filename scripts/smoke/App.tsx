@@ -105,6 +105,7 @@ const SMOKE_CONTROLS = [
   'checkbox',
   'search-field',
   'icon-button',
+  'stepper',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',

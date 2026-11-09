@@ -213,6 +213,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiPopover"
       }
+    },
+    "NitroUiStepper": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiStepper"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiStepper"
+      }
     }
   },
   "ignorePaths": [

@@ -26,7 +26,8 @@ export type ComponentName =
   | 'picker'
   | 'menu'
   | 'text-field'
-  | 'icon-button';
+  | 'icon-button'
+  | 'stepper';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -48,7 +49,8 @@ export type ScenarioName =
   | `${ScenarioAction}.picker`
   | `${ScenarioAction}.menu`
   | `${ScenarioAction}.text-field`
-  | `${ScenarioAction}.icon-button`;
+  | `${ScenarioAction}.icon-button`
+  | `${ScenarioAction}.stepper`;
 // @end-generated
 
 /**
