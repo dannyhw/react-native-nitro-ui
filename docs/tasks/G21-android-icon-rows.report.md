@@ -43,32 +43,37 @@ form is ARGB**, so the `0xff00a0` first passed was alpha 0 — a transparent gly
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1936 tests / 81 suites | `50b37147ab09` | 2 m 51 s | start 13.1 / med 14.1 / max 23.4 |
-| `harness:ios` | **PASS** | 530 tests / 27 suites + isolated 6 tests / 3 suites | `50b37147ab09` (ios tree) | 13 m 28 s | start 9.2 / med 7.8 / max 29.1 |
-| `harness:android` | **PASS** | 586 tests / 27 suites + isolated 6 tests / 3 suites | `50b37147ab09` (android tree) | 17 m 04 s | start 4.8 / med 4.5 / max 11.8 |
-| `real-input:ios` | **PASS** | — | `50b37147ab09` (ios tree) | 34 m 59 s | start 108.3 / med 16.4 / max 270.3 |
-| `real-input:android` | **PASS** | — | `50b37147ab09` (android tree) | 50 m 25 s | start 7.7 / med 5.0 / max 101.1 |
+| `check` | **PASS** | 1936 tests / 81 suites | `14ecf52303c1` | 2 m 44 s | start 4.1 / med 11.3 / max 19.0 |
+| `harness:ios` | **PASS** | 530 tests / 27 suites + isolated 6 tests / 3 suites | `14ecf52303c1` (ios tree) | 13 m 29 s | start 7.1 / med 5.7 / max 11.2 |
+| `harness:android` | **PASS** | 586 tests / 27 suites + isolated 6 tests / 3 suites | `14ecf52303c1` (android tree) | 17 m 02 s | start 5.0 / med 5.7 / max 24.3 |
+| `real-input:ios` | **PASS** | — | `14ecf52303c1` (ios tree) | 32 m 44 s | start 2.6 / med 12.6 / max 100.7 |
+| `real-input:android` | **PASS** | — | `14ecf52303c1` (android tree) | 49 m 22 s | start 7.7 / med 3.5 / max 13.3 |
 | `harness:android:(Menu%7CContextMenu)%5C.harness` | stale | 1 failed of 59 tests / 2 suites | ff52f6368fc5 (not this tree) | 1 m 39 s | start 10.7 / med 9.4 / max 11.5 |
-| `harness:android:%5E__tests__%2FChip%5C.harness` | stale | 2 failed of 17 tests / 1 suites | 6385bed4a58d (not this tree) | 30.2 s | start 6.4 / med 12.8 / max 14.8 |
-| `harness:android:%5E__tests__%2FContextMenu%5C.harness` | stale | 1 failed of 25 tests / 1 suites | c1c8886a00f9 (not this tree) | 1 m 05 s | start 15.5 / med 10.7 / max 15.5 |
-| `harness:android:%5E__tests__%2FMenu%5C.harness` | stale | 2 failed of 34 tests / 1 suites | 53028c1bb3c1 (not this tree) | 32.8 s | start 6.7 / med 6.6 / max 7.3 |
+| `harness:android:%5E__tests__%2FChip%5C.harness` | stale | 2 failed of 17 tests / 1 suites | 764db4e10651 (not this tree) | 31.3 s | start 7.5 / med 8.2 / max 9.7 |
+| `harness:android:%5E__tests__%2FContextMenu%5C.harness` | stale | 1 failed of 25 tests / 1 suites | cab771e3d510 (not this tree) | 1 m 09 s | start 7.1 / med 6.6 / max 7.1 |
+| `harness:android:%5E__tests__%2FMenu%5C.harness` | stale | 2 failed of 34 tests / 1 suites | 676c9c74d6c3 (not this tree) | 34.9 s | start 5.6 / med 5.5 / max 5.8 |
 | `harness:android:G21` | stale | — | ff52f6368fc5 (not this tree) | 2.0 s | start 9.8 / med 9.8 / max 9.8 |
 | `harness:android:Menu%5C.harness` | stale | 1 failed of 59 tests / 2 suites | 0d09ffbf1ab4 (not this tree) | 1 m 55 s | start 7.6 / med 38.0 / max 46.0 |
-| `harness:ios:(Menu%7CContextMenu)%5C.harness` | **PASS** | 59 tests / 2 suites | `50b37147ab09` (ios tree) | 1 m 14 s | start 7.6 / med 8.5 / max 10.9 |
+| `harness:ios:(Menu%7CContextMenu)%5C.harness` | stale | 59 tests / 2 suites | 50b37147ab09 (not this tree) | 1 m 14 s | start 7.6 / med 8.5 / max 10.9 |
 
-### need --for review
+### need --for merge
 
 ```text
       ✓ check — green
-      ✓ harness:ios — green on the ios code tree
-      ✓ harness:android — green on the android code tree
+      ✓ harness:ios — green
+      ✓ harness:android — green
+      ✓ real-input:ios — green
+      ✓ real-input:android — green
       note: treated as both platforms (outside the known prefixes): example/__tests__/Chip.harness.tsx, example/__tests__/ContextMenu.harness.tsx, example/__tests__/Menu.harness.tsx, example/src/assets/icons/slab_24px.xml
-    need: review is satisfied on this code tree.
+    need: merge is satisfied on this code tree.
 ```
 
-`harness:android` failed its first run at this tree on `Host.harness` F8 with a 30 s timeout, at a
-10-minute load of 17-21 because `G20`'s `real-input:android` shared the box, and passed unchanged on
-the retry. Nothing under `Host.harness` reads anything G21 touched.
+In round 1, `harness:android` failed its first run at `50b37147ab09` on `Host.harness` F8 with a
+30 s timeout, at a 10-minute load of 17-21 because `G20`'s `real-input:android` shared the box, and
+passed unchanged on the retry. Nothing under `Host.harness` reads anything G21 touched. In the merge
+round the table's five rows are one tree, `14ecf52303c1`: `check` plus both harnesses plus both
+`real-input`s, on lease `G21-uz5lj` (pair-b — `emulator-5570` and the iOS 27.0 iPhone Air, Metro
+8293), after the pair sat behind `G24` and `G20` for three hours and two `acquire` budgets.
 
 The README pair for `Menu`, `ContextMenu` and `Chip` was **not** retaken: those pictures are crops
 of each component's Storybook story, and this task changed no story file (`git diff bd6a3f6c..HEAD
@@ -125,11 +130,49 @@ assertion behind to quote.
   "menu":[-1,-1,-1,-1], …}` and `the popup of "miss": the report never got there - open=1;…;
   menu=-1;…` — both waits were for a field that platform answers `-1` for by design.
 
-Each of the five is in the table under its own filtered name and its own (mutated) code tree, which
-is why `status` calls them stale; they ran before the iOS-only fixes to these two suites. No `.kt`
-file and no Android assertion in either suite changed after them, so the same mutations break the
-same lines at `50b37147ab09` — they were not re-run there, because the lease ran down to zero with
-the four device gates and `check` already green.
+Each of the five is in the ledger (`docs/tasks/G21/gates.jsonl`) under its own filtered name and its
+own (mutated) code tree, which is why `status` calls them stale — the table prints one row per gate
+name, so it shows the newest of the three that share `^__tests__/Menu\.harness`. They ran before the
+iOS-only fixes to these two suites; no `.kt` file and no Android assertion changed after them, so the
+same mutations break the same lines at `50b37147ab09`. They were not re-run there — the lease ran
+down to zero with the four device gates and `check` already green — and the merge round re-ran h1,
+h3, h4 and the recycle case on the merged tree, below.
+
+**Merge round** — the same recipe at the merged tree, and the two assertions the review asked for
+proved against code rather than against a typed-in constant. Each mutation was applied, built, run,
+then restored and rebuilt, with `git status` clean after every one:
+
+- **h1** row slot `MenuDefaults.LeadingIconSize * 1.2f` (`MenuRows.kt`) →
+  `Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a
+  name` `expected 3969 to be less than 3087.0000000000005`, and `› keeps the check in the slot when
+  the row is checked` `expected '413x388' to be '423x389'` — the same two lines round 1 read.
+- **h3** `Absent` reserves the slot anyway (`if (false)` on the null branch) →
+  `› refuses a popup probe with no popup, and a name that cannot resolve with no icon`
+  `expected 'date#1A1B20,plain#40434B,slab#40434B' to be '-'` and `expected true to be false`.
+- **h4** chip slot `FilterChipDefaults.IconSize * 1.2f` (`HybridNitroUiChip.kt`) →
+  `Chip · the androidIcon (G21) › draws the imported glyph in the slot, and leaves nothing else in
+  its colour` `expected 21.714290618896484 to be less than 19` — the new width assertion, once the
+  case was reordered to read the box before the pixels. Run before that reorder, the same mutation
+  read `expected 3249 to be less than 2500.4700000000003` on the ink instead, which is what showed
+  the order hid the line.
+- **h5′** `MenuRowIcons.reset()` keeps the last owner's slots and `apply()` merges into them
+  (`slots = slots + next`, nothing retired) →
+  `ContextMenu · the row glyphs (G21) › hands the next owner no glyph of the last one's`
+  `expected 2954 to be less than 689.0625` — the stale 20 dp square, sampled for the colour the
+  first owner recorded rather than for `0x123456`.
+- *probe, not a code mutation*: the width band temporarily raised to `ICON_DP + 30` →
+  `expected 17.904766082763672 to be greater than 48`. That is how `docs/components/chip.md` got its
+  17.90 dp: read off the device, not off the arithmetic.
+- *JVM*: the compile-only overflow caller added to `MenuRowIconsTest.kt` → dropping `MenuRow`'s
+  `icon` default → `compileDebugUnitTestKotlin FAILED … No value passed for parameter 'icon'`.
+- *JS types*: putting `androidIcon?: AndroidIconProp | undefined` back on `MenuSubmenu` →
+  `error TS2578: Unused '@ts-expect-error' directive` at `src/__tests__/rowAndroidIcon.test.tsx:147`;
+  and sending `row.androidIcon` again for a submenu row → the wire case's `toEqual` mismatch on the
+  `null` it must send.
+- *the device corrected the fix once*: the first version of the recycle assertion,
+  `expect(ink).toBe(0)`, went red against **green** code at `5167699903b2` with
+  `expected 145 to be +0` — Material draws the popup's own row titles in the colour the glyph was
+  tinted with, so the claim is no *slot* of it, not none of it.
 
 ## Files changed
 
@@ -148,3 +191,24 @@ the four device gates and `check` already green.
 - harness: `Host.harness` F8 has a 30 s budget and no load allowance; on a box shared with another
   task's `real-input` it times out and takes a whole `harness:android` run with it.
 - menu: a submenu's label and a section's header take no `androidIcon` — neither has a leading slot on either platform, so only `MenuAction` does.
+
+## Merge round
+
+Review said merge with fixes. `origin/main` merged clean (docs commits only); the four fixes
+are in, each shown red above.
+
+1. **`MenuSubmenu.androidIcon` is gone from the public type** and the wrapper sends `null` for that
+   row: a group label on Android, a `UIMenu` title on iOS, no slot on either. Docs, changeset,
+   KDoc and the API report followed.
+2. **`MenuRow` takes a defaulted `icon` and an optional `onIconTint`** instead of a required
+   `MenuRowIcons`, so ButtonGroup's overflow rows, which hold a slot already, compile unchanged;
+   a compile-only caller pins that.
+3. **The two checks that could not fail sample a colour that exists now**: the recycle case asks for
+   the tint the first owner recorded. `toBe(0)` was wrong — Material tints these very titles that
+   colour, 145 px of them — so the bound is a quarter of a 20 dp square, and h5′ lands at 2954.
+4. **`chip.md` states the measured 17.90 dp**, which the harness logs and asserts; h4 moves it to
+   21.71.
+
+`check`, both harnesses and both `real-input`s are green at `14ecf52303c1` and `need --for merge`
+is satisfied. No README screenshot was retaken: no story file changed. Seven review lines went
+to `FOLLOWUPS.md`.
