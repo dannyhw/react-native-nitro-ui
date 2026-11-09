@@ -92,6 +92,8 @@ printed no stability line. The healthy reading is unchanged with the confirmatio
   that duplication invalidates every exemption anchored to a count.
 - scripts: `gate.mjs logs` keeps only the summary lines of a `real-input:ios` run, not the raw
   `real-input a11y …` lines — the per-case tree is invisible after the fact.
+- lease: the pool also carries a stale `avd:x16_avd` row on `emulator-5574`, the serial pair-a boots
+  `nitroui_a` on and no lease holds it, so an override reap keyed on that row would power off a live device.
 
 ## Questions for orchestrator
 
