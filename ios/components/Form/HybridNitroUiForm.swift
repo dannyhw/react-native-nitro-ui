@@ -1143,9 +1143,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "items=\(dataSource?.snapshot().numberOfItems ?? -1)",
       "inCells=\(inCells)",
       // Where the list itself is: is it in a window, how tall is it, how much content does
-      // it hold and how many items does it think are visible. A Form that reports rows and
-      // no cells says which of its two jobs stopped (fix round 1).
-      "screen=\(list.window != nil ? 1 : 0),\(Self.number(list.bounds.height)),\(Self.number(list.contentSize.height)),\(list.indexPathsForVisibleItems.count)",
+      // it hold, how many items does it think are visible, and how many cells has it actually
+      // realised. A Form that reports rows and no cells says which of its two jobs stopped
+      // (fix round 1); the last two apart says whether a row on screen is a cell that was
+      // never built or a cell built with nothing in it (fix round 2, item 1).
+      "screen=\(list.window != nil ? 1 : 0),\(Self.number(list.bounds.height)),\(Self.number(list.contentSize.height)),\(list.indexPathsForVisibleItems.count),\(list.visibleCells.count)",
       "orphans=\(orphans)",
       "stale=\(stale)",
       "alive=\(knownRows.count)",

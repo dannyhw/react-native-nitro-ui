@@ -171,7 +171,8 @@ function expectOrder(
 }
 
 /**
- * How many items the list says it is drawing - the fourth number of `screen=`.
+ * How many items the list says it is drawing - the fourth number of `screen=`, with the number
+ * of cells it has actually realised as the fifth.
  *
  * `inCells` counts the visible cells that hold a row; this counts the items the list has
  * realised. They are equal exactly when nothing on screen is a blank row, which is the claim
