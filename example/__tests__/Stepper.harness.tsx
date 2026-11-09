@@ -1090,10 +1090,9 @@ describe('Stepper', () => {
       // headers list, so a test that hard-coded one would be a premise everywhere else.
       const traits = /traits=(\d+)/.exec(detail)?.[1] ?? '';
       expect(traits.length, `no traits in "${detail}"`).toBeGreaterThan(0);
-      expect(
-        detail,
-        `the element is not adjustable: "${detail}"`
-      ).toContain('adjustable=true');
+      expect(detail, `the element is not adjustable: "${detail}"`).toContain(
+        'adjustable=true'
+      );
     } else {
       // Android's claim has two halves: the one node with range info, and the two
       // buttons being *out* of the tree beside it.

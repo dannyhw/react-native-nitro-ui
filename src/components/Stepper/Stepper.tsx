@@ -143,7 +143,7 @@ export function Stepper({
   // about a range nobody can drag along.
   if (__DEV__ && !(step > 0)) {
     throw new Error(
-      `nitro-ui: <Stepper step> must be greater than 0; received ${String(step)}.`,
+      `nitro-ui: <Stepper step> must be greater than 0; received ${String(step)}.`
     );
   }
   // An uncontrolled Stepper with no `defaultValue` starts at the bottom of its own
