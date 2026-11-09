@@ -1,0 +1,199 @@
+# Failure excerpt — harness:android
+
+- Ran: 2026-11-09T06:29:40.288Z on code tree `5167699903b2` at HEAD `2819f3c` (branch `task/G21-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android`
+- Result: fail, exit 1, 1044023 ms
+- Load: start 5.93, end 9.59, median 6.36, max 29.22
+- Device: android / device `emulator-5570` / lease `G21-uz5lj`
+- Full log: `task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log` (<store>/task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● Console`
+- `● ContextMenu · the row glyphs (G21) › hands the next owner no glyph of the last one’s`
+- `expected 145 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G21-uz5lj (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G21-uz5lj                G21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.59 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 152 — the rest is in the full log above)
+
+```
+gate: node ../scripts/harness.mjs --harnessRunner android (cwd example)
+gate: code tree 5167699903b2 at HEAD 2819f3cf
+gate: git tree 0f9e232d04d2
+gate: log task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log
+gate:       <store>/task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 5167699903b2, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.93/7.62 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ContextMenu.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+          · box=128x68.19047546386719 twin=128x67.80952453613281 child@14.095237731933594,14.095237731933594 twinChild@14.095237731933594,14.095245361328125 native kids=mount-child@14.1,14.1,99.8,40.0 contentIndex=1/2
+
+
+    console.log
+          · churn ok=50/50 firstBad=-
+
+
+    console.log
+          · after the hold: pressIn=1 pressOut=1 press=0 events=open
+
+
+    console.log
+          · under presses=2 none opens=0 armed=0 box-none opens=0 armed=0
+
+
+    console.log
+          · rows=7 menu=540,220,856,1325 drawn=(:Reply,Copy,Pin~),(More:Archive,Mail),(Tools:Flag),(:Delete)
+
+
+    console.log
+          · drawn=(:Pin@Keep on top+,Mute=),(Tools:[scrubbed]@For later)
+
+
+    console.log
+          · configs=-1 events=open,select:reply,close,open
+
+
+    console.log
+          · seq=1 title=Title 10
+
+
+    console.log
+          · on ax=1 action=Show menu · off ax=0 · disabled action=none
+
+
+    console.log
+          · live before=0 after=0
+
+
+    console.log
+          · stray listener runs: before=0 afterPick=0 afterDrops=0
+
+
+    console.log
+          · live before=0 after=0
+
+
+    console.log
+          · second owner: open=0;opens=0;closes=0;selects=0;configs=-1;cancels=0;rows=1;drawn=-1;title=-;box=379.4x120.0;contentIndex=1/2;interaction=-1;ax=0;a11yAction=none;radius=-1;press=-1;menu=-1;anchor=-1;live=0;arms=0;armed=0;copies=0;watchStray=0;seq=1;iconTints=-;kids=second-target@12.2,12.2,355.4,96.0
+
+
+    console.log
+          · second owner ax=0 stale label box=none
+
+
+    console.log
+          · row glyph ink: tint=slab#40434B asset=2954 name=2954 none=145
+
+
+    console.log
+          · unresolved name: menu=339x262 none=339x262
+
+
+    console.log
+          · second owner: menu=339x262 ink=145 sampled=#40434B
+
+  ● ContextMenu · the row glyphs (G21) › hands the next owner no glyph of the last one’s
+
+    expected 145 to be +0 // Object.is equality
+
+      [0m [90m 1564 |[39m     [90m// owner's loaded slots, goes red here), and `iconTints=` is the second line to[39m
+       [90m 1565 |[39m     [90m// say so rather than the one that hides it.[39m
+      [31m[1m>[22m[39m[90m 1566 |[39m     expect(ink)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                     [31m[1m^[22m[39m
+       [90m 1567 |[39m     expect(opened[33m.[39miconTints)[33m.[39mtoBe([32m'-'[39m)[33m;[39m
+       [90m 1568 |[39m   })[33m;[39m
+       [90m 1569 |[39m })[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · the row glyphs (G21) › hands the next owner no glyph of the last one’s
+
+    expected 145 to be +0 // Object.is equality
+
+      [0m [90m 1564 |[39m     [90m// owner's loaded slots, goes red here), and `iconTints=` is the second line to[39m
+       [90m 1565 |[39m     [90m// say so rather than the one that hides it.[39m
+      [31m[1m>[22m[39m[90m 1566 |[39m     expect(ink)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                     [31m[1m^[22m[39m
+       [90m 1567 |[39m     expect(opened[33m.[39miconTints)[33m.[39mtoBe([32m'-'[39m)[33m;[39m
+       [90m 1568 |[39m   })[33m;[39m
+       [90m 1569 |[39m })[33m;[39m[0m
+
+
+Test Suites: 1 failed, 26 passed, 27 total
+Tests:       1 failed, 3 skipped, 582 passed, 586 total
+Snapshots:   0 total
+Time:        1009.184 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 5167699903b2, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.77/11.60 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        31.79 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:android FAIL in 1044.0 s
+gate: recorded in .gates/task/G21-merge.jsonl
+
+
+gate: appended the device context to task/G21-merge/harness+android-2026-11-09T06-29-39.632Z.log (5 probe(s))
+
+```

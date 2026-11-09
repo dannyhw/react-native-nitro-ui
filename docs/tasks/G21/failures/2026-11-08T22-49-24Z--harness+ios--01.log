@@ -1,0 +1,201 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T22:49:24.827Z on code tree `b9d8077bb469` at HEAD `3004d8c` (branch `task/G21-android-icon-rows`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 877283 ms
+- Load: start 20.93, end 6.91, median 21.10, max 116.52
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G21-dl60k`
+- Full log: `task/G21-android-icon-rows/harness+ios-2026-11-08T22-49-22.452Z.log` (<store>/task/G21-android-icon-rows/harness+ios-2026-11-08T22-49-22.452Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● Console`
+- `● ContextMenu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name`
+- `● ContextMenu · the row glyphs (G21) › refuses a probe with no popup, and a name that cannot resolve with no glyph`
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name`
+- `● Menu · the row glyphs (G21) › refuses a popup probe with no popup, and a name that cannot resolve with no icon`
+- `● Menu · the row glyphs (G21) › puts the trigger glyph in the leading half, and only there`
+- `expected 'n=0 no pixels platform=ios' to be '' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G21-android-icon-rows/harness+ios-2026-11-08T22-49-22.452Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G21-dl60k (still live)
+  |   G20-d5vr8                G20          both              pair-a
+  |   G21-dl60k                G21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.91 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 521 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      menu glyph boxes: menu-plain=68.00x34.33 menu-icon=68.00x34.33 button-icon=68.00x34.33
+
+
+    console.log
+      menu missing-glyph boxes: missing-plain=68.00x34.33 missing-icon=68.00x34.33
+
+
+    console.log
+      menu split-glyph boxes: split-noicon=79.67x34.33 split-icon=79.67x34.33
+
+
+    console.log
+      menu rung boxes: rung-small=55.67x28.00 rung-medium=63.67x34.33 rung-large=79.67x50.33 rung-xlarge=79.67x50.33 rung-xxlarge=79.67x50.33
+
+  ● Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name
+
+    Menu report for "rows-asset" never matched within 12000ms; last read {"expanded":null,"live":null,"anchor":[-1,-1,-1,-1],"menu":[-1,-1,-1,-1],"rows":3,"drawn":null,"split":null,"leading":[-1,-1,-1,-1],"trailing":[-1,-1,-1,-1],"iconTints":"-"}.
+
+      [0m [90m 530 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 531 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 532 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 533 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 534 |[39m           [32m`last read ${seen}.`[39m
+       [90m 535 |[39m       )[33m;[39m[0m
+
+  ● Menu · the row glyphs (G21) › refuses a popup probe with no popup, and a name that cannot resolve with no icon
+
+    Menu report for "rows-missing" never matched within 12000ms; last read {"expanded":null,"live":null,"anchor":[-1,-1,-1,-1],"menu":[-1,-1,-1,-1],"rows":3,"drawn":null,"split":null,"leading":[-1,-1,-1,-1],"trailing":[-1,-1,-1,-1],"iconTints":"-"}.
+
+      [0m [90m 530 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 531 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 532 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 533 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 534 |[39m           [32m`last read ${seen}.`[39m
+       [90m 535 |[39m       )[33m;[39m[0m
+
+  ● Menu · the row glyphs (G21) › puts the trigger glyph in the leading half, and only there
+
+    expected 'n=0 no pixels platform=ios' to be '' // Object.is equality
+
+      [0m [90m 3820 |[39m           [36mawait[39m waitForHandle([32m'split-ink'[39m[33m,[39m [32m'the iOS split trigger'[39m)
+       [90m 3821 |[39m         )[33m.[39mnuiTestPixelReport()
+      [31m[1m>[22m[39m[90m 3822 |[39m       )[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m      |[39m             [31m[1m^[22m[39m
+       [90m 3823 |[39m       [36mreturn[39m[33m;[39m
+       [90m 3824 |[39m     }
+       [90m 3825 |[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/ContextMenu.harness.tsx
+  ● ContextMenu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name
+
+    the popup of "glyph-asset": the report never got there - open=1;opens=1;closes=0;selects=0;configs=1;cancels=1;rows=2;drawn=-1;title=-;box=388.0x120.0;contentIndex=1/2;interaction=1;ax=0;a11yAction=-1;radius=16.0;press=-1;menu=-1;live=-1;arms=-1;armed=-1;copies=-1;watchStray=-1;seq=229;iconTints=-;kids=glyph-asset-target@12.0,12.0,364.0,96.0
+
+      [0m [90m 144 |[39m   [36mwhile[39m (report[33m.[39mseq [33m===[39m undefined [33m||[39m [33m![39mok(report)) {
+       [90m 145 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 146 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 147 |[39m         [32m`${what}: the report never got there - ${handle.nuiTestContextMenuReport()}`[39m
+       [90m 148 |[39m       )[33m;[39m
+       [90m 149 |[39m     }[0m
+
+  ● ContextMenu · the row glyphs (G21) › refuses a probe with no popup, and a name that cannot resolve with no glyph
+
+    the popup of "miss": the report never got there - open=1;opens=1;closes=0;selects=0;configs=1;cancels=1;rows=2;drawn=-1;title=-;box=388.0x120.0;contentIndex=1/2;interaction=1;ax=0;a11yAction=-1;radius=16.0;press=-1;menu=-1;live=-1;arms=-1;armed=-1;copies=-1;watchStray=-1;seq=228;iconTints=-;kids=miss-target@12.0,12.0,364.0,96.0
+
+      [0m [90m 144 |[39m   [36mwhile[39m (report[33m.[39mseq [33m===[39m undefined [33m||[39m [33m![39mok(report)) {
+       [90m 145 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 146 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 147 |[39m         [32m`${what}: the report never got there - ${handle.nuiTestContextMenuReport()}`[39m
+       [90m 148 |[39m       )[33m;[39m
+       [90m 149 |[39m     }[0m
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name
+
+    Menu report for "rows-asset" never matched within 12000ms; last read {"expanded":null,"live":null,"anchor":[-1,-1,-1,-1],"menu":[-1,-1,-1,-1],"rows":3,"drawn":null,"split":null,"leading":[-1,-1,-1,-1],"trailing":[-1,-1,-1,-1],"iconTints":"-"}.
+
+      [0m [90m 530 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 531 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 532 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 533 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 534 |[39m           [32m`last read ${seen}.`[39m
+       [90m 535 |[39m       )[33m;[39m[0m
+
+  ● Menu · the row glyphs (G21) › refuses a popup probe with no popup, and a name that cannot resolve with no icon
+
+    Menu report for "rows-missing" never matched within 12000ms; last read {"expanded":null,"live":null,"anchor":[-1,-1,-1,-1],"menu":[-1,-1,-1,-1],"rows":3,"drawn":null,"split":null,"leading":[-1,-1,-1,-1],"trailing":[-1,-1,-1,-1],"iconTints":"-"}.
+
+      [0m [90m 530 |[39m     seen [33m=[39m [33mJSON[39m[33m.[39mstringify(current)[33m;[39m
+       [90m 531 |[39m     [36mif[39m (nitroUiCore[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 532 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 533 |[39m         [32m`Menu report for "${testId}" never matched within ${String(timeoutMs)}ms; `[39m [33m+[39m
+       [90m 534 |[39m           [32m`last read ${seen}.`[39m
+       [90m 535 |[39m       )[33m;[39m[0m
+
+  ● Menu · the row glyphs (G21) › puts the trigger glyph in the leading half, and only there
+
+    expected 'n=0 no pixels platform=ios' to be '' // Object.is equality
+
+      [0m [90m 3820 |[39m           [36mawait[39m waitForHandle([32m'split-ink'[39m[33m,[39m [32m'the iOS split trigger'[39m)
+       [90m 3821 |[39m         )[33m.[39mnuiTestPixelReport()
+      [31m[1m>[22m[39m[90m 3822 |[39m       )[33m.[39mtoBe([32m''[39m)[33m;[39m
+       [90m      |[39m             [31m[1m^[22m[39m
+       [90m 3823 |[39m       [36mreturn[39m[33m;[39m
+       [90m 3824 |[39m     }
+       [90m 3825 |[39m[0m
+
+
+Test Suites: 2 failed, 1 skipped, 24 passed, 26 of 27 total
+Tests:       5 failed, 2 skipped, 523 passed, 530 total
+Snapshots:   0 total
+Time:        838.265 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree b9d8077bb469, 19 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 10.48/21.84 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G21-android-icon-rows/harness+ios-2026-11-08T22-49-22.452Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        34.261 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 877.3 s
+gate: recorded in .gates/task/G21-android-icon-rows.jsonl
+
+
+gate: appended the device context to task/G21-android-icon-rows/harness+ios-2026-11-08T22-49-22.452Z.log (4 probe(s))
+
+```

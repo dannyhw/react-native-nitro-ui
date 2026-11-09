@@ -34,6 +34,10 @@ public protocol HybridNitroUiMenuSpec_protocol: HybridObject, HybridView {
   func nuiTestSelectRow(id: String) throws -> Void
   func nuiTestMenuReport() throws -> String
   func nuiTestMenuProbe() throws -> Void
+  func nuiTestPixelProbe(color: Double) throws -> Void
+  func nuiTestPixelReport() throws -> String
+  func nuiTestMenuPixelProbe(color: Double) throws -> Void
+  func nuiTestMenuPixelReport() throws -> String
 }
 
 public extension HybridNitroUiMenuSpec_protocol {

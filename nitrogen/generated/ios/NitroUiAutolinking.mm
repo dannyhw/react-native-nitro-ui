@@ -31,6 +31,7 @@
 #include "HybridNitroUiIconButtonSpecSwift.hpp"
 #include "HybridNitroUiPopoverSpecSwift.hpp"
 #include "HybridNitroUiStepperSpecSwift.hpp"
+#include "HybridNitroUiButtonGroupSpecSwift.hpp"
 
 @interface NitroUiAutolinking : NSObject
 @end
@@ -187,6 +188,13 @@
     "NitroUiStepper",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiStepperSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiStepper();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiButtonGroup",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiButtonGroupSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiButtonGroup();
       return hybridObject;
     }
   );

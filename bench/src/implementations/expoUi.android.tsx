@@ -8,6 +8,7 @@ import {
   Icon,
   IconButton,
   LoadingIndicator,
+  Row,
   SegmentedButton,
   SingleChoiceSegmentedButtonRow,
   Slider,
@@ -22,11 +23,13 @@ import { useCallback, useEffect, useState } from 'react';
 import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
+  buttonGroupItems,
   buttonTitle,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
   menuItems,
   menuTitle,
+  onButtonGroupPress,
   onIconButtonPress,
   onPress,
   onMenuSelect,
@@ -254,6 +257,8 @@ export function ExpoUiHostPerControlList({
               <BenchTextField value={value} />
             ) : component === 'progress' ? (
               <BenchProgress value={value} />
+            ) : component === 'button-group' ? (
+              <BenchButtonGroup value={value} />
             ) : (
               <Switch value={value} onCheckedChange={onValueChange} />
             )}
@@ -301,6 +306,32 @@ function BenchIconButton({ value }: { value: boolean }) {
         size={24}
       />
     </IconButton>
+  );
+}
+
+/**
+ * Three Material 3 `Button`s in a `Row`, spaced by 8 dp — the row nitro-ui's
+ * `ButtonGroup` draws at its defaults.
+ *
+ * `@expo/ui` has no `ButtonGroup` binding on Android (`Button`, `ToggleButton`,
+ * `SegmentedButton` and `SingleChoiceSegmentedButtonRow` are its whole group-ish
+ * surface), so this arm pays for the row a consumer would hand-roll: the same three
+ * labels, the same gap, no group container, no connected corners and no overflow of
+ * its own. That asymmetry is the number: it is what the control under test buys over
+ * the best a `@expo/ui` app can do without writing layout code.
+ *
+ * `horizontalArrangement` is `{ spacedBy: 8 }` rather than `Spacer`s between the
+ * buttons, so the row costs three composables and not five.
+ */
+function BenchButtonGroup({ value }: { value: boolean }) {
+  return (
+    <Row horizontalArrangement={{ spacedBy: 8 }}>
+      {buttonGroupItems(value).map((item) => (
+        <Button key={item.id} onClick={onButtonGroupPress}>
+          <Text>{item.title}</Text>
+        </Button>
+      ))}
+    </Row>
   );
 }
 
@@ -427,6 +458,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchTextField key={index} value={value} />
           ) : component === 'progress' ? (
             <BenchProgress key={index} value={value} />
+          ) : component === 'button-group' ? (
+            <BenchButtonGroup key={index} value={value} />
           ) : (
             <Switch key={index} value={value} onCheckedChange={onValueChange} />
           )

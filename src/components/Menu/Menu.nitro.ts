@@ -59,6 +59,23 @@ export interface NitroUiMenuRow {
   /** Leading SF Symbol name, or `null`. iOS only - Android ignores it. */
   systemImage: string | null;
   /**
+   * Leading glyph for the row on Android, or `null`: the same string `Button`'s
+   * `androidIcon` is sent, built the same way by the wrapper - a drawable the app
+   * ships named by its resource name, or a `url:` marker in front of the dev-server
+   * file Metro serves for a `require`'d `.xml` (`src/iconSource.ts`).
+   *
+   * Android only, exactly as `Button`'s is: iOS draws `systemImage` and ignores this,
+   * so a row that wants a glyph on both platforms sends both names and needs no
+   * `Platform.select`. It is Material's own leading icon - `MenuDefaults.LeadingIconSize`,
+   * 20 dp in material3 1.5.0-beta02 - in the row's own content colour, and on a checkable Android row the
+   * leading check keeps its slot: a checked row draws the check, which is what the
+   * row *means*, and the glyph is what an unchecked one draws.
+   *
+   * Like `systemImage`, it is never in the trigger's sizing key - a row lives in a
+   * popup of its own and cannot move the trigger's box.
+   */
+  androidIcon: string | null;
+  /**
    * The row's second line, or `null` for none (the wrapper sends `null` for `''`):
    * iOS `UIAction.subtitle`, Android the row's supporting text. Always `null` on a
    * `'submenu'` or `'section'` row.
@@ -317,6 +334,55 @@ export interface NitroUiMenuMethods extends HybridViewMethods {
    * SwiftUI `Menu` and read its rows itself.
    */
   nuiTestMenuProbe(): void;
+
+  /**
+   * TEMPORARY, test-only: sample the pixels this control's **trigger** is drawing,
+   * looking for `color`, and keep the answer for ``nuiTestPixelReport``. Returns at
+   * once - the sampling needs the UI thread and a Nitro method may not block for it
+   * - so the answer is polled, the way Button's pair works.
+   *
+   * It exists because `androidIcon` on the split trigger is a *drawing* contract, for
+   * Button's reason: every other reading of the prop is an echo, and only drawn pixels
+   * tell a glyph tinted with the control's content colour from one tinted with a
+   * constant. This is that half; ``nuiTestMenuPixelProbe`` is the rows.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestPixelProbe`` found, in Button's
+   * shape - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which has no Android glyph
+   * in its trigger to sample. Empty before the first probe.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPixelReport(): string;
+
+  /**
+   * TEMPORARY, test-only: sample the pixels the **open menu** is drawing, looking for
+   * `color`, and keep the answer for ``nuiTestMenuPixelReport``. Returns at once.
+   *
+   * The rows are not in this control's view: a Material `DropdownMenuPopup` is a
+   * window of its own, so sampling the trigger says nothing about a row's glyph. What
+   * is sampled is the popup's own view - the one ``nuiTestMenuProbe``'s witness
+   * already records for the menu's frame - and with no popup open there is nothing to
+   * sample, which the report says as `no popup`.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestMenuPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestMenuPixelProbe`` found, in Button's
+   * shape with one extra refusal: `n=<probes> no popup` when no menu of this mount is
+   * composed, and `n=<probes> no pixels` on iOS, whose menu is drawn by UIKit in a
+   * window this process cannot draw into a bitmap. Empty before the first probe.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestMenuPixelReport(): string;
 }
 
 /**

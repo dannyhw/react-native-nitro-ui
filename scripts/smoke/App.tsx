@@ -1,5 +1,6 @@
 import {
   Button,
+  ButtonGroup,
   Checkbox,
   Chip,
   DatePicker,
@@ -106,6 +107,7 @@ const SMOKE_CONTROLS = [
   'checkbox',
   'search-field',
   'icon-button',
+  'button-group',
   'stepper',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
@@ -113,6 +115,16 @@ const SMOKE_CONTROLS = [
 ] as const;
 
 type SmokeControl = (typeof SMOKE_CONTROLS)[number];
+
+/**
+ * The items the smoke row mounts: module-level, because `items` is an object-array prop
+ * and a literal in the JSX would be a fresh identity on every re-render of this screen.
+ */
+const SMOKE_BUTTON_GROUP_ITEMS = [
+  { id: 'copy', title: 'Copy' },
+  { id: 'cut', title: 'Cut' },
+  { id: 'paste', title: 'Paste' },
+];
 
 const READY_PREFIX = 'NITRO_UI_SMOKE_READY';
 const PENDING_PREFIX = 'NITRO_UI_SMOKE_PENDING';
@@ -336,6 +348,15 @@ export default function App(): React.ReactElement {
           accessibilityLabel="Quantity"
           onLayout={measureFor('stepper')}
           testID="SMOKE-stepper"
+        />
+        {/* Three plain action items: the shape whose height the sizing entry files. A
+            ButtonGroup is `fillWidth`, so the smoke box is the row's own height at the
+            width the smoke screen gives it - the one number a cold first frame needs. */}
+        <ButtonGroup
+          accessibilityLabel="Editing commands"
+          items={SMOKE_BUTTON_GROUP_ITEMS}
+          testID="SMOKE-button-group"
+          onLayout={measureFor('button-group')}
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a

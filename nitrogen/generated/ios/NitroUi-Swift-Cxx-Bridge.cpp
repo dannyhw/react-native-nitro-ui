@@ -9,6 +9,7 @@
 
 // Include C++ implementation defined types
 #include "HybridNitroUiBottomSheetSpecSwift.hpp"
+#include "HybridNitroUiButtonGroupSpecSwift.hpp"
 #include "HybridNitroUiButtonSpecSwift.hpp"
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiChipSpecSwift.hpp"
@@ -105,6 +106,38 @@ namespace margelo::nitro::nitroui::bridge::swift {
     return swiftPart.toUnsafe();
   }
   
+  // pragma MARK: std::function<void(const std::string& /* id */)>
+  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& id) mutable -> void {
+      swiftClosure.call(id);
+    };
+  }
+  
+  // pragma MARK: std::function<void(const std::string& /* id */, bool /* checked */, double /* eventCount */)>
+  Func_void_std__string_bool_double create_Func_void_std__string_bool_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_std__string_bool_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](const std::string& id, bool checked, double eventCount) mutable -> void {
+      swiftClosure.call(id, checked, eventCount);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiButtonGroupSpec>
+  std::shared_ptr<HybridNitroUiButtonGroupSpec> create_std__shared_ptr_HybridNitroUiButtonGroupSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiButtonGroupSpec_cxx swiftPart = NitroUi::HybridNitroUiButtonGroupSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiButtonGroupSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiButtonGroupSpec_(std__shared_ptr_HybridNitroUiButtonGroupSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiButtonGroupSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiButtonGroupSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiButtonGroupSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiButtonGroupSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
   // pragma MARK: std::shared_ptr<HybridNitroUiCheckboxSpec>
   std::shared_ptr<HybridNitroUiCheckboxSpec> create_std__shared_ptr_HybridNitroUiCheckboxSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
     NitroUi::HybridNitroUiCheckboxSpec_cxx swiftPart = NitroUi::HybridNitroUiCheckboxSpec_cxx::fromUnsafe(swiftUnsafePointer);
@@ -135,14 +168,6 @@ namespace margelo::nitro::nitroui::bridge::swift {
     #endif
     NitroUi::HybridNitroUiChipSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
-  }
-  
-  // pragma MARK: std::function<void(const std::string& /* id */)>
-  Func_void_std__string create_Func_void_std__string(void* NON_NULL swiftClosureWrapper) noexcept {
-    auto swiftClosure = NitroUi::Func_void_std__string::fromUnsafe(swiftClosureWrapper);
-    return [swiftClosure = std::move(swiftClosure)](const std::string& id) mutable -> void {
-      swiftClosure.call(id);
-    };
   }
   
   // pragma MARK: std::shared_ptr<HybridNitroUiContextMenuSpec>

@@ -28,6 +28,7 @@ namespace margelo::nitro::nitroui::views {
     mostRecentEventCount(nitro::ReactProp<double>::fromRawValue("NitroUiChip", "mostRecentEventCount", rawProps, sourceProps.mostRecentEventCount)),
     disabled(nitro::ReactProp<bool>::fromRawValue("NitroUiChip", "disabled", rawProps, sourceProps.disabled)),
     systemImage(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiChip", "systemImage", rawProps, sourceProps.systemImage)),
+    androidIcon(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiChip", "androidIcon", rawProps, sourceProps.androidIcon)),
     testID(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiChip", "testID", rawProps, sourceProps.testID)),
     accessibilityLabel(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiChip", "accessibilityLabel", rawProps, sourceProps.accessibilityLabel)),
     nuiPerfId(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiChip", "nuiPerfId", rawProps, sourceProps.nuiPerfId)),
@@ -49,6 +50,7 @@ namespace margelo::nitro::nitroui::views {
       case hashString("mostRecentEventCount"): return true;
       case hashString("disabled"): return true;
       case hashString("systemImage"): return true;
+      case hashString("androidIcon"): return true;
       case hashString("testID"): return true;
       case hashString("accessibilityLabel"): return true;
       case hashString("nuiPerfId"): return true;

@@ -702,6 +702,8 @@ internal fun NitroUiM3Button(
   modifier: Modifier,
   onClick: () -> Unit,
   icon: NitroUiIconContent = NitroUiIconContent.Absent,
+  shapes: ButtonShapes? = null,
+  glyph: ButtonGlyph = ButtonGlyph.Both,
 ) {
   // No height is set: the scale picks Material's padding, label style and corner,
   // and Material itself lays the box out at no less than MinTouchTargetHeight, so
@@ -716,45 +718,32 @@ internal fun NitroUiM3Button(
   // `Pending` takes the slot too. That is the point of it: the box the ladder
   // describes is the box the first frame draws, and the glyph arriving later
   // changes what is in the slot and not the size of it.
+  val showsGlyph = glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent
+  // An `iconOnly` item whose glyph never arrives draws its title instead, so the box it
+  // is padded for has to be the title's box: see [buttonGlyphDrawsTitle].
+  val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
   val padding =
-    if (icon == NitroUiIconContent.Absent) {
+    if (!showsGlyph || !drawsTitle) {
+      // Symmetric either way: the plain padding - or the padding of a button whose only
+      // content is a glyph, where the leading inset for a label that is not there would
+      // lean the glyph against the trailing edge.
       contentPaddingFor(variant, scale)
     } else {
       ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
     }
-  val labelStyle = buttonLabelStyle(scale)
-  val shapes = buttonShapes(cornerFor(variant, shape), scale)
+  // The caller's corner wins when it has one: a `ButtonGroup` item is sent the
+  // connected leading/middle/trailing shape, which is the group's whole look, and
+  // `null` keeps the variant's own (Button's and Menu's trigger's) answer.
+  val resting = shapes ?: buttonShapes(cornerFor(variant, shape), scale)
   val content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
-    // The glyph goes in the slot Material's `Button` would use, in the one helper
-    // Menu's split trigger uses too - [NitroUiIconSlotContent]. It draws the artwork
-    // tinted with `LocalContentColor` (not [buttonColors]' resting `contentColor`,
-    // which ignores `enabled` and would leave a disabled control's glyph at full
-    // strength - the harness's disabled probe catches that), and it paints an empty
-    // slot for `Pending`, which is the whole of D43's sizing rule: the box comes from
-    // `iconSizeFor(scale)`, the same rung that sets the control's height, so the
-    // frame before a dev-server file and the frame after it are one box.
-    NitroUiIconSlotContent(
-      icon = icon,
-      size = ButtonDefaults.iconSizeFor(scale.height),
-      spacing = ButtonDefaults.iconSpacingFor(scale.height),
-    )
-    // One line, tail-truncated: the control's intrinsic width is the title's
-    // width, and a caller who wants a narrower box gives it a `width` - then the
-    // label truncates instead of painting outside its box (the iOS content does
-    // the same).
-    Text(
-      text = title,
-      style = labelStyle,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    NitroUiButtonLabel(title = title, scale = scale, icon = icon, glyph = glyph)
   }
   val target: Modifier = modifier
   when (variant) {
       ButtonVariant.Filled ->
         Button(
           onClick = onClick,
-          shapes = shapes,
+          shapes = resting,
           modifier = target,
           enabled = enabled,
           colors = colors,
@@ -764,7 +753,7 @@ internal fun NitroUiM3Button(
       ButtonVariant.Tonal ->
         FilledTonalButton(
           onClick = onClick,
-          shapes = shapes,
+          shapes = resting,
           modifier = target,
           enabled = enabled,
           colors = colors,
@@ -774,7 +763,7 @@ internal fun NitroUiM3Button(
       ButtonVariant.Outlined ->
         OutlinedButton(
           onClick = onClick,
-          shapes = shapes,
+          shapes = resting,
           modifier = target,
           enabled = enabled,
           colors = colors,
@@ -784,7 +773,7 @@ internal fun NitroUiM3Button(
       ButtonVariant.Text ->
         TextButton(
           onClick = onClick,
-          shapes = shapes,
+          shapes = resting,
           modifier = target,
           enabled = enabled,
           colors = colors,
@@ -794,7 +783,7 @@ internal fun NitroUiM3Button(
       ButtonVariant.Elevated ->
         ElevatedButton(
           onClick = onClick,
-          shapes = shapes,
+          shapes = resting,
           modifier = target,
           enabled = enabled,
           colors = colors,
@@ -802,6 +791,90 @@ internal fun NitroUiM3Button(
           content = content,
         )
     }
+}
+
+/**
+ * Which half of an item's label to draw: the glyph, the text, or both.
+ *
+ * The three answers a `ButtonGroup`'s `labelStyle` reduces to on this platform.
+ * `ButtonGlyph.Both` is what a `Button` and a Menu's trigger have always drawn, so
+ * they pass nothing and see nothing change.
+ */
+internal enum class ButtonGlyph {
+  Both,
+  TitleOnly,
+  IconOnly,
+}
+
+/**
+ * Whether the label draws a *title*.
+ *
+ * `labelStyle='iconOnly'` means "prefer the glyph", not "draw nothing": an item with no
+ * `androidIcon` - none named, or one that does not resolve - falls back to the title
+ * rather than shipping an empty button, which is a control with no pixels and nothing for
+ * a thumb to hit. Measured before the fix: an `iconOnly` item with no glyph drew a box
+ * with nothing in it, and the harness's a11y probe read `text=` empty for it.
+ *
+ * The label and both item composables ask the same question - what does this box hold -
+ * so it is answered here rather than three times.
+ */
+internal fun buttonGlyphDrawsTitle(
+  glyph: ButtonGlyph,
+  icon: NitroUiIconContent,
+): Boolean = glyph != ButtonGlyph.IconOnly || icon == NitroUiIconContent.Absent
+
+/**
+ * The label of a Material 3 button: the icon slot, then the title.
+ *
+ * Extracted from [NitroUiM3Button] so a `ButtonGroup`'s toggle items - which are
+ * `ToggleButton`s and cannot go through [NitroUiM3Button] at all - draw the *same*
+ * label as its action items. Two copies of this composition is how a group's
+ * buttons and its toggles stop lining up.
+ *
+ * The glyph goes in the slot Material's `Button` would use, in the one helper
+ * Menu's split trigger uses too - [NitroUiIconSlotContent]. It draws the artwork
+ * tinted with `LocalContentColor` (not [buttonColors]' resting `contentColor`,
+ * which ignores `enabled` and would leave a disabled control's glyph at full
+ * strength - the harness's disabled probe catches that), and it paints an empty
+ * slot for `Pending`, which is the whole of D43's sizing rule: the box comes from
+ * `iconSizeFor(scale)`, the same rung that sets the control's height, so the frame
+ * before a dev-server file and the frame after it are one box.
+ */
+@Composable
+internal fun NitroUiButtonLabel(
+  title: String,
+  scale: ButtonScale,
+  icon: NitroUiIconContent,
+  glyph: ButtonGlyph = ButtonGlyph.Both,
+) {
+  val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
+  if (glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent) {
+    NitroUiIconSlotContent(
+      icon = icon,
+      size = ButtonDefaults.iconSizeFor(scale.height),
+      // The gap is the space *between* a glyph and a title. When the glyph is the whole
+      // content it is a trailing inset on one side of a box with none on the other, so
+      // the glyph sits off centre by exactly the icon gap.
+      spacing =
+        if (drawsTitle) {
+          ButtonDefaults.iconSpacingFor(scale.height)
+        } else {
+          0.dp
+        },
+    )
+  }
+  if (drawsTitle) {
+    // One line, tail-truncated: the control's intrinsic width is the title's
+    // width, and a caller who wants a narrower box gives it a `width` - then the
+    // label truncates instead of painting outside its box (the iOS content does
+    // the same).
+    Text(
+      text = title,
+      style = buttonLabelStyle(scale),
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
 }
 
 /** The Hybrid View React renders as `NitroUiButton`. */

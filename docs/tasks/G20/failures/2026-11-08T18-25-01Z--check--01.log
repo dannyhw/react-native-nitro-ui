@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T18:25:01.982Z on code tree `5932831f993b` at HEAD `bd6a3f6` (branch `task/G20-button-group`)
+- Command: `bun run check`
+- Result: fail, exit 1, 154699 ms
+- Load: start 12.64, end 13.28, median 13.25, max 18.13
+- Device: android / device `emulator-5574` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/check-2026-11-08T18-25-01.213Z.log` (<store>/task/G20-button-group/check-2026-11-08T18-25-01.213Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/readme-components.test.js`
+- `● the README shows every component with both screenshots › has a Components row, an import line and an img for every screenshot`
+- `expect(received).toEqual(expected) // deep equality`
+- `● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width`
+- `FAIL scripts/__tests__/real-input-a11y.test.js`
+- `● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "nitrogen:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3133 — the rest is in the full log above)
+
+```
+
+    - Expected  - 1
+    + Received  + 4
+
+    - Array []
+    + Array [
+    +   "ButtonGroup: docs/images/components/button-group-ios.png does not exist",
+    +   "ButtonGroup: docs/images/components/button-group-android.png does not exist",
+    + ]
+
+      252 |     }
+      253 |
+    > 254 |     expect(problems).toEqual([]);
+          |                      ^
+      255 |   });
+      256 | });
+      257 |
+
+      at Object.toEqual (scripts/__tests__/readme-components.test.js:254:22)
+
+FAIL scripts/__tests__/real-input-a11y.test.js
+  ● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt
+
+    ENOENT: no such file or directory, open '<repo>/scripts/__tests__/fixtures/a11y/button-group.xml'
+
+      41 |       id,
+      42 |       parseHierarchy(
+    > 43 |         readFileSync(`${__dirname}/fixtures/a11y/${id}.xml`, 'utf8')
+         |                     ^
+      44 |       )
+      45 |     );
+      46 |   }
+
+      at tree (scripts/__tests__/real-input-a11y.test.js:43:21)
+      at tree (scripts/__tests__/real-input-a11y.test.js:90:46)
+          at Array.map (<anonymous>)
+      at Object.map (scripts/__tests__/real-input-a11y.test.js:89:36)
+
+
+Test Suites: 2 failed, 79 passed, 81 total
+Tests:       3 failed, 1938 passed, 1941 total
+Snapshots:   0 total
+Time:        148.587 s, estimated 159 s
+Ran all test suites.
+error: script "test" exited with code 1
+──────── full log: nitrogen:check ────────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 22/22 HybridObjects in 1.3s!
+💡  Your code is in <tmp>/nitrogen-check-1aebSa/nitrogen/generated
+‼️   Added 725 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiPopoverComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiIconButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.mm
+nitrogen-check: patched HybridNitroUiIconButtonManager.kt
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.mm
+nitrogen-check: patched HybridNitroUiButtonGroupManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverComponent.mm
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/JFunc_void_std__string_bool_double.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/JHybridNitroUiButtonGroupSpec.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/JHybridNitroUiButtonGroupSpec.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/JNitroUiButtonGroupItem.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/JNitroUiButtonGroupSize.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/views/JHybridNitroUiButtonGroupStateUpdater.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/c++/views/JHybridNitroUiButtonGroupStateUpdater.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string_bool_double.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonGroupSpec.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonGroupItem.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonGroupSize.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonGroupManager.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonGroupStateUpdater.kt is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/c++/HybridNitroUiButtonGroupSpecSwift.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/c++/HybridNitroUiButtonGroupSpecSwift.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/c++/views/HybridNitroUiButtonGroupComponent.mm is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/swift/Func_void_std__string_bool_double.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/swift/HybridNitroUiButtonGroupSpec.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/swift/HybridNitroUiButtonGroupSpec_cxx.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/swift/NitroUiButtonGroupItem.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/ios/swift/NitroUiButtonGroupSize.swift is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/HybridNitroUiButtonGroupSpec.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/HybridNitroUiButtonGroupSpec.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/NitroUiButtonGroupItem.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/NitroUiButtonGroupSize.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/views/HybridNitroUiButtonGroupComponent.cpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/c++/views/HybridNitroUiButtonGroupComponent.hpp is not committed (run `bun run nitrogen`).
+nitrogen-check: ../../../../../..<tmp>/nitrogen-check-1aebSa/nitrogen/generated/shared/json/NitroUiButtonGroupConfig.json is not committed (run `bun run nitrogen`).
+
+nitrogen-check: 28 drift issue(s).
+error: script "nitrogen:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 154.7 s - note: the code tree moved during the run (2df32cea47e3 now), so this line describes 5932831f993b
+gate: recorded in .gates/task/G20-button-group.jsonl
+
+```
