@@ -4853,6 +4853,125 @@ const CHECKS = {
       `name node reports focusable=${String(named[0]?.focusable)} - ` +
         'kept as evidence, not asserted'
     );
+
+    // 9. The `radio` variant (G26). This is the one Picker whose options a real tap
+    //    can reach *directly*: the rows are the control, in the app's own window, so
+    //    there is no popup to open, no window to wait for, and nothing to aim at but
+    //    the row's label. Three claims, and the first two are the same event read
+    //    from two ends - what JS was told, and what the accessibility tree says.
+    const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
+    const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
+    await t.requireControlOnScreen('Real-input radio picker');
+    t.log.checkEquals(
+      'the radio group has reported no index before a touch',
+      t.requireEcho(ECHO.radioIndex),
+      '-'
+    );
+    t.log.checkEquals(
+      'and no popup window belongs to it - the rows are the control',
+      t.popupWindowCount(),
+      0
+    );
+    // A real tap on row 2. `tapOptionUntilValue` re-finds the row each attempt and
+    // stops re-pressing once the label is gone from the tree; for a row that is
+    // always up, a repeat tap on the row already chosen is the control's own no-op,
+    // so a retry can never double-count a pick.
+    t.log.checkEquals(
+      'a real tap on radio row 2 reaches JS as index 2',
+      await t.tapOptionUntilValue(
+        RADIO_ROWS[2],
+        ECHO.radioIndex,
+        '2',
+        'a real tap on the radio row to register'
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'one row tap reports one change',
+      t.requireEcho(ECHO.radioEvents),
+      '1'
+    );
+    t.log.checkEquals(
+      'a row tap opened no window',
+      t.waitForPopupCount(0, 'the row tap to open nothing'),
+      0
+    );
+    // The same pick, read from the tree a screen reader navigates: exactly one row
+    // says `checked`, and it is the row that was tapped. This is the radio group's
+    // version of step 1's "the open menu marks the current choice selected" - and
+    // stronger, because all three rows are on screen to be compared.
+    for (const [row, chosen] of [
+      [RADIO_ROWS[0], false],
+      [RADIO_ROWS[1], false],
+      [RADIO_ROWS[2], true],
+    ]) {
+      t.log.checkEquals(
+        `the tree marks "${row}" as ${chosen ? 'the chosen row' : 'not chosen'}`,
+        String(t.optionIsSelected(row)),
+        String(chosen)
+      );
+    }
+    // A row of a radio group is a RadioButton node, and `checked` alone would also
+    // be true of a plain row that merely drew a dot. The role is the class Compose
+    // gives `Role.RadioButton`, and the group's own name is on the container.
+    const radioNodes = t.nodesNamed('Real-input radio picker');
+    t.log.checkEquals(
+      'the group is named once, so TalkBack announces the group and then its rows',
+      radioNodes.length,
+      1
+    );
+    // Tapping the row already chosen is the no-op the menu refuses to report too.
+    await t.tapNode(t.waitForOption(RADIO_ROWS[2], 'the row already chosen'));
+    t.log.checkEquals(
+      'tapping the row that is already chosen reports nothing',
+      t.requireEchoToStay(
+        ECHO.radioEvents,
+        '1',
+        'a repeat tap on the chosen row'
+      ),
+      '1'
+    );
+    // The disabled group: its rows say so in the tree, and a real tap on one moves
+    // nothing. Both halves matter - a row that *looks* disabled but answers a finger
+    // is the bug, and a row that refuses while the tree says it is enabled is the
+    // same bug pointing the other way for a screen reader.
+    await t.requireControlOnScreen('Real-input disabled radio picker');
+    for (const row of RADIO_LOCKED_ROWS) {
+      const [node] = t.dump().filter((n) => n.text === row);
+      t.log.checkEquals(
+        `the disabled group's row "${row}" says it is not enabled`,
+        String(node?.enabled),
+        'false'
+      );
+    }
+    await t.tapNode(
+      t.waitForOption(
+        RADIO_LOCKED_ROWS[1],
+        'the disabled group to have a row on screen'
+      )
+    );
+    t.log.checkEquals(
+      'a real tap on a disabled row reports nothing',
+      t.requireEchoToStay(
+        ECHO.radioIndex,
+        '2',
+        'a tap on a disabled radio row'
+      ),
+      '2'
+    );
+    // The enabled group still works after all of that, which is what turns the line
+    // above into "that row refused" rather than "the screen stopped answering".
+    await t.requireControlOnScreen('Real-input radio picker');
+    t.log.checkEquals(
+      'and a real tap on row 1 of the enabled group still echoes',
+      await t.tapOptionUntilValue(
+        RADIO_ROWS[1],
+        ECHO.radioIndex,
+        '1',
+        'a second real tap on another radio row'
+      ),
+      '1'
+    );
   },
 };
 

@@ -34,6 +34,10 @@ final class PickerModel: NitroUiModel {
   var defaultSelectedIndex: Double = 0
   var didApplyDefault = false
   /// `'menu'` or `'wheel'`; the wrapper normalises, and the setter guards again.
+  ///
+  /// Never `'radio'`: this platform has no radio-group picker style, so the
+  /// wrapper sends the menu and ``resolvedVariant:`` would answer the same even if
+  /// it did not (DECISIONS D38 item 4).
   var variant = "menu"
   /// The picker's label. Drawn where the platform draws one, and used as the
   /// accessibility label when the caller did not give a better one.
@@ -57,6 +61,21 @@ final class PickerModel: NitroUiModel {
   /// cannot disagree about what the variant meant.
   static func isWheel(_ variant: String) -> Bool {
     return variant == "wheel"
+  }
+
+  /// The control a variant name means on this platform.
+  ///
+  /// `'radio'` is Android's: SwiftUI's radio-group style, `RadioGroupPickerStyle`,
+  /// is `@available(iOS, unavailable)`, so there is nothing here to host, and
+  /// DECISIONS D38 item 4 rules that `Picker variant="radio"` renders the menu on
+  /// iOS rather than an imitation of a control Apple does not ship. `Picker.tsx`
+  /// resolves that before the prop is sent (it also decides the sizing key, which
+  /// must name the control that is actually drawn), so `radio` reaching this
+  /// function is the guard rather than the route - and the guard answers "menu",
+  /// which is what the docs promise either way. An app that needs every option
+  /// visible on iOS uses `SegmentedControl` for up to about five options.
+  static func resolvedVariant(_ variant: String) -> String {
+    return variant == "wheel" ? "wheel" : "menu"
   }
 
   /// A choice index that exists in `options`, as a whole number in range.
@@ -339,9 +358,9 @@ final class HybridNitroUiPicker: HybridNitroUiPickerSpec, RecyclableView {
   var variant: String {
     get { model.variant }
     set {
-      // The wrapper is the only writer and sends one of two names; anything else
-      // behaves as `'menu'`, which is what the spec documents.
-      let next = PickerModel.isWheel(newValue) ? "wheel" : "menu"
+      // The wrapper is the only writer and sends one of three names; on this
+      // platform two of the three are the menu, which is what the spec documents.
+      let next = PickerModel.resolvedVariant(newValue)
       guard next != model.variant else { return }
       model.variant = next
       // The one prop that changes the control's *size policy*: a menu button is as

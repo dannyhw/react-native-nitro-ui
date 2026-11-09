@@ -80,7 +80,7 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
   {
     id: 'picker',
     title:
-      'real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup',
+      'real tap opens the menu, a real tap on a row reports it, an unmount while open leaks no popup, and the radio variant echoes a real row tap',
     screen: 'picker',
   },
   {

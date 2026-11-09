@@ -228,6 +228,23 @@ export function SizePicker() {
     />
   );
 }
+
+export function SizeRadio() {
+  const [index, setIndex] = useState(0);
+
+  // `variant="radio"` keeps every option on screen: Android draws a Material radio
+  // group, one row per choice; iOS has no radio-group picker style, so it draws the
+  // menu above.
+  return (
+    <Picker
+      accessibilityLabel="Size"
+      onChange={(event) => setIndex(event.index)}
+      options={['Small', 'Medium', 'Large']}
+      selectedIndex={index}
+      variant="radio"
+    />
+  );
+}
 // #endregion
 
 // #region date-picker

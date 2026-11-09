@@ -86,7 +86,9 @@ export interface NitroUiPickerHandle {
  * [NitroUiIntrinsicProps](../../core/NitroUiIntrinsicProps.ts). For a Picker the
  * key carries the variant, the options, the selected title and the label: a menu
  * button is as wide as the title it shows, so a new selection is a new size
- * configuration (`docs/architecture/sizing.md`).
+ * configuration (`docs/architecture/sizing.md`). A `radio` group leaves the
+ * selection out - it paints every label at once, so which row is chosen moves
+ * nothing - and on iOS `radio` is spelled `menu` before it gets here.
  */
 export interface NativeNitroUiPickerProps
   extends HybridViewProps, NitroUiIntrinsicProps {
