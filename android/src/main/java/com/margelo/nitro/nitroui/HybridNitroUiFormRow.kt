@@ -1,13 +1,3 @@
-    contentDescription = null
-    isClickable = false
-    isLongClickable = false
-    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
-    if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-      if (!hybrid.pressable) return false
-      taps += 1
-      hybrid.firePress()
-      return true
-    }
 package com.margelo.nitro.nitroui
 
 import android.os.Bundle
@@ -282,6 +272,10 @@ internal class NitroUiFormRowView(
     // mount to pull this view out of the pool is then announced with a name its own app never
     // gave it — which is what made the Form's own screen name a plain row (fix round 1). The
     // label the *new* mount wants arrives from its own `applyChrome`, after this.
+    contentDescription = null
+    isClickable = false
+    isLongClickable = false
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
   /**
@@ -298,6 +292,12 @@ internal class NitroUiFormRowView(
     action: Int,
     args: Bundle?,
   ): Boolean {
+    if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+      if (!hybrid.pressable) return false
+      taps += 1
+      hybrid.firePress()
+      return true
+    }
     return super.performAccessibilityAction(action, args)
   }
 
