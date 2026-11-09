@@ -67,6 +67,8 @@ target_sources(
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.cpp
+  ../nitrogen/generated/shared/c++/HybridNitroUiStepperSpec.cpp
+  ../nitrogen/generated/shared/c++/views/HybridNitroUiStepperComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
   ../nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
   ../nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
@@ -110,6 +112,8 @@ target_sources(
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.cpp
+  ../nitrogen/generated/android/c++/JHybridNitroUiStepperSpec.cpp
+  ../nitrogen/generated/android/c++/views/JHybridNitroUiStepperStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
   ../nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
   ../nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp

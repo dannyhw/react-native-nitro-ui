@@ -37,6 +37,22 @@
       "why": "the split button's trailing chevron (the icon Material's split button uses)"
     },
     {
+      "path": "android/src/main/res/drawable/nitroui_remove.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/remove/materialsymbolsoutlined/remove_24px.xml",
+      "sha256": "68365a2604c6cf88d2d3a091936d07dacb8a311d4d3544a00091024bbb29631d",
+      "symbol": "remove",
+      "style": "materialsymbolsoutlined",
+      "why": "the minus half of a Stepper (Material Symbols' `remove`; Android has no stepper control)"
+    },
+    {
+      "path": "android/src/main/res/drawable/nitroui_add.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/add/materialsymbolsoutlined/add_24px.xml",
+      "sha256": "784176dc9c204f9d2724d41e1b6fc10020780424364d246de2237875467c6980",
+      "symbol": "add",
+      "style": "materialsymbolsoutlined",
+      "why": "the plus half of a Stepper (Material Symbols' `add`; Android has no stepper control)"
+    },
+    {
       "path": "licenses/material-symbols/LICENSE",
       "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/LICENSE",
       "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd"

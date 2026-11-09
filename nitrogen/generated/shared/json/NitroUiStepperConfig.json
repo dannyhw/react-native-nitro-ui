@@ -1,0 +1,22 @@
+{
+  "uiViewClassName": "NitroUiStepper",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "value": true,
+    "defaultValue": true,
+    "mostRecentEventCount": true,
+    "minimumValue": true,
+    "maximumValue": true,
+    "step": true,
+    "disabled": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onValueChange": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}
