@@ -446,6 +446,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // one turn later, with the element on screen (fix round 1, item 8).
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
+      // A list with items and no cells is stuck: `apply` alone does not always bring a
+      // layout pass, and the pass that would has nothing left to invalidate. The first
+      // mount is saved by `listNeedsFrame`, which lays the list out once its frame
+      // arrives; a Form that re-mounts into a frame that never changed is not, and its
+      // rows then wait for a cell forever (five items on screen, one row shown).
+      if list.visibleCells.isEmpty,
+        (dataSource?.snapshot().numberOfItems ?? 0) > 0 {
+        list.collectionViewLayout.invalidateLayout()
+        list.layoutIfNeeded()
+      }
       if self.reconcileBands() {
         self.list.collectionViewLayout.invalidateLayout()
       }
@@ -866,7 +876,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// `safeAreaInsetsDidChange`. E7 measured the gap left by not answering either as 72 pt on
   /// every row of a form at rest.
   func reportGeometry() {
-    guard holding.superview != nil else { return }
+    // A list that is not on screen has no geometry to report, and reporting it is not
+    // merely useless: UIKit shifts `contentOffset` itself as a scroll view leaves the window
+    // (`_didMoveFromWindow:toWindow:` -> `_stopScrollingNotify:` -> `scrollViewDidScroll`),
+    // and by then the JS side of this Form's sections may already be gone - calling into a
+    // callback that has been torn down is a fatal error, not a no-op. Measured: a Form that
+    // was scrolled when its screen went away took the whole app with it, and the next test
+    // suite in the same app died with "the app bridge disconnected" (fix round 1).
+    guard holding.superview != nil, list.window != nil else { return }
     list.layoutIfNeeded()
 
     let offset = Double(list.contentOffset.y)
@@ -1026,6 +1043,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "rows=\(rows)",
       "items=\(dataSource?.snapshot().numberOfItems ?? -1)",
       "inCells=\(inCells)",
+      // Where the list itself is: is it in a window, how tall is it, how much content does
+      // it hold and how many items does it think are visible. A Form that reports rows and
+      // no cells says which of its two jobs stopped (fix round 1).
+      "screen=\(list.window != nil ? 1 : 0),\(Self.number(list.bounds.height)),\(Self.number(list.contentSize.height)),\(list.indexPathsForVisibleItems.count)",
       "orphans=\(orphans)",
       "stale=\(stale)",
       "alive=\(knownRows.count)",
