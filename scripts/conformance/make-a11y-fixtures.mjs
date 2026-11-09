@@ -8,7 +8,8 @@
  * asserting an imagined tree — the failure mode AGENTS.md calls out ("test fixtures must
  * not coincide with the right answer", and here, must not be *invented*).
  *
- * What is kept per control is the named node and its real ancestors, verbatim: the same
+ * What is kept per control is the named node and its real ancestors (and, for a group
+ * case, the actable nodes inside its box), verbatim: the same
  * attribute strings, in the same document order, so `parseHierarchy` sees a subtree of
  * the dump rather than a paraphrase of it. Nodes are dropped only when their box does not
  * contain the named node — the parts of the tree a rule about one control cannot see.
@@ -21,6 +22,21 @@ import { parseHierarchy } from '../real-input/uiautomator.mjs';
 
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
 const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
+
+/**
+ * `--only <id>[,<id>…]` refreshes one control's fixture.
+ *
+ * Regenerating the whole set is the right thing after a change that could move any
+ * control's tree, and the wrong thing when one control is new: the committed fixtures are
+ * the measured basis for rules this task did not touch, and rewriting all of them makes a
+ * later diff impossible to read. The tab walk still starts from the top, so the
+ * horizontal tab strip is searched in order exactly as a full run does.
+ */
+const onlyAt = process.argv.indexOf('--only');
+const only =
+  onlyAt >= 0 && process.argv[onlyAt + 1] != null
+    ? new Set(process.argv[onlyAt + 1].split(',').map((entry) => entry.trim()))
+    : null;
 
 const TAB_LABEL = {
   switch: 'Switch',
@@ -39,6 +55,7 @@ const TAB_LABEL = {
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
   form: 'Form',
+  buttongroup: 'Groups',
 };
 
 function adb(args) {
@@ -81,45 +98,13 @@ function scrollToTop() {
   sleep(500);
 }
 
-/** Slide the example's horizontal tab bar, so a tab scrolled away comes back. */
-function scrollTabs(direction) {
-  const y = '205';
-  adb(
-    direction === 'forward'
-      ? ['input', 'swipe', '900', y, '180', y, '300']
-      : ['input', 'swipe', '180', y, '900', y, '300']
+/** Whether a dumped node reports an action a person could take. */
+function actable(node) {
+  return (
+    node.clickable === 'true' ||
+    node.checkable === 'true' ||
+    node.focusable === 'true'
   );
-  sleep(400);
-}
-
-/**
- * The tab for a screen, scrolling the bar until it is laid out.
- *
- * The bar is a `HorizontalScrollView` (X19), so a tab that is scrolled off is not in a
- * dump at all - `uiautomator` reports what is laid out, not what a list could draw. The
- * one-dump lookup predates X19, when every tab fitted; it now finds only the first
- * screenful, which is why every control added after the seventh could not be reached.
- * The bar is rewound first, so this works whichever side of the last screen the tab is on.
- *
- * @param {string} label the `content-desc` the tab carries
- */
-function findTab(label) {
-  const onScreen = () =>
-    parseHierarchy(dump()).find(
-      (node) =>
-        node.contentDesc === label &&
-        node.bounds.y1 > 100 &&
-        node.bounds.y1 < 300
-    ) ?? null;
-  for (let i = 0; i < 6; i += 1) scrollTabs('back');
-  const atStart = onScreen();
-  if (atStart != null) return atStart;
-  for (let i = 0; i < 14; i += 1) {
-    scrollTabs('forward');
-    const candidate = onScreen();
-    if (candidate != null) return candidate;
-  }
-  return null;
 }
 
 /**
@@ -139,7 +124,17 @@ function subtree(xml, label) {
     a.bounds.y1 <= b.bounds.y1 &&
     a.bounds.x2 >= b.bounds.x2 &&
     a.bounds.y2 >= b.bounds.y2;
-  const kept = nodes.filter((node) => node === named || inside(node, named));
+  const kept = nodes.filter(
+    (node) =>
+      node === named ||
+      inside(node, named) ||
+      // A `role: 'container'` case is graded on what its box *contains*
+      // (`hasActableMembers` in `a11y.mjs`), and a group's members are siblings of the
+      // merged node rather than children of it — ancestry alone would drop the very items
+      // the rule asks about. Only the actable ones are kept, so a container's fixture
+      // stays as small as every other control's.
+      (node !== named && inside(named, node) && actable(node))
+  );
   const raw = [...xml.matchAll(/<node\b[^>]*?\/?>/g)];
   const lines = kept.map((node) => {
     const index = nodes.indexOf(node);
@@ -155,9 +150,38 @@ function subtree(xml, label) {
   };
 }
 
+/**
+ * The tab bar's node for `label`, scrolling the strip sideways until it shows.
+ *
+ * The bar is a horizontal scroller and the app now has more tabs than fit one
+ * screen, so a control added late can sit off-screen at every vertical scroll
+ * position: looking at one dump only was fine while the tabs fitted, and started
+ * to answer "no <screen> tab" for the tail of the list once they did not. The strip
+ * keeps its own scroll position between screens, and the controls are visited in
+ * tab order, so this walks forward rather than hunting.
+ */
+function findTab(label) {
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    const tab = parseHierarchy(dump()).find(
+      (node) =>
+        node.contentDesc === label &&
+        node.bounds.y1 > 100 &&
+        node.bounds.y1 < 300
+    );
+    if (tab != null) {
+      return tab;
+    }
+    // A leftward swipe on the bar's own row: the tab strip, not the page.
+    adb(['input', 'swipe', '900', '200', '120', '200', '300']);
+    sleep(600);
+  }
+  return null;
+}
+
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
 for (const control of A11Y_CONTROLS) {
+  if (only != null && !only.has(control.id)) continue;
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();

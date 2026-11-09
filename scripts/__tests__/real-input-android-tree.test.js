@@ -19,7 +19,11 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
-import { nativeChecked, nativeEnabled } from '../real-input/android-tree.mjs';
+import {
+  nativeChecked,
+  nativeEnabled,
+  tightestFlaggedNode,
+} from '../real-input/android-tree.mjs';
 
 /**
  * A node shaped like the ones in a real dump.
@@ -185,5 +189,105 @@ describe('real-input Android enabled state', () => {
       )
     ).toBeNull();
     expect(nativeEnabled(DISABLED_CHIP, 'Not on this screen')).toBeNull();
+  });
+});
+
+/**
+ * `tightestFlaggedNode`, against the shape measured on G20's ButtonGroup screen:
+ * Material merges the *row*, then draws each item as its own box (the one that
+ * carries `clickable`, and for a toggle `checkable`/`checked`), the title as a
+ * separate `TextView` inside it, and Compose's `Role.Checkbox` decoration as a third
+ * node between the two. `real-input`'s item search starts from the title, because
+ * that is the only thing in the dump that says which item it means.
+ *
+ * The three nodes are deliberately the same shape apart from the flags: a rule that
+ * took the first node in document order, the loosest container, or the named node
+ * itself would each pick one of the decoys, and the `ButtonGroup` check would then
+ * report a checked toggle as unchecked and a disabled item as enabled.
+ */
+function groupNode({
+  text = '',
+  clickable = 'false',
+  checkable = 'false',
+  checked = 'false',
+  enabled = 'true',
+  cls = 'android.view.View',
+  bounds,
+}) {
+  return parseHierarchy(
+    `<hierarchy><node text="${text}" class="${cls}" clickable="${clickable}" ` +
+      `checkable="${checkable}" checked="${checked}" enabled="${enabled}" ` +
+      `bounds="${bounds}" /></hierarchy>`
+  )[0];
+}
+
+/** The `Bold` toggle item of "Real-input formatting toggles", as measured. */
+const TOGGLE_ITEM = [
+  groupNode({ bounds: '[0,0][1080,2424]' }),
+  // A row that *is* clickable, and answers for the whole group: the loosest box that
+  // contains the title, and the wrong answer to both questions below. The real row is
+  // not clickable, but a rule that picked the loosest container cannot tell the two
+  // screens apart, and the fixture must be able to.
+  groupNode({
+    clickable: 'true',
+    checkable: 'true',
+    checked: 'false',
+    enabled: 'true',
+    bounds: '[189,947][891,1073]',
+  }),
+  groupNode({
+    clickable: 'true',
+    checkable: 'true',
+    checked: 'true',
+    bounds: '[189,948][421,1073]',
+  }), // the item
+  groupNode({
+    cls: 'android.widget.CheckBox',
+    bounds: '[189,958][421,1063]',
+  }), // the Role.Checkbox decoration
+  groupNode({
+    text: 'Bold',
+    cls: 'android.widget.TextView',
+    bounds: '[305,984][379,1037]',
+  }), // the title
+];
+
+describe('real-input Android container lookup', () => {
+  it('answers the item, not the title, the decoration or the row', () => {
+    const title = TOGGLE_ITEM[4];
+    expect(tightestFlaggedNode(TOGGLE_ITEM, title, 'checkable')).toBe(
+      TOGGLE_ITEM[2]
+    );
+    expect(tightestFlaggedNode(TOGGLE_ITEM, title, 'clickable')).toBe(
+      TOGGLE_ITEM[2]
+    );
+    expect(tightestFlaggedNode(TOGGLE_ITEM, title, 'checkable').checked).toBe(
+      'true'
+    );
+  });
+
+  it('carries the disabled answer out of the item, where it lives', () => {
+    // The measured trap, one rung smaller than the Chip's: the title of a disabled
+    // item says `enabled="true"` and the item's own box says `enabled="false"`.
+    const disabled = TOGGLE_ITEM.map((n, i) =>
+      i === 2 ? { ...n, checked: 'false', enabled: 'false' } : n
+    );
+    expect(
+      tightestFlaggedNode(disabled, disabled[4], 'clickable').enabled
+    ).toBe('false');
+    expect(disabled[4].enabled).toBe('true');
+  });
+
+  it('says null rather than naming somebody else', () => {
+    // A title with no clickable box around it is not an item a reader can act on,
+    // and `itemOf` aborts on that reading — so the helper must not answer.
+    expect(
+      tightestFlaggedNode(
+        [TOGGLE_ITEM[0], TOGGLE_ITEM[4]],
+        TOGGLE_ITEM[4],
+        'clickable'
+      )
+    ).toBeNull();
+    expect(tightestFlaggedNode(TOGGLE_ITEM, null, 'clickable')).toBeNull();
   });
 });

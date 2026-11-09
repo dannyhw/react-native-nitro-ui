@@ -1,0 +1,93 @@
+# Failure excerpt — harness:android:ButtonGroup
+
+- Ran: 2026-11-09T01:31:40.978Z on code tree `073e61d47941` at HEAD `fd6c594` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ButtonGroup`
+- Result: fail, exit 1, 28913 ms
+- Load: start 11.57, end 8.88, median 10.29, max 11.57
+- Device: android / device `emulator-5570` / lease `G20-jtox6`
+- Full log: `task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-31-40.978Z.log` (<store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-31-40.978Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › keeps one row when the trailing toggle of a connected group overflows`
+- `● ButtonGroup · G20 › seeds an uncontrolled item once, and never lets a re-render undo a tap`
+- `expected 'checked=bold;visible=none;overflow=no…' to contain 'checked=none'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-31-40.978Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-jtox6 (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.88 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ButtonGroup
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 073e61d47941, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.57/10.74 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-31-40.978Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › keeps one row when the trailing toggle of a connected group overflows
+
+    widening the well brought no more items into the row, so the row below is still the narrow layout: {"checked":"all","visible":"2","overflow":"1","row":"standard","shown":"day,week","menu":"closed","probes":"1","a11y":"none"}
+
+      [0m [90m 609 |[39m       }[33m,[39m
+       [90m 610 |[39m       () [33m=>[39m
+      [31m[1m>[22m[39m[90m 611 |[39m         [36mnew[39m [33mError[39m(
+       [90m     |[39m                  [31m[1m^[22m[39m
+       [90m 612 |[39m           [32m'widening the well brought no more items into the row, so the row below is '[39m [33m+[39m
+       [90m 613 |[39m             [32m'still the narrow layout: '[39m [33m+[39m
+       [90m 614 |[39m             [33mJSON[39m[33m.[39mstringify(reportOf([32m'bg-connected'[39m))[0m
+
+  ● ButtonGroup · G20 › seeds an uncontrolled item once, and never lets a re-render undo a tap
+
+    expected 'checked=bold;visible=none;overflow=no…' to contain 'checked=none'
+
+      [0m [90m 766 |[39m     )[33m;[39m
+       [90m 767 |[39m     [36mawait[39m sleep([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 768 |[39m     expect(handleOf([32m'bg-seed'[39m)[33m.[39mnuiTestStateReport())[33m.[39mtoContain([32m'checked=none'[39m)[33m;[39m
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 769 |[39m   })[33m;[39m
+       [90m 770 |[39m
+       [90m 771 |[39m   it([32m'takes nothing from a disabled group or a disabled item, and closes an open menu'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 7 passed, 9 total
+Snapshots:   0 total
+Time:        27.183 s
+Ran all test suites matching ButtonGroup.
+
+
+
+```

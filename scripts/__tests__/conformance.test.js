@@ -183,6 +183,7 @@ describe('coverage', () => {
     expect(manifests.map((m) => m.name)).toEqual([
       'BottomSheet',
       'Button',
+      'ButtonGroup',
       'Checkbox',
       'Chip',
       'ContextMenu',
@@ -2075,6 +2076,7 @@ describe('the a11y sweep, against a fake device', () => {
         'chip',
         'checkbox',
         'iconbutton',
+        'buttongroup',
         'host',
         'textfield',
         'searchfield',
