@@ -272,26 +272,6 @@ export const A11Y_CONTROLS = Object.freeze([
     iosTrait: 'button',
   },
   {
-    // A Stepper is one adjustable value on both platforms, not two buttons
-    // (`docs/components/stepper.md`), and Android is the half this rule can see: the
-    // row publishes the range info and the two Material buttons clear their own
-    // semantics away, so a dump has to show ONE named node with no clickable node
-    // under it. Two focus stops is precisely the bug this rule was written for (G6).
-    id: 'stepper',
-    component: 'Stepper',
-    hybridView: 'NitroUiStepper',
-    screen: 'stepper',
-    label: 'Real-input stepper',
-    role: 'interactive',
-    anchorTestId: 'real-input-stepper',
-    // What VoiceOver says, not what the tree reports: the element this control vends
-    // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
-    // element type for a trait, so the measured announcement belongs in
-    // `A11Y_EXEMPTIONS` — the Slider row's arrangement, for the same reason. Writing
-    // the measured word here would freeze the gap into the expectation.
-    iosTrait: 'adjustable',
-  },
-  {
     id: 'button-group',
     component: 'ButtonGroup',
     hybridView: 'NitroUiButtonGroup',
@@ -320,6 +300,26 @@ export const A11Y_CONTROLS = Object.freeze([
     // by their own text ("Copy", "Cut", "Paste"). So the finding to guard is a group whose
     // name stops leading to its items: a merged box with nothing pressable in it, or a
     // name that slid up onto the page.
+  },
+  {
+    // A Stepper is one adjustable value on both platforms, not two buttons
+    // (`docs/components/stepper.md`), and Android is the half this rule can see: the
+    // row publishes the range info and the two Material buttons clear their own
+    // semantics away, so a dump has to show ONE named node with no clickable node
+    // under it. Two focus stops is precisely the bug this rule was written for (G6).
+    id: 'stepper',
+    component: 'Stepper',
+    hybridView: 'NitroUiStepper',
+    screen: 'stepper',
+    label: 'Real-input stepper',
+    role: 'interactive',
+    anchorTestId: 'real-input-stepper',
+    // What VoiceOver says, not what the tree reports: the element this control vends
+    // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
+    // element type for a trait, so the measured announcement belongs in
+    // `A11Y_EXEMPTIONS` — the Slider row's arrangement, for the same reason. Writing
+    // the measured word here would freeze the gap into the expectation.
+    iosTrait: 'adjustable',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
