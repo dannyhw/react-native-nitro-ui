@@ -983,7 +983,10 @@ describe('Form (G24)', () => {
       );
       await formReport(
         (r) => Math.abs(num(r, 'origin') - num(moved, 'offset')) < 0.5,
-        'the shadow tree to be told the offset the list is at'
+        'the shadow tree to be told the offset the list is at',
+        // This case mounted `MeasureForm`, whose handle is `forms.measure`. Reading the
+        // default `form` here asked a Form that was never mounted to report.
+        'measure'
       );
     }
   });
