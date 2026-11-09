@@ -448,7 +448,7 @@ function describeBox(box: unknown): string {
 
 /** Mount the probe and wait for the Form's handle and first laid-out row. */
 async function mount(props: ProbeProps) {
-  const { rerender } = render(<Probe {...props} />);
+  const { rerender } = await render(<Probe {...props} />);
   await formRef();
   await boxOf('label-wifi');
   // The `rerender` rides along so a case can keep working in *this* surface. A second
