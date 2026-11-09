@@ -125,6 +125,8 @@ function trace(what: string, report: Record<string, string>): void {
         'placed',
         'screen',
         'offset',
+        'recycles',
+        'insetTop',
       ]
         .map((key) => `${key}=${report[key] ?? '-'}`)
         .join(';')
@@ -923,29 +925,26 @@ describe('Form (G24)', () => {
       `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
-      // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
-      // The row view is reparented into a cell, so React Native's own hit-test - which walks
-      // the shadow tree, where the row is still inside its section's holding view - does not
-      // find row content where it is drawn. Ten presses of the `Pressable` therefore reach
-      // nothing, while the same case on Android counts ten. A hosted control is different: it
-      // is a native view that answers for the point it is drawn at, and takes all ten.
-      //
       // Both waits below are for the row to be *drawn in a cell*, because on a screen short
       // enough to leave the last row in its holding view the Switch answers nothing for a
       // different reason - it is not on screen - and that would make the number below a
       // property of one simulator's height instead of the answer to question 4. A finger at
       // the drawn position reaches both, ten taps each, and `testRealInputForm` is what
       // measures that half.
-      await reportUntil(
-        () => rows.pressable?.nuiTestRowReport(),
-        (r) => r.where === 'cell',
-        'the row holding the Pressable to be drawn in a cell'
-      );
-      await reportUntil(
-        () => rows.silent?.nuiTestRowReport(),
-        (r) => r.where === 'cell',
-        'the row holding the Switch to be drawn in a cell'
-      );
+      //
+      // Asked of the Form rather than of `rows.pressable`/`rows.silent`: a handle is only a
+      // handle, and a row view that another case unmounted answers for itself forever (it
+      // reports `where=holding` for as long as you ask, whether or not the Form on screen has
+      // that row in a cell). `inCells` against the items on screen is the Form's own answer
+      // to the same question, and at this box every row is on screen, so it says the
+      // Pressable's row and the Switch's row are both drawn.
+      await drawnOnScreen('before the presses');
+      // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
+      // The row view is reparented into a cell, so React Native's own hit-test - which walks
+      // the shadow tree, where the row is still inside its section's holding view - does not
+      // find row content where it is drawn. Ten presses of the `Pressable` therefore reach
+      // nothing, while the same case on Android counts ten. A hosted control is different: it
+      // is a native view that answers for the point it is drawn at, and takes all ten.
       for (let index = 0; index < 10; index += 1) {
         await userEvent.press(pressable);
         await userEvent.press(toggle);
@@ -1212,42 +1211,44 @@ describe('Form (G24)', () => {
   });
 
   it('starts a recycled Form at the top of its own content', async () => {
-    // A `UICollectionView` keeps its `contentOffset` when its view goes back to React Native's
-    // pool, and the Form mounted into it inherits the scroll. This is not hypothetical: E7's
-    // at-rest reading of `offset=-2` against a 62 pt top inset is the `+60` that the settle case
-    // above moves the list by, arriving in a Form that case never scrolled (fix round 2, item 2).
+    // A `UICollectionView` keeps its `contentOffset` when its view goes back to React
+    // Native's pool, and the Form mounted into it inherits that scroll. This is not
+    // hypothetical: E7's at-rest reading of `offset=-2` against a 62 pt top inset is the
+    // `+60` the settle case above moves the list by, arriving in a Form that case never
+    // scrolled (fix round 2, item 2).
     //
-    // A key swap in this surface is what gets the recycled view: React Native's component-view
-    // pool is per app, and a new Form is the next thing to ask it for one. `recycles=` on the new
-    // Form's report is the witness that this is that Form.
-    const probe = await mount({
-      mode: 'base',
-      formStyle: SHORT_BOX,
-      ...counters(),
-    });
+    // Ending the surface and mounting another is the shape React Native really recycles, and
+    // `recycles=` on the new Form's report is the witness. A key swap inside one surface is
+    // not that shape, which an earlier draft of this case assumed: measured on this tree, the
+    // swap leaves `recycles`, `alive` and `applies` exactly where they were — Fabric keeps the
+    // same subtree, so nothing is being mounted and there is no new mount to reset.
+    await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     need(forms.form).nuiTestScrollTo(200);
     const scrolled = await formReport(
       (r) => num(r, 'offset') > 100,
-      'the list to have scrolled before the swap'
+      'the list to have scrolled before the recycle'
     );
-    trace('scrolled before the swap', scrolled);
+    trace('scrolled before the recycle', scrolled);
     if (IOS) {
-      await probe.rerender(
-        <Probe
-          key="second-form"
-          mode="base"
-          formStyle={SHORT_BOX}
-          {...counters()}
-        />
-      );
+      const recycled = num(scrolled, 'recycles');
+      cleanup();
+      // The pool gets the view when the surface is really gone, not when React says so.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      forgetPromisedHandles();
+      for (const map of [forms, sections, rows]) {
+        for (const key of Object.keys(map)) delete map[key];
+      }
+      await render(<Probe mode="base" formStyle={SHORT_BOX} {...counters()} />);
+      await formRef();
+      await boxOf('label-wifi');
       const next = await formReport(
-        (r) => num(r, 'rows') === 9 && num(r, 'recycles') >= 1,
-        'a recycled Form with nine rows'
+        (r) => num(r, 'rows') === 9 && num(r, 'recycles') >= recycled + 1,
+        'a Form mounted into the list the case above left scrolled (`recycles` to move)'
       );
       trace('the recycled Form', next);
       // The top of the content is wherever the list's own inset says it is, so this is one
-      // number and not a constant.
+      // number rather than a constant.
       expect(num(next, 'insetTop')).toBeGreaterThan(0);
       expect(
         Math.abs(num(next, 'offset') + num(next, 'insetTop'))
