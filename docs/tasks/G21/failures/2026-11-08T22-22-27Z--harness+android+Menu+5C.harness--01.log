@@ -1,0 +1,198 @@
+# Failure excerpt — harness:android:Menu%5C.harness
+
+- Ran: 2026-11-08T22:22:27.342Z on code tree `0d09ffbf1ab4` at HEAD `b82bf71` (branch `task/G21-android-icon-rows`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Menu\.harness`
+- Result: fail, exit 1, 115061 ms
+- Load: start 7.59, end 38.00, median 38.00, max 45.99
+- Device: android / device `emulator-5570` / lease `G21-dl60k`
+- Full log: `task/G21-android-icon-rows/harness+android+Menu+5C.harness-2026-11-08T22-22-27.342Z.log` (<store>/task/G21-android-icon-rows/harness+android+Menu+5C.harness-2026-11-08T22-22-27.342Z.log)
+- Scrubbed: 1 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Console`
+- `● Menu · the row glyphs (G21) › puts the trigger glyph in the leading half, and only there`
+- `expected 87 to be less than 0.6`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G21-android-icon-rows/harness+android+Menu+5C.harness-2026-11-08T22-22-27.342Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G21-dl60k (still live)
+  |   G20-d5vr8                G20          both              pair-a
+  |   G21-dl60k                G21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 38.00 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 175 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      group is not in the key: 57.90x48.00 -> 57.90x48.00 rows=0 delta={"corrections":0,"cachedSizes":0,"measurements":1}
+
+
+    console.log
+      title R3: short=64.76x48.00 long=129.90x48.00
+
+
+    console.log
+      picks: ["twin:copy","pick:copy","pick:delete"]
+
+
+    console.log
+      open/close: ["events:open","events:close","events:open"]
+
+
+    console.log
+      disable-while-open: ["disable:open","disable:close"]
+
+
+    console.log
+      wide list: trigger 174 px, popup 380 px (144.8 dp), floor list 316 px, start 21 vs 0, trigger box 66.29x48.00
+
+
+    console.log
+      long header: popup 735 px (280.0 dp, cap 280 dp)
+
+
+    console.log
+      short list: popup 316 px = 120.4 dp (floor 112), trigger 152 px
+
+
+    console.log
+      untitled group: android drawn=(:Open),(Share:AirDrop,Mail),(:Delete,Archive~),(More:Get Info)
+
+
+    console.log
+      drop-while-open: live 0 -> 1 -> 0
+
+
+    console.log
+      refuse previous mount: title="" measured=0.00x0.00 -> Error: "recycle" (the previous mount) never answered as "Renamed" on its new mount - the handle says title "" and measureContent() says 0.00x0.00, box null.
+
+
+    console.log
+      e2 rows: android drawn=(:Grid@Tiles+,List=,Rename@Edit the name),(Sort:[scrubbed]@Newest first~),(:Delete)
+
+
+    console.log
+      e2 in place: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      e2 remount: android drawn=(:Grid,List,Rename),(Sort:Name,Date~),(:Delete)
+
+
+    console.log
+      split halves: leading=0,0,197,126 trailing=202,0,328,126 box=124.95x48.00
+
+
+    console.log
+      split popup: menu left=202 top=142 - trailing half left=202 bottom=126 - leading half left=0
+
+
+    console.log
+      split in place: on -> off (one trigger) -> on again
+
+
+    console.log
+      split remount: split=false
+
+
+    console.log
+      split disabled: open closed by the flag, both halves inert
+
+
+    console.log
+      split sizes (declared fallback 75.10x52.00): split-size=124.95x48.00 plain-size=78.86x48.00 corrections=2
+
+
+    console.log
+      hosted anchoring: gap=16 -> 0 px at anchor bottom 126 -> 441
+
+
+    console.log
+      hosted anchor move: anchor top 126 -> 147 px, window taken down
+
+
+    console.log
+      read back: variant=outlined size=large tint=-3655765 label=Open the actions
+
+
+    console.log
+      a11y tree: named=null fallback=null plain=null
+
+
+    console.log
+      menu glyph boxes: menu-plain=68.19x48.00 menu-icon=96.38x48.00 button-icon=96.38x48.00
+
+
+    console.log
+      menu missing-glyph boxes: missing-plain=68.19x48.00 missing-icon=68.19x48.00
+
+
+    console.log
+      menu split-glyph boxes: split-noicon=124.95x48.00 split-icon=153.14x48.00
+
+
+    console.log
+      menu rung boxes: rung-small=57.90x48.00 rung-medium=64.38x48.00 rung-large=85.71x56.00 rung-xlarge=150.86x96.00 rung-xxlarge=200.76x136.00
+
+
+    console.log
+      row glyph ink: tint=slab#40434B asset=2954 name=2954 none=145
+
+
+    console.log
+      unresolved name: menu=339x388 none=339x388
+
+
+    console.log
+      checked row slot: unchecked=413x388 checked=413x388
+
+
+    console.log
+      split halves: glyph=271/126 plain=0/39
+
+  ● Menu · the row glyphs (G21) › puts the trigger glyph in the leading half, and only there
+
+    expected 87 to be less than 0.6
+
+      [0m [90m 3817 |[39m     [90m// and the chevron's half does not move at all.[39m
+       [90m 3818 |[39m     expect(lRight [33m-[39m lLeft)[33m.[39mtoBeGreaterThan(plainLRight [33m-[39m plainLLeft [33m+[39m [35m8[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 3819 |[39m     expect([33mMath[39m[33m.[39mabs(tRight [33m-[39m tLeft [33m-[39m (plainTRight [33m-[39m plainTLeft)))[33m.[39mtoBeLessThan(
+       [90m      |[39m                                                                               [31m[1m^[22m[39m
+       [90m 3820 |[39m       [35m0.6[39m
+       [90m 3821 |[39m     )[33m;[39m
+       [90m 3822 |[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 58 passed, 59 total
+Snapshots:   0 total
+Time:        113.234 s
+Ran all test suites matching Menu\.harness.
+
+
+
+```

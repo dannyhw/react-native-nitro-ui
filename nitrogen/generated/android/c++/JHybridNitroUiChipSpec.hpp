@@ -64,6 +64,8 @@ namespace margelo::nitro::nitroui {
     void setDisabled(bool disabled) override;
     std::variant<nitro::NullType, std::string> getSystemImage() override;
     void setSystemImage(const std::variant<nitro::NullType, std::string>& systemImage) override;
+    std::variant<nitro::NullType, std::string> getAndroidIcon() override;
+    void setAndroidIcon(const std::variant<nitro::NullType, std::string>& androidIcon) override;
     std::variant<nitro::NullType, std::string> getTestID() override;
     void setTestID(const std::variant<nitro::NullType, std::string>& testID) override;
     std::variant<nitro::NullType, std::string> getAccessibilityLabel() override;
@@ -85,6 +87,8 @@ namespace margelo::nitro::nitroui {
     void nuiTestPress() override;
     void nuiTestProbeAccessibility() override;
     std::string nuiTestStateReport() override;
+    void nuiTestPixelProbe(double color) override;
+    std::string nuiTestPixelReport() override;
 
   private:
     jni::global_ref<JHybridNitroUiChipSpec::JavaPart> _javaPart;

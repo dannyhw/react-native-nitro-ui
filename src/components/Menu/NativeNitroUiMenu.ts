@@ -68,6 +68,21 @@ export interface NitroUiMenuHandle {
    * a no-op on Android. Per `Menu.nitro.ts`.
    */
   nuiTestMenuProbe(): void;
+  /**
+   * Test-only (`@internal`, D14): sample this control's **trigger** for `color`.
+   * Per `Menu.nitro.ts`; iOS answers `no pixels`.
+   */
+  nuiTestPixelProbe(color: number): void;
+  /** Test-only: what that probe found. `@internal` (D14). */
+  nuiTestPixelReport(): string;
+  /**
+   * Test-only (`@internal`, D14): sample the **open menu**'s window for `color`.
+   * Android refuses with `no popup` when this mount has none composed; iOS answers
+   * `no pixels`. Per `Menu.nitro.ts`.
+   */
+  nuiTestMenuPixelProbe(color: number): void;
+  /** Test-only: what that probe found. `@internal` (D14). */
+  nuiTestMenuPixelReport(): string;
 }
 
 /**

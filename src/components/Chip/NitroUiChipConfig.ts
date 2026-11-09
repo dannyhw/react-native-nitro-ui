@@ -23,6 +23,7 @@ export const NitroUiChipConfig: ViewConfig<NativeNitroUiChipProps> = {
     mostRecentEventCount: true,
     disabled: true,
     systemImage: true,
+    androidIcon: true,
     testID: true,
     accessibilityLabel: true,
     nuiPerfId: true,

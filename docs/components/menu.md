@@ -68,7 +68,7 @@ width unless the app asks for one.
 ```ts
 interface MenuGroup    { actions?: (MenuAction | MenuSubmenu)[]; sections?: MenuSection[] }
 interface MenuAction   { id: string; title: string; disabled?: boolean; destructive?: boolean; systemImage?: string;
-                         subtitle?: string | null; checked?: boolean | null }
+                         androidIcon?: AndroidIconProp; subtitle?: string | null; checked?: boolean | null }
 interface MenuSubmenu  { id: string; title: string; systemImage?: string; items: MenuAction[] }
 interface MenuSection  { id: string; title?: string; items: MenuAction[] }
 ```
@@ -90,6 +90,10 @@ interface MenuSection  { id: string; title?: string; items: MenuAction[] }
   no value**: picking a checkable row reports its `id` through `onSelect`, exactly like
   any other row, and the check is whatever the app sends next — flip your own state in
   `onSelect`. Nothing is toggled locally.
+- `androidIcon` puts a leading glyph beside a row's title, on Android only. It takes the
+  same two forms `Button`'s prop takes. A submenu's own row has no such prop: on Android
+  it is a group label and on iOS a `UIMenu` title, and neither has a slot to draw into.
+  [The rows' glyphs](#the-rows-glyphs).
 - A submenu holds actions only. Depth stops at one level — the public type cannot
   express a submenu inside a submenu, and the wrapper has nothing to normalise into.
 - An empty `group` renders a trigger that opens nothing.
@@ -115,6 +119,7 @@ re-conversion of the struct array (`docs/research/nitro-patterns.md`).
 | Submenu            | **nests** — a real second-level menu                                 | renders its items **inline, as a group** titled with the submenu's title |
 | Section header     | `Section(header:)`; an untitled section is `Section` with **no** header | `MenuDefaults.DropdownMenuGroupLabel`, a heading; none when untitled |
 | Subtitle           | a second `Text` in the row's label → `UIAction.subtitle`              | `supportingText`                                                  |
+| Row glyph          | `systemImage` → `Image(systemName:)`, `androidIcon` accepted and ignored | `androidIcon` → Material's `MenuDefaults.LeadingIconSize` slot, in the row's own content colour |
 | Checked            | `Toggle` → `UIAction.state` `.on` / `.off`                            | `CheckableDropdownMenuItem(checked)`: selected container and leading check, `Role.Checkbox` + `selected` |
 | Primary action     | the other `Menu` init — tap runs it, `primaryAction` long-press opens | `SplitButtonLayout(leadingButton, trailingButton)`: the leading half runs it, the trailing half (`SplitButtonDefaults.*TrailingButton(checked = open)`) opens the list |
 | Destructive row    | `Button(role: .destructive)`                                         | Material 3 error colour                                          |
@@ -268,6 +273,52 @@ The boxes are the numbers `Button` prints for the same configuration, because it
 same composition; the harness compares the two directly rather than quoting a constant
 (`Menu.harness.tsx`, "takes the glyph the Button takes, into the box the Button takes").
 The measured run for this round is in `docs/tasks/G19-android-icon-iconbutton.report.md`.
+
+## The rows' glyphs
+
+`MenuAction.androidIcon` is the same prop with the same two forms —
+`require('./icons/share.xml')` or `"share"` — and all of `docs/components/button.md`,
+"Android icons" applies to it: the file format, the
+resource-name form, where Material Symbols come from and the failure table. What is
+Menu's own is the slot it lands in.
+
+- **iOS never draws it.** A row's glyph on iOS is `systemImage`, which is a name in
+  Apple's system set and has no Android counterpart; `androidIcon` is carried in the row
+  struct and never painted. A row therefore names both to look right on both platforms —
+  no `Platform.select`.
+- **Android hands Material the slot.** A row with a glyph is `DropdownMenuItem` with a
+  `leadingIcon`; the size, the colour, the gap to the title and the group insets are
+  Material's, not ours. The size is `MenuDefaults.LeadingIconSize` — **20 dp**, not the
+  24 dp an icon looks like elsewhere.
+- **The colour is the row's own content colour**, read as the row draws. It follows
+  `disabled` and the row's place in the menu without this file naming a Material role, so
+  a glyph on a disabled row is dimmed the way its title is.
+- **A checked row's check keeps the slot.** Android draws a `checked` row as a
+  `CheckableDropdownMenuItem`, and Material puts its leading check in the same slot the
+  glyph holds — so the menu is one width whether the row is checked or not, and the
+  check, not the app's glyph, is what shows. The check is what the row *means*; the glyph
+  is what an unchecked row shows.
+- **A glyph that cannot be resolved reserves nothing.** The resource table not knowing the
+  name, a file that fails to load and "no icon" all reach `leadingIcon` as `null`, so the
+  menu is exactly the menu with no icons, to the dp. (`leadingIcon` that is non-null but
+  draws nothing would still cost 20 dp, which is why the decision is made before the
+  lambda exists rather than inside it.) In development the wrapper warns once per name,
+  as `Button` does.
+- **A submenu's label takes it nowhere, on either platform.** Android flattens a submenu
+  into a group whose label is a `DropdownMenuGroupLabel` (D29) and iOS draws a `UIMenu`
+  title; neither has a leading slot, so `MenuSubmenu` has no `androidIcon` at all and the
+  flattened submenu row is sent `null` — a row inside one takes the prop like any other
+  action does. The prop was removed before a release, so nothing has to be deprecated.
+- **The rows travel in the rows array**, not as a prop of the control: the trigger's
+  `androidIcon` and a row's are different glyphs in different places, and the
+  wrapper's sizing key does not gain a field for the rows because a row is not what makes
+  the *trigger* a different box.
+
+Measured: `Menu.harness.tsx` ("draws the row glyph at the slot size, from a Metro asset
+and from a name") samples the open popup's own window — the only place a row's glyph is
+observable — and asserts the difference between a menu with the glyph and one without it
+is 20 dp squared at this device's density, ±12%. The fixture is a filled square rather
+than a glyph so that difference *is* the slot's area.
 
 ## Inside a `Host`
 
