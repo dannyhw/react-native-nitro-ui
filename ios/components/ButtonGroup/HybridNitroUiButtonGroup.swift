@@ -131,7 +131,12 @@ struct ButtonGroupCheckedSet {
 /// State of one ButtonGroup. See ``NitroUiModel`` for why this is not `@Published`.
 final class ButtonGroupModel: NitroUiModel {
   /// The items, in render order. Rendered, so a new list is a new layout.
-  var items: [ButtonGroupItemState] = []
+  ///
+  /// Republishes ``checkedReport`` because that string names the checked ids *in this
+  /// order*: an items write can change the answer without changing ``displayed``.
+  var items: [ButtonGroupItemState] = [] {
+    didSet { publishChecked() }
+  }
   var appearance: ButtonGroupAppearance = .standard
   var variant: ButtonVariant = .filled
   var scale: ButtonScale = .medium
@@ -145,7 +150,14 @@ final class ButtonGroupModel: NitroUiModel {
   var testID: String?
 
   /// The checked set on display. Written by the handshake and by a flip.
-  var displayed: Set<String> = []
+  ///
+  /// Every write republishes ``checkedReport`` — see the race note there. The writes are
+  /// the five places that move the set: `toggle`, `applyDefaults`, `pruneChecked`,
+  /// `afterUpdate`'s reconcile and `resetAll`; a `didSet` is what stops the sixth one
+  /// from being missed.
+  var displayed: Set<String> = [] {
+    didSet { publishChecked() }
+  }
   /// The handshake.
   var state = ButtonGroupCheckedSet()
   /// The ids whose `defaultChecked` has already been applied, so it is applied once.
@@ -214,8 +226,16 @@ final class ButtonGroupModel: NitroUiModel {
   // MARK: - Test witnesses
 
   private let reportLock = NSLock()
-  /// The last row probe's answer: `visible=<n>;overflow=<0|1>;shown=<ids|none>`.
-  private var rowReport = "visible=none;overflow=none;shown=none"
+  /// The last row probe's answer:
+  /// `visible=<n>;overflow=<0|1>;row=<controlGroup|standard|none>;shown=<ids|none>`.
+  private var rowReport = "visible=none;overflow=none;row=none;shown=none"
+  /// The checked half of ``stateReport()``, published rather than read.
+  ///
+  /// ``stateReport()`` is a synchronous call *from the JS thread*, while ``displayed``
+  /// and ``items`` are main-thread state — reading them there races the storage of a
+  /// `Set`. Chip's answer is the one used here: every write publishes the one string the
+  /// report needs, and the report reads only published strings, all under one lock.
+  private var checkedReport = "none"
   /// The last accessibility probe's answer.
   private var accessibilityReport = "none"
   /// How many probes have answered, so a test can tell its own from the previous one's.
@@ -231,12 +251,18 @@ final class ButtonGroupModel: NitroUiModel {
   /// just happened.
   private var placedVisible = -1
   private var placedOverflow = false
+  /// Which row the placed candidate drew — `controlGroup` or `standard`. D42 item 2 is a
+  /// decision about the *row*, so the witness has to say which row a given width got;
+  /// without it a group whose trailing toggle overflowed could look like a connected row
+  /// that is 31 pt tall at one width and 34.33 pt at another, all under one sizing key.
+  private var placedRow = "none"
 
   /// Record what the row laid out. Safe from any thread.
-  func recordPlacement(visible: Int, overflow: Bool) {
+  func recordPlacement(visible: Int, overflow: Bool, controlGroup: Bool) {
     reportLock.lock()
     placedVisible = visible
     placedOverflow = overflow
+    placedRow = controlGroup ? "controlGroup" : "standard"
     reportLock.unlock()
   }
 
@@ -245,13 +271,26 @@ final class ButtonGroupModel: NitroUiModel {
     reportLock.lock()
     probes += 1
     if placedVisible < 0 {
-      rowReport = "visible=none;overflow=none;shown=none"
+      rowReport = "visible=none;overflow=none;row=none;shown=none"
     } else {
       let shown = Array(order.prefix(placedVisible))
       rowReport =
         "visible=\(placedVisible);overflow=\(placedOverflow ? 1 : 0);"
+        + "row=\(placedRow);"
         + "shown=\(shown.isEmpty ? "none" : shown.joined(separator: ","))"
     }
+    reportLock.unlock()
+  }
+
+  /// Publish the checked half of ``stateReport()``. Called on the thread that wrote
+  /// ``displayed`` or ``items`` — always the main thread — never from the report itself.
+  private func publishChecked() {
+    let shown =
+      displayed.isEmpty
+      ? ""
+      : items.filter { displayed.contains($0.id) }.map(\.id).joined(separator: ",")
+    reportLock.lock()
+    checkedReport = shown.isEmpty ? "none" : shown
     reportLock.unlock()
   }
 
@@ -265,8 +304,9 @@ final class ButtonGroupModel: NitroUiModel {
 
   /// What the control is showing, as one line. Safe from any thread.
   ///
-  /// `checked` is read where the items are drawn, so it is a reading of the hosted
-  /// control rather than an echo of a prop. `visible`/`overflow` are the last
+  /// `checked` is the published half of what the row shows, so it is a reading of the
+  /// hosted control rather than an echo of a prop, and it never touches main-thread
+  /// storage from here (see ``checkedReport``). `visible`/`overflow`/`row` are the last
   /// ``publishRowReport(order:)``. `menu` is the field Android answers with
   /// `open`/`closed` from Material's own menu state; iOS has no way to read a presented
   /// `Menu` before iOS 18's `isExpanded` and the deployment target is 15.1, so here it
@@ -276,12 +316,8 @@ final class ButtonGroupModel: NitroUiModel {
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    let checked =
-      displayed.isEmpty
-      ? "none"
-      : items.filter { displayed.contains($0.id) }.map(\.id).joined(separator: ",")
     return
-      "checked=\(checked);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
+      "checked=\(checkedReport);\(rowReport);menu=\(placedOverflow ? "composed" : "none");"
       + "probes=\(probes);a11y=\(accessibilityReport)"
   }
 
@@ -304,11 +340,13 @@ final class ButtonGroupModel: NitroUiModel {
     onPress = nil
     onCheckedChange = nil
     reportLock.lock()
-    rowReport = "visible=none;overflow=none;shown=none"
+    rowReport = "visible=none;overflow=none;row=none;shown=none"
     accessibilityReport = "none"
     probes = 0
     placedVisible = -1
     placedOverflow = false
+    placedRow = "none"
+    checkedReport = "none"
     reportLock.unlock()
   }
 }
@@ -364,10 +402,17 @@ struct ButtonGroupContent: NitroUIContent {
       // An empty group is an empty row: nothing to draw, nothing to name.
       return AnyView(EmptyView())
     }
+    // D42 item 2 is decided once, for the whole group, from *every* item: a trailing
+    // toggle that a narrow box pushes into the overflow must not leave that candidate
+    // drawing `ControlGroup` while the same group at a wide box draws the standard row.
+    // One sizing key cannot carry two heights (31 pt and 34.33 pt), and the key does not
+    // hold the box's width, so the choice may not depend on the width.
+    let useControlGroup =
+      model.appearance == .connected && !items.contains(where: \.toggle)
     if #available(iOS 16.0, *) {
-      return AnyView(overflowingRow(items))
+      return AnyView(overflowingRow(items, useControlGroup: useControlGroup))
     }
-    return AnyView(clippedRow(items))
+    return AnyView(clippedRow(items, useControlGroup: useControlGroup))
   }
 
   // MARK: - The row, iOS 16+ (with overflow)
@@ -380,16 +425,23 @@ struct ButtonGroupContent: NitroUIContent {
   /// items that fit rather than the fewest. A one-item group has no narrower candidate,
   /// so it is one candidate and never a `Menu`.
   @available(iOS 16.0, *)
-  private func overflowingRow(_ items: [ButtonGroupItemState]) -> some View {
+  private func overflowingRow(
+    _ items: [ButtonGroupItemState],
+    useControlGroup: Bool
+  ) -> some View {
     Group {
       if items.count == 1 {
-        candidate(items: items, overflow: [])
+        candidate(items: items, overflow: [], useControlGroup: useControlGroup)
       } else {
         ViewThatFits(in: .horizontal) {
-          candidate(items: items, overflow: [])
+          candidate(items: items, overflow: [], useControlGroup: useControlGroup)
           ForEach(Array(stride(from: items.count - 1, through: 1, by: -1)), id: \.self) {
             visible in
-            candidate(items: Array(items[0..<visible]), overflow: Array(items[visible...]))
+            candidate(
+              items: Array(items[0..<visible]),
+              overflow: Array(items[visible...]),
+              useControlGroup: useControlGroup
+            )
           }
         }
       }
@@ -400,7 +452,8 @@ struct ButtonGroupContent: NitroUIContent {
   @available(iOS 16.0, *)
   private func candidate(
     items: [ButtonGroupItemState],
-    overflow: [ButtonGroupItemState]
+    overflow: [ButtonGroupItemState],
+    useControlGroup: Bool
   ) -> some View {
     PlacementWitness(
       // What the row *composed*, not what the candidate asked for: a disabled group
@@ -409,12 +462,13 @@ struct ButtonGroupContent: NitroUIContent {
       onPlace: {
         model.recordPlacement(
           visible: items.count,
-          overflow: !overflow.isEmpty && !model.disabled
+          overflow: !overflow.isEmpty && !model.disabled,
+          controlGroup: useControlGroup
         )
       }
     ) {
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items)
+        row(items, useControlGroup: useControlGroup)
         // D29's rule on this platform: a group that answers nothing cannot own a live
         // popup. Android can dismiss its own window (`model.menuState?.dismiss()`);
         // here the control is taken out of the row instead, so it cannot be opened and
@@ -433,29 +487,44 @@ struct ButtonGroupContent: NitroUIContent {
   /// Documented in `docs/components/button-group.md`: iOS 15 has no `ViewThatFits`, and
   /// drawing everything and clipping beats drawing outside the box, which is what the
   /// six-item probe in Appendix A did (396 pt of content in a 369 pt box).
-  private func clippedRow(_ items: [ButtonGroupItemState]) -> some View {
+  private func clippedRow(
+    _ items: [ButtonGroupItemState],
+    useControlGroup: Bool
+  ) -> some View {
     // The reading is direct here: with no candidates there is one row, and it drew
     // every item.
-    model.recordPlacement(visible: items.count, overflow: false)
+    model.recordPlacement(
+      visible: items.count,
+      overflow: false,
+      controlGroup: useControlGroup
+    )
     return AnyView(
       HStack(spacing: ButtonGroupContent.spacing) {
-        row(items)
+        row(items, useControlGroup: useControlGroup)
       }
       .clipped()
       .modifier(OptionalGroupAccessibility(label: model.accessibilityLabel))
     )
   }
 
-  /// The group itself: `ControlGroup` for a connected row with no toggles in it, the
-  /// plain row otherwise.
+  /// The group itself: `ControlGroup` when ``ButtonGroupContent/body`` decided the group
+  /// may draw one, the plain row otherwise.
   ///
   /// The toggle rule is D42 item 2, and it is measured, not guessed: three
   /// `Toggle(.button)`s inside a `ControlGroup` draw **no on state** — on and off are
   /// the same pixels (Appendix A). A group whose items include a toggle therefore draws
   /// the standard row, so the toggle has a state to show, and the docs say so instead
   /// of shipping a control that lies.
-  @ViewBuilder private func row(_ items: [ButtonGroupItemState]) -> some View {
-    if model.appearance == .connected && !items.contains(where: \.toggle) {
+  ///
+  /// The decision arrives already made, from every item in the group rather than from
+  /// the slice this candidate draws: a candidate's slice is what a narrow box overflowed,
+  /// and an overflowed toggle is still a toggle the control owns.
+  @ViewBuilder
+  private func row(
+    _ items: [ButtonGroupItemState],
+    useControlGroup: Bool
+  ) -> some View {
+    if useControlGroup {
       ControlGroup {
         ForEach(items, id: \.id) { item in
           itemControl(item, inControlGroup: true)
@@ -978,6 +1047,19 @@ final class HybridNitroUiButtonGroup: HybridNitroUiButtonGroupSpec, RecyclableVi
     } else {
       DispatchQueue.main.async { model.press(id) }
     }
+  }
+
+  /// Open the overflow menu the way the indicator's own tap does — which iOS cannot do.
+  ///
+  /// A SwiftUI `Menu` expands from a gesture, and the programmatic half (`isExpanded`) is
+  /// iOS 18 while the deployment target is 15.1. So this answers "nothing happened" rather
+  /// than putting a number in the witness that no user action caused: D29's open/close
+  /// pair is proved where Material owns the menu state (the harness, Android), and on iOS
+  /// it is proved one level down — `real-input:ios` taps the real indicator, disables the
+  /// group from the screen, and reads the overflow rows gone.
+  func nuiTestOpenOverflow() throws {
+    // Deliberately empty. See the doc comment: a fake `menu=open` here would make the
+    // harness's D29 assertion read as if it had opened a menu on iOS too.
   }
 
   /// Read what the row laid out, on the main thread. Returns at once.

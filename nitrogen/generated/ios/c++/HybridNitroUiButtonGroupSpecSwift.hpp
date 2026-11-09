@@ -219,6 +219,12 @@ namespace margelo::nitro::nitroui {
         std::rethrow_exception(__result.error());
       }
     }
+    inline void nuiTestOpenOverflow() override {
+      auto __result = _swiftPart.nuiTestOpenOverflow();
+      if (__result.hasError()) [[unlikely]] {
+        std::rethrow_exception(__result.error());
+      }
+    }
     inline void nuiTestProbeRow() override {
       auto __result = _swiftPart.nuiTestProbeRow();
       if (__result.hasError()) [[unlikely]] {

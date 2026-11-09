@@ -70,8 +70,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * because the composable that draws the indicator and the Hybrid View that owns the
  * model are different types, and only a top-level name is visible to both.
  */
-private const val DEFAULT_OVERFLOW_LABEL = "More"
-
 /*
  * The ButtonGroup component: a row of commands, optionally with independent
  * toggles, that moves the items it cannot fit into an overflow menu
@@ -248,8 +246,13 @@ internal class ButtonGroupModel : NitroUiModel() {
 
   var accessibilityLabel: String? = null
 
-  /** What a reader is told the "More" control is. Unused on Android (Material's own label). */
-  var overflowAccessibilityLabel: String? = null
+  /**
+   * What a reader is told the overflow control is, or `null` to leave it as Material
+   * names it ("More options", in the reader's language). Observed, because the name
+   * lives in the indicator's semantics: renaming it has to reach the composition, which
+   * is what a plain var could not do. iOS draws the control itself, so it keeps "More".
+   */
+  var overflowAccessibilityLabel by mutableStateOf<String?>(null)
 
   /** The checked set on display, observed. Written by the handshake and by a flip. */
   var displayed by mutableStateOf<Set<String>>(emptySet())
@@ -326,8 +329,15 @@ internal class ButtonGroupModel : NitroUiModel() {
 
   private val reportLock = Any()
 
-  /** The last row probe's answer: `visible=<n>;overflow=<0|1>`. */
-  private var rowReport = "visible=none;overflow=none"
+  /**
+   * The last row probe's answer: `visible=<n>;overflow=<0|1>;row=<r>;shown=<ids|none>`.
+   *
+   * Android answers `row=standard` always — Material's `ButtonGroup` is the only row this
+   * platform draws. The field is here because iOS has two rows (that row versus a
+   * `ControlGroup`) and D42 item 2 is only falsifiable if the same probe reads which row
+   * a given width got on both platforms.
+   */
+  private var rowReport = "visible=none;overflow=none;row=none;shown=none"
 
   /** The last accessibility probe's answer. */
   private var accessibilityReport = "none"
@@ -414,7 +424,7 @@ internal class ButtonGroupModel : NitroUiModel() {
     ledger.reset()
     menuState = null
     synchronized(reportLock) {
-      rowReport = "visible=none;overflow=none"
+      rowReport = "visible=none;overflow=none;row=none;shown=none"
       accessibilityReport = "none"
       menuOpen = false
       // Chip's and IconButton's line: `probes` is how a test tells its own answer
@@ -538,11 +548,15 @@ internal fun NitroUiM3ToggleButton(
   icon: NitroUiIconContent = NitroUiIconContent.Absent,
 ) {
   val showsGlyph = glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent
+  // The same question the label asks ([buttonGlyphDrawsTitle]): an `iconOnly` item with
+  // no glyph draws its title, and a box padded for a start icon would lean that title to
+  // one side — while a glyph that is alone wants no start-icon inset at all.
+  val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
   val colors = toggleButtonColors(variant, tint)
   val contentPadding: PaddingValues =
     ToggleButtonDefaults.contentPaddingFor(
       buttonHeight = scale.layoutHeight,
-      hasStartIcon = showsGlyph,
+      hasStartIcon = showsGlyph && drawsTitle,
     )
   val content: @Composable RowScope.() -> Unit = {
     NitroUiButtonLabel(title = title, scale = scale, icon = icon, glyph = glyph)
@@ -865,29 +879,33 @@ private class ButtonGroupHost(
           }
           ButtonGroupDefaults.OverflowIndicator(
             menuState = state,
-            // The label is this control's only name. Material draws an ellipsis with
-            // `contentDescription = null`, so a reader reaching a group that has
-            // overflowed is offered a button that says nothing - and the person who
-            // needs the menu most is the one who cannot find it. "More" is the title
-            // iOS draws on the same control, so the default word is one word and
-            // `overflowAccessibilityLabel` replaces it on both platforms.
             modifier =
               Modifier
                 .onPlaced { model.ledger.recordIndicatorPlaced() }
-                .clearAndSetSemantics {
-                  // Material's indicator already carries "More options", and a second
-                  // description in the same modifier chain *concatenates* — measured as
-                  // `label=More More options`, which is what a reader would hear. The
-                  // Menu split button's fix (MenuSplitButton.halfModifier) is the house
-                  // answer: clear the subtree's semantics, say the label once, and
-                  // restate what the clear drops — the role and the press action.
-                  contentDescription = model.overflowAccessibilityLabel ?: DEFAULT_OVERFLOW_LABEL
-                  role = Role.Button
-                  onClick(label = null, action = {
-                    if (state.isShowing) state.dismiss() else state.show()
-                    true
-                  })
-                },
+                .then(
+                  // Only renamed when the caller names it. Material ships this control
+                  // already named, in the reader's own language, and this library is not
+                  // in the business of replacing a platform's localised string with an
+                  // English one — which is what the hardcoded "More" default did, in every
+                  // locale. iOS draws the control, so iOS's default stays "More".
+                  //
+                  // When a name *is* given, the house answer is Menu's split button's
+                  // (`MenuSplitButton.halfModifier`): a second description in the same
+                  // modifier chain *concatenates* — measured as "More More options" — so
+                  // clear the subtree, say the label once, and restate what the clear
+                  // drops: the role and the press action.
+                  model.overflowAccessibilityLabel?.let { label ->
+                    Modifier.clearAndSetSemantics {
+                      contentDescription = label
+                      role = Role.Button
+                      onClick(label = null, action = {
+                        if (state.isShowing) state.dismiss() else state.show()
+                        true
+                      })
+                    }
+                  }
+                    ?: Modifier,
+                ),
             enabled = enabled,
           )
         },
@@ -908,11 +926,14 @@ private class ButtonGroupHost(
                 Modifier
                   .animateWidth(interaction)
                   .onPlaced { model.ledger.recordPlaced(item.id) }
-              // An icon-only item still has a name, and it is the title the caller
-              // wrote for it: the glyph is `contentDescription = null`, so the button
-              // would otherwise be announced nameless.
+              val icon = model.iconContent(index)
+              // An icon-only item still has a name, and it is the title the caller wrote
+              // for it: the glyph is `contentDescription = null`, so the button would
+              // otherwise be announced nameless. An icon-only item with *no* glyph draws
+              // that title as text instead ([buttonGlyphDrawsTitle]) — and a description
+              // laid over text the reader already reads would say it twice.
               val namedModifier =
-                if (labelStyle.showsTitle) {
+                if (labelStyle.showsTitle || icon == NitroUiIconContent.Absent) {
                   itemModifier
                 } else {
                   itemModifier.semantics { contentDescription = item.title }
@@ -928,7 +949,7 @@ private class ButtonGroupHost(
                   modifier = namedModifier,
                   shapes = groupToggleShapes(appearance, scale, index, count),
                   glyph = glyph,
-                  icon = model.iconContent(index),
+                  icon = icon,
                   onCheckedChange = { toggleTo(item.id) },
                 )
               } else {
@@ -941,7 +962,7 @@ private class ButtonGroupHost(
                   modifier = namedModifier,
                   shapes = groupActionShapes(appearance, variant, scale, index, count),
                   glyph = glyph,
-                  icon = model.iconContent(index),
+                  icon = icon,
                   onClick = { model.onPress?.invoke(item.id) },
                 )
               }
@@ -1203,10 +1224,14 @@ class HybridNitroUiButtonGroup(
       model.overflowAccessibilityLabel?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
-      // Stored, not applied: Android's overflow indicator carries Material's own
-      // localised label and tooltip, so there is nothing here to rename. iOS reads
-      // it (`HybridNitroUiButtonGroup.swift`).
-      model.overflowAccessibilityLabel = next.asSecondOrNull()
+      val value = next.asSecondOrNull()
+      if (value == model.overflowAccessibilityLabel) {
+        return
+      }
+      // Rendered: it renames the overflow indicator's semantics node. `null` hands the
+      // name back to Material, which is the answer that gets localised.
+      model.overflowAccessibilityLabel = value
+      host.markDirty()
     }
 
   override var accessibilityLabel: Variant_NullType_String
@@ -1334,6 +1359,20 @@ class HybridNitroUiButtonGroup(
     Handler(Looper.getMainLooper()).post { host.press(id) }
   }
 
+  /**
+   * Open the overflow menu the way the indicator's own tap does, on the UI thread.
+   *
+   * A test that taps the indicator proves where the row put it, not that the control can
+   * be opened: whether there is an indicator at all is the row's geometry, and a tap at a
+   * guessed point proves nothing about the control. Material hands the open state to the
+   * composition, so this asks for it. The harness uses it to prove that a `disabled`
+   * arriving while the menu is *open* closes it (D29), instead of asserting a close from
+   * a menu that was never open.
+   */
+  override fun nuiTestOpenOverflow() {
+    Handler(Looper.getMainLooper()).post { model.menuState?.show() }
+  }
+
   /** Read what the row laid out, on the UI thread. Returns at once. */
   override fun nuiTestProbeRow() {
     Handler(Looper.getMainLooper()).post {
@@ -1341,7 +1380,7 @@ class HybridNitroUiButtonGroup(
       val visible = model.ledger.visibleIds(order)
       val overflow = if (model.ledger.indicatorPlaced()) 1 else 0
       model.publishRowReport(
-        "visible=${visible.size};overflow=$overflow;" +
+        "visible=${visible.size};overflow=$overflow;row=standard;" +
           "shown=${if (visible.isEmpty()) "none" else visible.joinToString(",")}"
       )
     }
@@ -1364,7 +1403,7 @@ class HybridNitroUiButtonGroup(
    * This is how "a toggle item reads as a checkbox", "an action reads as a button"
    * and "an icon-only item is still named by its title" are proved on Android: the
    * nodes are the ones M3 publishes, `ToggleableState` is what TalkBack turns into
-   * "selected"/"not selected", and `ContentDescription` is the name it reads.
+   * "selected"/"not selected", and `text=`/`desc=` are the two ways a node is named.
    */
   private fun describeAccessibility(): String {
     val root = findComposeRoot(host) ?: return "no Compose root"
@@ -1384,11 +1423,19 @@ class HybridNitroUiButtonGroup(
         val role = config.getOrNull(SemanticsProperties.Role)?.toString() ?: "none"
         val toggle = config.getOrNull(SemanticsProperties.ToggleableState)?.toString() ?: "none"
         val disabled = config.contains(SemanticsProperties.Disabled)
-        val label =
+        // The two names are reported apart, because *which* one is filled is the claim.
+        // `text=` is a title Compose drew; `desc=` is a name this control put on a button
+        // that draws no title. Merged into one field they are indistinguishable, and
+        // "an icon-only item with no glyph is still named" would then pass just as well
+        // by describing an empty button as by drawing the title.
+        val text =
+          config.getOrNull(SemanticsProperties.Text)
+            ?.joinToString(" ") { value -> value.text }
+            ?: "none"
+        val desc =
           config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
-            ?: config.getOrNull(SemanticsProperties.Text)?.joinToString(" ") { text -> text.text }
-            ?: ""
-        "$index[$role,$toggle,disabled=$disabled,label=$label]"
+            ?: "none"
+        "$index[$role,$toggle,disabled=$disabled,text=$text,desc=$desc]"
       }
     return "nodes=${clickable.size};${parts.joinToString(";")}"
   }

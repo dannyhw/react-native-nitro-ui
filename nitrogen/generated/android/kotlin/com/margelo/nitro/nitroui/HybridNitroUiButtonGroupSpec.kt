@@ -169,6 +169,10 @@ abstract class HybridNitroUiButtonGroupSpec: HybridView() {
   
   @DoNotStrip
   @Keep
+  abstract fun nuiTestOpenOverflow(): Unit
+  
+  @DoNotStrip
+  @Keep
   abstract fun nuiTestProbeRow(): Unit
   
   @DoNotStrip

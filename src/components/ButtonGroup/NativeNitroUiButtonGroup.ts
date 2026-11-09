@@ -63,11 +63,20 @@ export interface NitroUiButtonGroupHandle {
   measureContent(): NitroUiButtonGroupSize;
   /** Test-only: press one item through the tap's path (see the spec). */
   nuiTestPressItem(id: string): void;
+  /**
+   * Test-only: open the overflow menu where the platform can open one in code — Android,
+   * via Material's own state. iOS's `Menu` needs a gesture (iOS 18 for the flag), so there
+   * it does nothing and D29 is proved by `real-input:ios` instead (see the spec).
+   */
+  nuiTestOpenOverflow(): void;
   /** Test-only: read what the row laid out (see the spec). */
   nuiTestProbeRow(): void;
   /** Test-only: read the accessibility nodes (see the spec). */
   nuiTestProbeAccessibility(): void;
-  /** Test-only: `checked=…;visible=…;overflow=…;menu=…;probes=…;a11y=…`. */
+  /**
+   * Test-only:
+   * `checked=…;visible=…;overflow=…;row=…;menu=…;probes=…;a11y=…`.
+   */
   nuiTestStateReport(): string;
 }
 

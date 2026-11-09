@@ -187,6 +187,7 @@ export interface ButtonGroupProps extends ViewProps {
         readonly mostRecentEventCount: number;
         measureContent(): { width: number; height: number };
         nuiTestPressItem(id: string): void;
+        nuiTestOpenOverflow(): void;
         nuiTestProbeRow(): void;
         nuiTestProbeAccessibility(): void;
         nuiTestStateReport(): string;

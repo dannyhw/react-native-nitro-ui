@@ -33,6 +33,7 @@ public protocol HybridNitroUiButtonGroupSpec_protocol: HybridObject, HybridView 
   // Methods
   func measureContent() throws -> NitroUiButtonGroupSize
   func nuiTestPressItem(id: String) throws -> Void
+  func nuiTestOpenOverflow() throws -> Void
   func nuiTestProbeRow() throws -> Void
   func nuiTestProbeAccessibility() throws -> Void
   func nuiTestStateReport() throws -> String
