@@ -131,6 +131,12 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
     reportedInset = nil
     form?.rowsChanged(in: model)
     form?.chromeChanged(in: model)
+    // Last, and unconditional: a Section that goes back to the pool is no longer anybody's.
+    // `resolveForm` only looks for a Form while it has none, so a cached one survives into the
+    // next mount - and if the Form of the mount that just ended is still alive, the Section
+    // goes on asking *that* Form what its band says, which answers with a heading view in a
+    // list nobody is looking at (fix round 1, item 8).
+    form = nil
   }
 
   func onDropView() {
@@ -292,7 +298,9 @@ final class HybridNitroUiFormSection: HybridNitroUiFormSectionSpec, RecyclableVi
       "title=\(model.title ?? "-")",
       "footer=\(model.footerText ?? "-")",
       "inHolding=\(inHolding)",
-      "form=\(form == nil ? "none" : "set")",
+      // "held" is the answer the harness can use: a Form was found *and* it holds this
+      // section. "elsewhere" is a Section still asking the Form of a mount that ended.
+      "form=\(form == nil ? "none" : (form.map { $0.holds(model) } == true ? "held" : "elsewhere"))",
       "width=\(String(format: "%.2f", holding.bounds.width))",
       "height=\(String(format: "%.2f", holding.bounds.height))",
       // What the shadow tree was told, as opposed to where the list actually put the section:
