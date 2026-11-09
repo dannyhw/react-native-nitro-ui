@@ -170,6 +170,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// delegate's guard lets every frame of them through (fix round 2, item 3).
   var scrollAnimating = false
 
+  /// Whether this list still owes the reset that puts it at the top of its own content.
+  ///
+  /// `prepareForRecycle` asks UIKit for it, and the answer does not always stick: a recycled
+  /// list's offset comes back with the view as it re-enters a window, later than the recycle,
+  /// which is how a Form mounted into a recycled list was measured still sitting at 200 pt
+  /// against a 68 pt top inset. The reset is therefore repeated once by the first geometry
+  /// pass of the new mount — the first moment the list has a window, a layout and content
+  /// (fix round 2, item 2).
+  private var pendingTopReset = false
+
   override init() {
     super.init()
     holding.owner = self
@@ -259,6 +269,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
       animated: false
     )
+    pendingTopReset = true
     applySnapshot()
   }
 
@@ -926,20 +937,46 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // of which UIKit has already folded into `adjustedContentInset`.
     let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
     if rect.maxY > visibleBottom {
-      // An animated scroll sets none of `isDragging`, `isTracking` or `isDecelerating`, so
-      // without this the delegate's guard lets every frame of it through to a publish.
-      scrollAnimating = true
-      list.setContentOffset(
-        CGPoint(
-          x: list.contentOffset.x,
-          y: list.contentOffset.y + (rect.maxY - visibleBottom) + 8
-        ),
+      scrollList(
+        to: list.contentOffset.y + (rect.maxY - visibleBottom) + 8,
         animated: true
       )
     }
     // The inset changed the visible box and the scroll changed the offset, both of which the
     // shadow tree has to be told about — and the settle animation reports again when it ends.
     reportGeometry()
+  }
+
+  /// Move the list for the library itself: the keyboard path above, and the harness's
+  /// `scroll-animated` command, which exists to measure exactly this shape.
+  ///
+  /// An animated `setContentOffset` sets none of `isDragging`, `isTracking` or
+  /// `isDecelerating`, so its frames have to be guarded out by `scrollAnimating` rather than
+  /// by the delegate's three states — and measured on iOS 27, it reports no settle this list
+  /// answers either: the offset JavaScript was told stayed at the value from before a scroll
+  /// that had already happened. So the end of the animation is this class's own business, and
+  /// the completion is where the flag goes down and the geometry gets reported (fix round 2,
+  /// item 3). `scrollToItem` and `scrollRectToVisible` do answer
+  /// `scrollViewDidEndScrollingAnimation`; this path does not wait for that.
+  func scrollList(to targetY: CGFloat, animated: Bool) {
+    let target = CGPoint(x: list.contentOffset.x, y: targetY)
+    guard animated else {
+      list.setContentOffset(target, animated: false)
+      list.layoutIfNeeded()
+      reportGeometry()
+      return
+    }
+    scrollAnimating = true
+    UIView.animate(
+      withDuration: 0.3,
+      delay: 0,
+      options: [.beginFromCurrentState, .allowUserInteraction],
+      animations: { self.list.contentOffset = target },
+      completion: { _ in
+        self.scrollAnimating = false
+        self.reportGeometry()
+      }
+    )
   }
 
   // MARK: - Where the list came to rest (`onPlacement` / `onContentOffset`, D45 item 3)
@@ -978,6 +1015,17 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // suite in the same app died with "the app bridge disconnected" (fix round 1).
     guard holding.superview != nil, list.window != nil else { return }
     list.layoutIfNeeded()
+
+    // The one place the reset above can actually land: the list is on screen, laid out, and
+    // has rows to have an offset for. Consumed once, so a Form the app scrolls by hand is
+    // never scrolled back afterwards.
+    if pendingTopReset, !sections.isEmpty {
+      pendingTopReset = false
+      list.setContentOffset(
+        CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
+        animated: false
+      )
+    }
 
     let offset = Double(list.contentOffset.y)
     // `reportedOffset` records what JavaScript was *told*, so it moves only on a publish that
@@ -1298,11 +1346,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
         // The keyboard path's shape: a scroll UIKit animates with no finger on it. Every frame
         // of it is a `scrollViewDidScroll` with nothing beside it, so this is how the harness
         // counts publishes per programmatic scroll (fix round 2, item 3).
-        scrollAnimating = true
-        list.setContentOffset(
-          CGPoint(x: list.contentOffset.x, y: list.contentOffset.y + 60),
-          animated: true
-        )
+        scrollList(to: list.contentOffset.y + 60, animated: true)
       case "self-sizing-off":
         // Take away the property that tells UIKit a row's height constraint moved, and say so,
         // so the harness can watch the `rowResized` fallback carry a growing row. Below iOS 16
