@@ -114,4 +114,4 @@
 | G24 | Form and Section (Q10 C1, S6/S6b, D45) | Apex | Opus | fix round 2, the last (re-review: 10 of 12 fixed; visible iOS cells without rows and E7 floors lowered to fit; recycled iOS Form keeps its scroll offset; per-frame reports during animated scrolls; iOS 15 path untested; keyboard inset double-counts the safe area) |
 | G20 | ButtonGroup (Q9 Appendix B, D42; the four early checks first) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `8fb41da6` with G21 in; iOS 26.5, 27.0 and 27.1 checked) |
 | G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | merged (1 impl + device round; review MERGE WITH FIXES applied in the merge round; merge gates 5/5 on code tree `14ecf523`) |
-| G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | running |
+| G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | in review (PR #55 @ `059ad24f`; check and both harnesses green, real-input left to the merge round) |
