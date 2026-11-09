@@ -69,8 +69,23 @@ export default function StepperScreen() {
   // bounds fixture and cannot show a repeat at all — it runs out of range after one
   // step, which is the behaviour its own assertions are about.
   const [held, setHeld] = useState(5);
+  const [heldEvents, setHeldEvents] = useState(0);
   const onHeldValueChange = useCallback((next: number) => {
     setHeld(next);
+    // Counted in the same callback that moves the value, so the two echoes are one
+    // number read twice: `events == value - 5` is the claim "every repeat is one step
+    // and one event", and a half that emitted twice per step shows as twice the
+    // value's own movement.
+    setHeldEvents((count) => count + 1);
+  }, []);
+  // A range that does not end on its step, which is the shape SwiftUI has to supply
+  // its own stride for: `0...1.05` by `0.1` is drawn without a `step:`, and the control
+  // may take only the *direction* of what it is written. One plus tap from 0 owes
+  // `0.1`; taking the write itself would owe `1` — ten steps, to a number the app never
+  // asked for.
+  const [sparse, setSparse] = useState(0);
+  const onSparseValueChange = useCallback((next: number) => {
+    setSparse(next);
   }, []);
   // Shared by the enabled and the disabled stepper, so a stray tap on the disabled
   // one is a number on screen rather than the absence of a callback.
@@ -125,6 +140,15 @@ export default function StepperScreen() {
             testID="real-input-stepper-hold"
           />
           <Stepper
+            value={sparse}
+            onValueChange={onSparseValueChange}
+            minimumValue={0}
+            maximumValue={1.05}
+            step={0.1}
+            accessibilityLabel="Real-input sparse stepper"
+            testID="real-input-stepper-sparse"
+          />
+          <Stepper
             value={1}
             onValueChange={onRefusedValueChange}
             minimumValue={0}
@@ -153,6 +177,18 @@ export default function StepperScreen() {
             label="hold stepper value"
             testID="real-input-stepper-hold-value"
             value={String(held)}
+            ink={ink}
+          />
+          <Echo
+            label="hold stepper events"
+            testID="real-input-stepper-hold-events"
+            value={String(heldEvents)}
+            ink={ink}
+          />
+          <Echo
+            label="sparse stepper value"
+            testID="real-input-stepper-sparse-value"
+            value={String(sparse)}
             ink={ink}
           />
           <Echo

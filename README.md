@@ -525,7 +525,7 @@ export function BrightnessStep({ onStep }: { onStep: (next: number) => void }) {
 
 The value rules are `Slider`'s, in the same code: the value snaps to multiples of
 `step` measured from `minimumValue`, `maximumValue` is always reachable (`0…10` by
-`3` steps 1, 4, 7, 10), and a `0.1` step arrives as `0.3`, not as
+`3` steps 0, 3, 6, 9, 10), and a `0.1` step arrives as `0.3`, not as
 `0.30000000000000004`. `step` must be greater than `0` — that is not a small step,
 it is no step, and the wrapper says so in development.
 

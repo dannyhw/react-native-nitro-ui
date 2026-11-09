@@ -47,8 +47,9 @@ cannot start meaning two things in one library.
 
 - **Snapping is measured from `minimumValue`**, not from 0, so a `0.5` step on a
   range starting at `0.25` lands on `0.25, 0.75, 1.25`, not on whole halves.
-- **The maximum is always reachable.** `0…10` by `3` steps 1 → 4 → 7 → 10: the
-  last step is short, because the top of the range is a value like any other.
+- **The maximum is always reachable.** `0…10` by `3` steps 0 → 3 → 6 → 9 → 10:
+  the grid is measured from `minimumValue`, so the stops are the multiples of `3`,
+  and the last step is short — the top of the range is a value like any other.
 - **A `step` that is not greater than 0 throws in development.** It is not a small
   step, it is no step: the control would sit at one number and report nothing
   while looking like it worked.
@@ -89,9 +90,9 @@ fixed-width on both platforms, so `minimumValue`, `maximumValue`, `step` and
 like, never how wide they are. The sizing key is therefore empty, and one cached
 size answers every Stepper in the tree.
 
-Measured on this machine, on the pair-a devices, and the same numbers are this
-control's declared fallback (`FALLBACK_WIDTH_DP` / `declaresFallback`) and its row
-in `scripts/conformance-core.mjs`:
+Measured on both platforms — and the control's declared fallback and its
+conformance row are these same numbers, because the fallback is the box and nothing
+else (`docs/architecture/sizing.md` §5 says where those tables live):
 
 |            | Width | Height | The box is                                                         |
 | ---------- | ----- | ------ | ------------------------------------------------------------------ |

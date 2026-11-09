@@ -138,21 +138,24 @@ final class StepperModel: NitroUiModel {
   /// What the SwiftUI control's `Binding` was just written with - one tap, or one
   /// repeat of a hold.
   ///
-  /// When the control was handed this range's own step (``isStepped``), the number it
-  /// computed is one of the grid's stops and is taken as it stands. When it was not - a
-  /// range that does not end on a step, where handing it a `step:` would make
-  /// `maximumValue` unreachable - the control moves by its own default stride and the
-  /// result is a number the grid has never had: `quantize` would send it back to where
-  /// it started, the tap would report success and nothing would move, which is the
-  /// failure `NitroUiSliderValue.stepped` exists to prevent. So the *direction* is what
-  /// the platform may decide, and the destination is this control's rule.
+  /// The write contributes a direction and nothing else: the destination is this
+  /// control's own step, from the value it displays. `NitroUiStepperBinding` carries
+  /// the argument (in short: on a range that does not end on a step the control is
+  /// drawn without one, so its write is SwiftUI's default stride of 1, and `quantize`
+  /// would accept `0` -> `1` on `0...1.05 step 0.1` as if ten steps had been asked
+  /// for), and it is the rule the host test runs, one case per range shape.
   func bindingWrite(_ requested: Double) {
-    guard !disabled else { return }
-    if quantize(requested) != state.displayed {
-      userStep(to: requested)
-      return
-    }
-    step(up: requested > state.displayed)
+    guard
+      let next = NitroUiStepperBinding.value(
+        afterWrite: requested,
+        displayed: state.displayed,
+        minimum: minimumValue,
+        maximum: maximumValue,
+        step: step,
+        disabled: disabled
+      )
+    else { return }
+    userStep(to: next)
   }
 
   // MARK: - Test read-outs

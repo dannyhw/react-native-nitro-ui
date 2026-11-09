@@ -126,9 +126,10 @@ version, documented as such.
   `nuiTestStep` into a local and called it detached, which a Nitro hybrid refuses; it is
   called on the handle now.
 - `scripts/__tests__/fixtures/a11y/stepper.xml`, `scripts/real-input/a11y.mjs`,
-  `scripts/conformance/make-a11y-fixtures.mjs` — the measured a11y case, its debt row, and
-  the `--only <screen>` filter that let one fixture be re-measured without re-dumping every
-  other control's.
+  `scripts/conformance/make-a11y-fixtures.mjs` — the measured a11y case and its debt row.
+  (Round 1 also added an `--only <screen>` filter here; `origin/main` shipped its own
+  `--only <id>[,<id>…]` by the time of the fix round, so the duplicate was dropped and the
+  claim is corrected — see *Fix round 1*.)
 - `docs/components/stepper.md`, `README.md`, `docs/images/components/stepper-*.png`,
   `.changeset/g25-stepper.md` — the docs page, the README row/section/usage and the
   screenshot pair.
