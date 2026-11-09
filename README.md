@@ -516,7 +516,17 @@ export function FileActions() {
       {
         id: 'dangerous',
         title: 'Dangerous',
-        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+        // `systemImage` is iOS's glyph and `androidIcon` Android's. Each platform
+        // ignores the other's, so one row reads the same on both.
+        items: [
+          {
+            id: 'delete',
+            title: 'Delete',
+            destructive: true,
+            systemImage: 'xmark',
+            androidIcon: require('./assets/icons/close_24px.xml'),
+          },
+        ],
       },
     ],
   };
@@ -549,8 +559,11 @@ export function FileActions() {
 
 `onOpen`/`onClose` exist but fire on Android only — SwiftUI's `Menu` has no
 expansion binding, so iOS never reports either one — and a pick fires
-`onSelect` before the `onClose` that follows it. `systemImage` is iOS-only, and
-a submenu nests on iOS and appears inline as a group of its own on Android.
+`onSelect` before the `onClose` that follows it. `systemImage` is iOS-only and
+`androidIcon` Android-only, on the rows as on the trigger; a row's glyph takes
+Material's own leading slot, and on a checked row the check mark takes that slot
+instead. A submenu nests on iOS and appears inline as a group of its own on
+Android.
 `primaryAction` works on both and is drawn each platform's way: on iOS the
 trigger stays one button, where a tap runs the action and a long-press opens
 the list; on Android it becomes Material 3's split button, so the left half
@@ -577,6 +590,13 @@ const MESSAGE_ACTIONS: MenuGroup = {
   actions: [
     { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
     { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+    // iOS draws the SF Symbol; Android draws the `.xml` the app imports.
+    {
+      id: 'share',
+      title: 'Share',
+      systemImage: 'square.and.arrow.up',
+      androidIcon: require('./assets/icons/share_24px.xml'),
+    },
   ],
   sections: [
     {
@@ -607,7 +627,9 @@ const messageStyles = StyleSheet.create({
 ```
 
 iOS lifts the view itself as the preview (its corners follow `borderRadius`);
-Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
+Android opens a Material menu at the finger. The rows are `Menu`'s rows, so
+`systemImage` and `androidIcon` mean here exactly what they mean on
+[Menu](#menu). `onOpen` and `onClose` fire on
 both platforms, `onSelect` before the `onClose` that follows it. Set
 `accessible` and an `accessibilityLabel` to make it one screen-reader element
 with the menu on it. Without `accessible`, Android screen readers can't open the
@@ -630,7 +652,13 @@ has a selection: `selected` is controlled the way a Switch's `value` is, and
 `onPress`.
 
 ```tsx name=chip
-export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+export function PlaceFilters({
+  onDirections,
+  onStar,
+}: {
+  onDirections: () => void;
+  onStar: () => void;
+}) {
   const [openNow, setOpenNow] = useState(false);
 
   return (
@@ -643,14 +671,23 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
         systemImage="map"
         onPress={onDirections}
       />
+      <Chip
+        variant="assist"
+        label="Starred"
+        systemImage="star"
+        androidIcon={require('./assets/icons/star_24px.xml')}
+        onPress={onStar}
+      />
     </>
   );
 }
 ```
 
-`systemImage` is iOS-only. On Android a selected filter chip shows Material's
-check mark and is wider by it; on iOS selection only changes the fill.
-[chip.md](docs/components/chip.md) has the sizes and the limits.
+`systemImage` is iOS-only and `androidIcon` Android-only. On Android a selected
+filter chip shows Material's check mark and is wider by it — unless a glyph
+already holds that slot, in which case the check takes it and the chip does not
+move; on iOS selection only changes the fill. [chip.md](docs/components/chip.md)
+has the sizes, the icons and the limits.
 
 ### Checkbox
 

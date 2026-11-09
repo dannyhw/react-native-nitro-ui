@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  A filled square that covers its whole 24 x 24 canvas, so the area it paints is the
+  slot's area and nothing else.
+
+  Every other fixture is a glyph, and a glyph's ink area is unknowable from the outside:
+  asking "how many pixels of the row's colour are on screen?" about a star answers
+  "the star, plus every letter near it". With a slab, the answer is (slotDp x density)^2
+  exactly, so the same probe that proves a glyph *drew* also proves it drew at the size
+  the platform's slot says - 20 dp in a Material menu row, 18 dp in a chip - instead of
+  at whatever size the file's own box suggests. That is the difference between "an icon
+  appeared" and "the icon is in the slot", and only the second one is the contract.
+
+  Not an icon, on purpose: a rectangle with no corner unturned, which no Material Symbol
+  is. Declared in scripts/__tests__/android-icons.test.js's EXAMPLE_FIXTURES.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="24"
+  android:viewportHeight="24">
+  <path
+    android:fillColor="#FF000000"
+    android:pathData="M0,0h24v24h-24z" />
+</vector>
