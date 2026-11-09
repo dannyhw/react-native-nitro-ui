@@ -392,8 +392,13 @@ final class NitroUiFormRowCell: UICollectionViewListCell, UIGestureRecognizerDel
     if row !== rowView {
       giveBack()
       row = rowView
-      container.adopt(rowView)
     }
+    // Ask the container every time, not only when the pointer changed. The cell's `row` is a
+    // pointer; the container is what actually holds the view, and a row can be adopted
+    // elsewhere while this cell still names it - after which `row !== rowView` is false, the
+    // adopt is skipped, and the cell goes on being configured with nothing in it. `adopt`
+    // early-outs when it already holds the row, so the steady state is one comparison.
+    container.adopt(rowView)
     let measured = rowView.bounds.height > 0 ? rowView.bounds.height : rowView.frame.height
     if measured > 0, abs(height.constant - measured) > 0.25 {
       height.constant = measured
@@ -617,16 +622,30 @@ final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
   /// did not move, so being reached twice from here and from the endings below costs a
   /// comparison, not a re-render.
   func scrollViewDidScroll(_ scrollView: UIScrollView) {
-    guard !scrollView.isDragging, !scrollView.isTracking, !scrollView.isDecelerating else {
-      return
-    }
+    // Three states say a finger is on the list. A fourth shape exists that none of them cover:
+    // a scroll UIKit *animates* for a caller - the keyboard path's `setContentOffset(animated:)`
+    // and a status-bar scroll to the top - which arrives as a dozen scroll frames with no
+    // drag, no tracking and no deceleration around them, and used to publish every one of them
+    // to JavaScript (fix round 2, item 3). The Form names that window instead.
+    guard !scrollView.isDragging, !scrollView.isTracking, !scrollView.isDecelerating,
+      form?.scrollAnimating != true
+    else { return }
     form?.reportGeometry()
+  }
+
+  /// The list is about to scroll to the top on its own - a status-bar tap. UIKit animates it
+  /// and sets none of the three finger states, so its frames have to be guarded out from here
+  /// and the settle reported from `scrollViewDidScrollToTop` below.
+  func scrollViewShouldScrollToTop(_ scrollView: UIScrollView) -> Bool {
+    form?.scrollAnimating = true
+    return true
   }
 
   /// The list was scrolled to the top - a real tap on the status bar, or a caller that asked
   /// UIKit for it. The frames of that scroll are guarded out above while it animates, and
   /// UIKit sends no drag ending for it, so this is where the new offset is reported.
   func scrollViewDidScrollToTop(_ scrollView: UIScrollView) {
+    form?.scrollAnimating = false
     form?.reportGeometry()
   }
 
@@ -645,16 +664,20 @@ final class NitroUiFormListDelegate: NSObject, UICollectionViewDelegate {
   /// A drag ended without decelerating: UIKit does not have to lay anything out for the list
   /// to be at rest, so this ending cannot be left to `scrollViewDidLayout`.
   func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+    // A finger took over, so whatever animation was in flight ends with it.
+    form?.scrollAnimating = false
     if !decelerate { form?.reportGeometry() }
   }
 
   /// A `setContentOffset(animated: true)` finished - the keyboard path's scroll, and the
   /// harness's own.
   func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+    form?.scrollAnimating = false
     form?.reportGeometry()
   }
 
   func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+    form?.scrollAnimating = false
     form?.reportGeometry()
   }
 }

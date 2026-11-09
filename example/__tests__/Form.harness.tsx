@@ -170,6 +170,40 @@ function expectOrder(
   }
 }
 
+/**
+ * How many items the list says it is drawing - the fourth number of `screen=`.
+ *
+ * `inCells` counts the visible cells that hold a row; this counts the items the list has
+ * realised. They are equal exactly when nothing on screen is a blank row, which is the claim
+ * E1 now makes at every step: a row can be alive, counted, and in a section's model while the
+ * cell drawing its item holds nothing, and no other field in the report says so.
+ */
+function visibleItems(report: Record<string, string>): number {
+  const box = report.screen;
+  if (box == null) throw new Error('the Form report has no "screen=" field');
+  const value = Number(box.split(',')[3]);
+  if (!Number.isFinite(value))
+    throw new Error(`"screen=${box}" has no visible-item count`);
+  return value;
+}
+
+/**
+ * Wait until every item on screen is drawn from a cell that holds a row.
+ *
+ * iOS only: Android has no cells to come short of (`inCells` is the row count there, because a
+ * row never leaves its Yoga box), and the report's `screen=` field is the collection view's.
+ */
+async function drawnOnScreen(step: string, which = 'form') {
+  const report = await formReport(
+    (r) => num(r, 'inCells') === visibleItems(r),
+    `${step}: every item on screen drawn from a cell (inCells against the ` +
+      'visible-item count; the last report below says which of the two moved)',
+    which
+  );
+  trace(`drawn: ${step}`, report);
+  return report;
+}
+
 async function formRef(): Promise<FormHandle> {
   return handleOf(() => forms.form, 'the Form');
 }
@@ -672,6 +706,7 @@ describe('Form (G24)', () => {
       );
       trace('at rest', resting);
       expect(num(resting, 'inCells')).toBeGreaterThan(1);
+      await drawnOnScreen('at rest');
     }
 
     // A keyed insert in the middle of the first section, in this same surface.
@@ -694,6 +729,10 @@ describe('Form (G24)', () => {
         'Personal hotspot',
         'Cellular data',
       ]);
+      // Ten rows is a count; this is the screen. Fix round 1's logs show this step at
+      // `inCells=3` with 5 items on screen: two rows drawn as nothing, and every counter in
+      // the report content with the step.
+      await drawnOnScreen('after the insert');
     }
 
     await rerender(
@@ -711,6 +750,7 @@ describe('Form (G24)', () => {
       // a row another cell has already adopted - that it can become a row drawn in one place
       // and mounted in another.
       expect(parse(need(forms.form).nuiTestFormReport()).stale).toBe('0');
+      await drawnOnScreen('after the removal');
     }
 
     // A keyed reorder: the same four rows, `cell` moved from third to first, every key
@@ -732,6 +772,9 @@ describe('Form (G24)', () => {
         'Bluetooth',
         'Ring on receipt',
       ]);
+      // The order is right and two of the five rows on screen are blank: the first is what
+      // the index fix proved, this is what the *screen* says after a move.
+      await drawnOnScreen('after the reorder');
     }
     if (!IOS) {
       // Question 2 again: the layer follows the new order. The count is still four - a
@@ -784,6 +827,9 @@ describe('Form (G24)', () => {
       );
       trace('scrolled for the cycles', scrolled);
       expect(num(scrolled, 'offset')).toBeGreaterThan(100);
+      // 0 of 4 items drawn at offset 400 in fix round 1's log, with `reparents` 103 and
+      // `reclaims` 100 behind it: every give-back landed and no re-adopt followed it.
+      await drawnOnScreen('at offset 400');
       // Cells really did take rows, and really did hand them back, once the list moved:
       // measured across the scroll, `reparents` 4 -> 103 and `reclaims` 0 -> 100. The two
       // are not compared with each other: UIKit keeps a cell across a snapshot apply, so a
@@ -1038,9 +1084,14 @@ describe('Form (G24)', () => {
     // Unmount this row and let a row with no label arrive - the shape that leaves a recycled
     // `ReactViewGroup` answering for a mount that ended, because React Native's
     // `prepareToRecycleView` clears its own tag and not the framework's name. It has to be a
-    // *key swap in this surface*: the pool RN keeps is per surface, so a second `render`
-    // would be handed a brand-new view and the case would pass with the reset deleted - which
-    // is what it did until fix round 1.
+    // *key swap in this surface*: the pool RN keeps is per surface, so a second `render` would
+    // be handed a brand-new view and could not carry a name over.
+    //
+    // What this case guards is `recycles >= 1` and the promise that a fresh row carries no
+    // name; the row's own a11y reset (`resetRow`) is NOT proven by it. With the reset commented
+    // out and the APK verified rebuilt, `desc` still came back empty, so that reset is defence
+    // in depth (fix round 1's red proof says so). The upstream bug's reproducer is the plain
+    // labelled `<View>` on the Form screen, which the a11y sweep grades.
     await rerender(
       <OneRow label={null} styled={true} title="B" rowKey="plain" />
     );
@@ -1131,6 +1182,127 @@ describe('Form (G24)', () => {
         'measure'
       );
     }
+  });
+
+  it('starts a recycled Form at the top of its own content', async () => {
+    // A `UICollectionView` keeps its `contentOffset` when its view goes back to React Native's
+    // pool, and the Form mounted into it inherits the scroll. This is not hypothetical: E7's
+    // at-rest reading of `offset=-2` against a 62 pt top inset is the `+60` that the settle case
+    // above moves the list by, arriving in a Form that case never scrolled (fix round 2, item 2).
+    //
+    // A key swap in this surface is what gets the recycled view: React Native's component-view
+    // pool is per app, and a new Form is the next thing to ask it for one. `recycles=` on the new
+    // Form's report is the witness that this is that Form.
+    const probe = await mount({
+      mode: 'base',
+      formStyle: SHORT_BOX,
+      ...counters(),
+    });
+    await formReport((r) => num(r, 'rows') === 9, 'nine rows');
+    need(forms.form).nuiTestScrollTo(200);
+    const scrolled = await formReport(
+      (r) => num(r, 'offset') > 100,
+      'the list to have scrolled before the swap'
+    );
+    trace('scrolled before the swap', scrolled);
+    if (IOS) {
+      await probe.rerender(
+        <Probe
+          key="second-form"
+          mode="base"
+          formStyle={SHORT_BOX}
+          {...counters()}
+        />
+      );
+      const next = await formReport(
+        (r) => num(r, 'rows') === 9 && num(r, 'recycles') >= 1,
+        'a recycled Form with nine rows'
+      );
+      trace('the recycled Form', next);
+      // The top of the content is wherever the list's own inset says it is, so this is one
+      // number and not a constant.
+      expect(num(next, 'insetTop')).toBeGreaterThan(0);
+      expect(
+        Math.abs(num(next, 'offset') + num(next, 'insetTop'))
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('publishes a settle for a scroll it started, not a frame', async () => {
+    // The keyboard path's `setContentOffset(animated: true)`, and a status-bar scroll to the
+    // top, set none of `isDragging`, `isTracking` or `isDecelerating`, so every frame of them
+    // walked past the delegate's guard and into `onContentOffset` - a re-render of the Form and
+    // its sections per frame of an animation nobody flicked (fix round 2, item 3).
+    await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
+    const atRest = await formReport(
+      (r) => num(r, 'rows') === 9 && num(r, 'offsetPublishes') >= 1,
+      'nine rows and a published offset'
+    );
+    const before = num(atRest, 'offsetPublishes');
+    if (!IOS) return;
+    const target = num(atRest, 'offset') + 60;
+    need(forms.form).nuiTestCommand('scroll-animated');
+    const settled = await formReport(
+      (r) => Math.abs(num(r, 'offset') - target) <= 1,
+      `the list to have animated to ${String(target)} pt`
+    );
+    const published = num(settled, 'offsetPublishes') - before;
+    console.log(
+      `FORM ANIMATED SCROLL: publishes=${String(published)} offset=${String(
+        atRest.offset
+      )} -> ${String(settled.offset)}`
+    );
+    // One for the settle it came to rest at, and room for the inset change that came with it.
+    // The floor matters as much as the ceiling: a Form that publishes nothing is quiet too.
+    expect(published).toBeGreaterThanOrEqual(1);
+    expect(published).toBeLessThanOrEqual(2);
+  });
+
+  it('grows a row when UIKit is not watching its height constraint (E3, iOS 15)', async () => {
+    // `selfSizingInvalidation` is iOS 16 and later. Below it - and in a list the
+    // `self-sizing-off` command has just switched off - the only thing that can tell the layout
+    // a row's height constraint moved is the `rowResized` fallback, which asks for one
+    // invalidation. Without it a row that grew was drawn at its old height forever (fix round 2,
+    // item 4), and no test on this host could see that, because every simulator here is modern.
+    const probe = await mount({ mode: 'base', ...counters() });
+    const settled = await formReport((r) => num(r, 'rows') === 9, 'nine rows');
+    if (!IOS) return;
+    expect(num(settled, 'selfSizing')).toBe(1);
+    const items = (settled.heights ?? '').split(',').map(Number);
+    const short = await reportUntil(
+      () => rows.pressable?.nuiTestRowReport(),
+      (r) => Number(r.h) > 0,
+      'the wrapped row to have a height'
+    );
+    need(forms.form).nuiTestCommand('self-sizing-off');
+    await formReport(
+      (r) => num(r, 'selfSizing') === 0,
+      'the list to stop watching row height constraints'
+    );
+
+    await probe.rerender(<Probe {...probe} mode="grown" />);
+    const grown = await formReport(
+      (r) =>
+        Math.abs(Number((r.heights ?? 'x,').split(',')[3]) - nth(items, 3)) > 4,
+      'the grown row to be taller in the layout with no self-sizing to do it',
+      'form'
+    );
+    const grownItems = (grown.heights ?? '').split(',').map(Number);
+    // The neighbours did not move, either: one invalidation re-asks the layout, it does not
+    // rebuild the section at a different pitch.
+    expect(Math.abs(nth(grownItems, 0) - nth(items, 0))).toBeLessThanOrEqual(1);
+    expect(Math.abs(nth(grownItems, 1) - nth(items, 1))).toBeLessThanOrEqual(1);
+    const tall = await reportUntil(
+      () => rows.pressable?.nuiTestRowReport(),
+      (r) => Number(r.h) > num(short, 'h') + 4,
+      'the wrapped row to have grown'
+    );
+    // The same delta as at rest - the cell followed the row, which is the whole claim, reached
+    // by the fallback rather than by UIKit noticing on its own.
+    const chrome = nth(items, 3) - num(short, 'h');
+    expect(
+      Math.abs(nth(grownItems, 3) - num(tall, 'h') - chrome)
+    ).toBeLessThanOrEqual(1);
   });
 
   it('leaves the window with the app still running', async () => {
@@ -1419,15 +1591,16 @@ describe('Form measure (E7)', () => {
     // gives the layout the same chance to settle the scrolled pass has always had.
     const atRest = await until(
       () => compareRows('at rest', 0),
-      (r) => r.bad.length === 0 && r.compared >= 7,
+      (r) => r.bad.length === 0 && r.compared >= 10,
       12000,
       'every row to measure where its own tree put it'
     );
     expect(atRest.bad).toEqual([]);
-    // Eight of the 24 rows are on screen at rest - the Form's box shows a little over
-    // eight 52 pt rows - so eight is the ceiling here, and the guard is that the case
-    // really compared a screenful rather than one or two rows.
-    expect(atRest.compared).toBeGreaterThanOrEqual(7);
+    // The floor is the go line, ten comparisons, and it is reachable: this Form is `flex: 1`
+    // in an 874 pt window, its rows are 52 pt, and the pass is capped at `COMPARE_LIMIT` (14)
+    // - every green run in the ledger logs `compared=14` at rest. An earlier draft called eight
+    // the ceiling, which counted a screenful of rows on a box this case does not use.
+    expect(atRest.compared).toBeGreaterThanOrEqual(10);
 
     // Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do
     // not, until the Form publishes where they came to rest - and on Android that the list
@@ -1461,9 +1634,10 @@ describe('Form measure (E7)', () => {
       'every row in a cell to measure where UIKit put it'
     );
     expect(scrolled.bad).toEqual([]);
-    // Fewer rows are on screen once the list has moved 180 pt, and the same ceiling
-    // applies as at rest: this asks that a screenful was compared, not a row or two.
-    expect(scrolled.compared).toBeGreaterThanOrEqual(5);
+    // A 180 pt scroll leaves a full page of rows on screen in an 874 pt window, so the same
+    // ten apply here as at rest - and the same reason: a pass over one or two rows is not a
+    // pass on the scroll.
+    expect(scrolled.compared).toBeGreaterThanOrEqual(10);
     cleanup();
   });
 });

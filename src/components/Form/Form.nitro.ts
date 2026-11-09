@@ -104,6 +104,12 @@ export interface NitroUiFormMethods extends HybridViewMethods {
    *   orphan is a row Fabric cannot find again;
    * - `live`: rows alive right now, read from a weak table — the leak witness;
    * - `reparents`, `reclaims` (iOS): moves into a cell, and back out;
+   * - `recycles`: how many times *this view* has been prepared for reuse — the witness that the
+   *   Form reading the field is the one a previous Form finished with, which is the only way a
+   *   claim about what a recycle leaves behind can be aimed at something;
+   * - `inCells` against the fourth number of `screen=` (iOS): the rows in a cell against the
+   *   items the list is drawing. Equal exactly when nothing on screen is a blank row — a row can
+   *   be alive, counted and in its section's model while the cell drawing its item holds nothing;
    * - `width`: the last reported content width; `box`/`boxReports`: the width a cell really
    *   draws a row at against the width it reported — the witness that a cell knows its Form,
    *   whose absence laid every row out 64 pt too wide and stopped UIKit hit-testing it;
@@ -116,7 +122,13 @@ export interface NitroUiFormMethods extends HybridViewMethods {
    * - `heights`: the first item heights, comma-joined (iOS: the layout's; Android: the rows'
    *   own Yoga heights);
    * - `taps`: row `onPress` calls delivered; `keyboard`: the bottom inset avoidance added;
-   *   `ime`: the IME inset reported;
+   *   `ime`: the IME inset reported; `insetBottom`/`adjBottom`: the inset the list is carrying
+   *   against the one every keyboard decision is measured against (`adjBottom` is what the
+   *   content is padded by, safe area included);
+   * - `offsetPublishes`: how many offsets have actually reached React. One per settle is the
+   *   contract, so a number climbing by one per frame says a scroll is being reported frame by
+   *   frame; `selfSizing` (iOS): whether the list still notices a row's height constraint on its
+   *   own — `0` means the `rowResized` fallback is the only thing that can grow a row;
    * - `shapes`, `pressed` (Android): shapes drawn, and rows pressed.
    *
    * @internal Not app API (D14).
@@ -140,6 +152,12 @@ export interface NitroUiFormMethods extends HybridViewMethods {
    * - `show-reference` puts a SwiftUI `Form` with the same three sections into this Form's
    *   box, over the list;
    * - `hide-reference` takes it away;
+   * - `scroll-no-report` moves the list 60 pt without reporting it, the shape of every settle
+   *   callback that used to be missing;
+   * - `scroll-animated` moves it 60 pt with `animated: true`, which is the keyboard path's shape
+   *   and the one that publishes a frame at a time if nothing guards it;
+   * - `self-sizing-off` takes `selfSizingInvalidation` away from the list, which is how iOS 15
+   *   behaves permanently and what lets the `rowResized` fallback be tested on a modern OS;
    * - while it is up, `nuiTestFormReport()` describes *that* list under the same field names,
    *   so the two are compared like for like rather than measured twice differently.
    *
