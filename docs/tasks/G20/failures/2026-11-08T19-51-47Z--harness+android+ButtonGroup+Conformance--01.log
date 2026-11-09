@@ -1,0 +1,93 @@
+# Failure excerpt — harness:android:ButtonGroup:Conformance
+
+- Ran: 2026-11-08T19:51:47.225Z on code tree `bd1832fc2325` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ButtonGroup Conformance`
+- Result: fail, exit 1, 204007 ms
+- Load: start 7.59, end 3.08, median 3.56, max 7.59
+- Device: android / device `emulator-5574` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+android+ButtonGroup+Conformance-2026-11-08T19-51-47.225Z.log` (<store>/task/G20-button-group/harness+android+ButtonGroup+Conformance-2026-11-08T19-51-47.225Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › lays the default row out at the size it measured, not at the planted one`
+- `● ButtonGroup · G20 › names every item kind, and an icon-only item by its title`
+- `expected 'nodes=3;0[Button,none,disabled=false,…' to match /Role\.Checkbox[^;]*label=Bold/`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+android+ButtonGroup+Conformance-2026-11-08T19-51-47.225Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.08 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ButtonGroup Conformance
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree bd1832fc2325, 21 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.59/7.21 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+android+ButtonGroup+Conformance-2026-11-08T19-51-47.225Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › lays the default row out at the size it measured, not at the planted one
+
+    testID "bg-default" (the default row) never reached 214.10x48.00 - last box 411.43x48.00, control measured 214.10x48.00.
+
+      [0m [90m 260 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 261 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 262 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 263 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - last `[39m [33m+[39m
+       [90m 264 |[39m           [32m`box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 265 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+  ● ButtonGroup · G20 › names every item kind, and an icon-only item by its title
+
+    expected 'nodes=3;0[Button,none,disabled=false,…' to match /Role\.Checkbox[^;]*label=Bold/
+
+      [0m [90m 793 |[39m     expect(a11y)[33m.[39mtoContain([32m'label=Copy'[39m)[33m;[39m
+       [90m 794 |[39m     expect(a11y)[33m.[39mtoContain([32m'label=Bold'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 795 |[39m     expect(a11y)[33m.[39mtoMatch([35m/Role\.Checkbox[^;]*label=Bold/[39m)[33m;[39m
+       [90m     |[39m                         [31m[1m^[22m[39m
+       [90m 796 |[39m   })[33m;[39m
+       [90m 797 |[39m
+       [90m 798 |[39m   it([32m'carries no items, checked state or event count across a remount'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       2 failed, 101 passed, 103 total
+Snapshots:   0 total
+Time:        202.802 s
+Ran all test suites matching ButtonGroup|Conformance.
+
+
+
+```

@@ -27,6 +27,7 @@ export type ComponentName =
   | 'menu'
   | 'text-field'
   | 'icon-button'
+  | 'button-group'
   | 'stepper';
 // @end-generated
 
@@ -50,6 +51,7 @@ export type ScenarioName =
   | `${ScenarioAction}.menu`
   | `${ScenarioAction}.text-field`
   | `${ScenarioAction}.icon-button`
+  | `${ScenarioAction}.button-group`
   | `${ScenarioAction}.stepper`;
 // @end-generated
 

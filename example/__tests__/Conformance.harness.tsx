@@ -103,6 +103,7 @@ import {
   Chip,
   ContextMenu,
   DatePicker,
+  ButtonGroup,
   IconButton,
   Menu,
   Picker,
@@ -275,6 +276,16 @@ const SHARED = {
         "width": 94,
         "height": 32
       }
+    },
+    "NitroUiButtonGroup": {
+      "android": {
+        "width": 300,
+        "height": 48
+      },
+      "ios": {
+        "width": 300,
+        "height": 34.4
+      }
     }
   },
   "poisonSizes": {
@@ -302,7 +313,8 @@ const SHARED = {
     "NitroUiChip": "none",
     "NitroUiCheckbox": "height",
     "NitroUiIconButton": "both",
-    "NitroUiStepper": "both"
+    "NitroUiStepper": "both",
+    "NitroUiButtonGroup": "height"
   },
   "exemptions": [
     {
@@ -432,6 +444,19 @@ type Handle = {
    * Chip there (`Chip.harness.tsx` measured it).
    */
   nuiTestPress?(): void;
+  /**
+   * ButtonGroup's press of one named item, through the tap's own path
+   * (`ButtonGroupModel.press(id)`): a harness touch cannot name an item in a row.
+   */
+  nuiTestPressItem?(id: string): void;
+  /**
+   * ButtonGroup's "what did the row draw" probe, which has to be *driven* before
+   * `nuiTestStateReport` can answer: neither platform can read overflow out of its
+   * toolkit's state, so the row stamps the report as it lays out.
+   */
+  nuiTestProbeRow?(): void;
+  /** ButtonGroup's semantics probe, same reason. */
+  nuiTestProbeAccessibility?(): void;
   /**
    * Checkbox's value, the props half of its recycle rule. `Chip`'s `label` and `Switch`'s
    * `value` have the same job: `useControlled` echoes it back, so it is what React last
@@ -627,6 +652,18 @@ const recordRecycle =
   (testId: string) =>
   (value: unknown): void => {
     recycleEvents.push(`${testId}:${String(value)}`);
+  };
+
+/**
+ * A ButtonGroup's `onCheckedChange` names the item *and* the new state, where Chip's and
+ * IconButton's events carry one value. The one-value recorder above would record the id
+ * alone, so a probe that reads `id:false` could never match what the control reported —
+ * this records the shape the event actually has.
+ */
+const recordRecycleChecked =
+  (testId: string) =>
+  (id: string, checked: boolean): void => {
+    recycleEvents.push(`${testId}:${id}:${String(checked)}`);
   };
 
 /** Events recorded since `from`, so a probe reads only the effect of its own press. */
@@ -1778,6 +1815,70 @@ function popoverShows(report: Record<string, string>, height: number): boolean {
  * in a plain `View`, so the box the harness measures is the control's and the press lands on
  * it. `columnStyle` is what `Slider.harness.tsx` and the other suites use for the same reason.
  */
+/**
+ * The item rows the ButtonGroup fixture mounts.
+ *
+ * Module-level because `items` is an object-array prop: a literal in the JSX would be a
+ * fresh identity on every re-render, which is a prop diff no other fixture pays and a
+ * repaint the sizing rules would then be measuring instead of a mount.
+ */
+const CONFORMANCE_BUTTON_GROUP_ACTIONS = [
+  { id: 'copy', title: 'Copy' },
+  { id: 'paste', title: 'Paste' },
+];
+
+/** The leak rule's two variants: different item counts, so the rows are visibly distinct. */
+const CONFORMANCE_BUTTON_GROUP_A = CONFORMANCE_BUTTON_GROUP_ACTIONS;
+
+const CONFORMANCE_BUTTON_GROUP_B = [
+  { id: 'copy', title: 'Copy' },
+  { id: 'cut', title: 'Cut' },
+  { id: 'paste', title: 'Paste' },
+];
+
+/**
+ * One uncontrolled toggle item: `defaultChecked` seeds it checked once, so pressing it
+ * reports `false` — and an item whose seed was re-applied reports the same thing, which
+ * is why the probe's *read* is the press after the second mount and not the state before
+ * it.
+ */
+const CONFORMANCE_BUTTON_GROUP_TOGGLES = [
+  { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
+];
+
+/**
+ * The same item, *controlled* at unchecked: a boolean `checked` is what makes the
+ * wrapper put the id in `checkedIds`/`controlledIds`, which is the only write the
+ * handshake's counters can refuse.
+ */
+const CONFORMANCE_BUTTON_GROUP_CONTROLLED = [
+  { id: 'bold', title: 'Bold', toggle: true, checked: false },
+];
+
+/**
+ * Press one item of a ButtonGroup, through the control's own press path on both
+ * platforms.
+ *
+ * Not a harness tap: on iOS a harness touch is a `UITouch` with no HID event behind it
+ * and reaches no SwiftUI `Button` gesture (Chip's note above), and on either platform a
+ * tap can only be aimed at a *point* — it cannot name the item, which for a row whose
+ * items have different widths is guesswork. `nuiTestPressItem(id)` runs the same
+ * `press(id)` a tap runs, including the disabled refusal.
+ */
+const pressButtonGroupItem = async (
+  testId: string,
+  id: string
+): Promise<void> => {
+  await screen.findByTestId(testId);
+  const handle = handleFor(testId);
+  if (handle.nuiTestPressItem == null) {
+    throw new Error(
+      `"${testId}" is not a ButtonGroup - it has no nuiTestPressItem(id)`
+    );
+  }
+  handle.nuiTestPressItem(id);
+};
+
 const FIXTURES: ReadonlyArray<Fixture> = [
   {
     name: 'Switch',
@@ -3877,6 +3978,165 @@ const FIXTURES: ReadonlyArray<Fixture> = [
       },
     },
   },
+  {
+    name: 'ButtonGroup',
+    component: 'NitroUiButtonGroup',
+    label: 'Conformance button group',
+    testId: 'conformance-button-group',
+    // Two **action** items at every default the wrapper resolves: this is the
+    // configuration `DECLARED_FALLBACKS.NitroUiButtonGroup` claims, so it is the one
+    // the sizing rules measure. A toggle item is deliberately absent from the *owner* —
+    // an iOS toggle row is a different height from an action row, and the fallback
+    // describes the row the docs print — but both recycle probes mount one.
+    owner: (second) => (
+      <ButtonGroup
+        accessibilityLabel={
+          second
+            ? `Conformance button group, ${SECOND}`
+            : 'Conformance button group'
+        }
+        items={CONFORMANCE_BUTTON_GROUP_ACTIONS}
+        testID="conformance-button-group"
+        hybridRef={captureFor('conformance-button-group')}
+      />
+    ),
+    control: (testId, variant) => (
+      <ButtonGroup
+        accessibilityLabel={`Leak button group ${String(variant)}`}
+        items={
+          variant ? CONFORMANCE_BUTTON_GROUP_B : CONFORMANCE_BUTTON_GROUP_A
+        }
+        testID={testId}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance button group, ${SECOND}`
+          : 'Conformance button group',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // A ButtonGroup holds the checked set the last app toggled, and that set survives
+    // every prop the second owner sends: `checkedIds` is built from the *controlled*
+    // items only, and an uncontrolled item's state belongs to the control. So the
+    // residue is real and the press after the remount is what reads it — Chip's and
+    // IconButton's shape, for the same reason.
+    //
+    // The second owner's `defaultChecked` is deliberately the *opposite* of the residue,
+    // so the answer cannot coincide with what a missing reset would also print.
+    probe: {
+      leaveBehind:
+        'an uncontrolled toggle item that started checked and was pressed off, then a ' +
+        'second owner whose own default is checked - a state the control can only be ' +
+        'showing because `seeded` was re-armed and let the default apply',
+      first: () => (
+        <ButtonGroup
+          accessibilityLabel="Conformance button group"
+          items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
+          testID="conformance-button-group"
+          hybridRef={captureFor('conformance-button-group')}
+        />
+      ),
+      act: async () => {
+        await pressButtonGroupItem('conformance-button-group', 'bold');
+        // The item starts checked (`defaultChecked`), so the press that arms the probe
+        // reports it *unchecked* — the residue a missing reset would show.
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual([
+            'conformance-button-group:bold:false',
+          ])
+        );
+      },
+      second: () => (
+        <ButtonGroup
+          accessibilityLabel="Conformance button group"
+          items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
+          testID="conformance-button-group"
+          hybridRef={captureFor('conformance-button-group')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressButtonGroupItem('conformance-button-group', 'bold');
+        // A clean control re-seeded from `defaultChecked` shows the item checked, so its
+        // first press reports the *unchecked* id with `false`. One still believing it
+        // applied that default shows the previous owner's unchecked item and reports
+        // `true`.
+        return [
+          {
+            label: 'the first press after the second mount reports',
+            expected: 'conformance-button-group:bold:false',
+            actual: await eventsSettled(
+              from,
+              'conformance-button-group:bold:false'
+            ),
+          },
+        ];
+      },
+    },
+    // The other half of the reset: the handshake's event counts. A toggle press on an
+    // uncontrolled item, then a second owner **controlled** at unchecked — the only
+    // shape that reads the counters, because an uncontrolled write is refused before
+    // them (`reconcile()` only applies a write when `js != null`).
+    //
+    // The residue differs from the controlled value on both platforms by construction:
+    // the press leaves the item *checked*, and the second owner says unchecked, so a
+    // stale counter (write refused, control still showing checked) reports `true` where
+    // a clean one reports `false`.
+    controlledProbe: {
+      leaveBehind:
+        'a press that checks an uncontrolled toggle item, then a second owner that is ' +
+        '*controlled* at unchecked - the only shape that reads the handshake\u2019s ' +
+        'counters',
+      first: () => (
+        <ButtonGroup
+          accessibilityLabel="Conformance button group"
+          items={CONFORMANCE_BUTTON_GROUP_TOGGLES}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
+          testID="conformance-button-group"
+          hybridRef={captureFor('conformance-button-group')}
+        />
+      ),
+      act: async () => {
+        await pressButtonGroupItem('conformance-button-group', 'bold');
+        // The item starts checked (`defaultChecked`), so the press that arms the probe
+        // reports it *unchecked* — the residue a missing reset would show.
+        await waitFor(() =>
+          expect(eventsSince(0)).toEqual([
+            'conformance-button-group:bold:false',
+          ])
+        );
+      },
+      second: () => (
+        <ButtonGroup
+          accessibilityLabel="Conformance button group"
+          items={CONFORMANCE_BUTTON_GROUP_CONTROLLED}
+          onCheckedChange={recordRecycleChecked('conformance-button-group')}
+          testID="conformance-button-group"
+          hybridRef={captureFor('conformance-button-group')}
+        />
+      ),
+      read: async () => {
+        const from = recycleEvents.length;
+        await pressButtonGroupItem('conformance-button-group', 'bold');
+        return [
+          {
+            label: 'the first press on the controlled second mount reports',
+            expected: 'conformance-button-group:bold:true',
+            actual: await eventsSettled(
+              from,
+              'conformance-button-group:bold:true'
+            ),
+          },
+        ];
+      },
+    },
+  },
+
   {
     name: 'Stepper',
     component: 'NitroUiStepper',

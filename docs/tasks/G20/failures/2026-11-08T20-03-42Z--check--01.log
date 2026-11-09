@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T20:03:42.633Z on code tree `b1672e0d5f8f` at HEAD `08769bd` (branch `task/G20-button-group`)
+- Command: `bun run check`
+- Result: fail, exit 1, 170641 ms
+- Load: start 7.76, end 7.50, median 8.51, max 12.42
+- Device: android / device `emulator-5574` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/check-2026-11-08T20-03-42.057Z.log` (<store>/task/G20-button-group/check-2026-11-08T20-03-42.057Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "api-extractor:check" exited with code 1`
+- `error: script "manifest:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3019 — the rest is in the full log above)
+
+```
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiIconButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.mm
+nitrogen-check: patched HybridNitroUiIconButtonManager.kt
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonGroupComponent.mm
+nitrogen-check: patched HybridNitroUiButtonGroupManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverComponent.mm
+nitrogen-check: no drift (470 generated files match, 64 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (19 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 0.7s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+check: ✓ prepare             pass        2.5s
+──────── prepare — pass, 2.5s ────────────────────────────────────────────────────
+$ bob build
+ℹ [module] Cleaning up previous build at lib/module
+ℹ [custom] Cleaning up nitrogen
+ℹ [typescript] Cleaning up previous build at lib/typescript
+ℹ [typescript] Generating type definitions with tsc
+ℹ [custom] Running bun run nitrogen
+ℹ [module] Compiling 122 files in src with babel
+$ nitrogen src && node scripts/patch-nitrogen.mjs
+✔ [module] Wrote files to lib/module
+✔ [custom] Ran the nitrogen script succesfully
+✔ [typescript] Wrote definition files to lib/typescript
+check: ✓ publint             pass        0.9s
+check: ✗ api-extractor:check fail        1.3s - exit 1
+──────── api-extractor:check — fail, 1.3s ────────────────────────────────────────
+──────── publint — pass, 0.9s ────────────────────────────────────────────────────
+$ publint --strict
+Running publint v0.3.25 for react-native-nitro-ui...
+Packing files with `bun pack`...
+Linting...
+All good!
+check: ✗ manifest:check      fail        1.8s - exit 1
+──────── manifest:check — fail, 1.8s ─────────────────────────────────────────────
+──────── readme:check — pass, 0.1s ───────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples: 23 blocks match example/src/readme-examples.tsx
+check: 15 passed, 2 failed in 170.4s
+check: failed step(s): api-extractor:check, manifest:check
+──────── full log: api-extractor:check ───────────────────────────────────────────
+$ api-extractor run --config etc/api-extractor.json
+
+[1mapi-extractor 7.59.4 [36m - https://api-extractor.com/[39m
+[22m
+Analysis will use the bundled TypeScript version 5.9.3
+*** The target project appears to use TypeScript 6.0.3 which is newer than the bundled compiler engine; consider upgrading API Extractor.
+[33mWarning: You have changed the API signature for this project. Please copy the file ".turbo/api-extractor-temp/react-native-nitro-ui.api.md" to "etc/react-native-nitro-ui.api.md", or perform a local build (which does this automatically). See the Git repo documentation for more info.[39m
+
+[33mAPI Extractor completed with warnings[39m
+error: script "api-extractor:check" exited with code 1
+──────── full log: manifest:check ────────────────────────────────────────────────
+$ node scripts/package-files.mjs
+package-files: +android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiButtonGroup.kt would be published (not in the manifest).
+package-files: +ios/components/ButtonGroup/HybridNitroUiButtonGroup.swift would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/ButtonGroup.js would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/ButtonGroup.js.map would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/ButtonGroup.nitro.js would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/ButtonGroup.nitro.js.map would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/NativeNitroUiButtonGroup.js would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/NativeNitroUiButtonGroup.js.map would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/NitroUiButtonGroupConfig.js would be published (not in the manifest).
+package-files: +lib/module/components/ButtonGroup/NitroUiButtonGroupConfig.js.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/ButtonGroup.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/ButtonGroup.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/ButtonGroup.nitro.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/ButtonGroup.nitro.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/NativeNitroUiButtonGroup.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/NativeNitroUiButtonGroup.d.ts.map would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/NitroUiButtonGroupConfig.d.ts would be published (not in the manifest).
+package-files: +lib/typescript/src/components/ButtonGroup/NitroUiButtonGroupConfig.d.ts.map would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JFunc_void_std__string_bool_double.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiButtonGroupSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JHybridNitroUiButtonGroupSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiButtonGroupItem.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/JNitroUiButtonGroupSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiButtonGroupStateUpdater.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/c++/views/JHybridNitroUiButtonGroupStateUpdater.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Func_void_std__string_bool_double.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiButtonGroupSpec.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonGroupItem.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiButtonGroupSize.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonGroupManager.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiButtonGroupStateUpdater.kt would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiButtonGroupSpecSwift.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/HybridNitroUiButtonGroupSpecSwift.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/c++/views/HybridNitroUiButtonGroupComponent.mm would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/Func_void_std__string_bool_double.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiButtonGroupSpec.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/HybridNitroUiButtonGroupSpec_cxx.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiButtonGroupItem.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/ios/swift/NitroUiButtonGroupSize.swift would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiButtonGroupSpec.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/HybridNitroUiButtonGroupSpec.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiButtonGroupItem.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/NitroUiButtonGroupSize.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiButtonGroupComponent.cpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/c++/views/HybridNitroUiButtonGroupComponent.hpp would be published (not in the manifest).
+package-files: +nitrogen/generated/shared/json/NitroUiButtonGroupConfig.json would be published (not in the manifest).
+package-files: +src/components/ButtonGroup/ButtonGroup.nitro.ts would be published (not in the manifest).
+package-files: +src/components/ButtonGroup/ButtonGroup.tsx would be published (not in the manifest).
+package-files: +src/components/ButtonGroup/NativeNitroUiButtonGroup.ts would be published (not in the manifest).
+package-files: +src/components/ButtonGroup/NitroUiButtonGroupConfig.ts would be published (not in the manifest).
+package-files: tarball differs from <repo>/etc/package-files.txt (50 added, 0 removed). If intended, run `bun run manifest:update`.
+error: script "manifest:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 170.6 s
+gate: recorded in .gates/task/G20-button-group.jsonl
+
+```

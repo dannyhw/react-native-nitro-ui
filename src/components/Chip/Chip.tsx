@@ -7,6 +7,13 @@ import {
   useStableCallback,
   type NitroCallbackProp,
 } from '../../core/useStableCallback';
+import { warnAndroidIconName } from '../../iconName';
+import {
+  androidIconResourceName,
+  androidIconUrl,
+  resolveAndroidIcon,
+  type AndroidIconProp,
+} from '../../iconSource';
 import { NativeNitroUiChip } from './NativeNitroUiChip';
 
 /**
@@ -59,6 +66,17 @@ export interface ChipProps extends ViewProps {
    */
   systemImage?: string | undefined;
   /**
+   * Leading glyph for Android: an app-shipped vector drawable, as
+   * `require('./icons/share.xml')` or as its resource name (`"share"`) - the two forms
+   * `Button`'s `androidIcon` takes (`docs/components/button.md`, "Android icons").
+   *
+   * Android only, like `Button`'s: iOS draws `systemImage` and ignores this. An assist
+   * chip draws it beside the label; a filter chip draws it while unselected, and the
+   * leading check takes the slot when selected. A name that resolves to nothing leaves
+   * the chip exactly its no-icon self.
+   */
+  androidIcon?: AndroidIconProp | undefined;
+  /**
    * Access to the native Hybrid Object, for this repo's harness.
    *
    * @internal Not app API (DECISIONS D14): props must flow through React, so a
@@ -77,11 +95,14 @@ export interface ChipProps extends ViewProps {
         readonly mostRecentEventCount: number;
         readonly disabled: boolean;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): { width: number; height: number };
         nuiTestPress(): void;
         nuiTestProbeAccessibility(): void;
         nuiTestStateReport(): string;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
       }) => void)
     | undefined;
   /**
@@ -128,13 +149,19 @@ function escapeField(value: string): string {
 
 /**
  * The size configuration of one Chip, as the sizing engine sees it:
- * `variant|selected|systemImage|label`.
+ * `variant|selected|systemImage|androidIcon|label`.
  *
  * - `variant` picks a different control (and on Android a different padding);
  * - `selected` is `1` only where a selection moves the size: a filter chip on
  *   Android (see {@link SELECTION_RESIZES}). Everywhere else it is `0`, so the
  *   field is fixed-width and a toggle is not a new configuration;
- * - `systemImage` and `label` are the content, escaped because both are free-form;
+ * - `systemImage` and `androidIcon` are the two roads to a leading glyph, one per
+ *   platform. Both are here on both platforms: the glyph widens the chip on whichever
+ *   platform draws it (Android the `androidIcon`, iOS the `systemImage`), and one key
+ *   read by both is what keeps a chip with a glyph on one platform from inheriting the
+ *   cached width of a chip without one on the other. The value is the *resolved*
+ *   string, so `share-24px` and `share_24px` stay one configuration;
+ * - `label` is the chip's width;
  * - `disabled` repaints and does not resize, and the environment (text size,
  *   density) is folded in by native through the epoch, so neither is here.
  */
@@ -142,6 +169,7 @@ function sizingVariantFor(
   variant: ChipVariant,
   shownSelected: boolean,
   systemImage: string | undefined,
+  androidIcon: string | null,
   label: string
 ): string {
   const selectedField =
@@ -150,6 +178,7 @@ function sizingVariantFor(
     variant,
     selectedField,
     escapeField(systemImage ?? ''),
+    escapeField(androidIcon ?? ''),
     escapeField(label),
   ].join(FIELD_SEPARATOR);
 }
@@ -190,6 +219,7 @@ export function Chip({
   onPress,
   disabled = false,
   systemImage,
+  androidIcon,
   testID,
   accessibilityLabel,
   hybridRef,
@@ -198,6 +228,18 @@ export function Chip({
   ...restProps
 }: ChipProps) {
   const resolvedVariant = resolveVariant(variant);
+  // One string for native whichever form the caller used, and the same rules
+  // `Button.tsx` applies - see there for why only a typed name is checked. Resolved
+  // before the size configuration below, because the two spellings of one icon must
+  // not be two configurations.
+  const resolvedAndroidIcon = resolveAndroidIcon(androidIcon);
+  if (
+    resolvedAndroidIcon != null &&
+    androidIconUrl(resolvedAndroidIcon) == null &&
+    androidIconResourceName(resolvedAndroidIcon) == null
+  ) {
+    warnAndroidIconName('Chip', 'androidIcon', resolvedAndroidIcon);
+  }
   const sizingId = useSizingId();
   // What native seeded an uncontrolled chip with. Native applies `defaultSelected`
   // once per mount (Switch's rule), so a later change to the prop is not what is
@@ -264,6 +306,7 @@ export function Chip({
       mostRecentEventCount={mostRecentEventCount}
       disabled={disabled}
       systemImage={systemImage ?? null}
+      androidIcon={resolvedAndroidIcon}
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}
       nuiPerfId={nuiPerfId}
@@ -273,6 +316,7 @@ export function Chip({
         resolvedVariant,
         shownSelected,
         systemImage,
+        resolvedAndroidIcon,
         label
       )}
       nuiSizingId={sizingId}

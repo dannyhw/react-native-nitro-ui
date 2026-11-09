@@ -1,0 +1,203 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T19:15:48.830Z on code tree `2997599ede24` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 839415 ms
+- Load: start 5.37, end 6.58, median 4.88, max 16.48
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+ios-2026-11-08T19-15-47.828Z.log` (<store>/task/G20-button-group/harness+ios-2026-11-08T19-15-47.828Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · ButtonGroup › shows none of its previous owner under one identity`
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › moves the items a 220-point well cannot hold, and takes them back when it grows`
+- `● ButtonGroup · G20 › seeds an uncontrolled item once, and never lets a re-render undo a tap`
+- `expected 'checked=bold;visible=none;overflow=no…' to contain 'checked=none'`
+- `● ButtonGroup · G20 › takes nothing from a disabled group or a disabled item, and closes an open menu`
+- `expected 4 to be 6 // Object.is equality`
+- `● ButtonGroup · G20 › carries no items, checked state or event count across a remount`
+- `expected events ["bg-recycle:check:month:true"], saw []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+ios-2026-11-08T19-15-47.828Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.58 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 900 — the rest is in the full log above)
+
+```
+       [90m 1309 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1310 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › moves the items a 220-point well cannot hold, and takes them back when it grows
+
+    widening the well never brought all 6 items into the row - the row reports "checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=1;a11y=none".
+
+      [0m [90m 494 |[39m       }[33m,[39m
+       [90m 495 |[39m       () [33m=>[39m
+      [31m[1m>[22m[39m[90m 496 |[39m         [36mnew[39m [33mError[39m(
+       [90m     |[39m                  [31m[1m^[22m[39m
+       [90m 497 |[39m           [32m`widening the well never brought all ${String(MANY.length)} items into the `[39m [33m+[39m
+       [90m 498 |[39m             [32m`row - the row reports "${handles[39m
+       [90m 499 |[39m [32m              .get('bg-narrow')![39m[0m
+
+  ● ButtonGroup · G20 › seeds an uncontrolled item once, and never lets a re-render undo a tap
+
+    expected 'checked=bold;visible=none;overflow=no…' to contain 'checked=none'
+
+      [0m [90m 636 |[39m     )[33m;[39m
+       [90m 637 |[39m     [36mawait[39m sleep([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 638 |[39m     expect(handleOf([32m'bg-seed'[39m)[33m.[39mnuiTestStateReport())[33m.[39mtoContain([32m'checked=none'[39m)[33m;[39m
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 639 |[39m   })[33m;[39m
+       [90m 640 |[39m
+       [90m 641 |[39m   it([32m'takes nothing from a disabled group or a disabled item, and closes an open menu'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● ButtonGroup · G20 › takes nothing from a disabled group or a disabled item, and closes an open menu
+
+    expected 4 to be 6 // Object.is equality
+
+      [0m [90m 663 |[39m       [33m.[39mslice([35m0[39m[33m,[39m [35m1[39m)
+       [90m 664 |[39m       [33m.[39mconcat(all[33m.[39mfilter((entry) [33m=>[39m [33m![39mshown[33m.[39mincludes(entry)))[33m;[39m
+      [31m[1m>[22m[39m[90m 665 |[39m     expect(pressed[33m.[39mlength)[33m.[39mtoBe([33mMANY[39m[33m.[39mlength)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 666 |[39m     [36mfor[39m ([36mconst[39m entry [36mof[39m pressed) {
+       [90m 667 |[39m       handleOf([32m'bg-disabled-group'[39m)[33m.[39mnuiTestPressItem(entry)[33m;[39m
+       [90m 668 |[39m     }[0m
+
+  ● ButtonGroup · G20 › carries no items, checked state or event count across a remount
+
+    expected events ["bg-recycle:check:month:true"], saw []
+
+      [0m [90m 326 |[39m     }[33m,[39m
+       [90m 327 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 328 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 329 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 330 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 331 |[39m       )[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · ButtonGroup › shows none of its previous owner under one identity
+
+    1 conformance finding(s):
+
+        - ButtonGroup × recycle-reset: testID "conformance-button-group" (uncontrolled second owner) kept its identity across lifetimes and the first press after the second mount reports reads conformance-button-group:bold where the props say conformance-button-group:bold:false — the view came back wearing its previous owner
+      [0m [90m 1305 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1306 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1307 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1308 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1309 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1310 |[39m [32m        .join('\n')}`[39m[0m
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › moves the items a 220-point well cannot hold, and takes them back when it grows
+
+    widening the well never brought all 6 items into the row - the row reports "checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=1;a11y=none".
+
+      [0m [90m 494 |[39m       }[33m,[39m
+       [90m 495 |[39m       () [33m=>[39m
+      [31m[1m>[22m[39m[90m 496 |[39m         [36mnew[39m [33mError[39m(
+       [90m     |[39m                  [31m[1m^[22m[39m
+       [90m 497 |[39m           [32m`widening the well never brought all ${String(MANY.length)} items into the `[39m [33m+[39m
+       [90m 498 |[39m             [32m`row - the row reports "${handles[39m
+       [90m 499 |[39m [32m              .get('bg-narrow')![39m[0m
+
+  ● ButtonGroup · G20 › seeds an uncontrolled item once, and never lets a re-render undo a tap
+
+    expected 'checked=bold;visible=none;overflow=no…' to contain 'checked=none'
+
+      [0m [90m 636 |[39m     )[33m;[39m
+       [90m 637 |[39m     [36mawait[39m sleep([35m400[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 638 |[39m     expect(handleOf([32m'bg-seed'[39m)[33m.[39mnuiTestStateReport())[33m.[39mtoContain([32m'checked=none'[39m)[33m;[39m
+       [90m     |[39m                                                               [31m[1m^[22m[39m
+       [90m 639 |[39m   })[33m;[39m
+       [90m 640 |[39m
+       [90m 641 |[39m   it([32m'takes nothing from a disabled group or a disabled item, and closes an open menu'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● ButtonGroup · G20 › takes nothing from a disabled group or a disabled item, and closes an open menu
+
+    expected 4 to be 6 // Object.is equality
+
+      [0m [90m 663 |[39m       [33m.[39mslice([35m0[39m[33m,[39m [35m1[39m)
+       [90m 664 |[39m       [33m.[39mconcat(all[33m.[39mfilter((entry) [33m=>[39m [33m![39mshown[33m.[39mincludes(entry)))[33m;[39m
+      [31m[1m>[22m[39m[90m 665 |[39m     expect(pressed[33m.[39mlength)[33m.[39mtoBe([33mMANY[39m[33m.[39mlength)[33m;[39m
+       [90m     |[39m                                [31m[1m^[22m[39m
+       [90m 666 |[39m     [36mfor[39m ([36mconst[39m entry [36mof[39m pressed) {
+       [90m 667 |[39m       handleOf([32m'bg-disabled-group'[39m)[33m.[39mnuiTestPressItem(entry)[33m;[39m
+       [90m 668 |[39m     }[0m
+
+  ● ButtonGroup · G20 › carries no items, checked state or event count across a remount
+
+    expected events ["bg-recycle:check:month:true"], saw []
+
+      [0m [90m 326 |[39m     }[33m,[39m
+       [90m 327 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 328 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 329 |[39m         [32m`expected events ${JSON.stringify(wanted)}, saw `[39m [33m+[39m
+       [90m 330 |[39m           [33mJSON[39m[33m.[39mstringify(events[33m.[39mslice([36mfrom[39m))
+       [90m 331 |[39m       )[0m
+
+
+Test Suites: 2 failed, 1 skipped, 25 passed, 27 of 28 total
+Tests:       5 failed, 2 skipped, 524 passed, 531 total
+Snapshots:   0 total
+Time:        801.538 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 2997599ede24, 20 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.50/5.09 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+ios-2026-11-08T19-15-47.828Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+
+Test Suites: 3 passed, 3 total
+Tests:       6 passed, 6 total
+Snapshots:   0 total
+Time:        34.233 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 839.4 s
+gate: recorded in .gates/task/G20-button-group.jsonl
+
+
+gate: appended the device context to task/G20-button-group/harness+ios-2026-11-08T19-15-47.828Z.log (4 probe(s))
+
+```

@@ -41,6 +41,7 @@ enum NitroUiDeclaredFallbacks {
     HybridNitroUiSearchField.declareFallback()
     HybridNitroUiIconButton.declareFallback()
     HybridNitroUiStepper.declareFallback()
+    HybridNitroUiButtonGroup.declareFallback()
     return true
   }()
 

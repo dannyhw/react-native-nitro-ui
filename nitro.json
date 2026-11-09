@@ -223,6 +223,16 @@
         "language": "kotlin",
         "implementationClassName": "HybridNitroUiStepper"
       }
+    },
+    "NitroUiButtonGroup": {
+      "ios": {
+        "language": "swift",
+        "implementationClassName": "HybridNitroUiButtonGroup"
+      },
+      "android": {
+        "language": "kotlin",
+        "implementationClassName": "HybridNitroUiButtonGroup"
+      }
     }
   },
   "ignorePaths": [

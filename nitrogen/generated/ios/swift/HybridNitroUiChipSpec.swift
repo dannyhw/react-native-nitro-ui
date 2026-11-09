@@ -17,6 +17,7 @@ public protocol HybridNitroUiChipSpec_protocol: HybridObject, HybridView {
   var mostRecentEventCount: Double { get set }
   var disabled: Bool { get set }
   var systemImage: Variant_NullType_String { get set }
+  var androidIcon: Variant_NullType_String { get set }
   var testID: Variant_NullType_String { get set }
   var accessibilityLabel: Variant_NullType_String { get set }
   var nuiPerfId: Variant_NullType_Double { get set }
@@ -30,6 +31,8 @@ public protocol HybridNitroUiChipSpec_protocol: HybridObject, HybridView {
   func nuiTestPress() throws -> Void
   func nuiTestProbeAccessibility() throws -> Void
   func nuiTestStateReport() throws -> String
+  func nuiTestPixelProbe(color: Double) throws -> Void
+  func nuiTestPixelReport() throws -> String
 }
 
 public extension HybridNitroUiChipSpec_protocol {

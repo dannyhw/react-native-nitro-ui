@@ -64,6 +64,75 @@ export interface BottomSheetProps {
 export function Button(input: ButtonProps): JSX.Element;
 
 // @public
+export function ButtonGroup(input: ButtonGroupProps): JSX.Element;
+
+// @public
+export type ButtonGroupAppearance = 'standard' | 'connected';
+
+// @public
+export interface ButtonGroupItem {
+    androidIcon?: AndroidIconProp | null | undefined;
+    checked?: boolean | null | undefined;
+    defaultChecked?: boolean | undefined;
+    disabled?: boolean | undefined;
+    id: string;
+    systemImage?: string | null | undefined;
+    title: string;
+    toggle?: boolean | undefined;
+}
+
+// @public
+export type ButtonGroupLabelStyle = 'automatic' | 'titleOnly' | 'iconOnly' | 'titleAndIcon';
+
+// @public
+export interface ButtonGroupProps extends ViewProps {
+    accessibilityLabel?: string | undefined;
+    appearance?: ButtonGroupAppearance | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly items: {
+            readonly id: string;
+            readonly title: string;
+            readonly systemImage: string | null;
+            readonly androidIcon: string | null;
+            readonly disabled: boolean;
+            readonly toggle: boolean;
+        }[];
+        readonly appearance: string;
+        readonly variant: string;
+        readonly size: string;
+        readonly labelStyle: string;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        readonly checkedIds: string[];
+        readonly controlledIds: string[];
+        readonly mostRecentEventCount: number;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPressItem(id: string): void;
+        nuiTestOpenOverflow(): void;
+        nuiTestProbeRow(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    items: ButtonGroupItem[];
+    labelStyle?: ButtonGroupLabelStyle | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onCheckedChange?: ((id: string, checked: boolean) => void) | undefined;
+    onPress?: ((id: string) => void) | undefined;
+    overflowAccessibilityLabel?: string | undefined;
+    size?: 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge' | undefined;
+    testID?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    variant?: ButtonVariant | undefined;
+}
+
+// @public
 export interface ButtonProps extends ViewProps {
     androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;
@@ -142,6 +211,7 @@ export function Chip(input: ChipProps): JSX.Element;
 
 // @public
 export interface ChipProps extends ViewProps {
+    androidIcon?: AndroidIconProp | undefined;
     defaultSelected?: boolean | undefined;
     disabled?: boolean | undefined;
     // @internal
@@ -152,6 +222,7 @@ export interface ChipProps extends ViewProps {
         readonly mostRecentEventCount: number;
         readonly disabled: boolean;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
@@ -160,6 +231,8 @@ export interface ChipProps extends ViewProps {
         nuiTestPress(): void;
         nuiTestProbeAccessibility(): void;
         nuiTestStateReport(): string;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
     }) => void) | undefined;
     label: string;
     // @internal
@@ -197,6 +270,8 @@ export interface ContextMenuProps extends ViewProps {
         readonly previewCornerRadius: number | null;
         nuiTestSelectRow(id: string): void;
         nuiTestMenuProbe(): void;
+        nuiTestMenuPixelProbe(color: number): void;
+        nuiTestMenuPixelReport(): string;
         nuiTestContextMenuReport(): string;
         nuiTestA11yLongClick(): void;
     }) => void) | undefined;
@@ -360,6 +435,7 @@ export function Menu(input: MenuProps): JSX.Element;
 
 // @public
 export interface MenuAction {
+    androidIcon?: AndroidIconProp | undefined;
     checked?: boolean | null | undefined;
     destructive?: boolean | undefined;
     disabled?: boolean | undefined;
@@ -397,6 +473,10 @@ export interface MenuProps extends ViewProps {
         nuiTestSelectRow(id: string): void;
         nuiTestMenuReport(): string;
         nuiTestMenuProbe(): void;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
+        nuiTestMenuPixelProbe(color: number): void;
+        nuiTestMenuPixelReport(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;

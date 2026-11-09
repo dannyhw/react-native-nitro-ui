@@ -29,6 +29,7 @@ import SearchFieldScreen from './SearchFieldScreen';
 import TooltipScreen from './TooltipScreen';
 import IconButtonScreen from './IconButtonScreen';
 import PopoverScreen from './PopoverScreen';
+import ButtonGroupScreen from './ButtonGroupScreen';
 import StepperScreen from './StepperScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
@@ -55,6 +56,7 @@ type Screen =
   | 'tooltip'
   | 'iconbutton'
   | 'popover'
+  | 'buttongroup'
   | 'stepper'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
@@ -119,6 +121,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'tooltip', label: 'Tooltip' },
   { id: 'iconbutton', label: 'Icons' },
   { id: 'popover', label: 'Popover' },
+  { id: 'buttongroup', label: 'Groups' },
   { id: 'stepper', label: 'Stepper' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
@@ -193,6 +196,7 @@ export default function App() {
         {screen === 'tooltip' ? <TooltipScreen /> : null}
         {screen === 'iconbutton' ? <IconButtonScreen /> : null}
         {screen === 'popover' ? <PopoverScreen /> : null}
+        {screen === 'buttongroup' ? <ButtonGroupScreen /> : null}
         {screen === 'stepper' ? <StepperScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}

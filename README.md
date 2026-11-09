@@ -21,6 +21,7 @@ the layout engine, and React never sees a native node.
 | `Progress`           | `ProgressView` + `.progressViewStyle(.linear / .circular)`              | `LinearProgressIndicator` / `CircularProgressIndicator` (M3)                                          | 0.1.0 | [progress.md](docs/components/progress.md)                   |
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                         | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
 | `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`                  | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
+| `ButtonGroup`        | a row of bordered controls, or `ControlGroup` when connected            | M3 `ButtonGroup` with `customItem` and its overflow menu                                              | next  | [button-group.md](docs/components/button-group.md)           |
 | `Stepper`            | `Stepper(value:in:step:)` + `.labelsHidden()` (hold-to-repeat included) | two Material 3 tonal icon buttons, 8 dp apart — Android has no stepper                                | next  | [stepper.md](docs/components/stepper.md)                     |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                                     | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                                 | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
@@ -56,6 +57,7 @@ import {
   AlertDialog,
   BottomSheet,
   Button,
+  ButtonGroup,
   Checkbox,
   Chip,
   ConfirmationDialog,
@@ -404,6 +406,66 @@ all three.
 [icon-button.md](docs/components/icon-button.md) has both columns measured, and
 what each platform does with a glyph it cannot resolve.
 
+### ButtonGroup
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/button-group-ios.png" width="300" alt="Button groups on iOS: a standard row of three command buttons with glyphs, the same three joined into one connected track that draws the glyphs alone, a row of formatting toggles with Bold showing its on state, and the same toggles asked connected — which iOS draws as the standard row" /></td>
+    <td><img src="docs/images/components/button-group-android.png" width="300" alt="Button groups on Android: a standard row of three filled command buttons with a gap between each, the same three joined into one connected group, a row of formatting toggle buttons with Bold checked, and the same toggles asked connected — which Android keeps joined" /></td>
+  </tr>
+</table>
+
+A row of **commands** — _Copy | Paste | Share_ — optionally with independent
+toggles — _Bold | Italic | Underline_. Items are data, `onPress` reports the id you
+gave them, and the items that do not fit move into an overflow menu. It has no
+selected value: one-of-a-few is `SegmentedControl`, and
+[button-group.md](docs/components/button-group.md#buttongroup-or-segmentedcontrol)
+says how to tell them apart.
+
+```tsx name=button-group
+export function FormatToolbar({
+  spellcheck,
+  onSpellcheck,
+  onCommand,
+}: {
+  spellcheck: boolean;
+  onSpellcheck: (next: boolean) => void;
+  onCommand: (id: string) => void;
+}) {
+  return (
+    <ButtonGroup
+      items={[
+        { id: 'copy', title: 'Copy', systemImage: 'doc.on.doc' },
+        { id: 'paste', title: 'Paste', systemImage: 'doc.on.clipboard' },
+        // Controlled: this render decides what is drawn.
+        {
+          id: 'spellcheck',
+          title: 'Spellcheck',
+          toggle: true,
+          checked: spellcheck,
+        },
+        // Uncontrolled: native owns it after the first render.
+        { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
+      ]}
+      appearance="connected"
+      onCheckedChange={(id, checked) => {
+        if (id === 'spellcheck') onSpellcheck(checked);
+      }}
+      onPress={onCommand}
+    />
+  );
+}
+```
+
+`appearance="connected"` is Material's joined group on Android and SwiftUI's
+`ControlGroup` on iOS — one track rather than one control per item. Three of this
+control's props do nothing in the iOS connected look, because `ControlGroup`
+ignores `.controlSize`, `.tint` and `.buttonStyle` (all measured): `variant`,
+`size` and `tintColor`. A connected iOS group that contains a toggle goes back to
+the standard row for the same reason — `ControlGroup` draws no on state, so a
+toggle in one cannot show what it is.
+
 ### Stepper
 
 <table>
@@ -590,7 +652,17 @@ export function FileActions() {
       {
         id: 'dangerous',
         title: 'Dangerous',
-        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+        // `systemImage` is iOS's glyph and `androidIcon` Android's. Each platform
+        // ignores the other's, so one row reads the same on both.
+        items: [
+          {
+            id: 'delete',
+            title: 'Delete',
+            destructive: true,
+            systemImage: 'xmark',
+            androidIcon: require('./assets/icons/close_24px.xml'),
+          },
+        ],
       },
     ],
   };
@@ -623,8 +695,11 @@ export function FileActions() {
 
 `onOpen`/`onClose` exist but fire on Android only — SwiftUI's `Menu` has no
 expansion binding, so iOS never reports either one — and a pick fires
-`onSelect` before the `onClose` that follows it. `systemImage` is iOS-only, and
-a submenu nests on iOS and appears inline as a group of its own on Android.
+`onSelect` before the `onClose` that follows it. `systemImage` is iOS-only and
+`androidIcon` Android-only, on the rows as on the trigger; a row's glyph takes
+Material's own leading slot, and on a checked row the check mark takes that slot
+instead. A submenu nests on iOS and appears inline as a group of its own on
+Android.
 `primaryAction` works on both and is drawn each platform's way: on iOS the
 trigger stays one button, where a tap runs the action and a long-press opens
 the list; on Android it becomes Material 3's split button, so the left half
@@ -651,6 +726,13 @@ const MESSAGE_ACTIONS: MenuGroup = {
   actions: [
     { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
     { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+    // iOS draws the SF Symbol; Android draws the `.xml` the app imports.
+    {
+      id: 'share',
+      title: 'Share',
+      systemImage: 'square.and.arrow.up',
+      androidIcon: require('./assets/icons/share_24px.xml'),
+    },
   ],
   sections: [
     {
@@ -681,7 +763,9 @@ const messageStyles = StyleSheet.create({
 ```
 
 iOS lifts the view itself as the preview (its corners follow `borderRadius`);
-Android opens a Material menu at the finger. `onOpen` and `onClose` fire on
+Android opens a Material menu at the finger. The rows are `Menu`'s rows, so
+`systemImage` and `androidIcon` mean here exactly what they mean on
+[Menu](#menu). `onOpen` and `onClose` fire on
 both platforms, `onSelect` before the `onClose` that follows it. Set
 `accessible` and an `accessibilityLabel` to make it one screen-reader element
 with the menu on it. Without `accessible`, Android screen readers can't open the
@@ -704,7 +788,13 @@ has a selection: `selected` is controlled the way a Switch's `value` is, and
 `onPress`.
 
 ```tsx name=chip
-export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+export function PlaceFilters({
+  onDirections,
+  onStar,
+}: {
+  onDirections: () => void;
+  onStar: () => void;
+}) {
   const [openNow, setOpenNow] = useState(false);
 
   return (
@@ -717,14 +807,23 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
         systemImage="map"
         onPress={onDirections}
       />
+      <Chip
+        variant="assist"
+        label="Starred"
+        systemImage="star"
+        androidIcon={require('./assets/icons/star_24px.xml')}
+        onPress={onStar}
+      />
     </>
   );
 }
 ```
 
-`systemImage` is iOS-only. On Android a selected filter chip shows Material's
-check mark and is wider by it; on iOS selection only changes the fill.
-[chip.md](docs/components/chip.md) has the sizes and the limits.
+`systemImage` is iOS-only and `androidIcon` Android-only. On Android a selected
+filter chip shows Material's check mark and is wider by it — unless a glyph
+already holds that slot, in which case the check takes it and the chip does not
+move; on iOS selection only changes the fill. [chip.md](docs/components/chip.md)
+has the sizes, the icons and the limits.
 
 ### Checkbox
 

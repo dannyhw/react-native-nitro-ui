@@ -379,6 +379,31 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
     }
   }
 
+  // MARK: - Pixel probes (test-only)
+
+  /// How many probes were asked for, so a harness can tell its own answer from the
+  /// previous control's.
+  private let pixelProbesLock = NSLock()
+  private var pixelProbes = 0
+
+  /// Counts the probe and answers nothing. The rows are UIKit's: a context menu is
+  /// presented by the system in a window this process cannot rasterise into a bitmap,
+  /// so there is nothing to sample even with a menu open - which is why this answers
+  /// `no pixels` rather than Android's `no popup`. Menu's pair, for Menu's reason:
+  /// whether a row's glyph reached the screen is a fact only its pixels hold.
+  func nuiTestMenuPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestMenuPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
+  }
+
   func nuiTestContextMenuReport() throws -> String {
     // From the first read on, every state change keeps the report fresh; until then
     // nothing builds it. This read returns the last one built.
@@ -655,7 +680,11 @@ final class HybridNitroUiContextMenu: HybridNitroUiContextMenuSpec, RecyclableVi
       + "cancels=\(cancels);rows=\(actionableRowCount);drawn=\(drawn);title=\(rawTitle ?? "-");"
       + "box=\(box);contentIndex=\(contentIndex);interaction=\(attached);ax=\(ax);a11yAction=-1;"
       + "radius=\(lastRadius < 0 ? "-1" : fmt(lastRadius));press=-1;menu=-1;live=-1;arms=-1;armed=-1;"
-      + "copies=-1;watchStray=-1;seq=\(reportSeq);kids=\(kids.joined(separator: "|"))"
+      + "copies=-1;watchStray=-1;seq=\(reportSeq);"
+      // Android's field, answered `-` here: iOS draws `systemImage` and has no Android
+      // glyph to tint, so no row recorded a colour. Menu answers `-` for the same
+      // reason, which keeps one report shape for both platforms.
+      + "iconTints=-;kids=\(kids.joined(separator: "|"))"
     reportLock.lock()
     report = line
     reportLock.unlock()

@@ -1,0 +1,62 @@
+# Failure excerpt — harness:android:closes%20an%20open%20menu
+
+- Ran: 2026-11-09T01:32:43.152Z on code tree `49ed3218986b` at HEAD `fd6c594` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android closes an open menu`
+- Result: fail, exit 1, 2004 ms
+- Load: start 8.26, end 8.26, median 8.26, max 8.26
+- Device: android / device `emulator-5570` / lease `G20-jtox6`
+- Full log: `task/G20-button-group/harness+android+closes+20an+20open+20menu-2026-11-09T01-32-43.152Z.log` (<store>/task/G20-button-group/harness+android+closes+20an+20open+20menu-2026-11-09T01-32-43.152Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+android+closes+20an+20open+20menu-2026-11-09T01-32-43.152Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-jtox6 (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 8.26 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 17 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android closes an open menu
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 49ed3218986b, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.26/9.86 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+android+closes+20an+20open+20menu-2026-11-09T01-32-43.152Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+No tests found, exiting with code 1
+Run with `--passWithNoTests` to exit with code 0
+In <repo>/example
+  430 files checked.
+  testMatch: <repo>/example/**/__tests__/**/*.harness.[jt]s?(x), !**/__tests__/isolated/** - 28 matches
+  testPathIgnorePatterns: \.(ios)\.harness\.(?:[mc]?[jt]sx?)$ - 430 matches
+  testRegex:  - 0 matches
+Pattern: closes an open menu - 0 matches
+
+
+
+```

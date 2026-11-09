@@ -8,7 +8,8 @@
  * asserting an imagined tree — the failure mode AGENTS.md calls out ("test fixtures must
  * not coincide with the right answer", and here, must not be *invented*).
  *
- * What is kept per control is the named node and its real ancestors, verbatim: the same
+ * What is kept per control is the named node and its real ancestors (and, for a group
+ * case, the actable nodes inside its box), verbatim: the same
  * attribute strings, in the same document order, so `parseHierarchy` sees a subtree of
  * the dump rather than a paraphrase of it. Nodes are dropped only when their box does not
  * contain the named node — the parts of the tree a rule about one control cannot see.
@@ -21,25 +22,22 @@ import { parseHierarchy } from '../real-input/uiautomator.mjs';
 
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
 
-// `--only <screen>` regenerates one control's fixture and leaves the others' measured
-// bytes alone. A late control (or one whose dump changed shape on a new OS) can be
-// re-measured without re-dumping every other control on the same screen, whose
-// committed fixtures are another component's evidence.
-const positional = [];
-let only = null;
-for (let index = 0; index < process.argv.length - 2; index += 1) {
-  const arg = process.argv[index + 2];
-  if (arg === '--only') {
-    only = process.argv[index + 3];
-    index += 1;
-  } else if (!arg.startsWith('--')) {
-    positional.push(arg);
-  }
-}
-if (only !== null && only.startsWith('--')) {
-  throw new Error('--only needs a screen id');
-}
-const outDir = positional[0] ?? 'scripts/__tests__/fixtures/a11y';
+const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
+
+/**
+ * `--only <id>[,<id>…]` refreshes one control's fixture.
+ *
+ * Regenerating the whole set is the right thing after a change that could move any
+ * control's tree, and the wrong thing when one control is new: the committed fixtures are
+ * the measured basis for rules this task did not touch, and rewriting all of them makes a
+ * later diff impossible to read. The tab walk still starts from the top, so the
+ * horizontal tab strip is searched in order exactly as a full run does.
+ */
+const onlyAt = process.argv.indexOf('--only');
+const only =
+  onlyAt >= 0 && process.argv[onlyAt + 1] != null
+    ? new Set(process.argv[onlyAt + 1].split(',').map((entry) => entry.trim()))
+    : null;
 
 const TAB_LABEL = {
   switch: 'Switch',
@@ -58,6 +56,7 @@ const TAB_LABEL = {
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
   stepper: 'Stepper',
+  buttongroup: 'Groups',
 };
 
 function adb(args) {
@@ -100,6 +99,15 @@ function scrollToTop() {
   sleep(500);
 }
 
+/** Whether a dumped node reports an action a person could take. */
+function actable(node) {
+  return (
+    node.clickable === 'true' ||
+    node.checkable === 'true' ||
+    node.focusable === 'true'
+  );
+}
+
 /**
  * The named node's real ancestors, in document order, plus the named node itself.
  *
@@ -117,7 +125,17 @@ function subtree(xml, label) {
     a.bounds.y1 <= b.bounds.y1 &&
     a.bounds.x2 >= b.bounds.x2 &&
     a.bounds.y2 >= b.bounds.y2;
-  const kept = nodes.filter((node) => node === named || inside(node, named));
+  const kept = nodes.filter(
+    (node) =>
+      node === named ||
+      inside(node, named) ||
+      // A `role: 'container'` case is graded on what its box *contains*
+      // (`hasActableMembers` in `a11y.mjs`), and a group's members are siblings of the
+      // merged node rather than children of it — ancestry alone would drop the very items
+      // the rule asks about. Only the actable ones are kept, so a container's fixture
+      // stays as small as every other control's.
+      (node !== named && inside(named, node) && actable(node))
+  );
   const raw = [...xml.matchAll(/<node\b[^>]*?\/?>/g)];
   const lines = kept.map((node) => {
     const index = nodes.indexOf(node);
@@ -163,12 +181,10 @@ function findTab(label) {
 
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
-const controls =
-  only == null
-    ? A11Y_CONTROLS
-    : A11Y_CONTROLS.filter((entry) => entry.screen === only);
-if (controls.length === 0) throw new Error(`no a11y case on screen "${only}"`);
-for (const control of controls) {
+for (const control of A11Y_CONTROLS) {
+  if (only != null && !only.has(control.id)) {
+    continue;
+  }
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();

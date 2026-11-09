@@ -25,12 +25,15 @@
 #include "JHybridNitroUiButtonSpec.hpp"
 #include "JFunc_void.hpp"
 #include "views/JHybridNitroUiButtonStateUpdater.hpp"
+#include "JHybridNitroUiButtonGroupSpec.hpp"
+#include "JFunc_void_std__string.hpp"
+#include "JFunc_void_std__string_bool_double.hpp"
+#include "views/JHybridNitroUiButtonGroupStateUpdater.hpp"
 #include "JHybridNitroUiCheckboxSpec.hpp"
 #include "views/JHybridNitroUiCheckboxStateUpdater.hpp"
 #include "JHybridNitroUiChipSpec.hpp"
 #include "views/JHybridNitroUiChipStateUpdater.hpp"
 #include "JHybridNitroUiContextMenuSpec.hpp"
-#include "JFunc_void_std__string.hpp"
 #include "views/JHybridNitroUiContextMenuStateUpdater.hpp"
 #include "JHybridNitroUiDatePickerSpec.hpp"
 #include "views/JHybridNitroUiDatePickerStateUpdater.hpp"
@@ -242,6 +245,14 @@ struct JHybridNitroUiStepperSpecImpl: public jni::JavaClass<JHybridNitroUiSteppe
     return javaPart->getJHybridNitroUiStepperSpec();
   }
 };
+struct JHybridNitroUiButtonGroupSpecImpl: public jni::JavaClass<JHybridNitroUiButtonGroupSpecImpl, JHybridNitroUiButtonGroupSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiButtonGroup;";
+  static std::shared_ptr<JHybridNitroUiButtonGroupSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiButtonGroupSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiButtonGroupSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiButtonGroupSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -258,12 +269,15 @@ void registerAllNatives() {
   margelo::nitro::nitroui::JHybridNitroUiButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::JFunc_void_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiButtonGroupSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_cxx::registerNatives();
+  margelo::nitro::nitroui::JFunc_void_std__string_bool_double_cxx::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiButtonGroupStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiCheckboxSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiCheckboxStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiChipSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiChipStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiContextMenuSpec::CxxPart::registerNatives();
-  margelo::nitro::nitroui::JFunc_void_std__string_cxx::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiContextMenuStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiDatePickerSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiDatePickerStateUpdater::registerNatives();
@@ -431,6 +445,12 @@ void registerAllNatives() {
     "NitroUiStepper",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiStepperSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiButtonGroup",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiButtonGroupSpecImpl::create();
     }
   );
 }
