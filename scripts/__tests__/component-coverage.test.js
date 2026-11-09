@@ -390,6 +390,7 @@ describe('every component is covered by the conformance suite', () => {
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
+      'Stepper|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
       'IconButton|a11y-name-on-focusable-node',
