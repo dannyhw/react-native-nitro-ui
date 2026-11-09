@@ -115,5 +115,5 @@
 | G20 | ButtonGroup (Q9 Appendix B, D42; the four early checks first) | Apex | Opus | merged (1 impl + 1 fix round; merge gates 5/5 on code tree `8fb41da6` with G21 in; iOS 26.5, 27.0 and 27.1 checked) |
 | G21 | `androidIcon` on Menu/ContextMenu rows, SplitButton and Chip (Q9 C2 item 3, D43) | Apex | Opus | merged (1 impl + device round; review MERGE WITH FIXES applied in the merge round; merge gates 5/5 on code tree `14ecf523`) |
 | G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | fix round 1 (review: iOS taps jump several steps when the range does not end on a step; TalkBack reads a percentage; wrong grid example in README, docs and changeset; hold-to-repeat never run; merge main) |
-| G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | in review (PR #56; gates green except real-input:ios, red on the ContextMenu a11y stop count, same as G25 - X22) |
+| G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | fix round 1 (review MERGE WITH FIXES: radio sizing key keeps `lbl:`; garbled picker.md line; no barrier twin for 'reports nothing'; Kotlin `expanded` red proof doesn't hold; '1 of N' untested; changeset too internal. real-input:ios waits on X22) |
 | X22 | iOS ContextMenu a11y stops read 4 instead of 2 on unrelated branches (blocks G25 and G26 merges) | Apex | Opus | running |
