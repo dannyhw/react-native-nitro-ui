@@ -28,7 +28,8 @@ export type ComponentName =
   | 'text-field'
   | 'icon-button'
   | 'form'
-  | 'button-group';
+  | 'button-group'
+  | 'stepper';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -52,7 +53,8 @@ export type ScenarioName =
   | `${ScenarioAction}.text-field`
   | `${ScenarioAction}.icon-button`
   | `${ScenarioAction}.form`
-  | `${ScenarioAction}.button-group`;
+  | `${ScenarioAction}.button-group`
+  | `${ScenarioAction}.stepper`;
 // @end-generated
 
 /**

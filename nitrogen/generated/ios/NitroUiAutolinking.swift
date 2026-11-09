@@ -276,6 +276,18 @@ public final class NitroUiAutolinking {
     return HybridNitroUiPopover.self is any RecyclableView.Type
   }
   
+  public static func createNitroUiStepper() -> bridge.std__shared_ptr_HybridNitroUiStepperSpec_ {
+    let hybridObject = HybridNitroUiStepper()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiStepperSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiStepperRecyclable() -> Bool {
+    return HybridNitroUiStepper.self is any RecyclableView.Type
+  }
+  
   public static func createNitroUiButtonGroup() -> bridge.std__shared_ptr_HybridNitroUiButtonGroupSpec_ {
     let hybridObject = HybridNitroUiButtonGroup()
     return { () -> bridge.std__shared_ptr_HybridNitroUiButtonGroupSpec_ in

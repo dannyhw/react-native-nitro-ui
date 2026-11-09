@@ -123,7 +123,7 @@ import { findByTestId, findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'|'stepper'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -300,6 +300,29 @@ export const A11Y_CONTROLS = Object.freeze([
     // by their own text ("Copy", "Cut", "Paste"). So the finding to guard is a group whose
     // name stops leading to its items: a merged box with nothing pressable in it, or a
     // name that slid up onto the page.
+  },
+  {
+    // A Stepper is one adjustable value on both platforms, not two buttons
+    // (`docs/components/stepper.md`), and Android is the half this rule can see: the
+    // row publishes the range info and the two Material buttons clear their own
+    // semantics away, so a dump has to show ONE named node with no clickable node
+    // under it. Two focus stops is precisely the bug this rule was written for (G6).
+    id: 'stepper',
+    component: 'Stepper',
+    hybridView: 'NitroUiStepper',
+    screen: 'stepper',
+    label: 'Real-input stepper',
+    role: 'interactive',
+    anchorTestId: 'real-input-stepper',
+    // What VoiceOver says, not what the tree reports: the element this control vends
+    // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
+    // element type for a trait, so the measured announcement is in `A11Y_EXEMPTIONS`
+    // below — the Slider row's arrangement, for the same reason. Writing the measured
+    // word here would freeze the gap into the expectation. Measured G25 fix round 1 on
+    // the lease's iPhone Air (iOS 27): the sweep's tree has the named element, at the
+    // control's box, with `value="1"` — and its type is `other`, exactly as the Slider's
+    // is, which is what that row is for.
+    iosTrait: 'adjustable',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
@@ -626,6 +649,20 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     matches: /not actionable/,
   },
   {
+    control: 'stepper',
+    platform: 'android',
+    followups:
+      "G25 a11y: the Stepper's RangeInfo node is not actionable in a dump",
+    // The same dump limitation the four Slider/SegmentedControl rows record, and for the
+    // same reason: the merged row is actionable through Compose's *custom* `SetProgress`
+    // action, and `uiautomator dump` prints only the standard clickable/scrollable
+    // flags, so a control a reader can adjust with a swipe reads as "no actions". The
+    // action itself is not taken on faith — `Stepper > steps once when a reader asks`
+    // performs SetProgress on this node and asserts the step and the one event it
+    // produces, so what is unasserted here is the flag, not the behaviour.
+    matches: /not actionable/,
+  },
+  {
     control: 'slider',
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',
@@ -636,6 +673,22 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',
     matches: /announced as an other/,
+  },
+  {
+    control: 'stepper',
+    platform: 'ios',
+    followups:
+      'G25 a11y: the Stepper is announced as other and not as an adjustable',
+    // The same gap `ios:slider` records, on the same element kind: this control vends a
+    // `UIAccessibilityElement` whose traits are `.adjustable` (measured by the harness
+    // probe, which reads the trait mask itself — `traits=4096` plus the bool UIKit
+    // computes from it), and XCUITest has no element type for a trait, so the tree calls
+    // it `other`. The row is anchored on the whole sentence — `and not as an adjustable`
+    // — because the *other* way an announcement goes wrong ("no element other than the
+    // React Native wrapper is announced as …", X4 re-review M3's lesson) must stay red:
+    // losing the label is not this debt. The kind is therefore excused and the name, the
+    // box and the value are not, which is also what the harness case grades.
+    matches: /announced as an other and not as an adjustable/,
   },
   {
     control: 'hosted-picker',

@@ -711,6 +711,24 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 48, height: 48 },
     ios: { width: 44, height: 44 },
   },
+  // `HybridNitroUiStepper.kt` (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`) and
+  // `HybridNitroUiStepper.swift` (`declaresFallback`), read off those sources.
+  //
+  // A Stepper is two fixed-width halves on both platforms, so unlike a Button or a Chip
+  // its declaration is not the middle of a table of content sizes: no range, step or
+  // label moves the box (`Stepper.tsx` sends an empty sizing variant for exactly this
+  // reason), which is what makes `both` an honest box rule here. The Android number is
+  // two 48 dp touch targets with the 8 dp the design puts between them; the iOS one is
+  // SwiftUI's own `Stepper` with its label hidden, at 94x32 pt on the iOS 26/27 runtimes
+  // this pool has (G25 round 1 recorded 93x28 for it, which no device here agrees
+  // with: an iOS run measured 94x32 and every cold mount paid a correction). Both were
+  // measured here rather than copied from Q7 Appendix E's estimates, and the poisoned
+  // run replaces them with `POISON_SIZES` before a cold mount, so "the guess was never
+  // corrected" still goes red.
+  NitroUiStepper: {
+    android: { width: 104, height: 48 },
+    ios: { width: 94, height: 32 },
+  },
   // `HybridNitroUiButtonGroup.kt` (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`) and
   // `HybridNitroUiButtonGroup.swift` (`fallbackSize`), read off those sources.
   //

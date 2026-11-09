@@ -877,6 +877,44 @@ export interface SliderProps extends ViewProps {
 }
 
 // @public
+export function Stepper(input: StepperProps): JSX.Element;
+
+// @public
+export interface StepperProps extends ViewProps {
+    accessibilityLabel?: string | undefined;
+    defaultValue?: number | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly value: number | null;
+        readonly mostRecentEventCount: number;
+        readonly minimumValue: number;
+        readonly maximumValue: number;
+        readonly step: number;
+        readonly disabled: boolean;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestStep(direction: number): void;
+        nuiTestAccessibilityStep(direction: number): void;
+        nuiTestAccessibilityStepReport(): string;
+        nuiTestProbeAccessibility(): void;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    maximumValue?: number | undefined;
+    minimumValue?: number | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onValueChange?: ((value: number) => void) | undefined;
+    step?: number | undefined;
+    value?: number | undefined;
+}
+
+// @public
 export function Switch(input: SwitchProps): JSX.Element;
 
 // @public
