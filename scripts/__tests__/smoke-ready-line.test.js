@@ -36,7 +36,7 @@ const READY_LINE =
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
   'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 chip=58x28 ' +
-  'search-field=310x37 checkbox=40x40 icon-button=32x32 stepper=93x28 host=310x96';
+  'search-field=310x37 checkbox=40x40 icon-button=32x32 stepper=94x32 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -55,7 +55,7 @@ const READY_LINE =
  * also its declared fallback (iOS's own field is 28 pt, and the line is an Android
  * logline) - so it is the box a smoke run prints unless the device disagrees.
  * `stepper=` (G25) is written the same way, from the two boxes the harness measures:
- * 93x28 pt on iOS (SwiftUI's own `Stepper` with its label hidden) and 104x48 dp on
+ * 94x32 pt on iOS (SwiftUI's own `Stepper` with its label hidden) and 104x48 dp on
  * Android (two 48 dp targets and the 8 dp between them), which are also the two
  * numbers `DECLARED_FALLBACKS.NitroUiStepper` carries.
  */

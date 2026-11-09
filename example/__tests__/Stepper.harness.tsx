@@ -115,7 +115,7 @@ type StepperHandle = {
 const DECLARED: Size =
   Platform.OS === 'android'
     ? { width: 104, height: 48 }
-    : { width: 93, height: 28 };
+    : { width: 94, height: 32 };
 
 /* ------------------------------- the fixtures ------------------------------- */
 
@@ -1080,17 +1080,17 @@ describe('Stepper', () => {
     expect(detail, 'the control carries its value').toContain('4');
 
     if (Platform.OS === 'ios') {
-      // 1 << 13 is `UIAccessibilityTraits.adjustable` - the trait VoiceOver needs to
-      // offer a swipe-adjustable element at all.
-      const traits = /traits=(\d+)/.exec(detail)?.[1];
-      expect(traits, `no traits in "${detail}"`).not.toBeNull();
-      // 1 << 13 is the trait bit, so the mask is spelled as the trait it reads.
-      // eslint-disable-next-line no-bitwise
-      const adjustable = (Number(traits) & (1 << 13)) !== 0;
+      // `.adjustable` is the trait VoiceOver needs to offer a swipe-adjustable element
+      // at all. The control answers it as a bool computed by UIKit, because the raw mask
+      // beside it is UIKit's own numbering: an element UIKit agrees is adjustable
+      // reports `traits=4096` on the OS this ran on, which is not the bit the pre-26
+      // headers list, so a test that hard-coded one would be a premise everywhere else.
+      const traits = /traits=(\d+)/.exec(detail)?.[1] ?? '';
+      expect(traits.length, `no traits in "${detail}"`).toBeGreaterThan(0);
       expect(
-        adjustable,
-        `the element is not adjustable: traits=${String(traits)}`
-      ).toBe(true);
+        detail,
+        `the element is not adjustable: "${detail}"`
+      ).toContain('adjustable=true');
     } else {
       // Android's claim has two halves: the one node with range info, and the two
       // buttons being *out* of the tree beside it.

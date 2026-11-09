@@ -456,15 +456,17 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
 
   /// The size to lay a Stepper out with before anything has been measured, in points.
   ///
-  /// Measured on this machine (D14), per OS: SwiftUI's `Stepper` with its label
-  /// hidden lays out at the two numbers below at every range and step - the control
-  /// is two fixed-width halves, so nothing the caller sends moves the box. The
-  /// numbers are what `Stepper.harness.tsx`'s sizing cases compare against, and a
-  /// change to either is a change to what the first cold frame shows (D17).
+  /// Measured on this machine (D14): SwiftUI's `Stepper` with its label hidden lays out
+  /// at 94x32 pt on iOS 26 and 27, at every range and step - the control is two
+  /// fixed-width halves, so nothing the caller sends moves the box. There is no runtime
+  /// below 26 on this machine to measure, so the same box is declared for those rather
+  /// than this file claiming a number no device has read: an older OS pays at most the
+  /// one cold correction the sizing engine exists for. The number is what
+  /// `Stepper.harness.tsx`'s sizing cases and `DECLARED_FALLBACKS.NitroUiStepper.ios`
+  /// compare against, and a change to either is a change to what the first cold frame
+  /// shows (D17).
   private static let declaresFallback: Bool = {
-    let modern = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
-    let size = modern ? (width: 93.0, height: 28.0) : (width: 93.0, height: 28.0)
-    NitroUiSizing.setFallback(sizingComponentName, size.width, size.height, NitroUiSizingPolicy.intrinsic.rawValue)
+    NitroUiSizing.setFallback(sizingComponentName, 94.0, 32.0, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
@@ -712,7 +714,14 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
   }
 
   /// What the element this view vends tells a reader, as one line:
-  /// `traits=<raw>;label=<text>;value=<text>;disabled=<bool>`.
+  /// `traits=<raw>,adjustable=<bool>,label=<text>,value=<text>,disabled=<bool>`.
+  ///
+  /// Comma-separated, because `;` is what splits this line's own fields apart inside
+  /// `nuiTestStateReport()` - a report that used it internally arrived as its first
+  /// word. `adjustable` is UIKit's own answer to `traits.contains(.adjustable)` rather
+  /// than a bit a test has to know: the raw mask is reported beside it as the evidence,
+  /// but the bit an adjustable element answers is UIKit's business, and on the OS this
+  /// was measured on it is not the one the pre-26 headers list.
   ///
   /// The element is the one this view hands UIKit, so it can be read in-process here
   /// in a way a SwiftUI-modifier-built element cannot (`HybridNitroUiSlider.swift`
@@ -729,7 +738,10 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
       let label = element.accessibilityLabel ?? ""
       let value = element.accessibilityValue ?? ""
       self.model.recordAccessibility(
-        nitroUiStepperReport("traits=\(traits.rawValue);label=\(label);value=\(value);disabled=\(traits.contains(.notEnabled))")
+        nitroUiStepperReport(
+          "traits=\(traits.rawValue),adjustable=\(traits.contains(.adjustable))," +
+            "label=\(label),value=\(value),disabled=\(traits.contains(.notEnabled))"
+        )
       )
     }
     if Thread.isMainThread {
