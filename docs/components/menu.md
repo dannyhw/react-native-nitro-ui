@@ -276,8 +276,9 @@ The measured run for this round is in `docs/tasks/G19-android-icon-iconbutton.re
 
 ## The rows' glyphs
 
-`MenuAction.androidIcon` is the same prop with the same two forms — `require('./icons/share.xml')` or `"share"` — and all
-of `docs/components/button.md`, "Android icons" applies to it: the file format, the
+`MenuAction.androidIcon` is the same prop with the same two forms —
+`require('./icons/share.xml')` or `"share"` — and all of `docs/components/button.md`,
+"Android icons" applies to it: the file format, the
 resource-name form, where Material Symbols come from and the failure table. What is
 Menu's own is the slot it lands in.
 

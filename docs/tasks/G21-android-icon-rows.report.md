@@ -11,8 +11,8 @@ JS resolves the asset or drawable name (`src/iconSource.ts`), native gets a stri
 
 - **Rows** (`Menu` + `ContextMenu`, one shared `MenuRowIcons`): every action row that takes
   `systemImage` now takes `androidIcon` — actions and the rows inside a submenu or a section —
-  as Material's
-  `leadingIcon`, so size, colour, gap and group insets stay Material's. The slot is
+  as Material's `leadingIcon`, so size, colour, gap and group insets stay Material's.
+  The slot is
   `MenuDefaults.LeadingIconSize` = **20 dp**, not 24; the colour is read from
   `LocalContentColor` **as the row draws**, so a disabled row dims its glyph with its title; and
   a checked row's check takes that same slot, which keeps the popup one width.
