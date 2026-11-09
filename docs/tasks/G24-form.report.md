@@ -255,15 +255,16 @@ would have bought the same ~106 min.
 
 **Lease:** `G24-en8js` (pair-a / Metro 8295).
 
-`origin/main` (98 commits) merged into `ea632607`; the regions the merge had resolved by keeping
-both sides were undone, and every generated file came from its own script.
+`origin/main` (98 commits) merged into `ea632607`; the merge's keep-both-sides regions were
+undone, and every generated file came from its own script.
 
 All twelve findings are in. iOS: Fabric's index travels through `insertSubview(_:at:)`, so a keyed
 insert lands where React put it and a reorder reaches `rowMoved`; `giveBack` releases only a row it
-still holds; the keyboard overlap is computed in one space; three scroll delegates answer a settle;
+still holds; the keyboard overlap is computed in one space and the list reports the inset it
+carries; three scroll delegates answer a settle;
 a changed title is redrawn without reloading the section; `rowResized` invalidates wherever
-`selfSizingInvalidation` is unavailable; a list leaving its window stops reporting to a callback
-that has gone. Android: a dropped composition keeps its view, `removeAllViews()` inside RN's
+`selfSizingInvalidation` is unavailable; a list that leaves its window stops reporting to a dead
+callback. Android: a dropped composition keeps its view, `removeAllViews()` inside RN's
 `recycleView` is answered by putting the layer back, bands reset with the model and publish from
 their own measure, `ACTION_CLICK` presses a row, and recycled views shed the last mount's name.
 `Form.tsx` builds React's own keys and refuses a nested `Form.Row`; an unstyled iOS `Form` has a
@@ -294,10 +295,21 @@ Each line is `test -> the thing it guards put back the way it was -> what went r
   "ACTION_CLICK to reach onPress" - last was `presses=0;pressable=1`.
 - `real-input:ios:--control:form` -> the keyboard rect back into the list's content space -> "the
   Form reserves a bottom inset of 99.0 ... the keys alone overlap by 284.0, so the avoidance
-  under-reserves by 185.0" (`RealInputTests.swift:6189`). The first draft of that assertion asked
-  for an equality and went red on the clean tree by 44 pt: XCUITest's keyboard element is the keys,
-  the notification's end frame is the keys plus the predictive-text bar, so it is a band now —
-  the keys as a floor, one accessory bar of slack as a ceiling.
+  under-reserves by 185.0" (`RealInputTests.swift:6189`). That band, not an equality: XCUITest's
+  keyboard element is the keys, the notification's end frame is the keys plus the predictive-text
+  bar, so it is the keys as a floor and one accessory bar of slack as a ceiling — the equality the
+  first draft asked for went red on the clean tree by 44 pt.
+- `real-input:ios:--control:form`, the scroll half -> `scrollView.contentInset.bottom = 0` at the
+  drag and deceleration endings -> "the list carried a bottom inset of 328.0 for the keyboard
+  before the scroll and 0.0 after it" (`RealInputTests.swift:6286`). The Form's own `keyboard=`
+  still read 328.0 through that mutation — it is what the class asked for, not what the list
+  carries — so the list now reports its `contentInset.bottom` and `adjustedContentInset.bottom`
+  and the check asks those. What the check asks changed too: with the reservation added below
+  content the check had already scrolled to the end of, and a synthesised drag carrying real
+  velocity, the field came to rest legitimately at 778 of an 874 pt window with the inset intact
+  (`off` 531.33 -> 234.33). A scroll may not take the reservation, so the check drags down, comes
+  back to the end of the content and asks whether the field is above the keys *there*: 482 against
+  590 with the inset, 770 without it.
 - `Form.harness`'s teardown case -> the `superview`/`window` guard out of `reportGeometry` -> not a
   failed assertion: the next suite never started, "the app bridge disconnected".
 - The Android row's a11y reset is the one item with no red: with `resetRow`'s reset commented out
