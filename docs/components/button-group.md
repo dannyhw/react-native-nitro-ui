@@ -38,7 +38,7 @@ import { ButtonGroup } from 'react-native-nitro-ui';
 | `tintColor`                | `ColorValue`                                  | platform     | The variant's container / SwiftUI `.tint()`. **Not iOS `connected`.**        |
 | `onPress`                  | `(id: string) => void`                        | —            | One call per tap on an action item, from the row or from the menu.           |
 | `onCheckedChange`          | `(id: string, checked: boolean) => void`      | —            | A toggle item's change, on the event-count handshake.                        |
-| `overflowAccessibilityLabel` | `string`                                    | `'More'`     | The name of the overflow control, on both platforms.                         |
+| `overflowAccessibilityLabel` | `string`                                    | platform     | Names the overflow control. iOS draws `'More'`; Android leaves Material's own localised label. |
 | `accessibilityLabel`       | `string`                                      | —            | The group's own name. Unset leaves each item to speak for itself.            |
 | `testID`                   | `string`                                      | —            | Forwarded to the native view.                                                |
 | `style`                    | `StyleProp<ViewStyle>`                        | —            | Applied over the control's own `alignSelf: 'stretch'`.                        |
@@ -147,7 +147,10 @@ same six items that overflow at 220 pt are a full row across the screen.
   built-in `DropdownMenu` for the rows. Which items overflowed is private state
   (`ButtonGroupOverflowState`), and the menu is Material's, not [Menu](menu.md)'s —
   which means it is a plain Material dropdown carrying this library's row style, and it
-  follows `MaterialExpressiveTheme`.
+  follows `MaterialExpressiveTheme`. The design task asked whether that popup survives
+  inside an Android `<Host>` as well as in a plain host: the first half is what shipped,
+  and the second is moot — `ButtonGroup` is not hostable, so there is no `<Host>` form of
+  it to open a menu from.
 - **iOS** has no overflow to borrow. The row is a `ViewThatFits` over "all items", then
   "n−1 items plus a `Menu`", and so on down to one item plus the menu, so what you get is
   the most items that fit rather than the fewest. The `Menu` sits **beside** the group:
@@ -155,15 +158,30 @@ same six items that overflow at 220 pt are a full row across the screen.
   containment and without).
 - A tap on an overflow row is the same event as a tap on the row: `onPress(id)`, or the
   toggle handshake. `disabled` arriving while the menu is open closes it, and so does a
-  recycle.
+  recycle. On Android the harness opens Material's menu, flips `disabled` and reads the
+  state back `closed`; iOS has no way to open a `Menu` from code before iOS 18's
+  `isExpanded` (the target is 15.1), so the same rule is proved there by the real-input
+  pass — a real tap on the real indicator, `disabled` arriving from the app, and the menu
+  rows gone.
 - On **iOS 15** there is no `ViewThatFits`, so every item is drawn and the row clips to
   its box. Nothing overflows and nothing moves into a menu there.
 
-`overflowAccessibilityLabel` names the control on both platforms. Android's own indicator
-arrives already named — Material calls it "More options" — and two descriptions on one
-node are read one after the other, so the library *replaces* Material's words with `'More'`
-unless you say otherwise: one name, the same word iOS draws. The person who needs the menu
-most is the one who cannot find it.
+`overflowAccessibilityLabel` names the control on both platforms — the person who needs
+the menu most is the one who cannot find it. What each platform does *without* it is
+different, and one word cannot serve both:
+
+- **iOS** draws the label it is given, defaulting to `'More'`, because the ellipsis it
+  draws arrives with nothing to read.
+- **Android** leaves Material's semantics alone. Its indicator already carries
+  `SemanticsProperties.ContentDescription("More options")`, in the reader's own
+  language, and a second description on the same node is read *after* the first — a reader
+  reaching an overflowing group was offered "More, More options". So with no prop this
+  library adds nothing and Material's localised string is what a reader hears.
+- Name it and Android replaces Material's words with yours (`clearAndSetSemantics`), which
+  is the only case this control overwrites a description.
+
+The label is observable state on Android: changing it after mount repaints the indicator.
+It used to be a plain field, so new words were stored and never drawn.
 
 ## Accessibility
 
@@ -172,7 +190,7 @@ most is the one who cannot find it.
 | An action item    | "Copy, button"                                     | "Copy, button"                                          |
 | An icon-only item | still named by its `title`                          | `contentDescription` on the item, glyph itself silent   |
 | A toggle item     | `Toggle(…).toggleStyle(.button)`                    | checkbox role with a checked state                      |
-| The overflow      | `'More'` (or your label)                            | `'More'` (or your label), plus Material's tooltip       |
+| The overflow      | `'More'` (or your label)                            | Material's own "More options", or your label, plus its tooltip |
 | The group         | one container holding one element per item          | one traversal group, items still reachable inside it    |
 
 The names are read from the tree, not listened to: the harness reads Compose semantics

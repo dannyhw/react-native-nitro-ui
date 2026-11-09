@@ -202,7 +202,8 @@ class ButtonGroupModelTest {
     assertEquals(false, model.ledger.indicatorPlaced())
     assertEquals(false, model.menuOpen)
     assertEquals(
-      "checked=none;visible=none;overflow=none;menu=closed;probes=0;a11y=none",
+      "checked=none;visible=none;overflow=none;row=none;shown=none;menu=closed;" +
+        "probes=0;a11y=none",
       model.stateReport(),
     )
     // `seeded` is not a field a test can read, and that is the point of writing it
