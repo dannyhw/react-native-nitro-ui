@@ -6133,45 +6133,45 @@ final class RealInputTests: XCTestCase {
       throw RealInputCheckAborted(identifier: identifier)
     }
 
-    // What the keyboard actually is has two possible witnesses, and they do not always both
-    // exist. The Form's own report carries the inset UIKit told it (`keyboardWillChangeFrame`
-    // -> the list's bottom inset), which is the number the avoidance was built from and which
-    // a simulator with a connected hardware keyboard still has. XCUITest's keyboard *window*
-    // is the better witness when the simulator bothers to expose one, so it is used when it
-    // is there and the inset is used when it is not. Neither is assumed.
+    // Two witnesses exist and they are not equal. XCUITest's keyboard *window* is the keyboard's
+    // real top edge. The Form's own report carries the inset it asked UIKit for
+    // (`keyboardWillChangeFrame` -> the list's bottom inset), which is a number produced by the
+    // code under test - so it is reported and compared with the keys, and never used to place the
+    // line the field is judged against. Fix round 1 fell back to that derived line when no window
+    // was there; fix round 2, item 5 called that what it is: a check graded against its subject.
     _ = waitUntil({ self.echoText(Echo.formKeyboardInset) != "-" }, window: 4)
     let insetText = echoText(Echo.formKeyboardInset)
     let inset = CGFloat(Double(insetText) ?? 0)
     let keyboard = app.keyboards.firstMatch
-    let keyboardTop: CGFloat
-    let from: String
-    if keyboard.waitForExistence(timeout: 5) {
-      keyboardTop = keyboard.frame.minY
-      from = "window"
-    } else if inset > 0 {
-      // A correct avoidance leaves the row above `listBottom - inset`, and the list's bottom
-      // is never below the window's, so `screen.maxY - inset` is a line the field must be
-      // above whenever the keyboard is what UIKit says it is - and cannot be met by accident.
-      keyboardTop = screen.maxY - inset
-      from = "inset"
-    } else {
-      dumpHierarchy("no keyboard window and no keyboard inset after focusing \(identifier)")
-      throw XCTSkip(
-        "nothing says a keyboard came up: XCUITest sees no keyboard window (a simulator with "
-          + "its hardware keyboard connected shows none) and the Form's own report reads "
-          + "keyboard=\(insetText), so there is no keyboard for the field to stay above. Not a "
-          + "pass: iOS question 5 is unmeasured on this host."
+    if !keyboard.waitForExistence(timeout: 5) {
+      if inset <= 0 {
+        dumpHierarchy("no keyboard window and no keyboard inset after focusing \(identifier)")
+        throw XCTSkip(
+          "nothing says a keyboard came up: XCUITest sees no keyboard window (a simulator with "
+            + "its hardware keyboard connected shows none) and the Form's own report reads "
+            + "keyboard=\(insetText), so there is no keyboard for the field to stay above. Not a "
+            + "pass: iOS question 5 is unmeasured on this host."
+        )
+      }
+      dumpHierarchy("no keyboard window, only the Form's own inset, after focusing \(identifier)")
+      XCTFail(
+        "question 5 has no witness for the keyboard's real top edge: XCUITest sees no keyboard "
+          + "window after \(identifier) took the focus, while the Form's own report reads "
+          + "keyboard=\(insetText). The only line left to judge the field against is one the code "
+          + "under test drew, which can show at most that the Form agrees with itself."
       )
+      throw RealInputCheckAborted(identifier: identifier)
     }
+    let keyboardTop = keyboard.frame.minY
     let frame = field.frame
     XCTAssertGreaterThan(
       inset,
       0,
-      "the Form's report reads keyboard=\(insetText) — UIKit never told it a keyboard is up, "
-        + "so the \(from)-derived line at \(keyboardTop) is not a keyboard's top edge and "
-        + "nothing here has measured question 5."
+      "the Form's report reads keyboard=\(insetText) while XCUITest shows a keyboard window at "
+        + "\(keyboardTop) — UIKit never told the Form a keyboard is up, so nothing reserved room "
+        + "for these keys and nothing here has measured question 5."
     )
-    if from == "window" {
+    do {
       // The echoed inset has to *be* the keyboard's overlap, not merely a positive number that
       // came out of the keyboard notification. This screen gives the Form `flex: 1` under a top
       // inset and no bottom padding, so the list's box runs to the bottom of the window and the
@@ -6215,14 +6215,47 @@ final class RealInputTests: XCTestCase {
       frame.maxY,
       keyboardTop + 1,
       "the keyboard covers the focused field: it is at \(frame) with the keyboard's top edge at "
-        + "\(keyboardTop) (from \(from)) — keyboardAvoidance left a field under the keys."
+        + "\(keyboardTop) (XCUITest's keyboard window) — keyboardAvoidance left a field under the "
+        + "keys."
     )
+    // The list's own numbers, read while the keyboard is up: `ib` is the inset the Form asked
+    // for, `ab` the inset the list is *carrying* after UIKit added the bottom safe area, and
+    // `h`/`bh` the content and the viewport - which together say how far the content can scroll
+    // at all, so a rest can be proved to be the end of it.
     let geometryBefore = echoText(Echo.formListGeometry)
     print(
-      "real-input (ios): form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from "
-        + "\(from)) inset=\(insetText) focused=\(echoText(Echo.formFieldFocus)) "
-        + "list=\(geometryBefore)"
+      "real-input (ios): form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from the "
+        + "keyboard window) inset=\(insetText) focused="
+        + "\(echoText(Echo.formFieldFocus)) list=\(geometryBefore)"
     )
+    // `ab` is the number the field's resting place is actually built from: UIKit adds the list's
+    // own bottom safe area to the inset asked for and pads the content by the sum. Ask for the
+    // whole overlap and the home-indicator strip is reserved twice — measured at adjusted 362
+    // against an overlap of 328, which is 34 pt of empty list above the keys (fix round 2, item
+    // 5). The same two-ended band as the inset above, asked of the sum.
+    if let adjusted = Self.geometryNumber(geometryBefore, "ab") {
+      let overlap = screen.maxY - keyboardTop
+      XCTAssertGreaterThanOrEqual(
+        adjusted,
+        overlap - 2,
+        "the list carries an adjusted bottom inset of \(adjusted) for keys that overlap by "
+          + "\(overlap): its content can be scrolled \(overlap - adjusted) pt too far, under them. "
+          + "The list reported \(geometryBefore)."
+      )
+      XCTAssertLessThanOrEqual(
+        adjusted,
+        overlap + 64,
+        "the list carries an adjusted bottom inset of \(adjusted) for keys that overlap by "
+          + "\(overlap), and the predictive-text bar above them is at most ~44: the \(adjusted - overlap) "
+          + "over describes something other than the keyboard, and the home indicator's safe area "
+          + "counted twice is 34 of them. The list reported \(geometryBefore)."
+      )
+    } else {
+      XCTFail(
+        "the echoed list geometry has no `ab=` field, so the inset the list carries cannot be "
+          + "asked: \(geometryBefore)"
+      )
+    }
 
     // Then a finger's scroll, because the list's offset is the variable the inset was once
     // mixing with the keyboard's geometry, and an inset that a scroll takes back is the bug.
@@ -6292,14 +6325,46 @@ final class RealInputTests: XCTestCase {
         )
       }
     }
-    XCTAssertLessThan(
-      rest.frame.minY,
-      keyboardTop,
-      "back at the end of its content, the focused field (\(rest.frame)) is below the "
-        + "keyboard's top edge \(keyboardTop): the inset that placed it there no longer keeps "
-        + "it on screen. Before the scroll it sat \(frame) and the list reported "
-        + "\(geometryBefore); after it the list reports \(rest.geometry)."
+    // "Back at the end of its content" was assumed; it is now asked. A rest in the middle of a
+    // form cannot judge a reservation added *below* the last row, and a synthesised drag stops
+    // wherever its velocity takes it, so the check swipes until the list's own numbers say it is
+    // at the end of what it holds (fix round 2, item 5).
+    for _ in 0..<4 {
+      if Self.isAtEndOfContent(rest.geometry) { break }
+      listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: -120)))
+      rest = settleFormKeyboard(field: field)
+    }
+    XCTAssertTrue(
+      Self.isAtEndOfContent(rest.geometry),
+      "the list never came to rest at the end of its content, so the field's position says "
+        + "nothing about the reservation below the last row: it reported \(rest.geometry), where "
+        + "the end is `h + ab - bh`. Before the scroll it reported \(geometryBefore)."
     )
+    // At the end of the content, the field has to be clear of the keys with a point of slack,
+    // not merely somewhere above them: `minY` let a field whose own box straddled the edge pass.
+    XCTAssertLessThanOrEqual(
+      rest.frame.maxY,
+      keyboardTop + 1,
+      "at the end of its content the focused field (\(rest.frame)) is not above the keyboard's "
+        + "top edge \(keyboardTop): the inset that placed it there no longer keeps it on screen. "
+        + "Before the scroll it sat \(frame) and the list reported \(geometryBefore); after it the "
+        + "list reports \(rest.geometry)."
+    )
+  }
+
+  /// Whether the list's own echoed numbers say its content is scrolled to the end.
+  ///
+  /// UIKit puts the last row `adjustedContentInset.bottom` above the bottom of the viewport, so
+  /// the largest offset a scroll view can hold is its content height plus that inset, less the
+  /// height of the viewport it scrolls through. Every number is one the list published; none is
+  /// a constant this file could get wrong on a different device.
+  private static func isAtEndOfContent(_ line: String) -> Bool {
+    guard let content = geometryNumber(line, "h"),
+      let viewport = geometryNumber(line, "bh"),
+      let adjusted = geometryNumber(line, "ab"),
+      let offset = geometryNumber(line, "off")
+    else { return false }
+    return offset >= content + adjusted - viewport - 2
   }
 
   /// The field's box, the screen's echo of the list's geometry and the echoed keyboard inset,
