@@ -1237,7 +1237,9 @@ describe('Form (G24)', () => {
     );
     trace('scrolled before the recycle', scrolled);
     {
-      const recycled = num(scrolled, 'recycles');
+      // `recycles` is iOS's witness that a view came back out of the pool; Android's Form
+      // report has no such field, so on Android the mount itself is the witness.
+      const recycled = IOS ? num(scrolled, 'recycles') : 0;
       cleanup();
       // The pool gets the view when the surface is really gone, not when React says so.
       await new Promise((resolve) => setTimeout(resolve, 150));
