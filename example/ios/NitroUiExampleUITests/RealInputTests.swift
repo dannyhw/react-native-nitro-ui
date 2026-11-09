@@ -6225,64 +6225,123 @@ final class RealInputTests: XCTestCase {
     )
 
     // Then a finger's scroll, because the list's offset is the variable the inset was once
-    // mixing with the keyboard's geometry. Drag *down* — the check has just scrolled to the end
-    // of the content, so a drag up would move nothing and prove nothing. The inset must survive
-    // it unchanged: a scroll is not a keyboard event, and an inset that is recomputed on one
-    // (or dropped) moves every row the avoidance has placed.
+    // mixing with the keyboard's geometry, and an inset that a scroll takes back is the bug.
     //
     // The finger goes down on the list's own rows, well above the field. Ten points above the
-    // field's box is not the list to UIKit: it is the text interaction's loupe, and a loupe drag
-    // that ends outside the field ends the editing session — the keyboard leaves, its inset
-    // legitimately goes with it, and there is no longer an avoidance to ask about.
+    // field's box is not the list to UIKit: it is the text interaction's loupe, and a loupe
+    // drag that ends outside the field ends the editing session — the keyboard leaves, its
+    // inset legitimately goes with it, and there is no longer an avoidance to ask about.
+    //
+    // Down first, then back up to the end of the content. Down is the direction that can move
+    // anything here: the keyboard's reservation was added *below* content the check had already
+    // scrolled to the end of, so the list is no longer at its end. And a synthesised drag
+    // carries real velocity, so how far one fling goes is not a number this file can know —
+    // where the list comes to rest at the end of its content is, and that rest is what the
+    // reservation has to hold above the keyboard. With the inset intact the last row ends at
+    // the visible bottom, one inset above the keys; with a scroll that dropped it, the same
+    // rest leaves the field below them.
     let listRow = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
     listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: 40)))
-
-    // Both witnesses need a moment: the field's box is XCUITest's and is read live off a list
-    // that is still springing back, and the inset is the screen's *poll* of
-    // `nuiTestFormReport()`, so it is at most one poll interval old. Reading either once, the
-    // instant the finger leaves, would compare a mid-animation frame with the inset from before
-    // the drag. Two reads that agree are the settle.
-    var settled = field.frame
-    var insetAfterText = echoText(Echo.formKeyboardInset)
-    var insetAfter = CGFloat(Double(insetAfterText) ?? -1)
-    for _ in 0..<15 {
-      let lastFrame = settled
-      let lastInset = insetAfterText
-      Thread.sleep(forTimeInterval: 0.2)
-      settled = field.frame
-      insetAfterText = echoText(Echo.formKeyboardInset)
-      insetAfter = CGFloat(Double(insetAfterText) ?? -1)
-      if abs(settled.minY - lastFrame.minY) < 0.5 && insetAfterText == lastInset { break }
-    }
+    var rest = settleFormKeyboard(field: field)
     print(
-      "real-input (ios): form keyboard after a scroll: field=\(frame) -> \(settled) "
-        + "inset=\(insetText) -> \(insetAfterText) "
-        + "focused=\(echoText(Echo.formFieldFocus)) "
-        + "keyboardWindow=\(app.keyboards.firstMatch.exists) "
-        + "list=\(geometryBefore) -> \(echoText(Echo.formListGeometry))"
+      "real-input (ios): form keyboard after a drag down: field=\(frame) -> \(rest.frame) "
+        + "inset=\(insetText) -> \(rest.inset) list=\(geometryBefore) -> \(rest.geometry)"
     )
+    listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: -40)))
+    rest = settleFormKeyboard(field: field)
+    print(
+      "real-input (ios): form keyboard after the scroll back: field=\(frame) -> "
+        + "\(rest.frame) inset=\(insetText) -> \(rest.inset) focused="
+        + "\(echoText(Echo.formFieldFocus)) keyboardWindow="
+        + "\(app.keyboards.firstMatch.exists) list=\(geometryBefore) -> \(rest.geometry)"
+    )
+
+    let insetAfter = CGFloat(Double(rest.inset) ?? -1)
     XCTAssertEqual(
       echoText(Echo.formFieldFocus),
       "yes",
       "the focused field lost the keyboard focus while the list was scrolled by the hand (it "
-        + "sat \(settled), and XCUITest sees a keyboard window: "
+        + "sat \(rest.frame), and XCUITest sees a keyboard window: "
         + "\(app.keyboards.firstMatch.exists)). Nothing is left to keep above the keys, so the "
         + "half of question 5 that follows a scroll cannot be answered."
     )
     XCTAssertLessThanOrEqual(
       abs(insetAfter - inset),
       2,
-      "the reserved keyboard inset changed from \(insetText) to \(insetAfterText) when the list "
-        + "was scrolled by the hand, without the keyboard moving: the field moved from \(frame) "
-        + "to \(settled), which is what an inset collapsing under a list at the end of its "
-        + "content looks like — UIKit pulls the offset back by the inset it no longer has."
+      "the reserved keyboard inset changed from \(insetText) to \(rest.inset) when the list was "
+        + "scrolled by the hand, without the keyboard moving. The field came to rest at "
+        + "\(rest.frame); the list reported \(geometryBefore) before the scroll and "
+        + "\(rest.geometry) after it."
     )
+    // The same claim asked of the list rather than of the Form's memory: the inset it is
+    // *carrying* (`ib` is its own `contentInset.bottom`, `ab` the adjusted inset every keyboard
+    // decision here is measured against). `keyboard=` is only what this class asked for, and a
+    // reservation that goes missing underneath a scroll leaves that number alone.
+    for label in ["ib", "ab"] {
+      let before = Self.geometryNumber(geometryBefore, label)
+      let after = Self.geometryNumber(rest.geometry, label)
+      XCTAssertNotNil(before, "the Form's report has no \(label)= field: \(geometryBefore)")
+      XCTAssertNotNil(after, "the Form's report has no \(label)= field: \(rest.geometry)")
+      if let before, let after {
+        XCTAssertLessThanOrEqual(
+          abs(after - before),
+          2,
+          "the list carried a bottom inset of \(before) for the keyboard before the scroll and "
+            + "\(after) after it: a scroll is not a keyboard event, and the field came to rest "
+            + "at \(rest.frame) with the keys still at \(keyboardTop)."
+        )
+      }
+    }
     XCTAssertLessThan(
-      settled.minY,
+      rest.frame.minY,
       keyboardTop,
-      "after a scroll the focused field (\(settled)) is wholly below the keyboard's top edge "
-        + "\(keyboardTop): the inset it was placed with no longer keeps it on screen."
+      "back at the end of its content, the focused field (\(rest.frame)) is below the "
+        + "keyboard's top edge \(keyboardTop): the inset that placed it there no longer keeps "
+        + "it on screen. Before the scroll it sat \(frame) and the list reported "
+        + "\(geometryBefore); after it the list reports \(rest.geometry)."
     )
+  }
+
+  /// The field's box, the screen's echo of the list's geometry and the echoed keyboard inset,
+  /// read until two reads agree.
+  ///
+  /// Both witnesses need a moment after a synthesised drag: the field's box is XCUITest's and is
+  /// read live off a list that is still springing back, and the two numbers the screen echoes
+  /// come from *polling* `nuiTestFormReport()`, so they are at most one poll interval old.
+  /// Reading either once, the instant the finger leaves, would compare a mid-animation frame
+  /// with the numbers from before the drag.
+  private func settleFormKeyboard(
+    field: XCUIElement
+  ) -> (frame: CGRect, geometry: String, inset: String) {
+    var frame = field.frame
+    var geometry = echoText(Echo.formListGeometry)
+    var inset = echoText(Echo.formKeyboardInset)
+    for _ in 0..<25 {
+      let lastFrame = frame
+      let lastGeometry = geometry
+      let lastInset = inset
+      Thread.sleep(forTimeInterval: 0.2)
+      frame = field.frame
+      geometry = echoText(Echo.formListGeometry)
+      inset = echoText(Echo.formKeyboardInset)
+      if abs(frame.minY - lastFrame.minY) < 0.5 && geometry == lastGeometry
+        && inset == lastInset
+      {
+        break
+      }
+    }
+    return (frame, geometry, inset)
+  }
+
+  /// One number out of the Form's echoed geometry line (`ib=328.00;ab=362.00;...`).
+  private static func geometryNumber(_ line: String, _ label: String) -> CGFloat? {
+    for field in line.split(separator: ";") {
+      let parts = field.split(separator: "=")
+            if parts.count == 2, parts[0] == Substring(label) {
+        return CGFloat(Double(String(parts[1])) ?? .nan)
+      }
+    }
+    return nil
   }
 
   /// The average luminance of one screenshot, 0 (black) to 1 (white).
