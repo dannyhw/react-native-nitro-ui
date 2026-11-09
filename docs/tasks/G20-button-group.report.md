@@ -271,3 +271,30 @@ mutation runs from this round's red proofs; they satisfy nothing.
 - sizing key drops `androidIcon` (round 0's proof, still the guard) -> key mismatch; `ButtonGroupModelTest` event-count guard -> `ButtonGroupModelTest.kt:75`; `seeded.add(id)` -> `id.isNotEmpty()` -> `:129`
 - `testRealInputPopover` (G22's fixture, not this control's) -> one `typeText("ab")` for two keystrokes -> `typed:a` and never `typed:ab`, red in three full `real-input:ios` runs (load1 medians 6.5-9.1) and green typed one character at a time, which is what the tree now does
 - iOS `stateReport()` race -> no mutation: it cannot be made to fail reliably; fixed by publishing `checkedReport` under `reportLock` instead
+
+## Merge round
+
+`origin/main` at `05504a64` — G21's `androidIcon` on Menu, ContextMenu, the split button and Chip —
+merged into `task/G20-merge` from `e2467f85`. One conflict, in `docs/tasks/FOLLOWUPS.md`, resolved by
+keeping both sides: G21's note that overflow rows should carry item icons stays a follow-up, and
+G20's "merge order" note becomes a resolved one, because `MenuRow`'s new `icon`/`onIconTint`
+parameters arrive defaulted, so ButtonGroup's overflow call compiles and draws exactly as before.
+Icons stay unwired here, as instructed. Nothing generated was hand-merged: `bun install`'s codegen,
+`bun run regen`, `api-extractor` and `manifest:update` all came back with no diff, and
+`registry:check`, `nitrogen:check` and `readme:check` are clean.
+
+The ledger's one red line is this branch's first `harness:ios` attempt, whose excerpt sits beside the
+exported ledger: the gate refused the app on disk, stamped `6be475db` where the merged tree is
+`8fb41da6`. `scripts/build-app.mjs --platform ios` (94 s) settled it and the rerun is the green row
+below. The table is the merged tree, `need --for merge` is satisfied, and the export keeps all 69
+earlier lines beside these six.
+
+### Gate table (merge round)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1954 tests / 82 suites | `8fb41da69c6f` | 2 m 51 s | start 10.5 / med 10.5 / max 17.1 |
+| `harness:ios` | **PASS** | 544 tests / 28 suites + isolated 6 tests / 3 suites | `8fb41da69c6f` (ios tree) | 15 m 53 s | start 16.6 / med 6.4 / max 20.7 |
+| `harness:android` | **PASS** | 600 tests / 28 suites + isolated 6 tests / 3 suites | `8fb41da69c6f` (android tree) | 17 m 24 s | start 5.3 / med 5.0 / max 12.1 |
+| `real-input:ios` | **PASS** | — | `8fb41da69c6f` (ios tree) | 34 m 54 s | start 3.5 / med 9.2 / max 57.6 |
+| `real-input:android` | **PASS** | — | `8fb41da69c6f` (android tree) | 53 m 37 s | start 8.6 / med 5.5 / max 22.5 |
