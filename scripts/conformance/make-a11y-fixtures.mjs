@@ -20,7 +20,26 @@ import { A11Y_CONTROLS } from '../real-input/a11y.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
-const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
+
+// `--only <screen>` regenerates one control's fixture and leaves the others' measured
+// bytes alone. A late control (or one whose dump changed shape on a new OS) can be
+// re-measured without re-dumping every other control on the same screen, whose
+// committed fixtures are another component's evidence.
+const positional = [];
+let only = null;
+for (let index = 0; index < process.argv.length - 2; index += 1) {
+  const arg = process.argv[index + 2];
+  if (arg === '--only') {
+    only = process.argv[index + 3];
+    index += 1;
+  } else if (!arg.startsWith('--')) {
+    positional.push(arg);
+  }
+}
+if (only !== null && only.startsWith('--')) {
+  throw new Error('--only needs a screen id');
+}
+const outDir = positional[0] ?? 'scripts/__tests__/fixtures/a11y';
 
 const TAB_LABEL = {
   switch: 'Switch',
@@ -38,6 +57,7 @@ const TAB_LABEL = {
   contextmenu: 'Context',
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
+  stepper: 'Stepper',
 };
 
 function adb(args) {
@@ -143,7 +163,12 @@ function findTab(label) {
 
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
-for (const control of A11Y_CONTROLS) {
+const controls =
+  only == null
+    ? A11Y_CONTROLS
+    : A11Y_CONTROLS.filter((entry) => entry.screen === only);
+if (controls.length === 0) throw new Error(`no a11y case on screen "${only}"`);
+for (const control of controls) {
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();
