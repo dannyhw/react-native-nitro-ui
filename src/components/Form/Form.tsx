@@ -180,9 +180,15 @@ function FormRoot({
 
   const layout = useMemo<FormLayout>(() => ({ contentWidth }), [contentWidth]);
   const body = (
-    <FormLayoutContext.Provider value={layout}>
-      {children}
-    </FormLayoutContext.Provider>
+    // A `Form` rendered inside a `Form.Row` (a sheet, say) is a new list, not a row inside the
+    // outer row's cell, so the "is the nearest wrapper above me a row?" answer resets here.
+    // Without the `false`, the flag set by an ancestor row leaks into every row of that inner
+    // Form, and each of them is reported as nested inside a row it is not a row of.
+    <InsideRowContext.Provider value={false}>
+      <FormLayoutContext.Provider value={layout}>
+        {children}
+      </FormLayoutContext.Provider>
+    </InsideRowContext.Provider>
   );
 
   const native = (
