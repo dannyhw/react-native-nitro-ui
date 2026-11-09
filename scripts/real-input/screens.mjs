@@ -74,6 +74,10 @@ export const ECHO = Object.freeze({
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  // G26: the `variant="radio"` group's own echo. Its rows are in the app's window,
+  // so a real tap goes straight to one and this is what that tap moves.
+  radioIndex: 'real-input-radio-index',
+  radioEvents: 'real-input-radio-events',
   menuPick: 'real-input-menu-pick',
   menuEvents: 'real-input-menu-events',
   // E3: the split trigger's own history, so the plain Menu's stays a fixed string.

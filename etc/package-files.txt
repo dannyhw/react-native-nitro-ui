@@ -90,6 +90,7 @@ ios/components/Host/HybridNitroUiHost.swift
 ios/components/IconButton/HybridNitroUiIconButton.swift
 ios/components/Menu/HybridNitroUiMenu.swift
 ios/components/Picker/HybridNitroUiPicker.swift
+ios/components/Picker/NitroUiPickerVariant.swift
 ios/components/Popover/HybridNitroUiPopover.swift
 ios/components/Progress/HybridNitroUiProgress.swift
 ios/components/SearchField/HybridNitroUiSearchField.swift

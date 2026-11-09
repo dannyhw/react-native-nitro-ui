@@ -1,0 +1,204 @@
+# Failure excerpt — harness:android:Picker
+
+- Ran: 2026-11-09T12:04:24.642Z on code tree `803893f19d36` at HEAD `72c91c1` (branch `task/G26-picker-radio`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Picker`
+- Result: fail, exit 1, 43985 ms
+- Load: start 39.50, end 23.66, median 29.91, max 39.50
+- Device: android / device `emulator-5574` / lease `G26-6r1z9`
+- Full log: `task/G26-picker-radio/harness+android+Picker-2026-11-09T12-04-23.627Z.log` (<store>/task/G26-picker-radio/harness+android+Picker-2026-11-09T12-04-23.627Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Console`
+- `● Picker · G6 › goes on reporting its size after a re-tap of the row already shown`
+- `expected [ 're-tap:0' ] to deeply equal []`
+- `● Picker · radio variant (G26) › measures a radio group as its option count, one row per option`
+- `expected 24 to be less than or equal to 1`
+- `● Picker · radio variant (G26) › reports nothing for the row already chosen, or for a disabled group`
+- `expected [ 'radio-noop:0', 'radio-disabled:1' ] to deeply equal []`
+- `● Picker · radio variant (G26) › answers menu on the platform with no radio group to render`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G26-picker-radio/harness+android+Picker-2026-11-09T12-04-23.627Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G26-6r1z9 (still live)
+  |   G24-2hz7i                G24          both              pair-b
+  |   G26-6r1z9                G26          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 23.66 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 209 — the rest is in the full log above)
+
+```
+      shrink: wide=384.76x56.00 narrow=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      read back: variant=menu/wheel selected=1 eventCount=0 label=Size tint=-3655765 disabled=false/true
+
+
+    console.log
+      caller width: box=240 measured=280.00x56.00 then no width: box=280.00x56.00
+
+
+    console.log
+      over-wide: box=180.19x56.00 measured=384.76x56.00
+
+
+    console.log
+      refit: measured=384.76x56.00 boxes=200/168/140 final=140.19x56.00
+
+
+    console.log
+      remount 0: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      remount 1: 1 options seed=1 measured=280.00x56.00
+
+
+    console.log
+      remount 2: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      pick re-keys: short=280.00x56.00 long=384.76x56.00 box=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":3,"epoch":0,"cachedSizes":1} events=["pick-key:2"]
+
+
+    console.log
+      cache after a pick: startedAt=280.00x56.00 picked=384.76x56.00 freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      uncontrolled pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} events=["unc:2"]
+
+
+    console.log
+      uncontrolled cache: freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      busy-echo pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      unpoisoned pick: short=280.00x56.00 long=338.29x56.00 box=338.29x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      variant menu->wheel: menu=280.00x56.00 wheel=330.29x56.00 box=330.29x60.19
+
+
+    console.log
+      variant wheel->menu: wheel=330.29x56.00 menu=384.76x56.00 box=330.29x60.19
+
+
+    console.log
+      selected row: drawn=Small,Medium+,Large
+
+
+    console.log
+      open-then-drop: menu=280.00x56.00 after=280.00x56.00 events=[]
+
+
+    console.log
+      radio rows: three=133.33x168.00 five=114.67x280.00 cold={"corrections":2,"immediate":1,"flushes":1,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      radio pick: 133.33x168.00 -> 133.33x168.00 pick={"corrections":0,"immediate":0,"flushes":0,"measurements":0,"epoch":0,"cachedSizes":0} events=["radio-warm:2"]
+
+
+    console.log
+      radio silence: events=["radio-noop:0","radio-disabled:1"]
+
+
+    console.log
+      radio platform: variant=radio 114.67x168.00
+
+
+    console.log
+      radio->menu (android): group=133.33x168.00 menu=280.00x56.00 events=[]
+
+  ● Picker · G6 › goes on reporting its size after a re-tap of the row already shown
+
+    expected [ 're-tap:0' ] to deeply equal []
+
+      [0m [90m 1691 |[39m     [90m// batch follows - so nothing may be held back on its account.[39m
+       [90m 1692 |[39m     [36mawait[39m pickRow([32m're-tap'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1693 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 1694 |[39m     expect(sameSize(sizeOf([32m're-tap'[39m)[33m,[39m shortSize))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 1695 |[39m
+       [90m 1696 |[39m     [90m// Now the size really does move, and the engine has to hear about it.[39m[0m
+
+  ● Picker · radio variant (G26) › measures a radio group as its option count, one row per option
+
+    expected 24 to be less than or equal to 1
+
+      [0m [90m 2046 |[39m         [32m`cold=${JSON.stringify(delta(before, stats()))}`[39m
+       [90m 2047 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 2048 |[39m     expect([33mMath[39m[33m.[39mabs(three[33m.[39mheight [33m-[39m [35m3[39m [33m*[39m [33mROW_DP[39m))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                                                                    [31m[1m^[22m[39m
+       [90m 2049 |[39m     expect([33mMath[39m[33m.[39mabs(five[33m.[39mheight [33m-[39m [35m5[39m [33m*[39m [33mROW_DP[39m))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m 2050 |[39m     [90m// The width is the widest row, not the menu's 280 dp field floor: a radio[39m
+       [90m 2051 |[39m     [90m// group has no field, so a short set of labels is a narrow control. (Whether[39m[0m
+
+  ● Picker · radio variant (G26) › reports nothing for the row already chosen, or for a disabled group
+
+    expected [ 'radio-noop:0', 'radio-disabled:1' ] to deeply equal []
+
+      [0m [90m 2208 |[39m     [36mawait[39m settle([35m300[39m)[33m;[39m
+       [90m 2209 |[39m     console[33m.[39mlog([32m`radio silence: events=${JSON.stringify(eventLog)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2210 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2211 |[39m     [90m// A disabled control is still inert the second time.[39m
+       [90m 2212 |[39m     [36mawait[39m pickRow([32m'radio-disabled'[39m[33m,[39m [35m2[39m)[33m;[39m
+       [90m 2213 |[39m     [36mawait[39m settle([35m200[39m)[33m;[39m[0m
+
+  ● Picker · radio variant (G26) › answers menu on the platform with no radio group to render
+
+    expected 24 to be less than or equal to 1
+
+      [0m [90m 2242 |[39m     expect(reported)[33m.[39mtoBe([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m [33m?[39m [32m'radio'[39m [33m:[39m [32m'menu'[39m)[33m;[39m
+       [90m 2243 |[39m     [36mif[39m ([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'android'[39m) {
+      [31m[1m>[22m[39m[90m 2244 |[39m       expect([33mMath[39m[33m.[39mabs(size[33m.[39mheight [33m-[39m [35m3[39m [33m*[39m [33mROW_DP[39m))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                                                                     [31m[1m^[22m[39m
+       [90m 2245 |[39m     } [36melse[39m {
+       [90m 2246 |[39m       [90m// A menu is one row tall (~35 pt); a radio group would be 144 and a wheel[39m
+       [90m 2247 |[39m       [90m// 216. Neither is what iOS is promised to draw.[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       4 failed, 41 passed, 45 total
+Snapshots:   0 total
+Time:        42.506 s
+Ran all test suites matching Picker.
+gate: harness:android:Picker FAIL in 44.0 s
+gate: recorded in .gates/task/G26-picker-radio.jsonl
+
+
+gate: appended the device context to task/G26-picker-radio/harness+android+Picker-2026-11-09T12-04-23.627Z.log (5 probe(s))
+
+```

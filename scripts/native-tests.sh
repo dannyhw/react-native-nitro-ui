@@ -92,6 +92,20 @@ run_case "slider-value.test (Swift)" \
       -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
+# The iOS Picker's variant rule (G26): `radio` is Android's control, so on this
+# platform it resolves to the menu (DECISIONS D38 item 4). It is a host test because
+# the device cannot reach it - `Picker.tsx` resolves the variant per platform before
+# the prop is sent, so the native guard only ever runs for a caller that bypassed the
+# wrapper. The Kotlin twin is `PickerModelTest.theVariantResolvesToTheThreeControls
+# ThisComponentHas`, and the two answers differ by design.
+run_case "picker-variant.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Picker/NitroUiPickerVariant.swift' \
+      '$ROOT/scripts/native-tests/picker-variant.test.swift' \
+      -o '$OUT/picker-variant' && '$OUT/picker-variant'
+  "
+
 # The TextField's `maxLength` cut and text equality (G13). The delegate's cut keeps
 # the part of an *inserted* text that fits; for typing at the end of the text the
 # post-edit backstop gives the same answer, so only mid-text vectors - which no

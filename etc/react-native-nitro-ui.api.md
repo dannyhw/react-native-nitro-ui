@@ -681,7 +681,7 @@ export interface PickerProps extends ViewProps {
 }
 
 // @public
-export type PickerVariant = 'menu' | 'wheel';
+export type PickerVariant = 'menu' | 'wheel' | 'radio';
 
 // @public
 export function Popover(input: PopoverProps): JSX.Element;
