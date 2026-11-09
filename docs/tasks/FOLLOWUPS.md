@@ -253,3 +253,13 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G20: disabling a group on iOS refits more items into the row, because the candidate that composes no overflow control measures narrower; the row's item count should not depend on `disabled`.
 - G20: `useControlledCheckedIds` has no Jest test — the JS half of the per-item controlled/uncontrolled split is only proved through native.
 - G20: the `mount.button-group` bench is unmeasured on this machine (no merge-mint number yet).
+- Merge order (G20 review): resolved at G20's merge instead of being wired there — G21 gave `MenuRow` optional `icon`/`onIconTint` parameters, so `HybridNitroUiButtonGroup.kt` compiles and draws unchanged; the wiring is the G21 merge line below.
+- Tooling (G24): `gate.mjs export --task <ID>` replaces `docs/tasks/<ID>/gates.jsonl` with the current branch's ledger, so every fix or merge round on a differently named branch has to restore the earlier lines by hand. Make export append and de-duplicate.
+- G21 review: `MenuRowIcons.noteTint` formats the `ComposeColor` to `#RRGGBB` and takes a lock on every production composition of a row with a glyph; store the raw `Color` and format it when `iconTints=` is read, where the string is actually wanted.
+- G21 review: the `MenuRowIcons.tints` docs promise an order a `ConcurrentHashMap` does not keep, and tints are never pruned within one mount — a menu whose rows change names keeps the old ids' colours until the recycle.
+- G21 review: "a disabled row dims its glyph the way it dims its title" is documented and asserted nowhere, and `Color.toRgbHex` drops the alpha, so the report cannot see the dimming even if a test looked.
+- G21 review: the split-trigger glyph case has had no deliberate code mutation — its ink assertion was first run green, so nothing has yet shown it able to fail for the right reason.
+- G21 review: the Chip's own `iconSlot.reset()` has no red proof; the ContextMenu recycle case covers `MenuRowIcons.reset()`, and the chip's single-slot equivalent is unmutated.
+- G21 review: `resolveRowIcons` allocates a filter and a map on every `afterUpdate`, including the updates no row cares about — one pass over `rawRows` with a reused list would do.
+- G21 merge: with the icon handed to `MenuRow` as a parameter, `MenuGroups` reads `MenuRowIcons.slots` in its own composition scope, so a glyph that lands late now invalidates the whole group rather than the one row that gained it.
+- G21 merge: ButtonGroup's overflow rows should pass their items' icons through `MenuRow`'s new `icon`/`onIconTint` parameters (the defaults mean it compiles and draws without them); `HybridNitroUiButtonGroup.kt:953` is the call.

@@ -211,6 +211,7 @@ export function Chip(input: ChipProps): JSX.Element;
 
 // @public
 export interface ChipProps extends ViewProps {
+    androidIcon?: AndroidIconProp | undefined;
     defaultSelected?: boolean | undefined;
     disabled?: boolean | undefined;
     // @internal
@@ -221,6 +222,7 @@ export interface ChipProps extends ViewProps {
         readonly mostRecentEventCount: number;
         readonly disabled: boolean;
         readonly systemImage: string | null;
+        readonly androidIcon: string | null;
         readonly accessibilityLabel: string | null;
         measureContent(): {
             width: number;
@@ -229,6 +231,8 @@ export interface ChipProps extends ViewProps {
         nuiTestPress(): void;
         nuiTestProbeAccessibility(): void;
         nuiTestStateReport(): string;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
     }) => void) | undefined;
     label: string;
     // @internal
@@ -266,6 +270,8 @@ export interface ContextMenuProps extends ViewProps {
         readonly previewCornerRadius: number | null;
         nuiTestSelectRow(id: string): void;
         nuiTestMenuProbe(): void;
+        nuiTestMenuPixelProbe(color: number): void;
+        nuiTestMenuPixelReport(): string;
         nuiTestContextMenuReport(): string;
         nuiTestA11yLongClick(): void;
     }) => void) | undefined;
@@ -429,6 +435,7 @@ export function Menu(input: MenuProps): JSX.Element;
 
 // @public
 export interface MenuAction {
+    androidIcon?: AndroidIconProp | undefined;
     checked?: boolean | null | undefined;
     destructive?: boolean | undefined;
     disabled?: boolean | undefined;
@@ -466,6 +473,10 @@ export interface MenuProps extends ViewProps {
         nuiTestSelectRow(id: string): void;
         nuiTestMenuReport(): string;
         nuiTestMenuProbe(): void;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
+        nuiTestMenuPixelProbe(color: number): void;
+        nuiTestMenuPixelReport(): string;
     }) => void) | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;

@@ -1,0 +1,95 @@
+# Failure excerpt — harness:android:%5E__tests__%2FMenu%5C.harness
+
+- Ran: 2026-11-09T06:20:46.761Z on code tree `676c9c74d6c3` at HEAD `5bb11e2` (branch `task/G21-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ^__tests__/Menu\.harness`
+- Result: fail, exit 1, 34909 ms
+- Load: start 5.59, end 5.09, median 5.48, max 5.81
+- Device: android / device `emulator-5570` / lease `G21-uz5lj`
+- Full log: `task/G21-merge/harness+android+5E__tests__+2FMenu+5C.harness-2026-11-09T06-20-46.761Z.log` (<store>/task/G21-merge/harness+android+5E__tests__+2FMenu+5C.harness-2026-11-09T06-20-46.761Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Menu.harness.tsx`
+- `● Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name`
+- `expected true to be false // Object.is equality`
+- `● Menu · the row glyphs (G21) › refuses a popup probe with no popup, and a name that cannot resolve with no icon`
+- `expected 'date#1A1B20,plain#40434B,slab#40434B' to be '-' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G21-merge/harness+android+5E__tests__+2FMenu+5C.harness-2026-11-09T06-20-46.761Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G21-uz5lj (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G21-uz5lj                G21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.09 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ^__tests__/Menu\.harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 676c9c74d6c3, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.59/13.96 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G21-merge/harness+android+5E__tests__+2FMenu+5C.harness-2026-11-09T06-20-46.761Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Menu.harness.tsx
+  ● Menu · the row glyphs (G21) › draws the row glyph at the slot size, from a Metro asset and from a name
+
+    expected true to be false // Object.is equality
+
+      [0m [90m 3662 |[39m     [36mconst[39m openedAsset [33m=[39m [36mawait[39m openRows([32m'rows-asset'[39m)[33m;[39m
+       [90m 3663 |[39m     expect(tintsOf(openedAsset)[33m.[39mhas([32m'slab'[39m))[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 3664 |[39m     expect(tintsOf(openedAsset)[33m.[39mhas([32m'plain'[39m))[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m      |[39m                                                   [31m[1m^[22m[39m
+       [90m 3665 |[39m     [36mconst[39m color [33m=[39m [36mawait[39m tintRow([32m'rows-asset'[39m[33m,[39m [32m'slab'[39m[33m,[39m [32m'the imported square'[39m)[33m;[39m
+       [90m 3666 |[39m     [36mconst[39m assetInk [33m=[39m [36mawait[39m stableHits([32m'rows-asset'[39m[33m,[39m color[33m,[39m [32m'the asset menu'[39m)[33m;[39m
+       [90m 3667 |[39m     [36mawait[39m shut([32m'rows-asset'[39m)[33m;[39m[0m
+
+  ● Menu · the row glyphs (G21) › refuses a popup probe with no popup, and a name that cannot resolve with no icon
+
+    expected 'date#1A1B20,plain#40434B,slab#40434B' to be '-' // Object.is equality
+
+      [0m [90m 3749 |[39m
+       [90m 3750 |[39m     [36mconst[39m missing [33m=[39m [36mawait[39m openRows([32m'rows-missing'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 3751 |[39m     expect(missing[33m.[39miconTints)[33m.[39mtoBe([32m'-'[39m)[33m;[39m
+       [90m      |[39m                                   [31m[1m^[22m[39m
+       [90m 3752 |[39m     [90m// Resolved-to-nothing is the menu with no icons at all: no reserved gap, no moved[39m
+       [90m 3753 |[39m     [90m// label, one popup frame. `Absent` reaches `leadingIcon` as `null`, which is what[39m
+       [90m 3754 |[39m     [90m// makes that true - a non-null-but-empty lambda would still take 20 dp.[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 32 passed, 34 total
+Snapshots:   0 total
+Time:        33.053 s
+Ran all test suites matching ^__tests__/Menu\.harness.
+
+
+
+```

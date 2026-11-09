@@ -255,7 +255,17 @@ export function FileActions() {
       {
         id: 'dangerous',
         title: 'Dangerous',
-        items: [{ id: 'delete', title: 'Delete', destructive: true }],
+        // `systemImage` is iOS's glyph and `androidIcon` Android's. Each platform
+        // ignores the other's, so one row reads the same on both.
+        items: [
+          {
+            id: 'delete',
+            title: 'Delete',
+            destructive: true,
+            systemImage: 'xmark',
+            androidIcon: require('./assets/icons/close_24px.xml'),
+          },
+        ],
       },
     ],
   };
@@ -291,6 +301,13 @@ const MESSAGE_ACTIONS: MenuGroup = {
   actions: [
     { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
     { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+    // iOS draws the SF Symbol; Android draws the `.xml` the app imports.
+    {
+      id: 'share',
+      title: 'Share',
+      systemImage: 'square.and.arrow.up',
+      androidIcon: require('./assets/icons/share_24px.xml'),
+    },
   ],
   sections: [
     {
@@ -321,7 +338,13 @@ const messageStyles = StyleSheet.create({
 // #endregion
 
 // #region chip
-export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
+export function PlaceFilters({
+  onDirections,
+  onStar,
+}: {
+  onDirections: () => void;
+  onStar: () => void;
+}) {
   const [openNow, setOpenNow] = useState(false);
 
   return (
@@ -333,6 +356,13 @@ export function PlaceFilters({ onDirections }: { onDirections: () => void }) {
         label="Directions"
         systemImage="map"
         onPress={onDirections}
+      />
+      <Chip
+        variant="assist"
+        label="Starred"
+        systemImage="star"
+        androidIcon={require('./assets/icons/star_24px.xml')}
+        onPress={onStar}
       />
     </>
   );

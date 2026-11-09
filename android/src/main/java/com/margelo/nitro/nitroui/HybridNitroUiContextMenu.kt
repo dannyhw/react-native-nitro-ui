@@ -30,6 +30,8 @@ import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.NitroUiPixelProbes
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
 import com.margelo.nitro.views.RecyclableView
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicInteger
@@ -120,6 +122,32 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
 
   /** The array the `rows` setter was last handed, for its equality guard. Not observed. */
   var rawRows: Array<NitroUiMenuRow> = emptyArray()
+
+  /**
+   * The rows' `androidIcon`s, resolved - Menu's [MenuRowIcons], because both controls
+   * draw the same [MenuRow] and a long-pressed list with no glyphs beside its rows would
+   * be a different menu from the one the same `group` opens from a tap.
+   */
+  val rowIcons = MenuRowIcons()
+
+  /** Resolve every action row's `androidIcon`. From `afterUpdate()`, once per change. */
+  fun resolveRowIcons(
+    artwork: NitroUiIconArtwork,
+  ) {
+    rowIcons.apply(
+      rawRows
+        .filter { row -> row.kind == "action" }
+        .map { row -> row.id to row.androidIcon?.asSecondOrNull() },
+      artwork,
+    )
+  }
+
+  /** The probe pair for the open popup's window - Menu's, for Menu's reasons. */
+  val menuProbes = NitroUiPixelProbes()
+
+  /** The open menu's own view, or `null`: the rows live in that window, not this one. */
+  val openMenuView: View?
+    get() = menuView?.takeIf { expanded }
 
   /** The header over the rows, or `null`. */
   var title by mutableStateOf<String?>(null)
@@ -317,6 +345,10 @@ internal class ContextMenuModel : NitroUiModel(), MenuWitnessSink {
     expanded = false
     entries = emptyList()
     rawRows = emptyArray()
+    // The rows' glyphs with the rows: a recycled wrapper that kept its previous owner's
+    // artwork would draw its icons beside the next owner's titles.
+    rowIcons.reset()
+    menuProbes.clear()
     title = null
     enabled = true
     pressX = 0
@@ -387,6 +419,7 @@ internal class ContextMenuHost(
           entries = model.entries,
           menuTitle = model.title,
           enabled = model.enabled,
+          icons = model.rowIcons,
           onPick = { id -> choose(id) },
           onRowsComposed = model::noteMenuRows,
         )
@@ -883,7 +916,17 @@ class HybridNitroUiContextMenu(
 
   // MARK: - Lifecycle
 
+  /**
+   * The app's resources, for the rows' `androidIcon`s - the same resolver `Button` and
+   * `Menu` hand their own glyphs, so a row's drawable name means the same thing in every
+   * control and in both menus.
+   */
+  private val iconArtwork = NitroUiAppIconArtwork(reactContext)
+
   override fun afterUpdate() {
+    // Once per batch, never from the `rows` setter: a name is a resource table lookup and
+    // a Metro file is a socket, and neither belongs on every prop that arrives beside it.
+    model.resolveRowIcons(iconArtwork)
     if (!model.canOpen) {
       // A control that answers nothing owns no live menu and arms no press (D29); the
       // close is reported through the model's funnel.
@@ -918,6 +961,32 @@ class HybridNitroUiContextMenu(
     model.onClose = null
     host.drop()
   }
+
+  /**
+   * Sample the open menu's window, or refuse when this wrapper has none composed.
+   *
+   * Menu's pair, for Menu's reason: the rows are drawn in the popup's own window, so
+   * nothing readable on the wrapper says whether a row's glyph reached the screen. The
+   * view is the one the witness already keeps, sampled on the UI thread, posted rather
+   * than waited for.
+   */
+  override fun nuiTestMenuPixelProbe(color: Double) {
+    val run = {
+      val view = model.openMenuView
+      if (view == null) {
+        model.menuProbes.refuse("no popup")
+      } else {
+        model.menuProbes.publish(view.nitroUiSamplePixels(color))
+      }
+    }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      wrapper.post { run() }
+    }
+  }
+
+  override fun nuiTestMenuPixelReport(): String = model.menuProbes.read()
 
   // MARK: - Open and close
 
@@ -1007,6 +1076,10 @@ class HybridNitroUiContextMenu(
       "ax=${if (wrapper.isFocusable) 1 else 0};a11yAction=${wrapper.a11yActionLabel()};" +
       "radius=-1;press=$press;menu=${model.menuFrame};anchor=${model.anchorPlaced};live=${ContextMenuModel.liveMenus.get()};" +
       "arms=${wrapper.arms};armed=${if (wrapper.armed) 1 else 0};copies=${wrapper.eventCopies};" +
-      "watchStray=${ContextMenuView.strayWatchFires.get()};seq=$reportSeq;kids=$kids"
+      "watchStray=${ContextMenuView.strayWatchFires.get()};seq=$reportSeq;" +
+      // What each row that drew a glyph tinted it with (`MenuRowIcons.noteTint`), so a
+      // harness can sample for a colour of this device's dynamic palette it cannot
+      // otherwise name. `-` when no row has drawn one.
+      "iconTints=${model.rowIcons.tintsReport()};kids=$kids"
   }
 }

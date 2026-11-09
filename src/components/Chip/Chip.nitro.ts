@@ -58,6 +58,29 @@ export interface NitroUiChipProps
    * both platforms, so the two cannot drift when Android gains an icon.
    */
   systemImage: string | null;
+  /**
+   * Leading glyph for Android, or `null`: the same string `Button`'s `androidIcon` is
+   * sent, built the same way by the wrapper - a drawable the app ships named by its
+   * resource name, or a `url:` marker in front of the dev-server file Metro serves for
+   * a `require`'d `.xml` (`src/iconSource.ts`).
+   *
+   * Android only, like `Button`'s: iOS draws `systemImage` and ignores this. It is
+   * drawn in the chip's own leading slot, at Material's chip icon size
+   * (`FilterChipDefaults.IconSize`, 18 dp), in the chip's content colour:
+   *
+   * - an **assist** chip draws it next to the label;
+   * - a **filter** chip draws it while unselected. The leading check is what a selected
+   *   filter chip means, so the check takes the slot when selected and the glyph comes
+   *   back when the chip does not.
+   *
+   * A name that cannot be resolved is treated as no icon at all - nothing drawn,
+   * nothing reserved - so the chip is exactly its no-icon self (DECISIONS D43).
+   *
+   * It joins `nuiSizingKey`, where `systemImage` already is: on Android the glyph
+   * widens the chip, and the two platforms read one key, which is why `systemImage`
+   * is in it even though Android ignores it (`docs/components/chip.md`, "Sizing").
+   */
+  androidIcon: string | null;
   /** Forwarded to the native view so tests and a11y tools can find it. */
   testID: string | null;
   /** Accessibility label of the control itself, or `null` to use `label`. */
@@ -129,6 +152,31 @@ export interface NitroUiChipMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestStateReport(): string;
+
+  /**
+   * TEMPORARY, test-only: sample the pixels this chip is drawing, looking for `color`,
+   * and keep the answer for ``nuiTestPixelReport``. Returns at once - the sampling
+   * needs the UI thread and a Nitro method may not block for it - so the answer is
+   * polled, the way Button's pair works.
+   *
+   * Button's reason, for a chip's slot: `androidIcon` is a *drawing* contract, and
+   * every other reading of it is an echo. A glyph tinted with a constant instead of
+   * the chip's content colour, or a slot reserved for artwork that never arrived, both
+   * satisfy the prop and the box and are wrong on screen.
+   *
+   * @internal Not app API (DECISIONS D14). Deleted when the harness can read pixels.
+   */
+  nuiTestPixelProbe(color: number): void;
+
+  /**
+   * TEMPORARY, test-only: what the last ``nuiTestPixelProbe`` found, in Button's shape
+   * - `n=<probes> size=<w>x<h> want=#<RRGGBB> hits=<n> mean=#<RRGGBB>
+   * closest=#<RRGGBB>`, or `n=<probes> no pixels` on iOS, which draws `systemImage`
+   * and has no Android glyph to sample. Empty before the first probe.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestPixelReport(): string;
 }
 
 /**

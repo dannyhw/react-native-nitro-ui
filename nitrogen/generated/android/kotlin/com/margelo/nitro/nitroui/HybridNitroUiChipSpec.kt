@@ -74,6 +74,12 @@ abstract class HybridNitroUiChipSpec: HybridView() {
   @get:Keep
   @set:DoNotStrip
   @set:Keep
+  abstract var androidIcon: Variant_NullType_String
+  
+  @get:DoNotStrip
+  @get:Keep
+  @set:DoNotStrip
+  @set:Keep
   abstract var testID: Variant_NullType_String
   
   @get:DoNotStrip
@@ -144,6 +150,14 @@ abstract class HybridNitroUiChipSpec: HybridView() {
   @DoNotStrip
   @Keep
   abstract fun nuiTestStateReport(): String
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelProbe(color: Double): Unit
+  
+  @DoNotStrip
+  @Keep
+  abstract fun nuiTestPixelReport(): String
 
   // Default implementation of `HybridObject.toString()`
   override fun toString(): String {

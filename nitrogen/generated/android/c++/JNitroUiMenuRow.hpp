@@ -51,6 +51,8 @@ namespace margelo::nitro::nitroui {
       jboolean destructive = this->getFieldValue(fieldDestructive);
       static const auto fieldSystemImage = clazz->getField<JVariant_NullType_String>("systemImage");
       jni::local_ref<JVariant_NullType_String> systemImage = this->getFieldValue(fieldSystemImage);
+      static const auto fieldAndroidIcon = clazz->getField<JVariant_NullType_String>("androidIcon");
+      jni::local_ref<JVariant_NullType_String> androidIcon = this->getFieldValue(fieldAndroidIcon);
       static const auto fieldSubtitle = clazz->getField<JVariant_NullType_String>("subtitle");
       jni::local_ref<JVariant_NullType_String> subtitle = this->getFieldValue(fieldSubtitle);
       static const auto fieldChecked = clazz->getField<JVariant_Boolean_NullType>("checked");
@@ -63,6 +65,7 @@ namespace margelo::nitro::nitroui {
         static_cast<bool>(disabled),
         static_cast<bool>(destructive),
         systemImage != nullptr ? std::make_optional(systemImage->toCpp()) : std::nullopt,
+        androidIcon != nullptr ? std::make_optional(androidIcon->toCpp()) : std::nullopt,
         subtitle != nullptr ? std::make_optional(subtitle->toCpp()) : std::nullopt,
         checked != nullptr ? std::make_optional(checked->toCpp()) : std::nullopt
       );
@@ -74,7 +77,7 @@ namespace margelo::nitro::nitroui {
      */
     [[maybe_unused]]
     static jni::local_ref<JNitroUiMenuRow::javaobject> fromCpp(const NitroUiMenuRow& value) {
-      using JSignature = JNitroUiMenuRow(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<JVariant_NullType_String>, jboolean, jboolean, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_Boolean_NullType>);
+      using JSignature = JNitroUiMenuRow(jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<jni::JString>, jni::alias_ref<JVariant_NullType_String>, jboolean, jboolean, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_NullType_String>, jni::alias_ref<JVariant_Boolean_NullType>);
       static const auto clazz = javaClassStatic();
       static const auto create = clazz->getStaticMethod<JSignature>("fromCpp");
       return create(
@@ -86,6 +89,7 @@ namespace margelo::nitro::nitroui {
         value.disabled,
         value.destructive,
         value.systemImage.has_value() ? JVariant_NullType_String::fromCpp(value.systemImage.value()) : nullptr,
+        value.androidIcon.has_value() ? JVariant_NullType_String::fromCpp(value.androidIcon.value()) : nullptr,
         value.subtitle.has_value() ? JVariant_NullType_String::fromCpp(value.subtitle.value()) : nullptr,
         value.checked.has_value() ? JVariant_Boolean_NullType::fromCpp(value.checked.value()) : nullptr
       );
