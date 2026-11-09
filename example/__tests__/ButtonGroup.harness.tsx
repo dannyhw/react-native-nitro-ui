@@ -70,6 +70,7 @@ type ButtonGroupHandle = {
   readonly controlledIds: string[];
   measureContent(): Size;
   nuiTestPressItem(id: string): void;
+  nuiTestOpenOverflow(): void;
   nuiTestProbeRow(): void;
   nuiTestProbeAccessibility(): void;
   nuiTestStateReport(): string;
@@ -538,6 +539,77 @@ describe('ButtonGroup · G20', () => {
     );
   });
 
+  it('keeps one row when the trailing toggle of a connected group overflows', async () => {
+    // D42 item 2 is a rule about the *group*: an iOS connected group that contains a
+    // toggle draws the standard row, because `ControlGroup` shows no on state. The bug
+    // this is here for decided it per candidate instead — and the candidate a narrow box
+    // wins is the one whose *trailing* item has already gone into the menu. Five actions
+    // plus a toggle is exactly that shape: at 220 pt the row the user sees holds no
+    // toggle, so a per-candidate answer reached for `ControlGroup` (31 pt) at the narrow
+    // width and the standard row (34.33 pt) at the wide one — two heights under one
+    // sizing key, which is the one thing the sizing key cannot carry.
+    const items: ButtonGroupItem[] = [
+      ...MANY.slice(0, 5),
+      { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
+    ];
+    poison([sizingKey('connected', 'filled', 'medium', 'automatic', items)]);
+    const { rerender } = await render(
+      <View style={WELL}>
+        <ButtonGroup
+          items={items}
+          appearance="connected"
+          testID="bg-connected"
+          hybridRef={captureHybrid('bg-connected')}
+        />
+      </View>
+    );
+    await waitForTestId('bg-connected');
+    const narrowMeasured = await waitForMeasured(
+      'bg-connected',
+      'the connected group in the well'
+    );
+    const narrow = await probeRow('bg-connected');
+    // The toggle really did overflow, which is the whole premise.
+    expect(narrow.overflow).toBe('1');
+    expect((narrow.shown ?? 'none').split(',')).not.toContain('bold');
+    expect(narrow.row).toBe('standard');
+    const narrowHeight = narrowMeasured.height;
+
+    // The same group, a box wide enough for the toggle: same row, same height.
+    await rerender(
+      <View style={{ width: '100%' }}>
+        <ButtonGroup
+          items={items}
+          appearance="connected"
+          testID="bg-connected"
+          hybridRef={captureHybrid('bg-connected')}
+        />
+      </View>
+    );
+    const wide = await pollUntil(
+      () => {
+        const probed = reportOf('bg-connected');
+        return (probed.shown ?? 'none').split(',').includes('bold')
+          ? probed
+          : null;
+      },
+      () =>
+        new Error(
+          'widening the well never brought the toggle into the row - the row reports ' +
+            JSON.stringify(reportOf('bg-connected'))
+        ),
+      10000
+    );
+    expect(wide.overflow).toBe('0');
+    expect(wide.row).toBe('standard');
+    const wideMeasured = await waitForMeasured(
+      'bg-connected',
+      'the connected group across the screen'
+    );
+    expect(wideMeasured.height).toBeCloseTo(narrowHeight, 1);
+    expect(wideMeasured.height).not.toBeCloseTo(WRONG_HEIGHT, 0);
+  });
+
   it('presses once per item, from the row and from the overflow menu', async () => {
     poison([sizingKey('standard', 'filled', 'medium', 'automatic', MANY)]);
     await render(
@@ -661,10 +733,18 @@ describe('ButtonGroup · G20', () => {
     // A re-render that sends the *same* `defaultChecked` again must not re-apply it:
     // the tap above is the user's, and the seed is a first-render value only. A second
     // `render()` would be a second mount, and a fresh control *should* seed itself, so
-    // this is `rerender` — the same view, new props, new array identities.
+    // this is `rerender` — the same view, new props.
+    //
+    // The second item is the part that makes this a test of native. `useNativeItems`
+    // caches by an items signature, so re-sending an identical array hands the wrapper
+    // back the *same* props object: nothing is re-sent to native at all, the guard below
+    // the bridge is never reached, and the test passes on the JS cache alone. Change one
+    // field and the signature changes, `defaultCheckedIds: ['bold']` crosses the bridge
+    // a second time, and only native's own `seeded` set stands between it and undoing
+    // the tap above. Drop that guard and this line reads `checked=bold`.
     await rerender(
       <ButtonGroup
-        items={[{ ...first! }]}
+        items={[{ ...first! }, { id: 'italic', title: 'Italic' }]}
         onCheckedChange={recordChecked('bg-seed')}
         testID="bg-seed"
         hybridRef={captureHybrid('bg-seed')}
@@ -731,10 +811,16 @@ describe('ButtonGroup · G20', () => {
       await waitForEvents(itemFrom, ['bg-disabled-item:press:copy'])
     ).toEqual(['bg-disabled-item:press:copy']);
 
-    // D29: `disabled` arriving while the overflow menu is open closes it. Android's
-    // `menu=` field answers `closed`; iOS has no control left to report about (the
-    // disabled group composes no overflow control at all), so it answers `none` — the
-    // documented deviation, and both readings mean "nothing is open".
+    // D29: `disabled` arriving while the overflow menu is *open* closes it — which is
+    // only a test if the menu was open. Asserting the close from a menu nobody opened
+    // proves the witness was never `open`, which is true of a fresh mount too.
+    //
+    // Android asks Material to show its own menu and reads `open` back from the state the
+    // composition is handed. iOS cannot open a `Menu` from code before iOS 18
+    // (`isExpanded`; the target is 15.1), so it takes the claim one level down instead:
+    // the row composes an overflow control (`menu=composed`), and after the disable there
+    // is no control at all (`menu=none`) — the form the rule takes on this platform, and
+    // the tap-the-real-indicator half of it is `real-input:ios`.
     await render(
       <View style={WELL}>
         <Controlled testId="bg-close" items={MANY} initialChecked={[]} />
@@ -742,17 +828,35 @@ describe('ButtonGroup · G20', () => {
     );
     await waitForTestId('bg-close');
     await waitForMeasured('bg-close', 'the group whose menu closes');
+    expect((await probeRow('bg-close')).overflow).toBe('1');
+
+    if (Platform.OS === 'android') {
+      handleOf('bg-close').nuiTestOpenOverflow();
+      await pollUntil(
+        () => (reportOf('bg-close').menu === 'open' ? 'open' : null),
+        () =>
+          new Error(
+            'the overflow menu never reported itself open, so the close below would ' +
+              `prove nothing (menu="${String(reportOf('bg-close').menu)}").`
+          ),
+        6000
+      );
+    } else {
+      expect(reportOf('bg-close').menu).toBe('composed');
+    }
+
     disabledSetters.get('bg-close')!(true);
+    const gone = Platform.OS === 'android' ? 'closed' : 'none';
     await pollUntil(
       () => {
         const menu = reportOf('bg-close').menu;
-        return menu === 'closed' || menu === 'none' ? (menu ?? '') : null;
+        return menu === gone ? (menu ?? '') : null;
       },
       () =>
         new Error(
           `disabling the group left its overflow menu reporting menu="${String(
             reportOf('bg-close').menu
-          )}".`
+          )}" (expected "${gone}" on this platform).`
         ),
       6000
     );
@@ -760,15 +864,21 @@ describe('ButtonGroup · G20', () => {
 
   it('names every item kind, and an icon-only item by its title', async () => {
     const items: ButtonGroupItem[] = [
-      // Both items carry a glyph, because `iconOnly` is only a real configuration when
-      // there is a glyph to draw: with none, the row would fall back to the title and
-      // the `label=Copy` assertion below would pass for the wrong reason.
+      // An item that has a glyph on this platform: `iconOnly` draws the glyph alone, so
+      // the title has to reach the reader as a description — `desc=`, with no text.
       {
         id: 'copy',
         title: 'Copy',
         systemImage: 'doc.on.doc',
         androidIcon: 'nitroui_test_star',
       },
+      // An item with no glyph to draw. `iconOnly` is a preference, not a death sentence:
+      // the title is the fallback, and `text=` is what distinguishes "drew the title"
+      // from the empty button this control used to draw — a node whose only claim to
+      // exist was a description saying a word nothing on screen matched. Carrying both
+      // would name it twice, so `desc=none` beside `text=Paste` is half the claim.
+      { id: 'paste', title: 'Paste' },
+      // A toggle item, for the role.
       {
         id: 'bold',
         title: 'Bold',
@@ -796,18 +906,63 @@ describe('ButtonGroup · G20', () => {
       expect(a11y).toBe('unavailable');
       return;
     }
-    // Android reads the merged Compose semantics nodes a reader is handed. Two claims,
-    // both from Appendix B5: an item drawn with no title is still *named* by its
-    // title, and a toggle item is a checkbox rather than a button.
-    expect(a11y).toContain('label=Copy');
-    expect(a11y).toContain('label=Bold');
-    // The report spells the role as `Checkbox`, with the M3 toggle's own state beside
-    // it (`Off` here): a reader is handed a checkbox named Bold, not a button.
-    expect(a11y).toMatch(/\[Checkbox,[^;]*label=Bold\]/);
-    // And the overflow control carries one name rather than two — Material's indicator
-    // arrives already labelled "More options", and this control replaces those words
-    // with the one iOS draws on the same control, instead of adding to them.
-    expect(a11y).toContain(',label=More]');
+    // Android reads the merged Compose semantics nodes a reader is handed. Three claims,
+    // all from Appendix B5, and they only say anything because `text=` and `desc=` are
+    // reported apart: which of the two is filled is how the node is named.
+    expect(a11y).toMatch(/text=none,desc=Copy/);
+    expect(a11y).toMatch(/text=Paste,desc=none/);
+    // The report spells the role as `Checkbox`, with the M3 toggle's own state beside it
+    // (`Off` here): a reader is handed a checkbox named Bold, not a button.
+    expect(a11y).toMatch(/\[Checkbox,[^;]*desc=Bold/);
+
+    // The overflow control's own name, both halves of it, on one group that overflows.
+    //
+    // With no `overflowAccessibilityLabel`, the answer is Material's: this control ships
+    // named, in the reader's language, and a hardcoded "More" here replaced that string
+    // with English in every locale. And when the caller *does* name it, the new words
+    // have to arrive — the model held the label in a plain var, so a change after mount
+    // was stored and never drawn.
+    const { rerender } = await render(
+      <View style={WELL}>
+        <ButtonGroup
+          items={MANY}
+          testID="bg-a11y-overflow"
+          hybridRef={captureHybrid('bg-a11y-overflow')}
+        />
+      </View>
+    );
+    await waitForTestId('bg-a11y-overflow');
+    await waitForMeasured('bg-a11y-overflow', 'the overflowing group');
+    expect((await probeRow('bg-a11y-overflow')).overflow).toBe('1');
+    const unnamed = await probeAccessibility('bg-a11y-overflow');
+    expect(unnamed).toContain('More options');
+    // One name, not two: the first version of this control put its own word in front of
+    // Material's and a reader heard "More More options".
+    expect(unnamed).not.toContain('More More');
+
+    // The *same* view, renamed: a prop that only reaches a plain var is stored and never
+    // drawn, and this is the step that would notice.
+    await rerender(
+      <View style={WELL}>
+        <ButtonGroup
+          items={MANY}
+          overflowAccessibilityLabel="Overflow"
+          testID="bg-a11y-overflow"
+          hybridRef={captureHybrid('bg-a11y-overflow')}
+        />
+      </View>
+    );
+    let renamed = 'none';
+    for (
+      let attempt = 0;
+      attempt < 20 && !renamed.includes('desc=Overflow');
+      attempt += 1
+    ) {
+      await sleep(100);
+      renamed = await probeAccessibility('bg-a11y-overflow');
+    }
+    expect(renamed).toContain('desc=Overflow');
+    expect(renamed).not.toContain('More options');
   });
 
   it('carries no items, checked state or event count across a remount', async () => {

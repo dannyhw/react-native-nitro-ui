@@ -105,6 +105,7 @@ final class RealInputTests: XCTestCase {
     static let buttonGroupRefusedLast = "button-group-refused-last"
     static let buttonGroupRefusedEvents = "button-group-refused-events"
     static let buttonGroupDisabledEvents = "button-group-disabled-events"
+    static let buttonGroupOverflowDisabled = "button-group-overflow-disabled"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -3320,6 +3321,11 @@ final class RealInputTests: XCTestCase {
   /// A real tap presses each ButtonGroup item once, a toggle item flips once per tap, and
   /// an overflowed item is reachable through the overflow menu (G20).
   ///
+  /// The last step is D29's rule on this platform: `disabled` arriving while the overflow
+  /// menu is open takes the menu down. The harness cannot open a SwiftUI `Menu` from code
+  /// before iOS 18's `isExpanded` (the target is 15.1), so Android proves the rule there
+  /// and iOS proves it here, where a real finger and a real prop change are available.
+  ///
   /// The `pressed-id` echo is what makes this a check about *items*: three taps and a
   /// counter reading `3` is also exactly what a group that reports `items[0]` for every
   /// tap looks like, and that group presses perfectly. So each tap asserts the counter
@@ -3545,6 +3551,43 @@ final class RealInputTests: XCTestCase {
       "4 2 1",
       "four presses and two flips — one more of each than the taps above reported — plus "
         + "the one delivery the barrier tap beside the disabled pair was owed"
+    )
+
+    // 7. D29: a group that is disabled while its overflow menu is open cannot keep that
+    //    menu. The rows are the only witness a menu has, so the check is: the rows are
+    //    up, the app flips `disabled`, the rows are gone. Re-opening the menu nobody
+    //    could open from code is the part that makes this a close — `0 row(s)` after the
+    //    disable is also what a menu that was never open looks like.
+    try tapItemUntilOption(
+      overflow,
+      titled: overflowControl,
+      option: "Quarter",
+      waitingFor: "the overflow menu to open again, for the disable below"
+    )
+    XCTAssertGreaterThan(
+      optionLabels(containing: "Quarter"),
+      0,
+      "the menu is up before the flip — without this the assertion below would be true "
+        + "of a menu nobody opened"
+    )
+    try required(
+      "button-group-overflow-disable",
+      as: "the control that disables the overflowing group"
+    ).fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.buttonGroupOverflowDisabled) { $0 == "disabled" },
+      "disabled",
+      "the app should have answered the tap by rendering the group disabled"
+    )
+    _ = waitUntilOptionGone(
+      "Quarter",
+      "an open overflow menu to close when its group became disabled"
+    )
+    XCTAssertEqual(
+      optionLabels(containing: "Quarter"),
+      0,
+      "a disabled group keeps no overflow menu open: its items are not reachable while it "
+        + "is disabled, so the open menu is not either"
     )
   }
 
