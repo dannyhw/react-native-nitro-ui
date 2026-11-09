@@ -734,13 +734,16 @@ describe('Form (G24)', () => {
       ]);
     }
     if (!IOS) {
-      // Question 2 again: the shapes follow the new index/count, not the old ones.
+      // Question 2 again: the layer follows the new order. The count is still four - a
+      // reorder moves a row, it does not remove one - so what this can say is that the
+      // section recounted rather than keeping the mount that ended (fix round 1: this read
+      // `3`, which is the count from the removal two steps above, not the one here).
       const section = await reportUntil(
         () => sections.first?.nuiTestSectionReport(),
         (r) => r.shapes != null,
         'the first section to recount its shapes'
       );
-      expect(num(section, 'shapes')).toBe(3);
+      expect(num(section, 'shapes')).toBe(4);
     }
 
     await rerender(<Probe mode="base" formStyle={SHORT_BOX} {...counters()} />);
@@ -1140,10 +1143,18 @@ describe('Form (G24)', () => {
     // `Probe`, not E7's `MeasureForm`: mounting a second Form with the same row test ids as
     // the case that runs after it is how that case came to measure a dead view.
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
-    await formReport((r) => num(r, 'rows') === 9, 'nine rows');
+    const resting = await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     need(forms.form).nuiTestScrollTo(400);
     await formReport(
-      (r) => num(r, 'offset') > 100,
+      // The claim is "scrolled", not "scrolled past 100": `SHORT_BOX` gives a 9-row Form
+      // about 84 dp of travel, so a fixed 100 is unreachable on Android however well the
+      // scroll works. Each platform publishes one of the two numbers — iOS moves the list's
+      // own `offset`, Android's scroll view updates `scroll` — so the case compares both
+      // against the reading taken before `nuiTestScrollTo`, and asks for 20 dp of movement
+      // out of either (fix round 1: this waited for a number that only iOS can reach).
+      (r) =>
+        num(r, 'offset') > num(resting, 'offset') + 20 ||
+        num(r, 'scroll') > num(resting, 'scroll') + 20,
       'the list to have scrolled before it goes'
     );
     // The screen goes away with the list scrolled: the moment UIKit moves the list out on
@@ -1399,7 +1410,19 @@ describe('Form measure (E7)', () => {
 
     // At rest. Android is the control here: its rows never leave Yoga's box, so both trees
     // have always agreed and a case that cannot see the difference is not worth running.
-    const atRest = await compareRows('at rest', 0);
+    // Polled for the same reason the pass below is: a row answers with the frame Fabric last
+    // wrote it, and the frames arrive per view. Mounting 24 rows behind one heading re-lays
+    // the section out once the heading's band has been measured, and a comparison that reads
+    // m3 and m8 mid-that pass sees the frame from before it (fix round 1: `m3 ... vs UIKit
+    // 12.2,37.3` and `m8 ... vs UIKit 12.2,0.0`, in a pass where twelve of fourteen rows
+    // agreed). Nothing is loosened here — the verdict is still "no row disagrees" — this just
+    // gives the layout the same chance to settle the scrolled pass has always had.
+    const atRest = await until(
+      () => compareRows('at rest', 0),
+      (r) => r.bad.length === 0 && r.compared >= 7,
+      12000,
+      'every row to measure where its own tree put it'
+    );
     expect(atRest.bad).toEqual([]);
     // Eight of the 24 rows are on screen at rest - the Form's box shows a little over
     // eight 52 pt rows - so eight is the ceiling here, and the guard is that the case
