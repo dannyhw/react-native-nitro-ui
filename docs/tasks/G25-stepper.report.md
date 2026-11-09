@@ -185,3 +185,19 @@ to `FOLLOWUPS.md`.
   `NitroUiStepperBinding.value` (take the write when `quantize` recognises it) -> 5 of 15 vectors
   red, first `FAIL one plus tap on 0...1.05 by 0.1 moves one tenth (got 1.0, want 0.1; a literal
   write would land on 1.0)`, exit 1.
+- `harness:android:Stepper > presents one adjustable control to a reader` -> delete the
+  `stateDescription = nitroUiStepperValueText(displayed)` line
+  (`HybridNitroUiStepper.kt:385`) -> `the control carries its value: expected
+  'range=0..10@4/steps=4,value=none,clic…' to contain 'value=4'`, exit 1.
+- `real-input:ios:--control:stepper > testRealInputStepper` -> `userStep` emits two
+  `onValueChange`s per step -> `XCTAssertEqual failed: ("4") is not equal to ("2") - a hold should
+  report one event per step — the value moved from 5 to 7 (2 steps) while 4 events were reported`,
+  exit 1.
+- `real-input:ios:--control:stepper > a11y:stepper` -> the new case run before its debt row
+  recorded the measured announcement (that tree predates `e6f4c752`) ->
+  `NitroUiStepper: "Real-input stepper" is announced as an other and not as an adjustable`; the
+  same line prints as a known-failing debt row once the announcement is recorded.
+
+The last three ran through `gate.mjs`, so their evidence is in the gate log store
+(`gate.mjs logs --branch task/G25-fix1 --failed`); the first is a host binary, run directly with
+`bun run test:native` on the mutated tree.
