@@ -1060,6 +1060,13 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       "heights=\(heights)",
       "taps=\(taps)",
       "keyboard=\(Self.number(keyboardInset))",
+      // The reservation this class asked UIKit for (`keyboard=`) and the two numbers the list
+      // ends up *carrying*: its own `contentInset.bottom`, and the adjusted inset every
+      // keyboard decision is measured against. They agree until someone else writes the
+      // list's inset — a scroll that takes the reservation back does not come through
+      // `setBottomInset`, so `keyboard=` alone cannot see it (fix round 1, question 5).
+      "insetBottom=\(Self.number(list.contentInset.bottom))",
+      "adjBottom=\(Self.number(list.adjustedContentInset.bottom))",
       "ime=0.00",
       "offset=\(Self.number(list.contentOffset.y))",
       "origin=\(Self.number(reportedOffset ?? .nan))",

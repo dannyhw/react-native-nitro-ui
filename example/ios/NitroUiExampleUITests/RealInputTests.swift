@@ -136,6 +136,7 @@ final class RealInputTests: XCTestCase {
     static let formFieldFocus = "form-field-focus"
     static let formFieldValue = "form-field-value"
     static let formKeyboardInset = "form-keyboard-inset"
+    static let formListGeometry = "form-list-geometry"
   }
 
   /// The three titles of `real-input-picker`, spelled as `PickerScreen` spells them.
@@ -6216,9 +6217,11 @@ final class RealInputTests: XCTestCase {
       "the keyboard covers the focused field: it is at \(frame) with the keyboard's top edge at "
         + "\(keyboardTop) (from \(from)) — keyboardAvoidance left a field under the keys."
     )
+    let geometryBefore = echoText(Echo.formListGeometry)
     print(
       "real-input (ios): form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from "
-        + "\(from)) inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
+        + "\(from)) inset=\(insetText) focused=\(echoText(Echo.formFieldFocus)) "
+        + "list=\(geometryBefore)"
     )
 
     // Then a finger's scroll, because the list's offset is the variable the inset was once
@@ -6255,7 +6258,8 @@ final class RealInputTests: XCTestCase {
       "real-input (ios): form keyboard after a scroll: field=\(frame) -> \(settled) "
         + "inset=\(insetText) -> \(insetAfterText) "
         + "focused=\(echoText(Echo.formFieldFocus)) "
-        + "keyboardWindow=\(app.keyboards.firstMatch.exists)"
+        + "keyboardWindow=\(app.keyboards.firstMatch.exists) "
+        + "list=\(geometryBefore) -> \(echoText(Echo.formListGeometry))"
     )
     XCTAssertEqual(
       echoText(Echo.formFieldFocus),
