@@ -34,6 +34,14 @@ import Foundation
 /// here are a stuck loop, an over-eager early exit and a wait that chases the answer — none of
 /// which a device run can be relied on to produce on demand.
 enum A11yFrameStability {
+  /// How long a confirmation read sits behind the pair it confirms, by default.
+  ///
+  /// 2 s because React Native publishes accessibility elements on the JS thread, and a window that
+  /// is meant to let one publication happen has to be longer than a frame. The ordinary `pauseMs`
+  /// (120 ms) is a test-manager snapshot-rebuild wait, which is a different question asked a
+  /// different place.
+  static let defaultConfirmMs = 2_000
+
   /// What one settle call ended with.
   struct Outcome<Snapshot> {
     /// The read to print. When `settled`, the second of the two agreeing reads; otherwise the
@@ -55,6 +63,13 @@ enum A11yFrameStability {
     let moved: Int
     /// Wall clock spent, measured with the injected clock.
     let elapsedMs: Int
+    /// The agreeing pair was confirmed by one more read, taken a window later, because the
+    /// snapshot's **element set** — not a box — was the thing in question (`confirmationNeeded`).
+    ///
+    /// This is what lets a reader tell "the pass read three times because the tree wobbled" from
+    /// "the pass read three times because this shape is always read three times". The first is a
+    /// finding; the second is the price of the guard, and both would otherwise print as `reads=3`.
+    let confirmed: Bool
   }
 
   /// Exact frame equality, component by component.
@@ -92,6 +107,26 @@ enum A11yFrameStability {
     return moved
   }
 
+  /// Do two reads agree on **which elements** the tree holds?
+  ///
+  /// Frames alone cannot answer this. React Native publishes a child accessibility element and
+  /// withdraws it without moving anything else, and XCUITest walks the subtree in whatever order
+  /// it felt like, so a tree can change its membership while its boxes and its element count both
+  /// stay put — and then two reads of two different trees agree on frames and the pass prints
+  /// whichever one it happened to sample. (X22: the same `ContextMenu` code read 3 accessibility
+  /// elements on one branch and 5 on two others, on one simulator in one day, with every frame
+  /// identical each time and no ContextMenu file in either diff.)
+  ///
+  /// Identity is a sorted multiset, not a set: the duplicates are the point. React Native publishes
+  /// each accessibility element twice (an element and the view that vends it), which is why the
+  /// sweep counts 2 stops for one leaked `Text`; deduplicating here would hide the very shape the
+  /// caller is grading, so `["Grace", "Grace"]` must not agree with `["Grace", "Menu"]`.
+  ///
+  /// Two empty lists agree: a caller with no identity channel is asking the frame question only.
+  static func identitiesAgree(_ left: [String], _ right: [String]) -> Bool {
+    return left.sorted() == right.sorted()
+  }
+
   /// Should this outcome be printed as a stability line?
   ///
   /// The ordinary wait — two reads that agree — prints nothing, which is what keeps fourteen
@@ -108,7 +143,10 @@ enum A11yFrameStability {
   /// Lives here rather than inline in the UI-test target so the case above is a test rather than a
   /// device run: `RealInputTests` asks this and prints what it says.
   static func shouldReport<Snapshot>(_ outcome: Outcome<Snapshot>) -> Bool {
-    return outcome.reads > 2 || outcome.moved > 0 || !outcome.settled
+    // A confirmation read is not a wobble: for a shape whose element set is in question the pass
+    // reads three times *by design*, and a note on every healthy run would train nobody to read it.
+    // Anything past that designed third read is still noise worth reporting.
+    return outcome.reads > (outcome.confirmed ? 3 : 2) || outcome.moved > 0 || !outcome.settled
   }
 
   /// Read until two consecutive reads agree, or the cap or the budget says stop.
@@ -147,6 +185,18 @@ enum A11yFrameStability {
   ///     manager's snapshot a chance to be rebuilt, so a zero pause re-reads the same snapshot.
   ///   - framesOf: the frames of one snapshot that agreement is judged on. What the caller does
   ///     not hand over here is not stability-checked, so pass the whole tree, not the anchor.
+  ///   - identitiesOf: what one snapshot *contains*, as one string per element — trait, name,
+  ///     value. Agreement then means "the same elements", not only "the same boxes", which is the
+  ///     difference between a settled tree and a settled sample of a tree that is still being
+  ///     published. The default (every snapshot answers `[]`) keeps the frame-only question.
+  ///   - confirmationNeeded: is this shape one whose **membership** is the question? When it is,
+  ///     two reads agreeing is not enough: the pair is taken ~3 s apart and React Native publishes
+  ///     accessibility elements on the JS thread, so an element can still be on its way for
+  ///     seconds. The wait then takes one more read, `confirmMs` later, and only calls it settled
+  ///     if that one agrees too. Cost: one extra read, on the cases that ask.
+  ///   - confirmMs: how long that window is. `pauseMs` is a snapshot-rebuild wait — 120 ms is not
+  ///     a window in which a JS-thread task can run, and a publication the pass has to wait for is
+  ///     exactly such a task.
   ///   - read: one read of the tree. Called on this thread; each call is the round trip.
   ///   - nowMs / pause: injected, so the cap and the budget are provable in milliseconds rather
   ///     than by a device run that happens to be slow.
@@ -156,6 +206,9 @@ enum A11yFrameStability {
     minReads: Int = 2,
     pauseMs: Int = 120,
     framesOf: (Snapshot) -> [CGRect],
+    identitiesOf: (Snapshot) -> [String] = { _ in [] },
+    confirmationNeeded: (Snapshot) -> Bool = { _ in false },
+    confirmMs: Int = A11yFrameStability.defaultConfirmMs,
     read: () -> Snapshot,
     nowMs: () -> Int = { Int(Date().timeIntervalSince1970 * 1000) },
     pause: (Int) -> Void = { Thread.sleep(forTimeInterval: Double($0) / 1000) }
@@ -164,8 +217,11 @@ enum A11yFrameStability {
     let startedAt = nowMs()
     var last = read()
     var lastFrames = framesOf(last)
+    var lastIdentities = identitiesOf(last)
     let first = last
     var hasSecondRead = false
+    var pendingConfirmation = false
+    var confirmed = false
     var reads = 1
 
     func outcome(settled: Bool, snapshot: Snapshot) -> Outcome<Snapshot> {
@@ -177,7 +233,8 @@ enum A11yFrameStability {
         moved: hasSecondRead
           ? movedFrameCount(framesOf(first), framesOf(snapshot))
           : 0,
-        elapsedMs: nowMs() - startedAt
+        elapsedMs: nowMs() - startedAt,
+        confirmed: confirmed
       )
     }
 
@@ -191,16 +248,40 @@ enum A11yFrameStability {
         // handed back rather than the first: the caller prints a real measurement either way.
         return outcome(settled: false, snapshot: last)
       }
-      pause(pauseMs)
+      // The confirmation window, not the ordinary pause, when a pair has already agreed and what
+      // is being re-checked is membership: whether an element that was absent has since been
+      // published. That happens on React Native's JS thread, seconds later on a loaded machine —
+      // which is exactly when the 4-stop reading was taken.
+      pause(pendingConfirmation ? confirmMs : pauseMs)
       let current = read()
       let currentFrames = framesOf(current)
+      let currentIdentities = identitiesOf(current)
       reads += 1
       hasSecondRead = true
-      if movedFrameCount(lastFrames, currentFrames) == 0 {
-        return outcome(settled: true, snapshot: current)
+      // Agreement is frames **and** membership: a withdrawn or newly published child element makes
+      // two reads of two different trees, however identical their boxes look.
+      let agrees = movedFrameCount(lastFrames, currentFrames) == 0
+        && identitiesAgree(lastIdentities, currentIdentities)
+      if pendingConfirmation {
+        pendingConfirmation = false
+        if agrees {
+          confirmed = true
+          return outcome(settled: true, snapshot: current)
+        }
+        // The tree changed under the confirmation, which is the whole reason for taking it. The new
+        // read becomes the baseline and the wait keeps going, up to the same cap as any other
+        // disagreement — so a tree that never publishes its children is printed unsettled rather
+        // than retried away.
+      } else if agrees {
+        if !confirmed && confirmationNeeded(current) {
+          pendingConfirmation = true
+        } else {
+          return outcome(settled: true, snapshot: current)
+        }
       }
       last = current
       lastFrames = currentFrames
+      lastIdentities = currentIdentities
     }
 
     return outcome(settled: false, snapshot: last)
