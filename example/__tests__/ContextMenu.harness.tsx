@@ -1559,11 +1559,16 @@ describe('ContextMenu · the row glyphs (G21)', () => {
       `    · second owner: menu=${frame} ink=${String(ink)} sampled=${firstTint}`
     );
     // The pixels first: they are the claim, and the report line below is only its
-    // echo. Read in this order, a slot that survived the recycle is named by the
-    // sample that would have to be empty (h5', the mutation that keeps the last
-    // owner's loaded slots, goes red here), and `iconTints=` is the second line to
-    // say so rather than the one that hides it.
-    expect(ink).toBe(0);
+    // echo. And the claim is *no slot of that colour*, not *none of it* — Material
+    // draws these very titles in the same `LocalContentColor` the glyph was tinted
+    // from, so the popup of a menu with no icon at all counts 145 px of `#40434B`
+    // here. A 20 dp square is 2954 px on this device: a quarter of one is a margin
+    // no text reaches and a kept slot blows through, which is what h5' — the
+    // mutation that hands the next owner the last owner's loaded slots — does, at
+    // 2954. (`expect(ink).toBe(0)` was the first thing written here and the device
+    // said no: the same colour belongs to the row titles too.)
+    const slot = ROW_ICON_DP * PixelRatio.get();
+    expect(ink).toBeLessThan(slot * slot * 0.25);
     expect(opened.iconTints).toBe('-');
   });
 });
