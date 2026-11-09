@@ -1,0 +1,211 @@
+# Failure excerpt — harness:android:Stepper
+
+- Ran: 2026-11-09T09:04:27.816Z on code tree `465d19029f04` at HEAD `ab3aa8d` (branch `task/G25-stepper`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Stepper`
+- Result: fail, exit 1, 165114 ms
+- Load: start 6.84, end 7.44, median 5.70, max 7.44
+- Device: android / device `emulator-5574` / lease `G25-ztv7a`
+- Full log: `task/G25-stepper/harness+android+Stepper-2026-11-09T09-04-27.443Z.log` (<store>/task/G25-stepper/harness+android+Stepper-2026-11-09T09-04-27.443Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Stepper.harness.tsx`
+- `● Stepper › hosts a control, keeps its own box, and draws the value it was given`
+- `● Stepper › lays out at the declared fallback and corrects a poisoned cached size`
+- `● Stepper › measures one box for every range, step and disabled state`
+- `● Stepper › steps one value and reports one event per step`
+- `● Stepper › disables the half at a bound and reports nothing from it`
+- `● Stepper › steps 0.1 without float drift, and reaches the maximum`
+- `● Stepper › reverts a change the app refused, and shows a value the app wrote`
+- `● Stepper › sends nothing while disabled, and follows the flag back`
+- `● Stepper › keeps its own value when uncontrolled, and seeds it from the range`
+- `● Stepper › snaps a value outside the range back into it`
+- `● Stepper › presents one adjustable control to a reader`
+- `● Stepper › steps once when a reader asks, and not at all at a bound`
+- `● Stepper › draws the two Material Symbols glyphs on Android`
+- `● Stepper › resets the value, the range and the name when its view is recycled`
+- `● Stepper › survives mounting and unmounting repeatedly, and many instances at once`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G25-stepper/harness+android+Stepper-2026-11-09T09-04-27.443Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G25-ztv7a (still live)
+  |   G25-ztv7a                G25          both              pair-a
+  |   G20-0sqdh                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.44 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 209 — the rest is in the full log above)
+
+```
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › disables the half at a bound and reports nothing from it
+
+    No element with testID "at-min" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › steps 0.1 without float drift, and reaches the maximum
+
+    No element with testID "tenths" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › reverts a change the app refused, and shows a value the app wrote
+
+    No element with testID "refused" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › sends nothing while disabled, and follows the flag back
+
+    No element with testID "off" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › keeps its own value when uncontrolled, and seeds it from the range
+
+    No element with testID "seeded" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › snaps a value outside the range back into it
+
+    No element with testID "over" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › presents one adjustable control to a reader
+
+    No element with testID "a11y" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › steps once when a reader asks, and not at all at a bound
+
+    No element with testID "reader" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › draws the two Material Symbols glyphs on Android
+
+    No element with testID "pixels" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › resets the value, the range and the name when its view is recycled
+
+    No element with testID "recycled" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+  ● Stepper › survives mounting and unmounting repeatedly, and many instances at once
+
+    No element with testID "churn" within 10000ms.
+
+      [0m [90m 264 |[39m     () [33m=>[39m (harnessUi[33m.[39mqueryByTestId(testId) [33m==[39m [36mnull[39m [33m?[39m [36mnull[39m [33m:[39m [36mtrue[39m)[33m,[39m
+       [90m 265 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 266 |[39m       [36mnew[39m [33mError[39m([32m`No element with testID "${testId}" within ${timeoutMs}ms.`[39m)[33m,[39m
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 267 |[39m     timeoutMs
+       [90m 268 |[39m   )[33m;[39m
+       [90m 269 |[39m   [36mreturn[39m screen[33m.[39mfindByTestId(testId)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       15 failed, 15 total
+Snapshots:   0 total
+Time:        163.606 s
+Ran all test suites matching Stepper.
+gate: harness:android:Stepper FAIL in 165.1 s
+gate: recorded in .gates/task/G25-stepper.jsonl
+
+
+gate: appended the device context to task/G25-stepper/harness+android+Stepper-2026-11-09T09-04-27.443Z.log (5 probe(s))
+
+```

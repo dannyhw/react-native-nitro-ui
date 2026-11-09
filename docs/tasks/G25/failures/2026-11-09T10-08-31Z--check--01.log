@@ -1,0 +1,185 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-09T10:08:31.547Z on code tree `bda5892fc7a3` at HEAD `fbff1d3` (branch `task/G25-stepper`)
+- Command: `bun run check`
+- Result: fail, exit 1, 150507 ms
+- Load: start 4.46, end 5.09, median 6.66, max 8.48
+- Device: none recorded (not a device gate)
+- Full log: `task/G25-stepper/check-2026-11-09T10-08-30.696Z.log` (<store>/task/G25-stepper/check-2026-11-09T10-08-30.696Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/conformance.test.js`
+- `● the debt ledger › sweeps both lists in one call, each on its own key`
+- `expect(received).toBe(expected) // Object.is equality`
+- `Expected: 3`
+- `Received: 4`
+- `● the debt, as the matrix sees it › collapses the a11y cases onto their components, once per control`
+- `expect(received).toEqual(expected) // deep equality`
+- `● the a11y sweep, against a fake device › runs every case in the table, so a new control is swept the day it is added`
+- `Expected: 4`
+- `Received: 5`
+- `FAIL scripts/__tests__/component-coverage.test.js`
+- `● every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `FAIL scripts/__tests__/ci-workflows.test.js (74.227 s)`
+- `● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3208 — the rest is in the full log above)
+
+```
+    +   "asked": false,
+    +   "elapsedMs": 2135,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+PASS scripts/__tests__/bench-baseline-merge.test.js (82.126 s)
+PASS scripts/__tests__/bench-gate.test.js (144.312 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/conformance.test.js
+  ● the debt ledger › sweeps both lists in one call, each on its own key
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 3
+    Received: 4
+
+      1275 |     // nothing. The iOS rows for the same controls are not in this count — an Android run
+      1276 |     // never read those trees, so it has no evidence that they still reproduce.
+    > 1277 |     expect(debt.length).toBe(3);
+           |                         ^
+      1278 |     expect(debt.join('\n')).toContain(
+      1279 |       'the android entry for "segmented-control"'
+      1280 |     );
+
+      at Object.toBe (scripts/__tests__/conformance.test.js:1277:25)
+
+  ● the debt, as the matrix sees it › collapses the a11y cases onto their components, once per control
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+      Array [
+        "Menu|recycle-reset",
+        "Slider|a11y-name-on-focusable-node",
+        "SegmentedControl|a11y-name-on-focusable-node",
+    +   "Stepper|a11y-name-on-focusable-node",
+        "Picker|a11y-name-on-focusable-node",
+        "ContextMenu|a11y-name-on-focusable-node",
+        "IconButton|a11y-name-on-focusable-node",
+      ]
+
+      1554 |     // back to `covered` when the geometry does. Round 0 expected the 44 pt target to retire
+      1555 |     // this cell; the sweep measured a wider inset instead, and the row came back with it.
+    > 1556 |     expect(failingKeys()).toEqual([
+           |                           ^
+      1557 |       'Menu|recycle-reset',
+      1558 |       'Slider|a11y-name-on-focusable-node',
+      1559 |       'SegmentedControl|a11y-name-on-focusable-node',
+
+      at Object.toEqual (scripts/__tests__/conformance.test.js:1556:27)
+
+  ● the a11y sweep, against a fake device › runs every case in the table, so a new control is swept the day it is added
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 4
+    Received: 5
+
+      2096 |       // stale — which is the same proof as above, over the whole table.
+      2097 |       expect(result.matched).toEqual([]);
+    > 2098 |       expect(result.stale.length).toBe(4);
+           |                                   ^
+      2099 |     });
+      2100 |   });
+      2101 |
+
+      at toBe (scripts/__tests__/conformance.test.js:2098:35)
+
+FAIL scripts/__tests__/component-coverage.test.js
+  ● every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+      Array [
+        "Menu|recycle-reset",
+        "Slider|a11y-name-on-focusable-node",
+        "SegmentedControl|a11y-name-on-focusable-node",
+    +   "Stepper|a11y-name-on-focusable-node",
+        "Picker|a11y-name-on-focusable-node",
+        "ContextMenu|a11y-name-on-focusable-node",
+        "IconButton|a11y-name-on-focusable-node",
+      ]
+
+      387 |     // wider inset, so the row was re-measured with the new numbers.
+      388 |     const keys = failingKeys();
+    > 389 |     expect(keys).toEqual([
+          |                  ^
+      390 |       'Menu|recycle-reset',
+      391 |       'Slider|a11y-name-on-focusable-node',
+      392 |       'SegmentedControl|a11y-name-on-focusable-node',
+
+      at Object.toEqual (scripts/__tests__/component-coverage.test.js:389:18)
+
+FAIL scripts/__tests__/ci-workflows.test.js (74.227 s)
+  ● the dispatch-only harness jobs are given what the action needs › the preflight does not wait forever for -accel-check
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 3
+
+    - ObjectContaining {
+    -   "asked": true,
+    + Object {
+    +   "asked": false,
+    +   "elapsedMs": 2135,
+        "printedRest": true,
+        "saidItGaveUp": true,
+        "status": 0,
+      }
+
+      900 |           out.includes('avd (from rn-harness.config.mjs): nitroui'),
+      901 |         elapsedMs: Date.now() - startedAt,
+    > 902 |       }).toEqual(
+          |          ^
+      903 |         expect.objectContaining({
+      904 |           status: 0,
+      905 |           asked: true,
+
+      at Object.toEqual (scripts/__tests__/ci-workflows.test.js:902:10)
+
+
+Test Suites: 3 failed, 78 passed, 81 total
+Tests:       5 failed, 1935 passed, 1940 total
+Snapshots:   0 total
+Time:        144.711 s, estimated 148 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 150.5 s
+gate: recorded in .gates/task/G25-stepper.jsonl
+
+```
