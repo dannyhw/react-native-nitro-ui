@@ -149,6 +149,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'a real tap opens the popover and presses a Pressable inside it exactly once, a real tap on a TextInput inside brings up the keyboard and keeps the field above it, and a tap outside closes it',
     screen: 'popover',
   },
+  {
+    id: 'button-group',
+    title:
+      'real tap presses each item once, a toggle item flips once per tap, and an overflowed item is reachable through the overflow menu',
+    screen: 'buttongroup',
+  },
   // @end-generated
 ]);
 

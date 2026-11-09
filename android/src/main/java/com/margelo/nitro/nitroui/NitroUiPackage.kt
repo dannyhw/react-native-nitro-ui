@@ -21,6 +21,7 @@ import com.margelo.nitro.nitroui.views.HybridNitroUiTooltipManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiCheckboxManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiSearchFieldManager
 import com.margelo.nitro.nitroui.views.HybridNitroUiIconButtonManager
+import com.margelo.nitro.nitroui.views.HybridNitroUiButtonGroupManager
 
 /**
  * The React package of `react-native-nitro-ui`.
@@ -67,6 +68,7 @@ class NitroUiPackage : BaseReactPackage() {
     HybridNitroUiCheckboxManager(),
     HybridNitroUiSearchFieldManager(),
     HybridNitroUiIconButtonManager(),
+    HybridNitroUiButtonGroupManager(),
     // Not the generated `HybridNitroUiHostManager`: a Hybrid View is a leaf, so
     // nitrogen emits a `SimpleViewManager` for it, and a container needs the
     // `IViewGroupManager` half. See `NitroUiHostViewManager`.

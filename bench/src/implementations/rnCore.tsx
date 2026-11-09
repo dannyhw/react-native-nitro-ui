@@ -12,11 +12,13 @@ import {
 import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
+  buttonGroupTitles,
   buttonTitle,
   dateLabel,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
   menuTitle,
+  onButtonGroupPress,
   onIconButtonPress,
   onPress,
   onValueChange,
@@ -270,6 +272,36 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
       </>
     );
   }
+  if (component === 'button-group') {
+    // The floor for a row of commands is a `View` of `Pressable`s with a `Text` in
+    // each: no Material/SwiftUI group, no connected corners and no overflow of its
+    // own — which is the point. The labels are the same three the nitro-ui arm
+    // draws, so the text measure is charged to both, and the 8 pt gap is the gap
+    // `ButtonGroup` draws its `standard` row at.
+    const titles = buttonGroupTitles(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <View
+            key={index}
+            testID={`bench-rn-core-button-group-${String(index)}`}
+            style={buttonGroupStyles.row}
+          >
+            {titles.map((title) => (
+              <Pressable
+                key={title}
+                accessibilityRole="button"
+                onPress={onButtonGroupPress}
+                style={buttonGroupStyles.item}
+              >
+                <Text style={buttonStyles.label}>{title}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {range(n).map((index) => (
@@ -293,6 +325,21 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
  */
 const iconButtonStyles = StyleSheet.create({
   glyph: { width: 24, height: 24 },
+});
+
+/**
+ * The row the `button-group` floor draws: the 8 pt gap `ButtonGroup` spaces its
+ * `standard` items with, and each item's own box. No minimum touch target and no
+ * group chrome, for `iconButtonStyles`' reason two lines above.
+ */
+const buttonGroupStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 8 },
+  item: {
+    backgroundColor: '#6750A4',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
 });
 
 const buttonStyles = StyleSheet.create({

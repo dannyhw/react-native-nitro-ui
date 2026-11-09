@@ -1,0 +1,172 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-09T01:02:01.332Z on code tree `ef0091d105bf` at HEAD `5539609` (branch `task/G20-button-group`)
+- Command: `bun run check`
+- Result: fail, exit 1, 64358 ms
+- Load: start 28.06, end 22.23, median 26.06, max 28.50
+- Device: none recorded (not a device gate)
+- Full log: `task/G20-button-group/check-2026-11-09T01-02-00.976Z.log` (<store>/task/G20-button-group/check-2026-11-09T01-02-00.976Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" was terminated by signal SIGTERM (Polite quit request)`
+- `error: script "test:native:android" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2826 — the rest is in the full log above)
+
+```
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS src/__tests__/checkbox.test.tsx
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS src/__tests__/hostReport.test.tsx
+PASS src/__tests__/useControlled.test.tsx
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/real-input-a11y.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/lease-pool-cli.test.js (46.405 s)
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS src/__tests__/useStableCallback.test.tsx
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/gate.test.js (53.516 s)
+error: script "test" was terminated by signal SIGTERM (Polite quit request)
+──────── full log: test:native:android ───────────────────────────────────────────
+$ bash scripts/native-tests-android.sh
+Reusing configuration cache.
+> Task :react-native-nitro-modules:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-ui:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-nitro-ui:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-nitro-modules:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-nitro-ui:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-nitro-ui:preBuild UP-TO-DATE
+> Task :react-native-nitro-ui:preDebugBuild UP-TO-DATE
+> Task :react-native-nitro-modules:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-nitro-ui:preDebugUnitTestBuild UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-ui:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :react-native-nitro-ui:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-ui:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-modules:prepareHeaders UP-TO-DATE
+> Task :react-native-nitro-modules:preBuild UP-TO-DATE
+> Task :react-native-nitro-modules:preDebugBuild UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugBuildConfig UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugNavigationResources UP-TO-DATE
+> Task :react-native-nitro-modules:javaPreCompileDebug UP-TO-DATE
+> Task :react-native-nitro-modules:packageDebugResources UP-TO-DATE
+> Task :react-native-nitro-modules:parseDebugLocalResources UP-TO-DATE
+> Task :react-native-nitro-modules:generateDebugRFile UP-TO-DATE
+> Task :react-native-nitro-ui:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugKotlin UP-TO-DATE
+> Task :react-native-nitro-modules:processDebugJavaRes UP-TO-DATE
+> Task :react-native-nitro-modules:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-nitro-modules:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugKotlin
+> Task :react-native-nitro-ui:processDebugJavaRes UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-ui:bundleLibRuntimeToJarDebug
+> Task :react-native-nitro-ui:bundleLibCompileToJarDebug
+> Task :react-native-nitro-ui:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :react-native-nitro-ui:processDebugUnitTestJavaRes UP-TO-DATE
+
+> Task :react-native-nitro-ui:testDebugUnitTest FAILED
+
+ButtonGroupModelTest > defaultCheckedSeedsOnceAndALaterBatchCannotUndoATap FAILED
+    java.lang.AssertionError at ButtonGroupModelTest.kt:129
+34 actionable tasks: 4 executed, 30 up-to-date
+Configuration cache entry reused.
+
+172 tests completed, 1 failed
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':react-native-nitro-ui:testDebugUnitTest'.
+> There were failing tests. See the report at: file://<repo>/android/build/reports/tests/testDebugUnitTest/index.html
+
+* Try:
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+
+BUILD FAILED in 6s
+error: script "test:native:android" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 64.4 s
+gate: recorded in .gates/task/G20-button-group.jsonl
+gate: re-raising SIGTERM
+
+```

@@ -64,6 +64,75 @@ export interface BottomSheetProps {
 export function Button(input: ButtonProps): JSX.Element;
 
 // @public
+export function ButtonGroup(input: ButtonGroupProps): JSX.Element;
+
+// @public
+export type ButtonGroupAppearance = 'standard' | 'connected';
+
+// @public
+export interface ButtonGroupItem {
+    androidIcon?: AndroidIconProp | null | undefined;
+    checked?: boolean | null | undefined;
+    defaultChecked?: boolean | undefined;
+    disabled?: boolean | undefined;
+    id: string;
+    systemImage?: string | null | undefined;
+    title: string;
+    toggle?: boolean | undefined;
+}
+
+// @public
+export type ButtonGroupLabelStyle = 'automatic' | 'titleOnly' | 'iconOnly' | 'titleAndIcon';
+
+// @public
+export interface ButtonGroupProps extends ViewProps {
+    accessibilityLabel?: string | undefined;
+    appearance?: ButtonGroupAppearance | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly items: {
+            readonly id: string;
+            readonly title: string;
+            readonly systemImage: string | null;
+            readonly androidIcon: string | null;
+            readonly disabled: boolean;
+            readonly toggle: boolean;
+        }[];
+        readonly appearance: string;
+        readonly variant: string;
+        readonly size: string;
+        readonly labelStyle: string;
+        readonly disabled: boolean;
+        readonly tintColor: number | null;
+        readonly accessibilityLabel: string | null;
+        readonly checkedIds: string[];
+        readonly controlledIds: string[];
+        readonly mostRecentEventCount: number;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPressItem(id: string): void;
+        nuiTestOpenOverflow(): void;
+        nuiTestProbeRow(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+    }) => void) | undefined;
+    items: ButtonGroupItem[];
+    labelStyle?: ButtonGroupLabelStyle | undefined;
+    // @internal
+    nuiPerfId?: number | null | undefined;
+    onCheckedChange?: ((id: string, checked: boolean) => void) | undefined;
+    onPress?: ((id: string) => void) | undefined;
+    overflowAccessibilityLabel?: string | undefined;
+    size?: 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge' | undefined;
+    testID?: string | undefined;
+    tintColor?: ColorValue | undefined;
+    variant?: ButtonVariant | undefined;
+}
+
+// @public
 export interface ButtonProps extends ViewProps {
     androidIcon?: AndroidIconProp | undefined;
     disabled?: boolean | undefined;

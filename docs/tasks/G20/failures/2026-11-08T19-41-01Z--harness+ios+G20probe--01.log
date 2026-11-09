@@ -1,0 +1,104 @@
+# Failure excerpt — harness:ios:G20probe
+
+- Ran: 2026-11-08T19:41:01.543Z on code tree `212a0c730ee3` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios G20probe`
+- Result: fail, exit 1, 18332 ms
+- Load: start 8.17, end 6.73, median 6.88, max 8.17
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+ios+G20probe-2026-11-08T19-41-01.543Z.log` (<store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-41-01.543Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/G20probe.harness.tsx`
+- `● G20 probe › A: rerender vs re-render vs remount`
+- `● G20 probe › B: does the row re-lay out when the box widens`
+- `● G20 probe › C: conformance-shaped residue across a remount`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-41-01.543Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.73 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios G20probe
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 212a0c730ee3, 20 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.17/7.67 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-41-01.543Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/G20probe.harness.tsx
+  ● G20 probe › A: rerender vs re-render vs remount
+
+    mounted=checked=bold;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || probed=checked=bold;visible=2;overflow=0;shown=bold,italic;menu=none;probes=1;a11y=none || afterRerender=checked=bold;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || rerenderPress=["p1:bold:false"] || afterRemount=checked=bold;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || remountPress=["p1:bold:false"]
+
+      [0m [90m 38 |[39m [36mfunction[39m dump(msg[33m:[39m string)[33m:[39m never {
+       [90m 39 |[39m   console[33m.[39mwarn([32m'[PROBE] '[39m [33m+[39m msg)[33m;[39m
+      [31m[1m>[22m[39m[90m 40 |[39m   [36mthrow[39m [36mnew[39m [33mError[39m(msg)[33m;[39m
+       [90m    |[39m                  [31m[1m^[22m[39m
+       [90m 41 |[39m }
+       [90m 42 |[39m
+       [90m 43 |[39m [36mconst[39m report [33m=[39m (testId[33m:[39m string) [33m=>[39m[0m
+
+  ● G20 probe › B: does the row re-lay out when the box widens
+
+    narrowBox={"y":0,"nativeId":"F854D2C0-DFC6-42AA-B342-E19BD0503B54","x":0,"width":220,"height":34.66666793823242} narrow=checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=1;a11y=none || wideBox={"y":0,"nativeId":"77B3656E-AC47-4451-8D82-40CDE6016641","x":0,"width":402,"height":34.33333206176758} wide=checked=none;visible=4;overflow=1;shown=day,week,month,quarter;menu=composed;probes=1;a11y=none measured={"width":402,"height":34.33333333333333}
+
+      [0m [90m 38 |[39m [36mfunction[39m dump(msg[33m:[39m string)[33m:[39m never {
+       [90m 39 |[39m   console[33m.[39mwarn([32m'[PROBE] '[39m [33m+[39m msg)[33m;[39m
+      [31m[1m>[22m[39m[90m 40 |[39m   [36mthrow[39m [36mnew[39m [33mError[39m(msg)[33m;[39m
+       [90m    |[39m                  [31m[1m^[22m[39m
+       [90m 41 |[39m }
+       [90m 42 |[39m
+       [90m 43 |[39m [36mconst[39m report [33m=[39m (testId[33m:[39m string) [33m=>[39m[0m
+
+  ● G20 probe › C: conformance-shaped residue across a remount
+
+    seeded=checked=bold;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || press1=["p3:bold:false"] afterPress=checked=none;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || second=checked=bold;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none || press2=["p3:bold:false"] afterPress2=checked=none;visible=none;overflow=none;shown=none;menu=none;probes=0;a11y=none
+
+      [0m [90m 38 |[39m [36mfunction[39m dump(msg[33m:[39m string)[33m:[39m never {
+       [90m 39 |[39m   console[33m.[39mwarn([32m'[PROBE] '[39m [33m+[39m msg)[33m;[39m
+      [31m[1m>[22m[39m[90m 40 |[39m   [36mthrow[39m [36mnew[39m [33mError[39m(msg)[33m;[39m
+       [90m    |[39m                  [31m[1m^[22m[39m
+       [90m 41 |[39m }
+       [90m 42 |[39m
+       [90m 43 |[39m [36mconst[39m report [33m=[39m (testId[33m:[39m string) [33m=>[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 total
+Snapshots:   0 total
+Time:        16.319 s
+Ran all test suites matching G20probe.
+
+
+
+```
