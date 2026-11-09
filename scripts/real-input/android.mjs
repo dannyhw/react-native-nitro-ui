@@ -4861,6 +4861,24 @@ const CHECKS = {
     //    from two ends - what JS was told, and what the accessibility tree says.
     const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
     const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
+    // The row a screen reader stops on, not the words inside it. A Compose row keeps
+    // its own state on its own node and leaves the label a node of its own, so
+    // reading whichever node carries the text reports every disabled row as enabled -
+    // the G12 Chip lesson, and the reason `android-tree.mjs` exists. The row is
+    // `selectable(role = Role.RadioButton)`, and a `Role` is what makes it the
+    // tightest `checkable` box around its own label.
+    const radioRowNode = (label, nodes = t.dump()) =>
+      tightestFlaggedNode(
+        nodes,
+        findAllByText(nodes, label)[0] ?? null,
+        'checkable'
+      );
+    const describeRow = (node) =>
+      node == null
+        ? 'no checkable row around the label'
+        : `${node.className} enabled=${node.enabled} checkable=${node.checkable} ` +
+          `checked=${node.checked} at ${node.bounds.x1},${node.bounds.y1}-` +
+          `${node.bounds.x2},${node.bounds.y2}`;
     await t.requireControlOnScreen('Real-input radio picker');
     t.log.checkEquals(
       'the radio group has reported no index before a touch',
@@ -4911,9 +4929,23 @@ const CHECKS = {
         String(chosen)
       );
     }
-    // A row of a radio group is a RadioButton node, and `checked` alone would also
-    // be true of a plain row that merely drew a dot. The role is the class Compose
-    // gives `Role.RadioButton`, and the group's own name is on the container.
+    // The same lookup on the group that *is* live, so a `false` below cannot be the
+    // lookup answering nothing. `className` is recorded, not asserted: what Compose
+    // writes for `Role.RadioButton` has not been measured the way the Spinner class
+    // the menu checks assert has, and the Checkbox precedent is to log the class
+    // until it has.
+    const enabledTree = t.dump();
+    for (const row of RADIO_ROWS) {
+      t.log.checkEquals(
+        `the enabled group's row "${row}" says it is enabled`,
+        String(radioRowNode(row, enabledTree)?.enabled),
+        'true'
+      );
+    }
+    t.log.note(
+      `radio row node, enabled group: "${RADIO_ROWS[2]}" -> ` +
+        `${describeRow(radioRowNode(RADIO_ROWS[2], enabledTree))}`
+    );
     const radioNodes = t.nodesNamed('Real-input radio picker');
     t.log.checkEquals(
       'the group is named once, so TalkBack announces the group and then its rows',
@@ -4936,14 +4968,18 @@ const CHECKS = {
     // is the bug, and a row that refuses while the tree says it is enabled is the
     // same bug pointing the other way for a screen reader.
     await t.requireControlOnScreen('Real-input disabled radio picker');
+    const disabledTree = t.dump();
     for (const row of RADIO_LOCKED_ROWS) {
-      const [node] = t.dump().filter((n) => n.text === row);
       t.log.checkEquals(
         `the disabled group's row "${row}" says it is not enabled`,
-        String(node?.enabled),
+        String(radioRowNode(row, disabledTree)?.enabled),
         'false'
       );
     }
+    t.log.note(
+      `radio row node, disabled group: "${RADIO_LOCKED_ROWS[0]}" -> ` +
+        `${describeRow(radioRowNode(RADIO_LOCKED_ROWS[0], disabledTree))}`
+    );
     await t.tapNode(
       t.waitForOption(
         RADIO_LOCKED_ROWS[1],
