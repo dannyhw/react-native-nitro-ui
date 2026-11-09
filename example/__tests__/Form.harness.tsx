@@ -973,6 +973,15 @@ describe('Form (G24)', () => {
       `${MEASURE_ROWS} rows`,
       'measure'
     );
+    // Let UIKit place a page of rows before comparing. A row still sitting in its section's
+    // holding view has no pixels to compare and is skipped, and on a loaded machine the list
+    // has not necessarily realised its cells by the turn the rows report their count - which
+    // made the number of comparisons below a race rather than a measurement.
+    await formReport(
+      (r) => num(r, 'inCells') >= 10,
+      'ten rows to be drawn from cells',
+      'measure'
+    );
     if (IOS) {
       const atRest = await formReport(
         (r) => r.origin !== undefined,
