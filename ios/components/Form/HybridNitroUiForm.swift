@@ -425,6 +425,14 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       configureDataSource()
     }
     dataSource?.apply(snapshot, animatingDifferences: false)
+    // Ask every band that is on screen whether it still says what its section says. A
+    // recycled Section is the case this catches: the model, the list and the band view all
+    // come back from the pool, the snapshot is identical, so UIKit keeps the heading it has
+    // and never runs the provider that would fill in the new title - and the Section's own
+    // `afterUpdate` cannot say it, because a recycled view's props are applied before it is
+    // attached to a Form it can name (fix round 1, item 8). Cheap when nothing changed:
+    // `chromeChanged` compares the text the band is painted with and returns.
+    for model in sections { chromeChanged(in: model) }
     // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
     // now wrong. One turn later, when UIKit has placed the cells, they are read again. The
     // delegate also reports a settle that moves the offset; this hop is the one that covers a

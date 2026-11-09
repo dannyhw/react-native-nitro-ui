@@ -201,6 +201,10 @@ final class HybridNitroUiFormRow: HybridNitroUiFormRowSpec, RecyclableView {
       "window=\(Self.inWindow(component, inCell: inCell))",
       "h=\(String(format: "%.1f", component.bounds.height))",
       "presses=\(presses)",
+      // What a screen reader would read out for this row. Android answers the same field, and
+      // a recycled view that keeps the previous mount's name is a finding there; iOS answers it
+      // so the two can be read against each other (fix round 1, item 9).
+      "desc=\(component.accessibilityLabel ?? "-")",
       "accessory=\(rawAccessory.stringValue)",
       "pressable=\(rawPressable ? 1 : 0)",
       "selected=\(rawSelected ? 1 : 0)",
