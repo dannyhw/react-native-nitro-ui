@@ -123,6 +123,11 @@ name.
   steps it with a swipe up or down. While `disabled`, the element also carries
   `.notEnabled`, because an inert control a reader can still act on reads as
   broken.
+  XCUITest — the tree the real-input sweep reads — has no element type for a
+  trait, so that tree calls this element `other` while naming it correctly
+  (measured, iOS 27). It is recorded as iOS debt rather than fixed: the harness
+  probe reads the trait mask itself and is the witness that the element really is
+  adjustable.
 - **Android** merges the row into one node that publishes
   `ProgressBarRangeInfo(current, minimum..maximum, steps)` and a `SetProgress`
   action, and each button clears its own semantics away — so TalkBack gets one

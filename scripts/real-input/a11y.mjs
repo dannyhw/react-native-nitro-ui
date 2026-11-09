@@ -316,9 +316,12 @@ export const A11Y_CONTROLS = Object.freeze([
     anchorTestId: 'real-input-stepper',
     // What VoiceOver says, not what the tree reports: the element this control vends
     // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
-    // element type for a trait, so the measured announcement belongs in
-    // `A11Y_EXEMPTIONS` — the Slider row's arrangement, for the same reason. Writing
-    // the measured word here would freeze the gap into the expectation.
+    // element type for a trait, so the measured announcement is in `A11Y_EXEMPTIONS`
+    // below — the Slider row's arrangement, for the same reason. Writing the measured
+    // word here would freeze the gap into the expectation. Measured G25 fix round 1 on
+    // the lease's iPhone Air (iOS 27): the sweep's tree has the named element, at the
+    // control's box, with `value="1"` — and its type is `other`, exactly as the Slider's
+    // is, which is what that row is for.
     iosTrait: 'adjustable',
   },
   {
@@ -633,6 +636,22 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',
     matches: /announced as an other/,
+  },
+  {
+    control: 'stepper',
+    platform: 'ios',
+    followups:
+      'G25 a11y: the Stepper is announced as other and not as an adjustable',
+    // The same gap `ios:slider` records, on the same element kind: this control vends a
+    // `UIAccessibilityElement` whose traits are `.adjustable` (measured by the harness
+    // probe, which reads the trait mask itself — `traits=4096` plus the bool UIKit
+    // computes from it), and XCUITest has no element type for a trait, so the tree calls
+    // it `other`. The row is anchored on the whole sentence — `and not as an adjustable`
+    // — because the *other* way an announcement goes wrong ("no element other than the
+    // React Native wrapper is announced as …", X4 re-review M3's lesson) must stay red:
+    // losing the label is not this debt. The kind is therefore excused and the name, the
+    // box and the value are not, which is also what the harness case grades.
+    matches: /announced as an other and not as an adjustable/,
   },
   {
     control: 'hosted-picker',
