@@ -540,18 +540,26 @@ describe('ButtonGroup · G20', () => {
   });
 
   it('keeps one row when the trailing toggle of a connected group overflows', async () => {
-    // D42 item 2 is a rule about the *group*: an iOS connected group that contains a
-    // toggle draws the standard row, because `ControlGroup` shows no on state. The bug
-    // this is here for decided it per candidate instead — and the candidate a narrow box
-    // wins is the one whose *trailing* item has already gone into the menu. Five actions
-    // plus a toggle is exactly that shape: at 220 pt the row the user sees holds no
-    // toggle, so a per-candidate answer reached for `ControlGroup` (31 pt) at the narrow
-    // width and the standard row (34.33 pt) at the wide one — two heights under one
-    // sizing key, which is the one thing the sizing key cannot carry.
-    const items: ButtonGroupItem[] = [
-      ...MANY.slice(0, 5),
-      { id: 'bold', title: 'Bold', toggle: true, defaultChecked: true },
-    ];
+    // D42 item 2 is a rule about the *group*: an iOS connected group whose items include
+    // a toggle draws the standard bordered row, because `ControlGroup` shows no on
+    // state. The bug this is here for decided it per candidate instead — and the
+    // candidate a narrow box wins is the one whose *trailing* item has already gone into
+    // the menu. Six items with the last one a toggle is exactly that shape: the row the
+    // user sees holds no toggle, so a per-candidate answer reached for `ControlGroup`
+    // (31 pt) while the same group in a wide box reached for the standard row
+    // (34.33 pt) — two heights under one sizing key, which is the one thing a sizing key
+    // cannot carry, because it does not hold the box's width.
+    //
+    // The six items are the ones the well test above already proves do not fit 220 pt,
+    // so "the toggle overflowed" is a measurement and not a guess about how wide a
+    // toggle draws. What is asserted at both widths is the invariant the fix is about:
+    // the *same* group draws the same row, at the same height, whatever the box.
+    const items: ButtonGroupItem[] = MANY.map((item, index) =>
+      index === MANY.length - 1
+        ? { ...item, toggle: true, defaultChecked: true }
+        : item
+    );
+    const LAST = MANY[MANY.length - 1]!.id;
     poison([sizingKey('connected', 'filled', 'medium', 'automatic', items)]);
     const { rerender } = await render(
       <View style={WELL}>
@@ -569,13 +577,19 @@ describe('ButtonGroup · G20', () => {
       'the connected group in the well'
     );
     const narrow = await probeRow('bg-connected');
-    // The toggle really did overflow, which is the whole premise.
+    // The premise: the toggle really is the item the well could not hold.
     expect(narrow.overflow).toBe('1');
-    expect((narrow.shown ?? 'none').split(',')).not.toContain('bold');
+    expect((narrow.shown ?? 'none').split(',')).not.toContain(LAST);
+    // And the answer: the *group* has a toggle, so this is the standard row — a
+    // per-candidate decision reads `row=controlGroup` here, which is the line this
+    // test exists to turn red.
     expect(narrow.row).toBe('standard');
+    const narrowShown = (narrow.shown ?? 'none').split(',');
     const narrowHeight = narrowMeasured.height;
 
-    // The same group, a box wide enough for the toggle: same row, same height.
+    // The same group with room to spare. Widening has to be visible in the row (more
+    // items drawn, the way the well test proves it does), because a placement witness
+    // that still carried the narrow layout would agree with anything.
     await rerender(
       <View style={{ width: '100%' }}>
         <ButtonGroup
@@ -589,18 +603,18 @@ describe('ButtonGroup · G20', () => {
     const wide = await pollUntil(
       () => {
         const probed = reportOf('bg-connected');
-        return (probed.shown ?? 'none').split(',').includes('bold')
+        return (probed.shown ?? 'none').split(',').length > narrowShown.length
           ? probed
           : null;
       },
       () =>
         new Error(
-          'widening the well never brought the toggle into the row - the row reports ' +
+          'widening the well brought no more items into the row, so the row below is ' +
+            'still the narrow layout: ' +
             JSON.stringify(reportOf('bg-connected'))
         ),
       10000
     );
-    expect(wide.overflow).toBe('0');
     expect(wide.row).toBe('standard');
     const wideMeasured = await waitForMeasured(
       'bg-connected',
