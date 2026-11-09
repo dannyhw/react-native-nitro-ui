@@ -35,6 +35,9 @@ final class ChipModel: NitroUiModel {
   /// A symbol name that resolved to an actual SF Symbol (see Button's model: the
   /// content never renders the "missing symbol" placeholder).
   var systemImage: String?
+  /// The Android glyph name. Stored so the getter answers; iOS draws `systemImage`
+  /// and never reads this (Button's `androidIcon` says why a prop is stored at all).
+  var androidIcon: String?
   var testID: String?
   var accessibilityLabel: String?
   /// The size configuration React sent; the engine reads it out of Fabric state,
@@ -93,11 +96,16 @@ final class ChipModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// `displayed=<0|1|none>;probes=<n>;a11y=<...>`. Safe from any thread.
+  /// `displayed=<0|1|none>;probes=<n>;a11y=<...>;iconTint=-`. Safe from any thread.
+  ///
+  /// The trailing field is Android's: it records the colour a chip tinted its
+  /// `androidIcon` with, and iOS has no such glyph to tint, so it answers `-` - the
+  /// same `-` an Android chip with no icon answers. Both platforms therefore return
+  /// one shape, which is what lets one harness test read both.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);probes=\(probes);a11y=\(accessibilityReport);iconTint=-"
   }
 
   /// Back to "nothing yet", for recycling: a reused view whose report still
@@ -320,6 +328,15 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     }
   }
 
+  /// Accepted and ignored: `androidIcon` names an Android drawable, and iOS draws
+  /// `systemImage` instead. Stored, not dropped - `hybridRef` reads it back, and a
+  /// prop that vanishes between commits is the nitro#1184 crash. No `markDirty()`:
+  /// nothing observes it, so a write must not cost a render.
+  var androidIcon: Variant_NullType_String {
+    get { model.androidIcon.map { .second($0) } ?? .first(.null) }
+    set { model.androidIcon = newValue.asType(String.self) }
+  }
+
   var testID: Variant_NullType_String {
     get { model.testID.map { .second($0) } ?? .first(.null) }
     set {
@@ -394,6 +411,7 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
     model.didApplyDefault = false
     model.disabled = false
     model.systemImage = nil
+    model.androidIcon = nil
     model.testID = nil
     model.accessibilityLabel = nil
     model.sizingKey = ""
@@ -441,5 +459,29 @@ final class HybridNitroUiChip: HybridNitroUiChipSpec, RecyclableView {
 
   func nuiTestStateReport() throws -> String {
     return host.model.stateReport()
+  }
+
+  private let pixelProbesLock = NSLock()
+  private var pixelProbes = 0
+
+  /// Records that a probe was asked for, and answers nothing.
+  ///
+  /// iOS has no glyph to sample: `androidIcon` is Android's prop and iOS draws
+  /// `systemImage` instead, so an iOS probe of an Android icon is a test that should
+  /// not be running there. The report says `no pixels`, which the harness's probe
+  /// helper treats as a hard failure rather than an answer - the honest outcome is a
+  /// red test, not a green one about nothing. Button's pair, copied for the same
+  /// reason (G19).
+  func nuiTestPixelProbe(color: Double) throws {
+    pixelProbesLock.lock()
+    pixelProbes += 1
+    pixelProbesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    pixelProbesLock.lock()
+    let probes = pixelProbes
+    pixelProbesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
   }
 }

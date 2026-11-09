@@ -41,6 +41,9 @@ data class NitroUiMenuRow(
   val systemImage: Variant_NullType_String?,
   @DoNotStrip
   @Keep
+  val androidIcon: Variant_NullType_String?,
+  @DoNotStrip
+  @Keep
   val subtitle: Variant_NullType_String?,
   @DoNotStrip
   @Keep
@@ -58,6 +61,7 @@ data class NitroUiMenuRow(
       && Objects.deepEquals(this.disabled, other.disabled)
       && Objects.deepEquals(this.destructive, other.destructive)
       && Objects.deepEquals(this.systemImage, other.systemImage)
+      && Objects.deepEquals(this.androidIcon, other.androidIcon)
       && Objects.deepEquals(this.subtitle, other.subtitle)
       && Objects.deepEquals(this.checked, other.checked)
   }
@@ -71,6 +75,7 @@ data class NitroUiMenuRow(
       disabled,
       destructive,
       systemImage,
+      androidIcon,
       subtitle,
       checked
     ).contentDeepHashCode()
@@ -84,8 +89,8 @@ data class NitroUiMenuRow(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Boolean, destructive: Boolean, systemImage: Variant_NullType_String?, subtitle: Variant_NullType_String?, checked: Variant_Boolean_NullType?): NitroUiMenuRow {
-      return NitroUiMenuRow(id, kind, title, parentId, disabled, destructive, systemImage, subtitle, checked)
+    private fun fromCpp(id: String, kind: String, title: String, parentId: Variant_NullType_String?, disabled: Boolean, destructive: Boolean, systemImage: Variant_NullType_String?, androidIcon: Variant_NullType_String?, subtitle: Variant_NullType_String?, checked: Variant_Boolean_NullType?): NitroUiMenuRow {
+      return NitroUiMenuRow(id, kind, title, parentId, disabled, destructive, systemImage, androidIcon, subtitle, checked)
     }
   }
 }

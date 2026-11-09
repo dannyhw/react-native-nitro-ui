@@ -27,7 +27,7 @@
  * accessibility node says).
  */
 import { useCallback, useRef, useState } from 'react';
-import { Platform, TurboModuleRegistry, View } from 'react-native';
+import { Platform, PixelRatio, TurboModuleRegistry, View } from 'react-native';
 import {
   afterEach,
   cleanup,
@@ -63,10 +63,13 @@ type ChipHandle = {
   readonly selected: boolean | null;
   readonly mostRecentEventCount: number;
   readonly disabled: boolean;
+  readonly androidIcon: string | null;
   measureContent(): { width: number; height: number };
   nuiTestPress(): void;
   nuiTestProbeAccessibility(): void;
   nuiTestStateReport(): string;
+  nuiTestPixelProbe(color: number): void;
+  nuiTestPixelReport(): string;
 };
 
 const handles = new Map<string, ChipHandle>();
@@ -279,14 +282,25 @@ async function probeAccessibility(testId: string): Promise<string> {
 }
 
 /**
- * The key `Chip.tsx` builds: `variant|selected|systemImage|label`, with the
- * selection only where it moves the size (an Android filter chip). Written out
+ * The key `Chip.tsx` builds: `variant|selected|systemImage|androidIcon|label`, with
+ * the selection only where it moves the size (an Android filter chip). Written out
  * rather than imported, so a wrong helper cannot poison and pass its own test.
+ *
+ * The `androidIcon` field (G21) is the *resolved* string - a dev-server URL or a
+ * drawable name - so callers pass what the wrapper will send, not what the app wrote.
+ * Both platforms carry it on both platforms: the glyph widens the chip on whichever
+ * one draws it, and a key that only grew on one would let a chip with a glyph inherit
+ * the cached width of a chip without one on the other.
  */
-function sizingKey(variant: string, selected: boolean, label: string): string {
+function sizingKey(
+  variant: string,
+  selected: boolean,
+  label: string,
+  androidIcon = ''
+): string {
   const field =
     variant === 'filter' && Platform.OS === 'android' && selected ? '1' : '0';
-  return `${variant}|${field}||${label}`;
+  return `${variant}|${field}||${androidIcon}|${label}`;
 }
 
 /** A size that is no chip's, planted as the engine's answer before a mount. */
@@ -990,5 +1004,411 @@ describe('chip · a toggle round trip (E1)', () => {
         afterBox
       )} where it started at ${describeSize(before)}`
     ).toBe(true);
+  });
+});
+
+/**
+ * `androidIcon` on a Chip (G21): the glyph, in Material's leading slot, in the
+ * colour Material picked for it.
+ *
+ * The probe answers here are *differences*, and that is the whole design of this
+ * suite. A probe counts every pixel of one colour in the view, and the chip draws
+ * other things in colours close to its icon's - so "N pixels of the glyph's colour
+ * are on screen" on its own would pass with the label's ink alone. Measured against
+ * the same chip with no icon, the label's contribution cancels (its glyphs are the
+ * same glyphs, only moved along) and what is left is the artwork: which is the only
+ * reading that can tell a glyph that drew from a prop that was echoed.
+ *
+ * The artwork is a filled square, not a glyph (`nitroui_test_slab`), because then the
+ * area that is left is the slot's area - and the slot's area is the size claim.
+ */
+describe('Chip · the androidIcon (G21)', () => {
+  /** The same square, through each road D43 gives an app. */
+  const SLAB_ASSET = require('../src/assets/icons/slab_24px.xml');
+  const SLAB_NAME = 'nitroui_test_slab';
+  const NOT_SHIPPED = 'nitroui_test_never_built';
+  const LABEL = 'Slab';
+
+  /** Material's chip icon slot: `AssistChipTokens.IconSize` and `FilterChipTokens`' are both 18 dp. */
+  const ICON_DP = 18;
+
+  /**
+   * Ask `testId` for its pixels, and wait for that probe's own answer.
+   *
+   * `Button.harness.tsx`'s helper of the same name, copied rather than shared: the
+   * suites run apart, and a shared util module would be a third file to keep in step.
+   */
+  async function pixelProbe(testId: string, color: number, what: string) {
+    const handle = handles.get(testId);
+    if (handle == null) {
+      throw new Error(
+        `testID "${testId}" has no handle - it was never rendered.`
+      );
+    }
+    const before = handle.nuiTestPixelReport();
+    handle.nuiTestPixelProbe(color);
+    const report = await pollUntil(
+      () => {
+        const next = handle.nuiTestPixelReport();
+        return next === '' || next === before ? null : next;
+      },
+      () =>
+        new Error(
+          `the pixel probe for "${testId}" (${what}) never reported. Last: ` +
+            `"${handle.nuiTestPixelReport()}".`
+        ),
+      8000
+    );
+    if (
+      !/ hits=\d+ mean=#[0-9A-F]{6}/.test(report) &&
+      !/no pixels/.test(report) &&
+      !/size=\d+x\d+ no pixels/.test(report)
+    ) {
+      throw new Error(
+        `the pixel probe for "${testId}" (${what}) reported a line that is neither a ` +
+          `sample nor a refusal: ${report}`
+      );
+    }
+    return report;
+  }
+
+  /** The `hits=` count of a probe line. */
+  function probeHits(report: string): number {
+    const hits = / hits=(\d+)/.exec(report);
+    return hits == null ? 0 : Number(hits[1]);
+  }
+
+  /** The colour the chip tinted its glyph with, or `null` when none drew. */
+  function iconTintOf(testId: string): string | null {
+    const tint = reportOf(testId).iconTint;
+    return tint == null || tint === '-' ? null : tint;
+  }
+
+  /** A `#RRGGBB` as the number the probe wants. */
+  const rgbOf = (tint: string): number => {
+    const hex = /^#([0-9A-Fa-f]{6})$/.exec(tint);
+    if (hex == null) {
+      throw new Error(`"${tint}" is not a #RRGGBB colour.`);
+    }
+    return parseInt(hex[1] ?? '', 16);
+  };
+
+  /** The `iconTint` of `testId` as a probe colour, with a message that says what was expected. */
+  async function tintOf(testId: string, what: string): Promise<number> {
+    const tint = await pollUntil(
+      () => iconTintOf(testId),
+      () =>
+        new Error(
+          `"${testId}" (${what}) never recorded a glyph tint - it reports ` +
+            `"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`
+        )
+    );
+    return rgbOf(tint);
+  }
+
+  /** Pixels of `color` this chip is drawing. */
+  async function hitsOf(testId: string, color: number): Promise<number> {
+    return probeHits(await pixelProbe(testId, color, testId));
+  }
+
+  /** One chip per testID, each with its own key poisoned, and every box settled. */
+  async function renderChips(
+    specs: ReadonlyArray<{
+      testId: string;
+      variant?: 'filter' | 'assist';
+      androidIcon?: string | number;
+      selected?: boolean;
+      onPress?: boolean;
+    }>
+  ): Promise<Map<string, Size>> {
+    // The key the wrapper will build, for every chip this file can name it for: a
+    // drawable is the string itself and no icon is the empty field. An *asset* resolves
+    // to a URL carrying the asset's own hash, and restating that rule here would be
+    // testing a copy of the thing under test - `Button.harness.tsx` proves the asset's
+    // key, and a planted size that never comes back is worth more when the key is one
+    // this file wrote than when it is one this file guessed.
+    poison(
+      specs
+        .filter((spec) => typeof spec.androidIcon !== 'number')
+        .map((spec) =>
+          sizingKey(
+            spec.variant ?? 'filter',
+            spec.selected === true,
+            LABEL,
+            typeof spec.androidIcon === 'string' ? spec.androidIcon : ''
+          )
+        )
+    );
+    await render(
+      <View style={rowStyle}>
+        {specs.map((spec) => (
+          <Chip
+            key={spec.testId}
+            label={LABEL}
+            variant={spec.variant ?? 'filter'}
+            selected={spec.selected}
+            androidIcon={spec.androidIcon}
+            onPress={spec.onPress ? recordPress(spec.testId) : undefined}
+            testID={spec.testId}
+            hybridRef={captureHybrid(spec.testId)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = new Map<string, Size>();
+    for (const spec of specs) {
+      await waitForTestId(spec.testId);
+      const content = await waitForMeasured(spec.testId, spec.testId);
+      boxes.set(
+        spec.testId,
+        await waitForBox(spec.testId, content, spec.testId)
+      );
+      expect(sameSize(content, WRONG_SIZE)).toBe(false);
+    }
+    return boxes;
+  }
+
+  const logged = (boxes: Map<string, Size>): string =>
+    [...boxes.entries()]
+      .map(([id, size]) => `${id}=${describeSize(size)}`)
+      .join(' ');
+
+  it('draws the imported glyph in the slot, and leaves nothing else in its colour', async () => {
+    const boxes = await renderChips([
+      { testId: 'plain', variant: 'assist' },
+      { testId: 'asset', variant: 'assist', androidIcon: SLAB_ASSET },
+    ]);
+    console.log(`chip glyph boxes: ${logged(boxes)}`);
+    if (Platform.OS !== 'android') {
+      // iOS draws `systemImage` and ignores `androidIcon`, exactly as Button does, so
+      // the chip with the prop is the chip without it - and the probe says so rather
+      // than answering zero, which would be a green test about nothing.
+      expect(sameSize(boxes.get('asset')!, boxes.get('plain')!)).toBe(true);
+      expect(reportOf('asset').iconTint).toBe('-');
+      expect(await pixelProbe('asset', 0x000000, 'the iOS refusal')).toContain(
+        'no pixels'
+      );
+      return;
+    }
+
+    // The wire the wrapper built, read back off the control: an asset arrives as the
+    // dev-server URL (or the drawable Metro filed it under), never as the number
+    // `require` evaluated to.
+    expect(handles.get('asset')?.androidIcon ?? '').toMatch(
+      /^url:.*slab_24px\.xml/
+    );
+    expect(reportOf('plain').iconTint).toBe('-');
+
+    // The slot read off the *box* first, because it is the cheap half and the half
+    // `docs/components/chip.md` quotes a number for. It is not 18 + 8 + 8: `FilterChip`
+    // sets its own start padding to 16 dp and to 8 dp as soon as a leading icon exists,
+    // so the icon's 18 dp and the 8 dp that separates it from the label are paid for
+    // partly by padding the chip stops needing — 17.90 dp on this device, which is also
+    // what the check mark costs. The growth is logged because the doc states it and
+    // asserted to the dp because the doc's claim is only a claim if something reads the
+    // box; h4, the 1.2x slot mutation, turns this line red before the pixels are read.
+    const growth = boxes.get('asset')!.width - boxes.get('plain')!.width;
+    console.log(
+      `chip glyph width growth: ${growth.toFixed(2)} dp (asset ` +
+        `${boxes.get('asset')!.width.toFixed(2)} plain ` +
+        `${boxes.get('plain')!.width.toFixed(2)})`
+    );
+    expect(growth).toBeGreaterThan(ICON_DP - 1);
+    expect(growth).toBeLessThan(ICON_DP + 1);
+
+    const color = await tintOf('asset', 'the imported slab');
+    const withIcon = await hitsOf('asset', color);
+    const without = await hitsOf('plain', color);
+    const ink = withIcon - without;
+    console.log(
+      `chip glyph ink: tint=#${color.toString(16)} hits=${withIcon} plain=${without}`
+    );
+    // Something drew, and it is the size of the slot: `FilterChipDefaults.IconSize`
+    // is 18 dp on the density of this device, and a square that fills its canvas paints
+    // the slot squared. 12% is room for the anti-aliased edge of a 50-pixel square and
+    // no room for a slot of the wrong size: 24 dp would be 78% more ink, and no slot at
+    // all is 100% less.
+    const slot = ICON_DP * PixelRatio.get();
+    expect(ink).toBeGreaterThan(slot * slot * 0.88);
+    expect(ink).toBeLessThan(slot * slot * 1.12);
+  });
+
+  it('draws the named glyph the same pixels as the imported one', async () => {
+    const boxes = await renderChips([
+      { testId: 'by-asset', variant: 'assist', androidIcon: SLAB_ASSET },
+      { testId: 'by-name', variant: 'assist', androidIcon: SLAB_NAME },
+    ]);
+    console.log(`chip glyph roads: ${logged(boxes)}`);
+    if (Platform.OS !== 'android') {
+      expect(sameSize(boxes.get('by-name')!, boxes.get('by-asset')!)).toBe(
+        true
+      );
+      return;
+    }
+    // The two forms of D43's prop are two roads to one file: same tint, same ink, same
+    // box - a name that resolved to a *different* drawable, or to nothing, shows up here.
+    expect(handles.get('by-name')?.androidIcon).toBe(SLAB_NAME);
+    expect(sameSize(boxes.get('by-name')!, boxes.get('by-asset')!)).toBe(true);
+    const color = await tintOf('by-asset', 'the imported slab');
+    const fromName = await hitsOf('by-name', color);
+    const fromAsset = await hitsOf('by-asset', color);
+    console.log(`chip glyph roads ink: name=${fromName} asset=${fromAsset}`);
+    expect(Math.abs(fromName - fromAsset)).toBeLessThan(
+      Math.max(4, fromAsset * 0.05)
+    );
+  });
+
+  it('leaves a name that resolves to nothing exactly its no-icon self', async () => {
+    const boxes = await renderChips([
+      { testId: 'none', variant: 'assist' },
+      { testId: 'missing', variant: 'assist', androidIcon: NOT_SHIPPED },
+      { testId: 'plain-filter' },
+      { testId: 'missing-filter', androidIcon: NOT_SHIPPED },
+    ]);
+    console.log(`chip missing-glyph boxes: ${logged(boxes)}`);
+    // Both variants, each against its own kind: a filter chip with this label is 3.81 dp
+    // narrower than an assist chip (`docs/components/chip.md`'s size table), so one
+    // baseline cannot settle both. The assist chip is handed `null` and the filter chip
+    // the zero-wide spacer, two ways of saying the same thing to two different
+    // compositions; an unresolvable name must not cost a pixel of width on either.
+    expect(sameSize(boxes.get('missing')!, boxes.get('none')!)).toBe(true);
+    expect(
+      sameSize(boxes.get('missing-filter')!, boxes.get('plain-filter')!),
+      `an unresolvable name left a filter chip at ${describeSize(
+        boxes.get('missing-filter')!
+      )} where the same chip with no icon at all is ${describeSize(
+        boxes.get('plain-filter')!
+      )}`
+    ).toBe(true);
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    expect(reportOf('missing').iconTint).toBe('-');
+    // No pixel claim here, on purpose. The two counts this used to compare were both
+    // taken at `0x00a000`, a colour no chip on this screen is ever drawn in - not the
+    // label, not the outline, not a glyph, because the chip that could have drawn one
+    // resolved to nothing - so it was `0 === 0` whatever the code did, and no mutation of
+    // this path could have turned it red. The claim is carried by the two `sameSize`
+    // boxes above (the unresolved chip is its no-icon self to the dp, on both variants)
+    // and by `iconTint` being `-` (no row of it recorded painting anything); the ink
+    // itself is measured, against a colour a glyph really was tinted with, by the case
+    // above this one.
+  });
+
+  it('hands the check the slot when the filter chip is selected, without moving the box', async () => {
+    const boxes = await renderChips([
+      { testId: 'toggle', androidIcon: SLAB_ASSET, onPress: true },
+      { testId: 'twin-on', androidIcon: SLAB_NAME, selected: true },
+      // A selected filter chip that never asked for a glyph. Material's check is
+      // `FilterChipDefaults.IconSize` - the same 18 dp the glyph holds - so this chip is
+      // the *same width* as the ones with a glyph. That equality is the claim.
+      { testId: 'bare-on', selected: true },
+      // And the contrast: the same chip unselected, whose slot is the zero-wide spacer,
+      // so here the check really does arrive in an empty row.
+      { testId: 'bare-off' },
+    ]);
+    const before = boxes.get('toggle')!;
+    console.log(`chip toggle boxes: ${logged(boxes)}`);
+    if (Platform.OS !== 'android') {
+      expect(sameSize(boxes.get('toggle')!, boxes.get('twin-on')!)).toBe(true);
+      return;
+    }
+    // Unselected, the glyph holds the slot.
+    const color = await tintOf('toggle', 'the unselected filter chip');
+    expect(await hitsOf('toggle', color)).toBeGreaterThan(
+      await hitsOf('bare-on', color)
+    );
+    const widthWithGlyph = before.width;
+
+    // Select it. Material keeps the slot - `leadingContent`'s `AnimatedVisibility` is
+    // keyed on the *presence* of a leading icon, not on the selection, which is why this
+    // chip is handed a lambda in both states - and the check takes it.
+    await pressChip('toggle');
+    await waitForDisplayed('toggle', '1');
+    const after = await waitForBox(
+      'toggle',
+      before,
+      'the selected filter chip'
+    );
+    // The glyph is gone from the slot: what draws there now is Material's check, and a
+    // check is not the app's glyph, so the tint field goes back to `-`.
+    expect(reportOf('toggle').iconTint).toBe('-');
+    // The box did not move. A chip that hid its slot when selected would grow or shrink
+    // by the slot and its spacing here, which is the difference between "the check takes
+    // the slot" and "the slot comes and goes".
+    expect(Math.abs(after.width - widthWithGlyph)).toBeLessThan(0.6);
+    // And it lands where a chip *mounted* selected lands: the same width, glyph or no
+    // glyph, which is the half that proves the swap and not just the stability.
+    expect(
+      sameSize(after, boxes.get('twin-on')!),
+      `selecting left the chip at ${describeSize(
+        after
+      )} where a chip mounted selected with a glyph is ${describeSize(
+        boxes.get('twin-on')!
+      )}`
+    ).toBe(true);
+    expect(
+      sameSize(after, boxes.get('bare-on')!),
+      `a chip that swapped its glyph for the check is ${describeSize(
+        after
+      )} where a chip that only ever had the check is ${describeSize(
+        boxes.get('bare-on')!
+      )}`
+    ).toBe(true);
+    // The contrast that turns those two equalities into a claim: with no glyph to hold
+    // the slot, the very same check *does* move the box, by the slot and its spacing.
+    expect(boxes.get('bare-on')!.width).toBeGreaterThan(
+      boxes.get('bare-off')!.width + 8
+    );
+  });
+
+  it('starts empty for its next owner', async () => {
+    const first = (
+      <Chip
+        label={LABEL}
+        variant="assist"
+        androidIcon={SLAB_NAME}
+        testID="recycled"
+        hybridRef={captureHybrid('recycled')}
+      />
+    );
+    const { rerender } = await render(<View style={rowStyle}>{first}</View>, {
+      timeout: 20000,
+    });
+    await waitForTestId('recycled');
+    await waitForMeasured('recycled', 'the first owner');
+    if (Platform.OS !== 'android') {
+      expect(reportOf('recycled').iconTint).toBe('-');
+      return;
+    }
+    const firstTint = await tintOf('recycled', 'the first owner');
+    expect(await hitsOf('recycled', firstTint)).toBeGreaterThan(
+      // The same colour on a chip that never had an icon, taken from the previous
+      // gate's fixture: not needed for the claim, so the assertion below is the one
+      // that matters - this owner draws its own glyph, and the next one draws none.
+      0
+    );
+
+    // Unmount the icon and mount nothing in its place, then hand the row to a chip
+    // that asks for nothing. `key` is what makes it a new view rather than an update.
+    await rerender(
+      <View style={rowStyle}>
+        <Chip
+          key="second"
+          label={LABEL}
+          variant="assist"
+          testID="recycled"
+          hybridRef={captureHybrid('recycled')}
+        />
+      </View>
+    );
+    await waitForMeasured('recycled', 'the second owner');
+    // The report a recycled chip gives is its own: no tint, and a probe counter that
+    // starts again - a view that kept its previous owner's state would answer for it.
+    expect(reportOf('recycled').iconTint).toBe('-');
+    const report = await pixelProbe('recycled', firstTint, 'the second owner');
+    expect(probeHits(report)).toBe(0);
+    expect(/ n=1 |^n=1 /.test(report) || report.startsWith('n=1')).toBe(true);
   });
 });

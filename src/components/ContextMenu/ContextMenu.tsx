@@ -53,6 +53,10 @@ export interface ContextMenuProps extends ViewProps {
         nuiTestSelectRow(id: string): void;
         /** Test-only: read the menu UIKit would be handed (iOS). `@internal` (D14). */
         nuiTestMenuProbe(): void;
+        /** Test-only: sample the open menu's window (see the spec). `@internal` (D14). */
+        nuiTestMenuPixelProbe(color: number): void;
+        /** Test-only: that probe's answer. `@internal` (D14). */
+        nuiTestMenuPixelReport(): string;
         /** Test-only witness line - see `ContextMenu.nitro.ts`. `@internal` (D14). */
         nuiTestContextMenuReport(): string;
         /** Test-only: Android's `ACTION_LONG_CLICK` on the wrapper. `@internal` (D14). */
@@ -120,7 +124,7 @@ export function ContextMenu({
   children,
   ...restProps
 }: ContextMenuProps) {
-  const rows = useMenuRows(group);
+  const rows = useMenuRows(group, 'ContextMenu');
   // Always functions, so every callback prop is always sent (D7b); the casts state what
   // each `??` guarantees, as in `Menu.tsx`.
   const selectCallback = useStableCallback(

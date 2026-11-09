@@ -1,0 +1,171 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T18:13:36.773Z on code tree `1fdedf6488ed` at HEAD `1b3b4f6` (branch `task/G21-android-icon-rows`)
+- Command: `bun run check`
+- Result: fail, exit 1, 153747 ms
+- Load: start 9.42, end 9.42, median 9.44, max 11.57
+- Device: none recorded (not a device gate)
+- Full log: `task/G21-android-icon-rows/check-2026-11-08T18-13-35.967Z.log` (<store>/task/G21-android-icon-rows/check-2026-11-08T18-13-35.967Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "readme:check" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3011 — the rest is in the full log above)
+
+```
+> Task :react-native-nitro-ui:compileDebugJavaWithJavac UP-TO-DATE
+> Task :react-native-nitro-ui:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :react-native-nitro-ui:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :react-native-nitro-ui:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :react-native-nitro-ui:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :react-native-nitro-ui:testDebugUnitTest UP-TO-DATE
+
+BUILD SUCCESSFUL in 1s
+34 actionable tasks: 34 up-to-date
+Configuration cache entry reused.
+──────── perf:renders — skipped, 0.0s ────────────────────────────────────────────
+──────── nitrogen:check — pass, 2.8s ─────────────────────────────────────────────
+$ node scripts/nitrogen-check.mjs
+🔧  Loading nitro.json config...
+🎉  Generated 21/21 HybridObjects in 1.8s!
+💡  Your code is in <tmp>/nitrogen-check-077N3L/nitrogen/generated
+‼️   Added 686 files - you need to run `pod install`/sync gradle to update files!
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.cpp
+nitrogen-check: patched HybridNitroUiButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.cpp
+nitrogen-check: patched HybridNitroUiChipComponent.cpp
+nitrogen-check: patched HybridNitroUiContextMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.cpp
+nitrogen-check: patched HybridNitroUiDialogComponent.cpp
+nitrogen-check: patched HybridNitroUiHostComponent.cpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.cpp
+nitrogen-check: patched HybridNitroUiMenuComponent.cpp
+nitrogen-check: patched HybridNitroUiPickerComponent.cpp
+nitrogen-check: patched HybridNitroUiPopoverComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.cpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.cpp
+nitrogen-check: patched HybridNitroUiSliderComponent.cpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.cpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.cpp
+nitrogen-check: patched HybridNitroUiTooltipComponent.cpp
+nitrogen-check: patched HybridNitroUiProgressComponent.hpp
+nitrogen-check: patched HybridNitroUiProgressComponent.mm
+nitrogen-check: patched HybridNitroUiProgressManager.kt
+nitrogen-check: patched HybridNitroUiSwitchComponent.hpp
+nitrogen-check: patched HybridNitroUiSwitchComponent.mm
+nitrogen-check: patched HybridNitroUiSwitchManager.kt
+nitrogen-check: patched HybridNitroUiSliderComponent.hpp
+nitrogen-check: patched HybridNitroUiSliderComponent.mm
+nitrogen-check: patched HybridNitroUiSliderManager.kt
+nitrogen-check: patched HybridNitroUiButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiButtonComponent.mm
+nitrogen-check: patched HybridNitroUiButtonManager.kt
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.hpp
+nitrogen-check: patched HybridNitroUiSegmentedControlComponent.mm
+nitrogen-check: patched HybridNitroUiSegmentedControlManager.kt
+nitrogen-check: patched HybridNitroUiDatePickerComponent.hpp
+nitrogen-check: patched HybridNitroUiDatePickerComponent.mm
+nitrogen-check: patched HybridNitroUiDatePickerManager.kt
+nitrogen-check: patched HybridNitroUiPickerComponent.hpp
+nitrogen-check: patched HybridNitroUiPickerComponent.mm
+nitrogen-check: patched HybridNitroUiPickerManager.kt
+nitrogen-check: patched HybridNitroUiMenuComponent.hpp
+nitrogen-check: patched HybridNitroUiMenuComponent.mm
+nitrogen-check: patched HybridNitroUiMenuManager.kt
+nitrogen-check: patched HybridNitroUiTextFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiTextFieldComponent.mm
+nitrogen-check: patched HybridNitroUiTextFieldManager.kt
+nitrogen-check: patched HybridNitroUiChipComponent.hpp
+nitrogen-check: patched HybridNitroUiChipComponent.mm
+nitrogen-check: patched HybridNitroUiChipManager.kt
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.hpp
+nitrogen-check: patched HybridNitroUiSearchFieldComponent.mm
+nitrogen-check: patched HybridNitroUiSearchFieldManager.kt
+nitrogen-check: patched HybridNitroUiCheckboxComponent.hpp
+nitrogen-check: patched HybridNitroUiCheckboxComponent.mm
+nitrogen-check: patched HybridNitroUiCheckboxManager.kt
+nitrogen-check: patched HybridNitroUiIconButtonComponent.hpp
+nitrogen-check: patched HybridNitroUiIconButtonComponent.mm
+nitrogen-check: patched HybridNitroUiIconButtonManager.kt
+nitrogen-check: patched HybridNitroUiBottomSheetComponent.mm
+nitrogen-check: patched HybridNitroUiPopoverComponent.mm
+nitrogen-check: no drift (442 generated files match, 60 view(s) patched).
+──────── registry:check — pass, 0.1s ─────────────────────────────────────────────
+$ node scripts/gen-registry.mjs --check
+registry:check: OK (18 components, 15 generated files in step with the manifests)
+──────── autolinking:check — pass, 1.1s ──────────────────────────────────────────
+$ node scripts/check-autolinking.mjs
+autolinking: RN CLI and Expo both resolve NitroUiPackage
+──────── prepare — skipped, 0.0s ─────────────────────────────────────────────────
+──────── api-extractor:check — skipped, 0.0s ─────────────────────────────────────
+──────── publint — skipped, 0.0s ─────────────────────────────────────────────────
+──────── manifest:check — skipped, 0.0s ──────────────────────────────────────────
+──────── readme:check — fail, 0.1s ───────────────────────────────────────────────
+check: 11 passed, 1 failed, 5 skipped in 153.6s
+check: failed step(s): readme:check
+check: not started after the first failure: perf:renders, prepare, api-extractor:check, publint, manifest:check
+──────── full log: readme:check ──────────────────────────────────────────────────
+$ node scripts/readme-examples-check.mjs
+README examples drifted (3): menu, context-menu, chip
+
+menu: README and example/src/readme-examples.tsx differ
+      first difference at line 15:
+    example:
+              id: 'dangerous',
+              title: 'Dangerous',
+              items: [{ id: 'delete', title: 'Delete', destructive: true }],
+            },
+          ],
+    README:
+              id: 'dangerous',
+              title: 'Dangerous',
+              // `systemImage` is iOS's glyph and `androidIcon` Android's. Each platform
+              // ignores the other's, so one row reads the same on both.
+              items: [
+
+context-menu: README and example/src/readme-examples.tsx differ
+      first difference at line 5:
+    example:
+          { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+          { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+        ],
+        sections: [
+          {
+    README:
+          { id: 'reply', title: 'Reply', systemImage: 'arrowshape.turn.up.left' },
+          { id: 'copy', title: 'Copy text', systemImage: 'doc.on.doc' },
+          // iOS draws the SF Symbol; Android draws the `.xml` the app imports.
+          {
+            id: 'share',
+
+chip: README and example/src/readme-examples.tsx differ
+      first difference at line 14:
+    example:
+              onPress={onDirections}
+            />
+          </>
+        );
+      }
+    README:
+              onPress={onDirections}
+            />
+            <Chip
+              variant="assist"
+              label="Starred"
+
+Fix: copy the region from example/src/readme-examples.tsx into the
+matching ```tsx name=<region> block in README.md (or the other way round).
+Both sides are typechecked, so only the text can disagree.
+error: script "readme:check" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 153.7 s
+gate: recorded in .gates/task/G21-android-icon-rows.jsonl
+
+```

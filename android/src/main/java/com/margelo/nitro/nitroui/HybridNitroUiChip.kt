@@ -18,12 +18,14 @@ import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
@@ -41,8 +43,11 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.NitroUiPixelProbes
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.nitroui.core.nitroUiIcon
+import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
+import com.margelo.nitro.nitroui.core.toRgbHex
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -107,6 +112,34 @@ internal class ChipModel : NitroUiModel() {
    */
   var systemImage: String? = null
 
+  /**
+   * The chip's Android glyph, in the wire form the wrapper built: a resource name, or a
+   * `url:` string for a file to read (`NitroUiIconSource`). Button's prop, spelled the
+   * same and resolved the same way - see [iconSlot] for what is derived from it.
+   *
+   * Stored, not observed: the composition draws [androidIconContent].
+   */
+  var androidIcon: String? = null
+
+  /**
+   * Everything derived from [androidIcon]: the same [NitroUiIconSlot] `ButtonModel` and
+   * `MenuModel` use, so "resolve once per change, reserve a file's slot before it
+   * lands, retire an in-flight load on a recycle, draw nothing for artwork that cannot
+   * be resolved" is written in one place for every control that has an icon.
+   */
+  val iconSlot = NitroUiIconSlot()
+
+  /** What the chip lays its label beside. Observed, through [iconSlot]. */
+  val androidIconContent: NitroUiIconContent
+    get() = iconSlot.content
+
+  /** Apply [androidIcon] if it is not what [androidIconContent] already is. */
+  fun resolveAndroidIcon(
+    artwork: NitroUiIconArtwork,
+  ) {
+    iconSlot.resolve(androidIcon, artwork)
+  }
+
   /** The size configuration React sent; the engine reads it out of Fabric state. */
   var sizingKey = ""
 
@@ -127,10 +160,26 @@ internal class ChipModel : NitroUiModel() {
   private var drawn = "none"
   private var probes = 0
   private var accessibilityReport = "none"
+  private var iconTint = "-"
 
   /** Record what the composable was handed. Plain storage, never observed. */
   fun recordDrawn(value: String) {
     synchronized(reportLock) { drawn = value }
+  }
+
+  /**
+   * Record the colour the `androidIcon` slot was tinted with, or `-` when no glyph drew.
+   *
+   * Test-only, for the reason `MenuRowIcons.noteTint` gives at length: Material's chip
+   * icon colour comes from the device's dynamic palette on Android 12+, so a harness
+   * cannot write the RGB down. It is recorded in the composable, from the same
+   * `LocalContentColor` the glyph is tinted with, and `nuiTestPixelProbe` samples for
+   * that - a reading of what was drawn, not of what was sent.
+   */
+  fun recordIconTint(
+    tint: ComposeColor?,
+  ) {
+    synchronized(reportLock) { iconTint = tint?.let { "#${it.toRgbHex()}" } ?: "-" }
   }
 
   fun recordAccessibility(report: String) {
@@ -140,9 +189,14 @@ internal class ChipModel : NitroUiModel() {
     }
   }
 
-  /** `displayed=<0|1|none>;probes=<n>;a11y=<...>`. Safe from any thread. */
+  /**
+   * `displayed=<0|1|none>;probes=<n>;a11y=<...>;iconTint=<#RRGGBB|->`.
+   * Safe from any thread.
+   */
   fun stateReport(): String =
-    synchronized(reportLock) { "displayed=$drawn;probes=$probes;a11y=$accessibilityReport" }
+    synchronized(reportLock) {
+      "displayed=$drawn;probes=$probes;a11y=$accessibilityReport;iconTint=$iconTint"
+    }
 
   override fun reset() {
     label = ""
@@ -151,6 +205,10 @@ internal class ChipModel : NitroUiModel() {
     enabled = true
     accessibilityLabel = null
     systemImage = null
+    androidIcon = null
+    // The same reset Button's and Menu's triggers do: the resolved name is forgotten, a
+    // file load the previous owner started is retired, and the slot is empty again.
+    iconSlot.reset()
     sizingKey = ""
     state.displayed = false
     state.js = null
@@ -165,6 +223,7 @@ internal class ChipModel : NitroUiModel() {
       drawn = "none"
       probes = 0
       accessibilityReport = "none"
+      iconTint = "-"
     }
   }
 }
@@ -244,6 +303,24 @@ private val ChipLeadingCheck: @Composable () -> Unit = {
  */
 private val ChipLeadingSlotEmpty: @Composable () -> Unit = {
   Spacer(Modifier.width(0.dp))
+}
+
+/**
+ * The chip's `androidIcon`, in the slot Material sizes and colours.
+ *
+ * [FilterChipDefaults.IconSize] for both variants: `AssistChipTokens.IconSize` and
+ * `FilterChipTokens.IconSize` are the same 18 dp, so an assist chip's glyph and a
+ * filter chip's are one size - and one size with the check that takes the filter chip's
+ * slot when it is selected, which is the pair the toggle round trip must not move.
+ *
+ * The colour comes from `LocalContentColor`, which the chip has already set to its own
+ * leading-icon colour before composing this: it follows the variant, the selection and
+ * `enabled` without this file knowing Material's colour roles, and a glyph painted in a
+ * constant would sit at full strength on a disabled chip (G19's finding on Button).
+ */
+@Composable
+internal fun ChipLeadingIcon(content: NitroUiIconContent) {
+  NitroUiIconSlotGlyph(content, FilterChipDefaults.IconSize)
 }
 
 /**
@@ -327,6 +404,29 @@ private class ChipHost(
       // caller's narrower `width` truncates it instead of painting outside.
       Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
+    // The leading slot, which is the whole of this chip's icon story. The check wins it
+    // on a selected filter chip - a selected chip means "checked", and a glyph beside a
+    // check would say it twice - and the app's glyph holds it otherwise.
+    //
+    // An assist chip with nothing to draw gets `null` rather than the empty spacer: it
+    // has no selection, so nothing toggles Material's `AnimatedVisibility`, and `null`
+    // is what it was handed before this prop existed - "a name that does not resolve
+    // leaves the chip exactly its no-icon self" is then true by construction rather than
+    // by a zero-wide spacer. The filter chip keeps the spacer for [ChipLeadingSlotEmpty]'s
+    // reason, which is a reason about its selection animation and not about icons.
+    val icon = model.androidIconContent
+    val glyph: @Composable () -> Unit = {
+      model.recordIconTint(LocalContentColor.current)
+      ChipLeadingIcon(icon)
+    }
+    val emptyGlyph: @Composable () -> Unit = {
+      model.recordIconTint(null)
+      ChipLeadingSlotEmpty()
+    }
+    val check: @Composable () -> Unit = {
+      model.recordIconTint(null)
+      ChipLeadingCheck()
+    }
     when (variant) {
       ChipVariant.Filter ->
         FilterChip(
@@ -336,7 +436,12 @@ private class ChipHost(
           modifier = labelModifier,
           enabled = model.enabled,
           shapes = chipShapes(),
-          leadingIcon = if (selected) ChipLeadingCheck else ChipLeadingSlotEmpty,
+          leadingIcon =
+            when {
+              selected -> check
+              icon == NitroUiIconContent.Absent -> emptyGlyph
+              else -> glyph
+            },
         )
       ChipVariant.Assist ->
         AssistChip(
@@ -344,6 +449,12 @@ private class ChipHost(
           label = content,
           modifier = labelModifier,
           enabled = model.enabled,
+          leadingIcon =
+            if (icon == NitroUiIconContent.Absent) {
+              null
+            } else {
+              glyph
+            },
         )
     }
   }
@@ -356,6 +467,12 @@ class HybridNitroUiChip(
 
   private val model = ChipModel()
   private val host = ChipHost(reactContext, reactContext.currentActivity, model)
+
+  /** The app's resources and the dev server, behind the one resolver every `androidIcon` uses. */
+  private val iconArtwork = NitroUiAppIconArtwork(reactContext)
+
+  /** The probe pair - Button's, for Button's reason: a drawn glyph is a fact pixels hold. */
+  private val pixelProbes = NitroUiPixelProbes()
 
   /** The Nitro `view` - created once here and never replaced. */
   override val view: View
@@ -480,6 +597,29 @@ class HybridNitroUiChip(
       model.systemImage = next.asSecondOrNull()
     }
 
+  /**
+   * `androidIcon`: the glyph to draw before the label - an app drawable's resource name,
+   * or a `url:` string naming a file to read. Button's prop and Button's rules
+   * (`HybridNitroUiButton.androidIcon` says them): the setter stores the string React
+   * sent and marks dirty, and [afterUpdate] resolves it, because a name is a lock on a
+   * shared resource table and a file is a socket.
+   *
+   * Stored verbatim so `hybridRef` reports the string back exactly as the harness built
+   * it - the marker is part of that string's identity, not noise to normalise away.
+   */
+  override var androidIcon: Variant_NullType_String
+    get() =
+      model.androidIcon?.let { Variant_NullType_String.Second(it) }
+        ?: Variant_NullType_String.First(NullType.NULL)
+    set(next) {
+      val name = next.asSecondOrNull()
+      if (name == model.androidIcon) {
+        return
+      }
+      model.androidIcon = name
+      host.markDirty()
+    }
+
   override var testID: Variant_NullType_String
     get() =
       (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
@@ -550,6 +690,11 @@ class HybridNitroUiChip(
   // MARK: - Lifecycle
 
   override fun afterUpdate() {
+    // The glyph first, once per commit, before the composition below reads it: Button's
+    // order and Button's reason - a resource resolved here is drawn by this commit, and a
+    // file that has to be read reserves its slot in this commit and fills it later, so
+    // the chip's box never waits for the bytes.
+    model.resolveAndroidIcon(iconArtwork)
     // The handshake decides whether React's `selected` wins over what the user just
     // did - including a toggle JS refused (§4).
     if (model.state.reconcile()) {
@@ -585,6 +730,9 @@ class HybridNitroUiChip(
   }
 
   override fun prepareForRecycle() {
+    // A recycled chip must not answer for its previous owner's pixels, the same way its
+    // model must not answer with its previous owner's `selected`.
+    pixelProbes.clear()
     host.tag = null
     // The composition does not survive a recycle (core.md §6), and
     // `host.prepareForRecycle()` resets the model and releases the sizing instance.
@@ -598,6 +746,24 @@ class HybridNitroUiChip(
   }
 
   // MARK: - Methods
+
+  /**
+   * Sample what this chip is drawing for [color], and store the answer.
+   *
+   * Posted rather than run inline, like every other probe here: reading pixels needs the
+   * view drawn, and a Nitro method may not block for the UI thread. The same sampler as
+   * Button's and SegmentedControl's, so one harness helper reads all three.
+   */
+  override fun nuiTestPixelProbe(color: Double) {
+    val run = { pixelProbes.publish(host.nitroUiSamplePixels(color)) }
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      run()
+    } else {
+      host.post { run() }
+    }
+  }
+
+  override fun nuiTestPixelReport(): String = pixelProbes.read()
 
   /** The size Compose measured, from the host's cache. Safe on the JS thread (§1.4). */
   override fun measureContent(): NitroUiChipSize {

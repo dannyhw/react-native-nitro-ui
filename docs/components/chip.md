@@ -14,6 +14,13 @@ import { Chip } from 'react-native-nitro-ui';
 const [open, setOpen] = useState(false);
 <Chip label="Open now" selected={open} onSelectedChange={setOpen} />
 <Chip variant="assist" label="Directions" systemImage="map" onPress={route} />
+<Chip
+  variant="assist"
+  label="Directions"
+  systemImage="map"
+  androidIcon={require('./icons/map.xml')}
+  onPress={route}
+/>
 ```
 
 ## API
@@ -28,11 +35,43 @@ const [open, setOpen] = useState(false);
 | `onPress`            | `() => void`                              | none       | Assist: fired once per tap.                                               |
 | `disabled`           | `boolean \| undefined`                     | `false`    | SwiftUI `.disabled()` / M3 `enabled = false`. Neither callback fires.     |
 | `systemImage`        | `string \| undefined`                      | none       | iOS only: a leading SF Symbol (`Label(_, systemImage:)`). Android ignores it. |
+| `androidIcon`        | `AndroidIconProp \| undefined`              | none       | **Android only**: a leading glyph — a `require`'d `.xml` or a drawable name. [Android icons](#android-icons). |
 | `style`              | `ViewStyle`                               | none       | Overrides the measured box (see Sizing).                                  |
 | `testID`             | `string \| undefined`                      | none       | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.             |
 | `accessibilityLabel` | `string \| undefined`                      | `label`    | Label of the control itself.                                              |
 | `hybridRef`          | `(view: handle) => void`                  | none       | **Internal.** Read-only handle for this repo's harness.                  |
 | `nuiPerfId`          | `number \| null \| undefined`              | `null`     | **Internal.** Instance id for perf marks.                                 |
+
+## Android icons
+
+`androidIcon` is `Button`'s prop, on this chip, with every rule that prop has — the file
+format, where Material Symbols come from, the `@expo/material-symbols` option, the
+drawable-name form and the failure table are all in `docs/components/button.md`, "Android
+icons". What is Chip's own:
+
+- **iOS never draws it.** `systemImage` is iOS's leading glyph; `androidIcon` is accepted,
+  stored (so a handle reads back what React sent) and never painted. Name both and one chip
+  looks right on both platforms, with no `Platform.select`.
+- **The slot is Material's, at 18 dp** — `FilterChipDefaults.IconSize`, which is the same
+  18 dp on both kinds (`AssistChipTokens.IconSize` and `FilterChipTokens.IconSize` agree),
+  so an assist chip's glyph and a filter chip's are one size.
+- **The colour is the chip's own leading-icon colour**, read from `LocalContentColor` as
+  the chip draws the glyph. It follows the variant, the selection and `disabled` without
+  this file naming a Material role, which is the difference between a glyph that dims with
+  a disabled chip and one that sits at full strength on it.
+- **A selected filter chip's check takes the slot.** A selected chip means "checked", and a
+  glyph beside a check would say it twice. The check is the same 18 dp, so the swap never
+  moves the box; a chip with *no* glyph is the one that grows by the check.
+- **A glyph that cannot be resolved leaves the chip exactly its no-glyph self**, to the
+  dp, on both kinds. In development the wrapper warns once per name, as `Button` does.
+- **The sizing key gains a field**: `variant|selected|systemImage|androidIcon|label`. A
+  glyph is a different box, so a chip that changed its icon has to be measured again
+  rather than laid out at the previous glyph's width.
+
+Measured: `example/__tests__/Chip.harness.tsx` ("draws the imported glyph in the slot, and
+leaves nothing else in its colour") samples the chip's own pixels and asserts that the
+difference between a chip with a glyph and one without is 18 dp squared at this device's
+density, ±12%; the fixture is a filled square so that difference *is* the slot's area.
 
 A prop that belongs to the other kind is ignored: an assist chip never selects,
 and a filter chip never calls `onPress`. `Chip` is a `View`, so other
@@ -47,7 +86,7 @@ app API (DECISIONS D14).
 | Assist    | `Button(action:) { label }`                                       | `androidx.compose.material3.AssistChip`                         |
 | Shape     | `.buttonStyle(.bordered)`, `.buttonBorderShape(.capsule)`, `.controlSize(.small)` | M3 chip shape, 32 dp tall in a 48 dp touch target |
 | Selected  | the bordered style's selected fill                                | M3 selected container plus a leading check mark                 |
-| Icon      | `systemImage` as a leading SF Symbol                              | none (the check mark is the selected filter chip's only icon)   |
+| Icon      | `systemImage` as a leading SF Symbol                              | `androidIcon` in `FilterChipDefaults.IconSize`, or the selected filter chip's check mark |
 | Value     | `NitroUiControlledValue<Bool>` on `ChipModel`                     | `NitroUiControlledValue<Boolean>` on `ChipModel`                |
 | Label     | `.accessibilityLabel(_:)` on the control                          | `Modifier.semantics { contentDescription }` on the chip         |
 | Host      | `UIHostingController` inside `NitroSwiftUIHost`                   | `NitroComposeHost<M>: AbstractComposeView`                      |
@@ -77,7 +116,13 @@ The filter rows moved with Android's Expressive button tokens and the assist row
 overload `FilterChip` now takes lays a filter chip out 3.81 dp narrower at both
 states than the `shape:` one did — a constant offset, so the growth by the check
 mark is untouched — and it shows up only on a chip with a leading slot, which an
-assist chip has none of. The harness asserts both halves: a
+assist chip has none of. A glyph grows the chip by **17.90 dp** here, which is not
+18 + 8: `FilterChip` starts a chip with no leading icon 16 dp in and one with an icon
+8 dp in, so `FilterChipDefaults.IconSize` (18 dp) and the 8 dp of spacing before the
+label arrive net of the 8 dp the chip stops needing — which is why the number matches
+the check mark above, the same slot in the same place. The harness measures that growth
+against a chip of the same label with no glyph, logs it and asserts it to the dp, next
+to the pixels that measure the slot's area. The harness asserts both halves: a
 toggled chip settles at the size of a reference chip mounted selected, and a
 fresh unselected one needs no correction.
 
@@ -140,7 +185,8 @@ asserted by real input (`RealInputTests.testRealInputChip` and the a11y sweep's
 - On iOS a disabled chip draws the same whether or not it is selected:
   SwiftUI's disabled bordered style drops the selected fill (the "Disabled" row
   of the README screenshot).
-- `systemImage` is iOS only, like Button's. Android does not draw it.
+- `systemImage` is iOS only, like Button's. Android does not draw it — and `androidIcon`
+  is Android-only, so a chip that wants a leading glyph on both platforms names both.
 - **No check mark slide-in on Android.** Material 3 animates the check mark's
   width as a spring. The host cannot follow an animated intrinsic width: the
   chip stops reporting while it is wider than its box. So the chip always

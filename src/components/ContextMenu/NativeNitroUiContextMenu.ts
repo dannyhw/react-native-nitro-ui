@@ -35,6 +35,13 @@ export interface NitroUiContextMenuHandle {
   nuiTestSelectRow(id: string): void;
   /** Test-only - see `NitroUiContextMenuMethods.nuiTestMenuProbe`. @internal */
   nuiTestMenuProbe(): void;
+  /**
+   * Test-only - see `NitroUiContextMenuMethods.nuiTestMenuPixelProbe`. @internal
+   * Samples the open menu's window; `no popup` / `no pixels` are the refusals.
+   */
+  nuiTestMenuPixelProbe(color: number): void;
+  /** Test-only - what that probe found. @internal */
+  nuiTestMenuPixelReport(): string;
   /** Test-only - see `NitroUiContextMenuMethods.nuiTestContextMenuReport`. @internal */
   nuiTestContextMenuReport(): string;
   /** Test-only - see `NitroUiContextMenuMethods.nuiTestA11yLongClick`. @internal */
