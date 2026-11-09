@@ -170,7 +170,11 @@ function StepperOwner({
 }: OwnerProps) {
   const controlled = value !== undefined;
   const [own, setOwn] = useState(value ?? defaultValue ?? 0);
-  const shown = controlled ? value : own;
+  // Always `own`, never the prop: a controlled fixture that rendered its own prop could
+  // never adopt the step it was just told about, so every "the app adopted it" claim
+  // below would describe a fixture that refuses everything. `own` starts at the prop,
+  // and the refusal case is the one that does not write it.
+  const shown = own;
   if (controlled) {
     setters.set(testId, setOwn);
   }
@@ -430,12 +434,15 @@ function poison(keys: readonly string[]): void {
 
 /* ------------------------------ the pixel probe ------------------------------ */
 
+/**
+ * Six digits everywhere on purpose: `processColor` reads an eight-digit literal as
+ * `#RRGGBBAA`, so `#FF000000` is *red* to it, and the sampler compares the channels it
+ * was handed. A constant written with a leading `FF` asks about the wrong colour.
+ */
 /** The sampler's own backdrop, from `NitroUiPixelProbe.kt` / iOS's twin. */
-const BACKDROP = '#FF808080';
-/** The same colour as the report spells it: no alpha, so distances compare alike. */
-const BACKDROP_RGB = '#808080';
-const BLACK = '#FF000000';
-const WHITE = '#FFFFFFFF';
+const BACKDROP = '#808080';
+const BLACK = '#000000';
+const WHITE = '#FFFFFF';
 
 /** One probe's answer, parsed. */
 type PixelReport = {
@@ -770,11 +777,18 @@ describe('Stepper', () => {
     expect(reportOf('at-max').displayed, 'the ceiling stayed at 2').toBe('2');
 
     // And the live half at each end still works, so the silence above is a bound and
-    // not a control that stopped listening.
+    // not a control that stopped listening. From the *settled* list onward: the
+    // barrier's own event sits in front of these two, so a window opened at
+    // `before` would report three events where two happened.
+    const afterBarrier = events.length;
     await stepStepper('at-min', 1);
-    expect(await waitForEvents(before, ['at-min:1'])).toEqual(['at-min:1']);
+    expect(await waitForEvents(afterBarrier, ['at-min:1'])).toEqual([
+      'at-min:1',
+    ]);
     await stepStepper('at-max', -1);
-    expect(await waitForEvents(before + 1, ['at-max:1'])).toEqual(['at-max:1']);
+    expect(await waitForEvents(afterBarrier + 1, ['at-max:1'])).toEqual([
+      'at-max:1',
+    ]);
     view.unmount();
   });
 
@@ -1006,7 +1020,7 @@ describe('Stepper', () => {
           accessibilityLabel="Off the grid"
           maximumValue={10}
           minimumValue={0}
-          step={2}
+          step={3}
           testId="offgrid"
           value={7}
         />
@@ -1020,7 +1034,9 @@ describe('Stepper', () => {
     await waitForDrawn('over', '5');
     await waitForDrawn('under', '0');
     // A value that is inside the range but not on the grid goes to the grid
-    // (`quantize`), not to the nearest bound.
+    // (`quantize`), not to the nearest bound. The fixture is deliberately *not* a tie:
+    // the shared quantizer breaks ties away from zero, so a half-step value would pin
+    // that tie-break here as well, and this test is about the grid.
     await waitForDrawn('offgrid', '6');
 
     const before = events.length;
@@ -1032,8 +1048,8 @@ describe('Stepper', () => {
     await stepStepper('under', 1);
     expect(await waitForEvents(before + 1, ['under:1'])).toEqual(['under:1']);
     await stepStepper('offgrid', 1);
-    expect(await waitForEvents(before + 2, ['offgrid:8'])).toEqual([
-      'offgrid:8',
+    expect(await waitForEvents(before + 2, ['offgrid:9'])).toEqual([
+      'offgrid:9',
     ]);
     view.unmount();
   });
@@ -1153,13 +1169,13 @@ describe('Stepper', () => {
     console.log(`stepper reader at the ceiling: ${atBound}`);
     expect(atBound, 'the probe reported what it found').toContain('10');
     expect(
-      await waitForEvents(bound, ['reader:5']),
+      await waitForEvents(bound, ['reader:6']),
       `a reader asking past the maximum produced an event: ${JSON.stringify(
         events.slice(bound)
       )} (${atBound})`
-    ).toEqual(['reader:5']);
+    ).toEqual(['reader:6']);
     expect(barrier, 'and the barrier’s own step moved one step').toContain(
-      '4->5'
+      '4->6'
     );
     expect(reportOf('reader-at-max').displayed).toBe('10');
     view.unmount();
@@ -1193,63 +1209,81 @@ describe('Stepper', () => {
 
     const dark = await pixelProbe('pixels', BLACK, 'the darkest thing drawn');
     const light = await pixelProbe('pixels', WHITE, 'the lightest thing drawn');
-    const backdrop = await pixelProbe(
-      'pixels',
-      BACKDROP,
-      'the sampler backdrop'
-    );
     console.log(
-      `stepper pixel probes: ${JSON.stringify([dark.raw, light.raw, backdrop.raw])}`
+      `stepper pixel probes: ${JSON.stringify([dark.raw, light.raw])}`
     );
 
     const area = dark.width * dark.height;
     expect(area, `the probe did not answer a box: ${dark.raw}`).toBeGreaterThan(
       0
     );
-    // Whichever extreme the control paints *most* of is its container; the other one
-    // is its ink. Probing each answer turns "the glyph is drawn" into a colour that
-    // is on screen, because the scheme is dynamic and no JS constant names it.
-    const fill = dark.hits >= light.hits ? dark : light;
-    const ink = dark.hits >= light.hits ? light : dark;
-    const inkColour = ink.closest;
-    const fillColour = fill.closest;
-    expect(inkColour.length, `no closest colour in "${ink.raw}"`).toBe(7);
 
-    const inkProbe = await pixelProbe('pixels', inkColour, 'the ink colour');
+    // Black and white are not colours this control paints - they are the two ends of
+    // the scale used to *find* the two it does: each probe answers the nearest thing on
+    // screen to its own end. One of those is the container, the other the ink. Whether
+    // the scheme paints dark ink on a mid container or light ink on a dark one is then
+    // decided by the pixels rather than by a JS constant, so both spellings pass.
+    const darkColour = dark.closest;
+    const lightColour = light.closest;
+    expect(darkColour.length, `no closest colour in "${dark.raw}"`).toBe(7);
+    expect(lightColour.length, `no closest colour in "${light.raw}"`).toBe(7);
+
+    const darkPaint = await pixelProbe(
+      'pixels',
+      darkColour,
+      'the darkest colour present'
+    );
+    const lightPaint = await pixelProbe(
+      'pixels',
+      lightColour,
+      'the lightest colour present'
+    );
+    // The marks are thin strokes over a solid fill, so the extreme covering *fewer*
+    // pixels is the ink and the other one is the surface it sits on.
+    const ink = darkPaint.hits <= lightPaint.hits ? darkPaint : lightPaint;
+    const surface = darkPaint.hits <= lightPaint.hits ? lightPaint : darkPaint;
+    console.log(
+      `stepper ink=${ink.closest} hits=${String(ink.hits)} ` +
+        `surface=${surface.closest} hits=${String(surface.hits)}`
+    );
+
     expect(
-      inkProbe.hits,
-      `the colour this control paints the least of (${inkColour}) is not on screen: ` +
-        `${inkProbe.raw}`
+      ink.hits,
+      `the colour this control paints its marks in (${ink.closest}) is not on ` +
+        `screen at all: ${ink.raw}`
     ).toBeGreaterThan(0);
     expect(
-      colourDistance(inkColour, fillColour),
-      `the "ink" is barely a different colour from the container ` +
-        `(${inkColour} vs ${fillColour}, ${String(
-          colourDistance(inkColour, fillColour)
+      colourDistance(ink.closest, surface.closest),
+      `the "ink" is barely a different colour from the surface it sits on ` +
+        `(${ink.closest} vs ${surface.closest}, ${String(
+          colourDistance(ink.closest, surface.closest)
         )} apart on the sampler's own scale) - nothing is being drawn on top of it`
     ).toBeGreaterThan(60);
+    // The line a stepper with empty glyph slots cannot cross. With nothing painted,
+    // the two extremes are the container and the sampler's own mid-grey backdrop
+    // showing through the box - about 37 apart and near-equal in area - so this and the
+    // distance above collapse together rather than one of them quietly surviving.
     expect(
-      inkProbe.hits < area * 0.5,
-      `${inkColour} covers ${String(inkProbe.hits)} of ${String(
-        area
-      )} pixels - that is a filled block, not a glyph on a container: ${inkProbe.raw}`
+      surface.hits > ink.hits * 2,
+      `the surface (${surface.closest}, ${String(
+        surface.hits
+      )} px) is not the dominant painting of this box; ink is ${String(
+        ink.hits
+      )} px: ${surface.raw}`
     ).toBe(true);
-    // The line a stepper with empty glyph slots cannot cross: with nothing painted,
-    // the darkest (light scheme) or lightest (dark scheme) thing in the box is the
-    // sampler's own mid-grey backdrop showing through the padding, and this distance
-    // collapses to about zero.
     expect(
-      colourDistance(inkColour, BACKDROP_RGB),
-      `the "ink" is the probe's own backdrop (${inkColour}, ` +
-        `${String(colourDistance(inkColour, BACKDROP_RGB))} from ${BACKDROP}) - ` +
+      colourDistance(ink.closest, BACKDROP),
+      `the "ink" is the probe's own backdrop (${ink.closest}, ` +
+        `${String(colourDistance(ink.closest, BACKDROP))} from ${BACKDROP}) - ` +
         'the glyph slots drew nothing, so the only dark/light thing here is the ' +
-        `canvas: ${ink.raw}`
+        `canvas: ${dark.raw}`
     ).toBeGreaterThan(30);
-    // And the glyphs are the only ink: the container dominates the box.
+    // And ink that covers the box is a filled block, not a glyph.
     expect(
-      fill.hits > inkProbe.hits * 2,
-      `the container (${fillColour}, ${String(fill.hits)} px) is not the dominant ` +
-        `painting of this box; ink is ${String(inkProbe.hits)} px: ${fill.raw}`
+      ink.hits < area * 0.5,
+      `${ink.closest} covers ${String(ink.hits)} of ${String(
+        area
+      )} pixels - that is a filled block, not a glyph on a container: ${ink.raw}`
     ).toBe(true);
     view.unmount();
   });
