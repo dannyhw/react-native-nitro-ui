@@ -4272,15 +4272,38 @@ final class RealInputTests: XCTestCase {
     // the close, with no `typed:ab`) at load1 ~13; the same control passed on its own at
     // load1 ~5. Waiting here keeps the claim - JS received both keystrokes - and takes the
     // close out of the race: a character that never arrives still goes red.
-    field.typeText("ab")
+    //
+    // It did not take the *typing* out of the race. One `typeText("ab")` sends both keys in
+    // one go, and the second lands in a controlled `TextInput` whose value the first key has
+    // not finished round-tripping through JS — so JS can put the field back to `a` with `b`
+    // already gone. That is the line's shape when it fails, every time: `typed:a` and no
+    // `typed:ab`. Measured on this branch: red in three full `real-input:ios` runs (load1
+    // medians 6.5-9.1), green in a solo `--control popover` run of the same tree and in the
+    // one full run taken on a machine at load1 5.4 — and red twice more on G21's and G22's
+    // own trees, so the race is the typing, not the task.
+    //
+    // So type one character, wait for JS to report it, then type the other. Both keystrokes
+    // still have to arrive, and both while the popover is still up: the claim is the same
+    // sentence, and a character that is really lost still goes red on the second wait.
+    field.typeText("a")
     var typedWhileUp = ""
+    let firstArrived = waitUntil({
+      typedWhileUp = echoText(Echo.popoverLog)
+      return typedWhileUp.contains("typed:a")
+    }, window: 10)
+    XCTAssertTrue(
+      firstArrived,
+      "the first real keystroke reaches the field inside the popover while it is still up: "
+        + typedWhileUp
+    )
+    field.typeText("b")
     let keystrokesArrived = waitUntil({
       typedWhileUp = echoText(Echo.popoverLog)
       return typedWhileUp.contains("typed:ab")
     }, window: 10)
     XCTAssertTrue(
       keystrokesArrived,
-      "real keystrokes reach the field inside the popover while it is still up: "
+      "both real keystrokes reach the field inside the popover while it is still up: "
         + typedWhileUp
     )
     outside.tap()
