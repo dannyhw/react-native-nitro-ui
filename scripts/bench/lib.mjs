@@ -405,6 +405,11 @@ export function parseTimeoutFlags(argv, readFlag, platform) {
 export const ARMS_WITHOUT_COMPONENT = [
   'android:expo-ui-host-per-control:date-picker',
   'android:expo-ui-shared-host:date-picker',
+  // G25: `@expo/ui`'s Compose surface has no stepper because Material has none, so
+  // there is no Android arm to measure — the iOS Stepper is the comparison. Saying so
+  // here keeps the cell out of the plan instead of launching an arm that throws.
+  'android:expo-ui-host-per-control:stepper',
+  'android:expo-ui-shared-host:stepper',
 ];
 
 /**

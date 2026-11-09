@@ -63,6 +63,15 @@ export default function StepperScreen() {
     setRefusedLast(String(next));
     setRefusedEvents((count) => count + 1);
   }, []);
+  // The hold-to-repeat control, and the only stepper on this page that is wide
+  // enough for one: `0...10` leaves five steps in the direction the check presses,
+  // so "one press, several steps" is countable. The two-step stepper above is the
+  // bounds fixture and cannot show a repeat at all — it runs out of range after one
+  // step, which is the behaviour its own assertions are about.
+  const [held, setHeld] = useState(5);
+  const onHeldValueChange = useCallback((next: number) => {
+    setHeld(next);
+  }, []);
   // Shared by the enabled and the disabled stepper, so a stray tap on the disabled
   // one is a number on screen rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
@@ -108,6 +117,14 @@ export default function StepperScreen() {
             testID="real-input-stepper"
           />
           <Stepper
+            value={held}
+            onValueChange={onHeldValueChange}
+            minimumValue={0}
+            maximumValue={10}
+            accessibilityLabel="Real-input hold stepper"
+            testID="real-input-stepper-hold"
+          />
+          <Stepper
             value={1}
             onValueChange={onRefusedValueChange}
             minimumValue={0}
@@ -130,6 +147,12 @@ export default function StepperScreen() {
             label="stepper value"
             testID="real-input-stepper-value"
             value={String(realValue)}
+            ink={ink}
+          />
+          <Echo
+            label="hold stepper value"
+            testID="real-input-stepper-hold-value"
+            value={String(held)}
             ink={ink}
           />
           <Echo
@@ -158,7 +181,9 @@ export default function StepperScreen() {
           />
         </View>
 
-        <Text style={[styles.section, { color: ink.ink }]}>A value the app shows</Text>
+        <Text style={[styles.section, { color: ink.ink }]}>
+          A value the app shows
+        </Text>
         <View style={styles.row}>
           <Text style={[styles.value, { color: ink.ink }]}>{quantity}</Text>
           <Stepper
@@ -171,7 +196,8 @@ export default function StepperScreen() {
           />
         </View>
         <Text style={styles.note}>
-          The control never draws the number - the app does, the way iOS apps do it.
+          The control never draws the number - the app does, the way iOS apps do
+          it.
         </Text>
 
         <Text style={[styles.section, { color: ink.ink }]}>Controlled</Text>
@@ -200,7 +226,9 @@ export default function StepperScreen() {
               accessibilityLabel="Tenths stepper"
               testID="stepper-tenths"
             />
-            <Text style={[styles.value, { color: ink.ink }]}>{tenths.toFixed(1)}</Text>
+            <Text style={[styles.value, { color: ink.ink }]}>
+              {tenths.toFixed(1)}
+            </Text>
           </View>
         </View>
 

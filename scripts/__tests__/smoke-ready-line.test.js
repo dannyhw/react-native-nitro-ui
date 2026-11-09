@@ -36,7 +36,7 @@ const READY_LINE =
   `${READY_PREFIX} switch=30x20 slider=310x20 button=88x36 ` +
   'progress=310x4 segmented-control=214x32 ' +
   'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 chip=58x28 ' +
-  'search-field=310x37 checkbox=40x40 icon-button=32x32 host=310x96';
+  'search-field=310x37 checkbox=40x40 icon-button=32x32 stepper=93x28 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -54,6 +54,10 @@ const READY_LINE =
  * height the Android control measures - Material 3's 56 dp `InputFieldHeight`, which is
  * also its declared fallback (iOS's own field is 28 pt, and the line is an Android
  * logline) - so it is the box a smoke run prints unless the device disagrees.
+ * `stepper=` (G25) is written the same way, from the two boxes the harness measures:
+ * 93x28 pt on iOS (SwiftUI's own `Stepper` with its label hidden) and 104x48 dp on
+ * Android (two 48 dp targets and the 8 dp between them), which are also the two
+ * numbers `DECLARED_FALLBACKS.NitroUiStepper` carries.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
@@ -63,7 +67,7 @@ const READY_LINE_FRACTIONAL =
   'picker=280x56.09523010253906 menu=97.619049072265625x48 ' +
   'text-field=363.4285583496094x24 chip=66.28571319580078x48 ' +
   'search-field=363.4285583496094x56 checkbox=48x48 ' +
-  'icon-button=48x48 host=363.4285583496094x96';
+  'icon-button=48x48 stepper=104x48 host=363.4285583496094x96';
 
 describe('smoke ready line', () => {
   it('passes on one non-zero box per control', () => {
