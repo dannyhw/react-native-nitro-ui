@@ -269,3 +269,12 @@ unavailable. Android: a dropped composition no longer takes the view with it, ba
 the model, `ACTION_CLICK` presses a row, and recycled views shed the previous mount's name.
 `Form.tsx` builds React's own keys and refuses a nested `Form.Row`; an unstyled iOS `Form` has a
 height; `form.md`, the changeset and FOLLOWUPS say what v1 promises.
+
+Reds — each new test, with the thing it guards put back the way it was:
+
+- `src/__tests__/form.test.tsx` (4 cases) -> `Form.tsx` back to `row-${anonymous++}` -> `does not
+  remount a row when a node above it appears or goes`: `Expected: 1`, `Received: 2`; the nested
+  row case: `Expected: true`, `Received: false`; the iOS base style: the four keys absent.
+- `real-input-a11y.test.js > grades the control, not the first node that happens to carry its
+  name` -> the rule back to `named[0]` -> `expect(problems.length).toBe(1)`: `Received: 2` — the
+  second problem is the actionability sentence about the screen container.
