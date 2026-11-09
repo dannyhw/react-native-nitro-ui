@@ -91,9 +91,6 @@ internal class StepperModel : NitroUiModel() {
   /** The control's name. The *value* is what the range info carries. */
   var accessibilityLabel by mutableStateOf<String?>(null)
 
-  /** Forwarded for the harness and a11y tools; the manager puts it on the view. */
-  var testID: String? = null
-
   /** The size configuration React sent; the engine reads it out of Fabric state. */
   var sizingKey = ""
 
@@ -193,7 +190,6 @@ internal class StepperModel : NitroUiModel() {
     step = 1.0
     enabled = true
     accessibilityLabel = null
-    testID = null
     sizingKey = ""
     state.displayed = 0.0
     state.js = null
@@ -581,12 +577,14 @@ class HybridNitroUiStepper(
 
   override var testID: Variant_NullType_String
     get() =
-      model.testID?.let { Variant_NullType_String.Second(it) }
+      (host.tag as String?)?.let { Variant_NullType_String.Second(it) }
         ?: Variant_NullType_String.First(NullType.NULL)
     set(next) {
-      // Stored, not applied: the generated manager puts `testID` on the view as its
-      // `tag`, which is how a harness query finds the box.
-      model.testID = next.asSecondOrNull()
+      // The host's tag, which is what RN's testID matchers read on Android — IconButton's
+      // answer, and the reason the prop exists on this platform at all: the
+      // generated manager forwards props to this class and nothing else, so a
+      // stored-only `testID` leaves the node invisible to every harness query.
+      host.tag = next.asSecondOrNull()
     }
 
   override var accessibilityLabel: Variant_NullType_String
@@ -783,7 +781,9 @@ class HybridNitroUiStepper(
       if (range == null) {
         "none"
       } else {
-        "${range.range.start}..${range.range.endInclusive}@${range.current}/steps=${range.steps}"
+        "${nitroUiStepperValueText(range.range.start.toDouble())}" +
+      "..${nitroUiStepperValueText(range.range.endInclusive.toDouble())}" +
+      "@${nitroUiStepperValueText(range.current.toDouble())}/steps=${range.steps}"
       }
     return candidates.size.toString() to
       "range=$rangeText,clickable=$clickable,disabled=$disabled,label=$label"
@@ -840,9 +840,12 @@ class HybridNitroUiStepper(
     val from = model.displayed
     action.action?.invoke(target)
     model.noteStepReport(
-      "performed SetProgress($target) on #${node.id} " +
-        "range=${range.range.start}..${range.range.endInclusive}@${range.current} " +
-        "$from->${model.displayed} disabled=${node.config.contains(SemanticsProperties.Disabled)}",
+      "performed SetProgress(${nitroUiStepperValueText(target.toDouble())}) on #${node.id} " +
+        "range=${nitroUiStepperValueText(range.range.start.toDouble())}" +
+        "..${nitroUiStepperValueText(range.range.endInclusive.toDouble())}" +
+        "@${nitroUiStepperValueText(range.current.toDouble())} " +
+        "${nitroUiStepperValueText(from)}->${nitroUiStepperValueText(model.displayed)} " +
+        "disabled=${node.config.contains(SemanticsProperties.Disabled)}",
     )
   }
 

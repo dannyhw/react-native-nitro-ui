@@ -418,6 +418,16 @@ private func nitroUiDescribeStepperNode(_ node: AnyObject) -> String {
   return "\(name)[\(traits.rawValue)]"
 }
 
+/// The number a report names, without a float's noise: `4.0` reads as `4` and `0.1`
+/// stays `0.1`. The Android twin is `nitroUiStepperValueText`, and one harness
+/// assertion reads both platforms' reader-action reports, so the spellings agree.
+private func nitroUiStepperValueText(_ value: Double) -> String {
+  if value.isFinite, value == value.rounded(), abs(value) < 1e15 {
+    return String(Int(value))
+  }
+  return String(value)
+}
+
 /// Reports go to a test's failure line, so they stay one line.
 private func nitroUiStepperReport(_ text: String) -> String {
   guard text.count > 320 else { return text }
@@ -769,7 +779,11 @@ final class HybridNitroUiStepper: HybridNitroUiStepperSpec, RecyclableView {
     element.perform(selector)
     let to = model.state.displayed
     model.noteStepReport(
-      nitroUiStepperReport("performed \(action) on \(nitroUiDescribeStepperNode(element)) \(from)->\(to) disabled=\(elementDisabled)")
+      nitroUiStepperReport(
+        "performed \(action) on \(nitroUiDescribeStepperNode(element)) " +
+          "\(nitroUiStepperValueText(from))->\(nitroUiStepperValueText(to)) " +
+          "disabled=\(elementDisabled)"
+      )
     )
   }
 }
