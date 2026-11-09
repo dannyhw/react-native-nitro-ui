@@ -192,3 +192,18 @@ the group instead.
   lease — not mine to power off, flagging for whoever owns the pool.
 - gate: `gate.mjs wait` on this host prints its progress lines only when it exits, so a long
   run looks silent; the log store is current.
+
+## Questions for orchestrator
+
+`need --for merge` wants one thing this branch cannot turn green on its own: `real-input:ios`,
+red on the two ContextMenu accessibility lines above. `task/G25-fix1` is red on the same two,
+so the bar is blocked for a second, unrelated branch at the same time.
+
+1. **Recommended — re-run at merge, and merge through the red if it stays.** The merge bar
+   runs the full harness plus real-input anyway. A green there closes the question; a red
+   there is two branches deep and cannot be this Picker's, whose diff has no ContextMenu file
+   and whose own `context-menu` check and 27 XCUITest cases pass.
+2. **Fix the sweep first.** Give `A11yFrameStability` a comparison that includes the element
+   set, not only frames, then re-run both branches. It is the right fix for the shape and it
+   edits another task's file, which is why it is not in this round.
+3. **Hold G26.** Costs a round for no new information.
