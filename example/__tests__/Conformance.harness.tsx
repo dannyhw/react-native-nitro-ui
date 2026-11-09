@@ -272,8 +272,8 @@ const SHARED = {
         "height": 48
       },
       "ios": {
-        "width": 93,
-        "height": 28
+        "width": 94,
+        "height": 32
       }
     }
   },

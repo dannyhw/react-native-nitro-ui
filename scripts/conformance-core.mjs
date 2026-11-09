@@ -719,12 +719,15 @@ export const DECLARED_FALLBACKS = Object.freeze({
   // label moves the box (`Stepper.tsx` sends an empty sizing variant for exactly this
   // reason), which is what makes `both` an honest box rule here. The Android number is
   // two 48 dp touch targets with the 8 dp the design puts between them; the iOS one is
-  // SwiftUI's own `Stepper` with its label hidden. Both were measured here rather than
-  // copied from Q7 Appendix E's estimates, and the poisoned run replaces them with
-  // `POISON_SIZES` before a cold mount, so "the guess was never corrected" still goes red.
+  // SwiftUI's own `Stepper` with its label hidden, at 94x32 pt on the iOS 26/27 runtimes
+  // this pool has (G25 round 1 recorded 93x28 for it, which no device here agrees
+  // with: an iOS run measured 94x32 and every cold mount paid a correction). Both were
+  // measured here rather than copied from Q7 Appendix E's estimates, and the poisoned
+  // run replaces them with `POISON_SIZES` before a cold mount, so "the guess was never
+  // corrected" still goes red.
   NitroUiStepper: {
     android: { width: 104, height: 48 },
-    ios: { width: 93, height: 28 },
+    ios: { width: 94, height: 32 },
   },
 });
 

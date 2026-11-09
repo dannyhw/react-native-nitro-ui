@@ -160,16 +160,18 @@ export const States: Story = {
             testID="storybook-stepper-disabled"
           />
         </Row>
-        <Row label="with the value the app shows">
-          <Stepper
-            accessibilityLabel="Quantity"
-            maximumValue={99}
-            minimumValue={1}
-            onValueChange={setQuantity}
-            testID="storybook-stepper-quantity"
-            value={quantity}
-          />
-          <Value value={quantity} />
+        <Row label="with the app’s own number">
+          <View style={styles.row}>
+            <Stepper
+              accessibilityLabel="Quantity"
+              maximumValue={99}
+              minimumValue={1}
+              onValueChange={setQuantity}
+              testID="storybook-stepper-quantity"
+              value={quantity}
+            />
+            <Value value={quantity} />
+          </View>
         </Row>
         <Note>
           iOS is SwiftUI&apos;s own `Stepper`, so the inert half at a bound is
