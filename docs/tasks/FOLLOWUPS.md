@@ -251,4 +251,5 @@ Triaged 2026-10-27 in `Q4-followups-triage.md`. Open items are grouped into task
 - G21 review: the split-trigger glyph case has had no deliberate code mutation — its ink assertion was first run green, so nothing has yet shown it able to fail for the right reason.
 - G21 review: the Chip's own `iconSlot.reset()` has no red proof; the ContextMenu recycle case covers `MenuRowIcons.reset()`, and the chip's single-slot equivalent is unmutated.
 - G21 review: `resolveRowIcons` allocates a filter and a map on every `afterUpdate`, including the updates no row cares about — one pass over `rawRows` with a reused list would do.
+- G21 merge: with the icon handed to `MenuRow` as a parameter, `MenuGroups` reads `MenuRowIcons.slots` in its own composition scope, so a glyph that lands late now invalidates the whole group rather than the one row that gained it.
 - G21 merge: ButtonGroup's overflow rows should pass their items' icons through `MenuRow`'s new `icon`/`onIconTint` parameters (the defaults mean it compiles and draws without them); `HybridNitroUiButtonGroup.kt:953` is the call.
