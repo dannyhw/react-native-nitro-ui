@@ -122,6 +122,44 @@ describe('Form rows keep their identity when the app re-renders', () => {
 });
 
 describe('Form.Row as a direct child only', () => {
+  /**
+   * Runs first in this block, and not by accident: the warning below is once per process, so a
+   * case that asks for silence only means something while the flag is still unset.
+   */
+  it('does not call the rows of a Form inside a row nested', async () => {
+    // A `Form` rendered inside a `Form.Row` - a sheet with its own list - is a new list, not a
+    // second row inside the outer row's cell. The outer row's "you are inside a row" flag must
+    // not reach through the inner Form and brand its rows as nested.
+    const error = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      await render(
+        <Form>
+          <Form.Section>
+            <Form.Row onPress={() => undefined}>
+              <Form>
+                <Form.Section title="Inner">
+                  <Form.Row>
+                    <Text>inner form row</Text>
+                  </Form.Row>
+                </Form.Section>
+              </Form>
+            </Form.Row>
+          </Form.Section>
+        </Form>
+      );
+      const warned = error.mock.calls.some((call) =>
+        /`Form.Row` was rendered inside another `Form.Row`/.test(
+          String(call[0])
+        )
+      );
+      expect(warned).toBe(false);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it('says so when a row is rendered inside a row', async () => {
     const error = jest
       .spyOn(console, 'error')
