@@ -292,8 +292,12 @@ Each line is `test -> the thing it guards put back the way it was -> what went r
   (`harness:android:Form.harness`, 02:45), which is how the second half of that fix was found.
 - `harness:android:Form` (00:30) -> `performAccessibilityAction` back out of the row -> never saw
   "ACTION_CLICK to reach onPress" - last was `presses=0;pressable=1`.
-- `real-input:ios --control form` -> the keyboard overlap back to `list.frame.maxY` -> "keyboard
-  inset 0.0 did not match the overlap of the keyboard (187.3)".
+- `real-input:ios:--control:form` -> the keyboard rect back into the list's content space -> "the
+  Form reserves a bottom inset of 99.0 ... the keys alone overlap by 284.0, so the avoidance
+  under-reserves by 185.0" (`RealInputTests.swift:6189`). The first draft of that assertion asked
+  for an equality and went red on the clean tree by 44 pt: XCUITest's keyboard element is the keys,
+  the notification's end frame is the keys plus the predictive-text bar, so it is a band now —
+  the keys as a floor, one accessory bar of slack as a ceiling.
 - `Form.harness`'s teardown case -> the `superview`/`window` guard out of `reportGeometry` -> not a
   failed assertion: the next suite never started, "the app bridge disconnected".
 - The Android row's a11y reset is the one item with no red: with `resetRow`'s reset commented out
