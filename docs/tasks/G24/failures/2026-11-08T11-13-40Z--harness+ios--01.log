@@ -1,0 +1,134 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T11:13:40.611Z on code tree `cb8f18ca9456` at HEAD `d011324` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 696957 ms
+- Load: start 7.32, end 5.85, median 6.09, max 12.88
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+ios-2026-11-08T11-13-40.611Z.log` (<store>/task/G24-form/harness+ios-2026-11-08T11-13-40.611Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected [ …(14) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+ios-2026-11-08T11-13-40.611Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.85 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 88 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree cb8f18ca9456, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.53/5.86 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios-2026-11-08T11-13-40.611Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"B777F9FD-E1DE-466D-8B98-48F5DF0D0E3E"} switch={"nativeId":"5C01DDAD-B7C7-4D28-9F67-47107997A85F"}
+
+
+    console.log
+      FORM COST N=20 form=59ms plain=67ms 10
+
+
+    console.log
+      FORM COST N=50 form=100ms plain=67ms 12
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=14 - m0: measureInWindow 40.0,40.3,340.0,44.0 (-scroll 0.0 = 40.3) vs UIKit 40.0,112.3,340.0,44.0 (off by 72.0 pt) | m1: measureInWindow 40.0,84.3,340.0,44.0 (-scroll 0.0 = 84.3) vs UIKit 40.0,164.3,340.0,44.0 (off by 80.0 pt) | m2: measureInWindow 40.0,128.3,340.0,44.0 (-scroll 0.0 = 128.3) vs UIKit 40.0,216.3,340.0,44.0 (off by 88.0 pt) | m3: measureInWindow 40.0,172.3,340.0,44.0 (-scroll 0.0 = 172.3) vs UIKit 40.0,268.3,340.0,44.0 (off by 96.0 pt) | m4: measureInWindow 40.0,216.3,340.0,44.0 (-scroll 0.0 = 216.3) vs UIKit 40.0,320.3,340.0,44.0 (off by 104.0 pt) | m5: measureInWindow 40.0,260.3,340.0,44.0 (-scroll 0.0 = 260.3) vs UIKit 40.0,372.3,340.0,44.0 (off by 112.0 pt) | m6: measureInWindow 40.0,304.3,340.0,44.0 (-scroll 0.0 = 304.3) vs UIKit 40.0,424.3,340.0,44.0 (off by 120.0 pt) | m7: measureInWindow 40.0,348.3,340.0,44.0 (-scroll 0.0 = 348.3) vs UIKit 40.0,476.3,340.0,44.0 (off by 128.0 pt) | m8: measureInWindow 40.0,392.3,340.0,44.0 (-scroll 0.0 = 392.3) vs UIKit 40.0,528.3,340.0,44.0 (off by 136.0 pt) | m9: measureInWindow 40.0,436.3,340.0,44.0 (-scroll 0.0 = 436.3) vs UIKit 40.0,580.3,340.0,44.0 (off by 144.0 pt) | m10: measureInWindow 40.0,480.3,340.0,44.0 (-scroll 0.0 = 480.3) vs UIKit 40.0,632.3,340.0,44.0 (off by 152.0 pt) | m11: measureInWindow 40.0,524.3,340.0,44.0 (-scroll 0.0 = 524.3) vs UIKit 40.0,684.3,340.0,44.0 (off by 160.0 pt) | m12: measureInWindow 40.0,568.3,340.0,44.0 (-scroll 0.0 = 568.3) vs UIKit 40.0,736.3,340.0,44.0 (off by 168.0 pt) | m13: measureInWindow 40.0,612.3,340.0,44.0 (-scroll 0.0 = 612.3) vs UIKit 40.0,788.3,340.0,44.0 (off by 176.0 pt)
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ …(14) ] to deeply equal []
+
+      [0m [90m 856 |[39m     [90m// have always agreed and a case that cannot see the difference is not worth running.[39m
+       [90m 857 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 858 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 859 |[39m     expect(atRest[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m 860 |[39m
+       [90m 861 |[39m     [90m// Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Form.harness.tsx
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ …(14) ] to deeply equal []
+
+      [0m [90m 856 |[39m     [90m// have always agreed and a case that cannot see the difference is not worth running.[39m
+       [90m 857 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 858 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 859 |[39m     expect(atRest[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m 860 |[39m
+       [90m 861 |[39m     [90m// Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 25 passed, 26 of 27 total
+Tests:       1 failed, 2 skipped, 477 passed, 480 total
+Snapshots:   0 total
+Time:        666.359 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree cb8f18ca9456, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.33/6.45 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios-2026-11-08T11-13-40.611Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        27.038 s
+Ran all test suites.
+harness: isolated run passed
+
+
+
+```

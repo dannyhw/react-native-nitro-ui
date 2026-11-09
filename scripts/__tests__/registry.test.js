@@ -38,7 +38,9 @@ import {
   planRegistry,
   regionsFor,
   replaceRegion,
+  subViewsOf,
   validateManifest,
+  withSubViews,
 } from '../registry-core.mjs';
 
 const repoRoot = resolve(process.cwd());
@@ -912,6 +914,230 @@ describe('the generated tables cover what they claim', () => {
         },
       })
     ).toMatch(/implementationClassName is "HybridNitroUiBtn"/);
+  });
+});
+
+/** The scratch tree of `gen-registry on a scratch tree`, rebuilt for this suite. */
+function scratchTreeOf() {
+  const dir = mkdtempSync(join(tmpdir(), 'nitro-ui-registry-sub-'));
+  const paths = new Set([
+    'package.json',
+    'nitro.json',
+    'src/index.ts',
+    SIZING_TABLE_FILE,
+    ...regionsFor(repoManifests()).map((spec) => spec.path),
+    ...repoManifests().map((m) => `example/src/${m.name}Screen.tsx`),
+  ]);
+  for (const path of paths) {
+    const text = readRepo(path);
+    if (text == null) continue;
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
+  for (const directory of componentDirs()) {
+    const path = `src/components/${directory}/${MANIFEST_BASENAME}`;
+    if (readRepo(path) == null) continue;
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    copyFileSync(join(repoRoot, path), join(dir, path));
+  }
+  return dir;
+}
+
+/** A manifest with nothing in common with a shipped one, under an invented name. */
+function spareComponent(name) {
+  return {
+    ...buttonManifest(),
+    name,
+    id: name.toLowerCase(),
+    exampleTab: name.toLowerCase(),
+    exampleLabel: name,
+    hybridView: `NitroUi${name}`,
+    implementation: `HybridNitroUi${name}`,
+  };
+}
+
+/** `scripts/gen-registry.mjs` in a scratch directory. */
+function runIn(dir, ...args) {
+  return spawnSync(
+    process.execPath,
+    [join(repoRoot, 'scripts', 'gen-registry.mjs'), ...args],
+    { cwd: dir, encoding: 'utf8' }
+  );
+}
+
+describe('a component with sub-views (subViews, G24)', () => {
+  const form = () => repoManifests().find((m) => m.name === 'Form');
+  const packageText = () =>
+    readRepo(
+      'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt'
+    );
+  const nitro = () => JSON.parse(readRepo('nitro.json'));
+
+  it('derives the names, and keeps the parent module as the directory', () => {
+    const subs = subViewsOf(form());
+    expect(subs.map((s) => s.name)).toEqual(['FormSection', 'FormRow']);
+    // A sub-view has no directory of its own: pointing its generated import at
+    // `components/FormSection/` would name a folder that does not exist.
+    for (const sub of subs) {
+      expect(sub.directory).toBe('Form');
+      expect(sub.parent).toBe('Form');
+      expect(sub.hybridView).toBe(`NitroUi${sub.name}`);
+      expect(sub.implementation).toBe(`HybridNitroUi${sub.name}`);
+      expect(sub.androidViewManager).toBe(`NitroUi${sub.name}ViewManager`);
+    }
+    // Each follows its own parent, so a regenerated nitro.json groups one component's
+    // views together rather than scattering them alphabetically.
+    const names = withSubViews(repoManifests()).map((m) => m.name);
+    expect(
+      names.slice(names.indexOf('Form'), names.indexOf('Form') + 3)
+    ).toEqual(['Form', 'FormSection', 'FormRow']);
+  });
+
+  it('autolinks every sub-view, and reports one whose entry is missing', () => {
+    const { problems } = runPlan();
+    expect(problems).toEqual([]);
+    for (const sub of subViewsOf(form())) {
+      const entry = nitro().autolinking[sub.hybridView];
+      expect(entry).toBeDefined();
+      expect(entry.ios.implementationClassName).toBe(sub.implementation);
+      expect(entry.android.implementationClassName).toBe(sub.implementation);
+    }
+    const missing = jsonCopy(nitro());
+    delete missing.autolinking.NitroUiFormRow;
+    expect(checkAutolinking([form()], missing)).toEqual([
+      expect.stringContaining(
+        'no autolinking entry for NitroUiFormRow (FormRow)'
+      ),
+    ]);
+  });
+
+  it('registers a sub-view manager on Android, and reports one that is not', () => {
+    expect(checkAndroidViewManagers([form()], packageText())).toEqual([]);
+    expect(
+      checkAndroidViewManagers(
+        [form()],
+        packageText().replace('    NitroUiFormRowViewManager(),\n', '')
+      )
+    ).toEqual([
+      expect.stringContaining(
+        'FormRow names androidViewManager NitroUiFormRowViewManager and createViewManagers does not register it'
+      ),
+    ]);
+    expect(
+      checkAndroidViewManagers(
+        [form()],
+        packageText().replace(
+          '    NitroUiFormRowViewManager(),',
+          '    NitroUiFormRowViewManager(),\n    HybridNitroUiFormRowManager(),'
+        )
+      )
+    ).toEqual([
+      expect.stringContaining(
+        'FormRow registers the generated HybridNitroUiFormRowManager as well'
+      ),
+    ]);
+  });
+
+  it('is not a component: no Host row, no bench arm, no barrel export', () => {
+    const { files } = runPlan();
+    const host =
+      files['src/components/Host/HostChildren.ts'] ??
+      readRepo('src/components/Host/HostChildren.ts');
+    expect(host).not.toContain("[FormSection, 'FormSection']");
+    expect(host).not.toContain('FormRow');
+    const index = files['src/index.ts'] ?? readRepo('src/index.ts');
+    expect(index).not.toContain('FormSection,');
+    const plan =
+      files['bench/src/implementations/index.ts'] ??
+      readRepo('bench/src/implementations/index.ts');
+    expect(plan).not.toContain("'form-section'");
+  });
+
+  it('refuses a sub-view that claims a name another component has', () => {
+    // Nothing reads two `HybridNitroUiFormButton` classes and complains, which is why the
+    // collision is checked against the *derived* names rather than the chosen ones.
+    const entries = componentDirs()
+      .map((directory) => ({
+        directory,
+        text:
+          directory === 'Form'
+            ? JSON.stringify({
+                ...JSON.parse(readRepo('src/components/Form/component.json')),
+                subViews: ['Section'],
+              })
+            : readRepo(`src/components/${directory}/${MANIFEST_BASENAME}`),
+      }))
+      .filter((entry) => entry.text != null);
+    // A control that happens to be called what `Form`'s sub-view derives to.
+    entries.push({
+      directory: 'FormSection',
+      text: JSON.stringify({
+        ...spareComponent('FormSection'),
+        subViews: undefined,
+      }),
+    });
+    expect(() => manifestsFromEntries(entries)).toThrow(
+      /the Form sub-view FormSection cannot both claim it/
+    );
+  });
+
+  it('writes a sub-view into nitro.json and both view-config regions', () => {
+    // nitrogen throws for a Hybrid View with no autolinking entry, so a component that
+    // declares sub-views only builds once `--write` has put one in for each of them.
+    const dir = scratchTreeOf();
+    const spare = spareComponent('Subviewy');
+    try {
+      mkdirSync(join(dir, 'src/components/Subviewy'), { recursive: true });
+      writeFileSync(
+        join(dir, 'example/src/SubviewyScreen.tsx'),
+        'export default function SubviewyScreen() {\n  return null\n}\n'
+      );
+      writeFileSync(
+        join(dir, 'src/index.ts'),
+        `${readFileSync(join(dir, 'src/index.ts'), 'utf8')}\nexport { Subviewy } from './components/Subviewy/Subviewy';\n`
+      );
+      writeFileSync(
+        join(dir, `src/components/Subviewy/${MANIFEST_BASENAME}`),
+        JSON.stringify({ ...spare, subViews: ['Panel'] }, null, 2) + '\n'
+      );
+      // The behaviour the generator still refuses to write for you: the sub-view's own
+      // Android manager, which nothing but a hand-written row can register.
+      const missing = runIn(dir, '--write');
+      expect(missing.stderr).toMatch(
+        /SubviewyPanel names androidViewManager NitroUiSubviewyPanelViewManager and createViewManagers does not register it/
+      );
+      const pkg =
+        'android/src/main/java/com/margelo/nitro/nitroui/NitroUiPackage.kt';
+      writeFileSync(
+        join(dir, pkg),
+        readFileSync(join(dir, pkg), 'utf8').replace(
+          '    NitroUiFormViewManager(),',
+          '    NitroUiFormViewManager(),\n    NitroUiSubviewyPanelViewManager(),'
+        )
+      );
+
+      const written = runIn(dir, '--write');
+      expect(written.stderr).toBe('');
+      const nitro = JSON.parse(readFileSync(join(dir, 'nitro.json'), 'utf8'));
+      expect(Object.keys(nitro.autolinking)).toContain('NitroUiSubviewyPanel');
+      expect(nitro.autolinking.NitroUiSubviewyPanel.ios).toMatchObject({
+        implementationClassName: 'HybridNitroUiSubviewyPanel',
+      });
+      const configs = readFileSync(
+        join(dir, 'src/__tests__/viewConfigs.test.ts'),
+        'utf8'
+      );
+      // The import points at the *parent's* directory, which is where the file is.
+      expect(configs).toContain(
+        "import { NitroUiSubviewyPanelConfig } from '../components/Subviewy/NitroUiSubviewyPanelConfig';"
+      );
+      expect(configs).toContain(
+        "  'NitroUiSubviewyPanelConfig.json': NitroUiSubviewyPanelConfig,"
+      );
+      expect(runIn(dir, '--check').stdout).toMatch(/OK/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

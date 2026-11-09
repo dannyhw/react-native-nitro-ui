@@ -28,6 +28,7 @@ const SUFFIXED_COMPONENTS: readonly Exclude<ComponentName, 'switch'>[] = [
   'picker',
   'menu',
   'text-field',
+  'form',
   'icon-button',
   'button-group',
   // @end-generated

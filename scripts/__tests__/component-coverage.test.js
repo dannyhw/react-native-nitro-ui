@@ -260,6 +260,16 @@ describe('every real-input control has a check on both platforms', () => {
     ).toEqual([]);
   });
 
+  it('names each control exactly once, because the table is the run order', () => {
+    // Both runners walk this list, so a second row for one id runs that control's check
+    // twice, and the second run starts on the viewport the first one left behind. `Form`
+    // shipped with a hand-written row and a generated row at once: on Android the repeat
+    // looked up a row by the tree the keyboard had scrolled, tapped empty space three
+    // times, and reported a control that ignores a finger.
+    const ids = controls().map((control) => control.id);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+  });
+
   // One test per row, so a failure names the control whose check vanished rather than
   // failing on whichever one sorts first.
   for (const control of controls()) {
@@ -378,6 +388,7 @@ describe('every component is covered by the conformance suite', () => {
     // names are on nodes a screen reader cannot act on in a dump (Android), the Slider is
     // announced as the wrong kind of control (iOS), a hosted Picker announces its name twice,
     // an accessible ContextMenu still lists its first Text under the labelled wrapper (iOS),
+    // a Form row keeps its name on the iOS wrapper where Android announces one button (iOS),
     // and Menu holds recycle residue no read-out can show on iOS. SegmentedControl's recycle
     // cell was the fifth of those until F6 gave the fixture a read-out that can see the
     // residue; the a11y one stands, because that debt is about a name, not a state. The two
@@ -392,6 +403,7 @@ describe('every component is covered by the conformance suite', () => {
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
+      'Form|a11y-name-on-focusable-node',
       'IconButton|a11y-name-on-focusable-node',
     ]);
     // …and every one of those cells really is marked failing in the matrix.

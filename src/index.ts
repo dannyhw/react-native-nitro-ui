@@ -200,6 +200,19 @@ export {
   type SearchFieldProps,
 } from './components/SearchField/SearchField';
 
+// A grouped list whose rows are ordinary React Native views (G24, DECISIONS D45): a
+// `UICollectionView` in `.insetGrouped` appearance on iOS, Material 3 Expressive's segmented
+// list shapes behind in-place rows on Android. `Form.Section` gives a header and a footer,
+// `Form.Row` the cell-level behaviour (`onPress`, `accessory`, `selected`) — and a bare child
+// of a section is a row too, so an app writes the wrapper only when it wants one.
+export {
+  Form,
+  type FormAccessory,
+  type FormComponent,
+  type FormProps,
+  type FormSectionProps,
+  type RowProps as FormRowProps,
+} from './components/Form/Form';
 // A popover with React Native content, anchored to one of your views (G22, DECISIONS
 // D44): `UIPopoverPresentationController` on iOS and a Compose `Popup` under a Material 3
 // `Surface` on Android, which has no popover control (D38 item 1). `isPresented` is

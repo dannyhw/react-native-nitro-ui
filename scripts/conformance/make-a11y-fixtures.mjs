@@ -54,6 +54,7 @@ const TAB_LABEL = {
   contextmenu: 'Context',
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
+  form: 'Form',
   buttongroup: 'Groups',
 };
 
