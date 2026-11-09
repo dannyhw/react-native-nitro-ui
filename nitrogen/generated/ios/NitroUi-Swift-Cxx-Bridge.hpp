@@ -48,6 +48,8 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSearchFieldSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiSegmentedControlSpec; }
 // Forward declaration of `HybridNitroUiSliderSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSliderSpec; }
+// Forward declaration of `HybridNitroUiStepperSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiStepperSpec; }
 // Forward declaration of `HybridNitroUiSwitchSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 // Forward declaration of `HybridNitroUiTextFieldSpec` to properly resolve imports.
@@ -86,6 +88,8 @@ namespace margelo::nitro::nitroui { struct NitroUiSheetDetent; }
 namespace margelo::nitro::nitroui { struct NitroUiSize; }
 // Forward declaration of `NitroUiSliderSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiSliderSize; }
+// Forward declaration of `NitroUiStepperSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiStepperSize; }
 // Forward declaration of `NitroUiTextFieldTestState` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiTextFieldTestState; }
 // Forward declaration of `NitroUiTooltipAction` to properly resolve imports.
@@ -132,6 +136,8 @@ namespace NitroUi { class HybridNitroUiSearchFieldSpec_cxx; }
 namespace NitroUi { class HybridNitroUiSegmentedControlSpec_cxx; }
 // Forward declaration of `HybridNitroUiSliderSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSliderSpec_cxx; }
+// Forward declaration of `HybridNitroUiStepperSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiStepperSpec_cxx; }
 // Forward declaration of `HybridNitroUiSwitchSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiSwitchSpec_cxx; }
 // Forward declaration of `HybridNitroUiTextFieldSpec_cxx` to properly resolve imports.
@@ -160,6 +166,7 @@ namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 #include "HybridNitroUiSearchFieldSpec.hpp"
 #include "HybridNitroUiSegmentedControlSpec.hpp"
 #include "HybridNitroUiSliderSpec.hpp"
+#include "HybridNitroUiStepperSpec.hpp"
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "HybridNitroUiTextFieldSpec.hpp"
 #include "HybridNitroUiTooltipSpec.hpp"
@@ -179,6 +186,7 @@ namespace NitroUi { class HybridNitroUiTooltipSpec_cxx; }
 #include "NitroUiSheetDetent.hpp"
 #include "NitroUiSize.hpp"
 #include "NitroUiSliderSize.hpp"
+#include "NitroUiStepperSize.hpp"
 #include "NitroUiTextFieldTestState.hpp"
 #include "NitroUiTooltipAction.hpp"
 #include <NitroModules/Null.hpp>
@@ -1240,6 +1248,27 @@ namespace margelo::nitro::nitroui::bridge::swift {
   }
   inline Result_NitroUiSliderSize_ create_Result_NitroUiSliderSize_(const std::exception_ptr& error) noexcept {
     return Result<NitroUiSliderSize>::withError(error);
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiStepperSpec>
+  /**
+   * Specialized version of `std::shared_ptr<HybridNitroUiStepperSpec>`.
+   */
+  using std__shared_ptr_HybridNitroUiStepperSpec_ = std::shared_ptr<HybridNitroUiStepperSpec>;
+  std::shared_ptr<HybridNitroUiStepperSpec> create_std__shared_ptr_HybridNitroUiStepperSpec_(void* NON_NULL swiftUnsafePointer) noexcept;
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiStepperSpec_(std__shared_ptr_HybridNitroUiStepperSpec_ cppType);
+  
+  // pragma MARK: std::weak_ptr<HybridNitroUiStepperSpec>
+  using std__weak_ptr_HybridNitroUiStepperSpec_ = std::weak_ptr<HybridNitroUiStepperSpec>;
+  inline std__weak_ptr_HybridNitroUiStepperSpec_ weakify_std__shared_ptr_HybridNitroUiStepperSpec_(const std::shared_ptr<HybridNitroUiStepperSpec>& strong) noexcept { return strong; }
+  
+  // pragma MARK: Result<NitroUiStepperSize>
+  using Result_NitroUiStepperSize_ = Result<NitroUiStepperSize>;
+  inline Result_NitroUiStepperSize_ create_Result_NitroUiStepperSize_(const NitroUiStepperSize& value) noexcept {
+    return Result<NitroUiStepperSize>::withValue(value);
+  }
+  inline Result_NitroUiStepperSize_ create_Result_NitroUiStepperSize_(const std::exception_ptr& error) noexcept {
+    return Result<NitroUiStepperSize>::withError(error);
   }
   
   // pragma MARK: std::optional<std::function<void(bool /* value */, double /* eventCount */)>>

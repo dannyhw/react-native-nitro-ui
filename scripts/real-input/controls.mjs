@@ -161,6 +161,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real tap presses each item once, a toggle item flips once per tap, and an overflowed item is reachable through the overflow menu',
     screen: 'buttongroup',
   },
+  {
+    id: 'stepper',
+    title:
+      'real taps step the stepper once each, a tap at a bound does nothing, and on iOS a hold repeats',
+    screen: 'stepper',
+  },
   // @end-generated
 ]);
 

@@ -120,6 +120,20 @@ run_case "scroll-offset.test (C++)" \
       '$ROOT/scripts/native-tests/scroll-offset.test.cpp' -o '$OUT/scroll-offset' && '$OUT/scroll-offset'
   "
 
+# The Stepper's Binding rule (G25): what a write from SwiftUI's control is allowed to
+# do with its own stride. The bug this holds down is invisible to a stepped range —
+# which is every on-device tap the suite can cheaply make — and shows only on a range
+# that does not end on a step, where SwiftUI supplies a stride of 1 and the control has
+# to refuse the destination while taking the direction.
+run_case "stepper-binding.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Slider/NitroUiSliderValue.swift' \
+      '$ROOT/ios/components/Stepper/NitroUiStepperBinding.swift' \
+      '$ROOT/scripts/native-tests/stepper-binding.test.swift' \
+      -o '$OUT/stepper-binding' && '$OUT/stepper-binding'
+  "
+
 # The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
 # reads agree" wait that `RealInputTests.measure` runs before it prints a control's
 # boxes. It is here rather than only on a device because the three things worth

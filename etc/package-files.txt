@@ -31,6 +31,7 @@ android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiProgress.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControl.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSlider.kt
+android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiStepper.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSwitch.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt
 android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTooltip.kt
@@ -54,10 +55,12 @@ android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiModel.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPerf.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiPixelProbe.kt
 android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiSizing.kt
+android/src/main/res/drawable/nitroui_add.xml
 android/src/main/res/drawable/nitroui_check.xml
 android/src/main/res/drawable/nitroui_chevron_right.xml
 android/src/main/res/drawable/nitroui_close.xml
 android/src/main/res/drawable/nitroui_keyboard_arrow_down.xml
+android/src/main/res/drawable/nitroui_remove.xml
 android/src/main/res/drawable/nitroui_search.xml
 cpp/HybridNitroUiCore.cpp
 cpp/HybridNitroUiCore.hpp
@@ -93,6 +96,8 @@ ios/components/SearchField/HybridNitroUiSearchField.swift
 ios/components/SegmentedControl/HybridNitroUiSegmentedControl.swift
 ios/components/Slider/HybridNitroUiSlider.swift
 ios/components/Slider/NitroUiSliderValue.swift
+ios/components/Stepper/HybridNitroUiStepper.swift
+ios/components/Stepper/NitroUiStepperBinding.swift
 ios/components/Switch/HybridNitroUiSwitch.swift
 ios/components/TextField/HybridNitroUiTextField.swift
 ios/components/TextField/NitroUiTextEditing.swift
@@ -267,6 +272,14 @@ lib/module/components/Slider/Slider.js
 lib/module/components/Slider/Slider.js.map
 lib/module/components/Slider/Slider.nitro.js
 lib/module/components/Slider/Slider.nitro.js.map
+lib/module/components/Stepper/NativeNitroUiStepper.js
+lib/module/components/Stepper/NativeNitroUiStepper.js.map
+lib/module/components/Stepper/NitroUiStepperConfig.js
+lib/module/components/Stepper/NitroUiStepperConfig.js.map
+lib/module/components/Stepper/Stepper.js
+lib/module/components/Stepper/Stepper.js.map
+lib/module/components/Stepper/Stepper.nitro.js
+lib/module/components/Stepper/Stepper.nitro.js.map
 lib/module/components/Switch/NativeNitroUiSwitch.js
 lib/module/components/Switch/NativeNitroUiSwitch.js.map
 lib/module/components/Switch/NitroUiSwitchConfig.js
@@ -471,6 +484,14 @@ lib/typescript/src/components/Slider/Slider.d.ts
 lib/typescript/src/components/Slider/Slider.d.ts.map
 lib/typescript/src/components/Slider/Slider.nitro.d.ts
 lib/typescript/src/components/Slider/Slider.nitro.d.ts.map
+lib/typescript/src/components/Stepper/NativeNitroUiStepper.d.ts
+lib/typescript/src/components/Stepper/NativeNitroUiStepper.d.ts.map
+lib/typescript/src/components/Stepper/NitroUiStepperConfig.d.ts
+lib/typescript/src/components/Stepper/NitroUiStepperConfig.d.ts.map
+lib/typescript/src/components/Stepper/Stepper.d.ts
+lib/typescript/src/components/Stepper/Stepper.d.ts.map
+lib/typescript/src/components/Stepper/Stepper.nitro.d.ts
+lib/typescript/src/components/Stepper/Stepper.nitro.d.ts.map
 lib/typescript/src/components/Switch/NativeNitroUiSwitch.d.ts
 lib/typescript/src/components/Switch/NativeNitroUiSwitch.d.ts.map
 lib/typescript/src/components/Switch/NitroUiSwitchConfig.d.ts
@@ -567,6 +588,8 @@ nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSegmentedControlSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSliderSpec.hpp
+nitrogen/generated/android/c++/JHybridNitroUiStepperSpec.cpp
+nitrogen/generated/android/c++/JHybridNitroUiStepperSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.cpp
 nitrogen/generated/android/c++/JHybridNitroUiSwitchSpec.hpp
 nitrogen/generated/android/c++/JHybridNitroUiTextFieldSpec.cpp
@@ -590,6 +613,7 @@ nitrogen/generated/android/c++/JNitroUiSegmentedControlSize.hpp
 nitrogen/generated/android/c++/JNitroUiSheetDetent.hpp
 nitrogen/generated/android/c++/JNitroUiSize.hpp
 nitrogen/generated/android/c++/JNitroUiSliderSize.hpp
+nitrogen/generated/android/c++/JNitroUiStepperSize.hpp
 nitrogen/generated/android/c++/JNitroUiTextFieldTestState.hpp
 nitrogen/generated/android/c++/JNitroUiTooltipAction.hpp
 nitrogen/generated/android/c++/JVariant_Boolean_NullType.cpp
@@ -638,6 +662,8 @@ nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.
 nitrogen/generated/android/c++/views/JHybridNitroUiSegmentedControlStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSliderStateUpdater.hpp
+nitrogen/generated/android/c++/views/JHybridNitroUiStepperStateUpdater.cpp
+nitrogen/generated/android/c++/views/JHybridNitroUiStepperStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.cpp
 nitrogen/generated/android/c++/views/JHybridNitroUiSwitchStateUpdater.hpp
 nitrogen/generated/android/c++/views/JHybridNitroUiTextFieldStateUpdater.cpp
@@ -674,6 +700,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiProgres
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSearchFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSegmentedControlSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSliderSpec.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiStepperSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiSwitchSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTextFieldSpec.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/HybridNitroUiTooltipSpec.kt
@@ -694,6 +721,7 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSegmentedCont
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSheetDetent.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiSliderSize.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiStepperSize.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiTextFieldTestState.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/NitroUiTooltipAction.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/Variant_Boolean_NullType.kt
@@ -740,6 +768,8 @@ nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiS
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSegmentedControlStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSliderManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSliderStateUpdater.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiStepperManager.kt
+nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiStepperStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchManager.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiSwitchStateUpdater.kt
 nitrogen/generated/android/kotlin/com/margelo/nitro/nitroui/views/HybridNitroUiTextFieldManager.kt
@@ -796,6 +826,8 @@ nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSegmentedControlSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSliderSpecSwift.hpp
+nitrogen/generated/ios/c++/HybridNitroUiStepperSpecSwift.cpp
+nitrogen/generated/ios/c++/HybridNitroUiStepperSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.cpp
 nitrogen/generated/ios/c++/HybridNitroUiSwitchSpecSwift.hpp
 nitrogen/generated/ios/c++/HybridNitroUiTextFieldSpecSwift.cpp
@@ -822,6 +854,7 @@ nitrogen/generated/ios/c++/views/HybridNitroUiProgressComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSearchFieldComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSegmentedControlComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSliderComponent.mm
+nitrogen/generated/ios/c++/views/HybridNitroUiStepperComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiSwitchComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiTextFieldComponent.mm
 nitrogen/generated/ios/c++/views/HybridNitroUiTooltipComponent.mm
@@ -874,6 +907,8 @@ nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSegmentedControlSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSliderSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSliderSpec_cxx.swift
+nitrogen/generated/ios/swift/HybridNitroUiStepperSpec.swift
+nitrogen/generated/ios/swift/HybridNitroUiStepperSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec.swift
 nitrogen/generated/ios/swift/HybridNitroUiSwitchSpec_cxx.swift
 nitrogen/generated/ios/swift/HybridNitroUiTextFieldSpec.swift
@@ -897,6 +932,7 @@ nitrogen/generated/ios/swift/NitroUiSegmentedControlSize.swift
 nitrogen/generated/ios/swift/NitroUiSheetDetent.swift
 nitrogen/generated/ios/swift/NitroUiSize.swift
 nitrogen/generated/ios/swift/NitroUiSliderSize.swift
+nitrogen/generated/ios/swift/NitroUiStepperSize.swift
 nitrogen/generated/ios/swift/NitroUiTextFieldTestState.swift
 nitrogen/generated/ios/swift/NitroUiTooltipAction.swift
 nitrogen/generated/ios/swift/Variant_Bool_NullType.swift
@@ -946,6 +982,8 @@ nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSegmentedControlSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSliderSpec.hpp
+nitrogen/generated/shared/c++/HybridNitroUiStepperSpec.cpp
+nitrogen/generated/shared/c++/HybridNitroUiStepperSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.cpp
 nitrogen/generated/shared/c++/HybridNitroUiSwitchSpec.hpp
 nitrogen/generated/shared/c++/HybridNitroUiTextFieldSpec.cpp
@@ -972,6 +1010,7 @@ nitrogen/generated/shared/c++/NitroUiSize.hpp
 nitrogen/generated/shared/c++/NitroUiSizingStats.hpp
 nitrogen/generated/shared/c++/NitroUiSizingTraceEvent.hpp
 nitrogen/generated/shared/c++/NitroUiSliderSize.hpp
+nitrogen/generated/shared/c++/NitroUiStepperSize.hpp
 nitrogen/generated/shared/c++/NitroUiTextFieldTestState.hpp
 nitrogen/generated/shared/c++/NitroUiTooltipAction.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiBottomSheetComponent.cpp
@@ -1014,6 +1053,8 @@ nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSegmentedControlComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSliderComponent.hpp
+nitrogen/generated/shared/c++/views/HybridNitroUiStepperComponent.cpp
+nitrogen/generated/shared/c++/views/HybridNitroUiStepperComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.cpp
 nitrogen/generated/shared/c++/views/HybridNitroUiSwitchComponent.hpp
 nitrogen/generated/shared/c++/views/HybridNitroUiTextFieldComponent.cpp
@@ -1040,6 +1081,7 @@ nitrogen/generated/shared/json/NitroUiProgressConfig.json
 nitrogen/generated/shared/json/NitroUiSearchFieldConfig.json
 nitrogen/generated/shared/json/NitroUiSegmentedControlConfig.json
 nitrogen/generated/shared/json/NitroUiSliderConfig.json
+nitrogen/generated/shared/json/NitroUiStepperConfig.json
 nitrogen/generated/shared/json/NitroUiSwitchConfig.json
 nitrogen/generated/shared/json/NitroUiTextFieldConfig.json
 nitrogen/generated/shared/json/NitroUiTooltipConfig.json
@@ -1124,6 +1166,10 @@ src/components/Slider/NativeNitroUiSlider.ts
 src/components/Slider/NitroUiSliderConfig.ts
 src/components/Slider/Slider.nitro.ts
 src/components/Slider/Slider.tsx
+src/components/Stepper/NativeNitroUiStepper.ts
+src/components/Stepper/NitroUiStepperConfig.ts
+src/components/Stepper/Stepper.nitro.ts
+src/components/Stepper/Stepper.tsx
 src/components/Switch/NativeNitroUiSwitch.ts
 src/components/Switch/NitroUiSwitchConfig.ts
 src/components/Switch/Switch.nitro.ts

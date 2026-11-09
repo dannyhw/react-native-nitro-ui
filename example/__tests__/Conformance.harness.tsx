@@ -113,6 +113,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
   Tooltip,
@@ -267,6 +268,16 @@ const SHARED = {
         "height": 44
       }
     },
+    "NitroUiStepper": {
+      "android": {
+        "width": 104,
+        "height": 48
+      },
+      "ios": {
+        "width": 94,
+        "height": 32
+      }
+    },
     "NitroUiButtonGroup": {
       "android": {
         "width": 300,
@@ -303,6 +314,7 @@ const SHARED = {
     "NitroUiChip": "none",
     "NitroUiCheckbox": "height",
     "NitroUiIconButton": "both",
+    "NitroUiStepper": "both",
     "NitroUiButtonGroup": "height"
   },
   "exemptions": [
@@ -412,6 +424,12 @@ type Handle = {
   nuiTestFormReport?(): string;
   /** Scroll the Form's list, so a probe can leave an offset behind for a reset to clear. */
   nuiTestScrollTo?(y: number): void;
+  /**
+   * Stepper's seam: take one step through the path a tap takes (`+1` up, `-1` down), so a
+   * probe can leave a *value* behind that no prop describes. The other control with a seam
+   * of this shape is Slider, which publishes the reader's action instead of the tap's.
+   */
+  nuiTestStep?(direction: number): void;
   /** Dialog's JS copy of `isPresented`, read back from the view's own props. */
   readonly presented?: boolean;
   /** Dialog's test hook: dismiss as a user would, through the real path. */
@@ -743,6 +761,43 @@ async function drawnIndexOf(testId: string): Promise<string> {
     `the drawn index of "${testId}"`
   );
   return /displayed=(\S+)/.exec(report)?.[1] ?? report;
+}
+
+/**
+ * Which value a Stepper is painting, or a sentence saying it never painted one.
+ *
+ * Polling is safe for the same reason {@link drawnIndexOf}'s is: the reset clears this
+ * report to the word `none` (`StepperModel.clearReports` / `StepperModel.reset`), so
+ * waiting is waiting for the **new** mount to draw, never for a reset to happen — a
+ * control that kept its previous owner's value answers with that value the moment you
+ * ask. Unlike `drawnIndexOf`, a timeout here is *returned* rather than thrown: a read
+ * that throws turns the residue this rule looks for into a Jest failure that names
+ * neither value, and the coverage matrix wants the pair.
+ */
+async function drawnValueOfStepper(testId: string): Promise<string> {
+  const deadline = Date.now() + 8000;
+  for (;;) {
+    const report = handleFor(testId).nuiTestStateReport?.() ?? '';
+    const value = /(?:^|;)displayed=([^;]*)/.exec(report)?.[1] ?? '';
+    if (value !== '' && value !== 'none') return value;
+    if (Date.now() >= deadline) {
+      return value === 'none'
+        ? 'nothing drawn'
+        : `no drawn value in "${report}"`;
+    }
+    await sleep(50);
+  }
+}
+
+/** One step of a Stepper, through the seam's own path — the same one a tap takes. */
+function stepStepper(testId: string, direction: number): void {
+  const handle = handleFor(testId);
+  if (handle.nuiTestStep == null) {
+    throw new Error(`"${testId}" is not a Stepper - it has no nuiTestStep()`);
+  }
+  // Called *on* the handle: a Nitro hybrid method lifted into a local loses its `this`,
+  // and the call answers "this is not bound" instead of stepping.
+  handle.nuiTestStep(direction);
 }
 
 /** Poll a control's own report until it answers the way `until` wants, then hand it back. */
@@ -4279,6 +4334,152 @@ const FIXTURES: ReadonlyArray<Fixture> = [
               from,
               'conformance-button-group:bold:true'
             ),
+          },
+        ];
+      },
+    },
+  },
+
+  {
+    name: 'Stepper',
+    component: 'NitroUiStepper',
+    label: 'Conformance stepper',
+    testId: 'conformance-stepper',
+    // The default range (0…100) and step (1): a Stepper's box depends on neither, which is
+    // what its empty sizing variant claims, so the fixture mounts the configuration the
+    // fallback row describes rather than one the sizing key would have to name.
+    owner: (second) => (
+      <Stepper
+        accessibilityLabel={
+          second ? `Conformance stepper, ${SECOND}` : 'Conformance stepper'
+        }
+        onValueChange={recordRecycle('conformance-stepper')}
+        testID="conformance-stepper"
+        hybridRef={captureFor('conformance-stepper')}
+      />
+    ),
+    control: (testId, variant) => (
+      <Stepper
+        accessibilityLabel={`Leak stepper ${String(variant)}`}
+        disabled={variant}
+        testID={testId}
+      />
+    ),
+    state: (handle, second) => [
+      {
+        label: 'accessibilityLabel',
+        expected: second
+          ? `Conformance stepper, ${SECOND}`
+          : 'Conformance stepper',
+        actual: handle.accessibilityLabel,
+      },
+    ],
+    // The residue is the displayed value and the one-shot that re-applies a default. The
+    // three possible answers are three different numbers, which is the line-specificity X4
+    // re-review 2 asked for: the previous owner stepped to **4**, `prepareForRecycle`
+    // writes **0**, and the second owner's own default is **6** — so "one-shot alive" is
+    // the only arrangement that can paint a 6, and a second owner defaulted to either of
+    // the other two would have let a deleted reset look right.
+    probe: {
+      leaveBehind:
+        'a step up to 4 on an uncontrolled stepper that started on 3, then a second ' +
+        'owner whose own `defaultValue` is 6 — a number the control can only be ' +
+        'painting because `didApplyDefault` was re-armed and the default applied again',
+      first: () => (
+        <Stepper
+          accessibilityLabel="Conformance stepper"
+          defaultValue={3}
+          onValueChange={recordRecycle('conformance-stepper')}
+          testID="conformance-stepper"
+          hybridRef={captureFor('conformance-stepper')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        stepStepper('conformance-stepper', 1);
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-stepper:4'])
+        );
+      },
+      second: () => (
+        <Stepper
+          accessibilityLabel="Conformance stepper"
+          defaultValue={6}
+          onValueChange={recordRecycle('conformance-stepper')}
+          testID="conformance-stepper"
+          hybridRef={captureFor('conformance-stepper')}
+        />
+      ),
+      read: async () => {
+        const before = eventsSince(0).length;
+        const drawn = await drawnValueOfStepper('conformance-stepper');
+        // Then the same question in the negative, through the event: a control still
+        // standing on the previous owner's 4 steps down to 3, and one the reset left on
+        // its own 0 has no lower bound to step down from at all. Only the second owner's
+        // 6 answers 5.
+        stepStepper('conformance-stepper', -1);
+        return [
+          {
+            label: 'the value the second owner’s default paints',
+            expected: '6',
+            actual: drawn,
+          },
+          {
+            label: 'a step down from that value emits',
+            expected: 'conformance-stepper:5',
+            actual: await eventsSettled(before, 'conformance-stepper:5'),
+          },
+        ];
+      },
+    },
+    // The other line of the same reset, which no uncontrolled owner ever reads: the
+    // handshake's event counts. The first owner's step leaves `nativeEvents` at 1, a
+    // controlled mount arrives with `mostRecentEventCount` 0, and a stale write is
+    // *dropped* — so the control would sit on the reset's own 0 while its app shows 7.
+    controlledProbe: {
+      leaveBehind:
+        'a step up on an uncontrolled stepper, then a second owner that is *controlled* ' +
+        'on 7 — a value that cannot be shown unless the handshake’s counters came back ' +
+        'at zero, because a write behind the previous owner’s event count is refused',
+      first: () => (
+        <Stepper
+          accessibilityLabel="Conformance stepper"
+          defaultValue={3}
+          onValueChange={recordRecycle('conformance-stepper')}
+          testID="conformance-stepper"
+          hybridRef={captureFor('conformance-stepper')}
+        />
+      ),
+      act: async () => {
+        const before = eventsSince(0).length;
+        stepStepper('conformance-stepper', 1);
+        await waitFor(() =>
+          expect(eventsSince(before)).toEqual(['conformance-stepper:4'])
+        );
+      },
+      second: () => (
+        <Stepper
+          accessibilityLabel="Conformance stepper"
+          onValueChange={recordRecycle('conformance-stepper')}
+          testID="conformance-stepper"
+          value={7}
+          hybridRef={captureFor('conformance-stepper')}
+        />
+      ),
+      read: async () => {
+        const before = eventsSince(0).length;
+        const drawn = await drawnValueOfStepper('conformance-stepper');
+        stepStepper('conformance-stepper', 1);
+        return [
+          {
+            label: 'the value the controlled second owner wrote',
+            expected: '7',
+            actual: drawn,
+          },
+          {
+            label: 'a step up from that value emits',
+            expected: 'conformance-stepper:8',
+            actual: await eventsSettled(before, 'conformance-stepper:8'),
           },
         ];
       },

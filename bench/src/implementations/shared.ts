@@ -42,6 +42,11 @@ const ROW_HEIGHTS: Record<
   // floor's `Pressable`s are 24 dp of text plus 16 dp of vertical padding. 48 holds
   // the tallest arm so nothing clips, and every arm still lays out the identical area.
   'button-group': 48,
+  // Two 48 dp touch targets on Android (each a 40 dp container inside the platform's
+  // minimum interactive size) and ~28 pt on iOS, so the row holds the taller arm and
+  // every arm still lays out the identical area — the icon-button's rule, for the
+  // same reason: on this control the touch target *is* the box.
+  'stepper': 48,
 };
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
@@ -519,6 +524,31 @@ export function buttonGroupTitles(value: boolean): readonly string[] {
 
 /** Stable no-op `onPress` for the ButtonGroup arms, for the same reason. */
 export function onButtonGroupPress(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/**
+ * The value every Stepper arm shows, flipped by the `update.stepper` cell.
+ *
+ * Two whole numbers four steps apart inside `0...10`, which every arm can express:
+ * `@expo/ui`'s iOS `Stepper` takes `min`/`max`/`step`, RN core has no stepper at all
+ * (the floor renders the number as text), and `nitro-ui`'s steps it through the
+ * event-count handshake. Four apart rather than one so the flip is a write the
+ * control has to act on, not a nudge it can absorb.
+ */
+export function stepperValue(value: boolean): number {
+  return value ? 7 : 3;
+}
+
+/** The name every Stepper arm gives its control; constant across the flip. */
+export const STEPPER_LABEL = 'Quantity';
+
+/**
+ * Stable no-op `onValueChange` for the Stepper arms, for the same reason as
+ * {@link onIconButtonPress}: the runner owns the value, so a callback that changed
+ * identity per render would hand one arm a cheaper prop diff than another.
+ */
+export function onStepperChange(_value: number): void {
   // Intentionally empty: state is driven by the runner.
 }
 

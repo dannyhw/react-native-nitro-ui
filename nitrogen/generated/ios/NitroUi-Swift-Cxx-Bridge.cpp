@@ -28,6 +28,7 @@
 #include "HybridNitroUiSearchFieldSpecSwift.hpp"
 #include "HybridNitroUiSegmentedControlSpecSwift.hpp"
 #include "HybridNitroUiSliderSpecSwift.hpp"
+#include "HybridNitroUiStepperSpecSwift.hpp"
 #include "HybridNitroUiSwitchSpecSwift.hpp"
 #include "HybridNitroUiTextFieldSpecSwift.hpp"
 #include "HybridNitroUiTooltipSpecSwift.hpp"
@@ -425,6 +426,22 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiSliderSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiStepperSpec>
+  std::shared_ptr<HybridNitroUiStepperSpec> create_std__shared_ptr_HybridNitroUiStepperSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiStepperSpec_cxx swiftPart = NitroUi::HybridNitroUiStepperSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiStepperSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiStepperSpec_(std__shared_ptr_HybridNitroUiStepperSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiStepperSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiStepperSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiStepperSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiStepperSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   

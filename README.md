@@ -22,6 +22,7 @@ the layout engine, and React never sees a native node.
 | `Button`             | `Button(action:) { Label }` + `.buttonStyle(…)`                | the five Material 3 button composables                                                                | 0.1.0 | [button.md](docs/components/button.md)                       |
 | `IconButton`         | `Button(action:) { Label }` + `.labelStyle(.iconOnly)`         | the four Material 3 icon buttons and their toggle forms                                               | next  | [icon-button.md](docs/components/icon-button.md)             |
 | `ButtonGroup`        | a row of bordered controls, or `ControlGroup` when connected   | M3 `ButtonGroup` with `customItem` and its overflow menu                                              | next  | [button-group.md](docs/components/button-group.md)           |
+| `Stepper`            | `Stepper(value:in:step:)` + `.labelsHidden()` (hold-to-repeat included) | two Material 3 tonal icon buttons, 8 dp apart — Android has no stepper                                | next  | [stepper.md](docs/components/stepper.md)                     |
 | `SegmentedControl`   | `Picker(…).pickerStyle(.segmented)`                            | a connected button group (`ButtonGroupDefaults` shapes)                                               | 0.1.0 | [segmented-control.md](docs/components/segmented-control.md) |
 | `Picker`             | `Picker(…).pickerStyle(.menu / .wheel)`                        | `ExposedDropdownMenuBox` (M3)                                                                         | 0.1.0 | [picker.md](docs/components/picker.md)                       |
 | `DatePicker`         | `DatePicker` (`.graphical` / `.wheel`, compact field)          | M3 `DatePicker` / `TimePicker` and their dialogs                                                      | 0.1.0 | [date-picker.md](docs/components/date-picker.md)             |
@@ -73,6 +74,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
   Tooltip,
@@ -465,6 +467,78 @@ ignores `.controlSize`, `.tint` and `.buttonStyle` (all measured): `variant`,
 `size` and `tintColor`. A connected iOS group that contains a toggle goes back to
 the standard row for the same reason — `ControlGroup` draws no on state, so a
 toggle in one cannot show what it is.
+
+### Stepper
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><img src="docs/images/components/stepper-ios.png" width="300" alt="Steppers on iOS: SwiftUI's two-arrow control mid-range, one at its minimum with the down half greyed, one at its maximum with the up half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+    <td><img src="docs/images/components/stepper-android.png" width="300" alt="Steppers on Android: two tonal circular icon buttons with a minus and a plus, mid-range, then one at each bound with the inert half greyed, one fully disabled, and one beside the number the app draws for it" /></td>
+  </tr>
+</table>
+
+Two halves that move a number by one `step` each. It draws **no number** — the
+value goes to your own text, the way iOS apps do it — and it announces the value
+itself, so `accessibilityLabel` is the half it cannot work out.
+
+```tsx name=stepper
+export function QuantityPicker({
+  quantity,
+  onQuantityChange,
+}: {
+  quantity: number;
+  onQuantityChange: (next: number) => void;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+      <Text style={{ fontSize: 20, minWidth: 32, textAlign: 'center' }}>
+        {quantity}
+      </Text>
+      <Stepper
+        accessibilityLabel="Quantity"
+        maximumValue={99}
+        minimumValue={1}
+        onValueChange={onQuantityChange}
+        value={quantity}
+      />
+    </View>
+  );
+}
+```
+
+Leave `value` out and native owns the displayed value, so a step costs no React
+render at all — the same three modes as `Switch` and `Chip`: controlled,
+uncontrolled, and a step the app refuses, which snaps back.
+
+```tsx name=stepper-uncontrolled
+export function BrightnessStep({ onStep }: { onStep: (next: number) => void }) {
+  return (
+    <Stepper
+      accessibilityLabel="Brightness"
+      defaultValue={5}
+      maximumValue={10}
+      minimumValue={1}
+      onValueChange={onStep}
+    />
+  );
+}
+```
+
+The value rules are `Slider`'s, in the same code: the value snaps to multiples of
+`step` measured from `minimumValue`, `maximumValue` is always reachable (`0…10` by
+`3` steps 0, 3, 6, 9, 10), and a `0.1` step arrives as `0.3`, not as
+`0.30000000000000004`. `step` must be greater than `0` — that is not a small step,
+it is no step, and the wrapper says so in development.
+
+iOS is SwiftUI's own `Stepper`, so **hold-to-repeat works there and every repeat
+is one step and one event**. Android has no stepper control, so it is composed from
+two Material 3 tonal icon buttons with the 8 dp between them, each disabled at its
+own bound — which is also why **Android has no hold-to-repeat**: a tap steps once.
+At a bound the inert half produces no event at all, on both platforms, and a screen
+reader meets one adjustable value rather than two buttons.
+[stepper.md](docs/components/stepper.md) has the composition, the measurements and
+the accessibility tree.
 
 ### SegmentedControl
 
