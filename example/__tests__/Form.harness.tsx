@@ -571,15 +571,16 @@ describe('Form (G24)', () => {
     const { rerender } = probe;
 
     if (IOS) {
-      // Put rows into cells *before* the insert. A row on screen is drawn from a cell and no
-      // longer sits in the holding view, and that is the only state in which the holding
-      // view's own count can disagree with the index React used. Asking for it here is what
-      // stops the order assertion below passing because nothing had been adopted yet.
-      need(forms.form).nuiTestScrollTo(240);
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      need(forms.form).nuiTestScrollTo(0);
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      const resting = parse(need(forms.form).nuiTestFormReport());
+      // The state the insert is going to happen in: every row of the section is drawn from a
+      // cell, so none of them is in the holding view any more, and that is the only state in
+      // which the holding view's own subview count can disagree with the index React used.
+      // Asking for it here is what stops the order assertion below passing because nothing had
+      // been adopted yet - scrolling first does the opposite (a scroll hands rows *back*), so
+      // this reads the list at rest.
+      const resting = await formReport(
+        (r) => num(r, 'inCells') === num(r, 'rows'),
+        'the rows to be drawn from cells before the insert'
+      );
       expect(num(resting, 'inCells')).toBeGreaterThan(1);
     }
 
@@ -861,6 +862,10 @@ describe('Form (G24)', () => {
       expect(num(second, 'headerBand')).toBeGreaterThan(0);
     }
     if (IOS) {
+      // Before believing anything the section says about what its Form drew, ask whether the
+      // Form it answers to is the one that holds it. A recycled Section that kept the Form of
+      // the mount that ended would read a heading out of a list nobody is looking at.
+      expect(second.form).toBe('held');
       // The other half of the same recycled section: a *changed* title string. The section's
       // identity is its model and the model did not change, so the snapshot the Section applies
       // is a no-op and UIKit never runs the provider that fills the band in — the old heading

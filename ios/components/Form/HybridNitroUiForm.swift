@@ -313,6 +313,15 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     for (index, section) in sections.enumerated() { section.reindex(index) }
   }
 
+  /// Whether this Form is the one that holds `model` - asked by the Section's report, which
+  /// otherwise says only that *a* Form was found.
+  ///
+  /// A Section that came back from the pool with a cached Form can be answering to the mount
+  /// that ended: `set` then means "found somebody", not "found my Form" (fix round 1, item 8).
+  func holds(_ model: NitroUiFormSectionModel) -> Bool {
+    sections.contains { $0 === model }
+  }
+
   // MARK: - Rows (a Section drives these)
 
   func rowMounted(_ row: UIView, in model: NitroUiFormSectionModel, at index: Int) {
