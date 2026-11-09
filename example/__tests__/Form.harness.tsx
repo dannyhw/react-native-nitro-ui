@@ -1225,12 +1225,18 @@ describe('Form (G24)', () => {
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
     await formReport((r) => num(r, 'rows') === 9, 'nine rows');
     need(forms.form).nuiTestScrollTo(200);
+    // Each platform reports its scroller under its own field: iOS publishes the list's real
+    // `contentOffset` as `offset`, while Android's report answers that question with `scroll`
+    // and keeps `offset=0.00` as a placeholder, because its rows are measured through the
+    // shadow tree instead (S6b). Asking one platform the other's question is how this case
+    // first went red on Android.
+    const offsetField = IOS ? 'offset' : 'scroll';
     const scrolled = await formReport(
-      (r) => num(r, 'offset') > 100,
+      (r) => num(r, offsetField) > 100,
       'the list to have scrolled before the recycle'
     );
     trace('scrolled before the recycle', scrolled);
-    if (IOS) {
+    {
       const recycled = num(scrolled, 'recycles');
       cleanup();
       // The pool gets the view when the surface is really gone, not when React says so.
@@ -1243,16 +1249,19 @@ describe('Form (G24)', () => {
       await formRef();
       await boxOf('label-wifi');
       const next = await formReport(
-        (r) => num(r, 'rows') === 9 && num(r, 'recycles') >= recycled + 1,
+        // `recycles` is iOS's witness that a view came back out of the pool; Android's report
+        // has no such field, so there the mount itself is the witness.
+        (r) =>
+          num(r, 'rows') === 9 && (!IOS || num(r, 'recycles') >= recycled + 1),
         'a Form mounted into the list the case above left scrolled (`recycles` to move)'
       );
       trace('the recycled Form', next);
       // The top of the content is wherever the list's own inset says it is, so this is one
-      // number rather than a constant.
-      expect(num(next, 'insetTop')).toBeGreaterThan(0);
-      expect(
-        Math.abs(num(next, 'offset') + num(next, 'insetTop'))
-      ).toBeLessThanOrEqual(1);
+      // number rather than a constant. Android's scroller has no content inset at all, so its
+      // top is 0.
+      const top = IOS ? num(next, 'insetTop') : 0;
+      if (IOS) expect(top).toBeGreaterThan(0);
+      expect(Math.abs(num(next, offsetField) + top)).toBeLessThanOrEqual(1);
     }
   });
 
@@ -1262,12 +1271,18 @@ describe('Form (G24)', () => {
     // walked past the delegate's guard and into `onContentOffset` - a re-render of the Form and
     // its sections per frame of an animation nobody flicked (fix round 2, item 3).
     await mount({ mode: 'base', formStyle: SHORT_BOX, ...counters() });
+    if (!IOS) {
+      // `offsetPublishes` counts publishes from UIKit's delegate, and Android's Form has
+      // neither the delegate nor the field: its scroller is React Native's own `ScrollView`,
+      // which does this work in `onScroll`. The case is iOS-only, so it says so before it
+      // asks for a number Android's report does not have.
+      return;
+    }
     const atRest = await formReport(
       (r) => num(r, 'rows') === 9 && num(r, 'offsetPublishes') >= 1,
       'nine rows and a published offset'
     );
     const before = num(atRest, 'offsetPublishes');
-    if (!IOS) return;
     const target = num(atRest, 'offset') + 60;
     need(forms.form).nuiTestCommand('scroll-animated');
     // The offset is not the settle. `setContentOffset` writes the model value before UIKit
