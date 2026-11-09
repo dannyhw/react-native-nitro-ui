@@ -1,0 +1,133 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T01:31:34.061Z on code tree `eeb5b077fcaa` at HEAD `63c517f` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 177131 ms
+- Load: start 11.70, end 6.49, median 7.54, max 11.70
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G24-en8js`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected 8 to be greater than or equal to 10`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 6.49 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 84 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: retention removed 1 stored log file(s) (size) — 35 days, 64.0 MiB cap
+gate: harness:ios:Form
+gate: node ../scripts/harness.mjs --harnessRunner ios Form (cwd example)
+gate: code tree eeb5b077fcaa at HEAD 63c517f4
+gate: git tree d2102c68b470 with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log
+gate:       <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree eeb5b077fcaa, 22 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.70/10.75 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"378EB22F-D137-4A71-81ED-3CD5032C8A36"} switch={"nativeId":"440E73CB-9F1E-4E7C-873E-0D184BBEBB68"}
+
+
+    console.log
+      FORM COST N=20 form=60ms plain=66ms 11
+
+
+    console.log
+      FORM COST N=50 form=99ms plain=67ms 13
+
+
+    console.log
+      S6b MEASURE at rest: compared=8 scroll=0.0 mismatched=0 geometry{offset=-2.00,origin=-2.00,received=0.00,listY=0.00,insetTop=62.00}
+
+  ● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    no cell handed a row back across 50 scroll cycles - {"sections":"3","rows":"9","items":"9","inCells":"1","orphans":"0","stale":"0","alive":"10","reparents":"2","reclaims":"0","applies":"6","width":"338.00","listWidth":"402.00","boxW":"316.00","boxReports":"17","heights":"52.00,52.00,52.00,52.00,52.00,52.00","taps":"0","keyboard":"0.00","ime":"0.00","offset":"-62.00","origin":"-62.00","received":"-62.00","listY":"0.00","insetTop":"62.00","placed":"0","order":"Wi-Fi|Bluetooth|Cellular data|Ring on receipt, Pre|ringer|alert|notification|nitro-ui 0.4.0|Silent mode","kind":"prototype","listW":"402.00","x":"16.00","y":"40.33","w":"370.00","h0":"52.00","rowH":"44.00","h1":"52.00","h2":"52.00","headerX":"16.00","headerY":"0.00","headerH":"40.33","footerH":"29.67","footerSection":"0","radius":"0.00","sep":"16.00"}
+
+      [0m [90m 673 |[39m       [36mif[39m (num(after[33m,[39m [32m'reclaims'[39m) [33m===[39m [35m0[39m) {
+       [90m 674 |[39m         [90m// The plain assertion says 0; this one says what the Form was doing instead.[39m
+      [31m[1m>[22m[39m[90m 675 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 676 |[39m           [32m'no cell handed a row back across 50 scroll cycles - '[39m [33m+[39m
+       [90m 677 |[39m             [33mJSON[39m[33m.[39mstringify(after)
+       [90m 678 |[39m         )[33m;[39m[0m
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected 8 to be greater than or equal to 10
+
+      [0m [90m 1241 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+       [90m 1242 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+      [31m[1m>[22m[39m[90m 1243 |[39m     expect(atRest[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m      |[39m                                                   [31m[1m^[22m[39m
+       [90m 1244 |[39m
+       [90m 1245 |[39m     [90m// Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do[39m
+       [90m 1246 |[39m     [90m// not, until the Form publishes where they came to rest - and on Android that the list[39m[0m
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+
+Test Suites: 2 failed, 1 passed, 3 total
+Tests:       2 failed, 9 passed, 11 total
+Snapshots:   0 total
+Time:        175.232 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 177.1 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T01-31-33.049Z.log (4 probe(s))
+
+```
