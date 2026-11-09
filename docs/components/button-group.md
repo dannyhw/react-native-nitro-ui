@@ -218,30 +218,39 @@ on the same track. The selection thumb is the difference, and so is what VoiceOv
 
 ## Which iOS versions this was checked on
 
-The connected appearance depends on a control Apple has changed before, so it was
-probed rather than read off a release note:
+The connected appearance depends on a control Apple has changed before, so it was probed
+rather than read off a release note. The probe is the shipped control: the example app's
+Groups tab installed on a simulator, every group's row read out of the running app's
+accessibility tree and photographed. The numbers below are the row's own rect in the
+running app, so they land on the device's 1/3-pt pixel grid — the same thing read on
+three runtimes and three device types.
 
-- **iOS 27.0** (iPhone 17 simulator, Xcode 27) — every number on this page. Taken
-  during the design task, whose probe row is
-  `docs/tasks/Q9-buttongroup-iconbutton-design.report.md` Appendix A, and again here on
-  the shipped control.
-- **iOS 26.5** and **iOS 27.1** — the two other runs Apple ships. **Not checked.**
-  Every leasable device in the pool runs 27.0, and the two runtime simulators made for
-  exactly this look check (`lease.mjs acquire --ios-runtime 26.5`) were never free:
-  first this task's device gates held its pair, then the pool's two slots went to other
-  tasks. So "`ControlGroup` draws at 31 pt and ignores `size`, `tint` and `variant`" is
-  a 27.0 measurement. It is the first thing to re-measure if a connected group ever
-  looks wrong on someone's phone: the `connected` row under **Appearance** on the
-  example app's Groups tab answers in one screenshot.
-- **iOS 15.1** is the deployment target. There is no `ViewThatFits` there, so the row
-  clips instead of overflowing; the row, the toggles and the handshake are the same
-  code. This was not run on a 15.x device — the pool has none — so the clipping is a
-  reading of the code path, not a measurement.
+| Runtime | Device | `connected` row | `standard` row | Shot |
+| --- | --- | --- | --- | --- |
+| iOS 27.1 | iPhone Duo | 31.00 pt — a `UISegmentedControl` | 34.67 pt | `docs/tasks/G20/controlgroup-ios27.1.png` |
+| iOS 27.0 | iPhone Air | 31.00 pt — a `UISegmentedControl` | 34.67 pt | `docs/tasks/G20/controlgroup-ios27.0-pool.png` |
+| iOS 26.5 | iPhone 17 | 31.00 pt — a `UISegmentedControl` | 34.67 pt | `docs/tasks/G20/controlgroup-ios26.5.png` |
 
-The harness and real-input suites run on the pool's iOS 27.0 device, so every number on
-this page is 27.0's. The code has one version condition — an `#available(iOS 16)` that
-picks the overflowing row over the clipped one — and a connected group is the same
-`ControlGroup` path on every runtime.
+Three runtimes, three devices, the same two numbers. A connected group is a
+`ControlGroup`, Apple bridges it to their own `UISegmentedControl`, and it draws 31.00 pt
+— 3.67 pt shorter than the standard row that shares its sizing key, which is why one
+measurement cannot stand in for the other (D42 item 2). The 220 pt overflow box also reads
+the same everywhere: 220 × 64.33, with the segment it composes 105.67 × 31.00. What the
+probe covers is the row's kind and height on the runtimes Apple ships today; that a
+connected group ignores `variant`, `size` and `tintColor` and draws no on state for a
+`Toggle` is the design task's measurement at 27.0, taken on the same iPhone 17 the 26.5 row
+above used (`docs/tasks/Q9-buttongroup-iconbutton-design.report.md` Appendix A).
+
+- **iOS 27.0** is where every other number on this page comes from: the harness and the
+  real-input suites run there, and the connected row was read there too — during the design
+  task and again on the shipped control.
+- **iOS 15.1** is the deployment target. There is no `ViewThatFits` there, so the row clips
+  instead of overflowing; the row, the toggles and the handshake are the same code. No 15.x
+  simulator was run, so that clipping is a reading of the code path, not a measurement.
+
+The code has one version condition — an `#available(iOS 16)` that picks the overflowing row
+over the clipped one — and a connected group is the same `ControlGroup` path on every
+runtime above.
 
 ## Limits
 
