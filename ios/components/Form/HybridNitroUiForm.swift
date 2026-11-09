@@ -425,19 +425,23 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       configureDataSource()
     }
     dataSource?.apply(snapshot, animatingDifferences: false)
-    // Ask every band that is on screen whether it still says what its section says. A
-    // recycled Section is the case this catches: the model, the list and the band view all
-    // come back from the pool, the snapshot is identical, so UIKit keeps the heading it has
-    // and never runs the provider that would fill in the new title - and the Section's own
-    // `afterUpdate` cannot say it, because a recycled view's props are applied before it is
-    // attached to a Form it can name (fix round 1, item 8). Cheap when nothing changed:
-    // `chromeChanged` compares the text the band is painted with and returns.
-    for model in sections { chromeChanged(in: model) }
     // A snapshot moves every cell below it, so the rows positions the shadow tree knows about are
     // now wrong. One turn later, when UIKit has placed the cells, they are read again. The
     // delegate also reports a settle that moves the offset; this hop is the one that covers a
     // snapshot that re-placed cells without scrolling anything, which no delegate method says.
-    DispatchQueue.main.async { [weak self] in self?.reportGeometry() }
+    //
+    // The same turn is where a band is reconciled. At the moment `apply` returns, an element
+    // the snapshot just brought in has not been dequeued yet, so the only place its text can
+    // still be wrong - a Section that came back from the pool with its list, its model and its
+    // heading view, where the snapshot changes nothing and UIKit never runs the provider - is
+    // one turn later, with the element on screen (fix round 1, item 8).
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      if self.reconcileBands() {
+        self.list.collectionViewLayout.invalidateLayout()
+      }
+      self.reportGeometry()
+    }
   }
 
   private func configureDataSource() {
@@ -544,21 +548,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// the layout's answer, and that answer is cached against the old text.
   func chromeChanged(in model: NitroUiFormSectionModel) {
     guard let index = sections.firstIndex(where: { $0 === model }) else { return }
-    let path = IndexPath(item: 0, section: index)
-    var changed = false
-    for kind in [
-      UICollectionView.elementKindSectionHeader,
-      UICollectionView.elementKindSectionFooter,
-    ] {
-      guard let view = list.supplementaryView(forElementKind: kind, at: path)
-        as? NitroUiFormSupplementaryCell else { continue }
-      let isFooter = kind == UICollectionView.elementKindSectionFooter
-      let text = isFooter ? model.footerText : model.title
-      guard view.drawnText != text else { continue }
-      view.configure(text: text, footer: isFooter)
-      changed = true
-    }
-    guard changed else { return }
+    guard reconcileBands() else { return }
     list.collectionViewLayout.invalidateLayout()
     // One turn later, when the invalidation has been answered: the band the shadow tree
     // reserves is read from the layout, and the layout has only just been asked again.
@@ -568,6 +558,37 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       self.reportGeometry()
     }
   }
+
+  /// Ask every band that is on screen whether it still says what its own section says, and
+  /// say it to the ones that do not. Whether anything had to be re-painted is the answer, so
+  /// the caller knows whether the layout needs asking again for a band's height.
+  ///
+  /// A band's text is normally the provider's job, and for a band UIKit has just dequeued it
+  /// is. This is for the one case the provider cannot see: a Section that came back from the
+  /// pool with the same model, the same list and the same heading view, so the snapshot it
+  /// applies is identical, UIKit keeps the element it already drew, and the new title is a
+  /// string the Form holds and no screen has ever shown.
+  @discardableResult
+  func reconcileBands() -> Bool {
+    var changed = false
+    for (index, model) in sections.enumerated() {
+      let path = IndexPath(item: 0, section: index)
+      for kind in [
+        UICollectionView.elementKindSectionHeader,
+        UICollectionView.elementKindSectionFooter,
+      ] {
+        guard let view = list.supplementaryView(forElementKind: kind, at: path)
+          as? NitroUiFormSupplementaryCell else { continue }
+        let isFooter = kind == UICollectionView.elementKindSectionFooter
+        let text = isFooter ? model.footerText : model.title
+        guard view.drawnText != text else { continue }
+        view.configure(text: text, footer: isFooter)
+        changed = true
+      }
+    }
+    return changed
+  }
+
 
   /// The text a section's visible band is actually painted with, or `-` when it is not on
   /// screen to be read. The harness's `drawnTitle=` - the difference between a Section that
