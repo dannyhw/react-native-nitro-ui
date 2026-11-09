@@ -114,6 +114,7 @@ export interface ButtonGroupProps extends ViewProps {
             height: number;
         };
         nuiTestPressItem(id: string): void;
+        nuiTestOpenOverflow(): void;
         nuiTestProbeRow(): void;
         nuiTestProbeAccessibility(): void;
         nuiTestStateReport(): string;
