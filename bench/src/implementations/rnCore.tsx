@@ -12,6 +12,7 @@ import {
 import type { BenchListProps } from '../types';
 import {
   SEGMENTED_SELECTION,
+  STEPPER_LABEL,
   buttonTitle,
   dateLabel,
   ICON_BUTTON_LABEL,
@@ -25,6 +26,7 @@ import {
   pickerOptions,
   pickerSelection,
   segmentedOptions,
+  stepperValue,
   onTextChange,
   textFieldValue,
 } from './shared';
@@ -241,6 +243,30 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
             key={index}
             testID={`bench-rn-core-progress-${String(index)}`}
             animating={true}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'stepper') {
+    // RN core has no stepper, so the floor is what the brief names: a `View`. It is
+    // the cheapest thing that can occupy this row, and that is the number's meaning —
+    // every other arm is priced against "an app that renders a box".
+    //
+    // The value still has to arrive as a prop, or `update.stepper` would flip a
+    // switch this arm never sees: the floor gets it as `accessibilityValue`, which is
+    // the one prop on a plain View that means *this control holds this number*. A
+    // `Text` of the value would be a different control again (and the DatePicker
+    // floor already plays that role for a control with no RN equivalent).
+    return (
+      <>
+        {range(n).map((index) => (
+          <View
+            key={index}
+            accessibilityLabel={STEPPER_LABEL}
+            accessibilityValue={{ min: 0, max: 10, now: stepperValue(value) }}
+            testID={`bench-rn-core-stepper-${String(index)}`}
             style={style}
           />
         ))}

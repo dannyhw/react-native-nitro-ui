@@ -121,7 +121,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'stepper'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -268,6 +268,26 @@ export const A11Y_CONTROLS = Object.freeze([
     // (G12 measured `switch` with value 0/1 for `Toggle(.button)`), and its state
     // is what `real-input:ios` reads after a tap rather than a static type here.
     iosTrait: 'button',
+  },
+  {
+    // A Stepper is one adjustable value on both platforms, not two buttons
+    // (`docs/components/stepper.md`), and Android is the half this rule can see: the
+    // row publishes the range info and the two Material buttons clear their own
+    // semantics away, so a dump has to show ONE named node with no clickable node
+    // under it. Two focus stops is precisely the bug this rule was written for (G6).
+    id: 'stepper',
+    component: 'Stepper',
+    hybridView: 'NitroUiStepper',
+    screen: 'stepper',
+    label: 'Real-input stepper',
+    role: 'interactive',
+    anchorTestId: 'real-input-stepper',
+    // What VoiceOver says, not what the tree reports: the element this control vends
+    // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
+    // element type for a trait, so the measured announcement belongs in
+    // `A11Y_EXEMPTIONS` — the Slider row's arrangement, for the same reason. Writing
+    // the measured word here would freeze the gap into the expectation.
+    iosTrait: 'adjustable',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all

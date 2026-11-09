@@ -38,6 +38,7 @@ export const SCREEN_FILE = Object.freeze({
   checkbox: 'example/src/CheckboxScreen.tsx',
   contextmenu: 'example/src/ContextMenuScreen.tsx',
   iconbutton: 'example/src/IconButtonScreen.tsx',
+  stepper: 'example/src/StepperScreen.tsx',
 });
 
 /**
@@ -127,6 +128,18 @@ export const ECHO = Object.freeze({
   iconButtonRefusedLast: 'real-input-icon-button-refused-last',
   iconButtonRefusedEvents: 'real-input-icon-button-refused-events',
   iconButtonDisabledEvents: 'real-input-icon-button-disabled-events',
+  // G25: a stepper has no text either, so the readings are the value React holds,
+  // the number of steps it was told about, and the two counters a refused or
+  // disabled tap would move. `…-refused-last` is the snap-back oracle: the value a
+  // refused stepper asks for *next* says whether it kept the refused one.
+  stepperValue: 'real-input-stepper-value',
+  // The hold fixture's own echo: a wide range so a press-and-hold has room to
+  // repeat, and one number to read while it does.
+  stepperHoldValue: 'real-input-stepper-hold-value',
+  stepperEvents: 'real-input-stepper-events',
+  stepperRefusedLast: 'real-input-stepper-refused-last',
+  stepperRefusedEvents: 'real-input-stepper-refused-events',
+  stepperDisabledEvents: 'real-input-stepper-disabled-events',
 });
 
 /**
@@ -234,6 +247,7 @@ export const SCREEN_TAB = Object.freeze({
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
   iconbutton: { anchor: ECHO.iconButtonValue },
+  stepper: { anchor: ECHO.stepperValue },
   host: { anchor: ECHO.hostValue },
 });
 

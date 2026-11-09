@@ -13,6 +13,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
 } from 'react-native-nitro-ui';
@@ -327,6 +328,14 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('icon-button')}
           systemImage="magnifyingglass"
           testID="SMOKE-icon-button"
+        />
+        {/* A Stepper is one node on both platforms, so one `onLayout` is the whole
+            control here: 0x0 would mean the hosted SwiftUI stepper or the Compose
+            row never measured itself, which is what this app exists to catch. */}
+        <Stepper
+          accessibilityLabel="Quantity"
+          onLayout={measureFor('stepper')}
+          testID="SMOKE-stepper"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a
