@@ -102,6 +102,7 @@ export default function FormScreen() {
   const [note, setNote] = useState('');
   const [focused, setFocused] = useState(false);
   const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
+  const [listGeometry, setListGeometry] = useState('-');
   const formRef = useRef<FormHandle | null>(null);
 
   // Question 5 needs the keyboard's own number, not a guess at it. UIKit tells the Form
@@ -120,6 +121,18 @@ export default function FormScreen() {
       if (Number.isFinite(value ?? Number.NaN)) {
         setKeyboardInset((previous) => (previous === value ? previous : value));
       }
+      // `kb` is what the Form *asked* UIKit to reserve; these are what its list is carrying:
+      // its own bottom inset, the adjusted inset its keyboard decisions are measured against,
+      // the offset, and the y of the box all of that is drawn in. A scroll that takes the
+      // reservation back leaves `kb` alone, so without these it is invisible on screen.
+      const picked = (name: string) =>
+        (line.match(new RegExp(`(?:^|;)${name}=(-?[\\d.]+)`)) ?? [])[1] ?? '-';
+      const geometry = `ib=${picked('insetBottom')};ab=${picked(
+        'adjBottom'
+      )};off=${picked('offset')};y=${picked('listY')}`;
+      setListGeometry((previous) =>
+        previous === geometry ? previous : geometry
+      );
     }, REPORT_POLL_MS);
     return () => clearInterval(timer);
   }, []);
@@ -199,6 +212,15 @@ export default function FormScreen() {
               label="kb"
               testID="form-keyboard-inset"
               value={keyboardInset == null ? '-' : keyboardInset.toFixed(1)}
+            />
+          ) : null}
+          {Platform.OS === 'ios' ? (
+            // The list's own geometry, four numbers the Form reports and nothing guesses.
+            <Echo
+              ink={ink}
+              label="list"
+              testID="form-list-geometry"
+              value={listGeometry}
             />
           ) : null}
         </View>
