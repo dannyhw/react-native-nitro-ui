@@ -1200,6 +1200,23 @@ describe('Chip · the androidIcon (G21)', () => {
     );
     expect(reportOf('plain').iconTint).toBe('-');
 
+    // The slot read off the *box* first, because it is the cheap half and the half
+    // `docs/components/chip.md` quotes a number for. It is not 18 + 8 + 8: `FilterChip`
+    // sets its own start padding to 16 dp and to 8 dp as soon as a leading icon exists,
+    // so the icon's 18 dp and the 8 dp that separates it from the label are paid for
+    // partly by padding the chip stops needing — 17.90 dp on this device, which is also
+    // what the check mark costs. The growth is logged because the doc states it and
+    // asserted to the dp because the doc's claim is only a claim if something reads the
+    // box; h4, the 1.2x slot mutation, turns this line red before the pixels are read.
+    const growth = boxes.get('asset')!.width - boxes.get('plain')!.width;
+    console.log(
+      `chip glyph width growth: ${growth.toFixed(2)} dp (asset ` +
+        `${boxes.get('asset')!.width.toFixed(2)} plain ` +
+        `${boxes.get('plain')!.width.toFixed(2)})`
+    );
+    expect(growth).toBeGreaterThan(ICON_DP - 1);
+    expect(growth).toBeLessThan(ICON_DP + 1);
+
     const color = await tintOf('asset', 'the imported slab');
     const withIcon = await hitsOf('asset', color);
     const without = await hitsOf('plain', color);
@@ -1215,21 +1232,6 @@ describe('Chip · the androidIcon (G21)', () => {
     const slot = ICON_DP * PixelRatio.get();
     expect(ink).toBeGreaterThan(slot * slot * 0.88);
     expect(ink).toBeLessThan(slot * slot * 1.12);
-    // And the same slot read off the *box*, which is the half `docs/components/chip.md`
-    // quotes a number for. It is not 18 + 8 + 8: `FilterChip` sets its own start padding
-    // to 16 dp and to 8 dp as soon as a leading icon exists, so the icon's 18 dp and the
-    // 8 dp that separates it from the label are paid for partly by padding the chip stops
-    // needing. The growth is logged because the doc states it, and asserted to the dp,
-    // because "from the box and the pixels, the same number" is only a claim if something
-    // reads the box: h4, the 1.2x slot mutation, moves the ink above *and* this.
-    const growth = boxes.get('asset')!.width - boxes.get('plain')!.width;
-    console.log(
-      `chip glyph width growth: ${growth.toFixed(2)} dp (asset ` +
-        `${boxes.get('asset')!.width.toFixed(2)} plain ` +
-        `${boxes.get('plain')!.width.toFixed(2)})`
-    );
-    expect(growth).toBeGreaterThan(ICON_DP - 1);
-    expect(growth).toBeLessThan(ICON_DP + 1);
   });
 
   it('draws the named glyph the same pixels as the imported one', async () => {

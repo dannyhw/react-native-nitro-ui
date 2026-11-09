@@ -1552,13 +1552,18 @@ describe('ContextMenu · the row glyphs (G21)', () => {
     // first owner would put a square beside these titles.
     expect(tintsOf(await settledReport('recycle-second')).size).toBe(0);
     const opened = await openMenu('recycle-second');
-    expect(opened.iconTints).toBe('-');
     const frame = frameOf(fieldOf(opened, 'menu'));
     const ink = await stableHits(second, color, 'the second owner’s popup');
     await shut('recycle-second');
     console.log(
       `    · second owner: menu=${frame} ink=${String(ink)} sampled=${firstTint}`
     );
+    // The pixels first: they are the claim, and the report line below is only its
+    // echo. Read in this order, a slot that survived the recycle is named by the
+    // sample that would have to be empty (h5', the mutation that keeps the last
+    // owner's loaded slots, goes red here), and `iconTints=` is the second line to
+    // say so rather than the one that hides it.
     expect(ink).toBe(0);
+    expect(opened.iconTints).toBe('-');
   });
 });
