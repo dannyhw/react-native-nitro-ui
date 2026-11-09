@@ -1,3 +1,13 @@
+    contentDescription = null
+    isClickable = false
+    isLongClickable = false
+    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
+    if (action == AccessibilityNodeInfo.ACTION_CLICK) {
+      if (!hybrid.pressable) return false
+      taps += 1
+      hybrid.firePress()
+      return true
+    }
 package com.margelo.nitro.nitroui
 
 import android.os.Bundle
@@ -15,6 +25,7 @@ import com.facebook.react.views.view.ReactViewGroup
 import com.facebook.react.views.view.ReactViewManager
 import com.margelo.nitro.R.id.associated_hybrid_view_tag
 import com.margelo.nitro.core.NullType
+import com.margelo.nitro.nitroui.core.NitroUiLifetimeGate
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.views.HybridNitroUiFormRowStateUpdater
 import com.margelo.nitro.views.RecyclableView
@@ -100,11 +111,13 @@ internal class HybridNitroUiFormRow(
     rawAccessory = NitroUiFormAccessory.NONE
     rawSelected = false
     rawPressable = false
+    view.lifetime.onRecycle()
     view.resetRow()
   }
 
   override fun onDropView() {
     onPress = null
+    view.lifetime.onDrop()
   }
 
   override fun nuiTestA11yClick() {
@@ -160,6 +173,11 @@ internal class HybridNitroUiFormRow(
       // What a screen reader would read out for this row. A recycled view that still answers
       // with the previous mount's label is invisible in every other number here.
       "desc=${view.contentDescription ?: "-"}",
+      // Whether the pool handed this instance back. A row that keeps the previous mount's
+      // name is only a finding on a view that was really reused, so the harness reads this
+      // before it reads `desc`.
+      "drops=${view.lifetime.drops}",
+      "recycles=${view.lifetime.recycles}",
       "pressesPending=${if (view.pressed) 1 else 0}",
       "accessory=${rawAccessory.name.lowercase()}",
       "pressable=${if (rawPressable) 1 else 0}",
@@ -202,6 +220,16 @@ internal class NitroUiFormRowView(
   private var downX = 0f
   private var downY = 0f
   private var pending = false
+
+  /**
+   * What this instance has been through, counted per object (F6's pattern).
+   *
+   * `recycles=` is what lets the harness tell a recycled row from a fresh one. The name a
+   * recycled row carries is only a bug on an instance that was really reused, and without
+   * this number an assertion about a stale `contentDescription` could pass because nothing
+   * was ever pooled (fix round 1, item 9).
+   */
+  val lifetime = NitroUiLifetimeGate()
 
   /** `onPress` calls delivered, for the harness's 10/10. */
   var taps = 0
@@ -254,10 +282,6 @@ internal class NitroUiFormRowView(
     // mount to pull this view out of the pool is then announced with a name its own app never
     // gave it — which is what made the Form's own screen name a plain row (fix round 1). The
     // label the *new* mount wants arrives from its own `applyChrome`, after this.
-    contentDescription = null
-    isClickable = false
-    isLongClickable = false
-    importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_AUTO
   }
 
   /**
@@ -274,12 +298,6 @@ internal class NitroUiFormRowView(
     action: Int,
     args: Bundle?,
   ): Boolean {
-    if (action == AccessibilityNodeInfo.ACTION_CLICK) {
-      if (!hybrid.pressable) return false
-      taps += 1
-      hybrid.firePress()
-      return true
-    }
     return super.performAccessibilityAction(action, args)
   }
 
