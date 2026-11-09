@@ -600,21 +600,25 @@ describe('ButtonGroup · G20', () => {
         />
       </View>
     );
-    const wide = await pollUntil(
-      () => {
-        const probed = reportOf('bg-connected');
-        return (probed.shown ?? 'none').split(',').length > narrowShown.length
-          ? probed
-          : null;
-      },
-      () =>
-        new Error(
-          'widening the well brought no more items into the row, so the row below is ' +
-            'still the narrow layout: ' +
-            JSON.stringify(reportOf('bg-connected'))
-        ),
-      10000
-    );
+    // The row is asked again, not read back: `stateReport` answers with the last
+    // *published* placement, and only a probe republishes it. Polling the report
+    // instead keeps answering with the narrow layout however wide the box got — which
+    // is exactly how this test first failed on a device.
+    let wide: Record<string, string> | null = null;
+    for (let attempt = 0; attempt < 40 && wide == null; attempt += 1) {
+      await sleep(100);
+      const probed = await probeRow('bg-connected');
+      if ((probed.shown ?? 'none').split(',').length > narrowShown.length) {
+        wide = probed;
+      }
+    }
+    if (wide == null) {
+      throw new Error(
+        'widening the well brought no more items into the connected row, so the ' +
+          'heights below still describe the narrow layout: ' +
+          JSON.stringify(handleOf('bg-connected').nuiTestStateReport())
+      );
+    }
     expect(wide.row).toBe('standard');
     const wideMeasured = await waitForMeasured(
       'bg-connected',
