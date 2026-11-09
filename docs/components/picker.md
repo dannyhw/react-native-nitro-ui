@@ -188,7 +188,6 @@ control iOS does have for "choose one of these, all shown" — or a `Menu` for m
 ## Sizing
 
 `menu` is `intrinsic`; `wheel` is `fillWidth` with a platform height — the same
- `wheel` is `fillWidth` with a platform height — the same
 two-policy switch Progress makes between its linear and circular shapes, taken with the
 remount that makes the switch work: the native view is keyed on the variant and the
 sizing id is taken per variant (`key={variant}` with `useSizingId(variant)`, exactly as
@@ -208,14 +207,16 @@ forge a separator and share another configuration's cached size. `disabled` and
 `tintColor` repaint, they do not resize; text size, density and OS control size come
 in through the epoch (`docs/architecture/sizing.md`).
 
-`radio` is `intrinsic` too, and drops the **`sel:` field**: a group paints every
-label at once, so its box is the widest row by the option count and *which* row is
-chosen decides nothing about it. That is `SegmentedControl`'s rule, arrived at from
-the other direction — a segment row is the same width whichever segment is chosen,
-and so is a radio group — and it is what makes a pick in a group **not** a cold
-configuration: 0 corrections, and no frame at the declared fallback. On iOS the
+`radio` is `intrinsic` too, and its key is `radio|count|labels…` — both of the last
+two fields are gone. `sel:` because a group paints every label at once, so its box is
+the widest row by the option count and *which* row is chosen decides nothing about it:
+`SegmentedControl`'s rule from the other direction, and what makes a pick in a group
+**not** a cold configuration (0 corrections, no frame at the declared fallback).
+`lbl:` because a group never draws `label` — on Android that prop is the group's
+accessibility name — so a field that moves no box has no business in its key: a rename
+on a warm group would otherwise cost a fallback frame and a correction. On iOS the
 variant is resolved to `menu` before the key is built (see The radio variant), so
-iOS files its radio sizes under a menu key with its `sel:` field, where they belong.
+iOS files its radio sizes under a menu key with both fields, where they belong.
 
 Measured on the devices this library's tests run on (iPhone 17 / iOS 27 in pt;
 an API 35 emulator at 420 dpi, in dp), with nothing overridden:
@@ -340,14 +341,17 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
 
 ## Accessibility
 
-- **A radio group is one node per row, inside a named group.** `selectableGroup()`
-  on the column is what gives TalkBack the position ("2 of 3"); `selectable(role =
-  Role.RadioButton)` on each row is what gives it the role and the selected state,
-  and the `RadioButton` inside is drawn, not focusable, because its `onClick` is
-  `null` — one press target per option, not two. `label` / `accessibilityLabel`
-  names the group. `scripts/real-input/android.mjs` reads a dump of a group it has
-  just tapped: exactly one row says `checked`, the one the finger chose, and the
-  rows of a disabled group say `enabled=false`.
+- **A radio group is one node per row, inside a named group** — what a dump proves,
+  and what `scripts/real-input/android.mjs` reads from one it has just tapped: the
+  group carries its name once (`label` / `accessibilityLabel`), exactly one row says
+  `checked`, the one the finger chose, and the rows of a disabled group say
+  `enabled=false`. `selectable(role = Role.RadioButton)` on each row is what gives it
+  that role and selected state, and the `RadioButton` inside is drawn, not focusable,
+  because its `onClick` is `null` — one press target per option, not two.
+  `selectableGroup()` on the column is there for the group semantics a screen reader
+  wants, including a spoken position ("2 of 3"); no test in this repo reads that
+  position, because `uiautomator` does not print collection info — see the automation
+  gap recorded in `docs/tasks/G26-picker-radio.report.md`.
 - The control is **a button that opens a list**: iOS gets a menu-style `Picker` with
   `.accessibilityLabel(accessibilityLabel ?? label)`. Android makes the anchor **one**
   semantics node carrying the name, the value, the role and the enabled state

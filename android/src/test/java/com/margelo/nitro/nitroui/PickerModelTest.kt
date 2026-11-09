@@ -237,10 +237,16 @@ class PickerModelTest {
         displayed = 0
         state.displayed = 0.0
         variant = "radio"
+        // A radio group never gets here on a device - it has no popup to open. The
+        // write is here so the line that closes it is the thing under test: the field
+        // starts false, so without this the assertion below passes whether or not
+        // `applyUserSelection` still says `expanded = false`. Delete that line and
+        // this goes red.
+        expanded = true
       }
     assertTrue("a pick of a different row is a choice", model.applyUserSelection(2))
     assertEquals(2, model.displayed)
-    assertFalse("a radio group has no popup to open", model.expanded)
+    assertFalse("a pick leaves a radio group nothing open", model.expanded)
     assertFalse(
       "a pick of the row already shown reports nothing",
       model.applyUserSelection(2),

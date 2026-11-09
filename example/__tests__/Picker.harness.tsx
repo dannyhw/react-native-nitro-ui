@@ -1977,11 +1977,13 @@ describe('Picker · G6', () => {
 /**
  * The key `Picker.tsx` builds for a `radio` variant, spelled out on purpose.
  *
- * On Android that is `radio|count|labels…|lbl:` with **no `sel:` term**: a group
- * paints every label at once, so which row is chosen decides nothing about its
- * box. On iOS the variant is resolved to `menu` before the key is built, and a
- * menu is as wide as the one title it shows - so the selection stays in the key
- * there, and this helper says so by delegating.
+ * On Android that is `radio|count|labels…` (Q7 Appendix D): a group paints every
+ * label at once, so which row is chosen decides nothing about its box, and it draws
+ * no `label` at all - that prop is the group's accessibility name there - so neither
+ * field belongs in a size configuration. On iOS the variant is resolved to `menu`
+ * before the key is built, and a menu is as wide as the one title it shows and has a
+ * field to name - so both fields stay in the key there, and this helper says so by
+ * delegating.
  */
 function radioSizingKey(
   options: readonly string[],
@@ -1992,12 +1994,7 @@ function radioSizingKey(
     return sizingKey(options, selectedIndex, label, 'menu');
   }
   const escape = (value: string) => value.replace(/[\\|]/g, '\\$&');
-  return [
-    'radio',
-    String(options.length),
-    ...options.map(escape),
-    `lbl:${escape(label ?? '')}`,
-  ].join('|');
+  return ['radio', String(options.length), ...options.map(escape)].join('|');
 }
 
 /** What one row of the group measures, on this device, at font scale 1. */
@@ -2113,6 +2110,64 @@ describe('Picker · radio variant (G26)', () => {
     unmount();
   });
 
+  it('costs no correction when the group is renamed', async () => {
+    // The other field that leaves a `radio` key: on Android `label` is the group's
+    // accessibility name and is drawn nowhere, so a rename is not a new size
+    // configuration either. Leave `lbl:` in the radio key in `Picker.tsx` and it
+    // becomes one - the group is laid out again at the declared fallback (the menu's
+    // 280 x 56) and pays a correction, on a control whose box cannot have moved.
+    // Android's, for the same reason as the case above: on iOS the variant is a menu,
+    // a menu draws the label as a field, and there the field *does* belong.
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const OPTIONS = ['Small', 'Medium', 'Large'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0, 'First')]);
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        label="First"
+        onChange={recordChange('radio-lbl')}
+        testID="radio-lbl"
+        hybridRef={captureHybrid('radio-lbl')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-lbl');
+    const first = await waitForMeasured('radio-lbl', 'the warm group');
+    await waitForBox('radio-lbl', first, 'the warm group');
+    await settle(300);
+    const warm = stats();
+    eventLog.length = 0;
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        label="Renamed"
+        onChange={recordChange('radio-lbl')}
+        testID="radio-lbl"
+        hybridRef={captureHybrid('radio-lbl')}
+      />
+    );
+    await settle(500);
+    const after = delta(warm, stats());
+    console.log(
+      `radio rename: ${describeSize(first)} -> ${describeSize(
+        measured('radio-lbl')
+      )} after=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // The rename is not vacuous: the new name is what the live control carries.
+    expect(handles.get('radio-lbl')?.label).toBe('Renamed');
+    // And it cost nothing: no new configuration, so no fallback frame, no
+    // correction, and the box is the one it already had.
+    expect(after.corrections).toBe(0);
+    expect(after.cachedSizes).toBe(0);
+    expect(eventLog).toEqual([]);
+    expect(sameSize(sizeOf('radio-lbl'), first)).toBe(true);
+    unmount();
+  });
+
   it('picks a row through the selection path and rolls back a refused one', async () => {
     // Android's, because the two claims here are about a group whose box does not
     // move. On iOS this variant *is* a menu, where a pick changes the title and
@@ -2170,6 +2225,14 @@ describe('Picker · radio variant (G26)', () => {
     await settle(300);
     await pickRow('radio-refuse', 2);
     expect(eventLog).toEqual(['radio-refuse:2', 'radio-refuse:2']);
+    // The refused pick did not stick, which is the second event meaning anything: the
+    // parent never adopted it, so the index the group paints its rows from is still
+    // the one it was given (`displayed` follows the sent index, it does not lead it).
+    // This is the nearest read to "row 0 is shown again" a harness run has - the row
+    // states themselves are a `checked` read on the accessibility tree, which only
+    // the real-input dump can take, and it takes it for the group on screen
+    // (`CHECKS.picker` step 9).
+    expect(handles.get('radio-refuse')?.selectedIndex).toBe(0);
     unmount();
   });
 
@@ -2212,6 +2275,14 @@ describe('Picker · radio variant (G26)', () => {
     await pickRow('radio-disabled', 2);
     await settle(200);
     expect(eventLog).toEqual([]);
+    // Two silences are only evidence if someone was listening, so the case closes
+    // with the barrier: a row that *is* a choice, on the very control that just
+    // stayed quiet, has to be heard through the very log that came back empty. A
+    // recorder that never armed would pass every assertion above and fail here.
+    await pickRow('radio-noop', 1);
+    await settle(200);
+    console.log(`radio barrier: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['radio-noop:1']);
     unmount();
   });
 
