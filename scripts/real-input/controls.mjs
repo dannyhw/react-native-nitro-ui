@@ -150,6 +150,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
     screen: 'popover',
   },
   {
+    id: 'form',
+    title:
+      'real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard',
+    screen: 'form',
+  },
+  {
     id: 'button-group',
     title:
       'real tap presses each item once, a toggle item flips once per tap, and an overflowed item is reachable through the overflow menu',
@@ -210,7 +216,15 @@ const HOST_CONTROL_ROWS = Object.freeze([
   },
 ]);
 
-/** Every control the suite proves, in the order it proves them. */
+/**
+ * Every control the suite proves, in the order it proves them.
+ *
+ * One row per id: both runners iterate this list, so a repeated id runs that control's check
+ * twice, and the second run inherits the viewport the first one left (`component-coverage`
+ * guards it). `form` is generated like any other component's row — what makes it unusual is
+ * only that its rows leave the React tree, so the check has to aim at where UIKit and the
+ * layout pass actually put one rather than at a tag.
+ */
 export const REAL_INPUT_CONTROLS = Object.freeze([
   ...REAL_INPUT_CONTROL_ROWS,
   ...HOST_CONTROL_ROWS,

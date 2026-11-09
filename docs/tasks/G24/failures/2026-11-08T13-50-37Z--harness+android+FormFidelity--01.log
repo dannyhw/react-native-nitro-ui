@@ -1,0 +1,87 @@
+# Failure excerpt — harness:android:FormFidelity
+
+- Ran: 2026-11-08T13:50:37.216Z on code tree `0dbb0c452975` at HEAD `b3d1445` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android FormFidelity`
+- Result: fail, exit 1, 614 ms
+- Load: start 4.75, end 4.75, median 4.75, max 4.75
+- Device: android / device `emulator-5570` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log` (<store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.75 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 42 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:FormFidelity
+gate: node ../scripts/harness.mjs --harnessRunner android FormFidelity (cwd example)
+gate: code tree 0dbb0c452975 at HEAD b3d14454
+gate: git tree 4107d4e09cde with a DIRTY worktree (not reusable)
+gate: log task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log
+gate:       <store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android FormFidelity
+bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 1b799bcb at b3d1445452c8b8f475312a6d313af7cee69128c9, now 0dbb0c45 at b3d1445452c8b8f475312a6d313af7cee69128c9)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 1b799bcb at b3d1445452c8b8f475312a6d313af7cee69128c9, now 0dbb0c45 at b3d1445452c8b8f475312a6d313af7cee69128c9)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+gate: harness:android:FormFidelity FAIL in 0.6 s
+gate: recorded in .gates/task/G24-form.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G24-form/harness+android+FormFidelity-2026-11-08T13-50-36.763Z.log (5 probe(s))
+
+```

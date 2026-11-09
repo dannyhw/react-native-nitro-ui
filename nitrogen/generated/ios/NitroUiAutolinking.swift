@@ -216,6 +216,42 @@ public final class NitroUiAutolinking {
     return HybridNitroUiTooltip.self is any RecyclableView.Type
   }
   
+  public static func createNitroUiForm() -> bridge.std__shared_ptr_HybridNitroUiFormSpec_ {
+    let hybridObject = HybridNitroUiForm()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiFormSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiFormRecyclable() -> Bool {
+    return HybridNitroUiForm.self is any RecyclableView.Type
+  }
+  
+  public static func createNitroUiFormSection() -> bridge.std__shared_ptr_HybridNitroUiFormSectionSpec_ {
+    let hybridObject = HybridNitroUiFormSection()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiFormSectionSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiFormSectionRecyclable() -> Bool {
+    return HybridNitroUiFormSection.self is any RecyclableView.Type
+  }
+  
+  public static func createNitroUiFormRow() -> bridge.std__shared_ptr_HybridNitroUiFormRowSpec_ {
+    let hybridObject = HybridNitroUiFormRow()
+    return { () -> bridge.std__shared_ptr_HybridNitroUiFormRowSpec_ in
+      let __cxxWrapped = hybridObject.getCxxWrapper()
+      return __cxxWrapped.getCxxPart()
+    }()
+  }
+  
+  public static func isNitroUiFormRowRecyclable() -> Bool {
+    return HybridNitroUiFormRow.self is any RecyclableView.Type
+  }
+  
   public static func createNitroUiIconButton() -> bridge.std__shared_ptr_HybridNitroUiIconButtonSpec_ {
     let hybridObject = HybridNitroUiIconButton()
     return { () -> bridge.std__shared_ptr_HybridNitroUiIconButtonSpec_ in

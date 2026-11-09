@@ -20,6 +20,9 @@ import { NitroUiCheckboxConfig } from '../components/Checkbox/NitroUiCheckboxCon
 import { NitroUiContextMenuConfig } from '../components/ContextMenu/NitroUiContextMenuConfig';
 import { NitroUiSearchFieldConfig } from '../components/SearchField/NitroUiSearchFieldConfig';
 import { NitroUiTooltipConfig } from '../components/Tooltip/NitroUiTooltipConfig';
+import { NitroUiFormConfig } from '../components/Form/NitroUiFormConfig';
+import { NitroUiFormSectionConfig } from '../components/Form/NitroUiFormSectionConfig';
+import { NitroUiFormRowConfig } from '../components/Form/NitroUiFormRowConfig';
 import { NitroUiIconButtonConfig } from '../components/IconButton/NitroUiIconButtonConfig';
 import { NitroUiPopoverConfig } from '../components/Popover/NitroUiPopoverConfig';
 import { NitroUiButtonGroupConfig } from '../components/ButtonGroup/NitroUiButtonGroupConfig';
@@ -61,6 +64,9 @@ const copies: Record<string, unknown> = {
   'NitroUiContextMenuConfig.json': NitroUiContextMenuConfig,
   'NitroUiSearchFieldConfig.json': NitroUiSearchFieldConfig,
   'NitroUiTooltipConfig.json': NitroUiTooltipConfig,
+  'NitroUiFormConfig.json': NitroUiFormConfig,
+  'NitroUiFormSectionConfig.json': NitroUiFormSectionConfig,
+  'NitroUiFormRowConfig.json': NitroUiFormRowConfig,
   'NitroUiIconButtonConfig.json': NitroUiIconButtonConfig,
   'NitroUiPopoverConfig.json': NitroUiPopoverConfig,
   'NitroUiButtonGroupConfig.json': NitroUiButtonGroupConfig,

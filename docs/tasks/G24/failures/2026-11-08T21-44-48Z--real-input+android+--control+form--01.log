@@ -1,0 +1,60 @@
+# Failure excerpt — real-input:android:--control:form
+
+- Ran: 2026-11-08T21:44:48.573Z on code tree `9065d0b56466` at HEAD `92d05f2` (branch `task/G24-form`)
+- Command: `node scripts/real-input/android.mjs --control form`
+- Result: fail, exit 1, 494 ms
+- Load: start 3.24, end 3.24, median 3.24, max 3.24
+- Device: android
+- Full log: `task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log` (<store>/task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: none
+  |   G24-n0vyo                G24          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.24 (the ledger line carries the samples across the whole run)
+gate: logcat [unavailable]
+  | (this run holds no lease, so no device is ours to ask — the block records that rather than reading someone else’s emulator)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+gate: real-input:android:--control:form
+gate: node scripts/real-input/android.mjs --control form (cwd .)
+gate: code tree 9065d0b56466 at HEAD 92d05f21
+gate: git tree 2896ece2ff74 with a DIRTY worktree (not reusable)
+gate: log task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log
+gate:       <store>/task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log
+
+real-input (android): Error: real-input: no running emulator for AVD "nitroui" on adb server default. Boot it first, e.g.
+  ANDROID_ADB_SERVER_PORT=5042 emulator -avd nitroui -no-snapshot-load -no-snapshot-save -no-window -gpu host -noaudio -no-boot-anim -no-metrics
+gate: real-input:android:--control:form FAIL in 0.5 s
+gate: recorded in .gates/task/G24-form.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G24-form/real-input+android+--control+form-2026-11-08T21-44-47.787Z.log (5 probe(s))
+
+```

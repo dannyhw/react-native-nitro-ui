@@ -1,0 +1,198 @@
+# Failure excerpt — harness:android:Form
+
+- Ran: 2026-11-08T10:42:05.455Z on code tree `c9cd6ce52171` at HEAD `022d3ab` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Form`
+- Result: fail, exit 1, 175994 ms
+- Load: start 39.41, end 6.65, median 15.17, max 39.41
+- Device: android / device `emulator-5570` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+android+Form-2026-11-08T10-42-05.455Z.log` (<store>/task/G24-form/harness+android+Form-2026-11-08T10-42-05.455Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Form › shows none of its previous owner under one identity`
+- `expected [ { component: 'Form', …(2) }, …(1) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+android+Form-2026-11-08T10-42-05.455Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 6.65 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 659 — the rest is in the full log above)
+
+```
+
+
+    console.log
+          · poisoned measured=175.6x48.0 box=175.6x48.0 corrections=1 poison=111.0x13.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=175.6x48.0 declared=96.0x48.0 boxRule=none locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 3→4 across 50 mounts
+
+
+    console.log
+          · conformance-chip props after the second owner: label=Second owner chip accessibilityLabel=Conformance chip, second owner
+
+
+    console.log
+          · conformance-chip residue probe (uncontrolled second owner): an uncontrolled filter chip that started selected and was pressed off, then a second owner whose own default is selected - which the control can only be showing because `didApplyDefault` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-chip after the uncontrolled second owner: the first press after the second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · conformance-chip residue probe (controlled second owner): a press that turns an uncontrolled filter chip off, then a second owner that is *controlled* at `true` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-chip after the controlled second owner: the first press on the controlled second mount reports=conformance-chip:false (expected conformance-chip:false)
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · poisoned measured=48.0x48.0 box=48.0x48.0 corrections=1 poison=111.0x13.0 locale=locale=en-US
+
+
+    console.log
+          · warm measured=48.0x48.0 declared=48.0x48.0 boxRule=height locale=locale=en-US
+
+
+    console.log
+          · ledger 0→8→0 registry 0→8→0 across 8 mounted together
+
+
+    console.log
+          · ledger 0→0 registry 0→0 cached 1→1 across 50 mounts
+
+
+    console.log
+          · conformance-checkbox props after the second owner: checked=true accessibilityLabel=Conformance checkbox, second owner
+
+
+    console.log
+          · conformance-checkbox residue probe (uncontrolled second owner): an uncontrolled Checkbox that started ON and was pressed off, then a second owner whose own default is ON - a number the control can only be standing on because `didApplyDefault` was re-armed and let the default apply
+
+
+    console.log
+          · conformance-checkbox after the uncontrolled second owner: the first press after the second mount reports=conformance-checkbox:false (expected conformance-checkbox:false)
+
+
+    console.log
+          · conformance-checkbox residue probe (controlled second owner): a press that turns an uncontrolled Checkbox on, then a second owner that is *controlled* at `false` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-checkbox after the controlled second owner: the first press on the controlled second mount reports=conformance-checkbox:true (expected conformance-checkbox:true)
+
+
+    console.log
+          · Android: the in-app a11y query cannot see a Compose control's name (labelBox=null) — this rule is asserted by real-input:android, see scripts/real-input/a11y.mjs
+
+
+    console.log
+          · ContextMenu declares no sizing policy, so it has no fallback to declare and never enters the engine to guess one (component.json sizing: null)
+
+
+    console.log
+          · ContextMenu is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · ContextMenu is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · conformance-context-menu props after the second owner: title=- open=0
+
+
+    console.log
+          · conformance-context-menu residue probe (uncontrolled second owner): a pick the first owner made through the row path (selects=1) - the second owner made none, so a count left over is the reset missing
+
+
+    console.log
+          · conformance-context-menu after the uncontrolled second owner: picks this mount reports=0 (expected 0)
+
+
+    console.log
+          · conformance-context-menu after the uncontrolled second owner: the menu is open=0 (expected 0)
+
+
+    console.log
+          · a View: box=411.4x56.0 labelBox=411.4x56.0
+
+
+    console.log
+          · Form declares no sizing policy, so it has no fallback to declare and never enters the engine to guess one (component.json sizing: null)
+
+
+    console.log
+          · Form is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · Form is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · a View: box=411.4x224.0 labelBox=411.4x224.0
+
+  ● conformance · every control, four rules › · Form › shows none of its previous owner under one identity
+
+    expected [ { component: 'Form', …(2) }, …(1) ] to deeply equal []
+
+      [0m [90m 3949 |[39m             checks[33m:[39m fixture[33m.[39mstate(handleFor(fixture[33m.[39mtestId)[33m,[39m [36mfalse[39m)[33m,[39m
+       [90m 3950 |[39m           })
+      [31m[1m>[22m[39m[90m 3951 |[39m         )[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                  [31m[1m^[22m[39m
+       [90m 3952 |[39m         first[33m.[39munmount()[33m;[39m
+       [90m 3953 |[39m         [36mawait[39m settle([35m400[39m)[33m;[39m
+       [90m 3954 |[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       1 failed, 91 passed, 92 total
+Snapshots:   0 total
+Time:        174.329 s
+Ran all test suites matching Form.
+
+
+
+```

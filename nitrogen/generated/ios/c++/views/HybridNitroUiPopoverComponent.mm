@@ -197,7 +197,11 @@ using namespace margelo::nitro::nitroui::views;
 - (void)unmountChildComponentView:(UIView<RCTComponentViewProtocol> *)childComponentView
                             index:(NSInteger)index {
   UIView *content = self.contentView;
-  if (content == nil || childComponentView.superview != content) {
+  // The promise is only "not mounted afterwards", not "was mounted here": a Form hands
+  // a row from its holding view to a list cell, so when Fabric unmounts it the row lives
+  // in a superview this view does not own, and forwarding to `super` would detach the
+  // row from the cell it is drawn in and leave that cell holding nothing.
+  if (content == nil) {
     [super unmountChildComponentView:childComponentView index:index];
     return;
   }

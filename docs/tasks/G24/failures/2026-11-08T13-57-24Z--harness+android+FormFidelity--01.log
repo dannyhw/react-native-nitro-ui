@@ -1,0 +1,89 @@
+# Failure excerpt — harness:android:FormFidelity
+
+- Ran: 2026-11-08T13:57:24.429Z on code tree `b7eb3198fa09` at HEAD `b3d1445` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android FormFidelity`
+- Result: fail, exit 1, 12001 ms
+- Load: start 4.94, end 4.58, median 4.76, max 4.94
+- Device: android / device `emulator-5570` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log` (<store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/FormFidelity.harness.tsx`
+- `● Form fidelity against a SwiftUI Form (E2) › measures the Form and a SwiftUI Form the same way (E2)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.58 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 43 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:FormFidelity
+gate: node ../scripts/harness.mjs --harnessRunner android FormFidelity (cwd example)
+gate: code tree b7eb3198fa09 at HEAD b3d14454
+gate: git tree 4107d4e09cde with a DIRTY worktree (not reusable)
+gate: log task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log
+gate:       <store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android FormFidelity
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree b7eb3198fa09, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.94/5.27 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/FormFidelity.harness.tsx
+  ● Form fidelity against a SwiftUI Form (E2) › measures the Form and a SwiftUI Form the same way (E2)
+
+    PROBE section=rows=2;index=0;title=Notifications;footer=Push arrives on this device only.;gap=2.0;shapes=2;pressed=0;headerBand=36.2;footerBand=28.2;headerText=20.2;footerText=16.0;boxH=180.6;layerH=180.6;rects=38-54,96-54;drawnShapes=2;drawn=12.2,38.3,355.4,54.0 row=where=inplace;frame=12.2,37.3,355.4,56.0;window=28.2,53.3,355.4,56.0;h=56.0;presses=0;pressesPending=0;accessory=none;pressable=0;selected=0 late=[]
+
+      [0m [90m 489 |[39m         )[33m;[39m
+       [90m 490 |[39m       }
+      [31m[1m>[22m[39m[90m 491 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 492 |[39m         [32m`PROBE section=${String([39m
+       [90m 493 |[39m [32m          sections.story?.nuiTestSectionReport()[39m
+       [90m 494 |[39m [32m        )} row=${String(rows.storyFirst?.nuiTestRowReport())} late=${String([39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 1 total
+Snapshots:   0 total
+Time:        10.525 s
+Ran all test suites matching FormFidelity.
+gate: harness:android:FormFidelity FAIL in 12.0 s
+gate: recorded in .gates/task/G24-form.jsonl
+
+
+gate: appended the device context to task/G24-form/harness+android+FormFidelity-2026-11-08T13-57-23.601Z.log (5 probe(s))
+
+```

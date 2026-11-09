@@ -104,6 +104,22 @@ run_case "text-limit.test (Swift)" \
       -o '$OUT/text-limit' && '$OUT/text-limit'
   "
 
+# The number behind a Form's `measure()` correction (G24, D45 item 3): what the
+# shadow node reads out of `nuiContentOffsetY`. It lives here because the interesting
+# inputs - a shadow tree that has not been told yet, an explicit `null`, a NaN - are the
+# ones an on-device test cannot produce on demand, and all three fail silently: a
+# correction of 0 is indistinguishable on screen from a Form that is not scrolled. The
+# arithmetic is the whole file; the Fabric types around it are why the shadow node
+# itself cannot compile here (see the header).
+run_case "scroll-offset.test (C++)" \
+  bash -c "
+    clang++ -std=c++20 -Wall -Werror \
+      -I '$ROOT/cpp' \
+      -I '$ROOT/node_modules/react-native-nitro-modules/cpp/core' \
+      -I '$ROOT/node_modules/react-native-nitro-modules/cpp/utils' \
+      '$ROOT/scripts/native-tests/scroll-offset.test.cpp' -o '$OUT/scroll-offset' && '$OUT/scroll-offset'
+  "
+
 # The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
 # reads agree" wait that `RealInputTests.measure` runs before it prints a control's
 # boxes. It is here rather than only on a device because the three things worth
@@ -142,6 +158,21 @@ run_case "sizing.test (C++ / ASan + UBSan)" \
       -framework CoreFoundation \
       '$ROOT/scripts/native-tests/sizing.test.cpp' \
       '$ROOT/cpp/NitroUiSizingEngine.cpp' -o '$OUT/sizing-asan' && '$OUT/sizing-asan'
+  "
+
+# The scroll-offset reader again under the sanitizers, for the same rule that every C++
+# unit test here runs twice. There is no allocation to corrupt in it, so this is the cheap
+# half of the guarantee - UBSan is the one with something to say about a NaN or an
+# infinity being read out of a shadow node's props.
+run_case "scroll-offset.test (C++ / ASan + UBSan)" \
+  bash -c "
+    ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 \
+    clang++ -std=c++20 -Wall -Werror -g -O1 -fno-omit-frame-pointer \
+      -fsanitize=address,undefined -fno-sanitize-recover=all \
+      -I '$ROOT/cpp' \
+      -I '$ROOT/node_modules/react-native-nitro-modules/cpp/core' \
+      -I '$ROOT/node_modules/react-native-nitro-modules/cpp/utils' \
+      '$ROOT/scripts/native-tests/scroll-offset.test.cpp' -o '$OUT/scroll-offset-asan' && '$OUT/scroll-offset-asan'
   "
 
 if [ "$status" -eq 0 ]; then

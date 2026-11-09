@@ -28,6 +28,9 @@
 #include "HybridNitroUiCheckboxSpecSwift.hpp"
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiTooltipSpecSwift.hpp"
+#include "HybridNitroUiFormSpecSwift.hpp"
+#include "HybridNitroUiFormSectionSpecSwift.hpp"
+#include "HybridNitroUiFormRowSpecSwift.hpp"
 #include "HybridNitroUiIconButtonSpecSwift.hpp"
 #include "HybridNitroUiPopoverSpecSwift.hpp"
 #include "HybridNitroUiButtonGroupSpecSwift.hpp"
@@ -166,6 +169,27 @@
     "NitroUiTooltip",
     []() -> std::shared_ptr<HybridObject> {
       std::shared_ptr<HybridNitroUiTooltipSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiTooltip();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiForm",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiFormSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiForm();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiFormSection",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiFormSectionSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiFormSection();
+      return hybridObject;
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiFormRow",
+    []() -> std::shared_ptr<HybridObject> {
+      std::shared_ptr<HybridNitroUiFormRowSpec> hybridObject = NitroUi::NitroUiAutolinking::createNitroUiFormRow();
       return hybridObject;
     }
   );

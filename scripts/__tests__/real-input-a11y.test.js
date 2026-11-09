@@ -138,6 +138,13 @@ describe('the a11y rule, on measured trees', () => {
       // the field's box — so the rule's box test finds the actionable node too.
       'search-field',
       'context-menu',
+      // G24's Form row, measured on pair-b: the row Compose merged for `onPress` is the
+      // `clickable` node, and the one node carrying "Row with onPress" sits inside it at
+      // the content box (933x116 px inside the row's own 1017x147 px touch target). So a
+      // screen reader stops once, and the stop it hears presses. Not the Checkbox shape -
+      // there the named node *is* the control's box - but the shape the rule exists to
+      // accept: an actionable node wrapping the name it announces.
+      'form',
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
@@ -378,6 +385,65 @@ describe('the a11y rule, on measured trees', () => {
     );
   });
 
+  it('grades the control, not the first node that happens to carry its name', () => {
+    // G24 fix round 1's Android finding, from the Form's own dump. A long `real-input`
+    // session left the row's name on two nodes — the row, and a recycled wrapper the
+    // screen had re-used — and `named[0]` was the wrapper, so the actionable half of the
+    // rule graded a container and the finding said nothing about the row a person presses.
+    // Built by *adding* that second node to the measured tree, in the tree order that
+    // fooled the rule, and by making the row clickable the way `applyChrome` does for a
+    // pressable row (the other half of the same round).
+    const row = named('form');
+    expect(row.resourceId).toBe(control('form').anchorTestId);
+    const pressable = { ...row, clickable: 'true' };
+    const box = row.bounds;
+    const wrapper = {
+      ...row,
+      resourceId: '',
+      // The shape of the node the run actually graded: named, focusable, and as big as a
+      // piece of the page — a wrapper the screen kept, not a control.
+      focusable: 'true',
+      scrollable: 'true',
+      bounds: {
+        ...box,
+        x1: 0,
+        y1: 0,
+        x2: box.x2 + 60,
+        y2: box.y2 + 400,
+        width: box.width + 60,
+        height: box.height + 400,
+        cx: box.cx,
+        cy: box.cy,
+      },
+    };
+    const nodes = [
+      wrapper,
+      ...tree('form').map((node) => (node === row ? pressable : node)),
+    ];
+
+    const problems = a11yProblems(control('form'), nodes);
+    // The duplicate is still a finding — grading the right node does not forgive a name
+    // on two of them.
+    expect(problems.length).toBe(1);
+    expect(problems[0]).toContain('announces twice');
+    // ...and the actionability question was asked of the row, not of the wrapper: before
+    // this, the run's whole Android finding was this line about a container.
+    expect(problems.join(' ')).not.toContain('scroll container');
+    expect(problems.join(' ')).not.toContain('is not actionable');
+
+    // The other half, and it is only this fixture: with one named node, grading the node
+    // under the anchor rather than the first named node changes nothing *when the named node
+    // is the anchor*, which is what this tree is. Whether some other control's named node sits
+    // outside its `anchorTestId` is a question the sweep answers on a device, not this test.
+    // The same tree minus the wrapper is the fixture, whose named node is *not* actionable —
+    // and still reported as such.
+    const single = a11yProblems(
+      control('form'),
+      tree('form').map((node) => (node === row ? pressable : node))
+    );
+    expect(single).toEqual([]);
+  });
+
   it('grades a group by what its box contains, and goes red when that is nothing', () => {
     // The `container` role's own proof, on ButtonGroup's measured tree: Material merges
     // the row into the node that carries the group's name, and the items survive inside
@@ -418,8 +484,9 @@ describe('the debt list', () => {
     // Four Android rows (two controls, one finding each) and the iOS rows, each measured
     // on a simulator: the Slider's name is announced as the wrong kind of control, a
     // hosted Picker's name is announced twice, an accessible ContextMenu still lists a
-    // child as a stop, and an IconButton's element is the drawn control inside its 44 pt
-    // touch target rather than the target. A row that named no platform would let one
+    // child as a stop, an IconButton's element is the drawn control inside its 44 pt
+    // touch target rather than the target, and a Form row's name stays on the React Native
+    // wrapper for its `Text` instead of the cell. A row that named no platform would let one
     // measurement excuse both halves, so each row says which one it was measured on. The
     // IconButton row is that rule working: G23 expected its 44 pt target to retire it and
     // the sweep came back with a bigger inset, so the row was re-measured, not widened.
@@ -434,6 +501,7 @@ describe('the debt list', () => {
       'ios:hosted-slider',
       'ios:hosted-picker',
       'ios:context-menu',
+      'ios:form',
       'ios:icon-button',
     ]);
     for (const entry of A11Y_EXEMPTIONS) {

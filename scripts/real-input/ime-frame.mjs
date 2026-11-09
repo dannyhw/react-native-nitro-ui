@@ -82,3 +82,93 @@ export function imeInsetSample(text) {
     .map((line) => line.trim().slice(0, 160));
   return lines.length > 0 ? lines.join(' ~ ') : 'no type=ime line at all';
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * The same edge, read from the input method service instead of the window
+ * (added by G24, for `Form`'s keyboard check)
+ * ---------------------------------------------------------------------------
+ *
+ * `imeInsetTop` answers what *this app's window* was told to avoid, which is the edge a
+ * control has to honour. The IME service answers the same edge from the other side, and
+ * the two are worth having beside each other: one is what the component saw
+ * (`WindowInsetsCompat.Type.ime()`), the other is what the keyboard really occupies, so a
+ * control that moved a field above one and not the other is visible in the log rather than
+ * silently right.
+ *
+ * The shape, at the end of `dumpsys input_method`, printed by the service itself:
+ *
+ *     Last computed insets:
+ *       contentTopInsets=2424 visibleTopInsets=1399 touchableRegion=SkRegion((0,1399,1080,2156)) …
+ *
+ * `mInputShown=true` is read first, and is not decoration. That block is the *last computed*
+ * insets: it keeps printing after the keyboard goes away (`visibleTopInsets=2156` with an
+ * empty `touchableRegion` on the lease's API 35 AVD — the bottom of the keyboard's own
+ * rectangle, which is a nonsense top edge). A reader that skipped the flag took the edge of
+ * a hidden keyboard for a shown one, which is how S6b round 2 reported a field sitting
+ * "below" a keyboard that was not on screen.
+ */
+
+/** Whether the service says it put an input view on screen. */
+const IME_INPUT_SHOWN = /\bmInputShown=true\b/;
+
+/** The `Last computed insets:` block, whose first line carries the two top insets. */
+const IME_LAST_COMPUTED_INSETS =
+  /Last computed insets:[^\n]*\n[^\n]*?\bvisibleTopInsets=(-?\d+)\b/;
+
+/**
+ * Whether this `dumpsys input_method` says the software keyboard is on screen.
+ *
+ * `true` distinguishes a real keyboard from the floating toolbar an AVD with a hardware
+ * keyboard answers a focused field with, which is the difference S6b question 5 is about.
+ *
+ * @param {string} text the output of `dumpsys input_method`
+ * @returns {boolean}
+ */
+export function imeServiceShown(text) {
+  return IME_INPUT_SHOWN.test(String(text));
+}
+
+/**
+ * The keyboard's top edge in px from the IME service's own insets, or `null`.
+ *
+ * `null` means "this text does not say": no input view on screen, or the block moved. It is
+ * never "the keyboard is at the top" — `0` is a legal edge (a fullscreen extract-mode IME
+ * starts there) and is returned as `0`.
+ *
+ * @param {string} text the output of `dumpsys input_method`
+ * @returns {number | null}
+ */
+export function imeServiceTopPx(text) {
+  const dump = String(text);
+  if (!imeServiceShown(dump)) {
+    return null;
+  }
+  const insets = dump.match(IME_LAST_COMPUTED_INSETS);
+  if (insets == null) {
+    return null;
+  }
+  const top = Number(insets[1]);
+  return Number.isFinite(top) ? top : null;
+}
+
+/**
+ * The lines a wrong answer was read from, for the caller's failure message.
+ *
+ * Same rule as {@link imeInsetSample}: a scrape that stops matching has to fail loudly, so
+ * the failure names what the dump actually said instead of reporting a keyboard that is not
+ * there.
+ *
+ * @param {string} text the output of `dumpsys input_method`
+ * @returns {string}
+ */
+export function imeServiceSample(text) {
+  const dump = String(text);
+  const shown = IME_INPUT_SHOWN.test(dump)
+    ? 'mInputShown=true'
+    : 'mInputShown is not true';
+  const insets = dump.match(IME_LAST_COMPUTED_INSETS);
+  return insets == null
+    ? `${shown}, no "Last computed insets:" block with visibleTopInsets`
+    : `${shown}, ${insets[0].split('\n').pop().trim().slice(0, 160)}`;
+}

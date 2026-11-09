@@ -2,6 +2,7 @@ import {
   Button,
   ButtonGroup,
   DatePicker,
+  Form,
   Host,
   IconButton,
   Menu,
@@ -15,6 +16,8 @@ import {
   nitroUiCore,
 } from 'react-native-nitro-ui';
 
+import { Text, type ViewStyle } from 'react-native';
+
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
   SEGMENTED_SELECTION,
@@ -24,6 +27,12 @@ import {
   onButtonGroupPress,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
+  formRowKind,
+  formRowLabel,
+  formRowValue,
+  formSwitchValue,
+  FORM_VALUE_STYLE,
+  onRowPress,
   menuItems,
   menuTitle,
   onDateChange,
@@ -117,6 +126,79 @@ export function drainNitroUiPerfMarks(): BenchPerfMark[] | null {
     });
   }
   return marks;
+}
+
+/**
+ * One grouped Form holding the whole batch, for the `nitro-ui` arm.
+ *
+ * `n` is the number of *rows*, so this arm renders one `Form` (one
+ * `UICollectionView` on iOS, one Compose layer on Android) with `n` rows in it,
+ * which is the tree an app writes. The other arms are asked for the same tree in
+ * their own runtime, and `rn-core` for the plain column without a grouped list.
+ *
+ * The arm is unmarkable: `Form` is the one component whose public props carry no
+ * `nuiPerfId`, because its own wrapper is what owns the ids its sections and rows
+ * send. A `--perf-marks` run therefore reads the `nitro-ui` form cell from the
+ * probe's signals alone, which is what every reference arm is measured by anyway.
+ */
+function BenchForm({
+  n,
+  value,
+  style,
+}: {
+  n: number;
+  value: boolean;
+  style: ViewStyle;
+}) {
+  return (
+    <Form testID="bench-nitro-ui-form" style={style}>
+      {/* A one-child row is a bare child - `Form.Section` wraps it, which is what an
+          app writes for a row with nothing to configure, so the arm pays the
+          wrapper's JS cost rather than skipping it. A row with more than one child
+          has to name `Form.Row`, because the wrapper walks fragments and arrays into
+          separate rows. */}
+      <Form.Section title="Settings">
+        {range(n).map((index) => {
+          const kind = formRowKind(index);
+          const label = formRowLabel(index);
+          if (kind === 'detail') {
+            return (
+              <Form.Row key={index}>
+                <Text>{label}</Text>
+                <Text style={FORM_VALUE_STYLE}>{formRowValue(value)}</Text>
+              </Form.Row>
+            );
+          }
+          if (kind === 'switch') {
+            return (
+              <Form.Row key={index}>
+                <Text>{label}</Text>
+                <Switch
+                  testID={`bench-nitro-ui-form-switch-${String(index)}`}
+                  value={formSwitchValue(index, value)}
+                  onValueChange={onValueChange}
+                  nuiPerfId={null}
+                />
+              </Form.Row>
+            );
+          }
+          if (kind === 'press') {
+            // The same visible content as a `label` row: what this kind prices is
+            // the row answering to a press, not an extra glyph. The Form's
+            // `disclosure` accessory stays out of the mix for that reason - the
+            // reference arms have no row-level accessory to set it against, so it
+            // would compare a drawn chevron with nothing drawn.
+            return (
+              <Form.Row key={index} onPress={onRowPress}>
+                <Text>{label}</Text>
+              </Form.Row>
+            );
+          }
+          return <Text key={index}>{label}</Text>;
+        })}
+      </Form.Section>
+    </Form>
+  );
 }
 
 /**
@@ -273,6 +355,15 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose icon-button: a Host refuses it'
       );
     }
+    if (component === 'form') {
+      // Not hostable either, for the same reason it is not a `<Host>` child in an app:
+      // a Form is a container that owns a scroller and its own rows, and a Host
+      // composes controls, not containers. Named here rather than left to the catch-all
+      // below so a plan that ever asks for it fails with this sentence.
+      throw new Error(
+        'nitro-ui-host cannot compose form: a Host refuses a container'
+      );
+    }
     if (component === 'button-group') {
       // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): its Compose
       // `ButtonGroup` opens its own overflow popup, and no round has measured a second
@@ -322,6 +413,10 @@ export function NitroUiList({
     return null;
   }
   const style = rowStyle(component);
+  if (component === 'form') {
+    // One Form for the batch, not one Form per row: `n` counts rows here.
+    return <BenchForm n={n} value={value} style={style as ViewStyle} />;
+  }
   if (component === 'date-picker') {
     // The `compact` `date` picker: the control's default presentation, and the
     // only one whose box the reference arms can also take (`matchContents` on

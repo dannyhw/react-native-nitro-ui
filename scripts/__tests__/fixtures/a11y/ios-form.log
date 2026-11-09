@@ -1,0 +1,5 @@
+Measured, not written (G24 round 3): the iOS a11y sweep's lines for the Form on the shipped code, iOS 27. The row with `onPress` holds two Texts; the React Native wrapper for the labelled one carries the app's name, and nothing else does - the list's cell does not answer for the row's name, so the row is not one element to a screen reader.
+The third line is the element around the wrapper, read by a probe that looked for it (round 2): the row's own box, no label, not a button. The shipped sweep prints the first two lines only; both readings give the same verdict.
+real-input a11y case=form kind=anchor id=form-row x=40.0 y=239.9999974568685 w=340.0 h=44.00000000000003 nodes=2
+real-input a11y case=form kind=node trait="other" enabled=true hittable=true id="form-row" label="Row with onPress" value="" x=40.0 y=239.9999974568685 w=340.0 h=44.00000000000003
+real-input a11y case=form kind=node trait="other" enabled=true hittable=false id="" label="" value="" x=20.0 y=235.9999974568685 w=380.0 h=52.00000000000003

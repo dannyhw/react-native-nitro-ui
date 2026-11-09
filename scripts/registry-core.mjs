@@ -209,6 +209,31 @@ export const MANIFEST_SCHEMA = {
     readBy:
       "HOSTABLE_CONTROLS rows and the Host's import in HostChildren.ts, and the barrel check of src/index.ts - one per public name",
   },
+
+  /**
+   * The Hybrid Views a component owns that are **not controls**: a container's sub-views,
+   * rendered only as members of the component (`Form.Section`, `Form.Row`), never on their
+   * own. Optional, and absent for every component that is one view.
+   *
+   * They need everything a control needs from the build - a `nitro.json` autolinking entry
+   * before nitrogen runs, and an Android view manager that takes React Native children - and
+   * nothing a control needs from the *catalogue*: no example tab, no bench arm, no smoke
+   * control, no real-input row, no README row, because an app cannot render one outside its
+   * parent. `exports` is the inverse case (one view, several public names); this is a
+   * component whose public name is one and whose native views are several.
+   *
+   * A sub-view's other names are derived, not typed, exactly as a control's are: for
+   * `Form` + `"Section"` they are `FormSection`, `NitroUiFormSection`,
+   * `HybridNitroUiFormSection`, `NitroUiFormSectionViewManager`.
+   */
+  subViews: {
+    type: 'array',
+    items: /^[A-Z][A-Za-z0-9]*$/,
+    optional: true,
+    readBy:
+      'the nitro.json autolinking entry and the Android manager of each sub-view Hybrid View, ' +
+      'and the cross-check that no sub-view name collides with a component name',
+  },
 };
 
 /**
@@ -220,6 +245,49 @@ export const MANIFEST_SCHEMA = {
  */
 export function exportsOf(manifest) {
   return Array.isArray(manifest.exports) ? manifest.exports : [manifest.name];
+}
+
+/**
+ * The sub-views of a manifest, as manifest-shaped entries.
+ *
+ * The nitro.json writer and the manager check both want `{ hybridView, implementation, … }`,
+ * so this derives them once, with the naming rules `validateManifest` enforces for a control
+ * - `NitroUi<name>` / `Hybrid<hybridView>` - so a sub-view cannot drift from the shape
+ * nitrogen and the package expect.
+ *
+ * @param {any} manifest a validated manifest
+ * @returns {any[]} one entry per declared sub-view, in declaration order
+ */
+export function subViewsOf(manifest) {
+  if (!Array.isArray(manifest.subViews)) return [];
+  return manifest.subViews.map((sub) => {
+    const name = `${manifest.name}${sub}`;
+    return {
+      name,
+      parent: manifest.name,
+      // A sub-view has no directory of its own: its module lives beside its parent's,
+      // which is where the generated view-config import has to point.
+      directory: manifest.directory ?? manifest.name,
+      hybridView: `NitroUi${name}`,
+      implementation: `HybridNitroUi${name}`,
+      androidViewManager: `NitroUi${name}ViewManager`,
+      subView: true,
+    };
+  });
+}
+
+/**
+ * Every sub-view in the tree, each right after its own parent.
+ *
+ * `manifestsFromEntries` returns manifests sorted by name; a sub-view follows its parent so a
+ * regenerated `nitro.json` groups a component's views together, which is also the order a
+ * merge conflict resolves to when two components land at once.
+ *
+ * @param {any[]} manifests validated manifests
+ * @returns {any[]}
+ */
+export function withSubViews(manifests) {
+  return manifests.flatMap((manifest) => [manifest, ...subViewsOf(manifest)]);
 }
 
 /** Every key a manifest may carry; anything else is an unknown key. */
@@ -374,6 +442,23 @@ export function manifestsFromEntries(entries) {
         );
       }
       seen.set(value, manifest.name);
+    }
+  }
+  // A sub-view is not a control, but its names are still one per tree: `NitroUiFormRow`
+  // autolinks exactly one implementation whatever the file that declares it, and a
+  // sub-view called the same thing as a component would put two views in one example tab,
+  // bench arm and manager. Checked against every *derived* name, because that is where a
+  // collision is invisible: nothing reads two `HybridNitroUiFormRow` classes and complains.
+  for (const sub of withSubViews(manifests).filter((entry) => entry.subView)) {
+    for (const key of ['name', 'hybridView', 'implementation']) {
+      if (!byField.has(key)) byField.set(key, new Map());
+      const seen = byField.get(key);
+      if (seen.has(sub[key])) {
+        problems.push(
+          `duplicate ${key} "${sub[key]}": ${seen.get(sub[key])} and the ${sub.parent} sub-view ${sub.name} cannot both claim it`
+        );
+      }
+      seen.set(sub[key], sub.name);
     }
   }
   // A public name is one component: two manifests exporting it would make the Host
@@ -712,6 +797,8 @@ export function regionsFor(manifests) {
         }),
   });
   const NAME = (manifest) => manifest.name;
+  /** The directory a component's module lives in (a sub-view's is its parent's). */
+  const DIRECTORY = (manifest) => manifest.directory ?? manifest.name;
   const ID = (manifest) => manifest.id;
   const TAB = (manifest) => manifest.exampleTab;
   const QUOTED_ID = /^ {2}'([a-z0-9-]+)',$/;
@@ -730,7 +817,9 @@ export function regionsFor(manifests) {
       anchor: '  "autolinking": {',
       describe: 'the autolinking entries',
       shipped: true,
-      entries: manifests,
+      // Sub-views are in this list and in no other: nitrogen needs an autolinking entry for
+      // every Hybrid View it generates glue for, whatever the catalogue thinks of them.
+      entries: withSubViews(manifests),
       keyOf: (manifest) => manifest.hybridView,
       // An entry is its key's whole object. JSON has no comment to mark one, so the
       // shape is the marker: it opens at `"Key": {` and ends where the nesting does,
@@ -849,18 +938,22 @@ export function regionsFor(manifests) {
       path: 'src/__tests__/viewConfigs.test.ts',
       marker: 'config-imports',
       describe: 'the view-config imports',
-      entries: manifests,
+      // Sub-views too: nitrogen writes a `Config.json` for every Hybrid View, and the test
+      // these regions feed fails on a generated config nobody imported a copy of.
+      entries: withSubViews(manifests),
       keyOf: NAME,
+      // The config is named after the entry (that is the key) and lives in the parent's
+      // directory for a sub-view, so only the file name is tied to the key here.
       entryStart:
-        /^import \{ NitroUi([A-Z]\w*)Config \} from '\.\.\/components\/\1\/NitroUi\1Config';$/,
+        /^import \{ NitroUi([A-Z]\w*)Config \} from '\.\.\/components\/[A-Z]\w*\/NitroUi\1Config';$/,
       render: (m) =>
-        `import { NitroUi${m.name}Config } from '../components/${m.name}/NitroUi${m.name}Config';`,
+        `import { NitroUi${m.name}Config } from '../components/${DIRECTORY(m)}/NitroUi${m.name}Config';`,
     }),
     withManifests({
       path: 'src/__tests__/viewConfigs.test.ts',
       marker: 'config-copies',
       describe: 'the `copies` rows',
-      entries: manifests,
+      entries: withSubViews(manifests),
       keyOf: NAME,
       entryStart: /^ +'NitroUi([A-Z]\w*)Config\.json': NitroUi\1Config,$/,
       render: (m) => `  'NitroUi${m.name}Config.json': NitroUi${m.name}Config,`,
@@ -1100,6 +1193,9 @@ export const NON_COMPONENT_EXPORTS = ['Host'];
  */
 export function checkAutolinking(manifests, nitro, onDisk) {
   const problems = [];
+  // A component's sub-views are Hybrid Views like any other, so their autolinking entries
+  // are checked by the same two halves (`subViewsOf` derives the names it looks for).
+  manifests = withSubViews(manifests);
   const autolinking = nitro?.autolinking;
   if (autolinking == null || typeof autolinking !== 'object') {
     return ['nitro.json has no autolinking section - run bun run registry'];
@@ -1178,7 +1274,9 @@ export function checkAndroidViewManagers(manifests, packageText) {
   const problems = [];
   if (packageText == null) return problems;
   const lines = packageText.split('\n').map((line) => line.trim());
-  for (const manifest of manifests) {
+  // Sub-views too: a container's sub-views are exactly the views whose children Fabric has
+  // to mount, so a missing manager there is a screen that never renders a row.
+  for (const manifest of withSubViews(manifests)) {
     if (manifest.androidViewManager == null) continue;
     if (!lines.includes(`${manifest.androidViewManager}(),`)) {
       problems.push(

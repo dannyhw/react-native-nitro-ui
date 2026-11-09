@@ -16,6 +16,9 @@
 #include "HybridNitroUiContextMenuSpecSwift.hpp"
 #include "HybridNitroUiDatePickerSpecSwift.hpp"
 #include "HybridNitroUiDialogSpecSwift.hpp"
+#include "HybridNitroUiFormRowSpecSwift.hpp"
+#include "HybridNitroUiFormSectionSpecSwift.hpp"
+#include "HybridNitroUiFormSpecSwift.hpp"
 #include "HybridNitroUiHostSpecSwift.hpp"
 #include "HybridNitroUiIconButtonSpecSwift.hpp"
 #include "HybridNitroUiMenuSpecSwift.hpp"
@@ -214,6 +217,62 @@ namespace margelo::nitro::nitroui::bridge::swift {
     }
     #endif
     NitroUi::HybridNitroUiDialogSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormSpec>
+  std::shared_ptr<HybridNitroUiFormSpec> create_std__shared_ptr_HybridNitroUiFormSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiFormSpec_cxx swiftPart = NitroUi::HybridNitroUiFormSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiFormSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormSpec_(std__shared_ptr_HybridNitroUiFormSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiFormSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiFormSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiFormSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiFormSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::function<void(double /* headerHeight */, double /* footerHeight */, double /* inset */, double /* gap */)>
+  Func_void_double_double_double_double create_Func_void_double_double_double_double(void* NON_NULL swiftClosureWrapper) noexcept {
+    auto swiftClosure = NitroUi::Func_void_double_double_double_double::fromUnsafe(swiftClosureWrapper);
+    return [swiftClosure = std::move(swiftClosure)](double headerHeight, double footerHeight, double inset, double gap) mutable -> void {
+      swiftClosure.call(headerHeight, footerHeight, inset, gap);
+    };
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormSectionSpec>
+  std::shared_ptr<HybridNitroUiFormSectionSpec> create_std__shared_ptr_HybridNitroUiFormSectionSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiFormSectionSpec_cxx swiftPart = NitroUi::HybridNitroUiFormSectionSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiFormSectionSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormSectionSpec_(std__shared_ptr_HybridNitroUiFormSectionSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiFormSectionSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiFormSectionSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiFormSectionSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiFormSectionSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
+    return swiftPart.toUnsafe();
+  }
+  
+  // pragma MARK: std::shared_ptr<HybridNitroUiFormRowSpec>
+  std::shared_ptr<HybridNitroUiFormRowSpec> create_std__shared_ptr_HybridNitroUiFormRowSpec_(void* NON_NULL swiftUnsafePointer) noexcept {
+    NitroUi::HybridNitroUiFormRowSpec_cxx swiftPart = NitroUi::HybridNitroUiFormRowSpec_cxx::fromUnsafe(swiftUnsafePointer);
+    return std::make_shared<margelo::nitro::nitroui::HybridNitroUiFormRowSpecSwift>(swiftPart);
+  }
+  void* NON_NULL get_std__shared_ptr_HybridNitroUiFormRowSpec_(std__shared_ptr_HybridNitroUiFormRowSpec_ cppType) {
+    std::shared_ptr<margelo::nitro::nitroui::HybridNitroUiFormRowSpecSwift> swiftWrapper = std::dynamic_pointer_cast<margelo::nitro::nitroui::HybridNitroUiFormRowSpecSwift>(cppType);
+    #ifdef NITRO_DEBUG
+    if (swiftWrapper == nullptr) [[unlikely]] {
+      throw std::runtime_error("Class \"HybridNitroUiFormRowSpec\" is not implemented in Swift!");
+    }
+    #endif
+    NitroUi::HybridNitroUiFormRowSpec_cxx& swiftPart = swiftWrapper->getSwiftPart();
     return swiftPart.toUnsafe();
   }
   
