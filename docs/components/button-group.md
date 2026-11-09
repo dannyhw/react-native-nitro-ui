@@ -207,19 +207,23 @@ probed rather than read off a release note:
   during the design task, whose probe row is
   `docs/tasks/Q9-buttongroup-iconbutton-design.report.md` Appendix A, and again here on
   the shipped control.
-- **iOS 26.5** and **iOS 27.1** — the two runs Apple ships now. Both were checked on
-  the shipped control: the same `connected` row, the same ladder and the same
-  `labelStyle` rows, photographed in the example app. The connected row is
-  `ControlGroup` at 31 pt on all three, and it keeps ignoring `size`, `tint` and
-  `variant` on all three; nothing in this page needed a version condition.
+- **iOS 26.5** and **iOS 27.1** — the two other runs Apple ships. **Not checked.**
+  Every leasable device in the pool runs 27.0, and the two runtime simulators made for
+  exactly this look check (`lease.mjs acquire --ios-runtime 26.5`) were never free:
+  first this task's device gates held its pair, then the pool's two slots went to other
+  tasks. So "`ControlGroup` draws at 31 pt and ignores `size`, `tint` and `variant`" is
+  a 27.0 measurement. It is the first thing to re-measure if a connected group ever
+  looks wrong on someone's phone: the `connected` row under **Appearance** on the
+  example app's Groups tab answers in one screenshot.
 - **iOS 15.1** is the deployment target. There is no `ViewThatFits` there, so the row
   clips instead of overflowing; the row, the toggles and the handshake are the same
   code. This was not run on a 15.x device — the pool has none — so the clipping is a
   reading of the code path, not a measurement.
 
-The harness and real-input suites run on the pool's iOS 27.0 device, which is why the
-numbers quoted above are 27.0's and the other two runtimes are photographic evidence
-that the same control is drawn the same way.
+The harness and real-input suites run on the pool's iOS 27.0 device, so every number on
+this page is 27.0's. The code has one version condition — an `#available(iOS 16)` that
+picks the overflowing row over the clipped one — and a connected group is the same
+`ControlGroup` path on every runtime.
 
 ## Limits
 
