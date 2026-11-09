@@ -29,6 +29,14 @@
       "why": "the leading check of a selected filter Chip, a checked Menu row and Picker's selected row"
     },
     {
+      "path": "android/src/main/res/drawable/nitroui_chevron_right.xml",
+      "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/chevron_right/materialsymbolsoutlined/chevron_right_24px.xml",
+      "sha256": "d3f53b271fdb2150775b4252bf46139c3ab5ca872802372a1089e6e1dd6f2a35",
+      "symbol": "chevron_right",
+      "style": "materialsymbolsoutlined",
+      "why": "a Form.Row's `disclosure` accessory (the Android twin of UIKit's `UICellAccessory.disclosureIndicator`)"
+    },
+    {
       "path": "android/src/main/res/drawable/nitroui_keyboard_arrow_down.xml",
       "url": "https://raw.githubusercontent.com/google/material-design-icons/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android/keyboard_arrow_down/materialsymbolsoutlined/keyboard_arrow_down_24px.xml",
       "sha256": "25c502082d201a6223f4ab6418918218a864e73f75d1d734984e648c55eccba3",

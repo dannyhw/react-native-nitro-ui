@@ -1,0 +1,131 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T19:55:40.924Z on code tree `9065d0b56466` at HEAD `92d05f2` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 640830 ms
+- Load: start 2.57, end 8.27, median 9.41, max 21.03
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log` (<store>/task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ContextMenu.harness.tsx`
+- `● Test suite failed to run`
+- `FAIL __tests__/Button.harness.tsx`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.27 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 86 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree 9065d0b56466 at HEAD 92d05f21
+gate: git tree 2896ece2ff74
+gate: log task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log
+gate:       <store>/task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9065d0b56466, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.16/4.87 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+2026-11-08T20:02:27.143Z [harness][metro] Pre-warmed Metro bundle graph key does not match the app-requested bundle graph key; the pre-warm may have built a graph the app cannot reuse. Mismatched: platform (prewarm=ios, app=android)
+HARNESS replacing existing app connection with a newer client
+FAIL __tests__/ContextMenu.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was replaced by a newer app connection. This can happen when the app reloads, restarts, or reconnects while a test file is still running.
+
+HARNESS replacing existing app connection with a newer client
+FAIL __tests__/Button.harness.tsx
+  ● Test suite failed to run
+
+    The native runtime disconnected while preparing to run this test file.
+
+    The runtime bridge disconnected, but the app session still appears to be running.
+
+    objc[10936]: Class UIAccessibilityLoaderWebShared is implemented in both /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.hoRje0/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10b46c398) and /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.hoRje0/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10fde4310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+
+
+Summary of all failing tests
+FAIL __tests__/ContextMenu.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge was replaced by a newer app connection. This can happen when the app reloads, restarts, or reconnects while a test file is still running.
+
+FAIL __tests__/Button.harness.tsx
+  ● Test suite failed to run
+
+    The native runtime disconnected while preparing to run this test file.
+
+    The runtime bridge disconnected, but the app session still appears to be running.
+
+    objc[10936]: Class UIAccessibilityLoaderWebShared is implemented in both /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.hoRje0/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x10b46c398) and /private/var/run/com.apple.security.cryptexd/mnt/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0.hoRje0/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.0.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10fde4310). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+
+
+Test Suites: 2 failed, 1 skipped, 24 passed, 26 of 27 total
+Tests:       2 skipped, 433 passed, 435 total
+Snapshots:   0 total
+Time:        611.974 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9065d0b56466, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.41/8.32 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        25.936 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 640.8 s
+gate: recorded in .gates/task/G24-form.jsonl
+
+
+gate: appended the device context to task/G24-form/harness+ios-2026-11-08T19-55-40.532Z.log (4 probe(s))
+
+```

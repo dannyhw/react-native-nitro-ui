@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T18:23:41.974Z on code tree `d21340926a13` at HEAD `e6eddfe` (branch `task/G24-form`)
+- Command: `bun run check`
+- Result: fail, exit 1, 168867 ms
+- Load: start 7.68, end 12.15, median 13.92, max 18.14
+- Device: none recorded (not a device gate)
+- Full log: `task/G24-form/check-2026-11-08T18-23-41.414Z.log` (<store>/task/G24-form/check-2026-11-08T18-23-41.414Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `● Console`
+- `FAIL scripts/__tests__/conformance.test.js`
+- `● the debt, as the matrix sees it › collapses the a11y cases onto their components, once per control`
+- `expect(received).toEqual(expected) // deep equality`
+- `FAIL scripts/__tests__/component-coverage.test.js`
+- `● every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2887 — the rest is in the full log above)
+
+```
+      at renderRootSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16481:11)
+      at performWorkOnRoot (node_modules/react-reconciler/cjs/react-reconciler.development.js:15540:11)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-reconciler/cjs/react-reconciler.development.js:3520:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:664:34)
+      at node_modules/react/cjs/react.development.js:923:21
+
+PASS src/__tests__/hostReport.test.tsx
+PASS scripts/__tests__/android-icons.test.js
+PASS src/__tests__/picker.test.tsx
+PASS src/__tests__/menuSizingKey.test.tsx
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/readme-components.test.js
+PASS src/__tests__/useSizingId.test.tsx
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS src/__tests__/viewConfigs.test.ts
+PASS src/__tests__/iconName.test.tsx
+  ● Console
+
+    console.warn
+      nitro-ui: Button's androidIcon "a|b" is not a valid Android resource name — lower-case letters, digits and underscores only, and not starting with a digit. Nothing will be drawn for it. See docs/components/button.md, "Android icons".
+
+      84 |   }
+      85 |   warnedNames.add(key);
+    > 86 |   console.warn(
+         |           ^
+      87 |     `nitro-ui: ${componentName}'s ${propName} "${name}" ${problem}. ` +
+      88 |       `Nothing will be drawn for it. See docs/components/button.md, "Android icons".`
+      89 |   );
+
+      at warn (src/iconName.ts:86:11)
+      at Button (src/components/Button/Button.tsx:317:24)
+      at Object.react_stack_bottom_frame (node_modules/react-reconciler/cjs/react-reconciler.development.js:19204:20)
+      at renderWithHooks (node_modules/react-reconciler/cjs/react-reconciler.development.js:5549:22)
+      at updateFunctionComponent (node_modules/react-reconciler/cjs/react-reconciler.development.js:7969:19)
+      at beginWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:9591:18)
+      at runWithFiberInDEV (node_modules/react-reconciler/cjs/react-reconciler.development.js:2663:13)
+      at performUnitOfWork (node_modules/react-reconciler/cjs/react-reconciler.development.js:16674:22)
+      at workLoopSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16500:41)
+      at renderRootSync (node_modules/react-reconciler/cjs/react-reconciler.development.js:16481:11)
+      at performWorkOnRoot (node_modules/react-reconciler/cjs/react-reconciler.development.js:15540:11)
+      at performWorkOnRootViaSchedulerTask (node_modules/react-reconciler/cjs/react-reconciler.development.js:3520:7)
+      at flushActQueue (node_modules/react/cjs/react.development.js:664:34)
+      at node_modules/react/cjs/react.development.js:923:21
+
+PASS src/__tests__/progressSizingKey.test.tsx
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/example-lock.test.js (11.797 s)
+PASS src/__tests__/segmentedControl.test.tsx
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-a11y-ios.test.js
+  ● Console
+
+    console.log
+          · the boxes below are read 3 times before two agreed (2 frame(s) moved, 6000 ms; the first read said (108.33, 72.44, 20.33, 9.33)) — the first read was thrown away rather than decided on. The finding below is unaffected: the rule compares two elements of this one read, never two reads — the first read is this box at ⅓ scale, the shape of a snapshot taken at another render scale rather than a control that moved
+
+      at CheckLog.log [as note] (scripts/real-input/report.mjs:65:13)
+
+    console.log
+          WARN its first accessibility read was this box at ⅓ scale — a stale snapshot from another render pass, discarded by read 3. The boxes reported here are the settled ones and the rule still graded them, so this is not a failure; it is a transient accessibility bug that came and went, and it is a warning so it does not become a footnote
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          · the boxes below are read 3 times before two agreed (2 frame(s) moved, 6000 ms) — the first read was thrown away rather than decided on. The finding below is unaffected: the rule compares two elements of this one read, never two reads
+
+      at CheckLog.log [as note] (scripts/real-input/report.mjs:65:13)
+
+PASS scripts/__tests__/emulator-launch.test.js
+PASS src/__tests__/checkbox.test.tsx
+PASS scripts/__tests__/ime-frame.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/gate.test.js (50.478 s)
+PASS scripts/__tests__/gate-logs.test.js (51.985 s)
+PASS scripts/__tests__/ci-workflows.test.js (71.724 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (80.008 s)
+PASS scripts/__tests__/bench-gate.test.js (161.66 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/conformance.test.js
+  ● the debt, as the matrix sees it › collapses the a11y cases onto their components, once per control
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+    @@ -2,6 +2,7 @@
+        "Menu|recycle-reset",
+        "Slider|a11y-name-on-focusable-node",
+        "SegmentedControl|a11y-name-on-focusable-node",
+        "Picker|a11y-name-on-focusable-node",
+        "ContextMenu|a11y-name-on-focusable-node",
+    +   "Form|a11y-name-on-focusable-node",
+      ]
+
+      1545 |     // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
+      1546 |     // as an element of its own under the wrapper that carries the label (G16).
+    > 1547 |     expect(failingKeys()).toEqual([
+           |                           ^
+      1548 |       'Menu|recycle-reset',
+      1549 |       'Slider|a11y-name-on-focusable-node',
+      1550 |       'SegmentedControl|a11y-name-on-focusable-node',
+
+      at Object.toEqual (scripts/__tests__/conformance.test.js:1547:27)
+
+FAIL scripts/__tests__/component-coverage.test.js
+  ● every component is covered by the conformance suite › the debt the matrix reports is the debt the runner reports
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 0
+    + Received  + 1
+
+    @@ -2,6 +2,7 @@
+        "Menu|recycle-reset",
+        "Slider|a11y-name-on-focusable-node",
+        "SegmentedControl|a11y-name-on-focusable-node",
+        "Picker|a11y-name-on-focusable-node",
+        "ContextMenu|a11y-name-on-focusable-node",
+    +   "Form|a11y-name-on-focusable-node",
+      ]
+
+      395 |     // `A11Y_EXEMPTIONS` rows carry a platform.
+      396 |     const keys = failingKeys();
+    > 397 |     expect(keys).toEqual([
+          |                  ^
+      398 |       'Menu|recycle-reset',
+      399 |       'Slider|a11y-name-on-focusable-node',
+      400 |       'SegmentedControl|a11y-name-on-focusable-node',
+
+      at Object.toEqual (scripts/__tests__/component-coverage.test.js:397:18)
+
+
+Test Suites: 2 failed, 75 passed, 77 total
+Tests:       2 failed, 1908 passed, 1910 total
+Snapshots:   0 total
+Time:        162.012 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 168.9 s
+gate: recorded in .gates/task/G24-form.jsonl
+
+```

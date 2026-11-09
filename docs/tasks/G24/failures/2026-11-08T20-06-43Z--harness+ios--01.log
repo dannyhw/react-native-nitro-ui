@@ -1,0 +1,195 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-08T20:06:43.053Z on code tree `9065d0b56466` at HEAD `92d05f2` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 688943 ms
+- Load: start 6.89, end 5.63, median 6.89, max 19.82
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+ios-2026-11-08T20-06-42.357Z.log` (<store>/task/G24-form/harness+ios-2026-11-08T20-06-42.357Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Console`
+- `● conformance · every control, four rules › · Progress › leaves the engine where it started across a churn of drops`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+ios-2026-11-08T20-06-42.357Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.63 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 730 — the rest is in the full log above)
+
+```
+
+    console.log
+          · conformance-checkbox after the uncontrolled second owner: the first press after the second mount reports=conformance-checkbox:false (expected conformance-checkbox:false)
+
+
+    console.log
+          · conformance-checkbox residue probe (controlled second owner): a press that turns an uncontrolled Checkbox on, then a second owner that is *controlled* at `false` - the only shape that reads the handshake’s counters, which is what `model.state = NitroUiControlledValue(…)` uniquely owns
+
+
+    console.log
+          · conformance-checkbox after the controlled second owner: the first press on the controlled second mount reports=conformance-checkbox:true (expected conformance-checkbox:true)
+
+
+    console.log
+          · box=61.0x28.0 labelBox=61.0x28.0
+
+
+    console.log
+          · ContextMenu declares no sizing policy, so it has no fallback to declare and never enters the engine to guess one (component.json sizing: null)
+
+
+    console.log
+          · ContextMenu is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · ContextMenu is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · conformance-context-menu props after the second owner: title=- open=0
+
+
+    console.log
+          · conformance-context-menu residue probe (uncontrolled second owner): a pick the first owner made through the row path (selects=1) - the second owner made none, so a count left over is the reset missing
+
+
+    console.log
+          · conformance-context-menu after the uncontrolled second owner: picks this mount reports=0 (expected 0)
+
+
+    console.log
+          · conformance-context-menu after the uncontrolled second owner: the menu is open=0 (expected 0)
+
+
+    console.log
+          · a View: box=420.0x56.0 labelBox=420.0x56.0
+
+
+    console.log
+          · Form declares no sizing policy, so it has no fallback to declare and never enters the engine to guess one (component.json sizing: null)
+
+
+    console.log
+          · Form is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · Form is not self-sizing, so it never enters the engine's ledger or registry (component.json sizing: null) - its drops are proved by its own suite, which reads the presentation count
+
+
+    console.log
+          · conformance-form props after the second owner: rows=2 orphans=0
+
+
+    console.log
+          · conformance-form residue probe (uncontrolled second owner): four registered rows and a list scrolled 120 pt - the second owner mounts two, so a reset that skipped the bookkeeping reports the first owner’s count, or a row that is in no cell at all
+
+
+    console.log
+          · the second owner's list: rows=2 sections=1 orphans=0 scroll=0.00 offset=0.00
+
+
+    console.log
+          · conformance-form after the uncontrolled second owner: rows=2 (expected 2)
+
+
+    console.log
+          · conformance-form after the uncontrolled second owner: sections=1 (expected 1)
+
+
+    console.log
+          · conformance-form after the uncontrolled second owner: orphans=0 (expected 0)
+
+
+    console.log
+          · a View: box=420.0x0.0 labelBox=420.0x0.0
+
+  ● conformance · every control, four rules › · Progress › leaves the engine where it started across a churn of drops
+
+    1 conformance finding(s):
+
+        - Progress × no-leak-on-drop: 5 ledger entry(ies) survived 50 drops — each missing `NitroUiSizing::forget(sizing_.get())` pair in `onDropView` shows up here, and a handle keeps the view alive, so the leaked entry is the leak
+      [0m [90m 1239 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1240 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1241 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1242 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1243 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1244 |[39m [32m        .join('\n')}`[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Conformance.harness.tsx
+  ● conformance · every control, four rules › · Progress › leaves the engine where it started across a churn of drops
+
+    1 conformance finding(s):
+
+        - Progress × no-leak-on-drop: 5 ledger entry(ies) survived 50 drops — each missing `NitroUiSizing::forget(sizing_.get())` pair in `onDropView` shows up here, and a handle keeps the view alive, so the leaked entry is the leak
+      [0m [90m 1239 |[39m   [90m// control names. One thrown Error is still one failed test, so the summary's count is right.[39m
+       [90m 1240 |[39m   [36mif[39m (failures[33m.[39mlength [33m>[39m [35m0[39m) {
+      [31m[1m>[22m[39m[90m 1241 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m      |[39m                    [31m[1m^[22m[39m
+       [90m 1242 |[39m       [32m`${String(failures.length)} conformance finding(s):\n${failures[39m
+       [90m 1243 |[39m [32m        .map((failure) => `  - ${failure}`)[39m
+       [90m 1244 |[39m [32m        .join('\n')}`[39m[0m
+
+
+Test Suites: 1 failed, 1 skipped, 25 passed, 26 of 27 total
+Tests:       1 failed, 2 skipped, 477 passed, 480 total
+Snapshots:   0 total
+Time:        660.137 s
+Ran all test suites.
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 9065d0b56466, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.63/7.65 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios-2026-11-08T20-06-42.357Z.log.suites.json.isolated.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+
+Test Suites: 2 passed, 2 total
+Tests:       4 passed, 4 total
+Snapshots:   0 total
+Time:        26.01 s
+Ran all test suites.
+harness: isolated run passed
+gate: harness:ios FAIL in 688.9 s
+gate: recorded in .gates/task/G24-form.jsonl
+
+
+gate: appended the device context to task/G24-form/harness+ios-2026-11-08T20-06-42.357Z.log (4 probe(s))
+
+```

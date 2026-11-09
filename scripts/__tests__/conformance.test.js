@@ -189,6 +189,7 @@ describe('coverage', () => {
       'ContextMenu',
       'DatePicker',
       'Dialog',
+      'Form',
       'IconButton',
       'Menu',
       'Picker',
@@ -1536,9 +1537,10 @@ describe('the debt, as the matrix sees it', () => {
   const followups = () => read('docs/tasks/FOLLOWUPS.md');
 
   it('collapses the a11y cases onto their components, once per control', () => {
-    // Nine rows across five controls: `slider` and `hosted-slider` both guard `Slider`,
-    // and the debt list carries both platforms' rows for a control. The matrix is
-    // about controls, so every row for one control makes exactly one failing cell.
+    // The debt list carries both platforms' rows for one control, and `slider` and
+    // `hosted-slider` both guard `Slider`. The matrix is about components, so every row for
+    // one control makes exactly one failing cell — which is why the expected list below is
+    // shorter than the debt list it collapses.
     //
     // `Picker` is here because the real accessibility tree says so, not because a rule was
     // widened to reach it: measured under XCUITest, a hosted Picker's control announces
@@ -1547,6 +1549,9 @@ describe('the debt, as the matrix sees it', () => {
     // printed on every run rather than asserted away. `ContextMenu` is the same kind of
     // row: measured under XCUITest, an accessible ContextMenu still lists its first Text
     // as an element of its own under the wrapper that carries the label (G16).
+    // `Form` is a second measurement of that kind: on iOS a Form row keeps its name on the
+    // React Native wrapper (`other`) instead of the cell, so the row is a stop with a named
+    // text inside it, not the button itself (G24).
     // `IconButton` is a third kind of the same record: the name is on the right element and
     // the box is the drawn control's, inset inside the 44 pt touch target the component adds
     // around it (G23). Nothing was widened for it — the box rule still says what it said, and
@@ -1559,6 +1564,7 @@ describe('the debt, as the matrix sees it', () => {
       'SegmentedControl|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
+      'Form|a11y-name-on-focusable-node',
       'IconButton|a11y-name-on-focusable-node',
     ]);
   });
@@ -2075,6 +2081,7 @@ describe('the a11y sweep, against a fake device', () => {
         'textfield',
         'searchfield',
         'contextmenu',
+        'form',
       ]);
     });
   });

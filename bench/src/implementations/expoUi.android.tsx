@@ -18,6 +18,12 @@ import {
   useNativeState,
 } from '@expo/ui/jetpack-compose';
 import { menuAnchor } from '@expo/ui/jetpack-compose/modifiers';
+import {
+  FieldGroup,
+  Row as FormRow,
+  Switch as FormSwitch,
+  Text as FormText,
+} from '@expo/ui';
 import { useCallback, useEffect, useState } from 'react';
 
 import type { BenchListProps } from '../types';
@@ -25,6 +31,11 @@ import {
   SEGMENTED_SELECTION,
   buttonGroupItems,
   buttonTitle,
+  FORM_ROW_HOST_STYLE,
+  formRowKind,
+  formRowLabel,
+  formRowValue,
+  formSwitchValue,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
   menuItems,
@@ -33,6 +44,7 @@ import {
   onIconButtonPress,
   onPress,
   onMenuSelect,
+  onRowPress,
   onPickerChange,
   onSliderChange,
   onValueChange,
@@ -177,6 +189,54 @@ function BenchMenu({ value }: { value: boolean }) {
 }
 
 /**
+ * One row of the batch's FieldGroup, in the universal toolkit's row vocabulary.
+ *
+ * `@expo/ui`'s `FieldGroup` is its answer to a grouped settings list; on Android it
+ * is a Compose `LazyColumn` whose rows are clipped to position-aware Material 3
+ * shapes - the same job nitro-ui's section does with `SegmentedListItem`, which is
+ * what makes it the peer the brief asks for. Each kind is what an app writes for
+ * it: `Text` alone, a `Row` of title and value, a `Row` of title and `Switch`, and
+ * a `Row` that answers to a press - universal `onPress`, this toolkit's row-level
+ * press, asked the same way nitro-ui's `Form.Row onPress` asks it.
+ *
+ * The universal components, not the `jetpack-compose` ones the other arms use:
+ * `FieldGroup.Section` builds its rows out of this toolkit's own primitives, and a
+ * row has to be spelled the way a consumer of this container spells it.
+ */
+function BenchFormRow({ index, value }: { index: number; value: boolean }) {
+  const kind = formRowKind(index);
+  const label = formRowLabel(index);
+  if (kind === 'detail') {
+    return (
+      <FormRow spacing={8}>
+        <FormText>{label}</FormText>
+        <FormText>{formRowValue(value)}</FormText>
+      </FormRow>
+    );
+  }
+  if (kind === 'switch') {
+    return (
+      <FormRow spacing={8}>
+        <FormText>{label}</FormText>
+        <FormSwitch
+          testID={`bench-expo-form-switch-${String(index)}`}
+          value={formSwitchValue(index, value)}
+          onValueChange={onValueChange}
+        />
+      </FormRow>
+    );
+  }
+  if (kind === 'press') {
+    return (
+      <FormRow spacing={8} onPress={onRowPress}>
+        <FormText>{label}</FormText>
+      </FormRow>
+    );
+  }
+  return <FormText>{label}</FormText>;
+}
+
+/**
  * `@expo/ui` worst case for the library: one Compose hosting view per control
  * (one `AndroidComposeView` each). Expo UI always needs a `Host`, so both Expo
  * arms are required for a fair comparison
@@ -194,6 +254,22 @@ export function ExpoUiHostPerControlList({
     return unsupportedDatePicker();
   }
   const style = rowStyle(component);
+  if (component === 'form') {
+    // One hosting view per *row*: a FieldGroup per row, which is what an app pays
+    // when it hosts each settings row instead of one grouped list. The host needs a
+    // box (`FORM_ROW_HOST_STYLE`) because a host has no intrinsic size of its own.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Host key={index} style={FORM_ROW_HOST_STYLE}>
+            <FieldGroup>
+              <BenchFormRow index={index} value={value} />
+            </FieldGroup>
+          </Host>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {range(n).map((index) =>
@@ -408,6 +484,21 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   }
   if (n === 0) {
     return null;
+  }
+  if (component === 'form') {
+    // The peer for nitro-ui's one grouped Form: one hosting view, one FieldGroup,
+    // one section, `n` rows - the tree an app writes.
+    return (
+      <Host style={stackStyle(n, component)}>
+        <FieldGroup>
+          <FieldGroup.Section title="Settings">
+            {range(n).map((index) => (
+              <BenchFormRow key={index} index={index} value={value} />
+            ))}
+          </FieldGroup.Section>
+        </FieldGroup>
+      </Host>
+    );
   }
   return (
     <Host style={stackStyle(n, component)}>

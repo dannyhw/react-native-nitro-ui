@@ -1,0 +1,169 @@
+# Failure excerpt — harness:android:Form
+
+- Ran: 2026-11-09T02:32:13.625Z on code tree `6269387e687a` at HEAD `f3c1d5c` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Form`
+- Result: fail, exit 1, 215123 ms
+- Load: start 6.35, end 9.48, median 10.16, max 12.94
+- Device: android / device `emulator-5574` / lease `G24-en8js`
+- Full log: `task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log` (<store>/task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `expected 4 to be 3 // Object.is equality`
+- `● Form (G24) › composes a recycled Section, and drops the band of a gone title`
+- `● Form (G24) › leaves the window with the app still running`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected [ …(2) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 9.48 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 117 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Form
+gate: node ../scripts/harness.mjs --harnessRunner android Form (cwd example)
+gate: code tree 6269387e687a at HEAD f3c1d5c0
+gate: git tree 8a8329176753 with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log
+gate:       <store>/task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Form
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 6269387e687a, 23 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.35/7.37 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      FORM TRACE base: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00
+
+
+    console.log
+      FORM TRACE inserted: rows=10;items=-;inCells=10;reparents=-;reclaims=-;applies=-;alive=10;placed=3;screen=-;offset=0.00
+
+
+    console.log
+      FORM TRACE removed: rows=8;items=-;inCells=8;reparents=-;reclaims=-;applies=-;alive=8;placed=3;screen=-;offset=0.00
+
+
+    console.log
+      FORM TRACE reordered: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"bcbfc321-88ad-4300-9ad2-dd4e6c0dc765"} switch={"nativeId":"1a7e0edf-0681-4dc6-9b87-fe49ea271e97"}
+
+
+    console.log
+      FORM COST N=20 form=80ms plain=68ms <missing>
+
+
+    console.log
+      FORM COST N=50 form=114ms plain=68ms <missing>
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=2 geometry{offset=0.00,origin=0.00,received=<missing>,listY=<missing>,insetTop=<missing>} - m3: measureInWindow 12.2,168.0,387.4,56.0 (-scroll 0.0 = 168.0) vs UIKit 12.2,37.3,387.4,56.0 (off by 130.7 pt) | m8: measureInWindow 12.2,448.0,387.4,56.0 (-scroll 0.0 = 448.0) vs UIKit 12.2,0.0,387.4,56.0 (off by 448.0 pt)
+
+  ● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    expected 4 to be 3 // Object.is equality
+
+      [0m [90m 741 |[39m         [32m'the first section to recount its shapes'[39m
+       [90m 742 |[39m       )[33m;[39m
+      [31m[1m>[22m[39m[90m 743 |[39m       expect(num(section[33m,[39m [32m'shapes'[39m))[33m.[39mtoBe([35m3[39m)[33m;[39m
+       [90m     |[39m                                          [31m[1m^[22m[39m
+       [90m 744 |[39m     }
+       [90m 745 |[39m
+       [90m 746 |[39m     [36mawait[39m rerender([33m<[39m[33mProbe[39m mode[33m=[39m[32m"base"[39m formStyle[33m=[39m{[33mSHORT_BOX[39m} {[33m...[39mcounters()} [33m/[39m[33m>[39m)[33m;[39m[0m
+
+  ● Form (G24) › composes a recycled Section, and drops the band of a gone title
+
+    never saw "the recycled section to draw its layer again" - last was rows=1;index=0;title=Second;footer=-;gap=0.0;shapes=1;pressed=0;headerBand=0.0;footerBand=0.0;headerText=0.0;footerText=0.0;boxH=56.0;layerH=0.0;rects=0-56;drawnAccessory=-
+
+      [0m [90m 560 |[39m     }
+       [90m 561 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 562 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`never saw "${what}" - last was ${String(read())}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 563 |[39m     }
+       [90m 564 |[39m     [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m25[39m))[33m;[39m
+       [90m 565 |[39m   }[0m
+
+  ● Form (G24) › leaves the window with the app still running
+
+    Form report never satisfied "the list to have scrolled before it goes" - last was sections=3;rows=9;inCells=8;orphans=0;alive=9;width=411.43;heights=56.0,56.0,56.0,56.0,56.0,56.0;taps=0;pressed=0;scroll=83.8;keyboard=rn;ime=0.00;offset=0.00;origin=0.00;placed=3
+
+      [0m [90m 101 |[39m     }
+       [90m 102 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 103 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 104 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 105 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 106 |[39m [32m        )}`[39m[0m
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 1401 |[39m     [90m// have always agreed and a case that cannot see the difference is not worth running.[39m
+       [90m 1402 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1403 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                               [31m[1m^[22m[39m
+       [90m 1404 |[39m     [90m// Eight of the 24 rows are on screen at rest - the Form's box shows a little over[39m
+       [90m 1405 |[39m     [90m// eight 52 pt rows - so eight is the ceiling here, and the guard is that the case[39m
+       [90m 1406 |[39m     [90m// really compared a screenful rather than one or two rows.[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       4 failed, 103 passed, 107 total
+Snapshots:   0 total
+Time:        213.656 s
+Ran all test suites matching Form.
+gate: harness:android:Form FAIL in 215.1 s - note: the code tree moved during the run (2dc278c67c04 now), so this line describes 6269387e687a
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+android+Form-2026-11-09T02-32-12.850Z.log (5 probe(s))
+
+```
