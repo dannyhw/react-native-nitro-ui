@@ -344,3 +344,67 @@ own median is 11.4.
 The ledger at `docs/tasks/G24/gates.jsonl` carries 119 lines: the 72 from `task/G24-form` plus the 47
 this branch wrote. `gate.mjs export` writes only the current branch's ledger, so the earlier lines
 were merged back in by hand rather than dropped.
+
+## Fix round 2 (review)
+
+**Lease:** `G24-2hz7i` (pair-b / Metro 8293; the iOS device is the 27.0 simulator `nitro-ui B`).
+
+Six of the seven findings are in. `origin/main` merged again; the shared lists keep both components
+and every generated region came from its own script.
+
+iOS: a visible cell with no row is re-adopted, not only when the list is empty; a list that comes
+back out of the pool is put at `-adjustedContentInset.top` and the reset is verified rather than
+asked; an animated scroll names itself so its frames stop publishing; the keyboard inset no longer
+counts the home-indicator area twice; below iOS 16 a row's growth invalidates the layout. `FormRoot`
+resets the "am I inside a row" flag, so a `Form` inside a `Form.Row` no longer brands its rows nested.
+
+The two new cases asked iOS questions of Android — its Form report answers under `scroll`, stubs
+`offset=0.00` and has no `offsetPublishes` — and now ask each platform its own.
+
+`form=held` is not reproducible as a red here, on either platform; both runs are in the appendix.
+
+Reds, the table and what did not go red: the appendix.
+
+### Appendix: fix round 2 red proofs
+
+Each line is `test -> the thing put back the way it was -> what went red`. A mutation was applied to
+the source, the platform rebuilt, the gate ran filtered, and the file was reverted.
+
+- `harness:ios:Form > keeps the tree intact through an insert, a removal and 50 scrolls (E1)` -> the
+  `readoptRowlessCells()` call and `giveBack`'s `row.superview === container` guard both removed ->
+  `never satisfied "at rest: every item on screen drawn from a cell" - last was inCells=2` against
+  `screen=1,420.00,666.00,5,5` (12:03Z). With only the guard removed, the same wait again at `at
+  offset 400`: `inCells=5` against `screen=1,420.00,646.67,6,6` (12:12Z), and `aims a row content at
+  its Yoga origin (E4)`: `expected 10 to be +0`.
+- `reports a settle that no drag announced` -> `scrollViewDidScroll`'s body emptied -> `never
+  satisfied "the shadow tree to be told the offset the list is at"` (12:12Z).
+- `composes a recycled Section, and drops the band of a gone title` (iOS) -> `view.configure(text:)`
+  removed from `reconcileBands` -> `never saw "the gone title to come off the band" - last was
+  ... drawnTitle=Second` with `title=-` (12:12Z).
+- `grows a row when UIKit is not watching its height constraint (E3, iOS 15)` -> the
+  `if !listSelfSizesRows { invalidateLayout() }` fallback removed -> `never satisfied "the grown row
+  to be taller in the layout with no self-sizing to do it"`; the plain E3 went red beside it (12:12Z).
+- `harness:android:Form > composes a recycled Section, and drops the band of a gone title` -> the
+  `if (header.isNullOrEmpty())` band zeroing removed -> `never saw "the gone title to give its band
+  back" - last was ... headerBand=36.2` (12:34Z).
+- `src/__tests__/form.test.tsx > does not call the rows of a Form inside a row nested` -> `FormRoot`'s
+  `InsideRowContext.Provider value={false}` removed -> `Expected: false`, `Received: true`. Removing
+  the flag instead (`value={true}`) reds the *other* case, because the warning is once per process:
+  `says so when a row is rendered inside a row` -> `Expected: true`, `Received: false`.
+- `publishes a settle for a scroll it started, not a frame` -> the `scrollAnimating != true` clause
+  removed from the delegate's guard -> **no red**: the animated scroll measured `publishes=1` with and
+  without the clause on this iOS build, so the ceiling is not the assertion that catches it. What did
+  go red is `aims a row content at its Yoga origin (E4)` — `expected 10 to be +0` (12:24Z, the only
+  failure of that run). The ceiling stays as a cheap regression guard and its comment no longer claims
+  a publish per frame.
+- `form=held` -> `form = nil` removed from the iOS Section's `prepareForRecycle` -> **no red**:
+  `harness:ios:Form` finished green, 115 of 115 (12:30Z). Android has no `form` field to read — its
+  section report runs `rows … headerBand/footerBand/headerText/footerText/boxH/layerH/rects`
+  (`HybridNitroUiFormSection.kt:236-245`) — and with `onDropView()` emptied the case still passed
+  (12:40Z, the run's only failure was this round's own `recycles` read). Both mutations were re-run
+  separately as the orchestrator asked; neither went red on `6a8c3606`. Reported, not chased: the
+  assertion exists, the field is iOS-only, and no mutation of the two reset points reached it here.
+- This round's own two Android reds, before they were fixed (12:34Z): `starts a recycled Form at the
+  top of its own content` -> `report has no "recycles"`, and `publishes a settle …` -> `never
+  satisfied "nine rows and a published offset"` — both because they read iOS fields off Android's
+  report. `6a8c3606` and `df2ef5da` are the fix.
