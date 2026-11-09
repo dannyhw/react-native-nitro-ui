@@ -282,6 +282,28 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     imeInset = nil
   }
 
+  /// Put a list that came back from the pool at the top of its own content, once.
+  ///
+  /// The ask in `prepareForRecycle` is not enough on its own: at that moment the list has no
+  /// sections, so there is nothing for "the top" to mean, and UIKit answers the reset later
+  /// with the offset the previous mount left. Doing it here, when the new mount has sections,
+  /// a window and laid-out rows, is what the numbers below are taken against — and it is the
+  /// only place that can *see* the difference (fix round 2, item 2).
+  ///
+  /// Returns whether this is the pass that applied it.
+  @discardableResult
+  private func takeTopResetIfNeeded() -> Bool {
+    guard pendingTopReset, !sections.isEmpty, list.window != nil else { return false }
+    pendingTopReset = false
+    list.setContentOffset(
+      CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
+      animated: false
+    )
+    list.collectionViewLayout.invalidateLayout()
+    list.layoutIfNeeded()
+    return true
+  }
+
   // MARK: - Putting the list in the component view
 
   /// The holding view is laid out by Fabric, inside the component view's padding. The list
@@ -482,6 +504,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // one turn later, with the element on screen (fix round 1, item 8).
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
+      // Before anything is asked of the visible rect: a recycled list still sitting at the
+      // previous mount's offset puts that rect outside the content, and a list with no visible
+      // items dequeues no cells and adopts no rows - the Form draws nothing at all until
+      // something scrolls it (measured at 200 pt against 646 pt of content).
+      takeTopResetIfNeeded()
       // A list with items and no cells is stuck: `apply` alone does not always bring a
       // layout pass, and the pass that would has nothing left to invalidate. The first
       // mount is saved by `listNeedsFrame`, which lays the list out once its frame
@@ -1016,16 +1043,10 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     guard holding.superview != nil, list.window != nil else { return }
     list.layoutIfNeeded()
 
-    // The one place the reset above can actually land: the list is on screen, laid out, and
-    // has rows to have an offset for. Consumed once, so a Form the app scrolls by hand is
-    // never scrolled back afterwards.
-    if pendingTopReset, !sections.isEmpty {
-      pendingTopReset = false
-      list.setContentOffset(
-        CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
-        animated: false
-      )
-    }
+    // The fallback place for the reset a recycled list owes (the hop after a snapshot apply
+    // is the first): a settle is the other moment the list is definitely on screen, laid out
+    // and worth asking.
+    takeTopResetIfNeeded()
 
     let offset = Double(list.contentOffset.y)
     // `reportedOffset` records what JavaScript was *told*, so it moves only on a publish that
