@@ -577,6 +577,20 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     matches: /not actionable/,
   },
   {
+    control: 'stepper',
+    platform: 'android',
+    followups:
+      "G25 a11y: the Stepper's RangeInfo node is not actionable in a dump",
+    // The same dump limitation the four Slider/SegmentedControl rows record, and for the
+    // same reason: the merged row is actionable through Compose's *custom* `SetProgress`
+    // action, and `uiautomator dump` prints only the standard clickable/scrollable
+    // flags, so a control a reader can adjust with a swipe reads as "no actions". The
+    // action itself is not taken on faith — `Stepper > steps once when a reader asks`
+    // performs SetProgress on this node and asserts the step and the one event it
+    // produces, so what is unasserted here is the flag, not the behaviour.
+    matches: /not actionable/,
+  },
+  {
     control: 'slider',
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',

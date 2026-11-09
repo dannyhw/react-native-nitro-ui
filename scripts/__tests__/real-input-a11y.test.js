@@ -136,7 +136,17 @@ describe('the a11y rule, on measured trees', () => {
     ]);
     // The rest are not silently passing: each is a finding, printed, with a debt row.
     expect(verdicts.filter((v) => v.known.length > 0).map((v) => v.id)).toEqual(
-      ['slider', 'segmented-control', 'hosted-slider', 'hosted-segmented']
+      [
+        'slider',
+        'segmented-control',
+        // G25's Stepper, measured on pair-a: one node carries the name — the merged row
+        // `View` at the control's own 273x126 px box, with no clickable node under it —
+        // and that node is actionable through Compose's custom `SetProgress`, which a
+        // uiautomator dump cannot show. The X4 rows' limitation, on a fifth control.
+        'stepper',
+        'hosted-slider',
+        'hosted-segmented',
+      ]
     );
     // And nothing *fails*, which is the difference between landing green and hiding: a new
     // failure on a control with a debt row still goes red, because rows match findings.
@@ -224,6 +234,38 @@ describe('the a11y rule, on measured trees', () => {
     // And the tree it was measured from does not have the problem: without this, the
     // mutation above proves only that the rule has a length test.
     expect(a11yProblems(control('checkbox'), tree('checkbox'))).toEqual([]);
+  });
+
+  it('goes red when a stepper’s two halves each keep a name', () => {
+    // The failure mode this control's Android half is shaped around: the row names the
+    // value and the two glyph buttons stay out of the tree. Give a half its own name
+    // back - what a dump shows the moment the buttons stop clearing their semantics -
+    // and a reader gets two focus stops with the value on only one of them.
+    const home = named('stepper');
+    const half = {
+      ...home,
+      className: 'android.widget.Button',
+      clickable: 'true',
+      focusable: 'true',
+      bounds: {
+        ...home.bounds,
+        // The left half of the row, inside the control's own box.
+        x2: home.bounds.x1 + Math.round(home.bounds.width / 2),
+        width: Math.round(home.bounds.width / 2),
+        cx: home.bounds.x1 + Math.round(home.bounds.width / 4),
+      },
+    };
+    const problems = a11yProblems(control('stepper'), [
+      ...tree('stepper'),
+      half,
+    ]);
+    expect(problems.join('\n')).toContain('2 nodes carry the name');
+    expect(problems.join('\n')).toContain('announces twice');
+    // And the tree this was measured from does not carry *this* finding (it carries the
+    // actionable one, which is the fifth debt row). Without this, the mutation above
+    // proves only that the rule has a length test.
+    const measured = a11yProblems(control('stepper'), tree('stepper'));
+    expect(measured.join('\n')).not.toContain('nodes carry the name');
   });
 
   it('goes red when the name has no box', () => {
@@ -391,6 +433,7 @@ describe('the debt list', () => {
       'android:segmented-control',
       'android:hosted-slider',
       'android:hosted-segmented',
+      'android:stepper',
       'ios:slider',
       'ios:hosted-slider',
       'ios:hosted-picker',
