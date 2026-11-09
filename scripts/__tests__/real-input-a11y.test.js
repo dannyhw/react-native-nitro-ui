@@ -458,10 +458,11 @@ describe('the a11y rule, on measured trees', () => {
 describe('the debt list', () => {
   it('is the measured findings, per platform, and nothing else', () => {
     // Four Android rows (two controls, one finding each) and the iOS rows, each measured
-    // on a simulator: the Slider's name is announced as the wrong kind of control, a
-    // hosted Picker's name is announced twice, an accessible ContextMenu still lists a
-    // child as a stop, and an IconButton's element is the drawn control inside its 44 pt
-    // touch target rather than the target. A row that named no platform would let one
+    // on a simulator: the Slider's and the Stepper's names are announced as the wrong kind
+    // of control, a hosted Picker's name is announced twice, an accessible ContextMenu
+    // still lists a child as a stop, and an IconButton's element is the drawn control
+    // inside its 44 pt touch target rather than the target. A row that named no platform
+    // would let one
     // measurement excuse both halves, so each row says which one it was measured on. The
     // IconButton row is that rule working: G23 expected its 44 pt target to retire it and
     // the sweep came back with a bigger inset, so the row was re-measured, not widened.
@@ -475,6 +476,7 @@ describe('the debt list', () => {
       'android:stepper',
       'ios:slider',
       'ios:hosted-slider',
+      'ios:stepper',
       'ios:hosted-picker',
       'ios:context-menu',
       'ios:icon-button',
