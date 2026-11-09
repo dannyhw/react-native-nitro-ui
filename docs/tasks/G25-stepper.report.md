@@ -45,15 +45,12 @@ version, documented as such.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1940 tests / 81 suites | `197834c30d3b` | 2 m 45 s | start 10.9 / med 11.9 / max 17.7 |
-| `harness:ios` | **PASS** | 538 tests / 28 suites + isolated 6 tests / 3 suites | `197834c30d3b` (ios tree) | 13 m 49 s | start 4.2 / med 4.9 / max 9.8 |
-| `harness:android` | **PASS** | 594 tests / 28 suites + isolated 6 tests / 3 suites | `197834c30d3b` (android tree) | 17 m 18 s | start 11.0 / med 4.4 / max 12.9 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | missing | — | — | — | — |
-| `harness:android:Stepper` | stale | 15 failed of 15 tests / 1 suites | a20f1e5c45d8 (not this tree) | 2 m 40 s | start 9.0 / med 5.4 / max 9.0 |
-| `harness:android:Switch` | stale | 15 tests / 1 suites | 465d19029f04 (not this tree) | 13.6 s | start 8.7 / med 9.4 / max 10.2 |
+Round 1 ran on code tree `197834c30d3b`: `check` green in 2 m 45 s (1940 tests / 81 suites),
+`harness:ios` green in 13 m 49 s (538 tests / 28 suites + isolated 6 tests / 3 suites),
+`harness:android` green in 17 m 18 s (594 tests / 28 suites + isolated 6 tests / 3 suites), both
+`real-input` gates missing. The only table in this report is the generated one under
+"Gates (fix round 1)"; every line of both rounds, with durations and load, is
+`docs/tasks/G25/gates.jsonl`.
 
 `need --for review`: satisfied — `check`, `harness:ios` and `harness:android` are green on this code tree; the two `real-input` gates and the full harness-plus-real-input sweep are merge's, and are not claimed here.
 
@@ -241,3 +238,8 @@ The last three ran through `gate.mjs`, so their evidence is in the gate log stor
 
 Recounting the exemption to 4 is not on the list: X22's brief forbids it, and the four-stop shape
 is exactly the D37 regression that row is there to catch.
+
+One hand-off for that hunt, cheap and decisive: run the case sweep on this tree with the single
+`A11yCase(id: "stepper")` line removed (it is #12 of 22, `context-menu` is last). If
+`ctx-accessible` reads 2 again, the trigger is one more case in the sweep rather than anything
+Stepper vends; if it stays 4, look outside this diff.
