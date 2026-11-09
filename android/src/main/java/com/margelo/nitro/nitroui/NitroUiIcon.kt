@@ -1166,6 +1166,43 @@ internal fun NitroUiIconGlyph(
 }
 
 /**
+ * The glyph inside a slot the platform already sized and coloured.
+ *
+ * [NitroUiIconSlotContent] is the Button's own leading slot, where the library lays
+ * out the label and so owns the spacing too. A Material menu row and a Material chip
+ * are the other case: each wraps the `leadingIcon` it is handed in a box of the right
+ * size, in the content colour it has already chosen (`MenuDefaults.LeadingIconSize`
+ * under `leadingIconColor`, `FilterChipDefaults.IconSize` under
+ * `leadingIconContentColor`), and adds the gap to the label itself. All this one owes
+ * is the artwork at the slot's size, the same pending rule, and no padding of its own
+ * — the two places that added one got a gap Material had already counted.
+ *
+ * The tint is `LocalContentColor.current`, read where the slot composes: that is how
+ * a row's glyph is the *row's* leading-icon colour - dimmed when the row is disabled,
+ * the selected container's colour when a checkable row is checked - without this file
+ * knowing any of Material's colour roles.
+ */
+@Composable
+internal fun NitroUiIconSlotGlyph(
+  icon: NitroUiIconContent,
+  size: Dp,
+) {
+  val painter = rememberIconPainter(icon)
+  if (painter != null) {
+    NitroUiIconGlyph(
+      painter = painter,
+      size = size,
+      tint = LocalContentColor.current,
+      contentDescription = null,
+    )
+  } else if (icon != NitroUiIconContent.Absent) {
+    // A file on its way holds the slot at the ladder's size, exactly as the Button's
+    // slot does: the frame before the bytes and the frame after them are one box.
+    Spacer(modifier = Modifier.size(size))
+  }
+}
+
+/**
  * The glyph slot in front of a control's label, for the controls that share
  * [NitroUiM3Button]'s composition rules: the artwork if there is any, an empty box of
  * exactly the same size while a file is on its way, and nothing at all when no icon

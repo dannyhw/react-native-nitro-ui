@@ -65,6 +65,9 @@ type Handle = {
   nuiTestMenuProbe(): void;
   nuiTestContextMenuReport(): string;
   nuiTestA11yLongClick(): void;
+  /** Sample the open popup's window (G21); `no popup` when this wrapper has none. */
+  nuiTestMenuPixelProbe(color: number): void;
+  nuiTestMenuPixelReport(): string;
 };
 
 const handles = new Map<string, Handle>();
@@ -1171,3 +1174,401 @@ async function liveNow(): Promise<string> {
   await sleep(200);
   return report.live ?? '0';
 }
+
+/**
+ * `androidIcon` on the rows (G21): a glyph in each row's Material slot.
+ *
+ * The rows live in a popup of their own window, so nothing readable on the wrapper says
+ * whether a row's glyph reached the screen. Menu faces the same wall and answers it the
+ * same way, and ContextMenu carries the same two reads for the same reason:
+ *
+ *  - `iconTints=` in its report, written by each row **as it draws**, from the
+ *    `LocalContentColor` its glyph is tinted with — a colour a test cannot name, because
+ *    Material takes it from this device's dynamic palette;
+ *  - `nuiTestMenuPixelProbe`, which samples the popup window the witness already keeps.
+ *
+ * Counts are compared as **differences** between two menus that differ only by the icon:
+ * a colour count includes the row titles, which Material draws in that same colour, and
+ * the artwork here is a filled square, so the difference is the slot's area. The size
+ * claim is 20 dp (`MenuDefaults.LeadingIconSize`) at this device's density, squared.
+ *
+ * One popup is open at a time: a Material popup takes focus and dismisses on a touch
+ * outside itself, so a sample is taken and the menu closed before the next one opens.
+ *
+ * The `MenuRowIcons.reset()` half of this is proven on the JVM, where a recycled slot is
+ * observable directly (`MenuRowIconsTest`); the recycle case below is the same claim on
+ * the device, where whether Fabric hands the view back at all is not the harness's call.
+ */
+describe('ContextMenu · the row glyphs (G21)', () => {
+  /** The same filled square, through each road D43 gives an app. */
+  const SLAB_ASSET = require('../src/assets/icons/slab_24px.xml');
+  const SLAB_NAME = 'nitroui_test_slab';
+  const NOT_SHIPPED = 'nitroui_test_never_built';
+
+  /** `MenuDefaults.LeadingIconSize` in material3 1.5.0-beta02. Not 24 dp. */
+  const ROW_ICON_DP = 20;
+
+  /**
+   * One row that may carry a glyph, one that never does, and the titles every
+   * comparison menu here shares — so one probe minus another leaves the artwork.
+   */
+  const glyphGroup = (icon: string | number | undefined): MenuGroup => ({
+    actions: [
+      { id: 'slab', title: 'Arrange by size', androidIcon: icon },
+      { id: 'plain', title: 'Sort by name' },
+    ],
+  });
+
+  /** The `<id>#<RRGGBB>` list the report carries, as a map. */
+  function tintsOf(report: Record<string, string>): Map<string, string> {
+    const out = new Map<string, string>();
+    const field = report.iconTints;
+    if (field != null && field !== '-') {
+      for (const entry of field.split(',')) {
+        const at = entry.indexOf('#');
+        if (at > 0) {
+          out.set(entry.slice(0, at), `#${entry.slice(at + 1)}`);
+        }
+      }
+    }
+    return out;
+  }
+
+  /** A field every report carries, refusing the line that lost it. */
+  function fieldOf(report: Record<string, string>, name: string): string {
+    const value = report[name];
+    if (value == null) {
+      throw new Error(
+        `a report with no "${name}" field: ${JSON.stringify(report)}`
+      );
+    }
+    return value;
+  }
+
+  /**
+   * A `l,t,r,b` rect as `WxH` — the half of it two popups can share.
+   *
+   * Two wrappers sit in two places, so their popups do too; what a claim about a glyph
+   * is about is the frame, and comparing whole rects would compare where each happened
+   * to open.
+   */
+  function frameOf(rect: string): string {
+    const parts = rect.split(',').map(Number);
+    if (parts.length !== 4 || parts.some((value) => Number.isNaN(value))) {
+      throw new Error(`The popup rect is not four numbers: "${rect}".`);
+    }
+    const [left, top, right, bottom] = parts as [
+      number,
+      number,
+      number,
+      number,
+    ];
+    return `${String(Math.round(right - left))}x${String(
+      Math.round(bottom - top)
+    )}`;
+  }
+
+  /**
+   * Open `testId` the way the platform can be asked to, and wait for its menu.
+   *
+   * Both platforms are opened by real input, and then each is read by the one witness it
+   * answers. Android shows a popup of its own window, so the witness's `menu=` rect is the
+   * proof its rows are on screen. iOS hands the menu to UIKit's system presentation and
+   * answers `menu=-1` for it forever (`HybridNitroUiContextMenu.swift`), so waiting for
+   * that rect there waits for a fact the platform never reports - a 15 s timeout, not a
+   * verdict. What iOS does answer is `drawn`: the probe builds the same `UIMenu`
+   * `configuration(at:)` hands UIKit and copies the tree, which is the stronger claim of
+   * the two - the rows UIKit was handed, rather than a window number.
+   */
+  async function openMenu(testId: string): Promise<Record<string, string>> {
+    const handle = await handleFor(testId);
+    if (IOS) {
+      await openedBy(`${testId}-target`);
+      handle.nuiTestMenuProbe();
+      return await reportWhen(
+        testId,
+        (r) => r.open === '1' && r.drawn !== '-1',
+        `the menu of "${testId}"`,
+        15000
+      );
+    }
+    handle.nuiTestA11yLongClick();
+    return await reportWhen(
+      testId,
+      (r) => r.open === '1' && r.menu !== '-1',
+      `the popup of "${testId}"`,
+      15000
+    );
+  }
+
+  /** Pick the row with no glyph: the popup closes, and no test below counts a pick. */
+  async function shut(testId: string): Promise<void> {
+    const handle = await handleFor(testId);
+    handle.nuiTestSelectRow('plain');
+    await reportWhen(testId, (r) => r.open === '0', `"${testId}" closed`);
+  }
+
+  /**
+   * One popup probe, answered.
+   *
+   * Sampling needs the UI thread and a Nitro call may not block for it, so a probe is a
+   * pair: ask, then poll. The `n=` a line carries is what tells this probe's answer from
+   * the previous control's.
+   */
+  async function probePopup(
+    handle: Handle,
+    color: number,
+    what: string
+  ): Promise<string> {
+    const before = handle.nuiTestMenuPixelReport();
+    handle.nuiTestMenuPixelProbe(color);
+    const deadline = Date.now() + 8000;
+    for (;;) {
+      const line = handle.nuiTestMenuPixelReport();
+      if (line !== '' && line !== before) {
+        return line;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the popup probe for ${what} never reported; last "${line}".`
+        );
+      }
+      await sleep(50);
+    }
+  }
+
+  /** Sample the open popup until two reads agree, and return that count. */
+  async function stableHits(
+    handle: Handle,
+    color: number,
+    what: string
+  ): Promise<number> {
+    const deadline = Date.now() + 15000;
+    let previous = -1;
+    let last = -1;
+    for (;;) {
+      const line = await probePopup(handle, color, what);
+      if (/no popup/.test(line)) {
+        throw new Error(
+          `the popup probe for ${what} said "no popup" while the menu was open - ` +
+            `the witness kept a window nobody can sample.`
+        );
+      }
+      const hits = / hits=(\d+)/.exec(line);
+      if (hits == null) {
+        throw new Error(
+          `the popup probe for ${what} reported no count: "${line}".`
+        );
+      }
+      last = Number(hits[1]);
+      if (last === previous) {
+        return last;
+      }
+      previous = last;
+      if (Date.now() > deadline) {
+        return last;
+      }
+      await sleep(250);
+    }
+  }
+
+  /** Open `testId`, sample its popup, close it, and hand back the count. */
+  async function inkOf(
+    testId: string,
+    color: number,
+    what: string
+  ): Promise<number> {
+    const handle = await handleFor(testId);
+    await openMenu(testId);
+    const ink = await stableHits(handle, color, what);
+    await shut(testId);
+    return ink;
+  }
+
+  it('draws the row glyph at the slot size, from a Metro asset and from a name', async () => {
+    await render(
+      <View>
+        <Message testId="glyph-asset" group={glyphGroup(SLAB_ASSET)} />
+        <Message testId="glyph-name" group={glyphGroup(SLAB_NAME)} />
+        <Message testId="glyph-none" group={glyphGroup(undefined)} />
+      </View>
+    );
+
+    if (IOS) {
+      // iOS's menu is UIKit's `UIMenu`: `androidIcon` has nothing to draw into there, so
+      // `iconTints` stays `-` and the pixel probe says `no pixels` rather than answering
+      // 0. What is asserted is that these rows still reach UIKit - `drawn`, whose exact
+      // tree the suite above pins - and that opening them through a real hold works with
+      // an unresolvable name beside a Metro asset. Both refusals are the honest green.
+      const opened = await openMenu('glyph-asset');
+      expect(opened.iconTints).toBe('-');
+      expect(opened.drawn).toBe('Arrange by size,Sort by name');
+      const handle = await handleFor('glyph-asset');
+      handle.nuiTestMenuPixelProbe(0x000000);
+      expect(handle.nuiTestMenuPixelReport()).toContain('no pixels');
+      await shut('glyph-asset');
+      return;
+    }
+
+    // The row names the colour it drew with, and only the row with an icon names one.
+    const asset = await handleFor('glyph-asset');
+    await openMenu('glyph-asset');
+    const drawn = await reportWhen(
+      'glyph-asset',
+      (r) => tintsOf(r).has('slab'),
+      'a row that drew its glyph',
+      15000
+    );
+    expect(tintsOf(drawn).has('plain')).toBe(false);
+    const tint = tintsOf(drawn).get('slab');
+    if (tint == null) {
+      throw new Error('the row reported no tint for its glyph.');
+    }
+    const color = parseInt(tint.slice(1), 16);
+    const assetInk = await stableHits(asset, color, 'the asset menu');
+    await shut('glyph-asset');
+
+    const nameInk = await inkOf('glyph-name', color, 'the named menu');
+    const noneInk = await inkOf('glyph-none', color, 'the icon-less menu');
+    const ink = assetInk - noneInk;
+    console.log(
+      `    · row glyph ink: tint=${drawn.iconTints} asset=${String(
+        assetInk
+      )} name=${String(nameInk)} none=${String(noneInk)}`
+    );
+
+    // The slot, measured: 20 dp, and a square that fills its canvas paints it squared.
+    // 12% is the anti-aliased edge of a 55-pixel square and nothing else — Material's
+    // 24 dp default would be 44% more ink, and "resolved but never drawn" is 100% less.
+    const slot = ROW_ICON_DP * PixelRatio.get();
+    expect(ink).toBeGreaterThan(slot * slot * 0.88);
+    expect(ink).toBeLessThan(slot * slot * 1.12);
+
+    // D43's two roads to one file, measured as pixels: the drawable the app shipped and
+    // the file Metro served leave the same mark.
+    const nameDifference = nameInk - noneInk;
+    expect(Math.abs(nameDifference - ink)).toBeLessThan(
+      Math.max(6, ink * 0.06)
+    );
+
+    // Closed, there is no window to sample, and the probe says `no popup` rather than
+    // counting the last frame it saw.
+    const closed = await probePopup(asset, color, 'the closed menu');
+    expect(closed).toContain('no popup');
+  });
+
+  it('refuses a probe with no popup, and a name that cannot resolve with no glyph', async () => {
+    await render(
+      <View>
+        <Message testId="miss" group={glyphGroup(NOT_SHIPPED)} />
+        <Message testId="miss-none" group={glyphGroup(undefined)} />
+      </View>
+    );
+
+    if (IOS) {
+      // The name iOS cannot resolve is a name iOS never asked for: `androidIcon` is
+      // Android's prop, so UIKit gets the same two rows here as it does from the group
+      // with no icons at all, and `iconTints` is `-` for both. Android compares the two
+      // popups' frames; iOS has no popup rect, so the tree is the comparison it has.
+      const missing = await openMenu('miss');
+      expect(missing.iconTints).toBe('-');
+      await shut('miss');
+      const plain = await openMenu('miss-none');
+      expect(plain.iconTints).toBe('-');
+      expect(plain.drawn).toBe(missing.drawn);
+      await shut('miss-none');
+      return;
+    }
+
+    // Before anything is open the probe refuses: "nothing to sample" is a different
+    // answer from "sampled and found none", and a test has to be able to tell them apart.
+    const handle = await handleFor('miss');
+    const refused = await probePopup(handle, 0x123456, 'the closed popup');
+    expect(refused).toContain('no popup');
+
+    const missing = await openMenu('miss');
+    expect(missing.iconTints).toBe('-');
+    const missingFrame = frameOf(fieldOf(missing, 'menu'));
+    await shut('miss');
+    // A name the resource table does not know resolves to `Absent`, which reaches
+    // `leadingIcon` as `null` — so the popup that could not find its glyph is the popup
+    // with no glyphs at all, to the last dp: no reserved 20 dp gap, no moved title.
+    const plain = await openMenu('miss-none');
+    expect(plain.iconTints).toBe('-');
+    const plainFrame = frameOf(fieldOf(plain, 'menu'));
+    await shut('miss-none');
+    console.log(
+      `    · unresolved name: menu=${missingFrame} none=${plainFrame}`
+    );
+    expect(missingFrame).toBe(plainFrame);
+  });
+
+  it('hands the next owner no glyph of the last one’s', async () => {
+    if (IOS) {
+      console.log(
+        '    · iOS: the rows are UIKit’s, so there is no slot to hand over'
+      );
+      return;
+    }
+    function Owner({ id }: { id: 'first' | 'second' | 'none' }): ReactElement {
+      if (id === 'none') return <View />;
+      return (
+        <Message
+          testId={`recycle-${id}`}
+          group={glyphGroup(id === 'first' ? SLAB_NAME : undefined)}
+        />
+      );
+    }
+    const { rerender } = await render(<Owner id="first" />);
+    await openMenu('recycle-first');
+    const first = await reportWhen(
+      'recycle-first',
+      (r) => tintsOf(r).has('slab'),
+      'the first owner’s glyph',
+      15000
+    );
+    // The colour the *first* owner painted its glyph with, which is the only colour worth
+    // asking the second owner about. The claim is "a slot kept from the first owner would
+    // draw its square beside these titles" - so the sample has to be for the ink that
+    // square would have. This used to probe `0x123456`, a colour no chip, row or label on
+    // this screen is ever drawn in, and an always-empty sample passes whether or not the
+    // square is there: `expect(ink).toBe(0)` could not have gone red.
+    const firstTint = tintsOf(first).get('slab');
+    if (firstTint == null) {
+      throw new Error(
+        `the first owner recorded no tint to sample: ${first.iconTints}`
+      );
+    }
+    const color = parseInt(firstTint.slice(1), 16);
+    await shut('recycle-first');
+    await rerender(<Owner id="none" />);
+    await sleep(300);
+    await rerender(<Owner id="second" />);
+    const second = await handleFor('recycle-second');
+
+    // Whether Fabric hands the same wrapper back is its own business; what is asserted
+    // is what the second owner may claim. It has no `androidIcon`, so before it opens it
+    // carries no tint — and once open, its popup draws none either: a slot kept from the
+    // first owner would put a square beside these titles.
+    expect(tintsOf(await settledReport('recycle-second')).size).toBe(0);
+    const opened = await openMenu('recycle-second');
+    const frame = frameOf(fieldOf(opened, 'menu'));
+    const ink = await stableHits(second, color, 'the second owner’s popup');
+    await shut('recycle-second');
+    console.log(
+      `    · second owner: menu=${frame} ink=${String(ink)} sampled=${firstTint}`
+    );
+    // The pixels first: they are the claim, and the report line below is only its
+    // echo. And the claim is *no slot of that colour*, not *none of it* — Material
+    // draws these very titles in the same `LocalContentColor` the glyph was tinted
+    // from, so the popup of a menu with no icon at all counts 145 px of `#40434B`
+    // here. A 20 dp square is 2954 px on this device: a quarter of one is a margin
+    // no text reaches and a kept slot blows through, which is what h5' — the
+    // mutation that hands the next owner the last owner's loaded slots — does, at
+    // 2954. (`expect(ink).toBe(0)` was the first thing written here and the device
+    // said no: the same colour belongs to the row titles too.)
+    const slot = ROW_ICON_DP * PixelRatio.get();
+    expect(ink).toBeLessThan(slot * slot * 0.25);
+    expect(opened.iconTints).toBe('-');
+  });
+});

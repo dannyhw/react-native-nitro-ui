@@ -243,7 +243,11 @@ class MenuModelTest {
     val report = model.readMenuReport()
     assertTrue(report.contains(";split=0;"))
     assertTrue(report.contains(";leading=-1,-1,-1,-1;"))
-    assertTrue(report.endsWith(";trailing=-1,-1,-1,-1"))
+    // The tail is the report's last two fields: an unread trailing half *and* no row
+    // having tinted a glyph (`MenuRowIcons.tintsReport`), which is what a menu with no
+    // rows at all answers. Asserting the tail rather than `trailing` alone keeps a new
+    // field from silently sliding past an assertion that meant "nothing after this".
+    assertTrue("the report's tail: $report", report.endsWith(";trailing=-1,-1,-1,-1;iconTints=-"))
   }
 
   /**
@@ -300,7 +304,7 @@ class MenuModelTest {
     val report = model.readMenuReport()
     assertFalse("the recycled control is not a split button", report.contains(";split=1;"))
     assertTrue("the previous owner's halves are gone: " + report, report.contains(";leading=-1,-1,-1,-1;"))
-    assertTrue("the previous owner's halves are gone: " + report, report.endsWith(";trailing=-1,-1,-1,-1"))
+    assertTrue("the previous owner's halves are gone: " + report, report.endsWith(";trailing=-1,-1,-1,-1;iconTints=-"))
   }
 
   @Test

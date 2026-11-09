@@ -835,6 +835,10 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     return "expanded=-1;live=-1;anchor=-1,-1,-1,-1;menu=-1,-1,-1,-1"
       + ";rows=\(host.model.actionableRowCount);drawn=\(readDrawn())"
       + ";split=-1;leading=-1,-1,-1,-1;trailing=-1,-1,-1,-1"
+      // Android's field, answered `-` here: no row tinted a glyph because iOS draws
+      // `systemImage` and has no Android glyph to tint. Same reason `nuiTestMenuReport`
+      // answers `-1` for the split fields - one shape for both platforms.
+      + ";iconTints=-"
   }
 
   /// Open the menu, copy the tree UIKit built for it, and close it - from a test.
@@ -859,6 +863,47 @@ final class HybridNitroUiMenu: HybridNitroUiMenuSpec, RecyclableView {
     } else {
       DispatchQueue.main.async { run() }
     }
+  }
+
+  // MARK: - Pixel probes (test-only)
+
+  /// How many probes were asked for, so a harness can tell its own answer from the
+  /// previous control's. The pair's shape is Button's (`HybridNitroUiButton.swift`).
+  private let probesLock = NSLock()
+  private var triggerProbes = 0
+  private var menuProbes = 0
+
+  /// Counts the probe and answers nothing - iOS has no Android glyph in its trigger to
+  /// sample. Button's `no pixels`, which the harness's probe helper treats as a hard
+  /// failure rather than an answer.
+  func nuiTestPixelProbe(color: Double) throws {
+    probesLock.lock()
+    triggerProbes += 1
+    probesLock.unlock()
+  }
+
+  func nuiTestPixelReport() throws -> String {
+    probesLock.lock()
+    let probes = triggerProbes
+    probesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
+  }
+
+  /// Counts the probe and answers nothing. The rows are UIKit's: a SwiftUI `Menu` is
+  /// presented by the system in a window this process cannot rasterise into a bitmap,
+  /// so there is nothing here to sample even when a menu is open - which is why this
+  /// says `no pixels` rather than Android's `no popup`.
+  func nuiTestMenuPixelProbe(color: Double) throws {
+    probesLock.lock()
+    menuProbes += 1
+    probesLock.unlock()
+  }
+
+  func nuiTestMenuPixelReport() throws -> String {
+    probesLock.lock()
+    let probes = menuProbes
+    probesLock.unlock()
+    return "n=\(probes) no pixels platform=ios"
   }
 
   /// The probe's last answer, or `-1` before there is one.
