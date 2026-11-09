@@ -116,10 +116,13 @@ The filter rows moved with Android's Expressive button tokens and the assist row
 overload `FilterChip` now takes lays a filter chip out 3.81 dp narrower at both
 states than the `shape:` one did — a constant offset, so the growth by the check
 mark is untouched — and it shows up only on a chip with a leading slot, which an
-assist chip has none of. A glyph costs the slot and its spacing on top of whatever the
-chip is otherwise: `FilterChipDefaults.IconSize` (18 dp) plus the 8 dp either side
-Material puts around a chip icon, which the harness reads off the box and off the pixels
-of the same fixture and gets the same number from both. The harness asserts both halves: a
+assist chip has none of. A glyph grows the chip by **17.90 dp** here, which is not
+18 + 8: `FilterChip` starts a chip with no leading icon 16 dp in and one with an icon
+8 dp in, so `FilterChipDefaults.IconSize` (18 dp) and the 8 dp of spacing before the
+label arrive net of the 8 dp the chip stops needing — which is why the number matches
+the check mark above, the same slot in the same place. The harness measures that growth
+against a chip of the same label with no glyph, logs it and asserts it to the dp, next
+to the pixels that measure the slot's area. The harness asserts both halves: a
 toggled chip settles at the size of a reference chip mounted selected, and a
 fresh unselected one needs no correction.
 
