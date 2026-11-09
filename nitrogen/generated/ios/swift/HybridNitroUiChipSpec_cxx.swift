@@ -255,6 +255,36 @@ open class HybridNitroUiChipSpec_cxx {
     }
   }
   
+  public final var androidIcon: bridge.std__variant_nitro__NullType__std__string_ {
+    @inline(__always)
+    get {
+      return { () -> bridge.std__variant_nitro__NullType__std__string_ in
+        switch self.__implementation.androidIcon {
+          case .first(let __value):
+            return bridge.create_std__variant_nitro__NullType__std__string_(margelo.nitro.NullType.null)
+          case .second(let __value):
+            return bridge.create_std__variant_nitro__NullType__std__string_(std.string(__value))
+        }
+      }()
+    }
+    @inline(__always)
+    set {
+      self.__implementation.androidIcon = { () -> Variant_NullType_String in
+        let __variant = newValue
+        switch __variant.index() {
+          case 0:
+            let __actual = __variant.get_0()
+            return .first(NullType.null)
+          case 1:
+            let __actual = __variant.get_1()
+            return .second(String(__actual))
+          default:
+            fatalError("Variant can never have index \(__variant.index())!")
+        }
+      }()
+    }
+  }
+  
   public final var testID: bridge.std__variant_nitro__NullType__std__string_ {
     @inline(__always)
     get {
@@ -470,6 +500,29 @@ open class HybridNitroUiChipSpec_cxx {
   public final func nuiTestStateReport() -> bridge.Result_std__string_ {
     do {
       let __result = try self.__implementation.nuiTestStateReport()
+      let __resultCpp = std.string(__result)
+      return bridge.create_Result_std__string_(__resultCpp)
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_std__string_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func nuiTestPixelProbe(color: Double) -> bridge.Result_void_ {
+    do {
+      try self.__implementation.nuiTestPixelProbe(color: color)
+      return bridge.create_Result_void_()
+    } catch (let __error) {
+      let __exceptionPtr = __error.toCpp()
+      return bridge.create_Result_void_(__exceptionPtr)
+    }
+  }
+  
+  @inline(__always)
+  public final func nuiTestPixelReport() -> bridge.Result_std__string_ {
+    do {
+      let __result = try self.__implementation.nuiTestPixelReport()
       let __resultCpp = std.string(__result)
       return bridge.create_Result_std__string_(__resultCpp)
     } catch (let __error) {

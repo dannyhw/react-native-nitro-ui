@@ -142,6 +142,14 @@ export interface MenuProps extends ViewProps {
          * Android. `@internal` (D14) - see `NitroUiMenuHandle`.
          */
         nuiTestMenuProbe(): void;
+        /** Test-only: sample the trigger's pixels (see `Menu.nitro.ts`). `@internal` (D14). */
+        nuiTestPixelProbe(color: number): void;
+        /** Test-only: the trigger probe's answer. `@internal` (D14). */
+        nuiTestPixelReport(): string;
+        /** Test-only: sample the open menu's window. `@internal` (D14). */
+        nuiTestMenuPixelProbe(color: number): void;
+        /** Test-only: the open-menu probe's answer. `@internal` (D14). */
+        nuiTestMenuPixelReport(): string;
       }) => void)
     | undefined;
   /**

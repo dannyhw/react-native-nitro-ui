@@ -1,0 +1,94 @@
+# Failure excerpt — harness:android:%5E__tests__%2FChip%5C.harness
+
+- Ran: 2026-11-09T06:21:29.839Z on code tree `78436a4f5ebe` at HEAD `5bb11e2` (branch `task/G21-merge`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ^__tests__/Chip\.harness`
+- Result: fail, exit 1, 31163 ms
+- Load: start 4.92, end 4.86, median 4.87, max 4.92
+- Device: android / device `emulator-5570` / lease `G21-uz5lj`
+- Full log: `task/G21-merge/harness+android+5E__tests__+2FChip+5C.harness-2026-11-09T06-21-29.839Z.log` (<store>/task/G21-merge/harness+android+5E__tests__+2FChip+5C.harness-2026-11-09T06-21-29.839Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Chip.harness.tsx`
+- `● Chip · the androidIcon (G21) › draws the imported glyph in the slot, and leaves nothing else in its colour`
+- `expected 3249 to be less than 2500.4700000000003`
+- `● Chip · the androidIcon (G21) › hands the check the slot when the filter chip is selected, without moving the box`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G21-merge/harness+android+5E__tests__+2FChip+5C.harness-2026-11-09T06-21-29.839Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G21-uz5lj (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G21-uz5lj                G21          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.86 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ^__tests__/Chip\.harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 78436a4f5ebe, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.92/12.63 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G21-merge/harness+android+5E__tests__+2FChip+5C.harness-2026-11-09T06-21-29.839Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Chip.harness.tsx
+  ● Chip · the androidIcon (G21) › draws the imported glyph in the slot, and leaves nothing else in its colour
+
+    expected 3249 to be less than 2500.4700000000003
+
+      [0m [90m 1215 |[39m     [36mconst[39m slot [33m=[39m [33mICON_DP[39m [33m*[39m [33mPixelRatio[39m[33m.[39m[36mget[39m()[33m;[39m
+       [90m 1216 |[39m     expect(ink)[33m.[39mtoBeGreaterThan(slot [33m*[39m slot [33m*[39m [35m0.88[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1217 |[39m     expect(ink)[33m.[39mtoBeLessThan(slot [33m*[39m slot [33m*[39m [35m1.12[39m)[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 1218 |[39m     [90m// And the same slot read off the *box*, which is the half `docs/components/chip.md`[39m
+       [90m 1219 |[39m     [90m// quotes a number for. It is not 18 + 8 + 8: `FilterChip` sets its own start padding[39m
+       [90m 1220 |[39m     [90m// to 16 dp and to 8 dp as soon as a leading icon exists, so the icon's 18 dp and the[39m[0m
+
+  ● Chip · the androidIcon (G21) › hands the check the slot when the filter chip is selected, without moving the box
+
+    testID "toggle" (the selected filter chip) never reached 77.33x48.00 - last box 73.52x48.00, control measured 73.52x48.00.
+
+      [0m [90m 194 |[39m     () [33m=>[39m (sameSize(sizeOf(testId)[33m,[39m size) [33m?[39m sizeOf(testId) [33m:[39m [36mnull[39m)[33m,[39m
+       [90m 195 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 196 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 197 |[39m         [32m`testID "${testId}" (${what}) never reached ${describeSize(size)} - `[39m [33m+[39m
+       [90m 198 |[39m           [32m`last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m
+       [90m 199 |[39m           [32m`${describeSize(measured(testId))}.`[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 15 passed, 17 total
+Snapshots:   0 total
+Time:        29.278 s
+Ran all test suites matching ^__tests__/Chip\.harness.
+
+
+
+```
