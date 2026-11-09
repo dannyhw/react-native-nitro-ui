@@ -719,8 +719,14 @@ internal fun NitroUiM3Button(
   // describes is the box the first frame draws, and the glyph arriving later
   // changes what is in the slot and not the size of it.
   val showsGlyph = glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent
+  // An `iconOnly` item whose glyph never arrives draws its title instead, so the box it
+  // is padded for has to be the title's box: see [buttonGlyphDrawsTitle].
+  val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
   val padding =
-    if (!showsGlyph) {
+    if (!showsGlyph || !drawsTitle) {
+      // Symmetric either way: the plain padding - or the padding of a button whose only
+      // content is a glyph, where the leading inset for a label that is not there would
+      // lean the glyph against the trailing edge.
       contentPaddingFor(variant, scale)
     } else {
       ButtonDefaults.contentPaddingFor(scale.height, hasStartIcon = true)
@@ -801,6 +807,23 @@ internal enum class ButtonGlyph {
 }
 
 /**
+ * Whether the label draws a *title*.
+ *
+ * `labelStyle='iconOnly'` means "prefer the glyph", not "draw nothing": an item with no
+ * `androidIcon` - none named, or one that does not resolve - falls back to the title
+ * rather than shipping an empty button, which is a control with no pixels and nothing for
+ * a thumb to hit. Measured before the fix: an `iconOnly` item with no glyph drew a box
+ * with nothing in it, and the harness's a11y probe read `text=` empty for it.
+ *
+ * The label and both item composables ask the same question - what does this box hold -
+ * so it is answered here rather than three times.
+ */
+internal fun buttonGlyphDrawsTitle(
+  glyph: ButtonGlyph,
+  icon: NitroUiIconContent,
+): Boolean = glyph != ButtonGlyph.IconOnly || icon == NitroUiIconContent.Absent
+
+/**
  * The label of a Material 3 button: the icon slot, then the title.
  *
  * Extracted from [NitroUiM3Button] so a `ButtonGroup`'s toggle items - which are
@@ -824,14 +847,23 @@ internal fun NitroUiButtonLabel(
   icon: NitroUiIconContent,
   glyph: ButtonGlyph = ButtonGlyph.Both,
 ) {
+  val drawsTitle = buttonGlyphDrawsTitle(glyph, icon)
   if (glyph != ButtonGlyph.TitleOnly && icon != NitroUiIconContent.Absent) {
     NitroUiIconSlotContent(
       icon = icon,
       size = ButtonDefaults.iconSizeFor(scale.height),
-      spacing = ButtonDefaults.iconSpacingFor(scale.height),
+      // The gap is the space *between* a glyph and a title. When the glyph is the whole
+      // content it is a trailing inset on one side of a box with none on the other, so
+      // the glyph sits off centre by exactly the icon gap.
+      spacing =
+        if (drawsTitle) {
+          ButtonDefaults.iconSpacingFor(scale.height)
+        } else {
+          0.dp
+        },
     )
   }
-  if (glyph != ButtonGlyph.IconOnly) {
+  if (drawsTitle) {
     // One line, tail-truncated: the control's intrinsic width is the title's
     // width, and a caller who wants a narrower box gives it a `width` - then the
     // label truncates instead of painting outside its box (the iOS content does

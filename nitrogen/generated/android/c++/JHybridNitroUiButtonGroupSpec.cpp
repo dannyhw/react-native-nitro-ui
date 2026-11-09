@@ -329,6 +329,10 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* id */)>("nuiTestPressItem");
     method(_javaPart, jni::make_jstring(id));
   }
+  void JHybridNitroUiButtonGroupSpec::nuiTestOpenOverflow() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestOpenOverflow");
+    method(_javaPart);
+  }
   void JHybridNitroUiButtonGroupSpec::nuiTestProbeRow() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void()>("nuiTestProbeRow");
     method(_javaPart);

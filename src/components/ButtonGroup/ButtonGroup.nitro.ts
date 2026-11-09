@@ -152,14 +152,19 @@ export interface NitroUiButtonGroupProps
    */
   defaultCheckedIds: string[];
   /**
-   * The last event count JS has fully processed (core-architecture §4). Native
+   * The last event count JS has fully processed (core.md §4). Native
    * only accepts a `checkedIds` write once it has seen this many of its own
    * events.
    */
   mostRecentEventCount: number;
   /**
-   * The name of the iOS "More" button, or `null` for the default. Android's
-   * overflow indicator carries Material's own localised label and needs nothing.
+   * What a reader is told the overflow control is, or `null` to leave the platform's own
+   * answer in place.
+   *
+   * There is nothing to fall back to on Android: the indicator Material draws is already
+   * named "More options", in the reader's language, and replacing that with a hardcoded
+   * English word is a downgrade no caller asked for. So `null` keeps Material's name
+   * there, and iOS - which draws the control itself, as a `Label` - keeps its "More".
    */
   overflowAccessibilityLabel: string | null;
   /** The group's own accessibility label, or `null`. */
@@ -190,7 +195,7 @@ export interface NitroUiButtonGroupMethods extends HybridViewMethods {
   /**
    * The size of the hosted control, as measured on the UI thread during the last
    * layout/commit. Never calls into SwiftUI/Compose: JS reads a cached value, so
-   * this is safe to call from the JS thread (core-architecture §1.4).
+   * this is safe to call from the JS thread (core.md §1.4).
    *
    * The width is the box's (the control is `fillWidth`); the height is the row's
    * measured height, which is the number the engine caches.
@@ -210,6 +215,24 @@ export interface NitroUiButtonGroupMethods extends HybridViewMethods {
    * @internal Not app API (DECISIONS D14).
    */
   nuiTestPressItem(id: string): void;
+
+  /**
+   * TEMPORARY, test-only: open the overflow menu the way the indicator's own tap opens
+   * it. Returns at once, because a Nitro method may not block for the UI thread.
+   *
+   * D29's rule is that `disabled` arriving while the overflow menu is open closes it,
+   * and proving that needs a menu that is *open* - asserting the close from a menu that
+   * was never opened proves nothing. Tapping the indicator would prove where the row put
+   * it, not that it can be opened, so Android asks Material's own state to show.
+   *
+   * iOS has no way to expand a SwiftUI `Menu` before iOS 18's `isExpanded`, and the
+   * deployment target is 15.1, so there this is a no-op and the rule is proved a level
+   * down: the harness shows the Android open/close pair, and `real-input:ios` taps the
+   * real indicator, disables the group from the screen and reads the rows gone.
+   *
+   * @internal Not app API (DECISIONS D14).
+   */
+  nuiTestOpenOverflow(): void;
 
   /**
    * TEMPORARY, test-only: ask what the row *drew*, and keep the answer for
@@ -246,14 +269,17 @@ export interface NitroUiButtonGroupMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: what the control is showing, as one line —
-   * `checked=<a,b|none>;visible=<n>;overflow=<0|1>;menu=<open|closed>;probes=<n>;`
-   * `a11y=<...>`.
+   * `checked=<a,b|none>;visible=<n>;overflow=<0|1>;row=<r>;menu=<open|closed>;`
+   * `probes=<n>;a11y=<...>`.
    *
-   * `checked` is read where the items are drawn, so it is a reading of the hosted
-   * control rather than an echo of a prop (`hybridRef`'s `checkedIds` answers what
-   * React sent). `visible` / `overflow` are the last `nuiTestProbeRow` reading;
-   * `menu` is whether the overflow menu is open. `probes` counts the probes so a
-   * test can tell its own answer from the previous control's.
+   * `checked` is what the row shows, published by the thread that writes it - so this
+   * JS-thread call races no main-thread storage - rather than an echo of a prop
+   * (`hybridRef`'s `checkedIds` answers what React sent). `visible` / `overflow` /
+   * `row` are the last `nuiTestProbeRow` reading; `row` names which row a connected iOS
+   * group composed (`controlGroup` or `standard` - D42 item 2), and is always
+   * `standard` on Android, which has one row. `menu` is whether the overflow menu is
+   * open. `probes` counts the probes so a test can tell its own answer from the
+   * previous control's.
    *
    * @internal Not app API (DECISIONS D14).
    */

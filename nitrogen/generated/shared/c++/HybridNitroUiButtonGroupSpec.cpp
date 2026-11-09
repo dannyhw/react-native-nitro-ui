@@ -54,6 +54,7 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("nuiSizingId", &HybridNitroUiButtonGroupSpec::setNuiSizingId);
       prototype.registerHybridMethod("measureContent", &HybridNitroUiButtonGroupSpec::measureContent);
       prototype.registerHybridMethod("nuiTestPressItem", &HybridNitroUiButtonGroupSpec::nuiTestPressItem);
+      prototype.registerHybridMethod("nuiTestOpenOverflow", &HybridNitroUiButtonGroupSpec::nuiTestOpenOverflow);
       prototype.registerHybridMethod("nuiTestProbeRow", &HybridNitroUiButtonGroupSpec::nuiTestProbeRow);
       prototype.registerHybridMethod("nuiTestProbeAccessibility", &HybridNitroUiButtonGroupSpec::nuiTestProbeAccessibility);
       prototype.registerHybridMethod("nuiTestStateReport", &HybridNitroUiButtonGroupSpec::nuiTestStateReport);

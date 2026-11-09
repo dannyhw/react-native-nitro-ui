@@ -93,6 +93,7 @@ namespace margelo::nitro::nitroui {
     // Methods
     NitroUiButtonGroupSize measureContent() override;
     void nuiTestPressItem(const std::string& id) override;
+    void nuiTestOpenOverflow() override;
     void nuiTestProbeRow() override;
     void nuiTestProbeAccessibility() override;
     std::string nuiTestStateReport() override;
