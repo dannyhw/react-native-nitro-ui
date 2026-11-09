@@ -158,8 +158,11 @@ prop, so on iOS `radio` is spelled `menu` in the prop **and** in `nuiSizingKey`
 (see Sizing). A key that named a `radio` configuration whose width follows its
 title would file a menu's title-dependent width under a key with no selection in
 it — the poisoned-cache bug G6 review M1 is about, wearing a different name.
-`HybridNitroUiPicker.swift` guards again, so a `radio` that arrived by another
-road would still draw a menu.
+`HybridNitroUiPicker.swift` guards again through `NitroUiPickerVariant.resolved`,
+so a `radio` that arrived by another road would still draw a menu — and because a
+device run can never reach that guard (the wrapper resolves first), its vectors run
+on the host: `scripts/native-tests/picker-variant.test.swift` in
+`bun run test:native`, with the Kotlin twin in `PickerModelTest`.
 
 **An iOS app that wants every option visible** should use
 `docs/components/segmented-control.md` for up to about five options — that is the

@@ -59,23 +59,21 @@ final class PickerModel: NitroUiModel {
   /// Whether this instance lays out as a wheel (`fillWidth`) or a menu
   /// (`intrinsic`). One string in, one bool out, so the setter and the content
   /// cannot disagree about what the variant meant.
+  ///
+  /// The rule itself is `NitroUiPickerVariant.isWheel`, which is derived from the
+  /// same resolution as this one so the two cannot drift.
   static func isWheel(_ variant: String) -> Bool {
-    return variant == "wheel"
+    return NitroUiPickerVariant.isWheel(variant)
   }
 
-  /// The control a variant name means on this platform.
-  ///
-  /// `'radio'` is Android's: SwiftUI's radio-group style, `RadioGroupPickerStyle`,
-  /// is `@available(iOS, unavailable)`, so there is nothing here to host, and
-  /// DECISIONS D38 item 4 rules that `Picker variant="radio"` renders the menu on
-  /// iOS rather than an imitation of a control Apple does not ship. `Picker.tsx`
-  /// resolves that before the prop is sent (it also decides the sizing key, which
-  /// must name the control that is actually drawn), so `radio` reaching this
-  /// function is the guard rather than the route - and the guard answers "menu",
-  /// which is what the docs promise either way. An app that needs every option
-  /// visible on iOS uses `SegmentedControl` for up to about five options.
+  /// The control a variant name means on this platform - the rule lives in
+  /// `NitroUiPickerVariant.resolved`, which `bun run test:native` runs on the host
+  /// because no device test can reach it: `Picker.tsx` resolves the variant per
+  /// platform before the prop is sent (`radio` arrives as `menu`), so this is the
+  /// guard rather than the route. See that file for why `radio` is the menu here
+  /// (DECISIONS D38 item 4) and for the vectors that prove it.
   static func resolvedVariant(_ variant: String) -> String {
-    return variant == "wheel" ? "wheel" : "menu"
+    return NitroUiPickerVariant.resolved(variant)
   }
 
   /// A choice index that exists in `options`, as a whole number in range.
