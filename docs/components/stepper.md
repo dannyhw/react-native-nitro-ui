@@ -95,7 +95,7 @@ in `scripts/conformance-core.mjs`:
 
 |            | Width | Height | The box is                                                         |
 | ---------- | ----- | ------ | ------------------------------------------------------------------ |
-| iOS        | 93 pt | 28 pt  | SwiftUI's own stepper with its label hidden                         |
+| iOS        | 94 pt | 32 pt  | SwiftUI's own stepper with its label hidden                         |
 | Android    | 104 dp| 48 dp  | two 48 dp touch targets and the 8 dp the design puts between them   |
 
 Because the fallback *is* the default box on both platforms, the conformance rule
