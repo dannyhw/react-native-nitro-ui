@@ -745,11 +745,13 @@ async function drawnValueOfStepper(testId: string): Promise<string> {
 
 /** One step of a Stepper, through the seam's own path — the same one a tap takes. */
 function stepStepper(testId: string, direction: number): void {
-  const step = handleFor(testId).nuiTestStep;
-  if (step == null) {
+  const handle = handleFor(testId);
+  if (handle.nuiTestStep == null) {
     throw new Error(`"${testId}" is not a Stepper - it has no nuiTestStep()`);
   }
-  step(direction);
+  // Called *on* the handle: a Nitro hybrid method lifted into a local loses its `this`,
+  // and the call answers "this is not bound" instead of stepping.
+  handle.nuiTestStep(direction);
 }
 
 /** Poll a control's own report until it answers the way `until` wants, then hand it back. */
