@@ -319,4 +319,28 @@ Each line is `test -> the thing it guards put back the way it was -> what went r
 
 ### Appendix: fix round 1 gates
 
-GATE_TABLE_PLACEHOLDER
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1965 tests / 82 suites | `2c8f5a8edbe4` | 3 m 14 s | start 7.2 / med 9.4 / max 224.3 |
+| `harness:ios` | **PASS** | 535 tests / 29 suites + isolated 6 tests / 3 suites | `2c8f5a8edbe4` | 13 m 39 s | start 220.1 / med 11.4 / max 220.1 |
+| `harness:android` | **PASS** | 591 tests / 29 suites + isolated 6 tests / 3 suites | `2c8f5a8edbe4` | 17 m 14 s | start 6.2 / med 5.6 / max 11.2 |
+| `real-input:ios` | **PASS** | — | `2c8f5a8edbe4` | 36 m 16 s | start 3.8 / med 6.4 / max 28.6 |
+| `real-input:android` | **PASS** | — | `2c8f5a8edbe4` | 54 m 05 s | start 6.1 / med 3.9 / max 19.8 |
+| `harness:android:Form` | stale | 5 failed of 107 tests / 3 suites | 6269387e687a (not this tree) | 3 m 42 s | start 11.7 / med 5.6 / max 11.7 |
+| `harness:android:Form.harness` | stale | 3 failed of 11 tests / 1 suites | f086bc841ab1 (not this tree) | 37.2 s | start 26.7 / med 20.4 / max 26.7 |
+| `harness:ios:Form` | stale | 1 failed of 107 tests / 3 suites | ef389784ae39 (not this tree) | 3 m 09 s | start 7.3 / med 4.6 / max 7.3 |
+| `real-input:ios:--control:form` | **PASS** | — | `2c8f5a8edbe4` | 10 m 49 s | start 4.3 / med 5.1 / max 12.2 |
+| `real-input:ios:--control:form:--background` | stale | — | 73b314609615 (not this tree) | 0.5 s | start 4.4 / med 4.4 / max 4.4 |
+
+All five required gates are green on the code tree this round ends on (`2c8f5a8edbe4` — the code
+tree at every commit after the last code change, `a9e4a2b7`), and `need --for review` and `need --for merge` are both satisfied on it. The stale
+rows are the filtered runs taken *inside* the round — each red proof was a filtered run on the tree
+with its mutation in it, and the full gate re-took that gate on the clean tree afterwards.
+`real-input:ios:--control:form:--background` is a mistyped invocation that died on its own argument
+check in 0.5 s, recorded because it was run. `harness:ios` opened at load 220 because another task's
+build owned the machine when it started; it is the only run whose start load is above 30, and its
+own median is 11.4.
+
+The ledger at `docs/tasks/G24/gates.jsonl` carries 119 lines: the 72 from `task/G24-form` plus the 47
+this branch wrote. `gate.mjs export` writes only the current branch's ledger, so the earlier lines
+were merged back in by hand rather than dropped.

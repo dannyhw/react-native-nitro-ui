@@ -1,0 +1,197 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T01:51:53.974Z on code tree `dab312b1d467` at HEAD `63c517f` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 187709 ms
+- Load: start 7.34, end 7.54, median 6.41, max 9.21
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G24-en8js`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T01-51-53.541Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-51-53.541Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-51-53.541Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 7.54 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 515 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=6 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=62.00}
+
+
+    console.log
+      S6b MEASURE timed out waiting for every row in a cell to measure where UIKit put it
+
+  ● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    no cell handed a row back across 50 scroll cycles - {"sections":"3","rows":"9","items":"9","inCells":"1","screen":"1,420.00,666.00,5","orphans":"0","stale":"0","alive":"10","reparents":"4","reclaims":"0","applies":"6","width":"338.00","listWidth":"402.00","boxW":"338.00","boxReports":"39","heights":"52.00,52.00,52.00,52.00,52.00,52.00","taps":"0","keyboard":"0.00","ime":"0.00","offset":"-62.00","origin":"-62.00","received":"-62.00","listY":"0.00","insetTop":"62.00","placed":"0","order":"Wi-Fi|Bluetooth|Cellular data|Ring on receipt, Pre|ringer|alert|notification|nitro-ui 0.4.0|Silent mode","kind":"prototype","listW":"402.00","x":"16.00","y":"40.33","w":"370.00","h0":"52.00","rowH":"44.00","h1":"52.00","h2":"52.00","headerX":"16.00","headerY":"0.00","headerH":"40.33","footerH":"29.67","footerSection":"0","radius":"0.00","sep":"16.00"}
+
+      [0m [90m 769 |[39m       [36mif[39m (num(after[33m,[39m [32m'reclaims'[39m) [33m===[39m [35m0[39m) {
+       [90m 770 |[39m         [90m// The plain assertion says 0; this one says what the Form was doing instead.[39m
+      [31m[1m>[22m[39m[90m 771 |[39m         [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                        [31m[1m^[22m[39m
+       [90m 772 |[39m           [32m'no cell handed a row back across 50 scroll cycles - '[39m [33m+[39m
+       [90m 773 |[39m             [33mJSON[39m[33m.[39mstringify(after)
+       [90m 774 |[39m         )[33m;[39m[0m
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+
+Test Suites: 2 failed, 1 passed, 3 total
+Tests:       1 failed, 10 passed, 11 total
+Snapshots:   0 total
+Time:        185.927 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 187.7 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T01-51-53.541Z.log (4 probe(s))
+
+```
