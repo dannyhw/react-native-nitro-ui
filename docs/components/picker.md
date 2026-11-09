@@ -228,6 +228,20 @@ an API 35 emulator at 420 dpi, in dp), with nothing overridden:
 | `['One','Two','Three']` with `label`            | 72.00 × 34.67     | 280.00 × 64.00    |
 | the same list, `disabled`                       | 72.00 × 34.67     | 280.00 × 56.00    |
 | `wheel`, `['Small','Medium','Large']`, 330 box  | 330.00 × 216.00   | 330.29 × 56.00    |
+| `radio`, `['One','Two','Three']`, index 0       | the menu row above  | 114.67 × 144.00   |
+| `radio`, `['Small','Medium','Large']`, index 0  | the menu row above  | 133.33 × 144.00   |
+| `radio`, five options, index 0                  | the menu row above  | 114.67 × 240.00   |
+
+The three `radio` rows are Android's, and the first of them is the same option list as
+the table's first row: a menu is 280 dp wide by Material's own field floor and 56 dp
+tall, a group of the same three options is **narrower** than that floor and three
+48 dp rows tall, because it has no field and no popup at all. The height is the option
+count exactly — 144 and 240 — which the harness asserts at ±1 dp from a poisoned
+fallback; the width is the widest row, so `One/Two/Three` (114.67) is narrower than
+`Small/Medium/Large` (133.33). On iOS those rows say "the menu row above" because that
+is what the variant is there: `Picker.tsx` resolves `radio` to `menu` before the key is
+built, so it files its size under the menu's key and measures what the menu measures,
+and the harness asserts one control tall rather than three rows.
 
 Three readings from that table are the platforms talking, not us: iOS sizes a menu
 to its title (62.67 pt for `Go`, 360.33 pt for 40 characters) while Android keeps
