@@ -57,14 +57,14 @@ const meta = {
     },
     variant: {
       control: { type: 'inline-radio' },
-      options: ['menu', 'wheel'],
+      options: ['menu', 'wheel', 'radio'],
       description:
-        "`menu` (default) is the platform menu. `wheel` is a SwiftUI wheel on iOS; Android has no wheel, so it renders the same menu taking its caller's width - see the `Variants` story.",
+        "`menu` (default) is the platform menu. `wheel` is a SwiftUI wheel on iOS; Android has no wheel, so it renders the same menu taking its caller's width. `radio` shows every option at once on Android; iOS has no radio-group picker style, so it renders the menu - see the `Variants` and `Radio` stories.",
     },
     label: {
       control: { type: 'text' },
       description:
-        "The picker's label. Android draws it as the field's floating label; iOS uses it for the menu and for accessibility and draws no separate text next to the button.",
+        "The picker's label. Android draws it as the field's floating label; iOS uses it for the menu and for accessibility and draws no separate text next to the button. The `radio` variant never draws it on either platform: it names the group for a screen reader.",
     },
     disabled: { control: { type: 'boolean' } },
     tintColor: {
@@ -169,6 +169,64 @@ export const Variants: Story = {
           iOS: `.pickerStyle(.menu)` and `.wheel`. Android: Material 3
           `ExposedDropdownMenuBox` for both - the wheel variant takes its
           caller&apos;s width instead of its own.
+        </Note>
+      </Showcase>
+    );
+  },
+};
+
+/**
+ * `variant="radio"`: every option visible at once, on the platform that has one.
+ *
+ * Android draws Material&apos;s radio group - a `selectableGroup()` column of 48 dp
+ * rows, each one TalkBack stop with its own selected state and the group&apos;s
+ * &quot;2 of 3&quot;. iOS has no radio-group picker style
+ * (`RadioGroupPickerStyle` is `@available(iOS, unavailable)`), so DECISIONS D38
+ * rules that this variant renders the menu there rather than an imitation: on an
+ * iPhone this same story is two menus. An iOS layout that needs every choice
+ * visible uses `SegmentedControl` for up to about five options.
+ */
+export const Radio: Story = {
+  render: function RadioStory() {
+    const [index, setIndex] = useState(1);
+    return (
+      <Showcase>
+        <Row label='variant="radio"'>
+          <Picker
+            options={SIZES}
+            selectedIndex={index}
+            onChange={(event) => setIndex(event.index)}
+            variant="radio"
+            accessibilityLabel="Size"
+            testID="storybook-radio"
+          />
+        </Row>
+        <Row label="radio, disabled">
+          <Picker
+            options={SIZES}
+            selectedIndex={1}
+            variant="radio"
+            disabled
+            accessibilityLabel="Size, locked"
+            testID="storybook-radio-disabled"
+          />
+        </Row>
+        <Row label="radio, tinted">
+          <Picker
+            options={SIZES}
+            defaultSelectedIndex={2}
+            variant="radio"
+            tintColor="#AF52DE"
+            accessibilityLabel="Size, tinted"
+            testID="storybook-radio-tinted"
+          />
+        </Row>
+        <Note>
+          index {index}. Android: one 48 dp row per option, the whole row
+          pressable, and the group is as tall as its options - a cold group is
+          laid out at the component&apos;s declared box (280 x 56 dp) and
+          corrected the turn it measures. iOS: the menu. Picking the row already
+          chosen reports nothing, and `label` is not drawn: it names the group.
         </Note>
       </Showcase>
     );

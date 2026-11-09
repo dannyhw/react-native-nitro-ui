@@ -503,7 +503,9 @@ export function ViewToggle() {
 
 The value is an index into `options`, as with `SegmentedControl`; `label` is
 drawn as the Material 3 field's label on Android and used for accessibility on
-iOS.
+iOS. `variant="radio"` shows every option instead of opening a menu — a Material
+radio group on Android, and on iOS the menu again, because SwiftUI has no
+radio-group style (`SegmentedControl` is the iOS control for "all shown").
 
 ```tsx name=picker
 export function SizePicker() {
@@ -515,6 +517,23 @@ export function SizePicker() {
       options={['Small', 'Medium', 'Large']}
       selectedIndex={index}
       onChange={(event) => setIndex(event.index)}
+    />
+  );
+}
+
+export function SizeRadio() {
+  const [index, setIndex] = useState(0);
+
+  // `variant="radio"` keeps every option on screen: Android draws a Material radio
+  // group, one row per choice; iOS has no radio-group picker style, so it draws the
+  // menu above.
+  return (
+    <Picker
+      accessibilityLabel="Size"
+      onChange={(event) => setIndex(event.index)}
+      options={['Small', 'Medium', 'Large']}
+      selectedIndex={index}
+      variant="radio"
     />
   );
 }

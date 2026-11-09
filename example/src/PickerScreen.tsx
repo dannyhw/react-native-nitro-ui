@@ -90,6 +90,21 @@ const DROP_OPTIONS = ['Alpha', 'Beta', 'Gamma'];
  */
 const PAIR_OPTIONS = ['Cinder', 'Mica', 'Shale'];
 
+/**
+ * The options of the `variant="radio"` pair — two more sets of private words.
+ *
+ * The radio group is the one variant whose rows are in the app's own window, so
+ * `scripts/real-input` aims at a row by the text it paints (the same helper the
+ * popup rows use). Two rules follow: no word here may be one another row paints
+ * (`findAllByText` is exact, and the check taps the match it finds), and the
+ * disabled group needs its *own* words, because the check reads "which row says
+ * `checked`" from one dump of both groups.
+ */
+const RADIO_OPTIONS = ['Basalt', 'Flint', 'Obsidian'];
+
+/** The disabled radio group's options. */
+const RADIO_LOCKED_OPTIONS = ['Gabbro', 'Peridot', 'Scoria'];
+
 /** How long the "drop while open" row stays mounted after the button is tapped. */
 // Platform-split, because the two platforms are in different moods about a popup.
 //
@@ -137,6 +152,10 @@ export default function PickerScreen() {
   const [realIndex, setRealIndex] = useState('-');
   const [realEvents, setRealEvents] = useState(0);
   const [rejectEvents, setRejectEvents] = useState(0);
+  // The radio group's own echo: its rows are in the app's window, so a real tap on
+  // one is a real pick and this is the witness the check waits for.
+  const [radioIndex, setRadioIndex] = useState('-');
+  const [radioEvents, setRadioEvents] = useState(0);
   // Pinned: the parent never moves it, so choosing in the popup has to snap back
   // natively. `rejectEvents` is what proves the choice was reported at all.
   const [rejectIndex] = useState(0);
@@ -182,6 +201,11 @@ export default function PickerScreen() {
 
   const countRejectChange = useCallback(() => {
     setRejectEvents((current) => current + 1);
+  }, []);
+
+  const countRadioChange = useCallback((event: { index: number }) => {
+    setRadioEvents((current) => current + 1);
+    setRadioIndex(String(event.index));
   }, []);
 
   const acceptChange = useCallback((event: { index: number }) => {
@@ -380,6 +404,53 @@ export default function PickerScreen() {
         <Text style={[styles.section, { color: ink.muted }]}>
           Disabled · tinted · wheel
         </Text>
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.ink }]}>
+            Radio variant — every option visible (Android)
+          </Text>
+          {/* The rows are the control, so this is the one Picker whose options a
+              real tap can reach without a popup: step 9 of `CHECKS.picker`
+              in `scripts/real-input/android.mjs` taps row 2 by its label and
+              reads the `checked` state back out of the dump. On iOS the variant is the menu
+              (D38 item 4), so the same rows are a field there. */}
+          <Picker
+            options={RADIO_OPTIONS}
+            variant="radio"
+            defaultSelectedIndex={0}
+            onChange={countRadioChange}
+            accessibilityLabel="Real-input radio picker"
+            testID="real-input-radio"
+          />
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            last index reported
+          </Text>
+          <Text
+            testID="real-input-radio-index"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {radioIndex}
+          </Text>
+          <Text style={[styles.readout, { color: ink.muted }]}>changes</Text>
+          <Text
+            testID="real-input-radio-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {radioEvents}
+          </Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.ink }]}>
+            Radio variant, disabled
+          </Text>
+          <Picker
+            options={RADIO_LOCKED_OPTIONS}
+            variant="radio"
+            defaultSelectedIndex={0}
+            disabled
+            accessibilityLabel="Real-input disabled radio picker"
+            testID="real-input-radio-disabled"
+          />
+        </View>
         <View style={styles.row}>
           <Text style={[styles.label, { color: ink.ink }]}>Disabled</Text>
           <Picker

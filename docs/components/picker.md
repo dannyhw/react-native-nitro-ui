@@ -31,8 +31,8 @@ reused rather than forked; what is new here is a control that *presents* UI.
 | `selectedIndex`        | `number \| undefined`                    | —        | Controlled index. `undefined` makes the picker uncontrolled.      |
 | `defaultSelectedIndex` | `number \| undefined`                    | `0`      | Seed for an uncontrolled picker; ignored while `selectedIndex` is set. |
 | `onChange`             | `((e: {index, value}) => void) \| undefined` | —    | One call per user choice, with the new index and its label.       |
-| `variant`              | `'menu' \| 'wheel'`                      | `'menu'` | SwiftUI `.menu` / `.wheel`; on Android both are the M3 menu.      |
-| `label`                | `string \| undefined`                    | —        | Android: the field's label. iOS: the `Picker`'s label (a11y).     |
+| `variant`              | `'menu' \| 'wheel' \| 'radio'`           | `'menu'` | SwiftUI `.menu` / `.wheel`; Android the M3 menu or a radio group. |
+| `label`                | `string \| undefined`                    | —        | Android: the field's label. iOS: the `Picker`'s label (a11y). `radio`: the group's a11y name, never drawn. |
 | `disabled`             | `boolean \| undefined`                   | `false`  | SwiftUI `.disabled()` / Compose `enabled = false`.                |
 | `tintColor`            | `ColorValue \| undefined`                | platform | iOS: the menu's title. Android: the field's outline, label and chevron accents. |
 | `style`                | `ViewStyle`                              | —        | Overrides the measured box (see Sizing).                          |
@@ -51,7 +51,7 @@ so such a prop would be answerable on Android and not on iOS.
 
 | Concept        | iOS                                                     | Android                                                |
 | -------------- | --------------------------------------------------------- | -------------------------------------------------------- |
-| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `ExposedDropdownMenu` (Expressive standalone-group shape and colour) of `SelectableDropdownMenuItem` rows |
+| Control        | `Picker(selection:) { … }.pickerStyle(.menu \| .wheel)`; `radio` renders the `.menu` one    | `ExposedDropdownMenuBox` + `OutlinedTextField` + `ExposedDropdownMenu` (Expressive standalone-group shape and colour) of `SelectableDropdownMenuItem` rows; `radio` is a `Column(selectableGroup())` of `RadioButton` rows |
 | Host           | `UIHostingController` inside `NitroSwiftUIHost`            | `NitroComposeHost<M>: AbstractComposeView`                |
 | Containment    | **required** (`needsContainment`) — the first control here that presents a view controller | n/a — the popup is a Compose `Popup`              |
 | Theme          | system traits                                              | `MaterialTheme` + dynamic colour on Android 12+           |
@@ -140,9 +140,52 @@ on the activity, window or a `ViewTreeObserver` may outlive the view.
   `example/__tests__/Picker.harness.tsx`) is named for what it can assert, which is
   those two things and not the popup.
 
+## The radio variant (`variant="radio"`)
+
+Every option visible at once, on the platform that has a control for it. Android
+draws Material 3's documented radio group: a `Column(Modifier.selectableGroup())`
+of rows, each row `selectable(selected, enabled, Role.RadioButton)` around a
+`RadioButton(onClick = null)` and the label, 48 dp tall, the whole row the press
+target. iOS **renders the menu**, because SwiftUI's radio-group style —
+`RadioGroupPickerStyle` — is `@available(iOS, unavailable)`: there is nothing to
+host, and DECISIONS D38 rules that a missing control falls back to the platform's
+real one rather than to an imitation drawn by us. The same rule is why `wheel` is
+the menu on Android.
+
+That is a decision the JS wrapper makes, not something it leaves to SwiftUI, and
+the reason is the cache: `Picker.tsx` resolves the variant before it sends the
+prop, so on iOS `radio` is spelled `menu` in the prop **and** in `nuiSizingKey`
+(see Sizing). A key that named a `radio` configuration whose width follows its
+title would file a menu's title-dependent width under a key with no selection in
+it — the poisoned-cache bug G6 review M1 is about, wearing a different name.
+`HybridNitroUiPicker.swift` guards again, so a `radio` that arrived by another
+road would still draw a menu.
+
+**An iOS app that wants every option visible** should use
+`docs/components/segmented-control.md` for up to about five options — that is the
+control iOS does have for "choose one of these, all shown" — or a `Menu` for more.
+
+- **`label` is not drawn**, on either platform. A radio group has no field to
+  float a caption inside, and the group is named by its rows; `label` (or
+  `accessibilityLabel`, which wins, as elsewhere) names the **group** for a screen
+  reader. A layout that counted on a caption therefore gets nothing, which is the
+  same difference `menu` already has between the platforms, in a new shape.
+- **`tintColor` paints the selected dot** on Android, through
+  `RadioButtonDefaults.colors(selectedColor = tint)` from a bounded cache keyed on
+  `(scheme, tint)` — this variant's analogue of the menu's field accent. The
+  unselected outline keeps the scheme's colour, and since iOS draws a menu, its
+  tint there is the menu's (the title and chevron).
+- **Picking the row already chosen reports nothing**, and a disabled group reports
+  nothing at all: `applyUserSelection` is the one place a pick is applied, so a
+  radio row and a popup row cannot disagree about what a choice means.
+- **Nothing about it presents**, so the whole popup story above — windows,
+  `expanded`, back, dismiss-on-move, containment — does not apply, and
+  `nuiTestMenuReport()` answers `-1` for every box and `rows=0`.
+
 ## Sizing
 
 `menu` is `intrinsic`; `wheel` is `fillWidth` with a platform height — the same
+ `wheel` is `fillWidth` with a platform height — the same
 two-policy switch Progress makes between its linear and circular shapes, taken with the
 remount that makes the switch work: the native view is keyed on the variant and the
 sizing id is taken per variant (`key={variant}` with `useSizingId(variant)`, exactly as
@@ -161,6 +204,15 @@ escaped the way SegmentedControl escapes (`\` → `\\`, `|` → `\|`) so a label
 forge a separator and share another configuration's cached size. `disabled` and
 `tintColor` repaint, they do not resize; text size, density and OS control size come
 in through the epoch (`docs/architecture/sizing.md`).
+
+`radio` is `intrinsic` too, and drops the **`sel:` field**: a group paints every
+label at once, so its box is the widest row by the option count and *which* row is
+chosen decides nothing about it. That is `SegmentedControl`'s rule, arrived at from
+the other direction — a segment row is the same width whichever segment is chosen,
+and so is a radio group — and it is what makes a pick in a group **not** a cold
+configuration: 0 corrections, and no frame at the declared fallback. On iOS the
+variant is resolved to `menu` before the key is built (see The radio variant), so
+iOS files its radio sizes under a menu key with its `sel:` field, where they belong.
 
 Measured on the devices this library's tests run on (iPhone 17 / iOS 27 in pt;
 an API 35 emulator at 420 dpi, in dp), with nothing overridden:
@@ -181,6 +233,17 @@ measures 280 dp; a `label` costs Android 8 dp of height and nothing on iOS, whic
 draws no caption; and a wheel is a wheel only on iOS — Android answers a `wheel`
 with the menu control under the wheel's layout policy (see Limits).
 
+**The radio group's box.** The height is one row per option and the row is
+Material's own minimum touch target — 48 dp, which the `RadioButton` inside already
+asks for through `minimumInteractiveComponentSize()` — so three options are 144 dp
+tall and five are 240, measured on the test emulator and asserted there at ±1 dp
+(`Picker.harness.tsx`, "measures a radio group as its option count"). The width is
+the widest row, measured unbounded like every other `intrinsic` box, with each
+label on one line with an ellipsis so a narrower box truncates the label instead of
+growing the row; `alignSelf: 'stretch'` remains the opt-in that makes the rows take
+the box's width. The rows and the numbers are Android's: on iOS the variant is a
+menu and measures like one.
+
 **What the engine starts from.** One declared fallback pair per component:
 **72 × 35 pt** (`ios/components/Picker/HybridNitroUiPicker.swift`) and
 **280 × 56 dp** (`android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt`) —
@@ -191,8 +254,18 @@ Registered at startup through `NitroUiDeclaredFallbacks`, not from the first
 view. Every other configuration is a first instance of its own: laid out at the
 fallback, corrected the turn it measures (D17).
 
+**The first frame of a cold radio group is therefore the menu's box** — 280 × 56 dp
+on Android — because the engine holds one declared fallback per component, not one
+per variant. A three-option group is 144 dp tall, so that first frame is wrong in
+both axes and gets corrected the turn the control measures, the same cost a cold
+iOS `wheel` pays in height. Per-variant fallbacks are what the engine has no room
+for; `prewarm` is the way to make a known group mount exact, and the harness mounts
+every radio case from a *poisoned* entry so the correction is required rather than
+decorative.
+
 **What makes a change re-measure.** Three things move a Picker's box, and each is
-wired: an `options` change (`options` setter → `noteContentSizeMayHaveChanged()` on
+wired (for a `radio` group, only the first and the third: its box has no title
+term): an `options` change (`options` setter → `noteContentSizeMayHaveChanged()` on
 iOS, Compose observation on Android), a **selection** change (a new title in the
 button), and a `variant` change. Both platforms reset the host's last-reported size
 when `nuiSizingKey` changes, so a new configuration that happens to measure exactly
@@ -250,6 +323,14 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
 
 ## Accessibility
 
+- **A radio group is one node per row, inside a named group.** `selectableGroup()`
+  on the column is what gives TalkBack the position ("2 of 3"); `selectable(role =
+  Role.RadioButton)` on each row is what gives it the role and the selected state,
+  and the `RadioButton` inside is drawn, not focusable, because its `onClick` is
+  `null` — one press target per option, not two. `label` / `accessibilityLabel`
+  names the group. `scripts/real-input/android.mjs` reads a dump of a group it has
+  just tapped: exactly one row says `checked`, the one the finger chose, and the
+  rows of a disabled group say `enabled=false`.
 - The control is **a button that opens a list**: iOS gets a menu-style `Picker` with
   `.accessibilityLabel(accessibilityLabel ?? label)`. Android makes the anchor **one**
   semantics node carrying the name, the value, the role and the enabled state
@@ -314,6 +395,12 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
 
 ## Limits
 
+- **`radio` is Android's.** iOS has no radio-group picker style
+  (`RadioGroupPickerStyle` is `@available(iOS, unavailable)`), so the variant
+  renders the menu there and shows no rows (see The radio variant); use
+  `SegmentedControl` on iOS for up to about five visible choices. Android's radio
+  group is a plain Material radio group — no per-row icons, no grouping, no
+  per-row enabled state.
 - Strings only — no icons, no per-option colours, no grouped or disabled rows.
 - **No wheel on Android.** Material 3 has no wheel; `variant='wheel'` renders the
   menu control under the wheel's layout policy (fills the box, Material's field

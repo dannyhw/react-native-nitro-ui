@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from '@jest/globals';
+import { Platform } from 'react-native';
 import { act, render, type RenderResult } from '@testing-library/react-native';
 
 import { nitroUiHybridObjects } from '../../__mocks__/react-native-nitro-modules';
@@ -291,5 +292,111 @@ describe('Picker · variant', () => {
       { alignSelf: 'stretch' },
       undefined,
     ]);
+  });
+
+  /**
+   * Run `body` with `Platform.OS` answered as `os`.
+   *
+   * The variant resolution is read per render rather than frozen into a module
+   * constant precisely so this is possible: which control `radio` is *is* the
+   * iOS-fallback contract (D38 item 4), and a suite that could only ever see the
+   * platform jest happens to report could not say it holds on the other one.
+   */
+  async function onOs<T>(
+    os: 'ios' | 'android',
+    body: () => Promise<T>
+  ): Promise<T> {
+    const previous = Platform.OS;
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: os });
+    try {
+      return await body();
+    } finally {
+      Object.defineProperty(Platform, 'OS', {
+        configurable: true,
+        value: previous,
+      });
+    }
+  }
+
+  it('is a radio group on Android and the menu on iOS', async () => {
+    const OPTIONS = ['One', 'Two', 'Three'];
+    await onOs('android', async () => {
+      const group = await render(
+        <Picker options={OPTIONS} variant="radio" testID="r-a" />
+      );
+      expect(nativeProps(group, 'r-a').variant).toBe('radio');
+      // The variant is the first field, like every other: a radio group and a menu
+      // are different controls with different boxes.
+      expect(keyOf(group, 'r-a')).toBe('radio|3|One|Two|Three|lbl:');
+      expect(nativeProps(group, 'r-a').style).toEqual([
+        { alignSelf: 'flex-start' },
+        undefined,
+      ]);
+    });
+    await onOs('ios', async () => {
+      const group = await render(
+        <Picker options={OPTIONS} variant="radio" testID="r-i" />
+      );
+      // iOS asks SwiftUI for the menu, so the key it files sizes under names the
+      // menu too - including `sel:`, because an iOS menu is as wide as its title.
+      expect(nativeProps(group, 'r-i').variant).toBe('menu');
+      expect(keyOf(group, 'r-i')).toBe('menu|3|One|Two|Three|sel:One|lbl:');
+    });
+  });
+
+  it('keeps a radio selection out of the key and a menu selection in it', async () => {
+    // The rule a pick costs 0 corrections is built on: a radio group paints every
+    // label at once, so moving the selection moves no box, while a menu button
+    // repaints a different word. Put `sel:` back for `radio` and both halves of
+    // this go red together - the Android key moves, and every pick there becomes a
+    // cold configuration with a frame at the declared fallback (D17).
+    const OPTIONS = ['One', 'Two', 'Three'];
+    await onOs('android', async () => {
+      const group = await render(
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          selectedIndex={0}
+          testID="k"
+        />
+      );
+      const before = keyOf(group, 'k');
+      await group.rerender(
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          selectedIndex={2}
+          testID="k"
+        />
+      );
+      expect(keyOf(group, 'k')).toBe(before);
+      expect(keyOf(group, 'k')).toBe('radio|3|One|Two|Three|lbl:');
+
+      const menu = await render(
+        <Picker options={OPTIONS} selectedIndex={0} testID="km" />
+      );
+      await menu.rerender(
+        <Picker options={OPTIONS} selectedIndex={2} testID="km" />
+      );
+      expect(keyOf(menu, 'km')).toBe('menu|3|One|Two|Three|sel:Three|lbl:');
+    });
+  });
+
+  it('treats an iOS variant change between menu and radio as no change at all', async () => {
+    // On iOS the two variants are the same control, so the wrapper must not ask for
+    // a new native view: `key={variantKey}` is the remount, and a remount resets an
+    // uncontrolled picker's seed for a control that did not change.
+    await onOs('ios', async () => {
+      const OPTIONS = ['One', 'Two'];
+      const menu = await render(
+        <Picker options={OPTIONS} variant="menu" testID="same" />
+      );
+      const menuId = nativeProps(menu, 'same').nuiSizingId;
+      await menu.rerender(
+        <Picker options={OPTIONS} variant="radio" testID="same" />
+      );
+      expect(nativeProps(menu, 'same').nuiSizingId).toBe(menuId);
+      expect(nativeProps(menu, 'same').variant).toBe('menu');
+    });
   });
 });

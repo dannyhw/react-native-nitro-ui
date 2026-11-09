@@ -199,4 +199,56 @@ class PickerModelTest {
     model.options = emptyArray()
     assertEquals("an empty list has no index at all", 0, model.clamp(2.0))
   }
+
+  /**
+   * The three names this component answers with, and the one of them that is a
+   * different *window*.
+   *
+   * `'radio'` composes rows in the host's own window, so a resolution that folded
+   * it into `'menu'` would draw a text field instead of the group - green on every
+   * other assertion in this file, because nothing else here reads the variant. The
+   * device suite owns the geometry; what a JVM can pin is that the name survives
+   * the setter's guard at all, and that an unknown name still lands on the default
+   * control rather than on nothing.
+   */
+  @Test
+  fun theVariantResolvesToTheThreeControlsThisComponentHas() {
+    assertEquals("menu", PickerModel.resolvedVariant("menu"))
+    assertEquals("wheel", PickerModel.resolvedVariant("wheel"))
+    assertEquals("radio", PickerModel.resolvedVariant("radio"))
+    assertEquals("unknown names are the default", "menu", PickerModel.resolvedVariant("popover"))
+    assertEquals("empty is the default", "menu", PickerModel.resolvedVariant(""))
+    assertTrue("'radio' is the radio group", PickerModel.isRadio("radio"))
+    assertFalse("a menu is not", PickerModel.isRadio("menu"))
+    assertFalse("nor is a wheel", PickerModel.isRadio("wheel"))
+  }
+
+  /**
+   * A radio pick is the menu's pick: same clamp, same no-op suppression, same
+   * refusal while disabled. The variant changes what is painted, not what a choice
+   * means - and this is the half the harness cannot reach on Android through a
+   * popup, because a radio group has no popup to reach into.
+   */
+  @Test
+  fun aRadioPickMeansTheSameThingAsAMenuPick() {
+    val model =
+      PickerModel().apply {
+        options = arrayOf("One", "Two", "Three")
+        displayed = 0
+        state.displayed = 0.0
+        variant = "radio"
+      }
+    assertTrue("a pick of a different row is a choice", model.applyUserSelection(2))
+    assertEquals(2, model.displayed)
+    assertFalse("a radio group has no popup to open", model.expanded)
+    assertFalse(
+      "a pick of the row already shown reports nothing",
+      model.applyUserSelection(2),
+    )
+    assertFalse(
+      "9 clamps to the last row, which is the one already shown",
+      model.applyUserSelection(9),
+    )
+    assertEquals(2, model.displayed)
+  }
 }
