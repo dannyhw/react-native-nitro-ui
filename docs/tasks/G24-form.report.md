@@ -352,19 +352,18 @@ were merged back in by hand rather than dropped.
 Six of the seven findings are in. `origin/main` merged again; the shared lists keep both components
 and every generated region came from its own script.
 
-iOS: a visible cell with no row is re-adopted, not only when the list is empty; a list that comes
-back out of the pool is put at `-adjustedContentInset.top` and the reset is verified rather than
-asked; an animated scroll names itself so its frames stop publishing; the keyboard inset no longer
-counts the home-indicator area twice; below iOS 16 a row's growth invalidates the layout. `FormRoot`
-resets the "am I inside a row" flag, so a `Form` inside a `Form.Row` no longer brands its rows nested.
+iOS: a visible cell with no row is re-adopted, not only when the list is empty; a list coming back
+out of the pool is put at `-adjustedContentInset.top`, verified rather than asked; an animated scroll
+names itself so its frames stop publishing; the keyboard inset no longer counts the home-indicator
+area twice; below iOS 16 a row's growth invalidates the layout. `FormRoot` resets the "am I inside a
+row" flag, so a `Form` inside a `Form.Row` no longer brands its rows nested.
 
 The two new cases asked iOS questions of Android — its Form report answers under `scroll`, stubs
 `offset=0.00` and has no `offsetPublishes` — and now ask each platform its own.
 
-`form=held` is not reproducible as a red on either platform, and one iOS tap case came red once and
-green twice on the same tree; both are in the appendix rather than papered over.
-
-Reds, the table and what did not go red: the appendix.
+`form=held` is not reproducible as a red on either platform, and one iOS tap case went red once and
+green twice on the same tree; both are in the appendix rather than papered over, beside the reds and
+the table.
 
 ### Appendix: fix round 2 red proofs
 
