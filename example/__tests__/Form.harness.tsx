@@ -386,7 +386,12 @@ function Probe({
         <Form.Row key="about">
           <Text testID="label-about">nitro-ui 0.4.0</Text>
         </Form.Row>
-        <Form.Row key="silent">
+        <Form.Row
+          key="silent"
+          hybridRef={(view) => {
+            if (view != null) rows.silent = view;
+          }}
+        >
           <Text testID="label-silent">Silent mode</Text>
           <Switch
             onValueChange={onSwitchChange}
@@ -918,22 +923,43 @@ describe('Form (G24)', () => {
       `FORM TAP boxes pressable=${describeBox(pressable)} switch=${describeBox(toggle)}`
     );
     if (IOS) {
-      // Question 4, the half that is not a finger. The row view is reparented into a cell,
-      // so the layout tree has it nowhere near where it is drawn (`Form.tsx` therefore lays
-      // iOS rows at `position: absolute, top: 0`, which is what leaves `measure`,
-      // `measureInWindow` and anything that aims at the point they return useless for row
-      // content). Ten presses of the Pressable and ten of the hosted Switch, aimed through
-      // that geometry, reach neither: the counters stay at zero while the same case on
-      // Android counts ten of each. A touch the operating system aims at the screen does
-      // reach them, and that is what `testRealInputForm` measures, ten taps per control,
-      // with the counters read back out of the screen.
+      // Question 4, the half that is not a finger, and it splits by who hit-tests the touch.
+      // The row view is reparented into a cell, so React Native's own hit-test - which walks
+      // the shadow tree, where the row is still inside its section's holding view - does not
+      // find row content where it is drawn. Ten presses of the `Pressable` therefore reach
+      // nothing, while the same case on Android counts ten. A hosted control is different: it
+      // is a native view that answers for the point it is drawn at, and takes all ten.
+      //
+      // Both waits below are for the row to be *drawn in a cell*, because on a screen short
+      // enough to leave the last row in its holding view the Switch answers nothing for a
+      // different reason - it is not on screen - and that would make the number below a
+      // property of one simulator's height instead of the answer to question 4. A finger at
+      // the drawn position reaches both, ten taps each, and `testRealInputForm` is what
+      // measures that half.
+      await reportUntil(
+        () => rows.pressable?.nuiTestRowReport(),
+        (r) => r.where === 'cell',
+        'the row holding the Pressable to be drawn in a cell'
+      );
+      await reportUntil(
+        () => rows.silent?.nuiTestRowReport(),
+        (r) => r.where === 'cell',
+        'the row holding the Switch to be drawn in a cell'
+      );
       for (let index = 0; index < 10; index += 1) {
         await userEvent.press(pressable);
         await userEvent.press(toggle);
       }
       await new Promise((resolve) => setTimeout(resolve, 250));
       expect(probe.log.pressable).toBe(0);
-      expect(probe.log.switches).toBe(0);
+      expect(probe.log.switches).toBe(10);
+      // The positive control: the very same two callbacks, outside any Form, where React
+      // Native's hit-test has its content where it is drawn. Both counters are the ones the
+      // loop above just drove ten times, so this is graded as a delta.
+      const loose = {
+        pressable: probe.log.pressable,
+        switches: probe.log.switches,
+      };
       cleanup();
       render(
         <Loose
@@ -943,8 +969,8 @@ describe('Form (G24)', () => {
       );
       await userEvent.press(await boxOf('loose-press'));
       await userEvent.press(await boxOf('loose-switch'));
-      expect(probe.log.pressable).toBe(1);
-      expect(probe.log.switches).toBe(1);
+      expect(probe.log.pressable - loose.pressable).toBe(1);
+      expect(probe.log.switches - loose.switches).toBe(1);
       return;
     }
     for (let index = 0; index < 10; index += 1) {
@@ -1243,10 +1269,20 @@ describe('Form (G24)', () => {
     if (!IOS) return;
     const target = num(atRest, 'offset') + 60;
     need(forms.form).nuiTestCommand('scroll-animated');
-    const settled = await formReport(
-      (r) => Math.abs(num(r, 'offset') - target) <= 1,
-      `the list to have animated to ${String(target)} pt`
+    // The offset is not the settle. `setContentOffset` writes the model value before UIKit
+    // has drawn a frame of the animation, so an offset at the target only says the scroll
+    // started; the settle is the publish, and that is what has to be waited for.
+    await formReport(
+      (r) =>
+        Math.abs(num(r, 'offset') - target) <= 1 &&
+        num(r, 'offsetPublishes') >= before + 1,
+      `the Form to have published the settle at ${String(target)} pt (` +
+        `offsetPublishes was ${String(before)})`
     );
+    // A beat longer than the animation, so the ceiling below counts a scroll that is over:
+    // read mid-flight, even an unguarded one looks quiet.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const settled = parse(need(forms.form).nuiTestFormReport());
     const published = num(settled, 'offsetPublishes') - before;
     console.log(
       `FORM ANIMATED SCROLL: publishes=${String(published)} offset=${String(
