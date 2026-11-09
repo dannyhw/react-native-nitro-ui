@@ -154,7 +154,21 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
   /// a bound: `width` right and `boxReports` zero means the cell never asked, and the row
   /// was laid out at whatever an earlier, wider guess said.
   private var boxReports = 0
+  /// How many times this *view* has been prepared for reuse - one `prepareForRecycle`, whether
+  /// it came from the pool or from a drop. Deliberately not reset by the reset: the Form
+  /// mounted into a recycled list is the only one that can say it was recycled, and a case that
+  /// cannot tell the two apart cannot assert anything about what the recycle left behind.
+  private var recycles = 0
   private var keyboardInset: CGFloat = .zero
+  /// How many offsets have actually been handed to JavaScript. A settle reports once, so a
+  /// number that climbs by one per frame of a scroll says the guard in
+  /// `NitroUiFormDelegate.scrollViewDidScroll` has stopped guarding (fix round 2, item 3).
+  private var offsetPublishes = 0
+  /// Whether the list is in a scroll that *nobody's finger* started: this class's animated
+  /// `setContentOffset` for the keyboard, or UIKit's own animated scroll to the top from a
+  /// status-bar tap. Neither sets `isDragging`, `isTracking` or `isDecelerating`, so the
+  /// delegate's guard lets every frame of them through (fix round 2, item 3).
+  var scrollAnimating = false
 
   override init() {
     super.init()
@@ -218,6 +232,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
 
   func prepareForRecycle() {
     nitroUiAssertMainThread()
+    recycles += 1
     for section in sections {
       NitroUiFormHoldingView.moving {
         for row in section.rows { row.removeFromSuperview() }
@@ -233,7 +248,17 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     reclaims = 0
     taps = 0
     boxReports = 0
+    offsetPublishes = 0
+    scrollAnimating = false
     setBottomInset(0)
+    // A recycled list keeps its `contentOffset`, and the Form mounted into it inherits a
+    // scroll nobody asked for: E7 measured an at-rest offset of -2 against a 62 pt top inset,
+    // which is another surface's +60 carried over (fix round 2, item 2). Back to the top of
+    // the content, wherever the list's *current* inset puts that.
+    list.setContentOffset(
+      CGPoint(x: list.contentOffset.x, y: -list.adjustedContentInset.top),
+      animated: false
+    )
     applySnapshot()
   }
 
@@ -461,6 +486,65 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       }
       self.reportGeometry()
     }
+  }
+
+  /// Notice every visible item whose cell has no row, and ask the data source again for it.
+  ///
+  /// A cell can be on screen holding nothing while no count beside it is wrong: the snapshot has
+  /// the item, the model has the row, and the row is alive in a section's holding view. Three
+  /// ways in, the first two measured in fix round 1's own logs — `inCells` 3 against 5 items on
+  /// screen, 2 against 5, 1 against 5, and 0 against 4 at offset 400, none of which looked like
+  /// anything but a blank row:
+  ///
+  /// - UIKit moves an item to another index path in a snapshot apply and keeps the cell already
+  ///   drawing it, without asking the provider again — and the row went to its section's holding
+  ///   view on the way;
+  /// - the provider gives up once (its guard reads an index path the models have moved under, or
+  ///   hands back a plain `UICollectionViewCell`) and UIKit keeps that blank cell, because the
+  ///   next snapshot says the same item at the same index path and has nothing to reconfigure;
+  /// - a row is taken out of a cell that is still on screen (another cell adopts it), and
+  ///   `giveBack` correctly refuses to hand the same row back twice, so this cell's pointer was
+  ///   cleared with nobody coming to replace it.
+  ///
+  /// The remedy is the same in every case: adoption is the provider's job, so run the provider
+  /// again for those items. `reconfigureItems` is the API for "this item's cell has to be built
+  /// again" that a diffable data source allows, and it only runs when something is actually
+  /// wrong, so the steady state costs a walk of the visible index paths.
+  ///
+  /// Asked from `reportGeometry`, which is every settle there is — the one after a snapshot
+  /// apply and the one after a list came to rest — so a blank cell is chased whether an apply or
+  /// a scroll made it. The apply itself waits for the next turn: writing a diffable snapshot from
+  /// inside a `UIScrollView` or layout callback is the class of thing UIKit answers with an
+  /// exception, and by the next turn a settle may have been followed by an apply that fixed the
+  /// cell anyway. `readoptQueued` keeps it to one per settle.
+  private var readoptQueued = false
+
+  private func readoptRowlessCells() {
+    guard !readoptQueued else { return }
+    readoptQueued = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.readoptQueued = false
+      let ids = self.rowlessVisibleItemIdentifiers()
+      guard !ids.isEmpty, var snapshot = self.dataSource?.snapshot() else { return }
+      snapshot.reconfigureItems(ids)
+      self.snapshotApplies += 1
+      self.dataSource?.apply(snapshot, animatingDifferences: false)
+    }
+  }
+
+  /// The identifiers of the items on screen whose cell holds no row. Main thread only.
+  private func rowlessVisibleItemIdentifiers() -> [NitroUiFormItem] {
+    guard let dataSource, dataSource.snapshot().numberOfItems > 0 else { return [] }
+    var ids: [NitroUiFormItem] = []
+    for path in list.indexPathsForVisibleItems {
+      guard let id = dataSource.itemIdentifier(for: path) else { continue }
+      // A cell that is not one of ours at all - the blank `UICollectionViewCell` from a
+      // provider call that gave up - has no row either, and reads as `nil` here.
+      let cell = list.cellForItem(at: path) as? NitroUiFormRowCell
+      if cell?.row == nil, !ids.contains(id) { ids.append(id) }
+    }
+    return ids
   }
 
   private func configureDataSource() {
@@ -836,6 +920,9 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // of which UIKit has already folded into `adjustedContentInset`.
     let visibleBottom = list.bounds.maxY - list.adjustedContentInset.bottom
     if rect.maxY > visibleBottom {
+      // An animated scroll sets none of `isDragging`, `isTracking` or `isDecelerating`, so
+      // without this the delegate's guard lets every frame of it through to a publish.
+      scrollAnimating = true
       list.setContentOffset(
         CGPoint(
           x: list.contentOffset.x,
@@ -894,6 +981,7 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     // form at rest wrong by the list's own top inset (E7).
     if reportedOffset != offset, scrollOffsetReport != nil {
       reportedOffset = offset
+      offsetPublishes += 1
       scrollOffsetReport?(offset)
     }
 
@@ -904,6 +992,11 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // top did not move; `applyPlacement` sends neither number if neither changed.
       model.hybrid?.applyPlacement(top: top, inset: inset)
     }
+
+    // A list that came to rest with a blank cell on screen stays that way: nothing else asks
+    // for that cell. Every settle ends here, whether it was an apply or a scroll, so this is
+    // where the rowless visible cell is chased (fix round 2, item 1).
+    readoptRowlessCells()
   }
 
   /// The y JavaScript has to put this section at, so that every row's Yoga origin *is* its
@@ -1067,6 +1160,16 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
       // `setBottomInset`, so `keyboard=` alone cannot see it (fix round 1, question 5).
       "insetBottom=\(Self.number(list.contentInset.bottom))",
       "adjBottom=\(Self.number(list.adjustedContentInset.bottom))",
+      // One publish per settle is the contract, so this is the number that says whether it is
+      // kept: an animated scroll that reports every frame moves it by twenty (fix round 2).
+      "offsetPublishes=\(offsetPublishes)",
+      // Witness that this view is the one a previous Form finished with, which is the only way
+      // the assertions about what a recycle leaves behind can be aimed at something.
+      "recycles=\(recycles)",
+      // Whether the list still watches a row's height constraint by itself. `0` means the
+      // `rowResized` fallback is the only thing that can grow a row — which is what iOS 15 is
+      // always in, and what the `self-sizing-off` command arranges on a modern system.
+      "selfSizing=\(listSelfSizesRows ? 1 : 0)",
       "ime=0.00",
       "offset=\(Self.number(list.contentOffset.y))",
       "origin=\(Self.number(reportedOffset ?? .nan))",
@@ -1183,6 +1286,23 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
           animated: false
         )
         list.layoutIfNeeded()
+      case "scroll-animated":
+        // The keyboard path's shape: a scroll UIKit animates with no finger on it. Every frame
+        // of it is a `scrollViewDidScroll` with nothing beside it, so this is how the harness
+        // counts publishes per programmatic scroll (fix round 2, item 3).
+        scrollAnimating = true
+        list.setContentOffset(
+          CGPoint(x: list.contentOffset.x, y: list.contentOffset.y + 60),
+          animated: true
+        )
+      case "self-sizing-off":
+        // Take away the property that tells UIKit a row's height constraint moved, and say so,
+        // so the harness can watch the `rowResized` fallback carry a growing row. Below iOS 16
+        // this is the permanent state of every Form; here it is a switch.
+        if #available(iOS 16.0, *) {
+          list.selfSizingInvalidation = .disabled
+        }
+        listSelfSizesRows = false
       default:
         break
     }
