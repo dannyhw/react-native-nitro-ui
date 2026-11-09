@@ -785,8 +785,14 @@ class HybridNitroUiStepper(
       "..${nitroUiStepperValueText(range.range.endInclusive.toDouble())}" +
       "@${nitroUiStepperValueText(range.current.toDouble())}/steps=${range.steps}"
       }
+    // The value as the *node* carries it, not as the model remembers it: a reader
+    // hears the progress this node publishes, and iOS spells its own
+    // `accessibilityValue` the same way, so the two platforms can be read alike.
+    val valueText =
+      range?.let { nitroUiStepperValueText(it.current.toDouble()) } ?: "none"
     return candidates.size.toString() to
-      "range=$rangeText,clickable=$clickable,disabled=$disabled,label=$label"
+      "range=$rangeText,value=$valueText,clickable=$clickable,disabled=$disabled," +
+      "label=$label"
   }
 
   private fun runTestAccessibilityStep(up: Boolean) {

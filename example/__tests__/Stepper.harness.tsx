@@ -1076,8 +1076,11 @@ describe('Stepper', () => {
     expect(detail, 'the control is named').toContain('Quantity');
     // The *value* is the control's own half of the announcement, spelled without a
     // float's noise (`4`, not `4.0`), and both platforms have to spell it alike or
-    // the two readings of this line would disagree.
-    expect(detail, 'the control carries its value').toContain('4');
+    // the two readings of this line would disagree. It is read from the field the
+    // reader is handed (`accessibilityValue` on iOS, the merged node's published
+    // progress on Android): a bare `4` here would be satisfied by this fixture's own
+    // `step={2}`, `range=…@4/steps=4` and `traits=4096`, which say nothing about it.
+    expect(detail, 'the control carries its value').toContain('value=4');
 
     if (Platform.OS === 'ios') {
       // `.adjustable` is the trait VoiceOver needs to offer a swipe-adjustable element
