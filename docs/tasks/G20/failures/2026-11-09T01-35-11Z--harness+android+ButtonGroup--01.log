@@ -1,0 +1,79 @@
+# Failure excerpt — harness:android:ButtonGroup
+
+- Ran: 2026-11-09T01:35:11.166Z on code tree `5c2be429d5d1` at HEAD `fd6c594` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ButtonGroup`
+- Result: fail, exit 1, 25416 ms
+- Load: start 5.33, end 4.51, median 4.88, max 5.33
+- Device: android / device `emulator-5570` / lease `G20-jtox6`
+- Full log: `task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-35-11.166Z.log` (<store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-35-11.166Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › lays the default row out at the size it measured, not at the planted one`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-35-11.166Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-jtox6 (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.51 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ButtonGroup
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 5c2be429d5d1, 21 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.33/8.21 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-09T01-35-11.166Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › lays the default row out at the size it measured, not at the planted one
+
+    testID "bg-default" (the default row) never reached height 48.00 - last box 411.43x99.05, control measured 214.10x48.00.
+
+      [0m [90m 267 |[39m     }[33m,[39m
+       [90m 268 |[39m     () [33m=>[39m
+      [31m[1m>[22m[39m[90m 269 |[39m       [36mnew[39m [33mError[39m(
+       [90m     |[39m                [31m[1m^[22m[39m
+       [90m 270 |[39m         [32m`testID "${testId}" (${what}) never reached height ${height.toFixed([39m
+       [90m 271 |[39m [32m          2[39m
+       [90m 272 |[39m [32m        )} - last box ${describeSize(sizeOf(testId))}, control measured `[39m [33m+[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 passed, 9 total
+Snapshots:   0 total
+Time:        24.091 s
+Ran all test suites matching ButtonGroup.
+
+
+
+```

@@ -27,7 +27,8 @@ export type ComponentName =
   | 'menu'
   | 'text-field'
   | 'icon-button'
-  | 'form';
+  | 'form'
+  | 'button-group';
 // @end-generated
 
 /** What one launch does to the controls. */
@@ -50,7 +51,8 @@ export type ScenarioName =
   | `${ScenarioAction}.menu`
   | `${ScenarioAction}.text-field`
   | `${ScenarioAction}.icon-button`
-  | `${ScenarioAction}.form`;
+  | `${ScenarioAction}.form`
+  | `${ScenarioAction}.button-group`;
 // @end-generated
 
 /**

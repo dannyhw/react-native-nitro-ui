@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-08T18:40:13.005Z on code tree `7fe64cece26f` at HEAD `bb7b62b` (branch `task/G20-button-group`)
+- Command: `bun run check`
+- Result: fail, exit 1, 243860 ms
+- Load: start 7.96, end 71.82, median 85.99, max 133.25
+- Device: none recorded (not a device gate)
+- Full log: `task/G20-button-group/check-2026-11-08T18-40-12.460Z.log` (<store>/task/G20-button-group/check-2026-11-08T18-40-12.460Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `error: script "lint" exited with code 1`
+- `error: script "format" exited with code 1`
+- `FAIL scripts/__tests__/real-input-a11y.test.js`
+- `● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt`
+- `FAIL scripts/__tests__/readme-components.test.js`
+- `● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width`
+- `expect(received).toEqual(expected) // deep equality`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 2865 — the rest is in the full log above)
+
+```
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ the control is named at its own box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS src/__tests__/hostReport.test.tsx
+PASS scripts/__tests__/release-catch-up.test.js
+PASS src/__tests__/iconSource.test.ts
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/gate.test.js (66.864 s)
+PASS scripts/__tests__/ci-workflows.test.js (74.217 s)
+PASS scripts/__tests__/gate-logs.test.js (85.371 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (147.357 s)
+PASS scripts/__tests__/bench-gate.test.js (236.934 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/real-input-a11y.test.js
+  ● the a11y rule, on measured trees › passes the controls today’s code gets right, and reports the rest as debt
+
+    ENOENT: no such file or directory, open '<repo>/scripts/__tests__/fixtures/a11y/button-group.xml'
+
+      41 |       id,
+      42 |       parseHierarchy(
+    > 43 |         readFileSync(`${__dirname}/fixtures/a11y/${id}.xml`, 'utf8')
+         |                     ^
+      44 |       )
+      45 |     );
+      46 |   }
+
+      at tree (scripts/__tests__/real-input-a11y.test.js:43:21)
+      at tree (scripts/__tests__/real-input-a11y.test.js:90:46)
+          at Array.map (<anonymous>)
+      at Object.map (scripts/__tests__/real-input-a11y.test.js:89:36)
+
+FAIL scripts/__tests__/readme-components.test.js
+  ● the README shows every component with both screenshots › ships each screenshot as a PNG of the documented width
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 4
+
+    - Array []
+    + Array [
+    +   "ButtonGroup: docs/images/components/button-group-ios.png does not exist",
+    +   "ButtonGroup: docs/images/components/button-group-android.png does not exist",
+    + ]
+
+      252 |     }
+      253 |
+    > 254 |     expect(problems).toEqual([]);
+          |                      ^
+      255 |   });
+      256 | });
+      257 |
+
+      at Object.toEqual (scripts/__tests__/readme-components.test.js:254:22)
+
+
+Test Suites: 2 failed, 79 passed, 81 total
+Tests:       2 failed, 1939 passed, 1941 total
+Snapshots:   0 total
+Time:        237.37 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 243.9 s
+gate: recorded in .gates/task/G20-button-group.jsonl
+
+```

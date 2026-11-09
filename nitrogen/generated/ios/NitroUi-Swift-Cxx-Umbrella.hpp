@@ -10,6 +10,8 @@
 // Forward declarations of C++ defined types
 // Forward declaration of `HybridNitroUiBottomSheetSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiBottomSheetSpec; }
+// Forward declaration of `HybridNitroUiButtonGroupSpec` to properly resolve imports.
+namespace margelo::nitro::nitroui { class HybridNitroUiButtonGroupSpec; }
 // Forward declaration of `HybridNitroUiButtonSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiButtonSpec; }
 // Forward declaration of `HybridNitroUiCheckboxSpec` to properly resolve imports.
@@ -52,6 +54,10 @@ namespace margelo::nitro::nitroui { class HybridNitroUiSwitchSpec; }
 namespace margelo::nitro::nitroui { class HybridNitroUiTextFieldSpec; }
 // Forward declaration of `HybridNitroUiTooltipSpec` to properly resolve imports.
 namespace margelo::nitro::nitroui { class HybridNitroUiTooltipSpec; }
+// Forward declaration of `NitroUiButtonGroupItem` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiButtonGroupItem; }
+// Forward declaration of `NitroUiButtonGroupSize` to properly resolve imports.
+namespace margelo::nitro::nitroui { struct NitroUiButtonGroupSize; }
 // Forward declaration of `NitroUiButtonSize` to properly resolve imports.
 namespace margelo::nitro::nitroui { struct NitroUiButtonSize; }
 // Forward declaration of `NitroUiCheckboxSize` to properly resolve imports.
@@ -89,6 +95,7 @@ namespace margelo::nitro::nitroui { struct NitroUiTooltipAction; }
 
 // Include C++ defined types
 #include "HybridNitroUiBottomSheetSpec.hpp"
+#include "HybridNitroUiButtonGroupSpec.hpp"
 #include "HybridNitroUiButtonSpec.hpp"
 #include "HybridNitroUiCheckboxSpec.hpp"
 #include "HybridNitroUiChipSpec.hpp"
@@ -110,6 +117,8 @@ namespace margelo::nitro::nitroui { struct NitroUiTooltipAction; }
 #include "HybridNitroUiSwitchSpec.hpp"
 #include "HybridNitroUiTextFieldSpec.hpp"
 #include "HybridNitroUiTooltipSpec.hpp"
+#include "NitroUiButtonGroupItem.hpp"
+#include "NitroUiButtonGroupSize.hpp"
 #include "NitroUiButtonSize.hpp"
 #include "NitroUiCheckboxSize.hpp"
 #include "NitroUiChipSize.hpp"
@@ -149,6 +158,8 @@ namespace margelo::nitro::nitroui { struct NitroUiTooltipAction; }
 // Forward declarations of Swift defined types
 // Forward declaration of `HybridNitroUiBottomSheetSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiBottomSheetSpec_cxx; }
+// Forward declaration of `HybridNitroUiButtonGroupSpec_cxx` to properly resolve imports.
+namespace NitroUi { class HybridNitroUiButtonGroupSpec_cxx; }
 // Forward declaration of `HybridNitroUiButtonSpec_cxx` to properly resolve imports.
 namespace NitroUi { class HybridNitroUiButtonSpec_cxx; }
 // Forward declaration of `HybridNitroUiCheckboxSpec_cxx` to properly resolve imports.

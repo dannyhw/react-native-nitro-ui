@@ -1,0 +1,104 @@
+# Failure excerpt — harness:ios:G20probe
+
+- Ran: 2026-11-08T19:47:32.628Z on code tree `cba3dec213ac` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios G20probe`
+- Result: fail, exit 1, 16262 ms
+- Load: start 4.87, end 5.14, median 5.14, max 5.14
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+ios+G20probe-2026-11-08T19-47-32.628Z.log` (<store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-47-32.628Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/G20probe.harness.tsx`
+- `● G20 probe 2 › D: rerender widens the box but not the row`
+- `● G20 probe 2 › E: disabling a group with an overflow menu`
+- `● G20 probe 2 › F: checked report order`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-47-32.628Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.14 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios G20probe
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree cba3dec213ac, 20 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.87/7.10 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-47-32.628Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/G20probe.harness.tsx
+  ● G20 probe 2 › D: rerender widens the box but not the row
+
+    narrowBox={"y":0,"nativeId":"CF100BAB-0ECA-4F40-9E87-1D03FCDC6CEB","x":0,"width":220,"height":34.66666793823242} narrow=checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=1;a11y=none || wideBox={"y":0,"nativeId":"8157049A-A90B-4BF4-8D4D-9824C2C3A5BB","x":0,"width":402,"height":34.33333206176758} wide=checked=none;visible=4;overflow=1;shown=day,week,month,quarter;menu=composed;probes=2;a11y=none measured={"width":402,"height":34.33333333333333} || backBox={"y":0,"nativeId":"E5E33454-9E7E-4849-9C20-2F94067DCDB7","x":0,"width":220,"height":34.66666793823242} back=checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=3;a11y=none
+
+      [0m [90m 38 |[39m
+       [90m 39 |[39m [36mfunction[39m dump(msg[33m:[39m string)[33m:[39m never {
+      [31m[1m>[22m[39m[90m 40 |[39m   [36mthrow[39m [36mnew[39m [33mError[39m(msg)[33m;[39m
+       [90m    |[39m                  [31m[1m^[22m[39m
+       [90m 41 |[39m }
+       [90m 42 |[39m
+       [90m 43 |[39m describe([32m'G20 probe 2'[39m[33m,[39m () [33m=>[39m {[0m
+
+  ● G20 probe 2 › E: disabling a group with an overflow menu
+
+    enabled=checked=none;visible=2;overflow=1;shown=day,week;menu=composed;probes=1;a11y=none box={"y":0,"nativeId":"11E952CA-85C6-417D-A94C-338CABA70725","x":0,"width":220,"height":34.33333206176758} || disabled=checked=none;visible=3;overflow=1;shown=day,week,month;menu=composed;probes=2;a11y=none box={"y":0,"nativeId":"98E0D673-F0CE-4B15-A5DE-887C2534ACC7","x":0,"width":220,"height":34.33333206176758}
+
+      [0m [90m 38 |[39m
+       [90m 39 |[39m [36mfunction[39m dump(msg[33m:[39m string)[33m:[39m never {
+      [31m[1m>[22m[39m[90m 40 |[39m   [36mthrow[39m [36mnew[39m [33mError[39m(msg)[33m;[39m
+       [90m    |[39m                  [31m[1m^[22m[39m
+       [90m 41 |[39m }
+       [90m 42 |[39m
+       [90m 43 |[39m describe([32m'G20 probe 2'[39m[33m,[39m () [33m=>[39m {[0m
+
+  ● G20 probe 2 › F: checked report order
+
+    Property 'rerender' doesn't exist
+
+      [0m [90m 116 |[39m     [36mawait[39m sleep([35m300[39m)[33m;[39m
+       [90m 117 |[39m     [36mconst[39m pressed [33m=[39m report([32m'q3'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 118 |[39m     [36mawait[39m rerender(
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 119 |[39m       [33m<[39m[33mButtonGroup[39m
+       [90m 120 |[39m         items[33m=[39m{[33mTOGGLES[39m[33m.[39mmap((item) [33m=>[39m ({ [33m...[39mitem }))}
+       [90m 121 |[39m         testID[33m=[39m[32m"q3"[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 total
+Snapshots:   0 total
+Time:        14.388 s
+Ran all test suites matching G20probe.
+
+
+
+```

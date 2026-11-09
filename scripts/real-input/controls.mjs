@@ -155,6 +155,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real taps press a row, its own Pressable and its hosted Switch once each, a row without onPress and a tap outside the Form press nothing, and a field near the bottom stays above the keyboard',
     screen: 'form',
   },
+  {
+    id: 'button-group',
+    title:
+      'real tap presses each item once, a toggle item flips once per tap, and an overflowed item is reachable through the overflow menu',
+    screen: 'buttongroup',
+  },
   // @end-generated
 ]);
 

@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'buttongroup'|'form'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -39,6 +39,7 @@ export const SCREEN_FILE = Object.freeze({
   contextmenu: 'example/src/ContextMenuScreen.tsx',
   iconbutton: 'example/src/IconButtonScreen.tsx',
   form: 'example/src/FormScreen.tsx',
+  buttongroup: 'example/src/ButtonGroupScreen.tsx',
 });
 
 /**
@@ -140,6 +141,17 @@ export const ECHO = Object.freeze({
   formFieldValue: 'form-field-value',
   // iOS only: the keyboard inset the Form's list is reserving, as UIKit told it.
   formKeyboardInset: 'form-keyboard-inset',
+  // G20: a ButtonGroup has no single value to echo, so the readings are the press
+  // count, the id of the last item that answered `onPress` (the one check that a
+  // three-item row fired the *right* item), the toggle's event count and state, and
+  // the two counters a refused or refused-because-disabled tap would move.
+  buttonGroupPresses: 'button-group-presses',
+  buttonGroupPressedId: 'button-group-pressed-id',
+  buttonGroupToggleEvents: 'button-group-toggle-events',
+  buttonGroupToggleState: 'button-group-toggle-state',
+  buttonGroupRefusedLast: 'button-group-refused-last',
+  buttonGroupRefusedEvents: 'button-group-refused-events',
+  buttonGroupDisabledEvents: 'button-group-disabled-events',
 });
 
 /**
@@ -247,6 +259,7 @@ export const SCREEN_TAB = Object.freeze({
   textfield: { anchor: ECHO.textTyping },
   searchfield: { anchor: ECHO.searchTyping },
   iconbutton: { anchor: ECHO.iconButtonValue },
+  buttongroup: { anchor: ECHO.buttonGroupPresses },
   host: { anchor: ECHO.hostValue },
   form: { anchor: ECHO.formScreenEcho },
 });
