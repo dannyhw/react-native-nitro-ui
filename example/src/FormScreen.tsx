@@ -127,9 +127,16 @@ export default function FormScreen() {
       // reservation back leaves `kb` alone, so without these it is invisible on screen.
       const picked = (name: string) =>
         (line.match(new RegExp(`(?:^|;)${name}=(-?[\\d.]+)`)) ?? [])[1] ?? '-';
-      const geometry = `ib=${picked('insetBottom')};ab=${picked(
-        'adjBottom'
-      )};off=${picked('offset')};y=${picked('listY')}`;
+      // `h`/`bh` are the content and the viewport, which the runner needs to know whether a
+      // rest is the *end* of the content - the only rest a keyboard reservation can be judged
+      // at. They ride in the report's `screen=` field, comma-joined.
+      const screenFields =
+        (line.match(/(?:^|;)screen=([^;]*)/) ?? [])[1]?.split(',') ?? [];
+      const geometry =
+        `ib=${picked('insetBottom')};ab=${picked(
+          'adjBottom'
+        )};off=${picked('offset')};y=${picked('listY')}` +
+        `;bh=${screenFields[1] ?? '-'};h=${screenFields[2] ?? '-'}`;
       setListGeometry((previous) =>
         previous === geometry ? previous : geometry
       );

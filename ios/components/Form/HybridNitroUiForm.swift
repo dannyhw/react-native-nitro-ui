@@ -910,7 +910,13 @@ final class HybridNitroUiForm: HybridNitroUiFormSpec, RecyclableView {
     let boxInWindow =
       list.superview.map { $0.convert(list.frame, to: nil) } ?? list.frame
     let overlap = max(0, boxInWindow.maxY - end.minY)
-    setBottomInset(overlap)
+    // Minus the list's own bottom safe area, which UIKit adds back by itself: the inset is
+    // asked for, the safe area is added to it, and the sum is what the content is padded by
+    // (`adjustedContentInset.bottom`). The overlap above already covers that strip — the
+    // keyboard's frame starts below it and the list's frame runs to the bottom of the window
+    // through it — so asking for the whole overlap reserved the home indicator twice and left
+    // 34 pt of empty list above the keys (adjusted 362 against an overlap of 328).
+    setBottomInset(max(0, overlap - list.safeAreaInsets.bottom))
     guard let focused = list.findFirstResponder(),
       let row = HybridNitroUiForm.rowAncestor(of: focused) else { return }
     let rect = list.convert(row.frame, from: row.superview)
