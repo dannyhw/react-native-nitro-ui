@@ -1,0 +1,107 @@
+# Failure excerpt — harness:ios:G20probe
+
+- Ran: 2026-11-08T19:38:49.528Z on code tree `dc23a72f21ed` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios G20probe`
+- Result: fail, exit 1, 18771 ms
+- Load: start 5.38, end 19.47, median 19.47, max 19.47
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+ios+G20probe-2026-11-08T19-38-49.528Z.log` (<store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-38-49.528Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/G20probe.harness.tsx`
+- `● G20 probe › A: rerender vs re-render vs remount`
+- `expected 'mounted=checked=bold;visible=none;ove…' to be 'FORCE' // Object.is equality`
+- `● G20 probe › B: does the row re-lay out when the box widens`
+- `expected 'narrowBox={"y":0,"nativeId":"803DC7FC…' to be 'FORCE' // Object.is equality`
+- `● G20 probe › C: conformance-shaped residue across a remount`
+- `expected 'seeded=checked=bold;visible=none;over…' to be 'FORCE' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-38-49.528Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 19.47 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 58 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios G20probe
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree dc23a72f21ed, 20 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.38/4.10 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+ios+G20probe-2026-11-08T19-38-49.528Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/G20probe.harness.tsx
+  ● G20 probe › A: rerender vs re-render vs remount
+
+    expected 'mounted=checked=bold;visible=none;ove…' to be 'FORCE' // Object.is equality
+
+      [0m [90m 115 |[39m         [32m`|| rerenderPress=${JSON.stringify(pressed)} || afterRemount=${afterRemount} `[39m [33m+[39m
+       [90m 116 |[39m         [32m`|| remountPress=${JSON.stringify(events.slice(at))}`[39m
+      [31m[1m>[22m[39m[90m 117 |[39m     )[33m.[39mtoBe([32m'FORCE'[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 118 |[39m   })[33m;[39m
+       [90m 119 |[39m
+       [90m 120 |[39m   it([32m'B: does the row re-lay out when the box widens'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● G20 probe › B: does the row re-lay out when the box widens
+
+    expected 'narrowBox={"y":0,"nativeId":"803DC7FC…' to be 'FORCE' // Object.is equality
+
+      [0m [90m 143 |[39m     expect(
+       [90m 144 |[39m       [32m`narrowBox=${narrowBox} narrow=${narrow} || wideBox=${wideBox} wide=${wide} measured=${measured}`[39m
+      [31m[1m>[22m[39m[90m 145 |[39m     )[33m.[39mtoBe([32m'FORCE'[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 146 |[39m   })[33m;[39m
+       [90m 147 |[39m
+       [90m 148 |[39m   it([32m'C: conformance-shaped residue across a remount'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+  ● G20 probe › C: conformance-shaped residue across a remount
+
+    expected 'seeded=checked=bold;visible=none;over…' to be 'FORCE' // Object.is equality
+
+      [0m [90m 183 |[39m       [32m`seeded=${seeded} || press1=${press1} afterPress=${afterPress} || second=${second} `[39m [33m+[39m
+       [90m 184 |[39m         [32m`|| press2=${press2} afterPress2=${afterPress2}`[39m
+      [31m[1m>[22m[39m[90m 185 |[39m     )[33m.[39mtoBe([32m'FORCE'[39m)[33m;[39m
+       [90m     |[39m           [31m[1m^[22m[39m
+       [90m 186 |[39m   })[33m;[39m
+       [90m 187 |[39m })[33m;[39m
+       [90m 188 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       3 failed, 3 total
+Snapshots:   0 total
+Time:        16.649 s
+Ran all test suites matching G20probe.
+
+
+
+```

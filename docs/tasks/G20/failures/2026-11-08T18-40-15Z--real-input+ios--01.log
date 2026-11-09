@@ -1,0 +1,144 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-11-08T18:40:15.932Z on code tree `7fe64cece26f` at HEAD `bb7b62b` (branch `task/G20-button-group`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit null signal SIGTERM, 2040103 ms
+- Load: start 8.84, end 3.91, median 9.14, max 302.20
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/real-input+ios-2026-11-08T18-40-15.932Z.log` (<store>/task/G20-button-group/real-input+ios-2026-11-08T18-40-15.932Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/real-input+ios-2026-11-08T18-40-15.932Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.00 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 101 log line(s)
+
+```
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+  app.stamp: <repo>/example/ios/build/app.stamp
+           tree 7fe64cece26f (1102 files) head bb7b62b9 · 20 components, 4..4 mentions
+  metro: nitroui.example will load its bundle from localhost:8295
+  running the real-input cases (log: <repo>/.real-input/ios/xcodebuild-test.log)
+    Test Suite 'Selected tests' started at 2026-11-08 18:43:59.199.
+    Test Suite 'NitroUiExampleUITests.xctest' started at 2026-11-08 18:43:59.199.
+    Test Suite 'RealInputTests' started at 2026-11-08 18:43:59.199.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputA11y]' started.
+    real-input (ios): accessibility hierarchy - no element "real-input-count" after 8.0s
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputA11y]' failed (87.294 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputBottomSheet]' started.
+    real-input (ios): the real tap on sheet-open-fit to bring up sheet-press: tap 1/3 left the fit sheet's opener (sheet-open-fit) at "down"
+    real-input (ios): the real tap on sheet-open-fit to bring up sheet-press: tap 2/3 left the fit sheet's opener (sheet-open-fit) at "down"
+    real-input (ios): the real tap on sheet-open-fit to bring up sheet-press: tap 3/3 left the fit sheet's opener (sheet-open-fit) at "down"
+    real-input (ios): accessibility hierarchy - 3 presses on the fit sheet's opener (sheet-open-fit) raised no witness
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputBottomSheet]' failed (61.085 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' started.
+    real-input (ios): accessibility hierarchy - no element "real-input-count" after 8.0s
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButton]' failed (27.405 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButtonGroup]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on button-group-disabled-events
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on button-group-disabled-events
+    real-input (ios): the barrier tap beside the disabled item: tap 1/3 left "Copy" in real-input-button-group-disabled-item at "3"
+    real-input (ios): the barrier tap beside the disabled item: tap 2/3 left "Copy" in real-input-button-group-disabled-item at "3"
+    real-input (ios): the barrier tap beside the disabled item: tap 3/3 left "Copy" in real-input-button-group-disabled-item at "3"
+    real-input (ios): accessibility hierarchy - 3 presses on "Copy" in real-input-button-group-disabled-item raised no witness
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputButtonGroup]' failed (112.414 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputCheckbox]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-checkbox-disabled-events
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-checkbox-events
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputCheckbox]' passed (56.190 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputChip]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-chip-events
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-chip-presses
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputChip]' passed (54.922 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputContextMenu]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputContextMenu]' passed (67.298 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' started.
+    real-input (ios): accessibility hierarchy - tapping the last row presented nothing
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDatePicker]' failed (64.814 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDialog]' started.
+    real-input (ios): dialog: the alert's identifier is "dialog-alert-dialog"
+    real-input (ios): the real tap that opens the confirmation sheet: tap 1/3 left the sheet's opener (dialog-open-sheet) at "0 row(s) named "Copy link""
+    real-input (ios): the real tap that opens the confirmation sheet: the sheet's opener (dialog-open-sheet) answered on tap 2/3 - the earlier tap(s) were never delivered
+    real-input (ios): dialog: the sheet's buttons are ["Copy link", "Remove photo", "Locked share"]; 0 element(s) say "Cancel"
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputDialog]' passed (56.821 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on host-button-presses
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedButton]' passed (46.155 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedDatePicker]' passed (48.799 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedMixed]' passed (50.878 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedPicker]' passed (68.965 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSegmented]' passed (51.972 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSlider]' passed (41.829 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputHostedSwitch]' passed (39.729 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputIconButton]' started.
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-icon-button-disabled-events
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-icon-button-disabled-events
+    real-input (ios): accessibility hierarchy - nothing matched what was waited for on real-input-icon-button-presses
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputIconButton]' passed (84.477 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' started.
+    real-input (ios): menu: open menu screenshot attached, and written to ~/Library/Developer/CoreSimulator/Devices/49D5024D-967B-4B93-ACF6-F73BA0A19E9F/data/Containers/Data/Application/6B8FD265-49A5-4F98-AA5C-8377ED014E00/tmp/g7b-menu-open.png
+    real-input (ios): menu: a real tap on the disabled row left the presentation open
+    real-input (ios): menu: checked row type=9 value=Optional() selected=true
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputMenu]' passed (56.805 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' started.
+    real-input (ios): heartbeat with nothing presented: "One" then "January"
+    real-input (ios): cycle 1: with the menu open the screen's heartbeat: "January" then "Yes"
+    real-input (ios): cycle 2: with the menu open the screen's heartbeat: "One" then "January"
+    real-input (ios): cycle 3: with the menu open the screen's heartbeat: "Yes" then "One"
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPicker]' passed (150.942 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPopover]' started.
+    real-input (ios): popover: 1 UIKit popover(s); the row inside it is at (24.0, 253.66666666666663, 152.0, 37.0)
+    real-input (ios): popover: field (24.33333334326744, 492.33333334326744, 191.33333331346512, 34.00002032518387) -> (24.33333334326744, 422.33333334326744, 191.33333331346512, 34.00002032518387) with the keyboard top at 590.0
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputPopover]' passed (108.764 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSearchField]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSearchField]' passed (53.728 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSegmentedControl]' passed (43.164 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSlider]' passed (43.473 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputSwitch]' failed (83.836 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTabTargets]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTabTargets]' passed (66.396 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTextField]' started.
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTextField]' passed (42.871 seconds).
+    Test Case '-[NitroUiExampleUITests.RealInputTests testRealInputTooltip]' started.
+
+
+
+```

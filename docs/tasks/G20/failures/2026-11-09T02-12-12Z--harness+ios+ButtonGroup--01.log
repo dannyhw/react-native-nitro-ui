@@ -1,0 +1,79 @@
+# Failure excerpt — harness:ios:ButtonGroup
+
+- Ran: 2026-11-09T02:12:12.669Z on code tree `bb57734d986c` at HEAD `badb3f1` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios ButtonGroup`
+- Result: fail, exit 1, 18163 ms
+- Load: start 3.24, end 4.20, median 4.20, max 4.20
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G20-jtox6`
+- Full log: `task/G20-button-group/harness+ios+ButtonGroup-2026-11-09T02-12-12.669Z.log` (<store>/task/G20-button-group/harness+ios+ButtonGroup-2026-11-09T02-12-12.669Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › keeps one row when the trailing toggle of a connected group overflows`
+- `expected 'controlGroup' to be 'standard' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+ios+ButtonGroup-2026-11-09T02-12-12.669Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-jtox6 (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 4.20 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios ButtonGroup
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree bb57734d986c, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.24/6.11 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+ios+ButtonGroup-2026-11-09T02-12-12.669Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › keeps one row when the trailing toggle of a connected group overflows
+
+    expected 'controlGroup' to be 'standard' // Object.is equality
+
+      [0m [90m 584 |[39m     [90m// per-candidate decision reads `row=controlGroup` here, which is the line this[39m
+       [90m 585 |[39m     [90m// test exists to turn red.[39m
+      [31m[1m>[22m[39m[90m 586 |[39m     expect(narrow[33m.[39mrow)[33m.[39mtoBe([32m'standard'[39m)[33m;[39m
+       [90m     |[39m                            [31m[1m^[22m[39m
+       [90m 587 |[39m     [36mconst[39m narrowShown [33m=[39m (narrow[33m.[39mshown [33m?[39m[33m?[39m [32m'none'[39m)[33m.[39msplit([32m','[39m)[33m;[39m
+       [90m 588 |[39m     [36mconst[39m narrowHeight [33m=[39m narrowMeasured[33m.[39mheight[33m;[39m
+       [90m 589 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 8 passed, 9 total
+Snapshots:   0 total
+Time:        16.17 s
+Ran all test suites matching ButtonGroup.
+
+
+
+```

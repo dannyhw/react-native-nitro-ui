@@ -1,5 +1,6 @@
 import {
   Button,
+  ButtonGroup,
   DatePicker,
   Host,
   IconButton,
@@ -17,8 +18,10 @@ import {
 import type { BenchListProps, BenchPerfMark } from '../types';
 import {
   SEGMENTED_SELECTION,
+  buttonGroupItems,
   buttonTitle,
   dateValue,
+  onButtonGroupPress,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
   menuItems,
@@ -270,6 +273,15 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose icon-button: a Host refuses it'
       );
     }
+    if (component === 'button-group') {
+      // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): its Compose
+      // `ButtonGroup` opens its own overflow popup, and no round has measured a second
+      // popup inside the Host's shared composition. Loud, like `icon-button`'s line —
+      // reaching here means a manifest changed without the host arm's list.
+      throw new Error(
+        'nitro-ui-host cannot compose button-group: a Host refuses it'
+      );
+    }
     // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.
@@ -462,6 +474,28 @@ export function NitroUiList({
             onPress={onIconButtonPress}
             nuiPerfId={perfMarks ? index : null}
             testID={`bench-nitro-ui-icon-button-${String(index)}`}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'button-group') {
+    // Three plain action items at the defaults, which is the shape the brief asks to
+    // price: a group whose items are all actions is the group with no handshake in
+    // its render path, so the cell measures the row and not a value round trip.
+    // `update.button-group` swaps the item list (`buttonGroupItems`), the one flip
+    // every other arm can be charged for too.
+    const items = buttonGroupItems(value);
+    return (
+      <>
+        {range(n).map((index) => (
+          <ButtonGroup
+            key={index}
+            items={items}
+            onPress={onButtonGroupPress}
+            nuiPerfId={perfMarks ? index : null}
+            testID={`bench-nitro-ui-button-group-${String(index)}`}
             style={style}
           />
         ))}

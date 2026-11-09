@@ -37,6 +37,11 @@ const ROW_HEIGHTS: Record<
   // container the rung's token asks for. The floor's glyph is 24 dp, so the row
   // holds the tallest arm and every arm still lays out the identical area.
   'icon-button': 48,
+  // A row of Material 3 buttons is the tall one: the `ButtonGroup` arm's 40 dp
+  // containers sit in Material's 48 dp minimum interactive box, and the RN-core
+  // floor's `Pressable`s are 24 dp of text plus 16 dp of vertical padding. 48 holds
+  // the tallest arm so nothing clips, and every arm still lays out the identical area.
+  'button-group': 48,
 };
 
 /* Button, SegmentedControl, DatePicker, Picker and Menu have no row height on
@@ -104,6 +109,7 @@ const styles = StyleSheet.create({
   sliderRow: { height: ROW_HEIGHTS.slider, width: '100%' },
   progressRow: { height: ROW_HEIGHTS.progress, width: '100%' },
   textFieldRow: { height: ROW_HEIGHTS['text-field'], width: '100%' },
+  buttonGroupRow: { height: ROW_HEIGHTS['button-group'], width: '100%' },
 });
 
 /**
@@ -122,6 +128,9 @@ export function rowStyle(component: ComponentName) {
   }
   if (component === 'text-field') {
     return styles.textFieldRow;
+  }
+  if (component === 'button-group') {
+    return styles.buttonGroupRow;
   }
   return component === 'progress' ? styles.progressRow : styles.row;
 }
@@ -332,6 +341,59 @@ export const ICON_BUTTON_LABEL = 'Toggle layout';
  * {@link onPress}.
  */
 export function onIconButtonPress(): void {
+  // Intentionally empty: state is driven by the runner.
+}
+
+/** One item of the row every ButtonGroup arm mounts. */
+export interface BenchButtonGroupItem {
+  id: string;
+  title: string;
+}
+
+/**
+ * The two item lists the ButtonGroup arms alternate between.
+ *
+ * Built once, at module level, for the reason `MENU_GROUP` gives: `items` is an
+ * object-array prop, so a literal in the JSX would be a fresh identity on every flip
+ * and hand the nitro-ui arm a prop diff no other arm pays.
+ *
+ * The second row is deliberately *wider* than the first (`Duplicate / Move / Archive`
+ * against `Copy / Paste / Share`), because `update.button-group` has to be a real
+ * redraw rather than a repaint of an unchanged box: a row's width is the sum of its
+ * labels, so the flip relayouts three text measures. It is also the one flip every arm
+ * can be charged for — neither RN core nor `@expo/ui` has a `ButtonGroup` to toggle a
+ * state on, or an icon slot worth swapping.
+ */
+/** One of the two rows, spelled as items. */
+function benchButtonGroupRow(
+  titles: readonly string[]
+): BenchButtonGroupItem[] {
+  return titles.map((title, index) => ({
+    id: `item-${String(index)}`,
+    title,
+  }));
+}
+
+const BUTTON_GROUP_ITEMS: readonly [
+  BenchButtonGroupItem[],
+  BenchButtonGroupItem[],
+] = [
+  benchButtonGroupRow(['Copy', 'Paste', 'Share']),
+  benchButtonGroupRow(['Duplicate', 'Move', 'Archive']),
+];
+
+/** The items a ButtonGroup arm should draw for this half of the flip. */
+export function buttonGroupItems(value: boolean): BenchButtonGroupItem[] {
+  return BUTTON_GROUP_ITEMS[value ? 1 : 0];
+}
+
+/** The same row, spelled as the labels an arm with no ButtonGroup draws. */
+export function buttonGroupTitles(value: boolean): readonly string[] {
+  return buttonGroupItems(value).map((item) => item.title);
+}
+
+/** Stable no-op `onPress` for the ButtonGroup arms, for the same reason. */
+export function onButtonGroupPress(): void {
   // Intentionally empty: state is driven by the runner.
 }
 

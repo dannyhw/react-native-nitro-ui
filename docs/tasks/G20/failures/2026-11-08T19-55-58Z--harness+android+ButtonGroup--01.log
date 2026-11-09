@@ -1,0 +1,79 @@
+# Failure excerpt — harness:android:ButtonGroup
+
+- Ran: 2026-11-08T19:55:58.132Z on code tree `ab36f62e4192` at HEAD `eea9f45` (branch `task/G20-button-group`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android ButtonGroup`
+- Result: fail, exit 1, 18032 ms
+- Load: start 6.43, end 17.55, median 17.55, max 17.55
+- Device: android / device `emulator-5574` / lease `G20-3ylcl`
+- Full log: `task/G20-button-group/harness+android+ButtonGroup-2026-11-08T19-55-58.132Z.log` (<store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-08T19-55-58.132Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/ButtonGroup.harness.tsx`
+- `● ButtonGroup · G20 › names every item kind, and an icon-only item by its title`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-08T19-55-58.132Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G20-3ylcl (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G20-3ylcl                G20          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 19.51 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android ButtonGroup
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree ab36f62e4192, 21 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.43/5.49 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G20-button-group/harness+android+ButtonGroup-2026-11-08T19-55-58.132Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/ButtonGroup.harness.tsx
+  ● ButtonGroup · G20 › names every item kind, and an icon-only item by its title
+
+    A11YDUMP nodes=3;0[Button,none,disabled=false,label=Copy];1[Checkbox,Off,disabled=false,label=Bold];2[Button,none,disabled=false,label=More More options]
+
+      [0m [90m 821 |[39m     expect(a11y)[33m.[39mtoContain([32m'label=Copy'[39m)[33m;[39m
+       [90m 822 |[39m     expect(a11y)[33m.[39mtoContain([32m'label=Bold'[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 823 |[39m     [36mthrow[39m [36mnew[39m [33mError[39m([32m`A11YDUMP ${a11y}`[39m)[33m;[39m
+       [90m     |[39m                    [31m[1m^[22m[39m
+       [90m 824 |[39m   })[33m;[39m
+       [90m 825 |[39m
+       [90m 826 |[39m   it([32m'carries no items, checked state or event count across a remount'[39m[33m,[39m [36masync[39m () [33m=>[39m {[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 7 passed, 8 total
+Snapshots:   0 total
+Time:        16.509 s, estimated 17 s
+Ran all test suites matching ButtonGroup.
+
+
+
+```
