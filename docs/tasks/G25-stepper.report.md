@@ -177,7 +177,30 @@ to `FOLLOWUPS.md`.
 
 ## Gates (fix round 1)
 
-<!-- gate table -->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1967 tests / 83 suites | `45d6f2f4c33d` | 2 m 46 s | start 9.6 / med 9.0 / max 10.2 |
+| `harness:ios` | **PASS** | 564 tests / 29 suites + isolated 6 tests / 3 suites | `45d6f2f4c33d` (ios tree) | 14 m 19 s | start 22.9 / med 6.6 / max 37.7 |
+| `harness:android` | **PASS** | 620 tests / 29 suites + isolated 6 tests / 3 suites | `45d6f2f4c33d` (android tree) | 17 m 48 s | start 6.4 / med 4.8 / max 13.6 |
+| `real-input:ios` | **FAIL** | — | `45d6f2f4c33d` (ios tree) | 35 m 17 s | start 3.8 / med 7.4 / max 61.1 |
+| `real-input:android` | **PASS** | — | `45d6f2f4c33d` (android tree) | 56 m 01 s | start 5.0 / med 5.6 / max 15.1 |
+| `harness:android:Stepper` | stale | 1 failed of 15 tests / 1 suites | 2dfdfd1dea29 (not this tree) | 25.2 s | start 9.3 / med 8.4 / max 9.3 |
+| `real-input:ios:--control:stepper` | stale | — | 0a43ddc5b57c (not this tree) | 12 m 22 s | start 6.7 / med 23.2 / max 218.7 |
+
+`need --for merge` is one line short: `real-input:ios` is red on two lines that are not Stepper's.
+26/26 controls and 22 of 24 auxiliary checks pass, `stepper` and `a11y:stepper` among them; the two
+are the sweep reading **4** stops under `ctx-accessible` where G16's debt row records 2, and the
+`a11y:ios-debt` staleness check that follows from it — X22's brief names this branch and owns the
+cause. What this round adds to that hunt: it is not load (the 19:04 read is deterministic, med load
+7.4, and the a11y sweep ran in its first 6 min), not the device (G26 reads 4 on pair-a, this ran on
+pair-b), and not the merge (`a526807e..409bd638` is one docs commit — no code path in
+`scripts`, `example`, `src`, `ios` or `android`). The only sweep delta here is one added `A11yCase`
+(#12 of 22, before `context-menu`); the wrapper's box is identical to the 2-stop runs
+(`12, 452.67, 396x68`), and the two extra elements are the *second* Text, listed twice — exactly
+the "four stops" shape that row's comment calls a D37 regression. `real-input:android` is green
+here after the 17:04 run's two DatePicker reds did not repeat (`date-picker` and
+`hosted-date-picker` both passed on a quieter machine), so those two read as a dump-timing flake
+under load, not as a bug in this diff.
 
 ## Red proofs (fix round 1)
 
@@ -201,3 +224,20 @@ to `FOLLOWUPS.md`.
 The last three ran through `gate.mjs`, so their evidence is in the gate log store
 (`gate.mjs logs --branch task/G25-fix1 --failed`); the first is a host binary, run directly with
 `bun run test:native` on the mutated tree.
+
+## Questions for orchestrator
+
+`real-input:ios` cannot be green on this tree this round, and the failing lines are not Stepper's
+(see "Gates (fix round 1)"). Options:
+
+1. **Wait for X22, then re-run the iOS half only (recommended).** X22 owns the `ctx-accessible`
+   2-versus-4 hunt and holds a lease now. When it lands, merge it into this branch and re-run
+   `real-input:ios`: `check`, both harnesses and `real-input:android` are already green on
+   `45d6f2f4c33d`, and a fix in `scripts/real-input` or ContextMenu moves the iOS half, not the
+   Android one.
+2. **Merge with the red line recorded.** 26/26 controls and `a11y:stepper` passed; the two reds are
+   a debt row on another component. This is the option `need --for merge` exists to refuse, so it
+   is yours to take, not mine.
+
+Recounting the exemption to 4 is not on the list: X22's brief forbids it, and the four-stop shape
+is exactly the D37 regression that row is there to catch.
