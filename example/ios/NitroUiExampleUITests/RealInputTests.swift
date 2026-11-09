@@ -6180,13 +6180,29 @@ final class RealInputTests: XCTestCase {
       // by however far the list had been scrolled, and by the time question 5 asks the list has
       // been dragged all the way to a field near the end of a long form.
       let overlap = screen.maxY - keyboardTop
-      XCTAssertLessThanOrEqual(
-        abs(inset - overlap),
-        2,
+      // Two bounds rather than an equality, because the two witnesses differ by one known thing:
+      // XCUITest's keyboard element is the *keys*, while the keyboard notification's end frame is
+      // the keys plus the predictive-text bar above them — 44 pt on this simulator, measured
+      // (inset 328 against an overlap of 284). Reserving for that bar is right: text the person
+      // is about to type sits over the content, so a field left under it is covered as far as
+      // they are concerned. What may not happen is either end of the band.
+      XCTAssertGreaterThanOrEqual(
+        inset,
+        overlap - 2,
         "the Form reserves a bottom inset of \(insetText) for a keyboard whose top edge is at "
-          + "\(keyboardTop) of a window ending at \(screen.maxY): the overlap is \(overlap), so "
-          + "the inset is off by \(inset - overlap) — it describes the scroll offset as much as "
-          + "the keyboard, and every row the avoidance moves is placed from that number."
+          + "\(keyboardTop) of a window ending at \(screen.maxY): the keys alone overlap by "
+          + "\(overlap), so the avoidance under-reserves by \(overlap - inset) and the field it "
+          + "just moved can sit under them."
+      )
+      XCTAssertLessThanOrEqual(
+        inset,
+        overlap + 64,
+        "the Form reserves a bottom inset of \(insetText) for a keyboard whose top edge is at "
+          + "\(keyboardTop) of a window ending at \(screen.maxY): the keys overlap by \(overlap) "
+          + "and the accessory bar above them is at most ~44, so the \(inset - overlap) this "
+          + "number carries describes something other than the keyboard — the bug here compared "
+          + "a keyboard rect converted into the list's content space, where it travels with "
+          + "`contentOffset`, against the list's frame bottom, and was off by 187.3 pt."
       )
     }
     XCTAssertGreaterThanOrEqual(
