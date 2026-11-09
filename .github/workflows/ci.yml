@@ -93,6 +93,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      # The scroll-offset test compiles against react-native-nitro-modules'
+      # headers (Null.hpp), so the dependencies must be installed.
+      - name: Setup
+        uses: ./.github/actions/setup
+
       - name: Run host native tests
         run: bash scripts/native-tests.sh
 
