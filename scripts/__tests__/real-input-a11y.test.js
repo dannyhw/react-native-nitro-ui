@@ -426,9 +426,12 @@ describe('the a11y rule, on measured trees', () => {
     expect(problems.join(' ')).not.toContain('scroll container');
     expect(problems.join(' ')).not.toContain('is not actionable');
 
-    // The other half: with one named node the anchor changes nothing, so no control that
-    // passes today is graded differently. The same tree minus the wrapper is the fixture,
-    // whose named node is *not* actionable — and still reported as such.
+    // The other half, and it is only this fixture: with one named node, grading the node
+    // under the anchor rather than the first named node changes nothing *when the named node
+    // is the anchor*, which is what this tree is. Whether some other control's named node sits
+    // outside its `anchorTestId` is a question the sweep answers on a device, not this test.
+    // The same tree minus the wrapper is the fixture, whose named node is *not* actionable —
+    // and still reported as such.
     const single = a11yProblems(
       control('form'),
       tree('form').map((node) => (node === row ? pressable : node))
