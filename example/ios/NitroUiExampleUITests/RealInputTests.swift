@@ -6217,8 +6217,8 @@ final class RealInputTests: XCTestCase {
         + "\(keyboardTop) (from \(from)) — keyboardAvoidance left a field under the keys."
     )
     print(
-      "real-input form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from \(from)) "
-        + "inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
+      "real-input (ios): form keyboard: field=\(frame) keyboardTop=\(keyboardTop) (from "
+        + "\(from)) inset=\(insetText) focused=\(echoText(Echo.formFieldFocus))"
     )
 
     // Then a finger's scroll, because the list's offset is the variable the inset was once
@@ -6226,26 +6226,58 @@ final class RealInputTests: XCTestCase {
     // of the content, so a drag up would move nothing and prove nothing. The inset must survive
     // it unchanged: a scroll is not a keyboard event, and an inset that is recomputed on one
     // (or dropped) moves every row the avoidance has placed.
-    let anchor = field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0)).withOffset(
-      CGVector(dx: 0, dy: -10)
+    //
+    // The finger goes down on the list's own rows, well above the field. Ten points above the
+    // field's box is not the list to UIKit: it is the text interaction's loupe, and a loupe drag
+    // that ends outside the field ends the editing session — the keyboard leaves, its inset
+    // legitimately goes with it, and there is no longer an avoidance to ask about.
+    let listRow = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+    listRow.press(forDuration: 0.3, thenDragTo: listRow.withOffset(CGVector(dx: 0, dy: 40)))
+
+    // Both witnesses need a moment: the field's box is XCUITest's and is read live off a list
+    // that is still springing back, and the inset is the screen's *poll* of
+    // `nuiTestFormReport()`, so it is at most one poll interval old. Reading either once, the
+    // instant the finger leaves, would compare a mid-animation frame with the inset from before
+    // the drag. Two reads that agree are the settle.
+    var settled = field.frame
+    var insetAfterText = echoText(Echo.formKeyboardInset)
+    var insetAfter = CGFloat(Double(insetAfterText) ?? -1)
+    for _ in 0..<15 {
+      let lastFrame = settled
+      let lastInset = insetAfterText
+      Thread.sleep(forTimeInterval: 0.2)
+      settled = field.frame
+      insetAfterText = echoText(Echo.formKeyboardInset)
+      insetAfter = CGFloat(Double(insetAfterText) ?? -1)
+      if abs(settled.minY - lastFrame.minY) < 0.5 && insetAfterText == lastInset { break }
+    }
+    print(
+      "real-input (ios): form keyboard after a scroll: field=\(frame) -> \(settled) "
+        + "inset=\(insetText) -> \(insetAfterText) "
+        + "focused=\(echoText(Echo.formFieldFocus)) "
+        + "keyboardWindow=\(app.keyboards.firstMatch.exists)"
     )
-    anchor.press(forDuration: 0.3, thenDragTo: anchor.withOffset(CGVector(dx: 0, dy: 40)))
-    let afterDrag = field.frame
-    let insetAfter = CGFloat(Double(echoText(Echo.formKeyboardInset)) ?? -1)
+    XCTAssertEqual(
+      echoText(Echo.formFieldFocus),
+      "yes",
+      "the focused field lost the keyboard focus while the list was scrolled by the hand (it "
+        + "sat \(settled), and XCUITest sees a keyboard window: "
+        + "\(app.keyboards.firstMatch.exists)). Nothing is left to keep above the keys, so the "
+        + "half of question 5 that follows a scroll cannot be answered."
+    )
     XCTAssertLessThanOrEqual(
       abs(insetAfter - inset),
       2,
-      "the reserved keyboard inset changed from \(insetText) to \(insetAfter) when the list was "
-        + "scrolled by the hand, without the keyboard moving — the field then sat \(afterDrag)."
+      "the reserved keyboard inset changed from \(insetText) to \(insetAfterText) when the list "
+        + "was scrolled by the hand, without the keyboard moving: the field moved from \(frame) "
+        + "to \(settled), which is what an inset collapsing under a list at the end of its "
+        + "content looks like — UIKit pulls the offset back by the inset it no longer has."
     )
     XCTAssertLessThan(
-      afterDrag.minY,
+      settled.minY,
       keyboardTop,
-      "after a scroll the focused field (\(afterDrag)) is wholly below the keyboard's top edge "
+      "after a scroll the focused field (\(settled)) is wholly below the keyboard's top edge "
         + "\(keyboardTop): the inset it was placed with no longer keeps it on screen."
-    )
-    print(
-      "real-input form keyboard after a scroll: field=\(afterDrag) inset=\(insetAfter)"
     )
   }
 
