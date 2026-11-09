@@ -9,15 +9,18 @@
 again on iOS. Value, clamps, handshake, `onChange`, `label`, `disabled` and `tintColor`
 are untouched — the variant only changes what is drawn and what the sizing key names.
 
+`real-input:ios` is red on two accessibility-sweep lines about `ContextMenu`, not the
+Picker — see Red gate below.
+
 Android draws Material 3's own pattern: a `Column(selectableGroup())` of rows, each
 `selectable(selected, enabled, Role.RadioButton)` around a `RadioButton(onClick = null)`
 and a one-line ellipsized label. The row is the press target and measures 48 dp
-(`heightIn(min = 48.dp)`, Material's own minimum touch target, spelled as a constant), so
+(`heightIn(min = 48.dp)`, Material's own minimum touch target), so
 a group is its option count — 144 dp tall for three options, 240 for five, asserted at
-±1 dp on the emulator rather than copied from Q7. The tint goes through
+±1 dp on the emulator. The tint goes through
 `pickerRadioColors`, a bounded `(scheme, tint)` cache beside the menu's field colours.
 A pick is `applyUserSelection`, the one place a choice is applied, so the no-op row, the
-disabled group and the rollback handshake are the menu's rules with no new code to drift.
+disabled group and the rollback handshake are the menu's rules, not new code to drift.
 
 iOS has no radio-group picker style — `RadioGroupPickerStyle` is
 `@available(iOS, unavailable)` — so per D38 item 4 the variant renders the menu instead of
@@ -33,7 +36,7 @@ so which row is chosen moves nothing and a pick costs no correction (measured: 0
 corrections, 0 cached sizes, the box unmoved). iOS files its radio sizes under the menu key,
 `sel:` and all. The cold first frame is still the menu's 280 × 56 dp box — one declared
 fallback per component, D17 — corrected the turn the group measures; every radio case
-mounts from a poisoned entry, so that correction is load-bearing and not decorative.
+mounts from a poisoned entry, so that correction is load-bearing.
 
 That iOS rule is unreachable from a device run — the wrapper resolves the name before the
 prop is sent — so it moved to `NitroUiPickerVariant.swift` and
@@ -42,9 +45,60 @@ twin keeps the other answer and its own JVM test.
 
 ## Gates
 
-<!--GATE-TABLE-->
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1957 tests / 82 suites | `3cf9a6ed57fb` | 2 m 48 s | start 5.4 / med 10.6 / max 14.3 |
+| `harness:ios` | **PASS** | 550 tests / 28 suites + isolated 6 tests / 3 suites | `3cf9a6ed57fb` (ios tree) | 13 m 58 s | start 10.2 / med 7.9 / max 35.8 |
+| `harness:android` | **PASS** | 606 tests / 28 suites + isolated 6 tests / 3 suites | `3cf9a6ed57fb` (android tree) | 17 m 46 s | start 20.6 / med 7.8 / max 54.7 |
+| `real-input:ios` | **FAIL** | — | `3cf9a6ed57fb` (ios tree) | 35 m 12 s | start 9.5 / med 7.2 / max 174.5 |
+| `real-input:android` | **PASS** | — | `3cf9a6ed57fb` (android tree) | 54 m 53 s | start 6.4 / med 6.2 / max 105.2 |
+| `harness:android:Picker` | stale | 4 failed of 45 tests / 2 suites | 4aaa513085ed (not this tree) | 57.2 s | start 9.5 / med 8.2 / max 9.8 |
+| `harness:ios:Picker` | stale | 45 tests / 2 suites | db102b3a87b9 (not this tree) | 49.4 s | start 9.4 / med 9.4 / max 12.0 |
 
-`need --for review`: <!--NEED-LINE-->
+`need --for review`: review is satisfied on this code tree — `check`,
+`harness:ios` and `harness:android` all green on `3cf9a6ed57fb`. `need --for merge`
+still wants `real-input:ios`, which is the red row above.
+
+The stale rows are this round's filtered mutation runs (`harness:android -- Picker`,
+`harness:ios -- Picker`), recorded under their own names and satisfying nothing; they
+stay in the ledger because a round's red lines are evidence.
+
+## Red gate: `real-input:ios`
+
+Red on this tree in all three runs, in one place only: the accessibility sweep's
+ContextMenu case and the debt row that guards it. Every XCUITest case passed and
+`context-menu: PASS (no retries)` — the two red lines are a read of the tree, not a
+control that stopped working.
+
+```
+a11y:context-menu: NitroUiContextMenu: 4 element(s) under "ctx-accessible" are stops of
+  their own ("Grace Hopper" x2, "One element for screen readers..." x2)
+a11y:ios-debt: the ios entry for "context-menu" matched no problem this run
+```
+
+`ContextMenu` is not in this diff: what reaches the sweep is one title string in
+`scripts/real-input/controls.mjs` and two `ECHO` ids in `scripts/real-input/screens.mjs`,
+and the wrapper is still the named element in every read (`other id="ctx-accessible"
+label="Message from Grace"`, the box identical to the base's). Measured, not assumed:
+
+- The branch's base `a526807e`, same simulator and Metro port, reads **2 stops and 0
+  failures in 2 of 2** probe runs (`node scripts/real-input/ios.mjs --control …`, off the
+  ledger — a filtered run records under its own name and satisfies nothing).
+- Of 193 `real-input:ios` logs in the gate store, 95 record the exempt 2-stop shape and 5
+  record 4 — and all five are today: this task's three and `task/G25-fix1`'s two (its
+  `--control stepper` run at 15:29 and its full `real-input:ios` at 16:08), on another
+  tree, another device pair and another Metro port, with no ContextMenu or Picker file in
+  its diff either. Two unrelated branches are blocked by the same two lines.
+- The two shapes differ in **which elements exist and never in a frame** — "Grace Hopper"
+  sits at `(25, 459.67, 352, 17)` in both. `A11yFrameStability` settles on frames, so a
+  read taken before SwiftUI merged the wrapper's children agrees with itself and prints.
+
+This branch mounts two more hosted Pickers on `picker`, the screen the sweep walks fifteen
+cases before `contextmenu`, which is the kind of load that shape is sensitive to. The merge
+bar re-runs real-input anyway; if it is still red it belongs to whoever owns the G16
+exemption row and X21's recurring-flakes item — most plausibly a settle that also compares
+the element set, not only the frames.
+
 
 ## Red proofs
 
@@ -101,13 +155,15 @@ nothing), reverted after; the mutation is in the shipping file, not in the test.
 
 - `src/components/Picker/Picker.tsx`, `Picker.nitro.ts`, `NativeNitroUiPicker.ts`:
   `PickerVariant`, `resolveVariant` / `radioIsRadioGroup`, the `sel:`-free radio key.
-- `android/.../HybridNitroUiPicker.kt`: `RadioGroup`, `pickerRadioColors`, the three row
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt`: `RadioGroup`,
+  `pickerRadioColors`, the three row
   constants, `PickerModel.resolvedVariant` / `isRadio`, the variant/policy branch.
 - `ios/components/Picker/NitroUiPickerVariant.swift` (new), `HybridNitroUiPicker.swift`:
   the iOS resolution, now host-testable.
 - `scripts/native-tests/picker-variant.test.swift` (new), `scripts/native-tests.sh`: its
   vectors, in `bun run test:native`.
-- `src/__tests__/picker.test.tsx`, `android/src/test/.../PickerModelTest.kt`,
+- `src/__tests__/picker.test.tsx`,
+  `android/src/test/java/com/margelo/nitro/nitroui/PickerModelTest.kt`,
   `example/__tests__/Picker.harness.tsx` (six cases): the tests above.
 - `scripts/real-input/{android,screens,controls}.mjs`, `example/src/PickerScreen.tsx`:
   `CHECKS.picker` step 9 — a real row tap, the `checked` read-back, disabled rows.
@@ -123,6 +179,9 @@ the group instead.
 
 ## Follow-ups
 
+- a11y: `A11yFrameStability` settles on frames alone, so a read taken before the ContextMenu
+  wrapper's children have merged agrees with itself — the sweep cannot tell the exempt
+  2-stop shape from the 4-stop one its own row is anchored against.
 - sizing: per-variant declared fallbacks would remove a cold radio group's correction
   entirely; the engine holds one pair per component (D17), so the frame stays.
 - real-input: the iOS `picker` check does not exercise the radio fallback — the harness
