@@ -419,3 +419,28 @@ the source, the platform rebuilt, the gate ran filtered, and the file was revert
   top of its own content` -> `report has no "recycles"`, and `publishes a settle …` -> `never
   satisfied "nine rows and a published offset"` — both because they read iOS fields off Android's
   report. `6a8c3606` and `df2ef5da` are the fix.
+
+### Appendix: fix round 2 gates
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1993 tests / 84 suites | `e0694020844f` | 2 m 48 s | start 4.3 / med 12.2 / max 26.9 |
+| `harness:ios` | **PASS** | 564 tests / 30 suites + isolated 6 tests / 3 suites | `e0694020844f` (ios tree) | 16 m 07 s | start 9.0 / med 5.4 / max 12.0 |
+| `harness:android` | **PASS** | 620 tests / 30 suites + isolated 6 tests / 3 suites | `e0694020844f` (android tree) | 17 m 43 s | start 5.8 / med 5.3 / max 29.1 |
+| `real-input:ios` | **PASS** | — | `e0694020844f` (ios tree) | 38 m 20 s | start 20.6 / med 7.5 / max 105.2 |
+| `real-input:android` | **PASS** | — | `e0694020844f` (android tree) | 59 m 20 s | start 9.0 / med 5.5 / max 52.3 |
+| `harness:ios:Form` | **PASS** | 115 tests / 3 suites | `e0694020844f` (ios tree) | 3 m 21 s | start 4.1 / med 4.6 / max 9.7 |
+| `harness:android:Form` | stale | 1 failed of 115 tests / 3 suites | f174c1dc1320 (not this tree) | 3 m 27 s | start 3.8 / med 4.2 / max 5.1 |
+| `harness:android:Form.harness` | stale | 3 failed of 11 tests / 1 suites | f086bc841ab1 (not this tree) | 37.2 s | start 26.7 / med 20.4 / max 26.7 |
+| `real-input:ios:--control:form` | stale | — | 864ae1557396 (not this tree) | 10 m 18 s | start 4.1 / med 9.1 / max 44.3 |
+
+All five required gates are green on `e0694020844f`, and `need --for merge` is satisfied on it. The
+stale rows are again the filtered runs taken *inside* the round — every red proof is one of them, on
+the tree with its mutation in it — plus one Android `Form.harness` run from fix round 1.
+`harness:ios` is the retry: the first run on this tree came in 561 of 564 with the tap-ordering case
+red and the same code tree went green on the retry (13:10Z), which is the flake the appendix describes.
+`real-input:ios` opened at load 105 because `harness:android` was finishing on the other pair.
+
+The ledger at `docs/tasks/G24/gates.jsonl` carries 146 lines: the 119 committed at the end of fix
+round 1 plus the 27 this round wrote. `gate.mjs export` writes only the current branch's ledger, so
+the earlier lines were merged back in by hand rather than dropped.

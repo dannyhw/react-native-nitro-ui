@@ -1,0 +1,198 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T11:33:42.966Z on code tree `462795cdddd7` at HEAD `9aef964` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 193815 ms
+- Load: start 7.12, end 6.26, median 6.49, max 10.01
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-2hz7i`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)`
+- `● Form (G24) › starts a recycled Form at the top of its own content`
+- `expected 268 to be less than or equal to 1`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-2hz7i (still live)
+  |   G24-2hz7i                G24          both              pair-b
+  |   G26-6r1z9                G26          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.92 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s)
+
+```
+gate: claimed ios:3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646 for this run
+gate: harness:ios:Form
+gate: node ../scripts/harness.mjs --harnessRunner ios Form (cwd example)
+gate: code tree 462795cdddd7 at HEAD 9aef9644
+gate: git tree 0c25acfc3981 with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log
+gate:       <store>/task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 462795cdddd7, 22 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 7.12/8.27 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+
+    console.log
+      FORM TRACE base: rows=9;items=9;inCells=9;reparents=9;reclaims=0;applies=1;alive=9;placed=0;screen=1,912.00,646.67,9,9;offset=-68.00;recycles=0;topReset=-;insetTop=68.00
+
+
+    console.log
+      FORM TRACE at rest: rows=9;items=9;inCells=9;reparents=9;reclaims=0;applies=1;alive=9;placed=0;screen=1,912.00,646.67,9,9;offset=-68.00;recycles=0;topReset=-;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: at rest: rows=9;items=9;inCells=5;reparents=6;reclaims=1;applies=3;alive=9;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE inserted: rows=10;items=10;inCells=5;reparents=7;reclaims=2;applies=4;alive=10;placed=0;screen=1,420.00,718.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: after the insert: rows=10;items=10;inCells=5;reparents=7;reclaims=2;applies=4;alive=10;placed=0;screen=1,420.00,718.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE removed: rows=8;items=8;inCells=5;reparents=9;reclaims=2;applies=6;alive=10;placed=0;screen=1,420.00,614.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: after the removal: rows=8;items=8;inCells=5;reparents=9;reclaims=2;applies=6;alive=10;placed=0;screen=1,420.00,614.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE reordered: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: after the reorder: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE before the cycles: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE after the cycles: rows=9;items=9;inCells=5;reparents=12;reclaims=3;applies=9;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE scrolled for the cycles: rows=9;items=9;inCells=1;reparents=213;reclaims=208;applies=59;alive=10;placed=0;screen=1,420.00,646.67,4,4;offset=400.00;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: at offset 400: rows=9;items=9;inCells=6;reparents=218;reclaims=208;applies=61;alive=10;placed=0;screen=1,420.00,646.67,6,6;offset=226.67;recycles=2;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"CBADC68A-6C14-4DDE-AA91-A600D470DA77"} switch={"nativeId":"7F2FC80B-47A8-4CEE-ABF8-C9719BC1D771"}
+
+
+    console.log
+      FORM COST N=20 form=63ms plain=67ms 67
+
+
+    console.log
+      FORM COST N=50 form=100ms plain=67ms 69
+
+
+    console.log
+      FORM TRACE scrolled before the swap: rows=9;items=9;inCells=5;reparents=11;reclaims=6;applies=83;alive=10;placed=0;screen=1,420.00,650.33,6,6;offset=200.00;recycles=22;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM TRACE the recycled Form: rows=9;items=9;inCells=6;reparents=12;reclaims=6;applies=84;alive=10;placed=0;screen=1,420.00,650.33,6,6;offset=200.00;recycles=22;topReset=recycle@-68 fire@-68->-68;insetTop=68.00
+
+
+    console.log
+      FORM ANIMATED SCROLL: publishes=1 offset=-68.00 -> -8.00
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=0 geometry{offset=-68.00,origin=-68.00,received=-68.00,listY=0.00,insetTop=68.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=14 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 40.0,112.3,340.0,44.0 (off by 248.0 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 40.0,164.3,340.0,44.0 (off by 248.0 pt) | m2: measureInWindow 40.0,-31.7,340.0,44.0 (-scroll 0.0 = -31.7) vs UIKit 40.0,216.3,340.0,44.0 (off by 248.0 pt) | m3: measureInWindow 40.0,20.3,340.0,44.0 (-scroll 0.0 = 20.3) vs UIKit 40.0,268.3,340.0,44.0 (off by 248.0 pt) | m4: measureInWindow 40.0,72.3,340.0,44.0 (-scroll 0.0 = 72.3) vs UIKit 40.0,320.3,340.0,44.0 (off by 248.0 pt) | m5: measureInWindow 40.0,124.3,340.0,44.0 (-scroll 0.0 = 124.3) vs UIKit 40.0,372.3,340.0,44.0 (off by 248.0 pt) | m6: measureInWindow 40.0,176.3,340.0,44.0 (-scroll 0.0 = 176.3) vs UIKit 40.0,424.3,340.0,44.0 (off by 248.0 pt) | m7: measureInWindow 40.0,228.3,340.0,44.0 (-scroll 0.0 = 228.3) vs UIKit 40.0,476.3,340.0,44.0 (off by 248.0 pt) | m8: measureInWindow 40.0,280.3,340.0,44.0 (-scroll 0.0 = 280.3) vs UIKit 40.0,528.3,340.0,44.0 (off by 248.0 pt) | m9: measureInWindow 40.0,332.3,340.0,44.0 (-scroll 0.0 = 332.3) vs UIKit 40.0,580.3,340.0,44.0 (off by 248.0 pt) | m10: measureInWindow 40.0,384.3,340.0,44.0 (-scroll 0.0 = 384.3) vs UIKit 40.0,632.3,340.0,44.0 (off by 248.0 pt) | m11: measureInWindow 40.0,436.3,340.0,44.0 (-scroll 0.0 = 436.3) vs UIKit 40.0,684.3,340.0,44.0 (off by 248.0 pt) | m12: measureInWindow 40.0,488.3,340.0,44.0 (-scroll 0.0 = 488.3) vs UIKit 40.0,736.3,340.0,44.0 (off by 248.0 pt) | m13: measureInWindow 40.0,540.3,340.0,44.0 (-scroll 0.0 = 540.3) vs UIKit 40.0,788.3,340.0,44.0 (off by 248.0 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00}
+
+  ● Form (G24) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)
+
+    never saw "the row holding the Pressable to be drawn in a cell" - last was where=holding;frame=40.0,200.3,340.0,44.0;window=-;h=44.0;presses=0;desc=-;accessory=none;pressable=0;selected=0
+
+      [0m [90m 603 |[39m     }
+       [90m 604 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 605 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`never saw "${what}" - last was ${String(read())}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 606 |[39m     }
+       [90m 607 |[39m     [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m25[39m))[33m;[39m
+       [90m 608 |[39m   }[0m
+
+  ● Form (G24) › starts a recycled Form at the top of its own content
+
+    expected 268 to be less than or equal to 1
+
+      [0m [90m 1255 |[39m       expect(
+       [90m 1256 |[39m         [33mMath[39m[33m.[39mabs(num(next[33m,[39m [32m'offset'[39m) [33m+[39m num(next[33m,[39m [32m'insetTop'[39m))
+      [31m[1m>[22m[39m[90m 1257 |[39m       )[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                            [31m[1m^[22m[39m
+       [90m 1258 |[39m     }
+       [90m 1259 |[39m   })[33m;[39m
+       [90m 1260 |[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       2 failed, 108 passed, 110 total
+Snapshots:   0 total
+Time:        192.142 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 193.8 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T11-33-42.586Z.log (4 probe(s))
+
+```
