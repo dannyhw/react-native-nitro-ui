@@ -513,6 +513,14 @@ export const PLANS = {
     { scenario: 'mount.text-field', n: 50 },
     { scenario: 'update.text-field', n: 50 },
     { scenario: 'memory.text-field', n: 200 },
+    // Two `mount` cells rather than one: a Form's `n` is rows inside one container,
+    // and the question this component is priced on (S6's sixth, G24) is asked at both
+    // 20 and 50, so the quick plan has to answer it or local feedback is half a
+    // sentence. `plan.ts`'s schedule length reads this through the per-component sum.
+    { scenario: 'mount.form', n: 20 },
+    { scenario: 'mount.form', n: 50 },
+    { scenario: 'update.form', n: 50 },
+    { scenario: 'memory.form', n: 200 },
   ],
   full: [
     { scenario: 'mount', n: 1 },
@@ -578,6 +586,19 @@ export const PLANS = {
     { scenario: 'update.text-field', n: 50 },
     { scenario: 'memory.text-field', n: 200 },
     { scenario: 'leak.text-field', n: 200 },
+    // Form is a container, so its `n` is a row count inside one grouped list rather
+    // than a count of mounted controls, and the two sizes S6's question 6 asks about
+    // are 20 and 50 (G24). There is no `n: 1` and no `n: 200` for `mount`/`update`:
+    // a one-row Form is not a grouped list, and a 200-row settings screen is the
+    // virtualised-list conversation in `docs/components/form.md` rather than a shape
+    // anyone ships. `memory`/`leak` keep the platform-wide `n: 200` because those
+    // cells measure bytes per row, which wants a long batch to divide by.
+    { scenario: 'mount.form', n: 20 },
+    { scenario: 'mount.form', n: 50 },
+    { scenario: 'update.form', n: 20 },
+    { scenario: 'update.form', n: 50 },
+    { scenario: 'memory.form', n: 200 },
+    { scenario: 'leak.form', n: 200 },
   ],
 };
 

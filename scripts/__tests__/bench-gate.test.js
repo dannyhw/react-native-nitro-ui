@@ -1343,35 +1343,45 @@ describe('the Button cells (--component button)', () => {
     // grow with every component that lands - a cell missing from the plan shows
     // up here as a shorter schedule, not a silent skip.
     const all = buildSchedule({ plan: 'quick' });
+    const QUICK_COMPONENTS = [
+      'switch',
+      'slider',
+      'button',
+      'progress',
+      'segmented-control',
+      'date-picker',
+      'picker',
+      'menu',
+      'text-field',
+      'form',
+    ];
     expect(new Set(all.map((entry) => componentOf(entry.scenario)))).toEqual(
-      new Set([
-        'switch',
-        'slider',
-        'button',
-        'progress',
-        'segmented-control',
-        'date-picker',
-        'picker',
-        'menu',
-        'text-field',
-      ])
+      new Set(QUICK_COMPONENTS)
     );
     /**
-     * Nine components in the quick plan (G13's TextField is benched but not hostable, so
-     * the Host arm's scope stays at eight), each with the same three cells of the four
-     * unscoped arms, plus one scoped arm's cells for each component it renders. Both
-     * halves are measured rather than folded into a product: a component losing a cell
-     * moves the first number, and an arm escaping (or losing) its scope moves the second.
+     * Ten components in the quick plan (G13's TextField and G24's Form are benched
+     * but not hostable, so the Host arm's scope stays at eight), each with the cells
+     * of that component's own plan entry run through the four unscoped arms, plus one
+     * scoped arm's cells for each component it renders. Both halves are measured
+     * rather than folded into a product: a component losing a cell moves the first
+     * number, and an arm escaping (or losing) its scope moves the second. Summed
+     * per component rather than one component's length times ten, because a Form's
+     * `n` is rows inside one container and it is priced at two row counts (20 and
+     * 50, S6's question 6) where every other component is priced at one.
      * Since H2b every bench control is hostable, so no component's schedule is naturally
      * free of the Host arm any more: the baseline is that same schedule with the scoped
      * arms taken out, which measures the quantity instead of assuming a probe. The half
      * that rode on the probe is asserted in its own right below — the Host arm is scoped
      * to Android, so an iOS schedule must not carry one.
      */
-    const unscoped = buildSchedule({
-      plan: 'quick',
-      component: 'date-picker',
-    }).filter((entry) => ARM_SCOPES[entry.implementation] == null);
+    const unscopedCells = QUICK_COMPONENTS.reduce(
+      (total, component) =>
+        total +
+        buildSchedule({ plan: 'quick', component }).filter(
+          (entry) => ARM_SCOPES[entry.implementation] == null
+        ).length,
+      0
+    );
     const iosSwitch = buildSchedule({
       plan: 'quick',
       component: 'switch',
@@ -1385,8 +1395,7 @@ describe('the Button cells (--component button)', () => {
       component: 'switch',
     }).filter((entry) => entry.implementation === 'nitro-ui-host').length;
     expect(all.length).toBe(
-      unscoped.length * 9 +
-        hostCells * ARM_SCOPES['nitro-ui-host'].components.length
+      unscopedCells + hostCells * ARM_SCOPES['nitro-ui-host'].components.length
     );
   });
 });

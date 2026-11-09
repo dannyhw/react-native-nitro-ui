@@ -1,0 +1,196 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-08T12:43:37.000Z on code tree `a80cdc784bd0` at HEAD `a6720fd` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 186268 ms
+- Load: start 4.58, end 36.56, median 10.82, max 36.56
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+ios+Form-2026-11-08T12-43-37.000Z.log` (<store>/task/G24-form/harness+ios+Form-2026-11-08T12-43-37.000Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected [ …(2) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+ios+Form-2026-11-08T12-43-37.000Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 36.56 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 472 — the rest is in the full log above)
+
+```
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=2 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 135.7 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 0.0,0.0,340.0,44.0 (off by 83.7 pt)
+
+
+    console.log
+      S6b MEASURE timed out waiting for every row in a cell to measure where UIKit put it
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ …(2) ] to deeply equal []
+
+      [0m [90m 901 |[39m       [32m'every row in a cell to measure where UIKit put it'[39m
+       [90m 902 |[39m     )[33m;[39m
+      [31m[1m>[22m[39m[90m 903 |[39m     expect(scrolled[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                 [31m[1m^[22m[39m
+       [90m 904 |[39m     expect(scrolled[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m 905 |[39m     cleanup()[33m;[39m
+       [90m 906 |[39m   })[33m;[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       1 failed, 91 passed, 92 total
+Snapshots:   0 total
+Time:        184.231 s
+Ran all test suites matching Form.
+
+
+
+```

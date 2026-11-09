@@ -1,0 +1,202 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T12:12:55.393Z on code tree `8ff17ce88f11` at HEAD `4c4837c` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 257256 ms
+- Load: start 9.57, end 10.27, median 15.53, max 25.49
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-2hz7i`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T12-12-54.427Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T12-12-54.427Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `● Form (G24) › gives a row the height its content needs, before and after it grows (E3)`
+- `● Form (G24) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)`
+- `expected 10 to be +0 // Object.is equality`
+- `● Form (G24) › composes a recycled Section, and drops the band of a gone title`
+- `● Form (G24) › reports a settle that no drag announced`
+- `● Form (G24) › grows a row when UIKit is not watching its height constraint (E3, iOS 15)`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T12-12-54.427Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-2hz7i (still live)
+  |   G24-2hz7i                G24          both              pair-b
+  |   G26-6r1z9                G26          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 10.27 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 198 — the rest is in the full log above)
+
+```
+      FORM TRACE removed: rows=8;items=8;inCells=5;reparents=9;reclaims=2;applies=6;alive=10;placed=0;screen=1,420.00,614.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: after the removal: rows=8;items=8;inCells=5;reparents=9;reclaims=2;applies=6;alive=10;placed=0;screen=1,420.00,614.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE reordered: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE drawn: after the reorder: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE before the cycles: rows=9;items=9;inCells=5;reparents=10;reclaims=3;applies=7;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE after the cycles: rows=9;items=9;inCells=5;reparents=12;reclaims=3;applies=9;alive=10;placed=0;screen=1,420.00,666.00,5,5;offset=-68.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TRACE scrolled for the cycles: rows=9;items=9;inCells=1;reparents=213;reclaims=208;applies=59;alive=10;placed=0;screen=1,420.00,646.67,4,4;offset=400.00;recycles=2;insetTop=68.00
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"BBB15B78-D585-443A-B1F4-17856B093EC2"} switch={"nativeId":"F4B236FE-4F65-479A-A857-42E7F1299A02"}
+
+
+    console.log
+      FORM TRACE drawn: before the presses: rows=9;items=9;inCells=9;reparents=9;reclaims=0;applies=64;alive=9;placed=0;screen=1,912.00,646.67,9,9;offset=-68.00;recycles=6;insetTop=68.00
+
+
+    console.log
+      FORM COST N=20 form=64ms plain=67ms 66
+
+
+    console.log
+      FORM COST N=50 form=99ms plain=67ms 68
+
+
+    console.log
+      FORM TRACE scrolled before the recycle: rows=9;items=9;inCells=5;reparents=9;reclaims=4;applies=83;alive=9;placed=0;screen=1,420.00,650.33,6,6;offset=200.00;recycles=22;insetTop=68.00
+
+
+    console.log
+      FORM TRACE the recycled Form: rows=9;items=9;inCells=5;reparents=6;reclaims=1;applies=86;alive=9;placed=0;screen=1,420.00,631.33,5,5;offset=-68.00;recycles=24;insetTop=68.00
+
+
+    console.log
+      FORM ANIMATED SCROLL: publishes=1 offset=-68.00 -> -8.00
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=0 geometry{offset=-68.00,origin=-68.00,received=-68.00,listY=0.00,insetTop=68.00}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=14 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,-135.7,340.0,44.0 (-scroll 0.0 = -135.7) vs UIKit 40.0,112.3,340.0,44.0 (off by 248.0 pt) | m1: measureInWindow 40.0,-83.7,340.0,44.0 (-scroll 0.0 = -83.7) vs UIKit 40.0,164.3,340.0,44.0 (off by 248.0 pt) | m2: measureInWindow 40.0,-31.7,340.0,44.0 (-scroll 0.0 = -31.7) vs UIKit 40.0,216.3,340.0,44.0 (off by 248.0 pt) | m3: measureInWindow 40.0,20.3,340.0,44.0 (-scroll 0.0 = 20.3) vs UIKit 40.0,268.3,340.0,44.0 (off by 248.0 pt) | m4: measureInWindow 40.0,72.3,340.0,44.0 (-scroll 0.0 = 72.3) vs UIKit 40.0,320.3,340.0,44.0 (off by 248.0 pt) | m5: measureInWindow 40.0,124.3,340.0,44.0 (-scroll 0.0 = 124.3) vs UIKit 40.0,372.3,340.0,44.0 (off by 248.0 pt) | m6: measureInWindow 40.0,176.3,340.0,44.0 (-scroll 0.0 = 176.3) vs UIKit 40.0,424.3,340.0,44.0 (off by 248.0 pt) | m7: measureInWindow 40.0,228.3,340.0,44.0 (-scroll 0.0 = 228.3) vs UIKit 40.0,476.3,340.0,44.0 (off by 248.0 pt) | m8: measureInWindow 40.0,280.3,340.0,44.0 (-scroll 0.0 = 280.3) vs UIKit 40.0,528.3,340.0,44.0 (off by 248.0 pt) | m9: measureInWindow 40.0,332.3,340.0,44.0 (-scroll 0.0 = 332.3) vs UIKit 40.0,580.3,340.0,44.0 (off by 248.0 pt) | m10: measureInWindow 40.0,384.3,340.0,44.0 (-scroll 0.0 = 384.3) vs UIKit 40.0,632.3,340.0,44.0 (off by 248.0 pt) | m11: measureInWindow 40.0,436.3,340.0,44.0 (-scroll 0.0 = 436.3) vs UIKit 40.0,684.3,340.0,44.0 (off by 248.0 pt) | m12: measureInWindow 40.0,488.3,340.0,44.0 (-scroll 0.0 = 488.3) vs UIKit 40.0,736.3,340.0,44.0 (off by 248.0 pt) | m13: measureInWindow 40.0,540.3,340.0,44.0 (-scroll 0.0 = 540.3) vs UIKit 40.0,788.3,340.0,44.0 (off by 248.0 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=0 geometry{offset=180.00,origin=180.00,received=180.00,listY=0.00,insetTop=68.00}
+
+  ● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    Form report never satisfied "at offset 400: every item on screen drawn from a cell (inCells against the visible-item count; the last report below says which of the two moved)" - last was sections=3;rows=9;items=9;inCells=5;screen=1,420.00,646.67,6,6;orphans=0;stale=0;alive=10;reparents=217;reclaims=208;applies=60;width=340.00;listWidth=420.00;boxW=340.00;boxReports=808;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=0.00;offsetPublishes=55;recycles=2;selfSizing=1;ime=0.00;offset=226.67;origin=400.00;received=400.00;listY=0.00;insetTop=68.00;placed=0;order=Wi-Fi|Bluetooth|Cellular data|Ring on receipt, Pre|ringer|alert|notification|nitro-ui 0.4.0|Silent mode;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=52.00;h1=52.00;h2=52.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=29.67;footerSection=0;radius=0.00;sep=0.00
+
+      [0m [90m 101 |[39m     }
+       [90m 102 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 103 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 104 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 105 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 106 |[39m [32m        )}`[39m[0m
+
+  ● Form (G24) › gives a row the height its content needs, before and after it grows (E3)
+
+    Form report never satisfied "the wrapped row to be taller in the list" - last was sections=3;rows=9;items=9;inCells=9;screen=1,912.00,646.67,9,9;orphans=0;stale=0;alive=9;reparents=9;reclaims=0;applies=62;width=340.00;listWidth=420.00;boxW=318.00;boxReports=58;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=34.00;offsetPublishes=1;recycles=4;selfSizing=1;ime=0.00;offset=-68.00;origin=-68.00;received=-68.00;listY=0.00;insetTop=68.00;placed=0;order=Wi-Fi|Bluetooth|Cellular data|Airplane mode turns|ringer|alert|notification|nitro-ui 0.4.0|Silent mode;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=52.00;rowH=44.00;h1=52.00;h2=52.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=29.67;footerSection=0;radius=0.00;sep=20.00
+
+      [0m [90m 101 |[39m     }
+       [90m 102 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 103 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 104 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 105 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 106 |[39m [32m        )}`[39m[0m
+
+  ● Form (G24) › aims a row content at its Yoga origin on iOS and presses it on Android (E4)
+
+    expected 10 to be +0 // Object.is equality
+
+      [0m [90m 951 |[39m       }
+       [90m 952 |[39m       [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m250[39m))[33m;[39m
+      [31m[1m>[22m[39m[90m 953 |[39m       expect(probe[33m.[39mlog[33m.[39mpressable)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m     |[39m                                       [31m[1m^[22m[39m
+       [90m 954 |[39m       expect(probe[33m.[39mlog[33m.[39mswitches)[33m.[39mtoBe([35m10[39m)[33m;[39m
+       [90m 955 |[39m       [90m// The positive control: the very same two callbacks, outside any Form, where React[39m
+       [90m 956 |[39m       [90m// Native's hit-test has its content where it is drawn. Both counters are the ones the[39m[0m
+
+  ● Form (G24) › composes a recycled Section, and drops the band of a gone title
+
+    never saw "the gone title to come off the band" - last was rows=1;subviews=0;index=0;title=-;footer=-;inHolding=0;form=held;width=420.00;height=106.33;placed=0.00;headerBand=40.33;footerBand=14.00;inset=40.00;headerText=-;drawnTitle=Second;drawnFooter=
+
+      [0m [90m 602 |[39m     }
+       [90m 603 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 604 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m([32m`never saw "${what}" - last was ${String(read())}`[39m)[33m;[39m
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 605 |[39m     }
+       [90m 606 |[39m     [36mawait[39m [36mnew[39m [33mPromise[39m((resolve) [33m=>[39m setTimeout(resolve[33m,[39m [35m25[39m))[33m;[39m
+       [90m 607 |[39m   }[0m
+
+  ● Form (G24) › reports a settle that no drag announced
+
+    Form report never satisfied "the shadow tree to be told the offset the list is at" - last was sections=1;rows=24;items=24;inCells=17;screen=1,912.00,1306.00,17,17;orphans=0;stale=0;alive=24;reparents=17;reclaims=0;applies=81;width=340.00;listWidth=420.00;boxW=340.00;boxReports=53;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=34.00;offsetPublishes=1;recycles=20;selfSizing=1;ime=0.00;offset=-8.00;origin=-68.00;received=-68.00;listY=0.00;insetTop=68.00;placed=0;order=Row 0|Row 1|Row 2|Row 3|Row 4|Row 5|Row 6|Row 7|Row 8|Row 9;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=52.00;rowH=44.00;h1=52.00;h2=52.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=17.67;footerSection=0;radius=0.00;sep=20.00
+
+      [0m [90m 101 |[39m     }
+       [90m 102 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 103 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 104 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 105 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 106 |[39m [32m        )}`[39m[0m
+
+  ● Form (G24) › grows a row when UIKit is not watching its height constraint (E3, iOS 15)
+
+    Form report never satisfied "the grown row to be taller in the layout with no self-sizing to do it" - last was sections=3;rows=9;items=9;inCells=9;screen=1,912.00,646.67,9,9;orphans=0;stale=0;alive=9;reparents=9;reclaims=0;applies=91;width=340.00;listWidth=420.00;boxW=340.00;boxReports=3321;heights=52.00,52.00,52.00,52.00,52.00,52.00;taps=0;keyboard=0.00;insetBottom=0.00;adjBottom=34.00;offsetPublishes=1;recycles=28;selfSizing=0;ime=0.00;offset=-68.00;origin=-68.00;received=-68.00;listY=0.00;insetTop=68.00;placed=0;order=Wi-Fi|Bluetooth|Cellular data|Airplane mode turns|ringer|alert|notification|nitro-ui 0.4.0|Silent mode;kind=prototype;listW=420.00;x=20.00;y=40.33;w=380.00;h0=52.00;rowH=44.00;h1=52.00;h2=52.00;headerX=20.00;headerY=0.00;headerH=40.33;footerH=14.00;footerSection=0;radius=0.00;sep=20.00
+
+      [0m [90m 101 |[39m     }
+       [90m 102 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 103 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 104 |[39m         [32m`Form report never satisfied "${what}" - last was ${String([39m
+       [90m 105 |[39m [32m          forms[which]?.nuiTestFormReport()[39m
+       [90m 106 |[39m [32m        )}`[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       6 failed, 109 passed, 115 total
+Snapshots:   0 total
+Time:        255.359 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 257.3 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T12-12-54.427Z.log (4 probe(s))
+
+```

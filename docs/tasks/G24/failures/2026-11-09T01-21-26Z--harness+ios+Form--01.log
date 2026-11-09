@@ -1,0 +1,147 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T01:21:26.232Z on code tree `4035963891e0` at HEAD `acb4182` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 175983 ms
+- Load: start 14.42, end 5.77, median 7.60, max 14.42
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G24-en8js`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)`
+- `expected 0 to be greater than 0`
+- `● Form (G24) › composes a recycled Section, and drops the band of a gone title`
+- `expected 'First' to be 'Second' // Object.is equality`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected 8 to be greater than or equal to 10`
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G21-dl60k                G21          both              pair-b
+  |   G24-en8js                G24          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.77 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 95 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form
+gate: node ../scripts/harness.mjs --harnessRunner ios Form (cwd example)
+gate: code tree 4035963891e0 at HEAD acb4182d
+gate: git tree 2982bdec2fed with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log
+gate:       <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4035963891e0, 22 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 14.55/15.54 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":11,"initialProps":{},"fabric":true}
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"3DAEFF55-0ACB-4276-8666-79C6B7493E5B"} switch={"nativeId":"458F5339-8B5C-44D2-B5F4-C4685C92C0DD"}
+
+
+    console.log
+      FORM COST N=20 form=64ms plain=67ms 12
+
+
+    console.log
+      FORM COST N=50 form=99ms plain=67ms 14
+
+
+    console.log
+      S6b MEASURE at rest: compared=8 scroll=0.0 mismatched=0 geometry{offset=-2.00,origin=-2.00,received=0.00,listY=0.00,insetTop=62.00}
+
+  ● Form (G24) › keeps the tree intact through an insert, a removal and 50 scrolls (E1)
+
+    expected 0 to be greater than 0
+
+      [0m [90m 671 |[39m       [90m// with each other: UIKit keeps a cell across a snapshot apply, so a row can be given[39m
+       [90m 672 |[39m       [90m// back and re-adopted without the provider running again.[39m
+      [31m[1m>[22m[39m[90m 673 |[39m       expect(num(after[33m,[39m [32m'reclaims'[39m))[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m     |[39m                                                     [31m[1m^[22m[39m
+       [90m 674 |[39m       expect(num(after[33m,[39m [32m'reparents'[39m))[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+       [90m 675 |[39m       [90m// The question the counters cannot answer, and the one this case exists for: after[39m
+       [90m 676 |[39m       [90m// fifty give-backs, is the row on screen sitting in a cell? A give-back with no[39m[0m
+
+  ● Form (G24) › composes a recycled Section, and drops the band of a gone title
+
+    expected 'First' to be 'Second' // Object.is equality
+
+      [0m [90m 872 |[39m       [90m// stays painted, at the old height. `drawnTitle` is what the band is painted with, the[39m
+       [90m 873 |[39m       [90m// only field here that separates a title the Form stored from one it drew (fix round 1).[39m
+      [31m[1m>[22m[39m[90m 874 |[39m       expect(second[33m.[39mdrawnTitle)[33m.[39mtoBe([32m'Second'[39m)[33m;[39m
+       [90m     |[39m                                     [31m[1m^[22m[39m
+       [90m 875 |[39m     }
+       [90m 876 |[39m
+       [90m 877 |[39m     [90m// A title that goes to null leaves nothing behind to measure, and Android reported the band[39m[0m
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected 8 to be greater than or equal to 10
+
+      [0m [90m 1228 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+       [90m 1229 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+      [31m[1m>[22m[39m[90m 1230 |[39m     expect(atRest[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m      |[39m                                                   [31m[1m^[22m[39m
+       [90m 1231 |[39m
+       [90m 1232 |[39m     [90m// Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do[39m
+       [90m 1233 |[39m     [90m// not, until the Form publishes where they came to rest - and on Android that the list[39m[0m
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+
+Test Suites: 2 failed, 1 passed, 3 total
+Tests:       3 failed, 8 passed, 11 total
+Snapshots:   0 total
+Time:        174.088 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 176.0 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T01-21-25.205Z.log (4 probe(s))
+
+```

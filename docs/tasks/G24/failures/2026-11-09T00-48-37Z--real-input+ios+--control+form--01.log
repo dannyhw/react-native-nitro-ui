@@ -1,0 +1,64 @@
+# Failure excerpt — real-input:ios:--control:form
+
+- Ran: 2026-11-09T00:48:37.430Z on code tree `ae8a0319ff85` at HEAD `a4e8dbb` (branch `task/G24-fix1`)
+- Command: `node scripts/real-input/ios.mjs --control form`
+- Result: fail, exit 1, 183895 ms
+- Load: start 6.73, end 246.37, median 153.08, max 270.25
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G24-en8js`
+- Full log: `task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log` (<store>/task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G21-dl60k                G21          both              pair-b
+  |   G24-en8js                G24          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 246.37 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 21 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios:--control:form
+gate: node scripts/real-input/ios.mjs --control form (cwd .)
+gate: code tree ae8a0319ff85 at HEAD a4e8dbb8
+gate: git tree 93d1ca58ff61 with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log
+gate:       <store>/task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD SUCCEEDED **
+
+real-input (ios): Error: real-input: the code tree changed during the build (before ae8a0319ff85, after 46f15928c305: 1147 files when it started, 1147 now). No stamp was written - nothing here proves which sources this binary came from. Run the build again with nothing else writing to the tree.
+       an incremental xcodebuild that never recompiled the generated hybrids is the usual cause: `rm -rf example/ios/build` and run again.
+gate: real-input:ios:--control:form FAIL in 183.9 s - note: the code tree moved during the run (46f15928c305 now), so this line describes ae8a0319ff85
+gate: recorded in .gates/task/G24-fix1.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G24-fix1/real-input+ios+--control+form-2026-11-09T00-48-37.002Z.log (4 probe(s))
+
+```

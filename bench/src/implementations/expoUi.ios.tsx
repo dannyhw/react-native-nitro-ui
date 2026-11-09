@@ -1,11 +1,14 @@
 import {
   Button,
   DatePicker,
+  Form,
   Host,
   HStack,
+  LabeledContent,
   Menu,
   Picker,
   ProgressView,
+  Section,
   Slider,
   Text,
   TextField,
@@ -33,6 +36,11 @@ import {
   buttonGroupItems,
   buttonTitle,
   dateValue,
+  FORM_ROW_HOST_STYLE,
+  formRowKind,
+  formRowLabel,
+  formRowValue,
+  formSwitchValue,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
   menuItems,
@@ -42,6 +50,7 @@ import {
   onIconButtonPress,
   onPress,
   onMenuSelect,
+  onRowPress,
   onSegmentChange,
   onSliderChange,
   onValueChange,
@@ -390,6 +399,46 @@ function BenchMenu({ index, value }: { index: number; value: boolean }) {
 }
 
 /**
+ * One row of the batch's Form, in SwiftUI's own row vocabulary.
+ *
+ * Each kind is what a SwiftUI app writes for it, because asking this arm the same
+ * question nitro-ui's arm asks the platform is the whole comparison:
+ * `LabeledContent` is a title with a trailing value, a labelled `Toggle` is a title
+ * with a control, and a `Button` is the row that answers to a press - the only way
+ * to make a SwiftUI Form row pressable here, so its look is SwiftUI's plain row and
+ * not this arm's decoration.
+ *
+ * The `Toggle` keeps its label, unlike `BenchToggle`: out alone, a label would draw
+ * a `Text` the other arms' controls do not have (T02 review B3); *in a row*, the
+ * label is the row's title, which every arm draws and this arm gets for free.
+ */
+function BenchFormRow({ index, value }: { index: number; value: boolean }) {
+  const kind = formRowKind(index);
+  const label = formRowLabel(index);
+  if (kind === 'detail') {
+    return (
+      <LabeledContent label={label}>
+        <Text>{formRowValue(value)}</Text>
+      </LabeledContent>
+    );
+  }
+  if (kind === 'switch') {
+    return (
+      <Toggle
+        testID={`bench-expo-form-toggle-${String(index)}`}
+        isOn={formSwitchValue(index, value)}
+        onIsOnChange={onValueChange}
+        label={label}
+      />
+    );
+  }
+  if (kind === 'press') {
+    return <Button label={label} onPress={onRowPress} />;
+  }
+  return <Text>{label}</Text>;
+}
+
+/**
  * `@expo/ui` worst case for the library: one SwiftUI hosting view per control.
  * Expo UI always needs a `Host`, so both Expo arms are required for a fair
  * comparison (docs/research/setup-decisions.md SS6).
@@ -400,6 +449,23 @@ export function ExpoUiHostPerControlList({
   component,
 }: BenchListProps) {
   const style = rowStyle(component);
+  if (component === 'form') {
+    // One hosting view per *row*: a Form per row, which is what an app pays when it
+    // hosts each settings row instead of one grouped list. Each host needs a box
+    // (`FORM_ROW_HOST_STYLE`) because a host has no intrinsic size, so this arm also
+    // prices the fixed row box the grouped-list arms get from the list for free.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Host key={index} style={FORM_ROW_HOST_STYLE}>
+            <Form>
+              <BenchFormRow index={index} value={value} />
+            </Form>
+          </Host>
+        ))}
+      </>
+    );
+  }
   // `matchContents` is what lets a host take the button's fitting size, which is
   // how a consumer ships a sized-to-content control here; it is also part of what
   // this arm costs per control and is measured as such.
@@ -463,6 +529,21 @@ export function ExpoUiHostPerControlList({
 export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (n === 0) {
     return null;
+  }
+  if (component === 'form') {
+    // The peer for nitro-ui's one grouped Form: one hosting view, one SwiftUI
+    // `Form`, one `Section`, `n` rows - the tree an app writes.
+    return (
+      <Host style={stackStyle(n, component)}>
+        <Form>
+          <Section title="Settings">
+            {range(n).map((index) => (
+              <BenchFormRow key={index} index={index} value={value} />
+            ))}
+          </Section>
+        </Form>
+      </Host>
+    );
   }
   if (
     component === 'button' ||

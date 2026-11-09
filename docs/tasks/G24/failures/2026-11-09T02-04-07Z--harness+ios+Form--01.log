@@ -1,0 +1,147 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-09T02:04:07.478Z on code tree `4be599237212` at HEAD `63c517f` (branch `task/G24-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 175809 ms
+- Load: start 6.33, end 11.30, median 8.65, max 11.30
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G24-en8js`
+- Full log: `task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log` (<store>/task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Conformance.harness.tsx`
+- `● Test suite failed to run`
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected [ Array(1) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-en8js (still live)
+  |   G24-en8js                G24          both              pair-a
+  |   G20-jtox6                G20          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 11.30 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 99 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios:Form
+gate: node ../scripts/harness.mjs --harnessRunner ios Form (cwd example)
+gate: code tree 4be599237212 at HEAD 63c517f4
+gate: git tree d2102c68b470 with a DIRTY worktree (not reusable)
+gate: log task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log
+gate:       <store>/task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 4be599237212, 22 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.33/6.92 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/Conformance.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      FORM TRACE base: rows=9;items=9;inCells=9;reparents=9;reclaims=0;applies=1;alive=9;placed=0;screen=1,874.00,646.67,9;offset=-62.00
+
+
+    console.log
+      FORM TRACE at rest: rows=9;items=9;inCells=9;reparents=9;reclaims=0;applies=1;alive=9;placed=0;screen=1,874.00,646.67,9;offset=-62.00
+
+
+    console.log
+      FORM TRACE inserted: rows=10;items=10;inCells=3;reparents=3;reclaims=0;applies=3;alive=10;placed=0;screen=1,420.00,718.00,5;offset=-62.00
+
+
+    console.log
+      FORM TRACE removed: rows=8;items=8;inCells=2;reparents=3;reclaims=0;applies=4;alive=10;placed=0;screen=1,420.00,614.00,5;offset=-62.00
+
+
+    console.log
+      FORM TRACE reordered: rows=9;items=9;inCells=3;reparents=4;reclaims=0;applies=5;alive=10;placed=0;screen=1,420.00,666.00,5;offset=-62.00
+
+
+    console.log
+      FORM TRACE before the cycles: rows=9;items=9;inCells=3;reparents=4;reclaims=0;applies=5;alive=10;placed=0;screen=1,420.00,666.00,5;offset=-62.00
+
+
+    console.log
+      FORM TRACE after the cycles: rows=9;items=9;inCells=1;reparents=4;reclaims=0;applies=6;alive=10;placed=0;screen=1,420.00,666.00,5;offset=-62.00
+
+
+    console.log
+      FORM TRACE scrolled for the cycles: rows=9;items=9;inCells=0;reparents=103;reclaims=100;applies=6;alive=10;placed=0;screen=1,420.00,646.67,4;offset=400.00
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"8E96AF70-CDF7-4ABD-9E6B-B3DD3E0E6EC5"} switch={"nativeId":"09DB77E1-5CEA-49E6-B26F-CB703CA48737"}
+
+
+    console.log
+      FORM COST N=20 form=62ms plain=67ms 10
+
+
+    console.log
+      FORM COST N=50 form=99ms plain=66ms 12
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=1 geometry{offset=-62.00,origin=-62.00,received=0.00,listY=0.00,insetTop=62.00} - m0: measureInWindow 0.0,0.0,338.0,44.0 (-scroll 0.0 = 0.0) vs UIKit 32.0,106.3,338.0,44.0 (off by 106.3 pt)
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ Array(1) ] to deeply equal []
+
+      [0m [90m 1386 |[39m     [90m// have always agreed and a case that cannot see the difference is not worth running.[39m
+       [90m 1387 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1388 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                               [31m[1m^[22m[39m
+       [90m 1389 |[39m     [90m// Eight of the 24 rows are on screen at rest - the Form's box shows a little over[39m
+       [90m 1390 |[39m     [90m// eight 52 pt rows - so eight is the ceiling here, and the guard is that the case[39m
+       [90m 1391 |[39m     [90m// really compared a screenful rather than one or two rows.[39m[0m
+
+
+Test Suites: 2 failed, 1 passed, 3 total
+Tests:       1 failed, 11 passed, 12 total
+Snapshots:   0 total
+Time:        174.115 s
+Ran all test suites matching Form.
+gate: harness:ios:Form FAIL in 175.8 s
+gate: recorded in .gates/task/G24-fix1.jsonl
+
+
+gate: appended the device context to task/G24-fix1/harness+ios+Form-2026-11-09T02-04-06.843Z.log (4 probe(s))
+
+```

@@ -58,7 +58,7 @@
  * measured shapes in `scripts/__tests__/real-input-a11y.test.js`.
  */
 
-import { findAllByDescription } from './uiautomator.mjs';
+import { findByTestId, findAllByDescription } from './uiautomator.mjs';
 
 /**
  * One control's a11y case: what to look for, on which screen, and what its node has to
@@ -123,7 +123,7 @@ import { findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -431,6 +431,36 @@ export const A11Y_CONTROLS = Object.freeze([
     // derived from the interaction, and not a type. The name, the box and the single
     // element are still graded.
   },
+  {
+    id: 'form',
+    component: 'Form',
+    hybridView: 'NitroUiForm',
+    screen: 'form',
+    // What the component page promises (C1): a row with `onPress` is one element carrying
+    // the row's name, not the row's two `Text`s. The label is therefore written on
+    // `Form.Row` itself (`FormScreen.tsx`), which is the element that presses.
+    //
+    // Android keeps the promise: `applyChrome` makes a pressable row one clickable node, and
+    // that node carries the name. It took two things to see that — performing
+    // `ACTION_CLICK` rather than reading `isClickable` as a promise (`HybridNitroUiFormRow`),
+    // and clearing `contentDescription` on the way into the view pool, which React Native's
+    // `prepareToRecycleView` does not do and which let a recycled row keep answering for a
+    // mount that had ended (both fix round 1; the upstream gap is a FOLLOWUPS line).
+    //
+    // iOS does not, measured twice on pair-b (G24 rounds 2 and 3) and unchanged by this
+    // round: the only element with the name is the React Native view the app wrote the label
+    // on, and the list's cell does not answer for the row's name at all — configuring the
+    // cell's label and deriving it on every read give the same XCUITest tree, byte for byte.
+    // That is the debt row below, and the reason this case is not deleted: the day UIKit is
+    // made to answer, the row goes stale.
+    label: 'Row with onPress',
+    role: 'interactive',
+    anchorTestId: 'form-row',
+    // What the row has to be announced as, not what it is: a pressable row is a button
+    // because the row presses. `other` is what the tree reports today, and recording the
+    // measurement here would freeze the bug into the expectation.
+    iosTrait: 'button',
+  },
 ]);
 
 /**
@@ -545,6 +575,13 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  *   all. The one the label reaches announces **"Hosted picker, Hosted picker"** — the
  *   name twice, because the hosted Picker's own label and its `accessibilityLabel`
  *   arrive at the same element. A person hears the name stutter.
+ * - `form`: nothing under the row's `testID` is announced as "Row with onPress" either.
+ *   The only element with the name is the React Native wrapper for the row's own `Text`,
+ *   announced as `other`, and the list's cell does not answer for the row's name — so the
+ *   row is a group of stops with a named one in it, not the one button the Android half
+ *   announces. G24 round 3 measured the same tree with the cell's label derived on read
+ *   instead of stored at configuration time, which rules out the first guess (a stale
+ *   snapshot) and leaves the merge itself unfixed.
  *
  * **The `icon-button` iOS row** came back in G23's fix round, with different numbers, and the
  * reason belongs here: the 44 pt touch target was expected to retire it and did not. Measured on
@@ -623,6 +660,24 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
     matches:
       /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+  },
+  {
+    control: 'form',
+    platform: 'ios',
+    followups:
+      'G24 a11y: a Form row is one button on Android; on iOS its name stays on the wrapper',
+    // Measured twice on pair-b (G24 rounds 2 and 3), byte for byte the same: the only
+    // element carrying the row's name is the React Native view the app put the label on —
+    // which since fix round 1 *is* the row, `Form.Row` itself — announced as `other`, on the
+    // row's box. The list's cell does not answer for the row's name at all, so writing the
+    // cell's label at configuration time and deriving it on every read produce the same tree.
+    // The row presses, the name is where the row is drawn, and what is missing is the merge
+    // into one button element: the cell has to be the leaf that UIKit already made it.
+    //
+    // Anchored on the wrapper being announced as `other`: a cell that starts answering is
+    // no longer this sentence, so the row goes stale and the run says so.
+    matches:
+      /is announced as "Row with onPress" .*\(wrapper: other "Row with onPress"/,
   },
   {
     control: 'icon-button',
@@ -1383,7 +1438,35 @@ export function a11yProblems(control, tree) {
     );
   }
 
-  const node = named[0];
+  // Which node is "the control", when the tree offers more than one answer.
+  //
+  // `named[0]` is tree order, and tree order is not identity. Measured on a long
+  // `real-input:android` session, the Form row's name was carried both by the row and by a
+  // recycled wrapper the screen had re-used, `named[0]` was the latter, and the actionable half
+  // of this rule graded *that* node — so the finding printed a container's box and said nothing
+  // about the row a person actually presses (G24 fix round 1).
+  //
+  // So when the name is on more than one node and the dump can still name the control by its
+  // own `testID`, ask the actionability question of that node. The duplicate above stays a
+  // finding — this decides *which* node is graded, not whether a second one is allowed. With
+  // one named node nothing changes, which is what keeps the other twenty-two controls graded
+  // exactly as they are today.
+  const anchor =
+    named.length > 1 && control.anchorTestId != null
+      ? findByTestId(tree, control.anchorTestId)
+      : undefined;
+  const node =
+    anchor != null &&
+    anchor.bounds.width > 0 &&
+    anchor.bounds.height > 0 &&
+    anchor.scrollable !== 'true' &&
+    isActable(anchor)
+      ? anchor
+      : named[0];
+  const subject =
+    node === named[0]
+      ? `the node that carries "${control.label}"`
+      : `the node under "${String(control.anchorTestId)}"`;
   if (node.scrollable === 'true') {
     // Measured: the only `scrollable="true"` node containing a control is the page's own
     // `ScrollView`, and it is `focusable="true"` as well — so it would satisfy the
@@ -1411,7 +1494,7 @@ export function a11yProblems(control, tree) {
     !hasActableHome(node, tree)
   ) {
     problems.push(
-      `${control.hybridView}: the node that carries "${control.label}" is not ` +
+      `${control.hybridView}: ${subject} is not ` +
         `actionable, and nothing whose box is the control's is either ` +
         `(${describeNode(node)}) — the name sits where a screen reader can stop ` +
         'but nobody can act, which is the split G5 M2 and G6 M3 found by hand. ' +

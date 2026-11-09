@@ -39,6 +39,7 @@ import { ContextMenu } from '../ContextMenu/ContextMenu';
 import { SearchField } from '../SearchField/SearchField';
 import { IconButton } from '../IconButton/IconButton';
 import { Popover } from '../Popover/Popover';
+import { Form } from '../Form/Form';
 import { ButtonGroup } from '../ButtonGroup/ButtonGroup';
 
 /**
@@ -123,6 +124,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [ContextMenu, 'ContextMenu'],
   [Tooltip, 'Tooltip'],
   [Popover, 'Popover'],
+  [Form, 'Form'],
   [ButtonGroup, 'ButtonGroup'],
 ]);
 

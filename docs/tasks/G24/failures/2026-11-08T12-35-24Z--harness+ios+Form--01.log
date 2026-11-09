@@ -1,0 +1,98 @@
+# Failure excerpt — harness:ios:Form
+
+- Ran: 2026-11-08T12:35:24.613Z on code tree `dfda1126217a` at HEAD `a6720fd` (branch `task/G24-form`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios Form`
+- Result: fail, exit 1, 172166 ms
+- Load: start 8.90, end 4.60, median 6.29, max 8.90
+- Device: ios / device `3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646` / lease `G24-n0vyo`
+- Full log: `task/G24-form/harness+ios+Form-2026-11-08T12-35-24.613Z.log` (<store>/task/G24-form/harness+ios+Form-2026-11-08T12-35-24.613Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form measure (E7) › measures a row as the row, before and after a scroll (E7)`
+- `expected [ …(14) ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G24-form/harness+ios+Form-2026-11-08T12-35-24.613Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G24-n0vyo (still live)
+  |   G24-n0vyo                G24          both              pair-b
+  |   G22-p8rhv                G22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.60 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 52 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios Form
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree dfda1126217a, 20 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 8.59/7.48 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G24-form/harness+ios+Form-2026-11-08T12-35-24.613Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui B...
+HARNESS Runner ios ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"CEFED529-279E-4A93-B09E-9053E60355C0"} switch={"nativeId":"89CF84FB-3696-4381-B4F9-9B6607096790"}
+
+
+    console.log
+      FORM COST N=20 form=63ms plain=67ms 10
+
+
+    console.log
+      FORM COST N=50 form=100ms plain=66ms 12
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=14 geometry{offset=-68.00,origin=-68.00,received=0.00,listY=0.00,insetTop=68.00} - m0: measureInWindow 40.0,44.3,340.0,44.0 (-scroll 0.0 = 44.3) vs UIKit 40.0,112.3,340.0,44.0 (off by 68.0 pt) | m1: measureInWindow 40.0,96.3,340.0,44.0 (-scroll 0.0 = 96.3) vs UIKit 40.0,164.3,340.0,44.0 (off by 68.0 pt) | m2: measureInWindow 40.0,148.3,340.0,44.0 (-scroll 0.0 = 148.3) vs UIKit 40.0,216.3,340.0,44.0 (off by 68.0 pt) | m3: measureInWindow 40.0,200.3,340.0,44.0 (-scroll 0.0 = 200.3) vs UIKit 40.0,268.3,340.0,44.0 (off by 68.0 pt) | m4: measureInWindow 40.0,252.3,340.0,44.0 (-scroll 0.0 = 252.3) vs UIKit 40.0,320.3,340.0,44.0 (off by 68.0 pt) | m5: measureInWindow 40.0,304.3,340.0,44.0 (-scroll 0.0 = 304.3) vs UIKit 40.0,372.3,340.0,44.0 (off by 68.0 pt) | m6: measureInWindow 40.0,356.3,340.0,44.0 (-scroll 0.0 = 356.3) vs UIKit 40.0,424.3,340.0,44.0 (off by 68.0 pt) | m7: measureInWindow 40.0,408.3,340.0,44.0 (-scroll 0.0 = 408.3) vs UIKit 40.0,476.3,340.0,44.0 (off by 68.0 pt) | m8: measureInWindow 40.0,460.3,340.0,44.0 (-scroll 0.0 = 460.3) vs UIKit 40.0,528.3,340.0,44.0 (off by 68.0 pt) | m9: measureInWindow 40.0,512.3,340.0,44.0 (-scroll 0.0 = 512.3) vs UIKit 40.0,580.3,340.0,44.0 (off by 68.0 pt) | m10: measureInWindow 40.0,564.3,340.0,44.0 (-scroll 0.0 = 564.3) vs UIKit 40.0,632.3,340.0,44.0 (off by 68.0 pt) | m11: measureInWindow 40.0,616.3,340.0,44.0 (-scroll 0.0 = 616.3) vs UIKit 40.0,684.3,340.0,44.0 (off by 68.0 pt) | m12: measureInWindow 40.0,668.3,340.0,44.0 (-scroll 0.0 = 668.3) vs UIKit 40.0,736.3,340.0,44.0 (off by 68.0 pt) | m13: measureInWindow 40.0,720.3,340.0,44.0 (-scroll 0.0 = 720.3) vs UIKit 40.0,788.3,340.0,44.0 (off by 68.0 pt)
+
+  ● Form measure (E7) › measures a row as the row, before and after a scroll (E7)
+
+    expected [ …(14) ] to deeply equal []
+
+      [0m [90m 867 |[39m     [90m// have always agreed and a case that cannot see the difference is not worth running.[39m
+       [90m 868 |[39m     [36mconst[39m atRest [33m=[39m [36mawait[39m compareRows([32m'at rest'[39m[33m,[39m [35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 869 |[39m     expect(atRest[33m.[39mbad)[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 870 |[39m     expect(atRest[33m.[39mcompared)[33m.[39mtoBeGreaterThanOrEqual([35m10[39m)[33m;[39m
+       [90m 871 |[39m
+       [90m 872 |[39m     [90m// Scrolled. On iOS this is the whole point: the cells move and the rows' Yoga origins do[39m[0m
+
+
+Test Suites: 1 failed, 2 passed, 3 total
+Tests:       1 failed, 91 passed, 92 total
+Snapshots:   0 total
+Time:        170.294 s
+Ran all test suites matching Form.
+
+
+
+```
