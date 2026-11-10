@@ -151,6 +151,9 @@ describe('the iOS a11y rule', () => {
       // The content view's getter forced false, on iOS 27: the wrapper is still listed
       // with its label (XCUITest lists any view with an identifier), so the name check
       // alone passes - what gives it away is the children reached as stops of their own.
+      // Four stops, which is also what the *healthy* component reads once React Native has
+      // published both Texts - so the sentence has to name the thing that actually
+      // separates the two, the unnamed container box between the wrapper and its texts.
       const tree = parseIosA11yLog(
         readFileSync(
           `${__dirname}/fixtures/a11y/ios-context-menu-not-an-element.log`,
@@ -163,22 +166,27 @@ describe('the iOS a11y rule', () => {
       expect(problems[0]).toContain(
         '4 element(s) under "ctx-accessible" are stops'
       );
+      expect(problems[0]).toContain('an unnamed box under the named wrapper');
     });
 
-    it('reports the shipped tree as its recorded debt, and only that', () => {
-      // The shipped code on iOS 27: the wrapper is the element with the label, and the
-      // first Text is still listed under it. Debt, printed every run - and the regression
-      // (the wrapper not an element, four stops) is not covered by the same row.
+    it('reports both shipped readings as its recorded debt, and only those', () => {
+      // The shipped code on iOS 27 reads either 2 stops (the sweep walked the tree before
+      // React Native published the second Text) or 4 (after it), both at the same boxes:
+      // measured a minute apart on the same machine, on trees that differ only in whether
+      // other components landed. Both are the same debt. The regression - the wrapper not
+      // an element - is a third tree, and it is not covered by the row.
       const read = (name) =>
         parseIosA11yLog(
           readFileSync(`${__dirname}/fixtures/a11y/${name}.log`, 'utf8')
         ).get('context-menu');
-      const shipped = checkIosControlA11y(
-        control('context-menu'),
-        read('ios-context-menu')
-      );
-      expect(shipped.failures).toEqual([]);
-      expect(shipped.known).toHaveLength(1);
+      for (const name of ['ios-context-menu', 'ios-context-menu-four-stops']) {
+        const shipped = checkIosControlA11y(
+          control('context-menu'),
+          read(name)
+        );
+        expect(shipped.failures).toEqual([]);
+        expect(shipped.known).toHaveLength(1);
+      }
       const regressed = checkIosControlA11y(
         control('context-menu'),
         read('ios-context-menu-not-an-element')
@@ -187,14 +195,57 @@ describe('the iOS a11y rule', () => {
       expect(regressed.exempt).toBe(false);
     });
 
-    it('excuses exactly two stops of its own, not 12 or 22', () => {
+    it("excuses the wrapper's own Texts at any count, and nothing else", () => {
+      // X22 fix round 1 withdrew the count anchor: 2 and 4 are one finding read at two
+      // moments, so pinning the number pinned a stopwatch. What the row does anchor is the
+      // *membership* of the list - only the two Texts the example puts inside the wrapper -
+      // and the cause the sentence names. Each of those two anchors is proved here, because
+      // either one alone would let a tree through that a person would call broken.
       const [row] = exemptionsFor('context-menu', 'ios');
-      const sentence = (count) =>
+      const stop = (label) => `static text "${label}" at (25, 459.67, 352, 17)`;
+      const grace = stop('Grace Hopper');
+      const body = stop('One element for screen readers, with the menu on it.');
+      const sentence = (count, items, tail) =>
         `NitroUiContextMenu: ${String(count)} element(s) under "ctx-accessible" ` +
-        'are stops of their own (static text "Grace Hopper" at 32,400 300x20)';
-      expect(row.matches.test(sentence(2))).toBe(true);
-      expect(row.matches.test(sentence(12))).toBe(false);
-      expect(row.matches.test(sentence(22))).toBe(false);
+        `are stops of their own (${items}) — ${tail}`;
+      const published =
+        'React Native publishes each Text inside the wrapper as an element of its own';
+      expect(
+        row.matches.test(sentence(2, [grace, grace].join('; '), published))
+      ).toBe(true);
+      expect(
+        row.matches.test(
+          sentence(4, [grace, body, grace, body].join('; '), published)
+        )
+      ).toBe(true);
+      // A third element under the wrapper is a different finding, at any count.
+      expect(
+        row.matches.test(
+          sentence(
+            6,
+            [
+              grace,
+              body,
+              stop('A Pressable that should be its own stop'),
+              grace,
+              body,
+              grace,
+            ].join('; '),
+            published
+          )
+        )
+      ).toBe(false);
+      // And the wrapper-not-an-element sentence, which quotes the unnamed box, is never it.
+      expect(
+        row.matches.test(
+          sentence(
+            4,
+            [grace, body, grace, body].join('; '),
+            'the walk also reaches other "" at (25, 429, 352, 42), an unnamed box ' +
+              'under the named wrapper'
+          )
+        )
+      ).toBe(false);
     });
 
     it('records a Form row that is named only on its wrapper as debt', () => {
