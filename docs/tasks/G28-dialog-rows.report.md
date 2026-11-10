@@ -10,7 +10,7 @@ The confirmation sheet's Android rows are the Expressive segmented row: `Segment
 pass 3 B for Dialog. **Both candidates were built and photographed on the leased device**
 ([segmented](G28-dialog-rows/rows-segmented.png),
 [interactive](G28-dialog-rows/rows-interactive.png)): the segmented one reads as one card inside the
-sheet — 16 dp outer corners carrying the sheet's own radius, 4 dp where rows meet, the notched
+sheet — `CornerLarge`'s 16 dp at the group's outer corners, `CornerExtraSmall`'s 4 dp where rows meet, the notched
 boundary between rows, and a press that morphs the row — while `ListItem(onClick, enabled, …)` is a
 full-bleed row with no group. Nothing but the look separates them: with the interactive row swapped
 in, only the shape assertion moved, the disabled-state and press checks stayed green — the call was
