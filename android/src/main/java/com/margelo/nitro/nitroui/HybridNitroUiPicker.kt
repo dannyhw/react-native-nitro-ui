@@ -73,6 +73,7 @@ import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.nuiOwnVerticalDrags
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -1197,7 +1198,11 @@ private class PickerHost(
           // it is offered and the host offers it the unbounded height that made this
           // variant's box "as tall as the caller wants".
           .fillMaxWidth()
-          .height(WheelHeight),
+          .height(WheelHeight)
+          // A drag that starts on the drum belongs to the drum: inside React Native's
+          // scroll container the page would otherwise intercept it and the wheel would
+          // never turn. See [nuiOwnVerticalDrags].
+          .nuiOwnVerticalDrags(enabled),
       contentAlignment = Alignment.Center,
     ) {
       // `rememberScrollFieldState` requires a positive item count, so an empty choice
