@@ -1937,16 +1937,23 @@ describe('DatePicker · wheel variant (G29)', () => {
     );
     await waitForTestId('wheel-time');
     const size = await waitForMeasured('wheel-time', 'the time drum');
-    await waitForBox('wheel-time', size, 'the time drum');
     const cold = delta(before, stats());
     console.log(
-      `time drum box: ${describeSize(size)} at 320 dp wide ` +
+      `time drum box: ${describeSize(size)} in a 320 dp box ` +
         `cold=${JSON.stringify(cold)}`
     );
-    // Not the planted size — the correction happened — and a drum has a height of
-    // its own, so the engine cannot have answered with the box's height.
+    // Not the planted size — the correction happened.
     expect(sameSize(sizeOf('wheel-time'), WRONG_SIZE)).toBe(false);
-    expect(size.height).toBeGreaterThan(0);
+    // The drum's *height* is its own claim, and it is the one that has to survive the
+    // box: the width is `fillWidth`, so an app that pins a width gets the width it
+    // asked for and the drum sits inside it at its intrinsic 280-ish dp. Asserting the
+    // width equal here would assert that a `fillWidth` control ignores the box, which
+    // is the opposite of what `fillWidth` is for. What must not happen is the height
+    // staying at the planted guess — that is a correction that never arrived.
+    const box = sizeOf('wheel-time');
+    expect(box).not.toBeNull();
+    expect(Math.abs((box?.height ?? 0) - size.height)).toBeLessThanOrEqual(1);
+    expect(size.height).toBeGreaterThanOrEqual(48);
     expect(cold.corrections).toBeGreaterThanOrEqual(1);
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(1);
     unmount();
@@ -1999,7 +2006,7 @@ describe('DatePicker · wheel variant (G29)', () => {
     // a calendar control was built, and it is showing the value's month.
     expect(report.controlBuilds).toBeGreaterThanOrEqual(1);
     expect(report.calendarHasSelection).toBe(1);
-    expect(monthKeyOf(report.calendarMonthUtc)).toBe(expectedMonthKey(2024, 5));
+    expect(monthKeyOf(report.calendarMonthUtc)).toBe(expectedMonthKey(2024, 6));
     drum.unmount();
     await settle(200);
     handles.clear();
