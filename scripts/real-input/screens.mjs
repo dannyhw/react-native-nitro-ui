@@ -19,7 +19,7 @@
  * @file
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'buttongroup'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'buttongroup'|'form'|'listitem'} ScreenId */
 
 /** @type {Readonly<Record<ScreenId, string>>} */
 export const SCREEN_FILE = Object.freeze({
@@ -41,6 +41,7 @@ export const SCREEN_FILE = Object.freeze({
   form: 'example/src/FormScreen.tsx',
   buttongroup: 'example/src/ButtonGroupScreen.tsx',
   stepper: 'example/src/StepperScreen.tsx',
+  listitem: 'example/src/ListItemScreen.tsx',
 });
 
 /**
@@ -172,6 +173,15 @@ export const ECHO = Object.freeze({
   stepperRefusedLast: 'real-input-stepper-refused-last',
   stepperRefusedEvents: 'real-input-stepper-refused-events',
   stepperDisabledEvents: 'real-input-stepper-disabled-events',
+  // G30: a ListItem has no value to hold, so the readings are the press count, the
+  // title of the last row that answered `onPress` (the one check that a tap fired the
+  // *right* row), the counter a tap on a disabled item would move, and the counter for
+  // the item that lives inside a `Form.Row` — whose press has to reach the leaf through
+  // a row that owns the cell's shape and insets (DECISIONS D46 item 2).
+  listItemPresses: 'real-input-listitem-presses',
+  listItemLast: 'real-input-listitem-last',
+  listItemDisabledEvents: 'real-input-listitem-disabled-events',
+  listItemFormPresses: 'real-input-listitem-form-presses',
 });
 
 /**
@@ -281,6 +291,7 @@ export const SCREEN_TAB = Object.freeze({
   iconbutton: { anchor: ECHO.iconButtonValue },
   buttongroup: { anchor: ECHO.buttonGroupPresses },
   stepper: { anchor: ECHO.stepperValue },
+  listitem: { anchor: ECHO.listItemPresses },
   host: { anchor: ECHO.hostValue },
   form: { anchor: ECHO.formScreenEcho },
 });

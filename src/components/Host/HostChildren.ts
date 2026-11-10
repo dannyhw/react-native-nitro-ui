@@ -42,6 +42,7 @@ import { Popover } from '../Popover/Popover';
 import { Form } from '../Form/Form';
 import { ButtonGroup } from '../ButtonGroup/ButtonGroup';
 import { Stepper } from '../Stepper/Stepper';
+import { ListItem } from '../ListItem/ListItem';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -109,7 +110,11 @@ export const HOSTABLE_CONTROLS = new Map<unknown, string>([
  * - **refused until a round measures it** again - the ButtonGroup (G20): its own
  *   Compose `ButtonGroup` opens its overflow menu in a popup of its own, and no round
  *   has measured a second popup inside the Host's shared composition (G20 report,
- *   check 3).
+ *   check 3). The ListItem (G30) is refused for the same reason and with the same
+ *   standing: its row content is a `UIViewRepresentable` / Composable inside the host's
+ *   own, and no round has measured that inside a *shared* composition. It is the leaf an
+ *   app puts in a `Form.Row` or its own list row, where the row already owns the box, so
+ *   nothing in the library needed the answer to get here.
  *
  * The rows are hand-written rather than generated: the registry writes the imports and
  * the allowlist, and `host.test.tsx` holds this table to the manifests' `hostable` flag
@@ -128,6 +133,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [Form, 'Form'],
   [ButtonGroup, 'ButtonGroup'],
   [Stepper, 'Stepper'],
+  [ListItem, 'ListItem'],
 ]);
 
 /**

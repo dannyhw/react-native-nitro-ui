@@ -32,6 +32,7 @@ import PopoverScreen from './PopoverScreen';
 import FormScreen from './FormScreen';
 import ButtonGroupScreen from './ButtonGroupScreen';
 import StepperScreen from './StepperScreen';
+import ListItemScreen from './ListItemScreen';
 // @end-generated
 // `Host` has no manifest (it is a container, not a control), so its screen is the
 // one import the registry does not write.
@@ -60,6 +61,7 @@ type Screen =
   | 'form'
   | 'buttongroup'
   | 'stepper'
+  | 'listitem'
   // @end-generated
   // The shared-composition screen, which is not a control and has no manifest.
   | 'host';
@@ -126,6 +128,7 @@ const TABS: { id: Screen; label: string }[] = [
   { id: 'form', label: 'Form' },
   { id: 'buttongroup', label: 'Groups' },
   { id: 'stepper', label: 'Stepper' },
+  { id: 'listitem', label: 'List items' },
   // @end-generated
   // The shared-`<Host>` screen: real-input taps it (iOS included, where `Host` is the
   // passthrough) and `Host.harness.tsx` measures it. `Host` composes on Android only.
@@ -202,6 +205,7 @@ export default function App() {
         {screen === 'form' ? <FormScreen /> : null}
         {screen === 'buttongroup' ? <ButtonGroupScreen /> : null}
         {screen === 'stepper' ? <StepperScreen /> : null}
+        {screen === 'listitem' ? <ListItemScreen /> : null}
         {/* @end-generated */}
         {screen === 'host' ? <HostScreen /> : null}
       </View>

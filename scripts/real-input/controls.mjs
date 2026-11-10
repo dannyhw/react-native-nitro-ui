@@ -167,6 +167,12 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
       'real taps step the stepper once each, a tap at a bound does nothing, and on iOS a hold repeats',
     screen: 'stepper',
   },
+  {
+    id: 'list-item',
+    title:
+      'a real tap on an item fires its onPress once and highlights the row, a disabled item takes nothing, and a tap inside a Form reaches the item',
+    screen: 'listitem',
+  },
   // @end-generated
 ]);
 

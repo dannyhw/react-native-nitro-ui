@@ -746,6 +746,19 @@ export const DECLARED_FALLBACKS = Object.freeze({
     android: { width: 300, height: 48 },
     ios: { width: 300, height: 34.4 },
   },
+  // `HybridNitroUiListItem.swift` (`fallbackSize`) and `HybridNitroUiListItem.kt`
+  // (`FALLBACK_WIDTH_DP`/`FALLBACK_HEIGHT_DP`), read off those sources.
+  //
+  // A ListItem is `fillWidth` — its width is the row's, so the height is the axis it owns
+  // and `boxRuleFor` compares that alone. The height is the *title-only* rung, which is
+  // the platform's own one-line row: 52 pt measured off `UIListContentView` with a
+  // `.cell()` configuration (G30 early check 1) and Material 3's
+  // `ItemOneLineContainerHeight` of 56 dp (its early check 2). The subtitle rung is a
+  // different number on both platforms and lives in the sizing key, not here.
+  NitroUiListItem: {
+    android: { width: 300, height: 56 },
+    ios: { width: 300, height: 52 },
+  },
 });
 
 /**

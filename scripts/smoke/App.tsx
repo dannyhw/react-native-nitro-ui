@@ -109,6 +109,7 @@ const SMOKE_CONTROLS = [
   'icon-button',
   'button-group',
   'stepper',
+  'list-item',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',

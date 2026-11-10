@@ -25,6 +25,8 @@ import {
   formSwitchValue,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
+  listItemValue,
+  LIST_ITEM_TITLE,
   menuTitle,
   onButtonGroupPress,
   onIconButtonPress,
@@ -381,6 +383,34 @@ export function RnCoreList({ n, value, component }: BenchListProps) {
       </>
     );
   }
+  if (component === 'list-item') {
+    // The floor the brief names: a `View` with two `Text`s — the title and the trailing
+    // value, at the 16 dp inset every other arm's row content is drawn behind. It is the
+    // cheapest thing that can occupy this row and still say "a settings row", and it is
+    // what the ratio is against: the other arms pay for UIKit's / Compose's / Expo's own
+    // row on top of these two text measures.
+    //
+    // The value still has to arrive as a prop, or `update.list-item` would flip a switch
+    // this arm never sees; here it is the second `Text`'s content, the same one write
+    // every other arm takes. The floor takes no press — the `stepper` floor's rule, for
+    // the same reason: an RN `View` has no row highlight to price.
+    return (
+      <>
+        {range(n).map((index) => (
+          <View
+            key={index}
+            testID={`bench-rn-core-list-item-${String(index)}`}
+            style={listItemStyles.row}
+          >
+            <Text numberOfLines={1}>{LIST_ITEM_TITLE}</Text>
+            <Text numberOfLines={1} style={FORM_VALUE_STYLE}>
+              {listItemValue(value)}
+            </Text>
+          </View>
+        ))}
+      </>
+    );
+  }
   return (
     <>
       {range(n).map((index) => (
@@ -469,6 +499,20 @@ const pickerStyles = StyleSheet.create({
  * outline, a divider per segment, and a fill on the chosen one. Any richer and
  * this arm would be drawing its own design rather than the control's.
  */
+/**
+ * The `list-item` floor: the two texts in a row that spaces them the way the other arms'
+ * row content does (UIKit's list cell and Material 3's `ListItem` both put 16 dp on the
+ * leading edge, and the value at the trailing edge).
+ */
+const listItemStyles = StyleSheet.create({
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+});
+
 const segmentedStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',

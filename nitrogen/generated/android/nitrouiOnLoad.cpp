@@ -50,6 +50,8 @@
 #include "views/JHybridNitroUiHostStateUpdater.hpp"
 #include "JHybridNitroUiIconButtonSpec.hpp"
 #include "views/JHybridNitroUiIconButtonStateUpdater.hpp"
+#include "JHybridNitroUiListItemSpec.hpp"
+#include "views/JHybridNitroUiListItemStateUpdater.hpp"
 #include "JHybridNitroUiMenuSpec.hpp"
 #include "views/JHybridNitroUiMenuStateUpdater.hpp"
 #include "JHybridNitroUiPickerSpec.hpp"
@@ -284,6 +286,14 @@ struct JHybridNitroUiButtonGroupSpecImpl: public jni::JavaClass<JHybridNitroUiBu
     return javaPart->getJHybridNitroUiButtonGroupSpec();
   }
 };
+struct JHybridNitroUiListItemSpecImpl: public jni::JavaClass<JHybridNitroUiListItemSpecImpl, JHybridNitroUiListItemSpec::JavaPart> {
+  static constexpr auto kJavaDescriptor = "Lcom/margelo/nitro/nitroui/HybridNitroUiListItem;";
+  static std::shared_ptr<JHybridNitroUiListItemSpec> create() {
+    static const auto constructorFn = javaClassStatic()->getConstructor<JHybridNitroUiListItemSpecImpl::javaobject()>();
+    jni::local_ref<JHybridNitroUiListItemSpec::JavaPart> javaPart = javaClassStatic()->newObject(constructorFn);
+    return javaPart->getJHybridNitroUiListItemSpec();
+  }
+};
 
 void registerAllNatives() {
   using namespace margelo::nitro;
@@ -325,6 +335,8 @@ void registerAllNatives() {
   margelo::nitro::nitroui::views::JHybridNitroUiHostStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiIconButtonSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiIconButtonStateUpdater::registerNatives();
+  margelo::nitro::nitroui::JHybridNitroUiListItemSpec::CxxPart::registerNatives();
+  margelo::nitro::nitroui::views::JHybridNitroUiListItemStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiMenuSpec::CxxPart::registerNatives();
   margelo::nitro::nitroui::views::JHybridNitroUiMenuStateUpdater::registerNatives();
   margelo::nitro::nitroui::JHybridNitroUiPickerSpec::CxxPart::registerNatives();
@@ -507,6 +519,12 @@ void registerAllNatives() {
     "NitroUiButtonGroup",
     []() -> std::shared_ptr<HybridObject> {
       return JHybridNitroUiButtonGroupSpecImpl::create();
+    }
+  );
+  HybridObjectRegistry::registerHybridObjectConstructor(
+    "NitroUiListItem",
+    []() -> std::shared_ptr<HybridObject> {
+      return JHybridNitroUiListItemSpecImpl::create();
     }
   );
 }

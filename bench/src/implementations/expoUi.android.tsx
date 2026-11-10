@@ -24,6 +24,8 @@ import {
   Switch as FormSwitch,
   Text as FormText,
 } from '@expo/ui';
+import { ListItem } from '@expo/ui';
+
 import { useCallback, useEffect, useState } from 'react';
 
 import type { BenchListProps } from '../types';
@@ -38,6 +40,9 @@ import {
   formSwitchValue,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
+  listItemValue,
+  LIST_ITEM_TITLE,
+  onListItemPress,
   menuItems,
   menuTitle,
   onButtonGroupPress,
@@ -335,6 +340,8 @@ export function ExpoUiHostPerControlList({
               <BenchProgress value={value} />
             ) : component === 'button-group' ? (
               <BenchButtonGroup value={value} />
+            ) : component === 'list-item' ? (
+              <BenchListItem value={value} />
             ) : (
               <Switch value={value} onCheckedChange={onValueChange} />
             )}
@@ -418,6 +425,23 @@ function BenchButtonGroup({ value }: { value: boolean }) {
  * under test: a stepped slider draws tick marks neither of the other arms has
  * (T02 review B3).
  */
+/**
+ * `@expo/ui`'s row for this job: its universal `ListItem`, which on this platform is
+ * Material 3's own `ListItem` with a `clickable` modifier (Q10 Appendix A) — the same
+ * Compose row the control under test draws, which is exactly what the ratio asks: the
+ * difference left is the hosting, not the row.
+ */
+function BenchListItem({ value }: { value: boolean }) {
+  return (
+    <ListItem
+      onPress={onListItemPress}
+      trailing={<Text>{listItemValue(value)}</Text>}
+    >
+      <Text>{LIST_ITEM_TITLE}</Text>
+    </ListItem>
+  );
+}
+
 function BenchSlider({ value }: { value: boolean }) {
   return (
     <Slider
@@ -551,6 +575,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
             <BenchProgress key={index} value={value} />
           ) : component === 'button-group' ? (
             <BenchButtonGroup key={index} value={value} />
+          ) : component === 'list-item' ? (
+            <BenchListItem key={index} value={value} />
           ) : (
             <Switch key={index} value={value} onCheckedChange={onValueChange} />
           )

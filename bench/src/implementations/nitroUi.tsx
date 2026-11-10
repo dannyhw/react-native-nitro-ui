@@ -5,6 +5,7 @@ import {
   Form,
   Host,
   IconButton,
+  ListItem,
   Menu,
   Stepper,
   type MenuGroup,
@@ -28,6 +29,9 @@ import {
   onButtonGroupPress,
   ICON_BUTTON_LABEL,
   iconButtonGlyph,
+  listItemValue,
+  LIST_ITEM_TITLE,
+  onListItemPress,
   formRowKind,
   formRowLabel,
   formRowValue,
@@ -385,6 +389,15 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose button-group: a Host refuses it'
       );
     }
+    if (component === 'list-item') {
+      // Not hostable either (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): a row is a
+      // leaf an app puts in a `Form.Row` or its own list row, and no round has measured
+      // this one inside the Host's shared composition. Loud, like `stepper`'s line —
+      // reaching here means a manifest changed without the host arm's list.
+      throw new Error(
+        'nitro-ui-host cannot compose list-item: a Host refuses it'
+      );
+    }
     // Nothing is hostable outside the eight (an RN view, a nested Host): a Host refuses
     // them, so the plan should never ask (`BenchImplementation.components`) and
     // rendering an empty tree here would be a number nobody asked for.
@@ -627,6 +640,29 @@ export function NitroUiList({
             onPress={onButtonGroupPress}
             nuiPerfId={perfMarks ? index : null}
             testID={`bench-nitro-ui-button-group-${String(index)}`}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'list-item') {
+    // The leaf G30 prices: UIKit's own `UIListContentView` row on iOS and Material 3's
+    // `ListItem` content on Android, standalone so it draws its own list insets.
+    // `update.list-item` flips the trailing value (`listItemValue`), which is one text
+    // commit on a row that keeps its box — every slot is capped to one line (DECISIONS
+    // D46), so the sizing key does not move and the cell measures the commit, not a
+    // re-measure.
+    return (
+      <>
+        {range(n).map((index) => (
+          <ListItem
+            key={index}
+            title={LIST_ITEM_TITLE}
+            value={listItemValue(value)}
+            onPress={onListItemPress}
+            nuiPerfId={perfMarks ? index : null}
+            testID={`bench-nitro-ui-list-item-${String(index)}`}
             style={style}
           />
         ))}
