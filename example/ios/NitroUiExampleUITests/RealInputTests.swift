@@ -60,6 +60,7 @@ final class RealInputTests: XCTestCase {
     static let iconButtonTab = "tab-iconbutton"
     static let formTab = "tab-form"
     static let buttonGroupTab = "tab-buttongroup"
+    static let stepperTab = "tab-stepper"
   }
 
   /// The on-screen echoes the checks read (`testID`s from `example/src`).
@@ -108,6 +109,14 @@ final class RealInputTests: XCTestCase {
     static let buttonGroupRefusedEvents = "button-group-refused-events"
     static let buttonGroupDisabledEvents = "button-group-disabled-events"
     static let buttonGroupOverflowDisabled = "button-group-overflow-disabled"
+    static let stepperValue = "real-input-stepper-value"
+    static let stepperEvents = "real-input-stepper-events"
+    static let stepperHoldValue = "real-input-stepper-hold-value"
+    static let stepperHoldEvents = "real-input-stepper-hold-events"
+    static let stepperSparseValue = "real-input-stepper-sparse-value"
+    static let stepperRefusedLast = "real-input-stepper-refused-last"
+    static let stepperRefusedEvents = "real-input-stepper-refused-events"
+    static let stepperDisabledEvents = "real-input-stepper-disabled-events"
     static let dialogLog = "dialog-log"
     static let sheetLog = "sheet-log"
     static let sheetPresses = "sheet-presses"
@@ -473,6 +482,8 @@ final class RealInputTests: XCTestCase {
       A11yCase(id: "button-group", testId: "real-input-button-group",
                label: "Real-input actions",
                tab: Tab.buttonGroupTab, screenAnchor: Echo.buttonGroupPresses),
+      A11yCase(id: "stepper", testId: "real-input-stepper", label: "Real-input stepper",
+               tab: Tab.stepperTab, screenAnchor: Echo.stepperValue),
       A11yCase(id: "hosted-switch", testId: "host-switch-0", label: "Hosted switch 0",
                tab: Tab.hostTab, screenAnchor: Echo.hostValue),
       A11yCase(id: "hosted-slider", testId: "host-slider", label: "Hosted slider",
@@ -5879,6 +5890,244 @@ final class RealInputTests: XCTestCase {
     ) { shown in
       shown == expected
     }
+  }
+
+  /// A real tap on one half of a Stepper moves it exactly one step, a tap on the
+  /// half at its bound moves it nothing, and a **held** half keeps stepping.
+  ///
+  /// The first two are the pair Android measures too. The third is the reason this
+  /// check is not a copy of it: hold-to-repeat is the one behaviour iOS has and
+  /// Android does not (`docs/components/stepper.md` says so in as many words), and
+  /// it is a property of SwiftUI's own control — the Binding is written once per
+  /// repeat, and each write is a step and an event. Nothing inside the app can see
+  /// a repeat: `Stepper.harness.tsx` steps through `nuiTestStep`, which is one step
+  /// by construction. Only a finger held down asks the question, so this is the
+  /// check that proves the documented difference is a difference and not an
+  /// oversight — and its Android twin proves the opposite half, that a hold there
+  /// steps once.
+  ///
+  /// The halves are aimed at by fraction: the control is one element whose box covers
+  /// both, so `fingerTap` on it lands between them.
+  func testRealInputStepper() throws {
+    try goToTab(Tab.stepperTab, showing: Echo.stepperValue)
+    let live = try required("real-input-stepper", as: "the real-input stepper")
+    let held = try required("real-input-stepper-hold", as: "the hold stepper")
+    let refusing = try required(
+      "real-input-stepper-refusing", as: "the refusing stepper")
+    let disabled = try required(
+      "real-input-stepper-disabled", as: "the disabled stepper")
+    XCTAssert(
+      live.isHittable && held.isHittable,
+      "both enabled steppers should be touchable before any tap is delivered"
+    )
+    // SwiftUI puts the minus half on the left and the plus half on the right; 0.15
+    // and 0.85 are inside each half and clear of the divider between them.
+    let minusX: CGFloat = 0.15
+    let plusX: CGFloat = 0.85
+
+    // 1. At rest, so every claim below is about a number that moved.
+    XCTAssertEqual(
+      try read(Echo.stepperEvents), "0",
+      "no step should be reported before a touch is delivered"
+    )
+    XCTAssertEqual(
+      try read(Echo.stepperValue), "1",
+      "the stepper should start where React put it"
+    )
+    XCTAssertEqual(
+      "\(try read(Echo.stepperRefusedLast)) \(try read(Echo.stepperRefusedEvents))",
+      "- 0",
+      "the refusing stepper should have been asked for nothing yet"
+    )
+    XCTAssertEqual(
+      try read(Echo.stepperDisabledEvents), "0",
+      "the counter the disabled stepper reports into should start at zero, so a stray "
+        + "delivery is a number that moved rather than a callback nobody saw"
+    )
+    XCTAssertEqual(
+      try read(Echo.stepperHoldValue), "5",
+      "the hold fixture should start in the middle of its range, with room to repeat"
+    )
+
+    // 2. Each half, one tap, one step. Exact, because one event per tap is the claim.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper",
+        echo: Echo.stepperValue,
+        expected: "2",
+        as: "the real-input stepper",
+        waitingFor: "the real tap on the plus half",
+        atFractionX: plusX
+      ),
+      "2",
+      "one real tap on the plus half should step to the maximum"
+    )
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper",
+        echo: Echo.stepperValue,
+        expected: "1",
+        as: "the real-input stepper",
+        waitingFor: "the real tap on the minus half",
+        atFractionX: minusX
+      ),
+      "1",
+      "one real tap on the minus half should step back"
+    )
+    XCTAssertEqual(
+      try read(Echo.stepperEvents), "2",
+      "two taps should report two steps — one event per tap, not one per half"
+    )
+
+    // 3. The bounds. Down to 0, refused another descent; up to 2, refused another
+    //    ascent. SwiftUI disables the half at a bound itself, so the event counter is
+    //    the read: a control that reported a step onto the value it already holds is
+    //    the failure, and it is invisible in the value echo.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper",
+        echo: Echo.stepperValue,
+        expected: "0",
+        as: "the real-input stepper",
+        waitingFor: "the tap that reaches the minimum",
+        atFractionX: minusX
+      ),
+      "0",
+      "a third tap downward should reach the minimum"
+    )
+    var eventsAtBottom = try read(Echo.stepperEvents)
+    live.atFraction(minusX).fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.stepperEvents, timeout: 1.5) { $0 != eventsAtBottom }, eventsAtBottom,
+      "a tap on the half at the minimum should be refused"
+    )
+    for _ in 0..<3 {
+      live.atFraction(plusX).fingerTap()
+      usleep(250_000)
+    }
+    XCTAssertEqual(
+      try read(Echo.stepperValue), "2",
+      "three taps upward should stop at the maximum rather than past it"
+    )
+    let eventsAtTop = try read(Echo.stepperEvents)
+    live.atFraction(plusX).fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.stepperEvents, timeout: 1.5) { $0 != eventsAtTop }, eventsAtTop,
+      "a tap on the half at the maximum should be refused too"
+    )
+
+    // 4. The hold, on the fixture with room for it: one press, several steps.
+    //    `>= 7` from 5 says at least *two* steps came out of one held press, which no
+    //    single tap can do, and it does not care how fast this simulator repeats.
+    held.atFraction(plusX).press(forDuration: 1.5)
+    let afterHold = readUntil(Echo.stepperHoldValue, timeout: 4) {
+      Int($0) ?? 0 >= 7
+    }
+    XCTAssert(
+      Int(afterHold) ?? 0 >= 7,
+      "one 1.5 s hold on the plus half should repeat past one step — the value ended at "
+        + "\(afterHold), which is one step (no repeat) at best. SwiftUI's hold-to-repeat "
+        + "is what `docs/components/stepper.md` promises on iOS, and this is the only "
+        + "check that can ask for it"
+    )
+    // 4b. What a repeat is *worth*: the same press, counted. Every repeat is one step and
+    //     one `onValueChange`, so the event counter has moved exactly as far as the value
+    //     has, from the 5 the fixture starts at. The line above says a repeat happened;
+    //     this is the half it cannot say — a half that emitted twice per step repeats at
+    //     the same speed and passes `>= 7` with twice the events. Both echoes move in one
+    //     callback, so they are read together, after the last repeat has had time to
+    //     arrive: comparing a settled value with a count still in flight would be a
+    //     disagreement this control does not have.
+    usleep(400_000)
+    let heldValue = Int(try read(Echo.stepperHoldValue)) ?? -1
+    let heldEvents = Int(try read(Echo.stepperHoldEvents)) ?? -1
+    XCTAssertEqual(
+      heldEvents, heldValue - 5,
+      "a hold should report one event per step — the value moved from 5 to \(heldValue) "
+        + "(\(heldValue - 5) steps) while \(heldEvents) events were reported, so the two "
+        + "echoes of one callback disagree about what a repeat is worth"
+    )
+    XCTAssertGreaterThanOrEqual(
+      heldEvents, 2,
+      "the hold should have reported at least two events — the value alone proves the "
+        + "steps happened, and an echo that stayed at \(heldEvents) while they did is a "
+        + "control taking the steps without telling React about them"
+    )
+
+    // 5. The refusing parent: React never moves `value`, so every step is refused and
+    //    has to snap back. The oracle is what the *next* tap asks for — a stepper that
+    //    had kept the refused value would ask for 3, not for 2 again.
+    for request in ["1", "2"] {
+      XCTAssertEqual(
+        try tapUntilValue(
+          "real-input-stepper-refusing",
+          echo: Echo.stepperRefusedEvents,
+          expected: request,
+          as: "the refusing stepper",
+          waitingFor: "refused request \(request)",
+          atFractionX: plusX
+        ),
+        request,
+        "refused request \(request) should reach onValueChange"
+      )
+      XCTAssertEqual(
+        try read(Echo.stepperRefusedLast), "2",
+        "refused request \(request) should ask for 2 — one step above the value React "
+          + "kept; a stepper that had adopted the refused one would ask for 3"
+      )
+    }
+    XCTAssertEqual(
+      try read(Echo.stepperValue), "2",
+      "taps on the refusing stepper should leave the live one alone"
+    )
+
+    // 6. The disabled stepper takes nothing, on either half.
+    for half in [minusX, plusX] {
+      disabled.atFraction(half).fingerTap()
+    }
+    XCTAssertEqual(
+      readUntil(Echo.stepperDisabledEvents, timeout: 1.5) { $0 != "0" }, "0",
+      "a real tap on either half of the disabled stepper should report no step"
+    )
+
+    // 7. The barrier: the live stepper is at its maximum, so the barrier presses the
+    //    half that can still move — pressing the inert one and calling the result a
+    //    lost tap is exactly the misread this suite exists to avoid.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper",
+        echo: Echo.stepperValue,
+        expected: "1",
+        as: "the real-input stepper",
+        waitingFor: "the barrier tap on the live stepper",
+        atFractionX: minusX
+      ),
+      "1",
+      "the live stepper, tapped on the half that can still move, should still step"
+    )
+
+    // 8. A range that does not end on its step. `0...1.05` by `0.1` is the one shape
+    //    where SwiftUI must supply a stride itself — handing it `step: 0.1` would stop it
+    //    at 1.0 and make `maximumValue` unreachable — and the stride it supplies is **1**,
+    //    ten of this control's steps. The write may contribute a direction and nothing
+    //    else, so one tap from the minimum owes `0.1`. The value rules cannot catch the
+    //    other reading, because `1` *is* a legal value on that range: `quantize` nods at
+    //    it, React renders it, and nothing disagrees. Only a finger on a range with an
+    //    off-grid top asks the question, which is what this fixture is for
+    //    (`NitroUiStepperBinding.swift` has the rule the host test runs).
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-stepper-sparse",
+        echo: Echo.stepperSparseValue,
+        expected: "0.1",
+        as: "the sparse-range stepper",
+        waitingFor: "the first real tap on its plus half",
+        atFractionX: plusX
+      ),
+      "0.1",
+      "one plus tap on 0...1.05 by 0.1 should move one tenth, not SwiftUI's own stride "
+        + "of 1 — the control took the amount of the write instead of its direction"
+    )
   }
 
   /// A Switch's own state, as iOS answers it: the toggle's `value`, not the echo.

@@ -32,6 +32,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
   type TextFieldHandle,
@@ -167,6 +168,45 @@ export function BookmarkButton({
 }
 // #endregion
 
+// #region stepper
+export function QuantityPicker({
+  quantity,
+  onQuantityChange,
+}: {
+  quantity: number;
+  onQuantityChange: (next: number) => void;
+}) {
+  return (
+    <View style={{ alignItems: 'center', flexDirection: 'row', gap: 12 }}>
+      <Text style={{ fontSize: 20, minWidth: 32, textAlign: 'center' }}>
+        {quantity}
+      </Text>
+      <Stepper
+        accessibilityLabel="Quantity"
+        maximumValue={99}
+        minimumValue={1}
+        onValueChange={onQuantityChange}
+        value={quantity}
+      />
+    </View>
+  );
+}
+// #endregion
+
+// #region stepper-uncontrolled
+export function BrightnessStep({ onStep }: { onStep: (next: number) => void }) {
+  return (
+    <Stepper
+      accessibilityLabel="Brightness"
+      defaultValue={5}
+      maximumValue={10}
+      minimumValue={1}
+      onValueChange={onStep}
+    />
+  );
+}
+// #endregion
+
 // #region button-group
 export function FormatToolbar({
   spellcheck,
@@ -226,6 +266,23 @@ export function SizePicker() {
       options={['Small', 'Medium', 'Large']}
       selectedIndex={index}
       onChange={(event) => setIndex(event.index)}
+    />
+  );
+}
+
+export function SizeRadio() {
+  const [index, setIndex] = useState(0);
+
+  // `variant="radio"` keeps every option on screen: Android draws a Material radio
+  // group, one row per choice; iOS has no radio-group picker style, so it draws the
+  // menu above.
+  return (
+    <Picker
+      accessibilityLabel="Size"
+      onChange={(event) => setIndex(event.index)}
+      options={['Small', 'Medium', 'Large']}
+      selectedIndex={index}
+      variant="radio"
     />
   );
 }

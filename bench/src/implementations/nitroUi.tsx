@@ -6,6 +6,7 @@ import {
   Host,
   IconButton,
   Menu,
+  Stepper,
   type MenuGroup,
   Picker,
   Progress,
@@ -51,6 +52,9 @@ import {
   rowStyle,
   segmentedOptions,
   sliderValue,
+  stepperValue,
+  STEPPER_LABEL,
+  onStepperChange,
   stackStyle,
   textFieldValue,
 } from './shared';
@@ -364,6 +368,14 @@ export function NitroUiHostList({
         'nitro-ui-host cannot compose form: a Host refuses a container'
       );
     }
+    if (component === 'stepper') {
+      // Not hostable either (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`), so the plan
+      // never asks this arm for it and reaching here is a manifest that moved under
+      // the arm's list — the icon-button's failure, for the same reason.
+      throw new Error(
+        'nitro-ui-host cannot compose stepper: a Host refuses it'
+      );
+    }
     if (component === 'button-group') {
       // Not hostable (`HostChildren.ts`'s `UNHOSTABLE_CONTROLS`): its Compose
       // `ButtonGroup` opens its own overflow popup, and no round has measured a second
@@ -543,6 +555,30 @@ export function NitroUiList({
             testID={`bench-nitro-ui-slider-${String(index)}`}
             value={sliderValue(value)}
             onValueChange={onSliderChange}
+            nuiPerfId={perfMarks ? index : null}
+            style={style}
+          />
+        ))}
+      </>
+    );
+  }
+  if (component === 'stepper') {
+    // The control G25 is asked to price: SwiftUI's `Stepper`, and on Android the two
+    // Material 3 tonal icon buttons that stand in for a control Material does not
+    // have. `update.stepper` flips `value` (`stepperValue`), which is the one write
+    // every arm can be charged for identically — it goes through the event-count
+    // handshake here, which is the thing this library costs.
+    return (
+      <>
+        {range(n).map((index) => (
+          <Stepper
+            key={index}
+            accessibilityLabel={STEPPER_LABEL}
+            maximumValue={10}
+            minimumValue={0}
+            onValueChange={onStepperChange}
+            testID={`bench-nitro-ui-stepper-${String(index)}`}
+            value={stepperValue(value)}
             nuiPerfId={perfMarks ? index : null}
             style={style}
           />

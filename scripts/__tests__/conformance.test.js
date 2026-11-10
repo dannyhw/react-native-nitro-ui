@@ -198,6 +198,7 @@ describe('coverage', () => {
       'SearchField',
       'SegmentedControl',
       'Slider',
+      'Stepper',
       'Switch',
       'TextField',
       'Tooltip',
@@ -1272,10 +1273,10 @@ describe('the debt ledger', () => {
       matchedKeys: [],
       a11yPlatform: 'android',
     });
-    // The Android sweep, the platform it was told about: three Android rows matched
+    // The Android sweep, the platform it was told about: four Android rows matched
     // nothing. The iOS rows for the same controls are not in this count — an Android run
     // never read those trees, so it has no evidence that they still reproduce.
-    expect(debt.length).toBe(3);
+    expect(debt.length).toBe(4);
     expect(debt.join('\n')).toContain(
       'the android entry for "segmented-control"'
     );
@@ -1562,6 +1563,12 @@ describe('the debt, as the matrix sees it', () => {
       'Menu|recycle-reset',
       'Slider|a11y-name-on-focusable-node',
       'SegmentedControl|a11y-name-on-focusable-node',
+      // G25's Stepper: the merged row is actionable through Compose's custom
+      // `SetProgress`, which a uiautomator dump cannot show, so the Android sweep
+      // sees a named node with no standard action on it. The Slider's and
+      // SegmentedControl's cell, on a fifth control — and the device suite performs
+      // the action, so the cell records the flag, not a missing behaviour.
+      'Stepper|a11y-name-on-focusable-node',
       'Picker|a11y-name-on-focusable-node',
       'ContextMenu|a11y-name-on-focusable-node',
       'Form|a11y-name-on-focusable-node',
@@ -2077,6 +2084,7 @@ describe('the a11y sweep, against a fake device', () => {
         'checkbox',
         'iconbutton',
         'buttongroup',
+        'stepper',
         'host',
         'textfield',
         'searchfield',
@@ -2098,11 +2106,11 @@ describe('the a11y sweep, against a fake device', () => {
         'a11y:debt',
       ]);
       expect(result.covered.length).toBe(A11Y_CONTROLS.length);
-      // A tree where every control is named on one actionable node: only the four rows
+      // A tree where every control is named on one actionable node: only the five rows
       // whose finding was about something else can still be outstanding, and here they are
       // stale — which is the same proof as above, over the whole table.
       expect(result.matched).toEqual([]);
-      expect(result.stale.length).toBe(4);
+      expect(result.stale.length).toBe(5);
     });
   });
 

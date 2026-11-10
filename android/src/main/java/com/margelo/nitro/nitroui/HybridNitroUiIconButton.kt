@@ -462,9 +462,17 @@ private class VariantColorCache<Value : Any> {
 private val PressColors = VariantColorCache<IconButtonColors>()
 private val ToggleColors = VariantColorCache<IconToggleButtonColors>()
 
-/** The press form's colours for [tint] (an ARGB int, or `null` for the scheme's). */
+/**
+ * The press form's colours for [tint] (an ARGB int, or `null` for the scheme's).
+ *
+ * `internal` and not `private` because the Stepper composes its two halves out of
+ * them (`HybridNitroUiStepper.kt`): Android has no stepper control (D38 item 1), and
+ * that brief says the composition reuses IconButton's colours, container and touch
+ * target rather than carrying a second copy of them - a second copy is two controls
+ * that drift, which is also why [iconButtonShapes] is shared.
+ */
 @Composable
-private fun iconButtonColors(
+internal fun iconButtonColors(
   variant: IconButtonVariant,
   tint: Int?,
 ): IconButtonColors {
@@ -567,9 +575,12 @@ private object IconButtonShapeCache {
   }
 }
 
-/** The press form's `shapes` overload for the rung and corner. */
+/**
+ * The press form's `shapes` overload for the rung and corner. Shared with the Stepper
+ * for [iconButtonColors]'s reason.
+ */
 @Composable
-private fun iconButtonShapes(
+internal fun iconButtonShapes(
   scale: IconButtonScale,
   corner: IconButtonCorner,
 ): IconButtonShapes {
@@ -628,6 +639,25 @@ private fun outlinedBorder(
     }
   return BorderStroke(base?.width ?: NITRO_UI_OUTLINED_BORDER_WIDTH, color)
 }
+
+/**
+ * The chain one icon-button half is laid out with: the platform's minimum interactive
+ * size *outside* the rung's container token, in that order.
+ *
+ * The order is not a style choice. `Modifier.size(40.dp)
+ * .minimumInteractiveComponentSize()` cannot grow past what the child asked for, so a
+ * 40 dp container swapped this way stops being a 48 dp touch target.
+ *
+ * Shared with the Stepper (`HybridNitroUiStepper.kt`), whose Android half is two of
+ * these - Material has no stepper control (D38 item 1), and its brief asks for
+ * IconButton's container, colours and touch target rather than a second copy.
+ */
+@Composable
+internal fun nitroUiIconButtonContainer(
+  scale: IconButtonScale,
+  width: IconButtonWidth,
+  leading: Modifier = Modifier,
+): Modifier = leading.minimumInteractiveComponentSize().size(scale.containerSize(width))
 
 /**
  * The hairline width Material strokes an outlined icon button with, used only when
@@ -727,9 +757,7 @@ private class IconButtonHost(
     // token, so a 40 dp control is still a 48 dp target while the painted container
     // stays the token. Swapping the two would clip the target — `Modifier.size(40.dp)
     // .minimumInteractiveComponentSize()` cannot grow past what the child asked for.
-    val containerSize = scale.containerSize(model.width)
-    val controlModifier =
-      labelModifier.minimumInteractiveComponentSize().size(containerSize)
+    val controlModifier = nitroUiIconButtonContainer(scale, model.width, labelModifier)
     val content: @Composable () -> Unit = {
       // The glyph alone: the composable's own Box centres its content, and the
       // container's size and shape are the composable's business now.

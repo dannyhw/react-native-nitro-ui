@@ -11,5 +11,5 @@
   "benchUnsuffixed": false,
   "smoke": true,
   "realInput": true,
-  "realInputTitle": "real tap opens the menu, a real tap on a row reports it, and an unmount while open leaks no popup"
+  "realInputTitle": "real tap opens the menu, a real tap on a row reports it, an unmount while open leaks no popup, and the radio variant echoes a real row tap"
 }
