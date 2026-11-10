@@ -167,3 +167,15 @@ whichever layer stops it. `G28/mutations.json` and the summary above now say so.
 two user-facing lines.
 
 ## Gates (fix round 1)
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2010 tests / 85 suites | `21fb7597f1e6` | 3 m 55 s | start 6.0 / med 107.8 / max 158.4 |
+| `harness:ios` | **PASS** | 592 tests / 31 suites + isolated 6 tests / 3 suites | `21fb7597f1e6` (ios tree) | 14 m 46 s | start 10.6 / med 5.9 / max 17.5 |
+| `harness:android` | **PASS** | 648 tests / 31 suites + isolated 6 tests / 3 suites | `21fb7597f1e6` (android tree) | 18 m 34 s | start 5.1 / med 7.1 / max 31.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **PASS** | — | `21fb7597f1e6` (android tree) | 61 m 57 s | start 6.0 / med 4.4 / max 20.9 |
+| `harness:android:Dialog` | stale | 2 failed of 31 tests / 1 suites | dce81fed31bc (not this tree) | 45.1 s | start 12.8 / med 10.5 / max 12.8 |
+| `harness:android:Dialog:--background` | stale | — | dce81fed31bc (not this tree) | 1.4 s | start 5.8 / med 5.8 / max 5.8 |
+
+`need --for review`: **review is satisfied on this code tree** — nothing owed. The two `harness:android:Dialog` rows are this round's red proof and the CLI mistake before it, each keyed to the tree it actually ran on; a filtered run satisfies nothing but its own name. `real-input:ios` is not owed: this round changed no iOS code, and the harness file both platforms share is green on both.
