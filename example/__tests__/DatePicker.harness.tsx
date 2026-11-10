@@ -1905,3 +1905,230 @@ describe('DatePicker · G5', () => {
     second.unmount();
   });
 });
+
+describe('DatePicker · wheel variant (G29)', () => {
+  it('measures the time drum from a poisoned fallback', async () => {
+    // The sizing claim for the one wheel Android draws: `wheel` + `time` is
+    // `TimeScroll`, and the box it lands at is the one *it* measured, not the
+    // guess the engine would have used. The configuration is poisoned first, so
+    // whatever arrives has to be a correction, and the correction is counted.
+    //
+    // The number is logged rather than hard-coded: this is the measurement the
+    // G29 report quotes, and a fixture here would only be able to prove that the
+    // device had not changed. What is asserted is the two things that must hold
+    // whatever the number turns out to be — it is not the planted size, and the
+    // host was laid out at the size the composition reported.
+    if (Platform.OS !== 'android') {
+      console.log('time drum: Android case - iOS has had a wheel since G5');
+      return;
+    }
+    poisonConfigurations([sizingKey('wheel', 'time')]);
+    const before = stats();
+    const { unmount } = await render(
+      <DatePicker
+        mode="time"
+        variant="wheel"
+        defaultValue={new Date(2024, 5, 15, 9, 20)}
+        testID="wheel-time"
+        hybridRef={captureHybrid('wheel-time')}
+        style={{ width: 320 }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-time');
+    const size = await waitForMeasured('wheel-time', 'the time drum');
+    await waitForBox('wheel-time', size, 'the time drum');
+    const cold = delta(before, stats());
+    console.log(
+      `time drum box: ${describeSize(size)} at 320 dp wide ` +
+        `cold=${JSON.stringify(cold)}`
+    );
+    // Not the planted size — the correction happened — and a drum has a height of
+    // its own, so the engine cannot have answered with the box's height.
+    expect(sameSize(sizeOf('wheel-time'), WRONG_SIZE)).toBe(false);
+    expect(size.height).toBeGreaterThan(0);
+    expect(cold.corrections).toBeGreaterThanOrEqual(1);
+    expect(cold.cachedSizes).toBeGreaterThanOrEqual(1);
+    unmount();
+  });
+
+  it('draws the calendar for a date wheel, because there is no date drum', async () => {
+    // `variant="wheel"` changes the widget only where Material has one to change
+    // it to. In `mode="date"` there is no wheel calendar to draw, so the wheel
+    // picker and the inline picker are the same grid — and the check that proves it
+    // is that the two measure the same box at the same width. A drum would be far
+    // shorter than a calendar, so a wheel that grew drums would go red here rather
+    // than quietly shipping a control nobody asked for.
+    //
+    // Mounted one after the other, not side by side: both are `fillWidth` and 512 dp
+    // tall, and two calendars stacked would put the second one off-screen, where its
+    // box would say nothing about either of them.
+    //
+    // Android's claim: on iOS `wheel` + `date` really is a wheel, and it measures
+    // nothing like the graphical calendar, so asserting equality there would assert
+    // the opposite of what iOS does.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'date wheel: Android case - iOS draws a real wheel for a date, not a calendar'
+      );
+      return;
+    }
+    poisonConfigurations([
+      sizingKey('wheel', 'date'),
+      sizingKey('inline', 'date'),
+    ]);
+    const tree = (variant: 'wheel' | 'inline', testId: string) => (
+      <DatePicker
+        mode="date"
+        variant={variant}
+        defaultValue={new Date(2024, 5, 15)}
+        testID={testId}
+        hybridRef={captureHybrid(testId)}
+        style={{ width: 320 }}
+      />
+    );
+
+    const drum = await render(tree('wheel', 'wheel-date'), { timeout: 20000 });
+    await waitForTestId('wheel-date');
+    const wheelSize = await waitForMeasured('wheel-date', 'the date wheel');
+    await waitForBox('wheel-date', wheelSize, 'the date wheel');
+    const report = reportOf('wheel-date');
+    console.log(`date wheel box: ${describeSize(wheelSize)}`);
+    expect(sameSize(sizeOf('wheel-date'), WRONG_SIZE)).toBe(false);
+    // The calendar it is meant to be, rather than a drum that happens to be tall:
+    // a calendar control was built, and it is showing the value's month.
+    expect(report.controlBuilds).toBeGreaterThanOrEqual(1);
+    expect(report.calendarHasSelection).toBe(1);
+    expect(monthKeyOf(report.calendarMonthUtc)).toBe(expectedMonthKey(2024, 5));
+    drum.unmount();
+    await settle(200);
+    handles.clear();
+
+    const inline = await render(tree('inline', 'wheel-date'), {
+      timeout: 20000,
+    });
+    await waitForTestId('wheel-date');
+    const inlineSize = await waitForMeasured(
+      'wheel-date',
+      'the inline calendar'
+    );
+    console.log(
+      `date wheel vs inline: ${describeSize(wheelSize)} vs ${describeSize(inlineSize)}`
+    );
+    expect(sameSize(wheelSize, inlineSize)).toBe(true);
+    inline.unmount();
+  });
+
+  it('sends nothing from a disabled time drum', async () => {
+    // The seam cannot be reached by a finger here any more than anywhere else, so
+    // "disabled" is asserted where it is assertable: the drum neither presents nor
+    // moves nor reports. A wheel that answered a disabled seam would move the app
+    // through a control the app said was closed.
+    const PINNED = localMs(2026, 5, 15, 9, 20);
+    const { unmount } = await render(
+      <DatePicker
+        mode="time"
+        variant="wheel"
+        value={new Date(PINNED)}
+        disabled
+        onChange={recordChange('wheel-locked')}
+        testID="wheel-locked"
+        hybridRef={captureHybrid('wheel-locked')}
+        style={{ width: 320 }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-locked');
+    await waitForDisplayed('wheel-locked', PINNED, 'the pinned time');
+
+    handles.get('wheel-locked')?.nuiTestPresent();
+    handles.get('wheel-locked')?.nuiTestSelect(2027, 0, 15, 14, 5);
+    await settle(400);
+    expect(reportOf('wheel-locked').presented).toBe(false);
+    expect(displayedOf('wheel-locked')).toBe(PINNED);
+    expect(eventLog).toEqual([]);
+    unmount();
+  });
+
+  it('reverts a time the parent refuses, and reports the next roll of it', async () => {
+    // The handshake on the drum: the parent keeps sending 09:20, so after a roll
+    // to 14:05 the picker is showing 09:20 again — which the tap-twice oracle can
+    // see without reading a single row. A drum that left 14:05 painted would make
+    // the second roll a no-op, and the log would be one line instead of two.
+    const PARENT = localMs(2026, 5, 15, 9, 20);
+    const ROLLED = localMs(2026, 5, 15, 14, 5);
+    const { unmount } = await render(
+      <DatePicker
+        mode="time"
+        variant="wheel"
+        value={new Date(PARENT)}
+        onChange={recordChange('wheel-refused')}
+        testID="wheel-refused"
+        hybridRef={captureHybrid('wheel-refused')}
+        style={{ width: 320 }}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('wheel-refused');
+    await waitForDisplayed('wheel-refused', PARENT, 'the parent’s time');
+    expect(eventLog).toEqual([]);
+
+    handles.get('wheel-refused')?.nuiTestSelect(2026, 5, 15, 14, 5);
+    const first = await waitForEvents(1);
+    expect(first).toEqual([`wheel-refused:${String(ROLLED)}`]);
+    // Reverted: the instant the picker holds is the parent's again.
+    await waitForDisplayed('wheel-refused', PARENT, 'the revert');
+
+    handles.get('wheel-refused')?.nuiTestSelect(2026, 5, 15, 14, 5);
+    const second = await waitForEvents(2);
+    expect(second[1]).toBe(`wheel-refused:${String(ROLLED)}`);
+    expect(displayedOf('wheel-refused')).toBe(PARENT);
+    unmount();
+  });
+
+  it('leaves nothing behind when the drum becomes a field again', async () => {
+    // A variant change is a remount, and this is the half a wheel cannot cheat at:
+    // the drum is a pager with a scroll position, and the field it becomes has no
+    // drum in it at all. So the box is the field's own and not the drum's, the size
+    // under the new key is a measured one rather than the poisoned guess, no roll
+    // survives as an event, and the instant the new mount shows is the one React
+    // sent it.
+    poisonConfigurations([
+      sizingKey('wheel', 'time'),
+      sizingKey('compact', 'time'),
+    ]);
+    const VALUE = localMs(2024, 5, 15, 9, 20);
+    const tree = (variant: 'wheel' | 'compact') => (
+      <DatePicker
+        mode="time"
+        variant={variant}
+        value={new Date(VALUE)}
+        onChange={recordChange('wheel-remount')}
+        testID="wheel-remount"
+        hybridRef={captureHybrid('wheel-remount')}
+        style={{ width: 320 }}
+      />
+    );
+
+    const drum = await render(tree('wheel'), { timeout: 20000 });
+    await waitForTestId('wheel-remount');
+    const drumSize = await waitForMeasured('wheel-remount', 'the drum');
+    expect(eventLog).toEqual([]);
+    drum.unmount();
+    await settle(200);
+    handles.clear();
+
+    const field = await render(tree('compact'), { timeout: 20000 });
+    await waitForTestId('wheel-remount');
+    const fieldSize = await waitForMeasured('wheel-remount', 'the field');
+    await settle(400);
+    console.log(
+      `wheel to compact: ${describeSize(drumSize)} -> ${describeSize(fieldSize)}`
+    );
+    expect(sameSize(fieldSize, drumSize)).toBe(false);
+    expect(sameSize(sizeOf('wheel-remount'), WRONG_SIZE)).toBe(false);
+    expect(eventLog).toEqual([]);
+    expect(displayedOf('wheel-remount')).toBe(VALUE);
+    field.unmount();
+  });
+});
