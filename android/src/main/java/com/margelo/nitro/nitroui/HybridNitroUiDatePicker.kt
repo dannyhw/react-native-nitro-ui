@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -131,6 +132,17 @@ internal class DatePickerModel : NitroUiModel() {
    * to snapshot state reaches the UI (the Switch and SegmentedControl do the same).
    */
   var displayed by mutableStateOf(0.0)
+
+  /**
+   * A request to roll the `wheel` + `time` drums to a pair, from `nuiTestSelect`.
+   *
+   * The same shape as `HybridNitroUiPicker`'s `wheelRequest`, for the same reason: the
+   * hook arrives on a UI-thread post and the drums live in the composition, so the hook
+   * leaves a request for the composition to turn into an animated scroll. What it must
+   * not do is write the model directly - a pick on this variant *is* a roll that comes
+   * to rest, and a hook that skips the roll never exercises the roll.
+   */
+  var timeWheelRequest by mutableStateOf<TimeWheelRequest?>(null)
 
   /** `!disabled`, spelled positively where a composable wants it. */
   var enabled by mutableStateOf(true)
@@ -251,6 +263,7 @@ internal class DatePickerModel : NitroUiModel() {
   override fun reset() {
     presentedSnapshot = false
     displayed = 0.0
+    timeWheelRequest = null
     enabled = true
     tintColor = null
     accessibilityLabel = null
@@ -1007,6 +1020,56 @@ private class DatePickerHost(
    */
   private val twentyFourHour: Boolean = android.text.format.DateFormat.is24HourFormat(context)
 
+  /**
+   * The `wheel` + `time` drums while that composition holds them, and null at every
+   * other moment of this view's life; [timeActive] is whether a finger is on the wheel
+   * or one of its drums is still turning.
+   *
+   * Back-references, written from the composition and cleared with the mount, because
+   * the props pass has to be able to move a state object that lives in a slot table -
+   * `HybridNitroUiPicker`'s `wheelState`/`wheelActive` are the same pair for the same
+   * reason, and [seatTimeDrumsFromModel] is its `syncWheelRow`.
+   */
+  var timeHourDrum: ScrollFieldState? = null
+  var timeMinuteDrum: ScrollFieldState? = null
+  var timePeriodDrum: ScrollFieldState? = null
+  var timeActive: State<Boolean>? = null
+
+  /**
+   * Put the drums on the instant this control shows, if they are not on it already.
+   *
+   * [afterUpdate] calls this for a batch that *moved* [DatePickerModel.displayed], and
+   * only for one. The reason is the race `docs/components/picker.md` records and
+   * `syncTimeWheel`'s own `LaunchedEffect` loses: a refused pick writes the new instant
+   * and then the parent's back inside one frame, the composition only ever *sees* the
+   * parent's, the key never changes, and the effect never runs - so the drums stay on
+   * the refused pair, and the next rest reads a pair the control does not hold and
+   * reports nothing at all. The composition cannot see that write; the props pass is
+   * where the write happens.
+   *
+   * Refused while [timeActive] holds, and refused for a batch that left the instant
+   * alone, because writing a drum that is moving is `requestScrollToPage`: it stops the
+   * scroll in progress and snaps home, which would cancel a roll the user is having and
+   * report nothing. The seat then belongs to the rest that roll arrives at - whose tail
+   * already puts the drums on `displayed` - or to the next batch after it.
+   *
+   * A no-op when no wheel is composed, which is every other variant and mode.
+   */
+  fun seatTimeDrumsFromModel() {
+    val hour = timeHourDrum ?: return
+    val minute = timeMinuteDrum ?: return
+    if (timeActive?.value == true) {
+      return
+    }
+    seatTimeDrums(
+      twentyFourHour,
+      hour,
+      minute,
+      timePeriodDrum,
+      timeOfDayOf(model, model.displayed),
+    )
+  }
+
   @Composable
   override fun Component(model: DatePickerModel) {
     val tint = model.tintColor
@@ -1112,11 +1175,13 @@ private class DatePickerHost(
    * Why the drums are drawn here instead of by `TimeScroll`, and what the settle costs, is
    * in [syncTimeWheel]. What matters here is that the *rows* are Material's own drum rows
    * ([NuiWheelRow], the same one a Picker's wheel paints), that the drums are named by
-   * Material's own localised `m3c_time_picker_*` descriptions rather than invented ones, so
-   * a screen reader hears the same words it hears from a stock wheel in every locale, and
-   * that the drums share the box rather than overflow it: `weight(1f, fill = false)` up
-   * front and a width cap after it means a wheel in a 320 dp box gets three narrower drums
-   * instead of a column the caller cannot see.
+  * Material's own localised `m3c_time_picker_hour_selection`/`_minute_selection` rather
+  * than invented ones, so a screen reader hears the same words it hears from a stock wheel
+  * in every locale. The AM/PM column has no Material description to borrow - Material's own
+  * meridiem control is a toggle, with a toggle's description - so it is named by the two
+  * Material-spelled values it holds. And that the drums share the box rather than overflow
+  * it: `weight(1f, fill = false)` up front and a width cap after it means a wheel in a
+  * 320 dp box gets three narrower drums instead of a column the caller cannot see.
    *
    * The height is this widget's own claim, stated rather than asked for: a drum is a pager
    * and a pager fills whatever height it is offered, which under this component's
@@ -1303,6 +1368,19 @@ private class DatePickerHost(
                 touching.value
             }
           }
+        // The host's back-references, taken in the composition rather than in an effect:
+        // `afterUpdate` can land before the next frame has run any effect of this mount,
+        // and the drums it has to reach exist only in a slot table. See
+        // [DatePickerHost.seatTimeDrumsFromModel] for what it uses them for, and
+        // `HybridNitroUiPicker`'s wheel for the same two lines.
+        remember(hourState, minuteState, periodState) {
+          this@DatePickerHost.timeHourDrum = hourState
+          this@DatePickerHost.timeMinuteDrum = minuteState
+          this@DatePickerHost.timePeriodDrum = periodState
+        }
+        remember(active) {
+          this@DatePickerHost.timeActive = active
+        }
         syncTimeWheel(model, twentyFourHour, hourState, minuteState, periodState, active)
         TimeWheel(
           model = model,
@@ -1718,6 +1796,17 @@ private val TimeWheelHeight = 120.dp
 private val TimeWheelGap = 16.dp
 
 /**
+ * One request to roll the time wheel to [hour]:[minute], tagged with the [serial] that
+ * makes it this request rather than a repeat of the last one. See
+ * [DatePickerModel.timeWheelRequest].
+ */
+internal class TimeWheelRequest(
+  val hour: Int,
+  val minute: Int,
+  val serial: Int,
+)
+
+/**
  * The `wheel`'s drums, held by *this* composable rather than by a Material widget.
  *
  * `TimeScroll` is 1.5's wheel, and it is the obvious thing to draw - which is what G29 did
@@ -1763,6 +1852,35 @@ private fun syncTimeWheel(
     val wanted = timeOfDayOf(model, shown)
     pushed.value = wanted
     seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted)
+  }
+  // A request from `nuiTestSelect`: this variant has no row to press, so the hook asks
+  // for the roll a pick here *is* - the drums turning and coming to rest - and the rest
+  // below emits, exactly as a finger's does. Consumed before the scroll rather than
+  // after it: the effect is keyed on the drum states too, and a request left standing is
+  // re-run by the next new state object, which `options`-sized change while this roll is
+  // still coasting would produce, undoing the re-seat that same composition is doing.
+  val request = model.timeWheelRequest
+  LaunchedEffect(hourState, minuteState, periodState, request) {
+    if (request != null) {
+      if (model.timeWheelRequest === request) {
+        model.timeWheelRequest = null
+      }
+      // All three at once. `active` is the drums' *or*, so starting them one after
+      // another would leave a frame in which none of them is scrolling - a rest, in the
+      // middle of a roll, and an event for a pair the user is not standing on.
+      val hour =
+        launch {
+          hourState.animateScrollToOption(if (twentyFourHour) request.hour else request.hour % 12)
+        }
+      val minute = launch { minuteState.animateScrollToOption(request.minute) }
+      val period =
+        periodState?.let { drum ->
+          launch { drum.animateScrollToOption(if (request.hour >= 12) 1 else 0) }
+        }
+      hour.join()
+      minute.join()
+      period?.join()
+    }
   }
   // One report per rest, on the rule the Picker's drum shares: a finger on the wheel or a
   // drum still turning is "active", and the pair the drums stand for when neither is true
@@ -2248,6 +2366,9 @@ class HybridNitroUiDatePicker(
   override fun afterUpdate() {
     val minimum = model.minimum
     val maximum = model.maximum
+    // The instant this control was showing when the batch arrived, for the same reason
+    // the Picker takes it: only a batch that *moves* it has a row to put on a drum.
+    val shownBefore = model.displayed
     // The value, the default and the two bounds can all land in one batch in any order,
     // so none of them is interpreted until the batch is complete - an instant outside the
     // range only means something once the range it belongs to is known (core.md section
@@ -2298,6 +2419,12 @@ class HybridNitroUiDatePicker(
     if (!model.enabled && model.presented) {
       model.setPresented(false)
     }
+    // The drums follow an instant they were not part of choosing, and only such one -
+    // see [DatePickerHost.seatTimeDrumsFromModel] for the race that makes this the
+    // props pass's job, and for the batch and the roll it must keep its hands off.
+    if (model.displayed != shownBefore) {
+      host.seatTimeDrumsFromModel()
+    }
     // A batch can move the displayed instant without any rendered change (React
     // confirming what native already picked), and the report must not go stale; the call
     // itself costs two comparisons when nothing moved.
@@ -2307,6 +2434,12 @@ class HybridNitroUiDatePicker(
 
   override fun prepareForRecycle() {
     host.tag = null
+    // The drums belonged to the composition that is about to go, and a recycled host
+    // that still held them could write a pager nothing is drawing.
+    host.timeHourDrum = null
+    host.timeMinuteDrum = null
+    host.timePeriodDrum = null
+    host.timeActive = null
     // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
     // marked the recycle: clearing it here would hide that mark.
     // Back to the policy the reset variant implies, and it has to be said here rather
@@ -2331,6 +2464,10 @@ class HybridNitroUiDatePicker(
 
   override fun onDropView() {
     model.onChange = null
+    host.timeHourDrum = null
+    host.timeMinuteDrum = null
+    host.timePeriodDrum = null
+    host.timeActive = null
     // The other half of the leak rule, and the reason `presented` is composed rather than
     // tracked: `drop()` disposes the composition, and a `Dialog` composed by a disposed
     // composition is gone with it. Nothing of this mount survives in a window, a listener
@@ -2367,9 +2504,26 @@ class HybridNitroUiDatePicker(
     // already where the model lives, rather than paying for a queue round trip the perf
     // contract forbids. Never `sync`: JS must not wait on the UI thread.
     runOnUi {
-      model.applyUserSelection(model.resolveTestSelection(year, month, day, hour, minute))
+      val target = model.resolveTestSelection(year, month, day, hour, minute)
+      // The time wheel has no row to press and no dial to turn: a pick on this variant
+      // *is* its drums rolling and resting, so the hook asks the composition for that
+      // roll and lets the rest at the end of it emit, exactly as
+      // `HybridNitroUiPicker`'s `nuiTestSelect` does for its drum. Every other variant
+      // (the calendar, the clock, the dialog's halves) applies its selection the way its
+      // own widget does. Either way the event comes from [DatePickerModel.applyUserSelection]
+      // at a rest, never from here.
+      if (model.mode == "time" && model.variant == "wheel" && model.enabled) {
+        val pair = timeOfDayOf(model, target)
+        timeWheelRequestSerial += 1
+        model.timeWheelRequest = TimeWheelRequest(pair.first, pair.second, timeWheelRequestSerial)
+      } else {
+        model.applyUserSelection(target)
+      }
     }
   }
+
+  /** Counts `nuiTestSelect` rolls for this mount; see [DatePickerModel.timeWheelRequest]. */
+  private var timeWheelRequestSerial = 0
 
   /** Open the `compact` field's dialog, through the same entry point the press uses. */
   override fun nuiTestPresent() {

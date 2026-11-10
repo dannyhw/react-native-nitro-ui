@@ -186,9 +186,15 @@ Android's `wheel` reads a pick at a **rest**, not as it turns. A drum names the 
 its snap line continuously, so the dial's rule ("the fields moved, so somebody picked")
 would price a roll from 09:20 to 14:05 at fifty-odd events, each with its own event count.
 The rule is kept and the trigger replaced: the time is read when the drums have come to
-rest, one rest one report, and the write-back that reverts a refused pick hangs off the same
-rest — so a snap-back is the widget moving its own drums home rather than a repaint from
-here. The rest is the wheel's own, on both of this library's wheels and in one helper: a
+rest, one rest one report. The write-back that reverts a refused pick is **not** that rest:
+it is an instant `requestScrollToPage` on the drums, asked for where the value is decided —
+on the props pass, right after the reconcile that reverts the instant. A refused pick can
+write the new instant and the parent's back inside one frame, and an effect keyed on the
+instant then never sees the change it was waiting for, which would leave the refused pair on
+the drums and the next roll reporting nothing (`Picker variant="wheel"` documents the same
+race, and answers it the same way). The rest's own tail re-seats the drums too, so a roll
+that lands on a value the app refuses is home again by the time the finger has left. The
+rest is the wheel's own, on both of this library's wheels and in one helper: a
 finger on the drum or a drum still turning is *active*, and a drum's scroll flag falls when
 its own snap animation finishes — so the report lands after the pointer is up and after the
 coasting has ended, never on a timer. (A quiet period is what this used to be, and a loaded
@@ -233,8 +239,8 @@ A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 Marc
 
 ## Limits
 
-- **Android's wheel is a time wheel** (`docs/tasks/G29-android-wheels.report.md` measured
-  it): `variant: 'wheel'` with `mode: 'time'` draws the drums above — Material's
+- **Android's wheel is a time wheel**: `variant: 'wheel'` with `mode: 'time'` draws the
+  drums above — Material's
   `ScrollField`, the widget Material builds its own `TimeScroll` out of, drawn one per
   field so the settle has a scroll state to read — and `variant: 'wheel'` in `date` or
   `datetime` renders the inline picker, because Material 3 has no wheel calendar to draw —
