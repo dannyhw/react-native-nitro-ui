@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
+import kotlin.math.max
 
 /**
  * Keep a vertical drag that *starts on* this node with the node, for the whole gesture.
@@ -55,6 +57,17 @@ import androidx.compose.ui.unit.dp
  * tells app developers so rather than leaving them to find the dead patch of screen. It is
  * also why the request is not made for a [enabled] control: a drum that cannot roll has no
  * claim on the gesture, and there the page keeps it.
+ *
+ * The claim is on the *vertical* half of the gesture, and the hand back is part of it. The
+ * request has to be made on the down — waiting to see which way the finger goes is exactly
+ * the delay the page's interception beats — so the direction is decided by the first move
+ * past touch slop instead: a drag that leaves sideways is a page turn, a drawer or a
+ * swipeable row, a gesture with no claim on a drum at all, and the disallow comes back off
+ * there and the ancestors get it. Without that line the drum would take every gesture that
+ * starts on it, which quietly makes a wheel unusable inside a pager or beside a drawer. The
+ * vertical component of such a drag is under touch slop by definition (the decision is that
+ * first past-slop move, and a drum row is several times slop), so handing it back moves no
+ * row and reports nothing.
  *
  * [touching], when the caller passes one, is this node's own answer to "is a finger on the
  * wheel" — set on the down and cleared on the up, the *cancel* included. It is here rather
@@ -88,13 +101,29 @@ internal fun Modifier.nuiOwnVerticalDrags(
       // The `Initial` pass, and `requireUnconsumed = false`: this only listens, so the
       // pager underneath still receives the whole stream. What it does between listening
       // is the one thing the pager cannot do for itself.
-      awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      val slop = viewConfiguration.touchSlop
       touching?.value = true
       view.parent?.requestDisallowInterceptTouchEvent(true)
+      var handedSideways = false
       try {
         var rolling = true
         while (rolling) {
           val event = awaitPointerEvent(PointerEventPass.Initial)
+          if (!handedSideways) {
+            val change =
+              event.changes.firstOrNull { pointerChange ->
+                pointerChange.pressed
+              }
+            if (change != null) {
+              val sideways = abs(change.position.x - down.position.x)
+              val along = abs(change.position.y - down.position.y)
+              if (max(sideways, along) >= slop && sideways > along) {
+                handedSideways = true
+                view.parent?.requestDisallowInterceptTouchEvent(false)
+              }
+            }
+          }
           rolling = event.changes.any { change -> change.pressed }
         }
       } finally {
