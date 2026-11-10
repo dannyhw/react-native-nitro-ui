@@ -45,11 +45,11 @@ active while a finger is on it or its own `isScrollInProgress` is up, and the re
 stands on when neither is true. The refused-pick write-back hangs off the same rest, so a
 snap-back is the widget moving home, not this file repainting it.
 
-`tintColor` reaches the selected row and the centre band; unselected rows keep Material's
-content colour, the one thing on a wheel it cannot take. `variant="wheel"` in `date`/`datetime`
-stays the inline calendar — Material has no wheel calendar, and a drum of days would be our
-control in Material's paint. It is the one place `variant` means something different per
-platform, stated in `date-picker.md`'s Limits.
+`tintColor` reaches the row the drum is stopped on, through `selectedContentColor`; the rows
+above and below keep Material's content colour, the one thing on a wheel it cannot take.
+`variant="wheel"` in `date`/`datetime` stays the inline calendar — Material has no wheel
+calendar, and a drum of days would be our control in Material's paint. It is the one place
+`variant` means something different per platform, stated in `date-picker.md`'s Limits.
 
 `TimeScroll` keeps its rows out of the accessibility tree, so the value travels as
 `stateDescription` on one node per drum: no rows to compare a reported value with, and no
@@ -181,10 +181,12 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
   the bench plan has one `mount.picker` cell and no `variant` knob (`rg wheel bench/src` is
   empty), so a wheel cell is a bench-host change (D15) rather than a run flag. No number is
   quoted here for that reason.
-- `nuiTestSelect` on a DatePicker writes the selection (`applyUserSelection`) without moving
-  its drums, so a drum roll is only reachable by a finger. Picker gained a drum-shaped seam
-  for exactly this (`PickerModel.wheelRequest`, animated like a real row press); DatePicker
-  has no equivalent, which is why its per-row proof is a real-input one.
+- `nuiTestSelect` on a DatePicker wrote the selection (`applyUserSelection`) without moving
+  its drums, so a drum roll was only reachable by a finger — the seam could not show a drum
+  left on a refused time. Fix round 3 gave it the drum-shaped seam Picker already had
+  (`DatePickerModel.timeWheelRequest`, animated like the roll a pick here is), so the
+  harness's refused-time case moves the drums now. The row-reading proof is still a
+  real-input one, for the reason in the next line.
 - both wheels: a drum's rows are absent from the a11y tree on both platforms, so "the row
   shown is the value reported" can only be checked through the app's own echo.
 - `TimeScroll`: no settle to subscribe to; if Material ever exposes one, the 180 ms window
@@ -200,9 +202,11 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
 - device state left behind, for whoever leases pair-b next: `emulator-5570` still carries an
   `adb reverse tcp:8080` that this task did not create (this task's own `tcp:8293` was removed
   before the lease was released, and no debug-host preference or `cmd uimode` was ever set).
-- tooling: `real-input:android --control <one>` still runs the whole a11y sweep (≈10 of the
-  ≈15 minutes) unless `NUI_SKIP_A11Y_SWEEP=1`; a filtered red-proof run would rather not pay
-  for it, and the flag is undocumented outside the script.
+- tooling: `real-input:android --control <one>` runs the whole a11y sweep (≈10 of the
+  ≈15 minutes) on every run, filtered or not. A filtered red-proof run would rather not pay
+  for it; the `NUI_SKIP_A11Y_SWEEP` escape hatch that let it was removed in fix round 3
+  (review), because a gate recorded as PASS must mean the same sweep on every machine. The
+  cheaper sweep for filtered runs is the open half of this line.
 - tooling: `gate.mjs export`'s failure excerpt names the failing test but not the assertion line
   above it — the iOS `XCTAssertLessThanOrEqual failed:` text is in the stored log (line 32 of the
   red filtered run) and quoted here, but not in the committed excerpt, so committed evidence is a
