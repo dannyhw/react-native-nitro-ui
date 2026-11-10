@@ -20,8 +20,11 @@ import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.TimePickerDialog
+import androidx.compose.material3.TimePickerShapes
 import androidx.compose.material3.TimePickerState
+import androidx.compose.material3.TimeScroll
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -1099,14 +1102,33 @@ private class DatePickerHost(
         is24Hour = twentyFourHour,
       )
       syncTimePicker(model, state)
-      TimePicker(
-        state = state,
-        modifier = Modifier.nuiControlSemantics(
-          label = model.accessibilityLabel,
-          value = DatePickerFieldText.format(mode, shown),
-          enabled = model.enabled,
-        ),
-      )
+      // The wheel and the clock are the same control with the same two fields, drawn
+      // two ways: `TimeScroll` is 1.5's wheel (Q8 Appendix E pass 3 A), and both take
+      // a `TimePickerState`, so the value, the clamps and the handshake behind them
+      // are one code path - `syncTimePicker`, unchanged. What differs is only the
+      // widget, and the 12/24-hour convention, which comes from the device either way
+      // ([twentyFourHour]).
+      if (model.variant == "wheel") {
+        TimeScroll(
+          state = state,
+          shapes = TimePickerDefaults.shapes(),
+          modifier = Modifier.nuiControlSemantics(
+            label = model.accessibilityLabel,
+            value = DatePickerFieldText.format(mode, shown),
+            enabled = model.enabled,
+          ),
+          colors = TimePickerDefaults.vibrantColors(),
+        )
+      } else {
+        TimePicker(
+          state = state,
+          modifier = Modifier.nuiControlSemantics(
+            label = model.accessibilityLabel,
+            value = DatePickerFieldText.format(mode, shown),
+            enabled = model.enabled,
+          ),
+        )
+      }
     } else {
       val yearRange = remember(model.minimum, model.maximum, shown) { model.dateYearRange() }
       val selectable = model.rememberSelectableDates()
