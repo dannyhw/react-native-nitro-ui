@@ -555,6 +555,10 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     // Back to a search field's own traits: the model is shared with TextField, and its
     // defaults are a text field's.
     applySearchPresets()
+    // What the reset left the keyboard as, read off the model after the fact: the harness
+    // cannot read between this and the next owner's first prop write, which would mask a
+    // reset that kept the previous owner's keyboard.
+    resetKeyboard = "\(model.keyboardType)/\(model.autoCapitalize)/\(model.autoCorrect)"
     // The control outlives the mount (the hosting controller is the expensive part the
     // pool keeps), so its text and its placeholder go with the model's - the
     // placeholder returns to UIKit's own, whatever the previous row asked for.
@@ -666,7 +670,10 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     }
   }
 
+  /// The keyboard `prepareForRecycle` last reset to, for `nuiTestLifetimeReport`.
+  private var resetKeyboard = "never"
+
   func nuiTestLifetimeReport() throws -> String {
-    return host.lifetimeReport()
+    return "\(host.lifetimeReport()) resetKeyboard=\(resetKeyboard)"
   }
 }

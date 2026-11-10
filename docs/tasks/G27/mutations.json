@@ -57,7 +57,7 @@
       "mutation": "MUTATION B — the keyboard is the one thing that survives the pool: `reset()` keeps the previous owner's three values",
       "before": "    model.keyboardType = \"default\"\\n    model.autoCapitalize = \"none\"\\n    model.autoCorrect = true",
       "after": "    val keptKeyboard = model.keyboardType\\n    val keptCapitalisation = model.autoCapitalize\\n    val keptAutoCorrect = model.autoCorrect\\n    …\\n    model.keyboardType = keptKeyboard (and the other two)",
-      "run": "harness:android:SearchField — FAIL, 1 of 16 (26.8 s)",
+      "run": "harness:android:SearchField — PASS, 16 of 16 (stayed green: the hole the note names; fix round 1 closes it below)",
       "redTests": [],
       "note": "Recorded because it is a hole, not a proof: with every prop always passed (D7b), the second owner's own keyboard props are applied on mount, so the recycled field is correct whatever `reset()` does. The recycle assertions in the harness therefore document the invariant rather than prove the reset. Closing it needs a read taken between `reset()` and the first prop write, which the harness cannot ask for from JS."
     },
