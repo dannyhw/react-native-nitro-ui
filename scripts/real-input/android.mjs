@@ -5598,6 +5598,74 @@ const CHECKS = {
       `the second roll moved the drum again ("${firstRow}" then "${secondRow}")`,
       secondRow !== firstRow
     );
+
+    // 11. The same drum inside a *horizontal* scroller has to give that scroller its
+    //     gesture back (G29 fix round). `nuiOwnVerticalDrags` asks the ancestors to stand
+    //     down on the pointer's *down* — waiting to see which way the finger goes is the
+    //     delay the page's interception beats — so the direction is decided by the first
+    //     move past touch slop, and a drag that leaves sideways hands the ask back. This is
+    //     the only shape that can show the hand-back, and the evidence is the drum's own
+    //     bounds: they move left exactly when the scroller takes the swipe.
+    //
+    //     Red proof: delete the `handedSideways` release in `NitroUiWheelDrag.kt`, so the
+    //     drum keeps every gesture that starts on it, and the drum does not move: the
+    //     swipe is eaten by a control that has no use for it.
+    const sideLabel = 'Real-input wheel in a scroller';
+    const sideDrum = await positionWheel(t, sideLabel, [ECHO.wheelEvents]);
+    const sideBefore = t.requireControl(sideLabel).bounds;
+    const eventsBefore = t.requireEcho(ECHO.wheelEvents);
+    // A swipe of most of the drum's width, purely horizontal, over 300 ms: past slop by a
+    // mile, slow enough that the scroller's own interception runs on the move that decides
+    // the axis, and short enough to stay inside the drum's box at both ends.
+    const travel = Math.round(Math.min(sideBefore.width * 0.7, 600));
+    await t.swipePx(
+      sideBefore.cx,
+      sideBefore.cy,
+      sideBefore.cx - travel,
+      sideBefore.cy,
+      300
+    );
+    const sideAfter = t.requireControl(sideLabel).bounds;
+    const moved = sideBefore.x1 - sideAfter.x1;
+    t.log.note(
+      `sideways swipe: ${String(travel)} px across the drum moved it ` +
+        `${String(moved)} px (x1 ${String(sideBefore.x1)} -> ${String(sideAfter.x1)}) ` +
+        `and the wheel reported ${eventsBefore} -> ` +
+        `${String(t.requireEcho(ECHO.wheelEvents))} changes`
+    );
+    t.log.check(
+      `a sideways swipe on the drum is handed back to the scroller it sits in ` +
+        `(the drum moved ${String(moved)} px of a ${String(travel)} px drag)`,
+      moved >= 40
+    );
+    t.log.checkEquals(
+      'and the swipe the drum gave back reported no roll',
+      t.requireEcho(ECHO.wheelEvents),
+      eventsBefore
+    );
+    // Handing the gesture back must not cost the drum its own: a vertical fling on this
+    // very drum still rolls it, which is the whole reason the disallow exists.
+    const sideIndexBefore = t.requireEcho(ECHO.wheelIndex);
+    const sideBox = t.requireControl(sideLabel).bounds;
+    const pad = Math.round(sideBox.height * 0.12);
+    await t.swipePx(
+      sideBox.cx,
+      sideBox.y2 - pad,
+      sideBox.cx,
+      sideBox.y1 + pad,
+      130
+    );
+    const rolled = t.echoWithin(
+      ECHO.wheelEvents,
+      (value) => value !== eventsBefore,
+      8000
+    );
+    t.log.check(
+      `the drum under that scroller still answers a vertical fling ` +
+        `(changes ${eventsBefore} -> ${String(rolled)}, index ` +
+        `${sideIndexBefore} -> ${String(t.requireEcho(ECHO.wheelIndex))})`,
+      rolled !== eventsBefore
+    );
   },
 
   /**

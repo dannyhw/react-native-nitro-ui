@@ -555,6 +555,41 @@ export default function PickerScreen() {
           </Text>
         </View>
 
+        {/* G29: the same drum inside a *horizontal* scroller, which is the only shape
+            that can show what `nuiOwnVerticalDrags` gives back. The drum disallows its
+            ancestors' interception on the down (a page would otherwise eat the roll), and
+            the fix round's rule is that a drag whose first move past touch slop is
+            sideways hands that disallow back — so a swipe across this drum must move the
+            *scroller*, not the drum. `scripts/real-input/android.mjs` reads this row's
+            bounds either side of such a swipe.
+
+            Android-only, and deliberately: the drum is Android's, the check is Android's,
+            and the iOS screen keeps the exact tree its geometry assertions were written
+            against. The drum's width is stated rather than stretched because a horizontal
+            scroller offers its children unbounded width — that is the whole point — and a
+            `fillWidth` question there has no answer to take. */}
+        {Platform.OS === 'android' ? (
+          <View style={styles.row}>
+            <Text style={[styles.label, { color: ink.ink }]}>
+              Wheel in a side-scroller — swipe it sideways (Android)
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={styles.sideScroller}>
+                <Picker
+                  options={WHEEL_OPTIONS}
+                  variant="wheel"
+                  defaultSelectedIndex={0}
+                  onChange={countWheelChange}
+                  accessibilityLabel="Real-input wheel in a scroller"
+                  testID="real-input-wheel-scroller"
+                  style={{ width: 280 }}
+                />
+                <View style={styles.scrollerSpacer} />
+              </View>
+            </ScrollView>
+          </View>
+        ) : null}
+
         <Text style={[styles.section, { color: ink.muted }]}>
           Too wide for its box (fits it, C1)
         </Text>
@@ -611,6 +646,18 @@ const styles = StyleSheet.create({
   },
   row: {
     gap: 6,
+  },
+  // The row inside the horizontal `ScrollView`: side by side, so the spacer really is
+  // somewhere the scroller can go, and centred so the drum sits where a drum sits.
+  sideScroller: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Wider than the screen minus the drum, so the content overflows by enough that a
+  // handed-back swipe has somewhere to be seen going.
+  scrollerSpacer: {
+    width: 420,
+    height: 8,
   },
   label: {
     fontSize: 15,
