@@ -627,3 +627,32 @@ covers a focused field. The orchestrator decided S6b's questions:
 6. **No virtualized native List** with React-rendered rows (Q10 question B): the docs point long lists to FlashList
    and Legend List, which work with nitro-ui controls in their rows. A data-template native List is reconsidered only
    on demand. Q10 question C (a `ListItem` row-content control) is decided after Form ships.
+
+## D46 — ListItem: build the row-content leaf (2026-11-10)
+
+Form and Section shipped (G24), so Q10's question C is decided: **build `ListItem`**, a plain leaf control under the
+existing sizing system, drawn by the platforms' own row content: `UIListContentView` with a
+`UIListContentConfiguration` on iOS (`.cell()`, `.subtitleCell()`, `.valueCell()`), and Material 3's `ListItem`
+content slots on Android (headline, supporting, overline, leading, trailing). It is what an app puts inside a
+`Form.Row` (or any row of its own, a FlashList row included) so a settings screen reads like the platform's without
+React Native `Text` approximating it.
+
+1. **Scope of v1:** title, subtitle, a trailing value, a leading icon (`systemImage` / `androidIcon`, G19's path), a
+   trailing disclosure chevron, `disabled`, and an optional `onPress` with the platform's row highlight. No
+   accessories that are controls (a `Switch` in a row stays React Native's, beside the leaf).
+2. **Inside `Form.Row`** it must not double the row's own shape, padding or press: the row owns the shape (D45), the
+   leaf owns the content. Standalone, it draws its own padding at the platform's list metrics.
+3. The build starts with early checks (G30's brief) because `UIListContentView`'s self-sizing and Compose `ListItem`'s
+   minimum heights decide the sizing design.
+
+## D47 — Checkbox on iOS draws a checkmark, not a switch (owner, 2026-11-10)
+
+iOS has no checkbox (`CheckboxToggleStyle` is iOS-unavailable), and `Checkbox` has rendered a switch-style `Toggle`
+there (D38 item 1). The owner found it confusing: on iOS a `Checkbox` looked exactly like a `Switch`. Decided:
+
+1. **iOS draws the system's checkmark glyphs**, as Reminders and Notes checklists do: a SwiftUI `Toggle` with its
+   own `ToggleStyle` drawing SF Symbols (`checkmark.circle.fill` / `circle`, or `checkmark.square.fill` / `square`),
+   tinted with the accent colour. It is still the platform's `Toggle` with Apple's own symbols, so D38 item 1's "no
+   imitation" rule holds: nothing is hand-drawn.
+2. **`iosStyle: 'circle' | 'square' | 'switch'`, default `'circle'`** (the iOS idiom). `'switch'` keeps the old look.
+3. `indeterminate` gets an iOS rendering in the glyph styles (`minus.circle.fill` / `minus.square.fill`).

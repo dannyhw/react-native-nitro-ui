@@ -1,0 +1,148 @@
+{
+  "task": "G27",
+  "how": "One source mutation applied to the working tree, the named suite run against it, then the file restored before the next row (X14/X15's convention: `before` is the shipped source the row was run against and `after` the text that replaced it). Device rows ran on lease G27-ul745, pair-b (`iPhone Air` / iOS 27 and emulator-5570 / API 35, Metro 8293); the filtered gate names satisfy nothing but their own name. Row 1 needs no device (JVM), row 2 no device (jest), rows 3-5 share one mutated Android build, rows 6-7 share one mutated iOS build. Logs: `gate.mjs logs --branch task/G27-search-field-keyboard`.",
+  "mutations": [
+    {
+      "test": "android/src/test/java/com/margelo/nitro/nitroui/KeyboardNamesTest.kt",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiTextField.kt",
+      "mutation": "the editor-info decode reads the variation before the class, the mistake an earlier cut of this function made",
+      "before": "  fun nameOfInputType(inputType: Int): String =\n    when (inputType and android.text.InputType.TYPE_MASK_CLASS) {",
+      "after": "  fun nameOfInputType(inputType: Int): String =\n    when {\n      inputType and android.text.InputType.TYPE_MASK_VARIATION ==\n        android.text.InputType.TYPE_TEXT_VARIATION_URI -> \"url\"\n      else ->\n        when (inputType and android.text.InputType.TYPE_MASK_CLASS) {",
+      "run": "test:native:android --tests '*KeyboardNamesTest*' — FAIL, 2 of 7",
+      "redTests": [
+        "everyEditorInfoPatternDecodesToTheSpellingThatProducedIt: org.junit.ComparisonFailure: expected:<number-pad> but was:<url>",
+        "aNumberKeyboardDoesNotReadAsTheTextKeyboardWithTheSameBits: inputType 0x12 expected:<number-pad> but was:<url>"
+      ],
+      "note": "TYPE_NUMBER_VARIATION_PASSWORD and TYPE_TEXT_VARIATION_URI are the same bit, so a secure number pad decoded by variation alone is a URL keyboard. The second row names the bit, which is why the fixture is not allowed to coincide with a plausible fallback."
+    },
+    {
+      "test": "scripts/__tests__/real-input-ime-frame.test.js",
+      "file": "scripts/real-input/ime-frame.mjs",
+      "mutation": "the editor record is scraped where the manager keeps it — an older cut of this reader, before it was run on a device",
+      "before": "  const record = String(text).match(\n    /mInputEditorInfo:\\s*\\n\\s*inputType=(0x[0-9a-fA-F]+)\\s+imeOptions=(0x[0-9a-fA-F]+)/\n  );",
+      "after": "  const dump = String(text);\n  const record = dump.match(\n    /(?:mCurEditorInfo|mEditorInfo)\\s*=\\s*EditorInfo\\{([\\s\\S]{0,2000}?)\\}/\n  );",
+      "run": "jest scripts/__tests__/real-input-ime-frame.test.js — FAIL, 1 of 11",
+      "redTests": [
+        "imeEditorInfo reads the keyboard and the action key off the IME service section: expect(received).not.toBeNull() — Received: null (scripts/__tests__/real-input-ime-frame.test.js:161)"
+      ],
+      "note": "The organic kind: this is the bug the first device run showed, in the shape of a red unit test rather than an 11-minute gate. `dumpsys input_method` is the manager's dump and prints the editor record only in proto; its text dump forwards to the bound IME, which prints `mInputEditorInfo:` and `EditorInfo.dump()`."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "MUTATION A — the field is handed what v1 effectively handed it, so the three props move the model and nothing else",
+      "before": "      keyboardOptions = keyboardOptions,",
+      "after": "      keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),",
+      "run": "harness:android:SearchField — FAIL, 1 of 16 (26.8 s)",
+      "redTests": [
+        "SearchField gives the field the keyboard the app asked for, Search key included: the number-pad keyboard to reach the field never happened; last report {\"focused\":true,\"keyboardType\":\"default\",\"autoCapitalize\":\"none\",\"autoCorrect\":true,\"returnKeyType\":\"search\"}"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs (search-field, EditorInfo section)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "MUTATION A (the same build as the harness row)",
+      "before": "      keyboardOptions = keyboardOptions,",
+      "after": "      keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),",
+      "run": "real-input:android:--control:search-field — FAIL, 2 checks of the section",
+      "redTests": [
+        "keyboardType=\"number-pad\" reaches the IME as a number keyboard, Search key included — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search",
+        "keyboardType=\"email-address\" with autoCorrect={false} reaches the IME as an email keyboard that refuses autocorrection, Search key included — expected class=text variation=0x20 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search"
+      ],
+      "note": "Both red lines are the IME's own record of the connection, and the section's first check — a field with no keyboard prop still asking for the text keyboard, autocorrected, with the Search key — stayed green under the mutation, which is the half that says v1's defaults survived. The keys reaching the field and the Search key submitting also stayed green: the mutation moves the keyboard, not the field."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (recycle test)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "MUTATION B — the keyboard is the one thing that survives the pool: `reset()` keeps the previous owner's three values",
+      "before": "    model.keyboardType = \"default\"\\n    model.autoCapitalize = \"none\"\\n    model.autoCorrect = true",
+      "after": "    val keptKeyboard = model.keyboardType\\n    val keptCapitalisation = model.autoCapitalize\\n    val keptAutoCorrect = model.autoCorrect\\n    …\\n    model.keyboardType = keptKeyboard (and the other two)",
+      "run": "harness:android:SearchField — PASS, 16 of 16 (stayed green: the hole the note names; fix round 1 closes it below)",
+      "redTests": [],
+      "note": "Recorded because it is a hole, not a proof: with every prop always passed (D7b), the second owner's own keyboard props are applied on mount, so the recycled field is correct whatever `reset()` does. The recycle assertions in the harness therefore document the invariant rather than prove the reset. Closing it needs a read taken between `reset()` and the first prop write, which the harness cannot ask for from JS."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx",
+      "file": "ios/components/SearchField/HybridNitroUiSearchField.swift",
+      "mutation": "MUTATION C — the keyboard trait is the one this component used to fix, so it is the one the props may not move",
+      "before": "    if keyboardType != traits.keyboard { keyboardType = traits.keyboard; traitsChanged = true }",
+      "after": "    let appliedKeyboard: UIKeyboardType = .default\n    if keyboardType != appliedKeyboard { keyboardType = appliedKeyboard; traitsChanged = true }",
+      "run": "harness:ios:SearchField — FAIL, 1 of 16 (38.8 s)",
+      "redTests": [
+        "SearchField gives the field the keyboard the app asked for, Search key included: SearchField keyboard: a focused field to reload its own keyboard never happened; last report {\"focused\":true,\"keyboardType\":\"default\",\"autoCapitalize\":\"none\",\"autoCorrect\":true,\"returnKeyType\":\"search\"}"
+      ],
+      "note": "iOS answers a keyboard change while the keyboard is up, so this is the first place the trait is asked for; the mutation leaves the other two props alone, and they read back as asked in the same report — which is what isolates the finding to the keyboard trait."
+    },
+    {
+      "test": "example/ios/NitroUiExampleUITests/RealInputTests.swift (testRealInputSearchField)",
+      "file": "ios/components/SearchField/HybridNitroUiSearchField.swift",
+      "mutation": "MUTATION C (the same build as the iOS harness row)",
+      "before": "    if keyboardType != traits.keyboard { keyboardType = traits.keyboard; traitsChanged = true }",
+      "after": "    let appliedKeyboard: UIKeyboardType = .default\n    if keyboardType != appliedKeyboard { keyboardType = appliedKeyboard; traitsChanged = true }",
+      "run": "real-input:ios:--control:search-field — FAIL, testRealInputSearchField (73.8 s)",
+      "redTests": [
+        "RealInputTests.swift:4914: XCTAssertTrue failed - keyboardType=\"number-pad\" should open a number keyboard, not the 35 keys of a field that was told nothing (the letter keyboard here has 35)"
+      ],
+      "note": "The keyboard the IME drew is read off its own key labels: 35 keys, letter for letter the keyboard the field with no prop opened. The email field above it, whose keyboard is a letter keyboard either way, stayed green in the same test."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (submit and recleared cases, unchanged from main)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "the organic kind: the take-over round's first tree, where every nuiTestState() read queued a full publishState() rather than a keyboard-only refresh",
+      "before": "      publishKeyboard()",
+      "after": "      publishState()",
+      "run": "harness:android (full) and harness:android:SearchField x3 on that tree - 2 of 4 runs red; with the fix, harness:android:SearchField x6 green at load1 12-23",
+      "redTests": [
+        "submits on the Search key, then blurs - and never on an empty field: expected [ 'focus', 'change:t', …(2) ] to deeply equal [ 'focus', 'change:t', …(4) ]",
+        "takes no submit from a Return pressed on a query it has just cleared: expected [ 'change:' ] to deeply equal []"
+      ],
+      "note": "The refresh published the text and focus straight off the TextFieldState, so a test waiting on the state saw a clear or a blur before its event reached JS. A timing race, so its red is a rate, not a guarantee: 2 of 4 before, 0 of 6 after."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (recycle test, resetKeyboard assertion)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION B again — prepareForRecycle keeps the previous owner's three keyboard values",
+      "before": "    applySearchPresets()\n    // What the reset left the keyboard as",
+      "after": "    val keptKeyboard = model.keyboardType  (and the other two)\n    applySearchPresets()\n    model.keyboardType = keptKeyboard  (and the other two)\n    // What the reset left the keyboard as",
+      "run": "harness:android:SearchField — FAIL, 2 of 16 (28.0 s; one build with MUTATION D)",
+      "redTests": [
+        "comes back from the pool with none of its previous owner: expected 'drops=8 recycles=8 measuresAfterDrop=…' to contain 'resetKeyboard=default/none/true'"
+      ],
+      "note": "Closes the hole row 5 recorded: `nuiTestLifetimeReport()` now carries what the reset left the keyboard as, read before the next owner's props land."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (recycle test, resetKeyboard assertion)",
+      "file": "ios/components/SearchField/HybridNitroUiSearchField.swift",
+      "mutation": "FIX ROUND 1, MUTATION B on iOS — prepareForRecycle keeps the previous owner's three keyboard values",
+      "before": "    applySearchPresets()\n    // What the reset left the keyboard as",
+      "after": "    let keptKeyboard = model.keyboardType  (and the other two)\n    applySearchPresets()\n    model.keyboardType = keptKeyboard  (and the other two)\n    // What the reset left the keyboard as",
+      "run": "harness:ios:SearchField — FAIL, 1 of 16 (27.4 s)",
+      "redTests": [
+        "comes back from the pool with none of its previous owner: expected 'drops=14 recycles=14 resetKeyboard=nu…' to contain 'resetKeyboard=default/none/true'"
+      ]
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (keyboard test, step 2 on Android)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION D — the keyboard options are remembered at first composition, so a prop change never reaches the field",
+      "before": "  val keyboardOptions =\n    KeyboardOptions(",
+      "after": "  val keyboardOptions = remember {\n    KeyboardOptions(  …  }",
+      "run": "harness:android:SearchField — FAIL, 2 of 16 (same build as the Android MUTATION B row)",
+      "redTests": [
+        "gives the field the keyboard the app asked for, Search key included: a focused field to reload its own keyboard never happened; last report {… \"focused\":true, … \"keyboardType\":\"default\" …}"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs (search-field, keyboard changed while focused)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION D (the same build)",
+      "before": "  val keyboardOptions =\n    KeyboardOptions(",
+      "after": "  val keyboardOptions = remember {\n    KeyboardOptions(  …  }",
+      "run": "real-input:android:--control:search-field — FAIL, 1 check (139 s)",
+      "redTests": [
+        "keyboardType changed while focused restarts the input session: the IME is handed a number keyboard without the field losing focus — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search"
+      ],
+      "note": "The IME's own mInputEditorInfo, not the field's fresh EditorInfo. On the shipped tree the same check reads class=number: Compose does restart the session on a focused field's options change, which is what settled the docs."
+    }
+  ]
+}

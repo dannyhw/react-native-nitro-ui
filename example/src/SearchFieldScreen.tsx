@@ -96,6 +96,13 @@ export default function SearchFieldScreen() {
   const [focusCount, setFocusCount] = useState(0);
   const [blurCount, setBlurCount] = useState(0);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [numberQuery, setNumberQuery] = useState('');
+  const [numberSubmitted, setNumberSubmitted] = useState<string | null>(null);
+  const [emailQuery, setEmailQuery] = useState('');
+  const [emailSubmitted, setEmailSubmitted] = useState<string | null>(null);
+  const [switching, setSwitching] = useState<'default' | 'number-pad'>(
+    'default'
+  );
   const focusRef = useRef<SearchFieldHandle>(null);
 
   // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the text
@@ -107,6 +114,19 @@ export default function SearchFieldScreen() {
   const noteBlur = useCallback(() => setBlurCount((count) => count + 1), []);
   const focusFromJs = useCallback(() => focusRef.current?.focus(), []);
   const blurFromJs = useCallback(() => focusRef.current?.blur(), []);
+  // A keyboard prop that changes while the field keeps focus: two seconds after the
+  // field takes focus it asks for the number pad, with nothing tapped in between (a
+  // button would sit under the open keyboard). A blur puts it back.
+  const switchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startSwitch = useCallback(() => {
+    if (switchTimer.current != null) clearTimeout(switchTimer.current);
+    switchTimer.current = setTimeout(() => setSwitching('number-pad'), 2000);
+  }, []);
+  const stopSwitch = useCallback(() => {
+    if (switchTimer.current != null) clearTimeout(switchTimer.current);
+    switchTimer.current = null;
+    setSwitching('default');
+  }, []);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: ink.background }]}>
@@ -197,6 +217,53 @@ export default function SearchFieldScreen() {
             editable={false}
           />
         </Row>
+
+        {/*
+          The keyboard rows come last: every row above sits where the older checks on
+          this screen aim, and these two are reached by the scroll a person makes.
+        */}
+        <Row title='keyboardType="number-pad"'>
+          <SearchField
+            testID="search-number"
+            accessibilityLabel="Number search field"
+            keyboardType="number-pad"
+            value={numberQuery}
+            onChangeText={setNumberQuery}
+            onSubmitEditing={setNumberSubmitted}
+          />
+        </Row>
+        <Text testID="search-number-echo" style={{ color: ink.ink }}>
+          {`number: ${numberQuery} submitted: ${numberSubmitted ?? '-'}`}
+        </Text>
+
+        <Row title='keyboardType="email-address", no autocorrect'>
+          <SearchField
+            testID="search-email"
+            accessibilityLabel="Email search field"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={emailQuery}
+            onChangeText={setEmailQuery}
+            onSubmitEditing={setEmailSubmitted}
+          />
+        </Row>
+        <Text testID="search-email-echo" style={{ color: ink.ink }}>
+          {`email: ${emailQuery} submitted: ${emailSubmitted ?? '-'}`}
+        </Text>
+
+        <Row title="keyboardType changes 2 s after focus">
+          <SearchField
+            testID="search-switching"
+            accessibilityLabel="Switching search field"
+            keyboardType={switching}
+            onFocus={startSwitch}
+            onBlur={stopSwitch}
+          />
+        </Row>
+        <Text testID="search-switching-echo" style={{ color: ink.ink }}>
+          {`switching: ${switching}`}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );

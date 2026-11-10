@@ -755,6 +755,8 @@ export interface SearchFieldHandle {
 
 // @public
 export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
+    autoCapitalize?: TextFieldAutoCapitalize | undefined;
+    autoCorrect?: boolean | undefined;
     defaultValue?: string | undefined;
     editable?: boolean | undefined;
     // @internal
@@ -780,6 +782,9 @@ export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> 
             placeholder: string;
             accessibilityLabel: string;
             returnKeyType: string;
+            keyboardType: string;
+            autoCapitalize: string;
+            autoCorrect: boolean;
             expanded: boolean;
             canClear: boolean;
         };
@@ -787,6 +792,7 @@ export interface SearchFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> 
         nuiTestSubmit(): void;
         nuiTestLifetimeReport(): string;
     }) => void) | undefined;
+    keyboardType?: TextFieldKeyboardType | undefined;
     maxLength?: number | null | undefined;
     // @internal
     nuiPerfId?: number | null | undefined;

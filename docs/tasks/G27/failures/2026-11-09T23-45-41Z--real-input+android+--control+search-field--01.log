@@ -1,0 +1,67 @@
+# Failure excerpt — real-input:android:--control:search-field
+
+- Ran: 2026-11-09T23:45:41.892Z on code tree `c4a5c415b72e` at HEAD `48a5587` (branch `task/G27-search-field-keyboard`)
+- Command: `node scripts/real-input/android.mjs --control search-field`
+- Result: fail, exit 1, 17727 ms
+- Load: start 70.75, end 55.06, median 59.60, max 70.75
+- Device: android / device `emulator-5570` / lease `G27-ul745`
+- Full log: `task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log` (<store>/task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-ul745 (still live)
+  |   G27-ul745                G27          both              pair-b
+  |   G25G26-w18jy             G25G26       both              pair-a
+gate: load
+  |   load1 at the moment of failure: 55.06 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 21 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android:--control:search-field
+gate: node scripts/real-input/android.mjs --control search-field (cwd .)
+gate: code tree c4a5c415b72e at HEAD 48a55871
+gate: git tree 10f6f301a694 with a DIRTY worktree (not reusable)
+gate: log task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log
+gate:       <store>/task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+
+real-input (android): Error: real-input: no tab of the example is in the accessibility tree, so the "Slider" tab cannot be scrolled to.
+gate: real-input:android:--control:search-field FAIL in 17.7 s
+gate: recorded in .gates/task/G27-search-field-keyboard.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G27-search-field-keyboard/real-input+android+--control+search-field-2026-11-09T23-45-41.160Z.log (5 probe(s))
+
+```
