@@ -107,9 +107,10 @@ printed no stability line. The healthy reading is unchanged with the confirmatio
 ## Fix round 1
 
 **Cause.** One component, three walk histories, iOS 27: a fresh app walked straight to the
-case reads **one** element — wrapper labelled, subtree hidden, no stops; the same tree after
-the sweep's 21 earlier cases reads **2** stops; the merged Stepper + Picker-radio tree's 22
-read **4**. Boxes identical, no instability line, the other 22 cases byte-identical in both logs. Not XCUITest echoing: the sweep's probe finds one labelled
+case reads **one** element — wrapper labelled, subtree hidden, no stops; the same tree walked in
+the middle of `main`'s sweep reads **2** stops; on the merged Stepper + Picker-radio tree,
+whose sweep has one more case before this one, **4**. Boxes identical, no instability line,
+and the 21 cases the two sweeps share are byte-identical in both logs. Not XCUITest echoing: the sweep's probe finds one labelled
 child under the wrapper and one under *that* — React Native vends two nested elements per
 `Text`. The window: the wrapper hides its subtree once React Native has stored `accessible` on the
 component view, and read from this view's getter, that store is still **false inside
@@ -135,11 +136,12 @@ both failed; restored, 51 pass.
 `control.wrapperIsControl === true` branch, which only ContextMenu sets in `A11Y_CONTROLS`,
 and the row is keyed `context-menu`/`ios`; every iOS fixture verdict for every other control
 is byte-identical to `origin/main`'s rule (both modules imported and compared), and on device
-the 22 non-ContextMenu cases read byte-identically in the two raw logs compared above.
+the 21 non-ContextMenu cases the two sweeps share read byte-identically in those logs (the
+merged log's extra `stepper` case reads 3 nodes).
 
 **The 2-vs-4 bisect.** Not a case's identity: the same tree, same build, sweep narrowed to
-`context-menu` alone reads `nodes=1` (Run A, 03:37Z); with all 21 predecessors it reads
-`nodes=3` (Run D, `NUI_CTX_A11Y` no-op, 03:47Z); `task/G25-G26-merge`, one case longer, read
+`context-menu` alone reads `nodes=1` (03:29Z); with all 20 of `main`'s predecessors it reads
+`nodes=3` (03:37Z, `NUI_CTX_A11Y` armed but a no-op); `task/G25-G26-merge`, one case longer, read
 `nodes=5`. Late re-reads 3, 6 and 9 s after the settled read never changed the count in any
 run, so the shape is latched by the time the rule sees it and the settle is right to trust it.
 `windowStaticTexts=0` in the 1-node reading: the second Text is nowhere in the a11y tree, not
