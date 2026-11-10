@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
+import com.margelo.nitro.nitroui.core.nuiOwnVerticalDrags
 import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
@@ -1121,11 +1122,15 @@ private class DatePickerHost(
         TimeScroll(
           state = state,
           shapes = TimePickerDefaults.shapes(),
-          modifier = Modifier.nuiControlSemantics(
-            label = model.accessibilityLabel,
-            value = DatePickerFieldText.format(mode, shown),
-            enabled = model.enabled,
-          ),
+          modifier = Modifier
+            .nuiControlSemantics(
+              label = model.accessibilityLabel,
+              value = DatePickerFieldText.format(mode, shown),
+              enabled = model.enabled,
+            )
+            // Two drums live inside this node, and a page that swallows their drags is a
+            // wheel that cannot be rolled. See [nuiOwnVerticalDrags].
+            .nuiOwnVerticalDrags(model.enabled),
           colors = TimePickerDefaults.vibrantColors(),
         )
       } else {
