@@ -1113,10 +1113,10 @@ private class DatePickerHost(
       }
       // The wheel and the clock are the same control with the same two fields, drawn
       // two ways: `TimeScroll` is 1.5's wheel (Q8 Appendix E pass 3 A), and both take
-      // a `TimePickerState`, so the value, the clamps and the handshake behind them
-      // are one code path - `syncTimePicker`, unchanged. What differs is only the
-      // widget, and the 12/24-hour convention, which comes from the device either way
-      // ([twentyFourHour]).
+      // a `TimePickerState`, so the value, the clamps and the bounds behind them are
+      // one code path. What differs is the widget, the trigger the value is read on
+      // (see [syncTimeWheel]), and the 12/24-hour convention, which comes from the
+      // device either way ([twentyFourHour]).
       if (model.variant == "wheel") {
         TimeScroll(
           state = state,
