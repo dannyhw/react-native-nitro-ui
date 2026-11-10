@@ -9,9 +9,10 @@ The confirmation sheet's Android rows are the Expressive segmented row: `Segment
 `ListItemDefaults.segmentedShapes(index, count)` — Q8 row 16's second candidate, adopted as D40's
 pass 3 B for Dialog. **Both candidates were built and photographed on the leased device**
 ([segmented](G28/rows-segmented.png),
-[interactive](G28/rows-interactive.png)): the segmented one reads as one card inside the
-sheet — `CornerLarge`'s 16 dp at the group's outer corners, `CornerExtraSmall`'s 4 dp where rows meet, the notched
-boundary between rows, and a press that morphs the row — while `ListItem(onClick, enabled, …)` is a
+[interactive](G28/rows-interactive.png)): the segmented one reads as one card inset inside the
+sheet — `CornerLarge`'s 16 dp at the group's outer corners, `CornerExtraSmall`'s 4 dp at the ends
+facing the next row, material3's own 2 dp gap between segments, and a press that morphs the row —
+while `ListItem(onClick, enabled, …)` is a
 full-bleed row with no group. Nothing but the look separates them: with the interactive row swapped
 in, only the shape assertion moved, the disabled-state and press checks stayed green — the call was
 made on the device, not on the API.
@@ -23,12 +24,14 @@ destructive row is drawn disabled and `tintColor` still colours the action text.
 left the file. Order, cancel handling, `dismissible`, "an action always closes", `titleVisibility`,
 hosting, recycling and the `AlertDialog` are untouched, on iOS as on Android.
 
-The harness cannot press or read a second window, so `nuiTestStateReport` now *arms* one row probe,
-answered from inside the sheet: `rows=` is each row's own merged accessibility node (`~` = disabled,
-the mark `Menu`'s probe writes) and `radii=` each row's corner radius in dp off the sheet window's
-pixels. Both are the component's own state, not the props behind it, and one mutation proves `radii=`
-is measured: loosening the probe's colour tolerance collapses every corner to the probe depth with
-nothing in the composition changed.
+The harness cannot press or read a second window, so the sheet can be asked for one row probe,
+answered from inside it: `rows=` is each row's own merged accessibility node (`~` = disabled, the
+mark `Menu`'s probe writes) and `radii=` each row's corner radius in dp off the sheet window's
+pixels. It is asked by a reserved action id through `nuiTestPerformAction`, not by reading the
+report - the read costs a bitmap draw of the window, so arming it on every poll was wrong (fix
+round 1). Both halves are the component's own state, not the props behind it, and one mutation
+proves `radii=` is measured: loosening the probe's colour tolerance collapses every corner to the
+probe depth with nothing in the composition changed.
 
 Real input does the part the harness cannot: the tree's `enabled="false"` is pressed. The log is
 snapshotted **with the sheet down** (the sheet owns the dump while it is up — the first version of
