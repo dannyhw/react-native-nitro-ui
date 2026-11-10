@@ -252,6 +252,39 @@ open class HybridNitroUiSearchFieldSpec_cxx {
     }
   }
   
+  public final var keyboardType: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.keyboardType)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.keyboardType = String(newValue)
+    }
+  }
+  
+  public final var autoCapitalize: std.string {
+    @inline(__always)
+    get {
+      return std.string(self.__implementation.autoCapitalize)
+    }
+    @inline(__always)
+    set {
+      self.__implementation.autoCapitalize = String(newValue)
+    }
+  }
+  
+  public final var autoCorrect: Bool {
+    @inline(__always)
+    get {
+      return self.__implementation.autoCorrect
+    }
+    @inline(__always)
+    set {
+      self.__implementation.autoCorrect = newValue
+    }
+  }
+  
   public final var editable: Bool {
     @inline(__always)
     get {

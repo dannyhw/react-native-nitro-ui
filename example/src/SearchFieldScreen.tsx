@@ -96,6 +96,10 @@ export default function SearchFieldScreen() {
   const [focusCount, setFocusCount] = useState(0);
   const [blurCount, setBlurCount] = useState(0);
   const [submitted, setSubmitted] = useState<string | null>(null);
+  const [numberQuery, setNumberQuery] = useState('');
+  const [numberSubmitted, setNumberSubmitted] = useState<string | null>(null);
+  const [emailQuery, setEmailQuery] = useState('');
+  const [emailSubmitted, setEmailSubmitted] = useState<string | null>(null);
   const focusRef = useRef<SearchFieldHandle>(null);
 
   // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the text
@@ -197,6 +201,40 @@ export default function SearchFieldScreen() {
             editable={false}
           />
         </Row>
+
+        {/*
+          The keyboard rows come last: every row above sits where the older checks on
+          this screen aim, and these two are reached by the scroll a person makes.
+        */}
+        <Row title='keyboardType="number-pad"'>
+          <SearchField
+            testID="search-number"
+            accessibilityLabel="Number search field"
+            keyboardType="number-pad"
+            value={numberQuery}
+            onChangeText={setNumberQuery}
+            onSubmitEditing={setNumberSubmitted}
+          />
+        </Row>
+        <Text testID="search-number-echo" style={{ color: ink.ink }}>
+          {`number: ${numberQuery} submitted: ${numberSubmitted ?? '-'}`}
+        </Text>
+
+        <Row title='keyboardType="email-address", no autocorrect'>
+          <SearchField
+            testID="search-email"
+            accessibilityLabel="Email search field"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={emailQuery}
+            onChangeText={setEmailQuery}
+            onSubmitEditing={setEmailSubmitted}
+          />
+        </Row>
+        <Text testID="search-email-echo" style={{ color: ink.ink }}>
+          {`email: ${emailQuery} submitted: ${emailSubmitted ?? '-'}`}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );

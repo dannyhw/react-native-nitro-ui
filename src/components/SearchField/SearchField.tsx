@@ -1,6 +1,13 @@
 import { useImperativeHandle, useLayoutEffect, useRef, type Ref } from 'react';
 import { type ViewProps } from 'react-native';
 
+import {
+  AUTO_CAPITALIZE,
+  KEYBOARD_TYPES,
+  resolveKeyboardOption,
+  type TextFieldAutoCapitalize,
+  type TextFieldKeyboardType,
+} from '../../core/keyboard';
 import { useControlled } from '../../core/useControlled';
 import { useSizingId } from '../../core/useSizingId';
 import {
@@ -28,10 +35,12 @@ export interface SearchFieldHandle {
  * Props of {@link SearchField}.
  *
  * The names are TextField's, which are React Native `TextInput`'s. There is no
- * `multiline`, no `secureTextEntry`, no `returnKeyType` and no keyboard prop: a
- * search field is one line, its Return key is the Search key, and Material 3's
- * search input field takes no keyboard options at all (D38 item 2). A field that
- * needs other keyboard options is a `TextField`.
+ * `multiline` and no `secureTextEntry`: a search field is one line with no
+ * password in it, and its Return key is always the Search key (D38 item 2).
+ * `keyboardType`, `autoCapitalize` and `autoCorrect` are there and are
+ * TextField's, with the same values and the same mapping; their defaults are what
+ * a search field has always been fixed to, so an app that passes nothing sees no
+ * change.
  */
 export interface SearchFieldProps extends Omit<
   ViewProps,
@@ -56,6 +65,15 @@ export interface SearchFieldProps extends Omit<
    * "Search".
    */
   placeholder?: string | undefined;
+  /** The keyboard to show. Default: `'default'`, as TextField's. */
+  keyboardType?: TextFieldKeyboardType | undefined;
+  /**
+   * What the keyboard capitalises. Default: `'none'` — a query is not a sentence,
+   * so a search field does not start one.
+   */
+  autoCapitalize?: TextFieldAutoCapitalize | undefined;
+  /** Whether the keyboard may autocorrect. Default: `true`. */
+  autoCorrect?: boolean | undefined;
   /**
    * The longest query the field accepts, counted the way JavaScript counts
    * `string.length` (UTF-16 code units, as React Native does). An insertion that
@@ -108,6 +126,9 @@ export interface SearchFieldProps extends Omit<
           placeholder: string;
           accessibilityLabel: string;
           returnKeyType: string;
+          keyboardType: string;
+          autoCapitalize: string;
+          autoCorrect: boolean;
           expanded: boolean;
           canClear: boolean;
         };
@@ -163,7 +184,9 @@ function onSubmitNotProvided(_text: string): void {
  * ```
  *
  * It is one line, with a search glyph at the start and a clear button that appears
- * with the text. The keyboard's Search key calls `onSubmitEditing` and dismisses the
+ * with the text, and it takes TextField's three keyboard props (`keyboardType`,
+ * `autoCapitalize`, `autoCorrect`) - the keyboard it opens is the one you ask for,
+ * and the key that submits it stays Search either way. The Search key calls `onSubmitEditing` and dismisses the
  * keyboard; an empty field never submits. The query is controlled through the same
  * event-count handshake as `TextField`, whose `maxLength`, IME guard and focus rules
  * it shares.
@@ -173,6 +196,9 @@ export function SearchField({
   defaultValue = '',
   onChangeText,
   placeholder,
+  keyboardType,
+  autoCapitalize,
+  autoCorrect = true,
   maxLength,
   editable = true,
   onSubmitEditing,
@@ -266,6 +292,17 @@ export function SearchField({
       defaultValue={controlled.defaultValue}
       mostRecentEventCount={controlled.mostRecentEventCount}
       placeholder={placeholder ?? null}
+      keyboardType={resolveKeyboardOption(
+        keyboardType,
+        KEYBOARD_TYPES,
+        'default'
+      )}
+      autoCapitalize={resolveKeyboardOption(
+        autoCapitalize,
+        AUTO_CAPITALIZE,
+        'none'
+      )}
+      autoCorrect={autoCorrect}
       maxLength={limit}
       editable={editable}
       testID={testID ?? null}
