@@ -14,6 +14,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  Stepper,
   Switch,
   TextField,
 } from 'react-native-nitro-ui';
@@ -107,6 +108,7 @@ const SMOKE_CONTROLS = [
   'search-field',
   'icon-button',
   'button-group',
+  'stepper',
   // @end-generated
   // The container, not a control: see the comment in scripts/smoke/lib.mjs.
   'host',
@@ -338,6 +340,14 @@ export default function App(): React.ReactElement {
           onLayout={measureFor('icon-button')}
           systemImage="magnifyingglass"
           testID="SMOKE-icon-button"
+        />
+        {/* A Stepper is one node on both platforms, so one `onLayout` is the whole
+            control here: 0x0 would mean the hosted SwiftUI stepper or the Compose
+            row never measured itself, which is what this app exists to catch. */}
+        <Stepper
+          accessibilityLabel="Quantity"
+          onLayout={measureFor('stepper')}
+          testID="SMOKE-stepper"
         />
         {/* Three plain action items: the shape whose height the sizing entry files. A
             ButtonGroup is `fillWidth`, so the smoke box is the row's own height at the

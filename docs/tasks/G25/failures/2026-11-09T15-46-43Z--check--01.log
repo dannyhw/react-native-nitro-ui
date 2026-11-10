@@ -1,0 +1,178 @@
+# Failure excerpt — check
+
+- Ran: 2026-11-09T15:46:43.507Z on code tree `45d6f2f4c33d` at HEAD `837cb29` (branch `task/G25-fix1`)
+- Command: `bun run check`
+- Result: fail, exit 1, 153120 ms
+- Load: start 6.15, end 10.16, median 9.02, max 10.16
+- Device: android / device `emulator-5570` / lease `G25-955dv`
+- Full log: `task/G25-fix1/check-2026-11-09T15-46-42.932Z.log` (<store>/task/G25-fix1/check-2026-11-09T15-46-42.932Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL scripts/__tests__/component-coverage.test.js`
+- `● every component is covered by the conformance suite › every manifest is covered, or has a stated reason`
+- `expect(received).toEqual(expected) // deep equality`
+- `FAIL scripts/__tests__/conformance.test.js`
+- `● the debt, as the matrix sees it › names the FOLLOWUPS line for a failing cell, when the line exists`
+- `expect(received).not.toBeNull()`
+- `Received: null`
+- `● Console`
+- `✗ the wrapper box is the control box`
+- `error: script "test" exited with code 1`
+- `error: script "check" exited with code 1`
+
+## Last 150 log line(s) (of 3072 — the rest is in the full log above)
+
+```
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+      
+        a11y:switch: a11y:switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:slider: a11y:slider a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN the first read was this box at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          ✓ named
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:100:15)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+      
+        a11y:switch: Switch a11y
+
+      at Suite.log [as beginAuxiliary] (scripts/real-input/report.mjs:252:13)
+
+    console.log
+          WARN a read was at ⅓ scale
+
+      at CheckLog.log [as warn] (scripts/real-input/report.mjs:78:13)
+
+    console.log
+          ✗ the wrapper box is the control box
+
+      at CheckLog.log [as check] (scripts/real-input/report.mjs:104:13)
+
+PASS src/__tests__/menuSizingKey.test.tsx
+PASS scripts/__tests__/readme-components.test.js
+PASS src/__tests__/hostReport.test.tsx
+PASS scripts/__tests__/build-speed.test.js
+PASS scripts/__tests__/release-catch-up.test.js
+PASS scripts/__tests__/real-input-tab-targets.test.js
+PASS scripts/__tests__/pod-serialisation.test.js
+PASS scripts/__tests__/changesets.test.js
+PASS scripts/__tests__/doctor.test.js
+PASS scripts/__tests__/app-launch-env.test.js
+PASS scripts/__tests__/smoke-ready-line.test.js
+PASS scripts/__tests__/bench-device-key.test.js
+PASS scripts/__tests__/test-env-scrub.test.js
+PASS src/__tests__/useControlled.test.tsx
+PASS src/__tests__/iconSource.test.ts
+PASS src/__tests__/viewConfigs.test.ts
+PASS scripts/__tests__/pod-install.test.js
+PASS scripts/__tests__/ci-harness-config.test.js
+PASS scripts/__tests__/real-input-android-tree.test.js
+PASS scripts/__tests__/real-input-ime-frame.test.js
+PASS scripts/__tests__/real-input-calendar.test.js
+PASS scripts/__tests__/contributing-ci-claims.test.js
+PASS scripts/__tests__/real-input-gesture-echo.test.js
+PASS scripts/__tests__/real-input-ios-log.test.js
+PASS scripts/__tests__/real-input-popover-placement.test.js
+PASS scripts/__tests__/nitrogen-scope.test.js
+PASS scripts/__tests__/gate.test.js (49.973 s)
+PASS scripts/__tests__/gate-logs.test.js (50.217 s)
+PASS scripts/__tests__/ci-workflows.test.js (71.949 s)
+PASS scripts/__tests__/bench-baseline-merge.test.js (76.21 s)
+PASS scripts/__tests__/bench-gate.test.js (146.335 s)
+
+Summary of all failing tests
+FAIL scripts/__tests__/component-coverage.test.js
+  ● every component is covered by the conformance suite › every manifest is covered, or has a stated reason
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 3
+
+    - Array []
+    + Array [
+    +   "Stepper × a11y-name-on-focusable-node: marked failing with no docs/tasks/FOLLOWUPS.md line. Debt with no owner is debt nobody pays",
+    + ]
+
+      364 |     expect(
+      365 |       checkCoverage(manifests, matrix, followupsResolver(read(FOLLOWUPS_FILE)))
+    > 366 |     ).toEqual([]);
+          |       ^
+      367 |     expect(checkA11yTable(manifests, read)).toEqual([]);
+      368 |     expect(checkInAppFixtures(manifests, read(HARNESS_FILE))).toEqual([]);
+      369 |     expect(checkRecycleNotes(read(HARNESS_FILE))).toEqual([]);
+
+      at Object.toEqual (scripts/__tests__/component-coverage.test.js:366:7)
+
+FAIL scripts/__tests__/conformance.test.js
+  ● the debt, as the matrix sees it › names the FOLLOWUPS line for a failing cell, when the line exists
+
+    expect(received).not.toBeNull()
+
+    Received: null
+
+      1575 |     for (const key of failingKeys()) {
+      1576 |       const cited = resolve(key);
+    > 1577 |       expect(cited).not.toBeNull();
+           |                         ^
+      1578 |       // One cell can carry debt on both platforms — the Slider's Android name is not
+      1579 |       // actionable and its iOS name is announced as the wrong kind of control — and the
+      1580 |       // resolver joins the citations it checked. It proves each one is in the document
+
+      at Object.toBeNull (scripts/__tests__/conformance.test.js:1577:25)
+
+
+Test Suites: 2 failed, 81 passed, 83 total
+Tests:       2 failed, 1965 passed, 1967 total
+Snapshots:   0 total
+Time:        146.652 s
+Ran all test suites.
+error: script "test" exited with code 1
+error: script "check" exited with code 1
+gate: check FAIL in 153.1 s
+gate: recorded in .gates/task/G25-fix1.jsonl
+
+```

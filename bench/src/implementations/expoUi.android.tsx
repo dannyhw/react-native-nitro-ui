@@ -96,6 +96,29 @@ function unsupportedDatePicker(): never {
 }
 
 /**
+ * `@expo/ui` has no Stepper on Android, for the same reason this library has to build
+ * one: Material has no stepper (`docs/components/stepper.md`, DECISIONS D38 item 1).
+ * Its Compose surface has `IconButton`, `Slider` and `SegmentedButton`, and nothing
+ * that steps a number.
+ *
+ * Composing one out of two of Expo's `IconButton`s would be a number, but not a
+ * comparable one: the cell would price Expo's icon button plus our own layout, against
+ * a control the other arms get from their platform. The runner therefore never
+ * schedules these cells on Android (`ARMS_WITHOUT_COMPONENT` in
+ * `scripts/bench/lib.mjs`), and the iOS arm is the comparison the brief asks for.
+ *
+ * Plainly, for anyone reading this looking for a number: no table in
+ * `docs/benchmarks.md` has an Android `@expo/ui` Stepper row, because there is no such
+ * arm to measure.
+ */
+function unsupportedStepper(): never {
+  throw new Error(
+    'expo-ui has no Stepper arm on Android: @expo/ui exposes no stepper, because ' +
+      'Material has none either (see ARMS_WITHOUT_COMPONENT in scripts/bench/lib.mjs).'
+  );
+}
+
+/**
  * Module-level so the anchor gets the same `modifiers` array identity every render
  * (T02 review NIT), the way the other arms' modifier arrays are built.
  */
@@ -252,6 +275,9 @@ export function ExpoUiHostPerControlList({
 }: BenchListProps) {
   if (component === 'date-picker') {
     return unsupportedDatePicker();
+  }
+  if (component === 'stepper') {
+    return unsupportedStepper();
   }
   const style = rowStyle(component);
   if (component === 'form') {
@@ -481,6 +507,9 @@ function BenchSegmented({ value }: { value: boolean }) {
 export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
   if (component === 'date-picker') {
     return unsupportedDatePicker();
+  }
+  if (component === 'stepper') {
+    return unsupportedStepper();
   }
   if (n === 0) {
     return null;

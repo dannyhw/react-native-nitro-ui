@@ -41,6 +41,7 @@ import { IconButton } from '../IconButton/IconButton';
 import { Popover } from '../Popover/Popover';
 import { Form } from '../Form/Form';
 import { ButtonGroup } from '../ButtonGroup/ButtonGroup';
+import { Stepper } from '../Stepper/Stepper';
 
 /**
  * The controls a Host can compose, keyed by the component itself.
@@ -126,6 +127,7 @@ export const UNHOSTABLE_CONTROLS = new Map<unknown, string>([
   [Popover, 'Popover'],
   [Form, 'Form'],
   [ButtonGroup, 'ButtonGroup'],
+  [Stepper, 'Stepper'],
 ]);
 
 /**

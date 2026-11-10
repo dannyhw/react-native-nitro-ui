@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type ColorValue, type ViewProps } from 'react-native';
+import { type ColorValue, Platform, type ViewProps } from 'react-native';
 
 import { useControlled } from '../../core/useControlled';
 import { useProcessedColor } from '../../core/useProcessedColor';
@@ -23,8 +23,15 @@ export interface PickerChange {
   value: string;
 }
 
-/** How the control presents its options. */
-export type PickerVariant = 'menu' | 'wheel';
+/**
+ * How the control presents its options.
+ *
+ * `'radio'` is Android's radio-group column and iOS's menu: SwiftUI has no
+ * radio-group picker style to ask for (`RadioGroupPickerStyle` is
+ * `@available(iOS, unavailable)`), so DECISIONS D38 item 4 rules that the
+ * variant falls back to the menu there rather than being imitated.
+ */
+export type PickerVariant = 'menu' | 'wheel' | 'radio';
 
 /**
  * Props of {@link Picker}.
@@ -64,12 +71,18 @@ export interface PickerProps extends ViewProps {
    */
   onChange?: ((event: PickerChange) => void) | undefined;
   /**
-   * `'menu'` (default) or `'wheel'`.
+   * `'menu'` (default), `'wheel'` or `'radio'`.
    *
    * A menu is a button that opens a list, sized by the title it shows. A wheel
    * fills its box's width and measures its own height — **on iOS only**:
    * Material 3 has no wheel, so `'wheel'` renders the menu control on Android
    * under the wheel's layout policy rather than a fake wheel.
+   *
+   * A radio group shows every option at once: one `RadioButton` row per
+   * option, 48 dp tall, sized by its widest label — **on Android only**. iOS
+   * has no radio-group picker style, so `'radio'` renders the menu there
+   * (DECISIONS D38 item 4); an iOS layout that needs every choice visible uses
+   * `SegmentedControl` for up to about five options.
    */
   variant?: PickerVariant | undefined;
   /**
@@ -171,7 +184,19 @@ function escapeOption(label: string): string {
  *   selection makes it wider (SegmentedControl deliberately leaves the selection
  *   out of *its* key: a segment row is the same width whichever segment is
  *   chosen. Copying that here would cache a narrow button against a wide one);
- * - the **label**, which on Android is part of the field's box.
+ * - the **label**, which on Android is part of the field's box - of the *field's*:
+ *   it names the box a menu draws and never appears in a radio group's box.
+ *
+ * A `radio` group is the exception to the last two bullets, and drops out of both
+ * of their fields: it paints every label at once, so its box is as wide as the
+ * widest option and as tall as the option count, and *which* row is selected moves
+ * nothing (Q7 Appendix D: `radio|count|labels…`). Nor does it draw `label` at all -
+ * on Android that prop is the group's accessibility name - so a field that cannot
+ * move the box does not belong in its key either: keeping it would split the cache
+ * and make a rename cost a fallback frame and a correction. That is what makes a
+ * pick in a radio group not a cold configuration. Both fields stay in every other
+ * key — including the one a `radio` builds on iOS, where `resolveVariant` resolves
+ * it to `menu` and a menu is as wide as the one title it shows.
  *
  * `disabled` and `tintColor` repaint, they do not resize, and the text size /
  * density / OS control size are *not* here: native folds the environment in
@@ -182,16 +207,60 @@ function sizingVariantFor(
   options: readonly string[],
   selectedIndex: number,
   label: string | null,
-  variant: string
+  variant: ResolvedPickerVariant
 ): string {
   const selected = options[selectedIndex] ?? '';
+  // A radio group is neither its selection nor its `label`: it shows every option
+  // and draws no field, so both fields leave its key - see the doc comment.
+  const drawnFromKey = variant !== 'radio';
   return [
     variant,
     String(options.length),
     ...options.map(escapeOption),
-    `sel:${escapeOption(selected)}`,
-    `lbl:${escapeOption(label ?? '')}`,
+    ...(drawnFromKey ? [`sel:${escapeOption(selected)}`] : []),
+    ...(drawnFromKey ? [`lbl:${escapeOption(label ?? '')}`] : []),
   ].join(OPTION_SEPARATOR);
+}
+
+/**
+ * The variant the native view is asked for: `'menu'`, `'wheel'`, or `'radio'`
+ * on the one platform that has a radio group. See {@link resolveVariant}.
+ *
+ * Not exported: it is this wrapper's own resolution of `PickerVariant`, and the
+ * native `variant` prop is a plain `string` on the Hybrid View.
+ */
+type ResolvedPickerVariant = 'menu' | 'wheel' | 'radio';
+
+/**
+ * Whether this platform draws `radio` as a radio group rather than a menu.
+ *
+ * iOS's `RadioGroupPickerStyle` is `@available(iOS, unavailable)`, so there is
+ * no control to host there and DECISIONS D38 item 4 rules that `radio` renders
+ * the menu - the same "build it from the platform's real controls, never imitate
+ * one" rule that makes `wheel` the menu on Android. The resolution happens here,
+ * in the one place that decides all three of the things a variant picks: the
+ * native `variant` prop, the sizing policy behind it (`SELF_SIZING_BASE_STYLE`
+ * versus `FILL_WIDTH_BASE_STYLE`) and the `nuiSizingKey`. Resolving it only
+ * inside SwiftUI would leave the key naming a `radio` configuration whose width
+ * follows a title, and the menu's title-dependent width would be filed against a
+ * key with no selection in it - the poisoned-cache bug (G6 review M1) with the
+ * variant spelled differently. Same shape as Chip's `SELECTION_RESIZES`: a
+ * measured platform fact that the *key* has to know.
+ *
+ * iOS's own setter still guards (`PickerModel.isWheel` answers "menu" for
+ * anything that is not a wheel), so a `radio` that ever reached it by another
+ * road would draw a menu rather than nothing.
+ */
+function radioIsRadioGroup(): boolean {
+  return Platform.OS === 'android';
+}
+
+/** The variant to hand the native view; anything unknown is the menu. */
+function resolveVariant(variant: PickerVariant): ResolvedPickerVariant {
+  if (variant === 'radio') {
+    return radioIsRadioGroup() ? 'radio' : 'menu';
+  }
+  return variant === 'wheel' ? 'wheel' : 'menu';
 }
 
 /**
@@ -267,7 +336,10 @@ export function Picker({
   // options rather than throwing inside a render.
   const safeOptions = options ?? [];
   const optionCount = safeOptions.length;
-  const nativeVariant = variant === 'wheel' ? 'wheel' : 'menu';
+  // `'radio'` is a radio group on Android and the menu on iOS, and this is the one
+  // place that resolves it: the prop, the sizing policy below and `nuiSizingKey`
+  // all have to answer the same variant (see `resolveVariant`).
+  const nativeVariant = resolveVariant(variant);
   // The handshake works on the index. The public `onChange` also carries the
   // label, looked up from the `options` of *this* render: `useControlled` keeps
   // one native callback identity forever and swaps only the closure it reads, so

@@ -56,14 +56,21 @@ export interface NitroUiPickerProps
    */
   mostRecentEventCount: number;
   /**
-   * `'menu'` or `'wheel'`. Anything else behaves as `'menu'`, which is also the
-   * default the wrapper sends.
+   * `'menu'`, `'wheel'` or `'radio'`. Anything else behaves as `'menu'`, which is
+   * also the default the wrapper sends.
    *
    * The one prop that changes the control's *size policy*: a menu button is
    * sized by its title (`intrinsic`), a wheel fills its box's width and measures
    * its own height (`fillWidth`) — the same two-policy dance Progress does
    * between its linear and circular shapes. On Android `'wheel'` renders the
    * menu control (Material 3 has no wheel) under the wheel's layout policy.
+   *
+   * `'radio'` is Android's own control (a `selectableGroup()` column of
+   * `RadioButton` rows) and keeps the menu's `intrinsic` policy: the box is the
+   * widest row by the option count. iOS has no radio-group picker style, so
+   * `'radio'` renders `'menu'` there and the wrapper sends `'menu'` — the key
+   * must name the control that is drawn (`docs/components/picker.md`, DECISIONS
+   * D38 item 4).
    */
   variant: string;
   /**
