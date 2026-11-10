@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -134,7 +135,7 @@ internal class DialogModel : NitroUiModel() {
   var probeToken by mutableIntStateOf(0)
     private set
 
-  /** Whether an armed probe is still unanswered, so a poll loop arms once, not eighty. */
+  /** Whether the one armed probe is still unanswered, so a re-arm cannot pile up. */
   @Volatile var probePending = false
     private set
 
@@ -229,9 +230,10 @@ internal class DialogModel : NitroUiModel() {
   }
 
   /**
-   * Ask for one read of the sheet's rows. Only a confirmation sheet can answer, and
-   * only one read is in flight at a time, so a harness polling its report does not
-   * queue a bitmap draw per poll. See [RowProbeWitness].
+   * Ask for one read of the sheet's rows, through [RowProbeWitness]. Only a confirmation
+   * sheet answers, and only one read is ever in flight: the answer costs a window-sized
+   * bitmap draw, so it happens because a harness asked for it by name
+   * ([PROBE_ROWS_ID]) and not on every read of the report.
    */
   fun armRowProbe() {
     if (probePending || !presented || variant != "confirmation") {
@@ -245,6 +247,14 @@ internal class DialogModel : NitroUiModel() {
   fun publishRowProbe(line: String) {
     probePending = false
     probeLine = "n=${probeCount.incrementAndGet()} $line"
+  }
+
+  /**
+   * The sheet left composition with a probe armed, so nothing will ever answer it.
+   * Without this the flag stays set and no later probe can be armed at all.
+   */
+  fun abandonRowProbe() {
+    probePending = false
   }
 
   fun noteWindowEntered() {
@@ -564,40 +574,49 @@ private class DialogHost(
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
           )
         }
-        val tint = model.tintColor
-        val rowColors = ListItemDefaults.segmentedColors()
-        ordered.forEachIndexed { index, action ->
-          // The interactive segmented row, and the row's own `enabled`: a disabled
-          // action takes no press, says so in the accessibility tree, and is painted
-          // with the component's own disabled colour rather than one picked here.
-          // (Written when M3 1.4's `ListItem` had no `enabled`; 1.5's interactive row
-          // has one, and this is the Dialog's Expressive pass - D40 pass 3 B.)
-          //
-          // `tintColor` and `role: 'destructive'` replace only the *enabled* content
-          // colour, so a disabled destructive row is still drawn disabled. The colour
-          // set is remembered, not rebuilt: `ListItemColors` has twenty-four fields and
-          // a prop update must not allocate one per row (`core.md` section 3).
-          val content =
-            when {
-              action.role == "destructive" -> MaterialTheme.colorScheme.error
-              tint != null -> ComposeColor(tint)
-              else -> null
+        // The group carries its own 16 dp inset, which is the radius of its outer corners:
+        // flush to the sheet the corners cut grey wedges against the sheet's edge, and
+        // segments that touch are not segments, so they keep material3's own gap. The title
+        // and message above keep the sheet's 24 dp padding.
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+          verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        ) {
+          val tint = model.tintColor
+          val rowColors = ListItemDefaults.segmentedColors()
+          ordered.forEachIndexed { index, action ->
+            // The interactive segmented row, and the row's own `enabled`: a disabled
+            // action takes no press, says so in the accessibility tree, and is painted
+            // with the component's own disabled colour rather than one picked here.
+            // (Written when M3 1.4's `ListItem` had no `enabled`; 1.5's interactive row
+            // has one, and this is the Dialog's Expressive pass - D40 pass 3 B.)
+            //
+            // `tintColor` and `role: 'destructive'` replace only the *enabled* content
+            // colour, so a disabled destructive row is still drawn disabled. The colour
+            // set is remembered, not rebuilt: `ListItemColors` has twenty-four fields and
+            // a prop update must not allocate one per row (`core.md` section 3).
+            val content =
+              when {
+                action.role == "destructive" -> MaterialTheme.colorScheme.error
+                tint != null -> ComposeColor(tint)
+                else -> null
+              }
+            val colors =
+              remember(rowColors, content) {
+                content?.let { rowColors.copy(contentColor = it) } ?: rowColors
+              }
+            SegmentedListItem(
+              onClick = { model.performAction(action.id) },
+              shapes = ListItemDefaults.segmentedShapes(index, ordered.size),
+              modifier =
+                Modifier
+                  .fillMaxWidth()
+                  .semantics { this[ROW_MARK] = Unit },
+              enabled = !action.disabled,
+              colors = colors,
+            ) {
+              ActionLabel(model, action)
             }
-          val colors =
-            remember(rowColors, content) {
-              content?.let { rowColors.copy(contentColor = it) } ?: rowColors
-            }
-          SegmentedListItem(
-            onClick = { model.performAction(action.id) },
-            shapes = ListItemDefaults.segmentedShapes(index, ordered.size),
-            modifier =
-              Modifier
-                .fillMaxWidth()
-                .semantics { this[ROW_MARK] = Unit },
-            enabled = !action.disabled,
-            colors = colors,
-          ) {
-            ActionLabel(model, action)
           }
         }
         RowProbeWitness(model)
@@ -620,6 +639,11 @@ private class DialogHost(
     val view = LocalView.current
     val density = LocalDensity.current.density
     val token = model.probeToken
+    DisposableEffect(Unit) {
+      // A sheet that goes away mid-answer would otherwise leave the probe armed
+      // forever: [DialogModel.abandonRowProbe] is what lets a later one be asked.
+      onDispose { model.abandonRowProbe() }
+    }
     LaunchedEffect(token) {
       if (token > 0) {
         model.publishRowProbe(describeConfirmationRows(view, density))
@@ -856,23 +880,26 @@ class HybridNitroUiDialog(
   // MARK: - Methods
 
   /**
-   * What the dialog shows - and reading it also *arms* one row probe, which is how a
-   * harness reaches the rows: it polls this same method, so the first poll queues the
-   * read and the rest find one in flight. The read is unchanged - still a lock-free snap
-   * of volatiles that never waits for the UI thread (`core.md` section 5); only the
-   * arming is posted, and only while a probe is unanswered.
+   * What the dialog shows. Still a pure read - a lock-free snap of volatiles that never
+   * waits for the UI thread (`core.md` section 5) - and still draws nothing: the row
+   * probe, which costs a bitmap draw of the window, is armed by name through
+   * [nuiTestPerformAction] rather than by the act of asking.
    */
-  override fun nuiTestStateReport(): String {
-    if (!model.probePending) {
+  override fun nuiTestStateReport(): String = model.readReport(host.lifetimeReport().replace(' ', ';'))
+
+  /**
+   * Press one action, as a person would. [PROBE_ROWS_ID] is not an action: it is the
+   * reserved id by which a harness asks for one read of the confirmation sheet's rows,
+   * the only way it can reach a window it can neither tap nor otherwise read.
+   */
+  override fun nuiTestPerformAction(id: String) {
+    if (id == PROBE_ROWS_ID) {
       runOnUi {
         model.armRowProbe()
         host.applyModelWrites()
       }
+      return
     }
-    return model.readReport(host.lifetimeReport().replace(' ', ';'))
-  }
-
-  override fun nuiTestPerformAction(id: String) {
     runOnUi {
       model.performAction(id)
       host.applyModelWrites()
@@ -895,6 +922,13 @@ class HybridNitroUiDialog(
     mainHandler.post { action() }
   }
 }
+
+/**
+ * The id [HybridNitroUiDialog.nuiTestPerformAction] reads as "answer one row probe"
+ * rather than as an action. Underscores first so no app's action id can collide, and
+ * private to this file because nothing outside it may name it.
+ */
+private const val PROBE_ROWS_ID = "__nui_probe_rows"
 
 /**
  * Marks each confirmation row in the sheet's semantics tree, so [describeConfirmationRows]

@@ -565,8 +565,9 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
 
   /**
    * Android, and only Android can answer it: what the sheet's rows *are*, read off the
-   * open sheet rather than out of the props that produced it. Reading the report arms
-   * one row probe while one is unanswered, so polling the report is the whole seam (G28).
+   * open sheet rather than out of the props that produced it. The seam is a reserved
+   * action id - `nuiTestPerformAction('__nui_probe_rows')` asks for one read, and reading
+   * the report stays the pure read it is everywhere else (G28, fix round 1).
    *
    * `rows=` is each row's own merged accessibility node - `~` marks one that says it is
    * disabled, the same mark `Menu.harness.tsx`'s probe writes - and `radii=` is the
@@ -590,18 +591,28 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       await waitForHandle('rows');
       await waitForReport('rows', isUpCounted(1), 'the sheet up');
       // Past the slide-in: a sheet on its way up measures below the window, and the
-      // probe says `?-moving` rather than guess. Polling re-arms it, so this waits for
-      // an answer that could be measured, whatever the first ones said.
+      // probe answers `?-outside`, `?-small` or `?-blind` rather than guess. One ask is
+      // one answer, so this asks again - and only again - until the answer is one that
+      // could be measured, whatever the first ones said.
       await sleep(900);
-      const probed = await waitForReport(
-        'rows',
-        (report) => {
-          const answer = report.probe ?? '';
-          return answer.includes('radii=') && !answer.includes('?');
-        },
-        'a row probe answer the sheet could be measured in',
-        20000
-      );
+      const measurable = (report: Report) => {
+        const answer = report.probe ?? '';
+        return answer.includes('radii=') && !answer.includes('?');
+      };
+      const deadline = nitroUiCore.now() + 20000;
+      let probed = reportOf('rows');
+      for (;;) {
+        handles.get('rows')?.nuiTestPerformAction('__nui_probe_rows');
+        await sleep(150);
+        probed = reportOf('rows');
+        if (measurable(probed) || nitroUiCore.now() > deadline) break;
+      }
+      if (!measurable(probed)) {
+        throw new Error(
+          `"rows" never reached a row probe answer the sheet could be measured in; its ` +
+            `report is "${probed.raw}"`
+        );
+      }
       const probe = probed.probe ?? '';
       console.log(`sheet rows: ${probe}`);
       const fields: Record<string, string> = {};
@@ -619,7 +630,11 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       // The barrier that makes `~` mean something: an ordinary row of the same sheet is
       // not marked, and the sheet as a whole is not one long disabled row.
       expect(fields.rows).not.toBe('Locked,Go,Wipe');
-      // The disabled row still takes no press, once the probe has read it.
+      // The press check: a press on the disabled row reports nothing and closes nothing.
+      // Which layer refuses it is not this line's claim - the row's own `enabled = false`
+      // is what the two halves of the probe and the accessibility dump show - but a press
+      // that got through either layer would land in the log, and this is the line that
+      // would see it. It goes red with `enabled = true` on the row alone.
       handles.get('rows')?.nuiTestPerformAction('locked');
       await sleep(400);
       expect(eventLog.join(',')).toBe('');
