@@ -6938,8 +6938,12 @@ async function checkTimeDrums(t) {
   // What TalkBack is offered, read out of the tree it navigates. The value itself
   // travels as `stateDescription`, which a `uiautomator dump` does not transcribe, so
   // this records the node's class, its name and whether it says it scrolls (the
-  // adjust actions), and the row-reading below carries "the value shown is the value
-  // reported" instead.
+  // adjust actions). What the flings below carry is the *event count*, which is readable
+  // whatever the tree looks like. They also try to read the rows - and on this device's
+  // tree they cannot: `ScrollField` keeps its rows out of the accessibility tree, so
+  // `rowsReadable` is false, every "the row shown is the value reported" comparison below
+  // is skipped, and the WARN two lines later is the sentence that says so. A PASS on this
+  // control is not a claim that the rows were compared; on `nitroui_b` they never are.
   const wheelNodes = t.nodesNamed('Real-input wheel time picker');
   // The assertion is that the wheel is named at all - zero is the failure this can
   // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
@@ -7465,32 +7469,30 @@ async function main() {
     // would misattribute it. `a11y-sweep.mjs` says why this gate is where the rule lives —
     // no in-app query can see a Compose control's name, and a dedicated gate is a gate
     // nobody runs.
-    // G29-DEVONLY
-    if (!process.env.NUI_SKIP_A11Y_SWEEP)
-      await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
-        // The sweep's log travels with the navigation: `goToScreen` re-presses a tab
-        // until its screen arrives, and every one of those re-presses used to land on an
-        // absent `log` argument, where `log?.retried?.()` prints nothing and the run's
-        // totals could not see them. Half of a run's tab navigations are these.
-        goToScreen: (screen, log) => harness.goToScreen(screen, log),
-        dump: () => harness.hierarchy(),
-        scrollToTop: () => harness.scrollToTop(),
-        scrollPage: async (pixels) => {
-          const width = harness.displayWidth();
-          const height = harness.displayHeight();
-          // Aimed at the empty strip at the right edge, for the reason on `scrollPage`:
-          // anywhere else the swipe can start on Material 3's own calendar scroller and
-          // turn the month instead of moving the page.
-          harness.swipe(
-            width - 8,
-            Math.round(height * 0.7),
-            width - 8,
-            Math.round(height * 0.7) - pixels,
-            400
-          );
-          await sleep(500);
-        },
-      });
+    await runA11ySweep((id, title) => suite.beginAuxiliary(id, title), {
+      // The sweep's log travels with the navigation: `goToScreen` re-presses a tab
+      // until its screen arrives, and every one of those re-presses used to land on an
+      // absent `log` argument, where `log?.retried?.()` prints nothing and the run's
+      // totals could not see them. Half of a run's tab navigations are these.
+      goToScreen: (screen, log) => harness.goToScreen(screen, log),
+      dump: () => harness.hierarchy(),
+      scrollToTop: () => harness.scrollToTop(),
+      scrollPage: async (pixels) => {
+        const width = harness.displayWidth();
+        const height = harness.displayHeight();
+        // Aimed at the empty strip at the right edge, for the reason on `scrollPage`:
+        // anywhere else the swipe can start on Material 3's own calendar scroller and
+        // turn the month instead of moving the page.
+        harness.swipe(
+          width - 8,
+          Math.round(height * 0.7),
+          width - 8,
+          Math.round(height * 0.7) - pixels,
+          400
+        );
+        await sleep(500);
+      },
+    });
   } finally {
     harness.teardown();
     stopMetro();
