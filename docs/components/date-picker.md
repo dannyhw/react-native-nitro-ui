@@ -64,7 +64,7 @@ clamp, and the pick test is routed through it.
 | `compact` `time` | same field, popover shows `.wheel` | field opens `TimePickerDialog` |
 | `compact` `datetime` | popover shows `.graphical` with `[.date, .hourAndMinute]` (calendar + time row) | **two dialogs**: the date one commits, then the time one opens |
 | `inline` | `DatePicker` with `.graphical` | `DatePicker(state, showModeToggle = false)`; `time` → `TimePicker` |
-| `wheel` | `DatePicker` with `.wheel` | **no M3 wheel** — renders the inline picker |
+| `wheel` | `DatePicker` with `.wheel` | `time` → `TimeScroll`, Material 3 1.5's two drums; `date` / `datetime` → the inline calendar, unchanged |
 | Bounds | `DatePicker(in: ClosedRange<Date>)` | `SelectableDates` + the calendar's `yearRange` |
 | Host | `UIHostingController` inside `NitroSwiftUIHost`, plus containment for the popover (`needsContainment`) | `NitroComposeHost<M>: AbstractComposeView`; the dialog is composed from `model.presented` inside that composition |
 | Test id | RN `testID` → `accessibilityIdentifier` | `host.tag` (Compose has no test id) |
