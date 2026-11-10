@@ -131,6 +131,17 @@ internal class HybridNitroUiForm(
   override fun prepareForRecycle() {
     reportedWidthDp = -1f
     reportedImeInsetDp = -1f
+    // The report is a cache, and a read on the JS thread answers with whatever was last built
+    // (see [nuiTestFormReport]) - so a box that goes back to the pool still holding its last
+    // build answers for its previous owner until somebody asks again. Going back to the pool is
+    // the normal ending here: React Native keeps recycled views per `surfaceId`
+    // (`ViewManager.mRecyclableViews`) and hands a stopped surface's id to the next one, so the
+    // first report read from a recycled Form was the *previous* Form's - rows, `inCells` and
+    // offset included. X23 measured that as a recycled Form "starting" at the 200 dp its case
+    // had scrolled the first Form to, in a box whose real scroller is a fresh `ScrollView` at 0.
+    // Dropping the cache gives the report the reset every other number above gets; the next
+    // read answers `pending` and is rebuilt from the box as it now stands.
+    report = "pending"
     view.resetAccessibility()
   }
 
