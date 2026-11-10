@@ -441,15 +441,16 @@ export default function DatePickerScreen() {
           above read sits *above* these, because `uiautomator dump` lists no off-screen
           node and a check reads its echoes while the drum is on screen.
 
-          `mode="time"` becomes Material 3 1.5's `TimeScroll`: two drums, rolled with a
+          `mode="time"` becomes a drum per field (Material 3 1.5's `ScrollField`, the widget
+          its own `TimeScroll` is built from): rolled with a
           finger, one event per settle — which is what the counters are for. The second
           one is refused by the parent, so its drum has to roll itself back.
           `mode="date"` with the same variant stays the inline calendar (there is no
           Material date wheel to draw), and a check reads its box to prove that: a
-          calendar is far taller than the 200 dp drum.
+          calendar is far taller than the 120 dp drum.
 
           Every echo is above the control it belongs to, for the same reason: the check
-          brings the *drum* into the window, and what a drum needs is 200 dp of it.
+          brings the *drum* into the window, and what a drum needs is its own 120 dp of it.
         */}
         <Text style={[styles.section, { color: ink.ink }]}>
           Real input · wheel

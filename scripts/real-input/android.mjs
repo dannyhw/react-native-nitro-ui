@@ -6465,18 +6465,22 @@ function isCancelLabel(node) {
 }
 
 /**
- * The drums of a `TimeScroll`, as the accessibility tree shows them.
+ * The drums of a time wheel, as the accessibility tree shows them.
  *
- * A `TimeScroll` is two vertical pagers side by side, and the only thing the dump
- * says about them is the text of the rows it happens to be showing: five two-digit
- * `Text` nodes per column, one of which sits under the centre line. That is enough to
+ * The time wheel is a vertical pager per field, side by side. When a dump carries a
+ * drum's rows they are plain `Text` nodes — a handful of two-digit rows per column, one
+ * of which sits under the centre line — and that is enough to
  * aim a fling (the column's own x, not a fraction of the control's box) and — the
  * half that matters for G29 — to read *which row the drum stopped on*, which is the
  * only way this gate can say "the time shown is the time reported" about a wheel
  * rather than assert it from the Kotlin.
  *
+ * Whether the rows are there is the control's business, not this check's: on
+ * `nitroui_b` a `ScrollField` publishes the drum and not its rows, which is why
+ * [wheelColumns] says out loud what a run loses when they are missing.
+ *
  * Columns are found by clustering on x rather than by dividing the box: a 12-hour
- * `TimeScroll` puts an AM/PM toggle to the right of the two drums, and the drums are
+ * wheel keeps an AM/PM column to the right of the two drums, and the drums are
  * not symmetric inside the control's box. Rows of one drum share an x exactly, so a
  * gap of more than 20 px is a different column.
  *
@@ -6532,7 +6536,7 @@ function timeWheelColumns(t, drum) {
  * Bring a whole drum into the window, with the echo rows beside it.
  *
  * `requireControlOnScreen` stops the moment a control's *centre* is inside the window,
- * and a `TimeScroll` is 200 dp — 525 px of this device's ~2 000 px of window — so half
+ * and a drum is 120-200 dp — 315-525 px of this device's ~2 000 px of window — so half
  * of it can still be hanging off the bottom edge. Two things the wheel checks then do
  * would be quietly wrong: the row under the centre line is not in the dump at all when
  * that line is off screen (so "the row shown is the value reported" would compare the
@@ -6599,13 +6603,14 @@ async function positionWheel(t, label, echoIds) {
 /**
  * The two drums as Material itself names them.
  *
- * `TimeScroll` puts a semantics node on each `ScrollField` with the content description
- * Material chose for the field — "Select hour" and "Select minutes" — and each of those
- * nodes has the drum's own box. Measured on `nitroui_b` inside a 280 dp control at
- * `172,951 → 908,1266`: hour `172,951 → 435,1266`, minutes `477,951 → 740,1266`, with the
- * AM/PM toggle occupying the rest. So a fling can be aimed at a *measured* drum rather than
- * at a sixth of the control's box, which is what makes a missed aim a failure of the control
- * rather than of the check.
+ * Each drum publishes a semantics node with the content description Material chose for its
+ * own wheel's field — "Select hour" and "Select minutes" (`m3c_time_picker_*`, so the words
+ * are localised) — and each of those nodes has the drum's own box. Measured on `nitroui_b`
+ * in the full-width story, whose control is `42,952 → 1038,1267` (379 × 120 dp): hour
+ * `174,952 → 348,1266` (66 dp wide), minutes `390,952 → 601,1266` (80 dp wide), 42 px
+ * apart, and an AM/PM column beside them on a 12-hour device. So a fling can be aimed at a
+ * *measured* drum rather than at a sixth of the control's box, which is what makes a missed
+ * aim a failure of the control rather than of the check.
  *
  * Rows, by contrast, are not in the tree at all (see [wheelColumns]), so this is the only
  * reading of the drum's geometry available here.
@@ -6680,17 +6685,21 @@ function wheelColumns(t, drum) {
  */
 async function checkTimeDrums(t) {
   // ---------------------------------------------------------------------------
-  // G29: `variant="wheel"` with `mode="time"` is Material 3 1.5's `TimeScroll` — two
-  // drums, and a pick is a roll that comes to rest. Everything the dialog tests above
+  // G29: `variant="wheel"` with `mode="time"` is a drum per field, and a pick is a roll
+  // that comes to rest. Everything the dialog tests above
   // do with a tap, this does with a fling, and the assertion that matters is a count:
-  // a roll across three rows reports **one** change, not three. `TimeScroll` forwards
-  // the row nearest the snap line to its state continuously, so a control that read
-  // each of those as a pick would report one event per row here, on the real input
-  // path, with the real timing a pager has.
+  // a roll across three rows reports **one** change, not three. A `ScrollField` names the
+  // row nearest its snap line continuously, so a control that read each of those as a pick
+  // would report one event per row here, on the real input path, with the real timing a
+  // pager has.
   //
-  // Red proof: swap `collectLatest` for `collect` in `syncTimeWheel`, so the settle
-  // stops restarting while the drum is moving, and the first fling below reports one
-  // event per row it crossed and goes red.
+  // Red proof: make the settle a wall-clock window again instead of the wheel's own rest —
+  // in `syncTimeWheel`, trade `nuiReportAtWheelRest(active) { … }` for
+  // `snapshotFlow { readTimeDrums(…) }.collectLatest { rolled -> delay(60); … }` — and the
+  // first fling below reports two changes for one roll ("expected 1, saw 2"), which is the
+  // defect the 180 ms window had on a loaded box: the gap between two row crossings is as
+  // long as the machine's frames let it be, so a window can expire mid-roll. Shortening it
+  // to 60 ms only makes the same defect arrive without waiting for load.
   // ---------------------------------------------------------------------------
   const SEEDED = '2024-06-15 09:20';
   // Not `requireControlOnScreen`: a 200 dp drum is 525 px of a ~2 000 px window, so
@@ -6730,10 +6739,10 @@ async function checkTimeDrums(t) {
   const wheelNodes = t.nodesNamed('Real-input wheel time picker');
   // The assertion is that the wheel is named at all - zero is the failure this can
   // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
-  // carrying the name is Material's decision, not ours: `TimeScroll` is two drums
-  // and each publishes semantics of its own, so a name that lands on the control
-  // can also land on a drum. Recorded rather than asserted, and raised as the a11y
-  // finding it is - a reader that meets the label twice hears it twice.
+  // carrying the name is the widget's decision, not ours: each drum publishes semantics of
+  // its own (the column's name and its rows), so a name that lands on the control can also
+  // land on a drum. Recorded rather than asserted, and raised as the a11y finding it is - a
+  // reader that meets the label twice hears it twice.
   t.log.check(
     `the wheel is named in the tree (${String(wheelNodes.length)} node(s) carry ` +
       '"Real-input wheel time picker")',
@@ -6876,18 +6885,33 @@ async function checkTimeDrums(t) {
       Number(afterHour.slice(11, 13)) % 12
     );
   }
-  const period = t
+  // Which half of the day a wheel is in is read twice: from the AM/PM column's own node
+  // (the drum is named by the two values it holds), and from any AM/PM row the dump happens
+  // to carry. Reading only the rows would call a 12-hour wheel 24-hour on a tree that
+  // publishes no rows at all — and the modulo below would then look like a bug rather than
+  // as what a 12-hour row cannot say on its own.
+  const periodDrum = t
     .dump()
-    .filter(
+    .find(
       (node) =>
-        /^(AM|PM)$/i.test(node.text.trim()) &&
+        /^(AM|PM)\/(AM|PM)$/.test(node.contentDesc.trim()) &&
         node.bounds.cx >= wheel.bounds.x1 &&
         node.bounds.cx <= wheel.bounds.x2
-    )
-    .map((node) => node.text.trim());
+    );
+  const period = periodDrum
+    ? periodDrum.contentDesc.trim().split('/')
+    : t
+        .dump()
+        .filter(
+          (node) =>
+            /^(AM|PM)$/i.test(node.text.trim()) &&
+            node.bounds.cx >= wheel.bounds.x1 &&
+            node.bounds.cx <= wheel.bounds.x2
+        )
+        .map((node) => node.text.trim());
   t.log.note(
     period.length > 0
-      ? `the wheel is a 12-hour one (${period.join('/')} toggle): the assertion ` +
+      ? `the wheel is a 12-hour one (${period.join('/')} column): the assertion ` +
           'above compares the row with the reported hour modulo 12, and the half the ' +
           'row does not carry is the reported day part, which was checked unchanged'
       : 'the wheel is a 24-hour one, so the row is the reported hour itself'

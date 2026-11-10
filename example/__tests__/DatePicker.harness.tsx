@@ -1908,8 +1908,8 @@ describe('DatePicker · G5', () => {
 
 describe('DatePicker · wheel variant (G29)', () => {
   it('measures the time drum from a poisoned fallback', async () => {
-    // The sizing claim for the one wheel Android draws: `wheel` + `time` is
-    // `TimeScroll`, and the box it lands at is the one *it* measured, not the
+    // The sizing claim for the one wheel Android draws: `wheel` + `time` is a drum per
+    // field, and the box it lands at is the one *it* measured, not the
     // guess the engine would have used. The configuration is poisoned first, so
     // whatever arrives has to be a correction, and the correction is counted.
     //
