@@ -114,13 +114,19 @@ export default function SearchFieldScreen() {
   const noteBlur = useCallback(() => setBlurCount((count) => count + 1), []);
   const focusFromJs = useCallback(() => focusRef.current?.focus(), []);
   const blurFromJs = useCallback(() => focusRef.current?.blur(), []);
-  // Flips the keyboard of a field that keeps focus: an Action does not take focus,
-  // and the scroll view lets the tap through (`keyboardShouldPersistTaps`).
-  const switchKeyboard = useCallback(
-    () =>
-      setSwitching((type) => (type === 'default' ? 'number-pad' : 'default')),
-    []
-  );
+  // A keyboard prop that changes while the field keeps focus: two seconds after the
+  // field takes focus it asks for the number pad, with nothing tapped in between (a
+  // button would sit under the open keyboard). A blur puts it back.
+  const switchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startSwitch = useCallback(() => {
+    if (switchTimer.current != null) clearTimeout(switchTimer.current);
+    switchTimer.current = setTimeout(() => setSwitching('number-pad'), 2000);
+  }, []);
+  const stopSwitch = useCallback(() => {
+    if (switchTimer.current != null) clearTimeout(switchTimer.current);
+    switchTimer.current = null;
+    setSwitching('default');
+  }, []);
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: ink.background }]}>
@@ -246,17 +252,13 @@ export default function SearchFieldScreen() {
           {`email: ${emailQuery} submitted: ${emailSubmitted ?? '-'}`}
         </Text>
 
-        {/* The button sits above the field, so the open keyboard never covers it. */}
-        <Row title="keyboardType changed while focused">
-          <Action
-            label="Switch keyboard"
-            testID="search-switch-keyboard"
-            onPress={switchKeyboard}
-          />
+        <Row title="keyboardType changes 2 s after focus">
           <SearchField
             testID="search-switching"
             accessibilityLabel="Switching search field"
             keyboardType={switching}
+            onFocus={startSwitch}
+            onBlur={stopSwitch}
           />
         </Row>
         <Text testID="search-switching-echo" style={{ color: ink.ink }}>

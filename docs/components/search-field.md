@@ -151,7 +151,8 @@ rule stated on both sides rather than a coincidence of two defaults: iOS sets
 `enablesReturnKeyAutomatically`, so UIKit disables the key while the field is
 empty; Android's `onSearch` returns without reporting. `nuiTestSubmit()` runs the
 same guard, so the rule is assertable rather than invisible inside UIKit, and
-`real-input` presses the real key on both platforms.
+`real-input` presses a real key on both platforms (on Android a hardware Enter,
+which reaches the same `onSearch` the soft Search key does).
 
 The Android bar stays **collapsed** — v1 has no results view to expand into, and
 a bar that grew on focus would move the box under the keyboard. `expanded` in the
@@ -177,19 +178,14 @@ passes no keyboard prop gets the field it already had:
 | `autoCapitalize` | `'none'`    | A query is not a sentence. `TextField`'s default is `'sentences'`; this one is not, and that is the only place the two components' keyboard props disagree. |
 | `autoCorrect`    | `true`      | The system's own answer on iOS (`.default`, and `.no` when refused), and Android's autocorrection flag — what `TextField` sends for `true`. |
 
-**A change while the field is focused** reaches the keyboard that is already up
-on iOS: a `UITextInputTraits` setter does not touch a keyboard once it is
-visible, so the apply step calls `reloadInputViews()` when any of them moved.
-That is `TextField`'s rule, run through the same code.
-
-On Android it reaches the field's editor info at once and the keys on screen when
-that editor info is next asked for. Compose rebuilds the `EditorInfo` it hands the
-IME and does not restart an input session that is already running, so an open
-keyboard keeps the layout it opened with until the field is focused again. The
-query typed in the meantime still lands in the same field and submits on the same
-key — the difference is which keys are drawn — and `real-input` reads the IME's
-own record of the connection, which is the only place the distinction is visible
-from outside.
+**A change while the field is focused** reaches the keyboard that is already up,
+on both platforms. On iOS a `UITextInputTraits` setter does not touch a keyboard
+once it is visible, so the apply step calls `reloadInputViews()` when any of them
+moved — `TextField`'s rule, run through the same code. On Android, Compose
+restarts the field's input session when its keyboard options change while it
+has focus, so the IME is handed the new keyboard without the field losing focus;
+the IME's own record of the connection shows the switch (from the text keyboard
+to the number keyboard, Search key kept).
 
 One consequence of a keyboard prop is worth knowing before shipping one. UIKit's
 `.numberPad` and `.decimalPad` have **no Return key at all**, so on iOS a field

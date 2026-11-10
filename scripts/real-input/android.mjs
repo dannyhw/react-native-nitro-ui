@@ -4632,9 +4632,8 @@ const CHECKS = {
         editorWords(before),
         'class=text variation=0x0 flags=auto-correct action=search'
       );
-      await t.tapNode(await t.requireControlOnScreen('Switch keyboard'));
       t.log.checkEquals(
-        'the tap on "Switch keyboard" moved the prop to number-pad',
+        'two seconds after focus the screen moved the prop to number-pad, focus kept',
         t.waitForEcho(
           ECHO.searchSwitching,
           'switching: number-pad',
