@@ -874,6 +874,11 @@ class HybridNitroUiSearchField(
    * focus lands. So asking for the state also asks the UI thread to refresh it — coalesced,
    * because [stateWhen]-style tests poll this every 20 ms, and the harness sees what the
    * control is configured with on the next poll instead of what was true when focus moved.
+   *
+   * The refresh re-reads the keyboard and nothing else. The text, the focus and the event
+   * counts are published where their events are emitted, so a test that waits for the
+   * state to show a change has the change's event in hand too; refreshing them here would
+   * let a poll see a cleared query or a blur before its `change:` or `blur` reached JS.
    */
   override fun nuiTestState(): NitroUiSearchFieldTestState {
     requestStateRefresh()
@@ -889,8 +894,27 @@ class HybridNitroUiSearchField(
     }
     host.post {
       stateRefreshQueued.set(false)
-      publishState()
+      publishKeyboard()
     }
+  }
+
+  /** Bring the snapshot's three keyboard fields up to date, leaving every other field. */
+  private fun publishKeyboard() {
+    val keyboard = appliedKeyboard()
+    val current = snapshot
+    if (
+      current.keyboardType == keyboard.keyboardType &&
+        current.autoCapitalize == keyboard.autoCapitalize &&
+        current.autoCorrect == keyboard.autoCorrect
+    ) {
+      return
+    }
+    snapshot =
+      current.copy(
+        keyboardType = keyboard.keyboardType,
+        autoCapitalize = keyboard.autoCapitalize,
+        autoCorrect = keyboard.autoCorrect,
+      )
   }
 
   /** The clear button's own call, on the UI thread: the `snapshotFlow` reports it. */
