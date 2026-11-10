@@ -127,11 +127,15 @@ final class ListItemModel: NitroUiModel {
     reportLock.unlock()
   }
 
-  /// `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>`. Safe from any thread.
+  /// `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=-`. Safe from any thread.
+  ///
+  /// The last field answers `-` because iOS has no pixel sampler to feed (`nuiTestPixelReport`
+  /// answers `no pixels platform=ios` for the same reason). Android records the colour its
+  /// leading glyph was actually tinted with there, so one harness reads one line shape.
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);presses=\(presses);probes=\(probes);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);presses=\(presses);probes=\(probes);a11y=\(accessibilityReport);iconTint=-"
   }
 
   /// `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`. Safe from any thread.
@@ -175,6 +179,14 @@ final class NitroUiListRowView: UIView {
   private lazy var pressGesture = UILongPressGestureRecognizer(target: self, action: #selector(pressChanged(_:)))
   /// Whether the row is drawing its pressed background right now.
   private var pressed = false
+  /// Which press path this row is configured for: `own` (this row paints its own
+  /// highlight), `cell` (inside a `Form.Row`, whose cell owns the highlight) or `none`.
+  ///
+  /// Recorded in ``nuiApply()``, where the decision is made, and read back by
+  /// ``layoutReport(_:)`` for `shape=` — the same answer Android records at the branch that
+  /// picks Material's interactive row. Without it `shape=` would read `0` for every row at
+  /// rest and could not tell a leaf that obeys `insideRow` from one that ignores it.
+  private(set) var pressPath = "pending"
   /// The baseline the value label rides, taken from the row's own title label. Built once
   /// the first label exists, and rebuilt if UIKit hands us a different one.
   private var baselineConstraint: NSLayoutConstraint?
@@ -195,6 +207,17 @@ final class NitroUiListRowView: UIView {
     // The view's own margins must not add to the configuration's: the row is pinned to
     // these edges, and a box that inherits layout margins would inset it a second time.
     directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+    // ... and neither may the row content's. `insetsLayoutMarginsFromSafeArea` is on by
+    // default, and `UIListContentView` places its labels *inside* `directionalLayoutMargins`
+    // — so a row whose frame crosses the window's top inset gets its whole label block
+    // pushed down by that inset, and `systemLayoutSizeFitting` then reports a row that is
+    // the safe area taller. Measured on the harness before this line existed: the first
+    // `ListItem` under a status bar measured 52 pt while it had no geometry, and 113 pt on
+    // the first prop change after it had (`ListItem.harness.tsx` · "keeps one box while the
+    // slots that cost nothing change"). A list that absorbs the inset itself — `Form`, a
+    // `FlashList` — hides this; a plain `<View>` at the top of a screen does not.
+    insetsLayoutMarginsFromSafeArea = false
+    content.insetsLayoutMarginsFromSafeArea = false
     addSubview(content)
     content.translatesAutoresizingMaskIntoConstraints = false
     NSLayoutConstraint.activate([
@@ -265,6 +288,9 @@ final class NitroUiListRowView: UIView {
 
   /// Re-apply everything the model says, without touching the views' identity.
   func nuiApply() {
+    // Who paints the press: this row's own highlight, the `Form.Row`'s cell, or nobody.
+    // `setPressed(_:)` is the painter, and this is its condition spelled once.
+    pressPath = !model.pressable || model.disabled ? "none" : (model.insideRow ? "cell" : "own")
     let image = model.systemImage.flatMap { UIImage(systemName: $0) }
     let configuration = ListItemModel.configuration(
       title: model.title,
@@ -397,7 +423,7 @@ final class NitroUiListRowView: UIView {
   }
 
   /// What the row drew, as one line. Read from the drawn layout: the configuration the
-  /// content view laid itself out with, and whether the row painted a background.
+  /// content view laid itself out with, and whether the row paints anything of its own.
   private static func layoutReport(_ row: NitroUiListRowView) -> String {
     let margins = (row.content.configuration as? UIListContentConfiguration)?.directionalLayoutMargins
     // The reservation is the value's and the chevron's own width, not an inset of the
@@ -409,7 +435,10 @@ final class NitroUiListRowView: UIView {
     )
     let leading = margins?.leading ?? -1
     let trailing = (margins?.trailing ?? -1) - reservation
-    let painted = row.backgroundColor != nil && row.backgroundColor != .clear
+    // `shape=1`: a background on screen right now, or a press highlight this row has armed
+    // for itself. Inside a `Form.Row` neither happens, and the row's cell is the shape.
+    let painted = (row.backgroundColor != nil && row.backgroundColor != .clear)
+      || row.pressPath == "own"
     return String(
       format: "insets=%.2f,%.2f;shape=%d;box=%.2fx%.2f",
       leading,
