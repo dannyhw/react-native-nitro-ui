@@ -1,7 +1,8 @@
 # G29 — Real Android wheels: Picker `wheel` and DatePicker's time wheel
 
-**Branch:** `task/G29-android-wheels` (from `main` at `6005b35e`) · **Round:** 1 of up to 3 (D19) ·
-**Lease:** `G29-itkdc` (`emulator-5570` + iPhone Air 27.0 / Metro `8293`)
+**Branch:** `task/G29-android-wheels` (from `main` at `6005b35e`) · **Rounds:** 1 + fix round 2 of
+up to 3 (D19) · **Lease:** round 1 `G29-itkdc`, round 2 `G29-to3to` (both `emulator-5570` +
+iPhone Air 27.0 / Metro `8293`)
 
 ## Measured boxes
 
@@ -11,20 +12,24 @@ the emulator had not changed.
 
 | Wheel | Device box (dp) | How measured |
 | --- | --- | --- |
-| Picker `wheel` | 197 × **200**, in a box its story pins narrower than the 300 dp the harness used | real-input `drum box: 282,703 → 798,1228`; the harness lays the same drum out at 300 dp wide and 200 dp tall |
-| DatePicker `wheel` `time` | **280 × 120**, and inside it one drum per field: hour 100 × 120, minute 100 × 120, 42 px apart | real-input `time wheel box: 172,1020 → 908,1335` and the two named drum nodes ("Select hour", "Select minutes") |
+| Picker `wheel` | 197 × **200**, in a box its story pins narrower than the 300 dp the harness used | real-input `drum box: 282,750 → 798,1275` (round 2's run, unchanged from round 1); the harness lays the same drum out at 300 dp wide and 200 dp tall |
+| DatePicker `wheel` `time` | **379 × 120** in the full-width story, and inside it one drum per field — hour **66 × 120**, minute **80 × 120**, 42 px apart, with the AM/PM column beside them on this 12-hour device | round 2's real-input `time wheel box: 42,1005 → 1038,1320` and the two named drum nodes ("Select hour", "Select minutes"), which carry the drums' own boxes |
 | DatePicker `wheel` `date` | **512 dp tall** — the inline calendar's own box, asserted equal to it | real-input `wheel + mode="date" box … = 512 dp tall, against the time wheel's 120 dp`; `DatePicker.harness.tsx` asserts the two boxes are the same box |
 
-The heights are the widgets' claims, not the component's: `fillWidth` gives the width and the
-`ScrollField`/`TimeScroll` gives the height, which is why each sizing test poisons the
-fallback first and then counts the correction.
+The heights are the widgets' claims, not the component's: `fillWidth` gives the width and each
+`ScrollField` gives the height, which is why each sizing test poisons the fallback first and
+then counts the correction. The time wheel's drum *widths* are content's, not the constant's:
+`TimeWheelDrumWidth` (100 dp) is a cap behind `weight(1f, fill = false)`, and the two columns
+land at 66 and 80 dp because that is what their rows need.
 
 ## Summary
 
 Both wheels are Material's own now: `Picker variant="wheel"` draws `ScrollField`, and
-DatePicker's `wheel` + `time` draws `TimeScroll`, where Android gave a menu and an inline
-calendar. **Not mergeable as it stands:** one fling of the time drum reported two changes on a
-loaded box, and the freeze cut both iOS gates.
+DatePicker's `wheel` + `time` draws a drum per field out of the same widget, where Android gave a
+menu and an inline calendar. Round 1 ended on a double-report and two missing iOS gates; **fix
+round 2 below closes both** — and a third thing only the iOS run could find, a check that could no
+longer reach the bottom of the page it shares with the new wheels — and the round-1 prose that the
+fix round replaces is listed there.
 
 The bug that mattered was not the drawing. A drum is a pager, and React Native's scroll view
 claims a vertical drag at touch slop, before the pager sees it: a fling in a scroller moved
@@ -33,16 +38,12 @@ asks the ancestors to stand down for a gesture begun on the drum — and both do
 bargain: that drag rolls the drum, and the page is scrolled beside it.
 
 The one design decision a reviewer needs: **neither wheel reads its value as it turns.** A
-`ScrollField` names the row nearest its snap line continuously and `TimeScrollImpl` forwards
-each one to `state.hour`/`.minute`, so the dial's "the fields moved, so somebody picked" rule
-would price a 09:20→14:05 roll at fifty-odd events. Both wheels
-keep the rule and replace the trigger: the value is read at a *rest*, one rest one report.
-Picker has a real rest to subscribe to (`isScrollInProgress`); `TimeScroll`'s drum states are
-private to Material's implementation, so rest there is `collectLatest` over the two fields
-behind a 180 ms window. That number is not a measured settle time — nothing exposes one — it
-is proven from the other side: with no window one fling of the hour drum reports two changes;
-with it, one. The refused-pick write-back hangs off the same rest, so a snap-back is the
-widget moving home, not this file repainting it.
+`ScrollField` names the row nearest its snap line continuously, so the dial's "the fields moved,
+so somebody picked" rule would price a 09:20→14:05 roll at fifty-odd events. Both wheels keep the
+rule and replace the trigger: the value is read at a *rest*, one rest one report — a drum is
+active while a finger is on it or its own `isScrollInProgress` is up, and the report is the row it
+stands on when neither is true. The refused-pick write-back hangs off the same rest, so a
+snap-back is the widget moving home, not this file repainting it.
 
 `tintColor` reaches the selected row and the centre band; unselected rows keep Material's
 content colour, the one thing on a wheel it cannot take. `variant="wheel"` in `date`/`datetime`
@@ -56,23 +57,11 @@ platform, stated in `date-picker.md`'s Limits.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 2010 tests / 85 suites | `c749a35e04e8` | 2 m 49 s | start 6.2 / med 11.2 / max 17.7 |
-| `harness:ios` | missing | — | — | — | — |
-| `harness:android` | **PASS** | 657 tests / 31 suites + isolated 6 tests / 3 suites | `c749a35e04e8` (android tree) | 18 m 33 s | start 8.4 / med 5.9 / max 33.8 |
-| `real-input:ios` | missing | — | — | — | — |
-| `real-input:android` | **FAIL** | — | `c749a35e04e8` (android tree) | 16 m 15 s | start 5.1 / med 5.6 / max 17.5 |
-| `harness:android:-t:wheel%20variant` | **PASS** | 657 tests / 31 suites | `c749a35e04e8` (android tree) | 1 m 02 s | start 5.4 / med 5.0 / max 5.4 |
-| `harness:android:DatePicker` | stale | 19 tests / 1 suites | 37936848b36d (not this tree) | 27.0 s | start 8.9 / med 8.2 / max 8.9 |
-| `real-input:android:--control:date-picker` | stale | — | 1a0a972a0d0f (not this tree) | 14 m 52 s | start 6.8 / med 4.9 / max 14.5 |
-| `real-input:android:--control:date-picker:--background` | stale | — | e9e8a5c85cb6 (not this tree) | 0.4 s | start 3.8 / med 3.8 / max 3.8 |
-| `real-input:android:--control:picker` | stale | — | 5de08269fd41 (not this tree) | 7 m 07 s | start 4.9 / med 4.3 / max 14.4 |
-| `real-input:android:date-picker` | stale | — | 37936848b36d (not this tree) | 0.3 s | start 41.4 / med 41.4 / max 41.4 |
-
-`need --for review`: `✓ check`, `✓ harness:android`, `✗ harness:ios — never run on this
-tree` (the freeze). `real-input:android` is not part of review, but it is red on this tree and
-is the blocker above.
+Round 1's table stood here. Fix round 2 re-ran four of those five gates on a new code tree, so the
+one table this report carries is the generated one at the foot of `## Fix round 2` — what
+`gate.mjs table` prints for this code tree, because a stale row is a claim and the ledger row is
+evidence. Round 1's own runs, including the red one this round answers, are in
+`docs/tasks/G29/gates.jsonl` and in the store `gate.mjs logs` lists.
 
 ## Status at the freeze
 
@@ -107,6 +96,11 @@ gesture later. That is a small change inside `HybridNitroUiDatePicker.syncTimeWh
 re-run of the fling a few times on a quiet box (a flaky check has to be repeated, not
 greened once). Not attempted during the freeze, because an unverified fix on a frozen tree is
 worth less than a precise bug report.
+
+→ **Done in fix round 2, with the diagnosis confirmed rather than assumed.** The settle is now the
+wheel's own scroll and gesture rather than any window, the mutation that restores a window
+reproduces `expected 1, saw 2` on command, and the four gates this section lists as never started or
+left red are in the generated table in `## Fix round 2`.
 
 ## Red proofs
 
@@ -166,9 +160,9 @@ for either is a fix-round item, not a claim.
 
 ## Files changed
 
-- `android/.../HybridNitroUiPicker.kt`: `ScrollField` drum, the rest-read settle, sizing keys, recycle reset.
-- `android/.../HybridNitroUiDatePicker.kt`: `TimeScroll` for `wheel` + `time`, `syncTimeWheel`, date/datetime unchanged.
-- `android/.../core/NitroUiWheelDrag.kt` (new, in the published manifest): `nuiOwnVerticalDrags`, the one
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiPicker.kt`: `ScrollField` drum, the rest-read settle, sizing keys, recycle reset.
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDatePicker.kt`: `TimeScroll` for `wheel` + `time`, `syncTimeWheel`, date/datetime unchanged.
+- `android/src/main/java/com/margelo/nitro/nitroui/core/NitroUiWheelDrag.kt` (new, in the published manifest): `nuiOwnVerticalDrags`, the one
   gesture rule both drums need.
 - `example/__tests__/{Picker,DatePicker}.harness.tsx`, `scripts/real-input/{android,screens}.mjs`: the two
   wheels' coverage — ten harness cases and the fling steps that read a drum's own box out of the dump.
@@ -210,25 +204,94 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
   ≈15 minutes) unless `NUI_SKIP_A11Y_SWEEP=1`; a filtered red-proof run would rather not pay
   for it, and the flag is undocumented outside the script.
 
+## Fix round 2 — the rest is the wheel's, not a clock's
+
+**Lease:** `G29-to3to`.
+
+**The settle is the wheel's own scroll, not a clock's.** A drum is *active* while a finger is on
+it — `nuiOwnVerticalDrags` awaits the down and the up anyway — or while its
+`ScrollFieldState.isScrollInProgress` is up, and the value is read on the edge where both fall: the
+frame the pager's snap animation finished. `nuiReportAtWheelRest` (core) is that rule and both
+wheels run through it; a mount leaves it unarmed, and a refused pick's snap-back is a scroll too, so
+the handshake's refusal answers it rather than an event. A quiet period on the value stream cannot
+be the edge, because a drum only *names* rows as they cross. `wheel` + `time` draws its own `ScrollField`s (hour, minute,
+AM/PM on a 12-hour device) because `TimeScrollImpl` keeps its drum states private — from outside the
+widget, "the drum is still turning" does not exist.
+
+**Two finds only round 2's runs could make.** Two harness cases were reading Android's boxes off an
+iPhone (SwiftUI's wheel is 216 dp, the menu a wheel recycles into is 82 × 34.67), and `harness:ios`
+had never run on them. And the Date screen's low-row check scrolled with `app.swipeUp()`, which
+always begins at the centre of the window — a drum now. The wheel kept that drag (correct: it is what
+rolls a drum), one unmoved swipe read as "the end of the page", and the check pressed a row left at
+y=1005 of a 912 pt window and reported *presented no popover*. It drags the page's own 16 pt of left
+padding, where no wheel is laid out; it calls the end three unmoved steps rather than one, because
+the `wideBox` inline rows do reach the gutter; and it asserts the row is on the window before
+pressing it, so an unreachable page says so instead of blaming the control.
+
+**Files:** core `NitroUiWheelDrag.kt` (the drag flag, the active-drum count, `nuiReportAtWheelRest`),
+`HybridNitroUiDatePicker.kt` (the drums it draws itself and the settle that reads them),
+`HybridNitroUiPicker.kt` (the same settle through the shared helper),
+`example/__tests__/{Picker,DatePicker}.harness.tsx` (the two boxes), `RealInputTests.swift` (the low
+row's scroll), `scripts/real-input/{android,screens}.mjs`, `example/src/DatePickerScreen.tsx`,
+`docs/components/date-picker.md`, `README.md`, the changeset.
+
+Red proofs, in the round-1 idiom (`test -> mutation -> the line that went red`):
+
+- real-input `date-picker: the wheel's time drum` -> in `syncTimeWheel`, swap
+  `nuiReportAtWheelRest(active) { … }` for the window this rule replaced,
+  `snapshotFlow { readTimeDrums(…) }.collectLatest { delay(60); … }`, shortened from 180 ms so it
+  does not have to wait for load -> `one roll of the hour reports exactly one change, not one per row
+  crossed — expected 1, saw 2`, with `the hour drum at rest: real-input-wheel-time-events went to "2"
+  when it should have stayed "1"` (`real-input:android:--control:date-picker`, exit 1, mutated APK on
+  `nitroui_b`). The same app with the rule restored reads `expected 1, saw 1` for all five rolls.
+- real-input `date-picker: the low row` -> keep `app.swipeUp()` and add only the row-on-the-window
+  assert -> `RealInputTests.swift:5181 XCTAssertLessThanOrEqual failed: ("1041.3331705729165") is
+  greater than ("912.0") — the last row of the Date screen ended at y 1005.0-1041.3 of a 912.0pt
+  window, so it is off it` (`real-input:ios:--control:date-picker`, exit 1). With the gutter drag the
+  same check reaches the real end (`scrolled in 14 steps, last 3 unmoved`, `roomBelow=50.0`), the
+  popover measures `336 × 337`, and `testRealInputDatePicker passed (100.3s)`.
+
+Superseded from round 1: the Summary's "`TimeScroll`'s drum states are private … behind a 180 ms
+window" and the matching "`TimeScroll` for `wheel` + `time`" row of Files changed; the measured box
+for `wheel` + `time`, which is the drums' own row, not `TimeScroll`'s 280 × 120; the follow-up "`TimeScroll`: no settle to subscribe to", now the reason the drums are drawn
+here; and question 1, which is what this round is. Round 1's red proof for the window (deleting its
+`delay`) stands — the same defect from the other end.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2010 tests / 85 suites | `5da281ff32f3` | 2 m 45 s | start 7.3 / med 9.7 / max 17.3 |
+| `harness:ios` | **PASS** | 601 tests / 31 suites + isolated 6 tests / 3 suites | `5da281ff32f3` (ios tree) | 14 m 49 s | start 11.3 / med 10.8 / max 30.4 |
+| `harness:android` | **PASS** | 657 tests / 31 suites + isolated 6 tests / 3 suites | `a57685d120dd` (android tree) | 18 m 23 s | start 6.7 / med 5.0 / max 13.2 |
+| `real-input:ios` | **PASS** | — | `5da281ff32f3` (ios tree) | 44 m 27 s | start 15.3 / med 11.3 / max 97.7 |
+| `real-input:android` | **PASS** | — | `5da281ff32f3` (android tree) | 67 m 40 s | start 11.1 / med 7.3 / max 51.5 |
+| `harness:android:-t:wheel%20variant` | stale | 657 tests / 31 suites | c749a35e04e8 (not this tree) | 1 m 02 s | start 5.4 / med 5.0 / max 5.4 |
+| `harness:android:DatePicker` | stale | 19 tests / 1 suites | 37936848b36d (not this tree) | 27.0 s | start 8.9 / med 8.2 / max 8.9 |
+| `real-input:android:--control:date-picker` | stale | — | ef30471dccaa (not this tree) | 6 m 47 s | start 3.9 / med 3.9 / max 7.2 |
+| `real-input:android:--control:date-picker:--background` | stale | — | e9e8a5c85cb6 (not this tree) | 0.4 s | start 3.8 / med 3.8 / max 3.8 |
+| `real-input:android:--control:picker` | stale | — | 5de08269fd41 (not this tree) | 7 m 07 s | start 4.9 / med 4.3 / max 14.4 |
+| `real-input:android:date-picker` | stale | — | 37936848b36d (not this tree) | 0.3 s | start 41.4 / med 41.4 / max 41.4 |
+| `real-input:ios:--control:date-picker` | stale | — | b07e22b9377b (not this tree) | 13 m 31 s | start 14.6 / med 18.1 / max 38.1 |
+
+`need --for review`: `✓ check`, `✓ harness:ios`, `✓ harness:android`, `✓ real-input:ios`,
+`✓ real-input:android`. `need --for merge` still names `harness:android`: merge matches every gate on
+the whole tree, review on a platform's own half, and the only commit since that run is
+`RealInputTests.swift`, which moves `trees.ios` to `d6aea28dbe21` and leaves `trees.android` at
+`4db576ac7650` — byte for byte the tree that run covered. The merge host re-keys all five anyway.
+
+**Two greens of the load-sensitive fling:** `real-input:android` sits twice in the ledger on that same
+`trees.android`, both PASS — `16:58:27Z` (66 m 13 s) and `20:28:37Z` (67 m 40 s), each reading
+`expected N, saw N` for all five drum rolls. `real-input:ios:--control:date-picker` is the filtered
+red/green pair above, one run either side of `c7da9333`.
+
 ## Questions for orchestrator
 
-- **The double-report needs a decision before G29 merges.** Options: (a) a fix round here — arm
-  the DatePicker drum's settle from the pointer-up `nuiOwnVerticalDrags` already sees instead of
-  from 180 ms of quiet, then run the fling several times on a quiet box (recommended: it is my
-  code, the seam is in the file, and the alternative is a timeout that is tuned until it
-  stops failing); (b) raise the window to something embarrassing (400 ms+) and accept a laggy
-  report; (c) land the Picker wheel only and hold the DatePicker drum back. The check that
-  caught it (`one roll of the hour reports exactly one change`) is the right check — it should
-  not be relaxed.
-- Also still owed by this task, once gates are allowed again: `harness:ios`, `real-input:ios`,
-  and a green `real-input:android` — twice, since one of its checks is now known to be
-  load-sensitive.
+Round 1's two questions were both answered before fix round 2 started, so nothing is held open here.
 
-- **The bench number the brief asks for does not exist to be taken.** `mount.picker` has one
-  cell and no `variant` knob (`rg wheel bench/src` is empty), so wheel-vs-menu needs a bench
-  fixture — a plan cell plus the two implementations' stories — which is bench-host work
-  (D15) and cannot be reached by a flag. Options: (a) accept the gap and hand the cell to the
-  bench host as a follow-up (recommended: `need` never asks for a bench, and the wheel's
-  cost is bounded by the same `ScrollField` the menu does not use); (b) a fix round adding
-  `mount.picker-variant-wheel` to the bench plan, which is a day of fixture work on the bench
-  host's tree rather than a run here.
+- **The double-report** — answered: a settle must not be a wall-clock timeout, and the definition
+  was left to the gesture and the scroll. Option (a) was taken (a fix round here); (b) and (c) are
+  off the table, and the check that caught it was kept rather than relaxed. What came of it is
+  `## Fix round 2` above, with the red proof and two greens of the load-sensitive fling.
+- **The bench number** — answered: `mount.picker` has no `variant` knob, so no number is quoted
+  and the cell is left to the bench host as the one follow-up line the brief allows.
+- The gates round 1 owed (`harness:ios`, `real-input:ios`, `real-input:android` twice) are all in
+  the generated table in `## Fix round 2`, and `task-ready` is green on this tree.
