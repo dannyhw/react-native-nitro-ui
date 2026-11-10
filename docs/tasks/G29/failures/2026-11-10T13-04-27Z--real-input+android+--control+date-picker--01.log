@@ -1,0 +1,159 @@
+# Failure excerpt — real-input:android:--control:date-picker
+
+- Ran: 2026-11-10T13:04:27.531Z on code tree `e7900a5c7d0a` at HEAD `bd09f0a` (branch `task/G29-android-wheels`)
+- Command: `node scripts/real-input/android.mjs --control date-picker`
+- Result: fail, exit 1, 434855 ms
+- Load: start 4.67, end 4.69, median 5.66, max 15.54
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log` (<store>/task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ no on-screen text with testID "real-input-wheel-time-events" in the accessibility tree`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G27-izh0s                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.69 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 113 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: real-input:android:--control:date-picker
+gate: node scripts/real-input/android.mjs --control date-picker (cwd .)
+gate: code tree e7900a5c7d0a at HEAD bd09f0ae
+gate: git tree 5b9c79d0512f with a DIRTY worktree (not reusable)
+gate: log task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log
+gate:       <store>/task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log
+real-input (android): emulator-5570 · nitroui_b · adb server 5041 · Metro 8293
+metro: started on 8293 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ the DatePicker has reported no day before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input date picker" occupies 42,807 → 386,933
+    · tapping dialog day "Monday, November 16, 2026"
+    ✓ a real tap on a dialog day (Monday, November 16, 2026) reaches JS as a change — expected 1, saw 1
+    ✓ the day JS was told is the day React paints: "2026-11-16" is Y-M-D, written by hand so that no locale can move the assertion
+    ✓ the refusing parent pins its DatePicker to one day — expected 2024-06-15, saw 2024-06-15
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the day it sends is unchanged — expected 2024-06-15, saw 2024-06-15
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a second pick is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 2024-06-15, saw 2024-06-15
+    · grid: 31 cells in the band, first = "Thursday, January 1, 2026", value = "2026-01-01 08:30"
+    ✓ the tap moved the value it is echoing: "2026-01-08 08:30" is not "2026-01-01 08:30"
+    ✓ and the day it accepted is the instant that day echoed before, time of day kept — expected 2026-01-01 08:30, saw 2026-01-01 08:30
+    ✓ "Wide inline calendar" is laid out in a 411 dp box, at the 360 dp width that decides the touch target
+    ✓ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 126px, 126px, 126px, 126px, 126px, 126px, 126px (narrowest 48.0 dp)
+    ✓ "Narrow inline calendar" is laid out in a 320 dp box, under the 360 dp width that decides the touch target
+    ✓ the 320 dp inline calendar lays a whole week out on 40 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp)
+    · "Real-input wheel time picker" occupies 172,1796 → 908,2111
+    · "Real-input wheel time picker" occupies 172,951 → 908,1266
+    ✓ the uncontrolled wheel has reported no time yet — expected -, saw -
+    ✓ and has reported no change — expected 0, saw 0
+    · time wheel box: 172,951 → 908,1266 at 2.625 x = 120 dp tall, 280 dp wide
+    ✓ the wheel is named in the tree (1 node(s) carry "Real-input wheel time picker")
+    · wheel a11y node: class=android.view.View enabled=true scrollable=false content-desc=Real-input wheel time picker
+    · G29-TEMP inside: class=android.widget.FrameLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.LinearLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.FrameLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.LinearLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.FrameLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.FrameLayout text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.view.ViewGroup text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.view.ViewGroup text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 0,0 → 1080,2424 scrollable=false
+    · G29-TEMP inside: class=android.widget.FrameLayout text="" desc="" 42,951 → 1038,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.ViewGroup text="" desc="" 42,951 → 1038,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 42,951 → 1038,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 172,951 → 908,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="Real-input wheel time picker" 172,951 → 908,1266 scrollable=false
+    · G29-TEMP inside: class=android.widget.SeekBar text="" desc="Select hour" 172,951 → 435,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 435,951 → 477,1266 scrollable=false
+    · G29-TEMP inside: class=android.widget.SeekBar text="" desc="Select minutes" 477,951 → 740,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="Select AM or PM" 761,951 → 908,1266 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 761,951 → 908,1098 scrollable=false
+    · G29-TEMP inside: class=android.widget.TextView text="AM" desc="" 801,993 → 868,1056 scrollable=false
+    · G29-TEMP inside: class=android.widget.CheckBox text="" desc="" 761,951 → 908,1098 scrollable=false
+    · G29-TEMP inside: class=android.view.View text="" desc="" 761,1119 → 908,1266 scrollable=false
+    · G29-TEMP inside: class=android.widget.TextView text="PM" desc="" 802,1161 → 868,1224 scrollable=false
+    · G29-TEMP inside: class=android.widget.CheckBox text="" desc="" 761,1119 → 908,1266 scrollable=false
+    · "Real-input wheel time picker" occupies 172,951 → 908,1266
+    · "Real-input wheel time picker" occupies 172,462 → 908,777
+    · G29-TEMP left sixth, up, 130 ms: x=295 y 1228->989 dur=130ms events 0 -> 0 value=- box now 172,462 → 908,777
+    · "Real-input wheel time picker" occupies 172,462 → 908,777
+    · "Real-input wheel time picker" occupies 172,924 → 908,1239
+    · G29-TEMP left sixth, down, 130 ms: x=295 y 500->739 dur=130ms events 0 -> 0 value=- box now 172,924 → 908,1239
+    · "Real-input wheel time picker" occupies 172,924 → 908,1239
+    · "Real-input wheel time picker" occupies 172,449 → 908,764
+    · G29-TEMP left twelfth, up, 130 ms: x=233 y 1201->962 dur=130ms events 0 -> 0 value=- box now 172,449 → 908,764
+    · "Real-input wheel time picker" occupies 172,449 → 908,764
+    ✗ no on-screen text with testID "real-input-wheel-time-events" in the accessibility tree
+
+date-picker: FAIL (no retries)
+    failed: no on-screen text with testID "real-input-wheel-time-events" in the accessibility tree
+
+real-input (android): 0/1 controls passed · 0 input sequence(s) needed a retry · 1/1 auxiliary checks passed
+gate: real-input:android:--control:date-picker FAIL in 434.9 s
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-04-26.734Z.log (5 probe(s))
+
+```

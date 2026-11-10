@@ -70,7 +70,9 @@ platform, stated in `date-picker.md`'s Limits.
 | `real-input:android:--control:picker` | stale | — | 5de08269fd41 (not this tree) | 7 m 07 s | start 4.9 / med 4.3 / max 14.4 |
 | `real-input:android:date-picker` | stale | — | 37936848b36d (not this tree) | 0.3 s | start 41.4 / med 41.4 / max 41.4 |
 
-`need --for review`: pending — see *Status at the freeze*.
+`need --for review`: `✓ check`, `✓ harness:android`, `✗ harness:ios — never run on this
+tree` (the freeze). `real-input:android` is not part of review, but it is red on this tree and
+is the blocker above.
 
 ## Status at the freeze
 
