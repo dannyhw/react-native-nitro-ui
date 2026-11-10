@@ -1913,11 +1913,10 @@ describe('DatePicker · wheel variant (G29)', () => {
     // guess the engine would have used. The configuration is poisoned first, so
     // whatever arrives has to be a correction, and the correction is counted.
     //
-    // The number is logged rather than hard-coded: this is the measurement the
-    // G29 report quotes, and a fixture here would only be able to prove that the
-    // device had not changed. What is asserted is the two things that must hold
-    // whatever the number turns out to be — it is not the planted size, and the
-    // host was laid out at the size the composition reported.
+    // What is asserted is that the box is not the planted guess, that the host was laid
+    // out at the size the composition reported, and that the height is the 120 dp this
+    // widget states for itself. The measured box is still logged, because it is the
+    // number the G29 report quotes and a run should say what it saw.
     if (Platform.OS !== 'android') {
       console.log('time drum: Android case - iOS has had a wheel since G5');
       return;
