@@ -4405,7 +4405,7 @@ const CHECKS = {
     );
     t.key(KEY_ENTER);
     t.log.checkEquals(
-      'the Search key with an empty query submits nothing and blurs nobody',
+      'a hardware KEY_ENTER (the route the Search key shares) with an empty query submits nothing and blurs nobody',
       t.requireEchoToStay(
         ECHO.searchFocus,
         'focus: 1 blur: 0 submitted: -',
@@ -4447,7 +4447,7 @@ const CHECKS = {
     await t.type('go');
     t.key(KEY_ENTER);
     t.log.checkEquals(
-      'the Search key submits the query and then blurs the field',
+      'a hardware KEY_ENTER (the route the Search key shares) submits the query and then blurs the field',
       t.waitForEcho(
         ECHO.searchFocus,
         'focus: 1 blur: 1 submitted: go',
@@ -4572,7 +4572,7 @@ const CHECKS = {
       );
       t.key(KEY_ENTER);
       t.log.checkEquals(
-        'and its Search key submits the query',
+        'and a hardware KEY_ENTER on it submits the query through the Search action',
         t.waitForEcho(
           ECHO.searchNumber,
           'number: 123 submitted: 123',
@@ -4608,13 +4608,49 @@ const CHECKS = {
       );
       t.key(KEY_ENTER);
       t.log.checkEquals(
-        'and the Search key still submits on a keyboard the app chose',
+        'and a hardware KEY_ENTER still submits through the Search action on a keyboard the app chose',
         t.waitForEcho(
           ECHO.searchEmail,
           'email: a@b submitted: a@b',
           'the email field to submit'
         ),
         'email: a@b submitted: a@b'
+      );
+
+      // A keyboard prop changed while the field holds focus. The IME's own record is the
+      // witness: `onCreateInputConnection` would build a fresh `EditorInfo` from the new
+      // options whether or not the running session was restarted, but the record the
+      // service holds only changes when the session is started again.
+      await t.hideKeyboard();
+      await t.tapNode(await t.requireControlOnScreen('Switching search field'));
+      const before = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x1,
+        'the switching field to open as a text keyboard'
+      );
+      t.log.checkEquals(
+        'the switching field opens with the text keyboard it was given',
+        editorWords(before),
+        'class=text variation=0x0 flags=auto-correct action=search'
+      );
+      await t.tapNode(await t.requireControlOnScreen('Switch keyboard'));
+      t.log.checkEquals(
+        'the tap on "Switch keyboard" moved the prop to number-pad',
+        t.waitForEcho(
+          ECHO.searchSwitching,
+          'switching: number-pad',
+          'the prop to change'
+        ),
+        'switching: number-pad'
+      );
+      const after = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x2,
+        'the open keyboard to become a number keyboard'
+      );
+      t.log.checkEquals(
+        'keyboardType changed while focused restarts the input session: the IME is ' +
+          'handed a number keyboard without the field losing focus',
+        editorWords(after),
+        'class=number variation=0x0 flags=none action=search'
       );
       // Leave no keyboard up for the next check.
       await t.hideKeyboard();

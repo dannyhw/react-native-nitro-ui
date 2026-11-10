@@ -7,8 +7,8 @@
 
 `SearchField` takes `keyboardType`, `autoCapitalize` and `autoCorrect`: TextField's props, values, mapping and
 resolver. `src/core/keyboard.ts` holds the shared vocabulary (both unions, both value lists,
-`resolveKeyboardOption`); `TextField` re-exports it, so its public names are unchanged. The props are `T | null` on the
-Nitro spec, always passed (nitro#1184), with v1's defaults (`'default'`, `'none'`, autocorrection on), so a field whose
+`resolveKeyboardOption`); `TextField` re-exports it, so its public names are unchanged. The props are plain `string`/`boolean`
+on the Nitro spec (the wrapper resolves an omitted prop to its default), always passed (nitro#1184), with v1's defaults (`'default'`, `'none'`, autocorrection on), so a field whose
 app passes nothing is configured as before, byte for byte in the IME's own record. The Return key stays Search.
 
 **iOS** writes the four traits in `nuiApply()` through `NitroUiTextTraits.Resolved` (TextField's resolver) and calls

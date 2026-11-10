@@ -691,8 +691,15 @@ class HybridNitroUiSearchField(
     host.prepareForRecycle()
     // The model is shared with TextField, whose defaults are a text field's.
     applySearchPresets()
+    // What the reset left the keyboard as, read off the model after the fact: the harness
+    // cannot read between this and the next owner's first prop write, which would mask a
+    // reset that kept the previous owner's keyboard.
+    resetKeyboard = "${model.keyboardType}/${model.autoCapitalize}/${model.autoCorrect}"
     publishState()
   }
+
+  /** The keyboard [prepareForRecycle] last reset to, for [nuiTestLifetimeReport]. */
+  private var resetKeyboard = "never"
 
   override fun onDropView() {
     model.onChange = null
@@ -718,20 +725,16 @@ class HybridNitroUiSearchField(
   }
 
   /**
-   * Bumped by the three keyboard setters, and the stamp [appliedKeyboard] was last read
-   * at. Together they mean the read-back below runs when a keyboard prop moved or the
-   * field changed focus - and not on every keystroke, which is what [publishState] is
-   * otherwise called for (a keystroke latency is the one budget this component shares
-   * with TextField's timing gate).
+   * Bumped by the three keyboard setters and by a recycle: a read-back taken under an
+   * older stamp describes options the field no longer has.
    */
   private var keyboardStamp = 0
-  private var keyboardStampRead = -1
-  private var keyboardFocusRead: Boolean? = null
 
-  /** The keyboard as [publishState] reported it, decoded from whatever it read. */
-  private var appliedKeyboard = AppliedKeyboard("default", "none", true)
+  /** [readBackKeyboard]'s last answer from a real `EditorInfo`, and the stamp it was read at. */
+  private var probedKeyboard: AppliedKeyboard? = null
+  private var probedStamp = -1
 
-  /** [appliedKeyboard]'s three RN names. */
+  /** The three keyboard fields in RN's spellings. */
   private data class AppliedKeyboard(
     val keyboardType: String,
     val autoCapitalize: String,
@@ -739,52 +742,75 @@ class HybridNitroUiSearchField(
   )
 
   /**
-   * The keyboard the field is configured with, in RN's spellings.
-   *
-   * Two sources, in that order of authority:
-   *
-   * - While the field holds focus, the [EditorInfo] its own input connection hands the
-   *   IME ([currentEditorInfo]) - the same object the keyboard is built from, so this
-   *   says what the IME was told, not what the wrapper asked for.
-   * - With no input connection up (an unfocused field, a fresh recycle), the
-   *   [KeyboardOptions] the composition would be given, decoded from the same mapping
-   *   functions it uses.
-   *
-   * What neither can say is that the IME *redrew* its keyboard after a prop changed
-   * while focused: Compose rebuilds the `EditorInfo` on request and nothing restarts the
-   * input session for a `keyboardOptions` change, so the open keyboard keeps the type it
-   * opened with until the field is focused again. `docs/components/search-field.md` says
-   * exactly that, and the real-input suite is the one that can watch the IME itself.
+   * A focused field whose `EditorInfo` has not been read yet. `keyboardType` and
+   * `autoCapitalize` say `pending`, which no prop spells, so a test waiting for a
+   * keyboard cannot be satisfied by it; `autoCorrect` carries the option, and the
+   * harness checks it only alongside a `keyboardType` that is not `pending`.
    */
-  private fun appliedKeyboard(): AppliedKeyboard {
-    val focused = model.focused
-    if (keyboardStamp == keyboardStampRead && focused == keyboardFocusRead) {
-      return appliedKeyboard
+  private val PENDING_KEYBOARD = AppliedKeyboard("pending", "pending", true)
+
+  /**
+   * The keyboard [KeyboardOptions] describe, decoded through the same mapping functions
+   * the composition uses. Cheap - no view walk - so it is what [publishState] reports
+   * for an unfocused field on every update.
+   */
+  private fun optionsKeyboard(): AppliedKeyboard =
+    AppliedKeyboard(
+      keyboardType =
+        NitroUiKeyboardNames.nameOfKeyboardType(keyboardTypeOf(model.keyboardType, secure = false)),
+      autoCapitalize =
+        NitroUiKeyboardNames.nameOfCapitalization(capitalizationOf(model.autoCapitalize)),
+      autoCorrect = model.autoCorrect,
+    )
+
+  /**
+   * What [publishState] reports for the keyboard, without touching the view tree.
+   *
+   * Unfocused: the options. Focused: the last [readBackKeyboard] answer for the current
+   * stamp, or [PENDING_KEYBOARD] when there is none yet - never the options, because a
+   * focused field's report is the claim "this is what the IME was handed", and only
+   * [readBackKeyboard] (the test-only path `nuiTestState()` queues) may make it.
+   */
+  private fun publishedKeyboard(): AppliedKeyboard {
+    if (!model.focused) {
+      probedKeyboard = null
+      return optionsKeyboard()
     }
-    val info = if (focused) currentEditorInfo() else null
-    appliedKeyboard =
-      if (info != null) {
-        AppliedKeyboard(
-          keyboardType = NitroUiKeyboardNames.nameOfInputType(info.inputType),
-          autoCapitalize = NitroUiKeyboardNames.nameOfCapitalization(info.inputType),
-          autoCorrect = NitroUiKeyboardNames.autoCorrectOf(info.inputType, model.autoCorrect),
-        )
-      } else {
-        AppliedKeyboard(
-          keyboardType =
-            NitroUiKeyboardNames.nameOfKeyboardType(
-              keyboardTypeOf(model.keyboardType, secure = false)
-            ),
-          autoCapitalize =
-            NitroUiKeyboardNames.nameOfCapitalization(
-              capitalizationOf(model.autoCapitalize)
-            ),
-          autoCorrect = model.autoCorrect,
-        )
-      }
-    keyboardStampRead = keyboardStamp
-    keyboardFocusRead = focused
-    return appliedKeyboard
+    val probed = probedKeyboard
+    return if (probed != null && probedStamp == keyboardStamp) probed else PENDING_KEYBOARD
+  }
+
+  /**
+   * The test-only read-back: while focused, the [EditorInfo] the field's own input
+   * connection hands the IME ([currentEditorInfo]), decoded. Runs only from
+   * [publishKeyboard], so an app's focus changes never walk the view tree or open an
+   * extra input connection. A focused read that finds no `EditorInfo` is not cached and
+   * reports [PENDING_KEYBOARD]: falling back to the options there would turn the
+   * read-back into an echo of the props.
+   *
+   * What this cannot say is what the IME *drew*: `onCreateInputConnection` builds a
+   * fresh `EditorInfo` from the current options whether or not the running session was
+   * restarted. The real-input suite reads the IME's own record for that.
+   */
+  private fun readBackKeyboard(): AppliedKeyboard {
+    if (!model.focused) {
+      probedKeyboard = null
+      return optionsKeyboard()
+    }
+    val cached = probedKeyboard
+    if (cached != null && probedStamp == keyboardStamp) {
+      return cached
+    }
+    val info = currentEditorInfo() ?: return PENDING_KEYBOARD
+    val read =
+      AppliedKeyboard(
+        keyboardType = NitroUiKeyboardNames.nameOfInputType(info.inputType),
+        autoCapitalize = NitroUiKeyboardNames.nameOfCapitalization(info.inputType),
+        autoCorrect = NitroUiKeyboardNames.autoCorrectOf(info.inputType, model.autoCorrect),
+      )
+    probedKeyboard = read
+    probedStamp = keyboardStamp
+    return read
   }
 
   /**
@@ -820,7 +846,7 @@ class HybridNitroUiSearchField(
 
   /** Snapshot what the harness reads. UI thread; read from JS through `@Volatile`. */
   private fun publishState() {
-    val keyboard = appliedKeyboard()
+    val keyboard = publishedKeyboard()
     val field = model.textState
     val text = field.text.toString()
     snapshot =
@@ -900,7 +926,7 @@ class HybridNitroUiSearchField(
 
   /** Bring the snapshot's three keyboard fields up to date, leaving every other field. */
   private fun publishKeyboard() {
-    val keyboard = appliedKeyboard()
+    val keyboard = readBackKeyboard()
     val current = snapshot
     if (
       current.keyboardType == keyboard.keyboardType &&
@@ -931,5 +957,6 @@ class HybridNitroUiSearchField(
     host.post { host.submitTick += 1 }
   }
 
-  override fun nuiTestLifetimeReport(): String = host.lifetimeReport()
+  override fun nuiTestLifetimeReport(): String =
+    "${host.lifetimeReport()} resetKeyboard=$resetKeyboard"
 }

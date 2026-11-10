@@ -211,7 +211,14 @@ async function refocusAndRead(
   await sleep(150);
   handle.focus();
   await stateWhen(id, (state) => state.focused, 'the field to take focus back');
-  return stateWhen(id, check, what, 8000);
+  // `pending` is Android's "focused, and the IME's editor info not read yet": never an
+  // answer, so a check that only looks at `autoCorrect` cannot pass on it.
+  return stateWhen(
+    id,
+    (state) => state.keyboardType !== 'pending' && check(state),
+    what,
+    8000
+  );
 }
 
 /**
@@ -783,7 +790,11 @@ describe('SearchField', () => {
     // them to, so an app that passes no keyboard prop has to get the field it always
     // got — and the answer has to come from the control rather than from the snapshot's
     // own initial value, which says the same words for a field that was never told.
-    const asFound = (await handleOf('keyboard')).nuiTestState();
+    const asFound = await stateWhen(
+      'keyboard',
+      (current) => current.keyboardType !== 'pending',
+      'the focused field to read its keyboard back'
+    );
     expect(asFound.focused).toBe(true);
     expect(asFound.keyboardType).toBe('default');
     expect(asFound.autoCapitalize).toBe('none');
@@ -958,6 +969,13 @@ describe('SearchField', () => {
       const lifetime = handle.nuiTestLifetimeReport();
       recycled = /recycles=[1-9]/.test(lifetime);
       console.log(`search field recycle round ${round}: ${lifetime}`);
+      if (recycled) {
+        // The reset itself, recorded by `prepareForRecycle` before the second owner's
+        // props land. The assertions above cannot see it: every prop is always passed,
+        // so the second owner's own defaults would mask a reset that kept the first
+        // owner's number pad.
+        expect(lifetime).toContain('resetKeyboard=default/none/true');
+      }
       cleanup();
       handles.clear();
       await sleep(200);

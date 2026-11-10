@@ -100,6 +100,9 @@ export default function SearchFieldScreen() {
   const [numberSubmitted, setNumberSubmitted] = useState<string | null>(null);
   const [emailQuery, setEmailQuery] = useState('');
   const [emailSubmitted, setEmailSubmitted] = useState<string | null>(null);
+  const [switching, setSwitching] = useState<'default' | 'number-pad'>(
+    'default'
+  );
   const focusRef = useRef<SearchFieldHandle>(null);
 
   // Every edit is refused: JS keeps `FROZEN`, so the echo is what brings the text
@@ -111,6 +114,13 @@ export default function SearchFieldScreen() {
   const noteBlur = useCallback(() => setBlurCount((count) => count + 1), []);
   const focusFromJs = useCallback(() => focusRef.current?.focus(), []);
   const blurFromJs = useCallback(() => focusRef.current?.blur(), []);
+  // Flips the keyboard of a field that keeps focus: an Action does not take focus,
+  // and the scroll view lets the tap through (`keyboardShouldPersistTaps`).
+  const switchKeyboard = useCallback(
+    () =>
+      setSwitching((type) => (type === 'default' ? 'number-pad' : 'default')),
+    []
+  );
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: ink.background }]}>
@@ -234,6 +244,23 @@ export default function SearchFieldScreen() {
         </Row>
         <Text testID="search-email-echo" style={{ color: ink.ink }}>
           {`email: ${emailQuery} submitted: ${emailSubmitted ?? '-'}`}
+        </Text>
+
+        {/* The button sits above the field, so the open keyboard never covers it. */}
+        <Row title="keyboardType changed while focused">
+          <Action
+            label="Switch keyboard"
+            testID="search-switch-keyboard"
+            onPress={switchKeyboard}
+          />
+          <SearchField
+            testID="search-switching"
+            accessibilityLabel="Switching search field"
+            keyboardType={switching}
+          />
+        </Row>
+        <Text testID="search-switching-echo" style={{ color: ink.ink }}>
+          {`switching: ${switching}`}
         </Text>
       </ScrollView>
     </SafeAreaView>
