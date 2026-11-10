@@ -2702,19 +2702,60 @@ describe('Picker · wheel variant (G29)', () => {
     expect(eventLog).toEqual([]);
 
     handles.get('wheel-midroll')?.nuiTestSelect(19);
-    for (const label of ['Drum A', 'Drum B', 'Drum C', 'Drum D', 'Drum E']) {
-      await settle(40);
+    // Batches until one of them is *seen* mid-flight, then a couple more after it.
+    // A fixed handful at fixed intervals is the wrong shape for this: the animation's
+    // length and the JS loop's latency are both the device's to choose, so on a loaded
+    // run five batches can all land after the rest and the case would pass having
+    // tested nothing. Stopping on the witness is what makes the window wide on a fast
+    // device and long on a slow one, and the assertion below is still the one that has
+    // to be met.
+    const LABELS = [
+      'Drum A',
+      'Drum B',
+      'Drum C',
+      'Drum D',
+      'Drum E',
+      'Drum F',
+      'Drum G',
+      'Drum H',
+      'Drum I',
+      'Drum J',
+      'Drum K',
+      'Drum L',
+      'Drum M',
+      'Drum N',
+      'Drum O',
+      'Drum P',
+    ];
+    let seen = false;
+    for (const label of LABELS) {
+      await settle(25);
       await rerender(tree(label));
+      if (wheelWitness('wheel-midroll').sawRolling) {
+        seen = true;
+        // Two more after the proof, so the case covers the batches a real parent keeps
+        // sending while a roll is going, not only the one that happened to land.
+        await settle(25);
+        await rerender(tree(`${label} +`));
+        break;
+      }
     }
     const during = wheelWitness('wheel-midroll');
     console.log(
-      `mid-roll batches: witness=${JSON.stringify(during)} ` +
+      `mid-roll batches: witnessed=${String(seen)} witness=${JSON.stringify(during)} ` +
         `events=${JSON.stringify(eventLog)}`
     );
     // The case bit: some batch landed while the drum was still turning. Had none
     // arrived in time, this would be a passing test that had tested nothing, so it fails
     // instead - the same rule the red proofs of this suite run on.
-    expect(during.sawRolling).toBe(true);
+    if (!during.sawRolling) {
+      throw new Error(
+        `none of the ${String(LABELS.length)} batches reached the drum's sync point while ` +
+          `it was touched or turning (witness ${JSON.stringify(during)}, log ` +
+          `${JSON.stringify(eventLog)}) - a mid-roll batch that never arrives mid-roll ` +
+          `proves nothing, so this case refuses rather than passing.`
+      );
+    }
     // And not one of them wrote the drum.
     expect(during.seats).toBe(0);
 
