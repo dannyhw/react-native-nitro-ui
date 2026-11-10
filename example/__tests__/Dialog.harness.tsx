@@ -630,11 +630,11 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
       // The barrier that makes `~` mean something: an ordinary row of the same sheet is
       // not marked, and the sheet as a whole is not one long disabled row.
       expect(fields.rows).not.toBe('Locked,Go,Wipe');
-      // The press check: a press on the disabled row reports nothing and closes nothing.
-      // Which layer refuses it is not this line's claim - the row's own `enabled = false`
-      // is what the two halves of the probe and the accessibility dump show - but a press
-      // that got through either layer would land in the log, and this is the line that
-      // would see it. It goes red with `enabled = true` on the row alone.
+      // The press check. Which layer refuses the press is deliberately not this line's
+      // claim: `rows=` and `radii=` above are what show the row's own `enabled = false`,
+      // and this is the line that would see a press that got through *either* layer,
+      // because both report through the same log. A press here that did something is a
+      // bug whoever let it through; which layer is the row's own story, told by the probe.
       handles.get('rows')?.nuiTestPerformAction('locked');
       await sleep(400);
       expect(eventLog.join(',')).toBe('');
