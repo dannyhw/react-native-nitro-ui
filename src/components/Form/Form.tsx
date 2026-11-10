@@ -99,6 +99,19 @@ const FormLayoutContext = createContext<FormLayout>(EMPTY_LAYOUT);
  */
 const InsideRowContext = createContext(false);
 
+/**
+ * Whether the nearest wrapper above is a {@link RowRoot}.
+ *
+ * @internal Not app API (DECISIONS D14): exported for `ListItem`, whose row content
+ * has to stand down inside a row — the cell has already paid for its insets, its
+ * shape and its highlight, and a leaf that paid for them again draws a band inside a
+ * band (DECISIONS D46 item 2). An app never passes this; the context is the whole
+ * mechanism, so a `ListItem` in a `Form.Row` is right without being configured.
+ */
+export function useInsideFormRow(): boolean {
+  return useContext(InsideRowContext);
+}
+
 /** What a Row inside a Row is told, once per process — a 50-row list should not log 50 lines. */
 const NESTED_ROW_WARNING =
   'nitro-ui: a `Form.Row` was rendered inside another `Form.Row`. v1 supports `Form.Row` ' +
