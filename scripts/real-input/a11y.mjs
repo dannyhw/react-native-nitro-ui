@@ -674,20 +674,27 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     platform: 'ios',
     followups:
       'G16 a11y: an accessible ContextMenu still lists its Texts as stops on iOS',
-    // React Native 0.88 inherits `accessible` down the tree (AccessibilityProps.cpp takes
-    // the parent's value as the child's default), so each `Text` inside an accessible
-    // ContextMenu is an element in its own right and `RCTParagraphComponentView` vends one
-    // for it. XCUITest lists every element twice, so the reading is 2 stops when the sweep
-    // walks the tree before the second Text has been published and 4 after it: main read 2
-    // at 20:57Z and a branch touching neither ContextMenu nor its screen read 4 at 00:53Z,
-    // with byte-identical boxes and no instability line (X22 fix round 1). The count is
-    // therefore not the shape, and G16's comment that four stops meant the wrapper had
-    // stopped being an element was wrong: that regression is told apart by the unnamed
-    // container box the sentence quotes, which this row does not match.
+    // One component, three walk histories, measured on iOS 27 (X22 fix round 1). An app
+    // that goes straight to this case reads ONE node: the wrapper with the label, its
+    // subtree hidden — the tree the rule actually wants. The same tree walked after the
+    // sweep's other 21 cases lists the first Text; after the merged Stepper + Picker-radio
+    // tree's 22 it lists both. Each Text shows up twice, and that is not XCUITest
+    // duplicating: the sweep's own probe finds one child under the wrapper with the same
+    // label and one child under *that*, so React Native really vends two nested elements
+    // per `Text` (the `Text`'s component view, and the element its Paragraph vends). All
+    // three readings have identical boxes and settle with no instability line, and the
+    // other 22 cases read byte for byte the same in both logs — the count is when the tree
+    // was walked, not what the component is. The reason it can change at all is React
+    // Native's: the wrapper hides its subtree only once React Native has stored
+    // `accessible` on the component view, and measured from this view's own getter that
+    // store still reads false inside the Hybrid's `afterUpdate()`. A walk that lands in
+    // that window publishes the subtree, and UIKit keeps what it has published.
     //
     // So: any count, but every stop listed has to be one of the wrapper's own two Texts,
     // and the sentence has to be the one that names React Native's publication as the
-    // cause. A third label, or the unnamed box, is not this row and goes red.
+    // cause. A third label is not this row, and neither is the unnamed container box —
+    // that box is the D37 item 2 regression (the wrapper not an element at all), which is
+    // what G16's comment mistook four stops for.
     matches: CONTEXT_MENU_TEXT_STOPS_ROW,
   },
   {
