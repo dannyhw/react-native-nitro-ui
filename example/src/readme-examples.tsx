@@ -24,6 +24,7 @@ import {
   type DialogAction,
   Host,
   IconButton,
+  ListItem,
   Menu,
   type MenuGroup,
   Picker,
@@ -651,6 +652,63 @@ export function NotificationForm({
       <Form.Section title="Quiet hours">
         <Form.Row accessory="disclosure" onPress={onOpenQuietHours}>
           <Text>Set quiet hours</Text>
+        </Form.Row>
+      </Form.Section>
+    </Form>
+  );
+}
+// #endregion
+
+// #region list-item
+export function RingtoneList({
+  onOpenNotifications,
+  onOpenArchive,
+}: {
+  onOpenNotifications: () => void;
+  onOpenArchive: () => void;
+}) {
+  return (
+    <View>
+      <ListItem
+        accessory="disclosure"
+        androidIcon={require('./assets/icons/share_24px.xml')}
+        onPress={onOpenNotifications}
+        subtitle="Only while the app is open"
+        systemImage="bell.badge"
+        title="Notifications"
+      />
+      <ListItem title="Version" value="1.2.3" />
+      <ListItem
+        accessory="disclosure"
+        disabled
+        onPress={onOpenArchive}
+        systemImage="tray.and.arrow.down"
+        title="Archived conversations"
+        value="Soon"
+      />
+    </View>
+  );
+}
+// #endregion
+
+// #region list-item-in-form
+export function AccountForm({ onOpenProfile }: { onOpenProfile: () => void }) {
+  return (
+    <Form style={{ height: 220 }}>
+      <Form.Section title="Account">
+        {/* Inside a row the item draws no insets, shape or press of its own: the
+            row is the cell, and the cell has already paid for all three. */}
+        <Form.Row>
+          <ListItem
+            accessory="disclosure"
+            onPress={onOpenProfile}
+            subtitle="Signed in on 3 devices"
+            systemImage="person.crop.circle"
+            title="Profile"
+          />
+        </Form.Row>
+        <Form.Row>
+          <ListItem title="Sign out" />
         </Form.Row>
       </Form.Section>
     </Form>
