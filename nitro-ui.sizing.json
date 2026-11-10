@@ -12,5 +12,6 @@
   "HybridNitroUiSearchField": "fillWidth",
   "HybridNitroUiCheckbox": "intrinsic",
   "HybridNitroUiIconButton": "intrinsic",
+  "HybridNitroUiStepper": "intrinsic",
   "HybridNitroUiButtonGroup": "fillWidth"
 }

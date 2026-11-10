@@ -21,6 +21,7 @@ import { A11Y_CONTROLS } from '../real-input/a11y.mjs';
 import { parseHierarchy } from '../real-input/uiautomator.mjs';
 
 const serial = process.env.ANDROID_SERIAL ?? 'emulator-5570';
+
 const outDir = process.argv[2] ?? 'scripts/__tests__/fixtures/a11y';
 
 /**
@@ -55,6 +56,7 @@ const TAB_LABEL = {
   checkbox: 'Checkbox',
   iconbutton: 'Icons',
   form: 'Form',
+  stepper: 'Stepper',
   buttongroup: 'Groups',
 };
 
@@ -181,7 +183,9 @@ function findTab(label) {
 mkdirSync(outDir, { recursive: true });
 const seen = new Set();
 for (const control of A11Y_CONTROLS) {
-  if (only != null && !only.has(control.id)) continue;
+  if (only != null && !only.has(control.id)) {
+    continue;
+  }
   if (!seen.has(control.screen)) {
     seen.add(control.screen);
     scrollToTop();

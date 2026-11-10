@@ -1947,3 +1947,467 @@ describe('Picker · G6', () => {
     unmount();
   });
 });
+
+/*
+ * ---------------------------------------------------------------------------
+ * G26 — `variant="radio"` (Q7 Appendix D, DECISIONS D38 item 4).
+ *
+ * A radio group is the first variant of this control that is *not* a popup, and
+ * that inverts which of these tests can say what:
+ *
+ *  - the rows are in the app's own window, so `nuiTestSelect` presses a row that a
+ *    `menu` pick can only reach through a popup - and on Android a *real* tap can
+ *    reach one too, which is step 9 of `CHECKS.picker` in `scripts/real-input`;
+ *  - the box is the option count by the widest row, so the selection is *not* a
+ *    sizing input. The suite below reads that two ways: a pick costs 0
+ *    corrections (the key has no `sel:` term to move), and the box does not move
+ *    either - which is the same fact measured instead of trusted;
+ *  - on iOS `radio` is the menu (there is no `RadioGroupPickerStyle` to host), so
+ *    the geometry cases are Android's and iOS gets the fallback asserted - the
+ *    variant answers `menu`, the box is the menu's, and flipping the prop back is
+ *    not a remount.
+ *
+ * The 48 dp row is measured here rather than copied from the design: the numbers
+ * below are what `nitroui_a` says a Material 3 `RadioButton` row is, and a row is
+ * 48 dp because that is Material's own minimum touch target, which the radio
+ * inside already asks for.
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * The key `Picker.tsx` builds for a `radio` variant, spelled out on purpose.
+ *
+ * On Android that is `radio|count|labels…` (Q7 Appendix D): a group paints every
+ * label at once, so which row is chosen decides nothing about its box, and it draws
+ * no `label` at all - that prop is the group's accessibility name there - so neither
+ * field belongs in a size configuration. On iOS the variant is resolved to `menu`
+ * before the key is built, and a menu is as wide as the one title it shows and has a
+ * field to name - so both fields stay in the key there, and this helper says so by
+ * delegating.
+ */
+function radioSizingKey(
+  options: readonly string[],
+  selectedIndex: number,
+  label: string | null = null
+): string {
+  if (Platform.OS !== 'android') {
+    return sizingKey(options, selectedIndex, label, 'menu');
+  }
+  const escape = (value: string) => value.replace(/[\\|]/g, '\\$&');
+  return ['radio', String(options.length), ...options.map(escape)].join('|');
+}
+
+/** What one row of the group measures, on this device, at font scale 1. */
+const ROW_DP = 48;
+
+describe('Picker · radio variant (G26)', () => {
+  it('measures a radio group as its option count, one row per option', async () => {
+    // The base sizing claim for the variant, and the reason the option *count* is
+    // in the key: three options are 144 dp tall and five are 240. A control that
+    // reported a fixed height for every radio group - or one that inherited the
+    // menu's 56 dp field, which is what the component's declared fallback says -
+    // cannot satisfy both. Both configurations start poisoned (D17), so the pair
+    // also requires the corrections that replace the fallback.
+    if (Platform.OS !== 'android') {
+      console.log('radio geometry: Android only - iOS renders the menu');
+      return;
+    }
+    const THREE = ['Small', 'Medium', 'Large'];
+    const FIVE = ['One', 'Two', 'Three', 'Four', 'Five'];
+    poisonConfigurations([radioSizingKey(THREE, 0), radioSizingKey(FIVE, 0)]);
+    const before = stats();
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={THREE}
+          variant="radio"
+          testID="radio-three"
+          hybridRef={captureHybrid('radio-three')}
+        />
+        <Picker
+          options={FIVE}
+          variant="radio"
+          testID="radio-five"
+          hybridRef={captureHybrid('radio-five')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-three');
+    const three = await waitForMeasured('radio-three', 'three rows');
+    await waitForBox('radio-three', three, 'three rows');
+    const five = await waitForMeasured('radio-five', 'five rows');
+    await waitForBox('radio-five', five, 'five rows');
+    console.log(
+      `radio rows: three=${describeSize(three)} five=${describeSize(five)} ` +
+        `cold=${JSON.stringify(delta(before, stats()))}`
+    );
+    expect(Math.abs(three.height - 3 * ROW_DP)).toBeLessThanOrEqual(1);
+    expect(Math.abs(five.height - 5 * ROW_DP)).toBeLessThanOrEqual(1);
+    // The width is the widest row, not the menu's 280 dp field floor: a radio
+    // group has no field, so a short set of labels is a narrow control. (Whether
+    // *these* labels clear 280 is the device's business - what is not the
+    // device's business is that both groups are as wide as their own rows, which
+    // is what the ellipsis and the over-wide placement rule are there for.)
+    expect(three.width).toBeGreaterThan(80);
+    for (const testId of ['radio-three', 'radio-five']) {
+      expect(sameSize(sizeOf(testId), WRONG_SIZE)).toBe(false);
+    }
+    const cold = delta(before, stats());
+    expect(cold.corrections).toBeGreaterThanOrEqual(2);
+    expect(cold.cachedSizes).toBeGreaterThanOrEqual(2);
+    unmount();
+  });
+
+  it('costs no correction when a pick moves the selection', async () => {
+    // The `sel:`-free key is what this buys, and it is the only test that can see
+    // it: the pick is warm (the configuration is exact in the cache), so a key
+    // that named the selection would make it a *new* configuration - one frame at
+    // the declared fallback and a correction, on a control whose box did not move.
+    // Red proof: put `sel:` back for the `radio` variant in `Picker.tsx` and this
+    // goes red on both counts, the correction and the box.
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const OPTIONS = ['Small', 'Medium', 'Large'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        onChange={recordChange('radio-warm')}
+        testID="radio-warm"
+        hybridRef={captureHybrid('radio-warm')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-warm');
+    const first = await waitForMeasured('radio-warm', 'the warm group');
+    await waitForBox('radio-warm', first, 'the warm group');
+    await settle(300);
+    eventLog.length = 0;
+    const warm = stats();
+    await pickRow('radio-warm', 2);
+    await settle(500);
+    const after = delta(warm, stats());
+    console.log(
+      `radio pick: ${describeSize(first)} -> ${describeSize(
+        measured('radio-warm')
+      )} pick=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // The choice happened, and it was a choice: this is the selection path, not a
+    // prop write, and the count says so. `mostRecentEventCount` is what *JS sent*,
+    // and an uncontrolled pick sends nothing back - the app was told, the control
+    // painted, and no props batch went down. A wrapper that adopted the pick and
+    // re-sent it would read 1 here, which is the same reading the menu cases at the
+    // read-back and press-me tests use for the opposite claim.
+    expect(eventLog).toEqual(['radio-warm:2']);
+    expect(handles.get('radio-warm')?.mostRecentEventCount).toBe(0);
+    expect(after.corrections).toBe(0);
+    expect(after.cachedSizes).toBe(0);
+    // The box never moved, which is the same fact read from the other end.
+    expect(sameSize(sizeOf('radio-warm'), first)).toBe(true);
+    unmount();
+  });
+
+  it('costs no correction when the group is renamed', async () => {
+    // The other field that leaves a `radio` key: on Android `label` is the group's
+    // accessibility name and is drawn nowhere, so a rename is not a new size
+    // configuration either. Leave `lbl:` in the radio key in `Picker.tsx` and it
+    // becomes one - the group is laid out again at the declared fallback (the menu's
+    // 280 x 56) and pays a correction, on a control whose box cannot have moved.
+    // Android's, for the same reason as the case above: on iOS the variant is a menu,
+    // a menu draws the label as a field, and there the field *does* belong.
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const OPTIONS = ['Small', 'Medium', 'Large'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0, 'First')]);
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        label="First"
+        onChange={recordChange('radio-lbl')}
+        testID="radio-lbl"
+        hybridRef={captureHybrid('radio-lbl')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-lbl');
+    const first = await waitForMeasured('radio-lbl', 'the warm group');
+    await waitForBox('radio-lbl', first, 'the warm group');
+    await settle(300);
+    const warm = stats();
+    eventLog.length = 0;
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        label="Renamed"
+        onChange={recordChange('radio-lbl')}
+        testID="radio-lbl"
+        hybridRef={captureHybrid('radio-lbl')}
+      />
+    );
+    await settle(500);
+    const after = delta(warm, stats());
+    console.log(
+      `radio rename: ${describeSize(first)} -> ${describeSize(
+        measured('radio-lbl')
+      )} after=${JSON.stringify(after)} events=${JSON.stringify(eventLog)}`
+    );
+    // The rename is not vacuous: the new name is what the live control carries.
+    expect(handles.get('radio-lbl')?.label).toBe('Renamed');
+    // And it cost nothing: no new configuration, so no fallback frame, no
+    // correction, and the box is the one it already had.
+    expect(after.corrections).toBe(0);
+    expect(after.cachedSizes).toBe(0);
+    expect(eventLog).toEqual([]);
+    expect(sameSize(sizeOf('radio-lbl'), first)).toBe(true);
+    unmount();
+  });
+
+  it('picks a row through the selection path and rolls back a refused one', async () => {
+    // Android's, because the two claims here are about a group whose box does not
+    // move. On iOS this variant *is* a menu, where a pick changes the title and
+    // therefore the box, and a second pick of the pinned row is the no-op the menu
+    // refuses to report - both already covered for menus by the suite above, so a
+    // guard here states the difference instead of duplicating the menu's tests.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'radio selection path: Android only - iOS picks a menu, and a menu resizes'
+      );
+      return;
+    }
+    // `nuiTestSelect` runs the model's own selection path, which for a radio group
+    // is the row's own `selectable` press. The refusing parent is the interesting
+    // half: the control paints 2 optimistically, the parent keeps sending 0, and
+    // the second pick of that row has to be a *fresh* choice again - which is only
+    // true if the refused one was rolled back. `scripts/real-input` makes the same
+    // claim about a real tap on a real row (`CHECKS.picker` step 9); here it is the
+    // only way to see a snap-back that changes no size and paints no title.
+    const OPTIONS = ['Red', 'Green', 'Blue'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          onChange={recordChange('radio-pick')}
+          testID="radio-pick"
+          hybridRef={captureHybrid('radio-pick')}
+        />
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          selectedIndex={0}
+          onChange={recordChange('radio-refuse')}
+          testID="radio-refuse"
+          hybridRef={captureHybrid('radio-refuse')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-pick');
+    const picked = await waitForMeasured('radio-pick', 'uncontrolled group');
+    await waitForBox('radio-pick', picked, 'uncontrolled group');
+    await waitForMeasured('radio-refuse', 'controlled group');
+
+    await pickRow('radio-pick', 2);
+    expect(eventLog).toEqual(['radio-pick:2']);
+    // An uncontrolled pick costs the app one render and no box.
+    expect(sameSize(sizeOf('radio-pick'), picked)).toBe(true);
+
+    eventLog.length = 0;
+    await pickRow('radio-refuse', 2);
+    expect(eventLog).toEqual(['radio-refuse:2']);
+    await settle(300);
+    await pickRow('radio-refuse', 2);
+    expect(eventLog).toEqual(['radio-refuse:2', 'radio-refuse:2']);
+    // The refused pick did not stick, which is the second event meaning anything: the
+    // parent never adopted it, so the index the group paints its rows from is still
+    // the one it was given (`displayed` follows the sent index, it does not lead it).
+    // This is the nearest read to "row 0 is shown again" a harness run has - the row
+    // states themselves are a `checked` read on the accessibility tree, which only
+    // the real-input dump can take, and it takes it for the group on screen
+    // (`CHECKS.picker` step 9).
+    expect(handles.get('radio-refuse')?.selectedIndex).toBe(0);
+    unmount();
+  });
+
+  it('reports nothing for the row already chosen, or for a disabled group', async () => {
+    // The barrier twin of the test above, and the disabled rule. Both are the
+    // menu's rules carried over (`applyUserSelection` is the one place a pick is
+    // applied), so what this can catch is a row that learned to emit on its own.
+    const OPTIONS = ['Red', 'Green', 'Blue'];
+    const { unmount } = await render(
+      <View style={columnStyle}>
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          defaultSelectedIndex={0}
+          onChange={recordChange('radio-noop')}
+          testID="radio-noop"
+          hybridRef={captureHybrid('radio-noop')}
+        />
+        <Picker
+          options={OPTIONS}
+          variant="radio"
+          disabled
+          onChange={recordChange('radio-disabled')}
+          testID="radio-disabled"
+          hybridRef={captureHybrid('radio-disabled')}
+        />
+      </View>,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-noop');
+    await waitForMeasured('radio-noop', 'the group');
+    await waitForMeasured('radio-disabled', 'the disabled group');
+
+    await pickRow('radio-noop', 0);
+    await pickRow('radio-disabled', 1);
+    await settle(300);
+    console.log(`radio silence: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual([]);
+    // A disabled control is still inert the second time.
+    await pickRow('radio-disabled', 2);
+    await settle(200);
+    expect(eventLog).toEqual([]);
+    // Two silences are only evidence if someone was listening, so the case closes
+    // with the barrier: a row that *is* a choice, on the very control that just
+    // stayed quiet, has to be heard through the very log that came back empty. A
+    // recorder that never armed would pass every assertion above and fail here.
+    await pickRow('radio-noop', 1);
+    await settle(200);
+    console.log(`radio barrier: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['radio-noop:1']);
+    unmount();
+  });
+
+  it('answers menu on the platform with no radio group to render', async () => {
+    // The D38 fallback, asserted rather than described. iOS has no
+    // `RadioGroupPickerStyle`, so the variant must come back as the menu and size
+    // like one - one control tall, not three rows - while Android reports the
+    // group and its rows. The same two lines are the difference between "falls
+    // back to the menu" and "draws nothing".
+    const OPTIONS = ['One', 'Two', 'Three'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
+    const { unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        testID="radio-platform"
+        hybridRef={captureHybrid('radio-platform')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-platform');
+    const size = await waitForMeasured('radio-platform', 'variant="radio"');
+    await waitForBox('radio-platform', size, 'variant="radio"');
+    const reported = handles.get('radio-platform')?.variant;
+    console.log(
+      `radio platform: variant=${String(reported)} ${describeSize(size)}`
+    );
+    expect(reported).toBe(Platform.OS === 'android' ? 'radio' : 'menu');
+    if (Platform.OS === 'android') {
+      expect(Math.abs(size.height - 3 * ROW_DP)).toBeLessThanOrEqual(1);
+    } else {
+      // A menu is one row tall (~35 pt); a radio group would be 144 and a wheel
+      // 216. Neither is what iOS is promised to draw.
+      expect(size.height).toBeLessThan(60);
+      expect(size.width).toBeGreaterThan(40);
+    }
+    unmount();
+  });
+
+  it('goes back to a menu when the variant changes, with no leftovers', async () => {
+    // The variant is a `key` (`Picker.tsx`), so on Android a `radio` that becomes a
+    // `menu` is a new mount on a host that may have been recycled from the group.
+    // What would leak is the *control*: rows where a field belongs, the group's
+    // height, or a selection the fresh mount was never seeded with. On iOS the two
+    // variants are the same control, so the change must not remount anything - the
+    // witness is that the picked title is still on screen (a remount re-seeds an
+    // uncontrolled picker at `defaultSelectedIndex`, and an iOS menu is as wide as
+    // the title it shows, so a re-seed shrinks the box).
+    const OPTIONS = ['Small', 'Medium', 'Large'];
+    poisonConfigurations([radioSizingKey(OPTIONS, 0)]);
+    const { rerender, unmount } = await render(
+      <Picker
+        options={OPTIONS}
+        variant="radio"
+        onChange={recordChange('radio-switch')}
+        testID="radio-switch"
+        hybridRef={captureHybrid('radio-switch')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('radio-switch');
+    const asGroup = await waitForMeasured('radio-switch', 'the group');
+    await waitForBox('radio-switch', asGroup, 'the group');
+    await pickRow('radio-switch', 2);
+    eventLog.length = 0;
+    // The size the change must survive. On Android a pick in a group moves nothing,
+    // so `asGroup` is already the right reference; on iOS this variant is a menu,
+    // and the pick just moved its title and with it the box. The number a remount
+    // would erase is therefore the one *after* the pick: a remount re-seeds an
+    // uncontrolled picker at `defaultSelectedIndex` (index 0, "Small") and an iOS
+    // menu is as wide as the title it shows, so a re-seed shrinks it back.
+    const beforeChange =
+      Platform.OS === 'android'
+        ? asGroup
+        : await waitForRemeasure(
+            'radio-switch',
+            asGroup,
+            'the picked title in the menu'
+          );
+
+    await rerender(
+      <Picker
+        options={OPTIONS}
+        variant="menu"
+        onChange={recordChange('radio-switch')}
+        testID="radio-switch"
+        hybridRef={captureHybrid('radio-switch')}
+      />
+    );
+    if (Platform.OS !== 'android') {
+      const same = await waitForMeasured('radio-switch', 'the same menu');
+      await settle(300);
+      console.log(
+        `radio->menu (ios): ${describeSize(beforeChange)} -> ` +
+          `${describeSize(same)} events=${JSON.stringify(eventLog)}`
+      );
+      // Not a remount: still the title the pick chose, and nothing reported.
+      expect(sameSize(same, beforeChange)).toBe(true);
+      expect(handles.get('radio-switch')?.variant).toBe('menu');
+      expect(eventLog).toEqual([]);
+      unmount();
+      return;
+    }
+
+    const asMenu = await waitForFreshMeasure(
+      'radio-switch',
+      asGroup,
+      'the menu after the variant change'
+    );
+    await settle(300);
+    console.log(
+      `radio->menu (android): group=${describeSize(asGroup)} ` +
+        `menu=${describeSize(asMenu)} events=${JSON.stringify(eventLog)}`
+    );
+    // A Material field, not a column of rows: 56 dp tall, and the field's own
+    // 280 dp floor wide. The group measured 144 tall, so a leak cannot hide in
+    // rounding.
+    expect(Math.abs(asMenu.height - 56) < 1).toBe(true);
+    expect(Math.abs(asMenu.width - 280) < 1).toBe(true);
+    expect(sameSize(sizeOf('radio-switch'), asMenu)).toBe(true);
+    expect(handles.get('radio-switch')?.variant).toBe('menu');
+    // The change itself reported nothing, and the popup witness is a *menu's*
+    // again - closed, with no rows composed.
+    expect(eventLog).toEqual([]);
+    expect(drawnOf('radio-switch')).toBe('-1');
+    unmount();
+  });
+});

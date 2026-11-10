@@ -1,0 +1,199 @@
+# Failure excerpt — harness:android:Picker.harness
+
+- Ran: 2026-11-09T20:55:07.885Z on code tree `b9cea81d2864` at HEAD `19d9e01` (branch `task/G26-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Picker.harness`
+- Result: fail, exit 1, 48723 ms
+- Load: start 7.66, end 5.63, median 6.74, max 7.78
+- Device: android / device `emulator-5570` / lease `G26-o4dni`
+- Full log: `task/G26-fix1/harness+android+Picker.harness-2026-11-09T20-55-07.396Z.log` (<store>/task/G26-fix1/harness+android+Picker.harness-2026-11-09T20-55-07.396Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Console`
+- `● Picker · radio variant (G26) › costs no correction when the group is renamed`
+- `expected 1 to be +0 // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G26-fix1/harness+android+Picker.harness-2026-11-09T20-55-07.396Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G26-o4dni (still live)
+  |   X22-inlap                X22          both              pair-a
+  |   G26-o4dni                G26          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 5.63 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 184 — the rest is in the full log above)
+
+```
+    console.log
+      policies (android): menu=280.00x56.00 box=280.00x56.00 | wheel=330.29x56.00 box=330.29x56.00
+
+
+    console.log
+      options change: short=280.00x56.00 long=384.76x56.00 cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} warm={"corrections":2,"immediate":2,"flushes":2,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      same-size key change (android): box=280.00x56.00 measured=280.00x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      selection change: first=280.00x56.00 widest=329.90x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      planted-equal-to-box (android): box=384.76x56.00 measured=384.76x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      clamps: 99=384.76x56.00 2=384.76x56.00 NaN=280.00x56.00 -4=280.00x56.00
+
+
+    console.log
+      shrink: wide=384.76x56.00 narrow=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      read back: variant=menu/wheel selected=1 eventCount=0 label=Size tint=-3655765 disabled=false/true
+
+
+    console.log
+      caller width: box=240 measured=280.00x56.00 then no width: box=280.00x56.00
+
+
+    console.log
+      over-wide: box=180.19x56.00 measured=384.76x56.00
+
+
+    console.log
+      refit: measured=384.76x56.00 boxes=200/168/140 final=140.19x56.00
+
+
+    console.log
+      remount 0: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      remount 1: 1 options seed=1 measured=280.00x56.00
+
+
+    console.log
+      remount 2: 2 options seed=0 measured=329.90x56.00
+
+
+    console.log
+      pick re-keys: short=280.00x56.00 long=384.76x56.00 box=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":3,"epoch":0,"cachedSizes":1} events=["pick-key:2"]
+
+
+    console.log
+      cache after a pick: startedAt=280.00x56.00 picked=384.76x56.00 freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      uncontrolled pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} events=["unc:2"]
+
+
+    console.log
+      uncontrolled cache: freshMountBox=280.00x56.00 measured=280.00x56.00 laidOut=280.00x56.00 delta={"corrections":0,"immediate":0,"flushes":0,"measurements":1,"epoch":0,"cachedSizes":0}
+
+
+    console.log
+      busy-echo pick: short=280.00x56.00 long=384.76x56.00 laidOut=13.25x66.50 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      unpoisoned pick: short=280.00x56.00 long=338.29x56.00 box=338.29x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      re-tap then resize: short=280.00x56.00 long=384.76x56.00 box=384.76x56.00 delta={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      variant menu->wheel: menu=280.00x56.00 wheel=330.29x56.00 box=330.29x60.19
+
+
+    console.log
+      variant wheel->menu: wheel=330.29x56.00 menu=384.76x56.00 box=330.29x60.19
+
+
+    console.log
+      selected row: drawn=Small,Medium+,Large
+
+
+    console.log
+      open-then-drop: menu=280.00x56.00 after=280.00x56.00 events=[]
+
+
+    console.log
+      radio rows: three=133.33x144.00 five=114.67x240.00 cold={"corrections":2,"immediate":1,"flushes":1,"measurements":4,"epoch":0,"cachedSizes":2}
+
+
+    console.log
+      radio pick: 133.33x144.00 -> 133.33x144.00 pick={"corrections":0,"immediate":0,"flushes":0,"measurements":0,"epoch":0,"cachedSizes":0} events=["radio-warm:2"]
+
+
+    console.log
+      radio rename: 133.33x144.00 -> 133.33x144.00 after={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1} events=[]
+
+
+    console.log
+      radio silence: events=[]
+
+
+    console.log
+      radio barrier: events=["radio-noop:1"]
+
+
+    console.log
+      radio platform: variant=radio 114.67x144.00
+
+
+    console.log
+      radio->menu (android): group=133.33x144.00 menu=280.00x56.00 events=[]
+
+  ● Picker · radio variant (G26) › costs no correction when the group is renamed
+
+    expected 1 to be +0 // Object.is equality
+
+      [0m [90m 2162 |[39m     [90m// And it cost nothing: no new configuration, so no fallback frame, no[39m
+       [90m 2163 |[39m     [90m// correction, and the box is the one it already had.[39m
+      [31m[1m>[22m[39m[90m 2164 |[39m     expect(after[33m.[39mcorrections)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m      |[39m                                   [31m[1m^[22m[39m
+       [90m 2165 |[39m     expect(after[33m.[39mcachedSizes)[33m.[39mtoBe([35m0[39m)[33m;[39m
+       [90m 2166 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m 2167 |[39m     expect(sameSize(sizeOf([32m'radio-lbl'[39m)[33m,[39m first))[33m.[39mtoBe([36mtrue[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 45 passed, 46 total
+Snapshots:   0 total
+Time:        47.177 s
+Ran all test suites matching Picker.harness.
+gate: harness:android:Picker.harness FAIL in 48.7 s
+gate: recorded in .gates/task/G26-fix1.jsonl
+
+
+gate: appended the device context to task/G26-fix1/harness+android+Picker.harness-2026-11-09T20-55-07.396Z.log (5 probe(s))
+
+```
