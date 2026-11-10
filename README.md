@@ -1230,6 +1230,9 @@ A grouped, scrolling settings screen whose rows are ordinary React Native views.
 (`onPress`, `accessory`, `selected`); a bare child of a section is already a row.
 `measure()` of a row is right once scrolling has settled, and a row scrolled out
 of the list is not attached to a cell — `docs/components/form.md` has both.
+A row lays its content out at the row's full width, so a label with `flex: 1`
+puts a control at the trailing edge; the box around the pair is what keeps the
+control level with the label.
 
 ```tsx name=form
 export function NotificationForm({
@@ -1247,12 +1250,16 @@ export function NotificationForm({
         footer="Push arrives on this device only."
       >
         <Form.Row>
-          <Text style={{ flex: 1 }}>Push notifications</Text>
-          <Switch value={push} onValueChange={setPush} />
+          <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
+            <Text style={{ flex: 1 }}>Push notifications</Text>
+            <Switch value={push} onValueChange={setPush} />
+          </View>
         </Form.Row>
         <Form.Row>
-          <Text style={{ flex: 1 }}>Play a sound</Text>
-          <Switch value={sound} onValueChange={setSound} />
+          <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
+            <Text style={{ flex: 1 }}>Play a sound</Text>
+            <Switch value={sound} onValueChange={setSound} />
+          </View>
         </Form.Row>
       </Form.Section>
       <Form.Section title="Quiet hours">

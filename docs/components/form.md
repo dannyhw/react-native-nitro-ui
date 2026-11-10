@@ -15,8 +15,10 @@ import { Text } from 'react-native';
 <Form>
   <Form.Section title="Notifications" footer="Push arrives on this device only.">
     <Form.Row>
-      <Text style={{ flex: 1 }}>Push notifications</Text>
-      <Switch value={push} onValueChange={setPush} />
+      <View style={{ alignItems: 'center', flex: 1, flexDirection: 'row' }}>
+        <Text style={{ flex: 1 }}>Push notifications</Text>
+        <Switch value={push} onValueChange={setPush} />
+      </View>
     </Form.Row>
   </Form.Section>
 </Form>;
@@ -106,6 +108,18 @@ is the width a cell hands it — narrower than the list's own bounds by the grou
 insets. The Form reports that width and applies it to every row, which is what makes a
 row's Yoga height equal the cell's height, and what makes a wrapping `Text` grow the
 cell that holds it.
+
+A row also centres its content vertically (`alignItems: 'center'`, on top of the
+minimum height below), and one of your own styles can overrule that from the child's
+side: every self-sizing nitro-ui control carries `{ alignSelf: 'flex-start' }` as its
+base style — the same defence React Native's own `Switch` has, so a parent with
+`alignItems: 'stretch'` cannot decide the control's width — and a child's `alignSelf`
+beats its parent's `alignItems`. In a row taller than its content the control then
+sticks to the row's top edge while the label centres. Wrap the pair in a box of your
+own (`{ alignItems: 'center', flex: 1, flexDirection: 'row' }`, as above): the box
+hugs its content, so there is no leftover room for the two rules to disagree about,
+the label's `flex: 1` still reaches the trailing edge, and the control sits level
+with the label.
 
 On Android a row with an `accessory` gives up the trailing room the section is going
 to draw the glyph in, so the accessory never lands on top of your content.

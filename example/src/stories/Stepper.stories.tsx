@@ -8,14 +8,14 @@
  * so every story here pairs the control with the text that shows its value, which
  * is also the only way to *see* a step happen in a screenshot.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type PropsWithChildren } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Stepper } from 'react-native-nitro-ui';
 import { fn } from 'storybook/test';
 
 import type { Meta, StoryObj } from '@storybook/react-native';
 
-import { Frame, Note, Row, Showcase } from './showcase';
+import { Frame, Note, Row, Showcase, useShowcaseInk } from './showcase';
 
 const meta = {
   component: Stepper,
@@ -117,6 +117,34 @@ export const Playground: Story = {
 };
 
 /**
+ * A caption in a column of its own, with the control at the row's trailing edge.
+ *
+ * `Row` puts a caption and its controls on one line, which is the right picture
+ * for a short caption and a small control. It is the wrong picture for this row:
+ * the caption wins the line (a `Text` does not give up width it was not asked
+ * to), the content wrapper is the thing allowed to shrink, and what a control
+ * then gets is a box narrower than the width it measured — which iOS answers by
+ * painting outside that box and Android by laying the control out inside it
+ * (`docs/architecture/sizing.md` §9). Either way the steppers in the picture
+ * neither line up nor keep their shape, and the row below is drawn somewhere
+ * else again because its caption is a different length.
+ *
+ * A settings screen never asks for that, and neither does this: the caption
+ * takes a column (`flex: 1`, so it wraps instead of pushing) and the control
+ * keeps the room it measured (`flexShrink: 0`). Every control in the list then
+ * lands on the same trailing edge, which is what makes the list read as one list.
+ */
+function SettingRow({ label, children }: PropsWithChildren<{ label: string }>) {
+  const ink = useShowcaseInk();
+  return (
+    <View style={styles.setting}>
+      <Text style={[styles.settingLabel, { color: ink.muted }]}>{label}</Text>
+      <View style={styles.settingContent}>{children}</View>
+    </View>
+  );
+}
+
+/**
  * The bounds and the two states a bound produces, plus a disabled control — the
  * row the README pair is taken from.
  *
@@ -129,38 +157,38 @@ export const States: Story = {
     const [quantity, setQuantity] = useState(1);
     return (
       <Showcase>
-        <Row label="mid-range — both halves live">
+        <SettingRow label="mid-range — both halves live">
           <Stepper
             accessibilityLabel="Mid-range stepper"
             defaultValue={50}
             testID="storybook-stepper-mid"
           />
-        </Row>
-        <Row label="at the minimum — the minus half is inert">
+        </SettingRow>
+        <SettingRow label="at the minimum — the minus half is inert">
           <Stepper
             accessibilityLabel="At the minimum"
             defaultValue={0}
             maximumValue={3}
             testID="storybook-stepper-min"
           />
-        </Row>
-        <Row label="at the maximum — the plus half is inert">
+        </SettingRow>
+        <SettingRow label="at the maximum — the plus half is inert">
           <Stepper
             accessibilityLabel="At the maximum"
             defaultValue={3}
             maximumValue={3}
             testID="storybook-stepper-max"
           />
-        </Row>
-        <Row label="disabled — both halves inert, and no event">
+        </SettingRow>
+        <SettingRow label="disabled — both halves inert, and no event">
           <Stepper
             accessibilityLabel="Disabled stepper"
             defaultValue={50}
             disabled
             testID="storybook-stepper-disabled"
           />
-        </Row>
-        <Row label="with the app’s own number">
+        </SettingRow>
+        <SettingRow label="with the app’s own number">
           <View style={styles.row}>
             <Stepper
               accessibilityLabel="Quantity"
@@ -172,7 +200,7 @@ export const States: Story = {
             />
             <Value value={quantity} />
           </View>
-        </Row>
+        </SettingRow>
         <Note>
           iOS is SwiftUI&apos;s own `Stepper`, so the inert half at a bound is
           SwiftUI&apos;s. Android has no stepper: the control is composed from
@@ -352,6 +380,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
+  },
+  setting: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  settingContent: {
+    flexShrink: 0,
+  },
+  settingLabel: {
+    flex: 1,
+    fontSize: 12,
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
   },
   value: {
     fontVariant: ['tabular-nums'],
