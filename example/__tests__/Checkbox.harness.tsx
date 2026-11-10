@@ -107,6 +107,38 @@ function corrections(before: NitroUiSizingStats, after: NitroUiSizingStats) {
   );
 }
 
+/**
+ * The engine's correction counters, read once they have stopped moving.
+ *
+ * The counters are process-wide: they add up every configuration the engine corrects,
+ * including the ones a case that already finished is still landing. Two cases here read
+ * them as *this* render's number, and a straggler from the case before arrives as an
+ * extra cold configuration - measured on Android, where the four cold boxes of the third
+ * state case pushed the styles case's count to 4 against a bound of "fewer corrections
+ * than styles". Two consecutive equal reads, because "settled" only means something
+ * against a number that is not on its way somewhere else: the same rule
+ * `Conformance.harness.tsx`'s `settledStats` applies to the ledger.
+ *
+ * Throws rather than returning a contested read - a window that never settles is not a
+ * baseline, and a bound checked against one is green for the wrong reason.
+ */
+async function settledCorrections(what: string): Promise<NitroUiSizingStats> {
+  let previous = stats();
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await sleep(150);
+    const current = stats();
+    if (corrections(previous, current) === 0) {
+      return current;
+    }
+    previous = current;
+  }
+  throw new Error(
+    `${what}: the engine's correction counters kept moving for 3s (last read ` +
+      `${String(previous.correctionsImmediate)}/` +
+      `${String(previous.correctionsBatched)}), so no count here is a baseline`
+  );
+}
+
 /** Within what Yoga rounds to. */
 function sameSize(a: Size | null, b: Size | null): boolean {
   return (
@@ -723,11 +755,21 @@ describe('Checkbox · G15', () => {
       // same box - which is what keeps `checked` out of the sizing key honest.
       await waitForSymbol('mixed', 'checkmark.circle.fill');
     }
+    // Four cold configurations, counted with a counter the whole app shares - so the
+    // case's own number is only this case's once the counter has stopped moving. Read it
+    // settled, which is also what stops two of these corrections from landing inside the
+    // next case's window (the Android failure this replaced read exactly that: the styles
+    // case below inherited them and its "fewer corrections than styles" bound went red).
+    const total = corrections(
+      before,
+      await settledCorrections('the third state')
+    );
+    expect(total).toBeGreaterThanOrEqual(made);
     console.log(
       `checkbox indeterminate: drawn=${reportOf('mixed').displayed} ` +
         `symbol=${reportOf('mixed').symbol ?? '-'} checked-with-dash=` +
         `${reportOf('mixed-on').displayed} switch=${reportOf('mixed-switch').displayed} ` +
-        `size=${describeSize(size)} corrections=${made}`
+        `size=${describeSize(size)} corrections=${total}`
     );
   });
 
@@ -900,6 +942,11 @@ describe('Checkbox · G15', () => {
     // three style names of one label are *one* configuration. That is what the correction
     // count is read for there - the day the key starts carrying a field Android ignores,
     // it costs three cold mounts and this line goes red.
+    // Take the baseline once the counter has stopped moving: it is a process-wide one,
+    // and the bound below is only about what *this* render corrects. Whatever an earlier
+    // case still has in flight lands in the settle instead of inside this window, where
+    // it would read as a second Android configuration.
+    await settledCorrections('the iOS styles');
     poison(STYLES.map((style) => sizingKey(false, 'Measured', style)));
     const before = stats();
     await render(
