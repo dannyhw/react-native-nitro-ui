@@ -74,6 +74,20 @@ export const ECHO = Object.freeze({
   pickerIndex: 'real-input-picker-index',
   pickerEvents: 'real-input-picker-events',
   pickerGone: 'real-input-drop-gone',
+  // G29: the `variant="wheel"` drum's own echo. Its rows are in the app's window like
+  // the radio group's, but a drum is rolled rather than pressed, so the count matters as
+  // much as the index: one settle, one event, whatever rows it passed.
+  wheelIndex: 'real-input-wheel-index',
+  wheelEvents: 'real-input-wheel-events',
+  // G29: the same pair on the `wheel` + `mode="time"` DatePicker, where the value is an
+  // instant and the drum that moved is Material's own `TimeScroll`.
+  wheelTimeValue: 'real-input-wheel-time-value',
+  wheelTimeEvents: 'real-input-wheel-time-events',
+  // G29: the count on the drum whose parent refuses every roll. The time it reports
+  // never moves - the parent keeps sending the one it was built with - so this echo is
+  // the only thing that says the roll was seen, and the accessibility tree is what says
+  // whether the drums rolled back afterwards.
+  wheelRefuseEvents: 'real-input-wheel-refuse-events',
   // G26: the `variant="radio"` group's own echo. Its rows are in the app's window,
   // so a real tap goes straight to one and this is what that tap moves.
   radioIndex: 'real-input-radio-index',

@@ -206,7 +206,13 @@ A screen-reader user hears a *label* and a *localised value* ("Saturday, 14 Marc
 
 ## Limits
 
-- **Android has no wheel** (`variant: 'wheel'` renders the inline picker), and **no
+- **Android's wheel is a time wheel** (`docs/tasks/G29-android-wheels.report.md` measured
+  it): `variant: 'wheel'` with `mode: 'time'` draws Material 3 1.5's `TimeScroll`, and
+  `variant: 'wheel'` in `date` or `datetime` renders the inline picker, because Material
+  3 has no wheel calendar to draw — its calendar is a grid of day cells, and a drum of
+  days would be a control of ours with Material's paint on it. So on Android the variant
+  chooses a *widget* where a time is shown and changes nothing where a date is, which is
+  the one place `variant` does not mean the same thing on both platforms. There is **no
   combined date+time control**: `datetime` is a date dialog followed by a time dialog, and
   the inline form of `datetime` shows the calendar only.
 - **Android's Material 3 pickers are dialogs or full inline calendars** — there is no
