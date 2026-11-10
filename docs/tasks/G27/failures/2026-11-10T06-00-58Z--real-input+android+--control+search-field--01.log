@@ -1,0 +1,196 @@
+# Failure excerpt — real-input:android:--control:search-field
+
+- Ran: 2026-11-10T06:00:58.567Z on code tree `29661020597e` at HEAD `ecc3203` (branch `task/G27-fix1`)
+- Command: `node scripts/real-input/android.mjs --control search-field`
+- Result: fail, exit 1, 687221 ms
+- Load: start 5.55, end 4.23, median 4.14, max 7.96
+- Device: android / device `emulator-5574` / lease `G27-91rgl`
+- Full log: `task/G27-fix1/real-input+android+--control+search-field-2026-11-10T06-00-57.888Z.log` (<store>/task/G27-fix1/real-input+android+--control+search-field-2026-11-10T06-00-57.888Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ keyboardType changed while focused restarts the input session: the IME is handed a number keyboard without the field losing focus — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-fix1/real-input+android+--control+search-field-2026-11-10T06-00-57.888Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-91rgl (still live)
+  |   X23-8wjce                X23          both              pair-b
+  |   G27-91rgl                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.23 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 159 — the rest is in the full log above)
+
+```
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  search-field: real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, the Search key submits then dismisses the keyboard, and a keyboard prop reaches the IME as the keyboard it names with the Search key still on it
+    ✓ the search field starts empty — expected query:  (0), saw query:  (0)
+    ✓ and nothing has been focused, blurred or submitted yet — expected focus: 0 blur: 0 submitted: -, saw focus: 0 blur: 0 submitted: -
+    ✓ a placeholder nobody chose still draws a word for search
+    ✓ and a placeholder that was chosen is drawn too
+    · "Capped search field" occupies 42,1677 → 1038,1824
+    ✓ maxLength 5 keeps five of seven keys — expected capped: abcde (5), saw capped: abcde (5)
+    ✓ and the field holds the same five — expected abcde, saw abcde
+    · "Frozen search field" occupies 42,1370 → 1038,1517
+    ✓ every key into the frozen field is reported to JS — expected frozen: 2 edits refused, saw frozen: 2 edits refused
+    ✓ and each one is reverted: the field still shows what JS kept — expected frozen, saw frozen
+    · "Typing search field" occupies 42,1062 → 1038,1209
+    ✓ real keystrokes reach the field, and React sees the query — expected query: latte (5), saw query: latte (5)
+    ✓ the field shows what React was told — expected latte, saw latte
+    · "Focus search field" occupies 42,645 → 1038,792
+    ✓ a real tap focuses the field (onFocus) — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ a hardware KEY_ENTER (the route the Search key shares) with an empty query submits nothing and blurs nobody — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ the field holds the query before anything clears it — expected go, saw go
+    · "Focus search field" occupies 42,645 → 1038,792
+    · the clear button is "Clear query" at 903,657 → 1029,783
+    ✓ the clear button names itself, so TalkBack can say what it does
+    ✓ a real tap on the clear button empties the field — expected , saw 
+    ✓ and clearing keeps focus: no blur, no submit — expected focus: 1 blur: 0 submitted: -, saw focus: 1 blur: 0 submitted: -
+    ✓ a hardware KEY_ENTER (the route the Search key shares) submits the query and then blurs the field — expected focus: 1 blur: 1 submitted: go, saw focus: 1 blur: 1 submitted: go
+    ✓ a real tap on a button that calls ref.focus() focuses it — expected focus: 2 blur: 1 submitted: go, saw focus: 2 blur: 1 submitted: go
+    ✓ and one that calls ref.blur() blurs it — expected focus: 2 blur: 2 submitted: go, saw focus: 2 blur: 2 submitted: go
+    · show_ime_with_hard_keyboard was "0" - raised to 1 for the keyboard case so the software keyboard shows despite the AVD hardware keyboard
+    · "Typing search field" occupies 42,1062 → 1038,1209
+    ✓ a field with no keyboard prop still asks for the plain text keyboard, with autocorrection and the Search key — expected class=text variation=0x0 flags=auto-correct action=search, saw class=text variation=0x0 flags=auto-correct action=search
+    · "Number search field" needed 1 scroll to come on screen
+    · "Number search field" occupies 42,1176 → 1038,1323
+    ✓ keyboardType="number-pad" reaches the IME as a number keyboard, Search key included — expected class=number variation=0x0 flags=none action=search, saw class=number variation=0x0 flags=none action=search
+    ✓ keys reach the number field, and React sees the query — expected number: 123 submitted: -, saw number: 123 submitted: -
+    ✓ and a hardware KEY_ENTER on it submits the query through the Search action — expected number: 123 submitted: 123, saw number: 123 submitted: 123
+    · "Email search field" occupies 42,1484 → 1038,1631
+    ✓ keyboardType="email-address" with autoCorrect={false} reaches the IME as an email keyboard that refuses autocorrection, Search key included — expected class=text variation=0x20 flags=none action=search, saw class=text variation=0x20 flags=none action=search
+    ✓ keys reach the email field, and React sees the query — expected email: a@b submitted: -, saw email: a@b submitted: -
+    ✓ and a hardware KEY_ENTER still submits through the Search action on a keyboard the app chose — expected email: a@b submitted: a@b, saw email: a@b submitted: a@b
+    · "Switching search field" occupies 42,1792 → 1038,1939
+    ✓ the switching field opens with the text keyboard it was given — expected class=text variation=0x0 flags=auto-correct action=search, saw class=text variation=0x0 flags=auto-correct action=search
+    ✓ two seconds after focus the screen moved the prop to number-pad, focus kept — expected switching: number-pad, saw switching: number-pad
+    ✗ keyboardType changed while focused restarts the input session: the IME is handed a number keyboard without the field losing focus — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search
+    · show_ime_with_hard_keyboard restored to 0
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:icon-button: IconButton a11y
+    ✓ NitroUiIconButton is named on one node a person can act on
+
+  a11y:button-group: ButtonGroup a11y
+    ✓ NitroUiButtonGroup is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2185][1038,2311]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2218][535,2344]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:search-field: SearchField a11y
+    ✓ NitroUiSearchField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+  a11y:form: Form a11y
+    ✓ NitroUiForm is named on one node a person can act on
+
+search-field: FAIL (no retries)
+    failed: keyboardType changed while focused restarts the input session: the IME is handed a number keyboard without the field losing focus — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search
+
+real-input (android): 0/1 controls passed · 0 input sequence(s) needed a retry · 23/23 auxiliary checks passed
+gate: real-input:android:--control:search-field FAIL in 687.2 s
+gate: recorded in .gates/task/G27-fix1.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G27-fix1/real-input+android+--control+search-field-2026-11-10T06-00-57.888Z.log (5 probe(s))
+
+```
