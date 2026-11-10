@@ -874,6 +874,11 @@ describe('Checkbox · G15', () => {
             hybridRef={captureHybrid(`style-${style}`)}
           />
         ))}
+        <Checkbox
+          accessibilityLabel="Bare measured"
+          testID="style-bare"
+          hybridRef={captureHybrid('style-bare')}
+        />
       </View>,
       { timeout: 20000 }
     );
@@ -892,6 +897,16 @@ describe('Checkbox · G15', () => {
         await waitForSymbol(testId, expectedSymbol(style, true, false));
       }
     }
+    // The bare default box: the configuration `HybridNitroUiCheckbox.swift`'s
+    // `declaresFallback` names, because a fallback is a guess about what an app draws
+    // first, and the first thing an app draws is a checkbox with no label in the default
+    // style. Deliberately *not* poisoned: what is claimed about this box is which control
+    // it belongs to, and a size the engine read from this Toggle does not need a wrong
+    // guess to be true - the poison above is for the boxes whose claim is "this is the
+    // correction's answer, not the fallback's".
+    await waitForTestId('style-bare');
+    const bare = await waitForMeasured('style-bare', 'the bare default box');
+    await waitForBox('style-bare', bare, 'the bare default box');
     const made = corrections(before, stats());
     const boxOf = (style: IosStyle): Size => {
       const size = boxes.get(style);
@@ -901,7 +916,7 @@ describe('Checkbox · G15', () => {
     console.log(
       `checkbox styles: ${STYLES.map(
         (style) => `${style}=${describeSize(boxOf(style))}`
-      ).join(' ')} corrections=${made}`
+      ).join(' ')} bare=${describeSize(bare)} corrections=${made}`
     );
     if (Platform.OS === 'ios') {
       // Three poisoned configurations, three corrections...
@@ -909,6 +924,12 @@ describe('Checkbox · G15', () => {
       // ...and the glyph row is not the switch's box, which is the claim the declared
       // fallback and the iOS key are both built on. Over one labelled string, so the
       // label cannot be what tells them apart.
+      // The bare default box is not the Switch's box either - the number this component
+      // declared as its fallback until D47 made the glyph the default. That is the claim
+      // `declaresFallback` and `scripts/conformance-core.mjs` now have to agree on.
+      expect(
+        Math.abs(bare.width - 61) > 0.6 || Math.abs(bare.height - 28) > 0.6
+      ).toBe(true);
       const circle = boxOf('circle');
       const toggled = boxOf('switch');
       expect(
