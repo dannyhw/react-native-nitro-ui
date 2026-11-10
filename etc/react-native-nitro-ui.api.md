@@ -488,6 +488,50 @@ export type IconButtonVariant = 'standard' | 'filled' | 'tonal' | 'outlined';
 export type IconButtonWidth = 'narrow' | 'uniform' | 'wide';
 
 // @public
+export function ListItem(input: ListItemProps): JSX.Element;
+
+// @public
+export type ListItemAccessory = 'none' | 'disclosure';
+
+// @public
+export interface ListItemProps extends ViewProps {
+    accessibilityLabel?: string | undefined;
+    accessory?: ListItemAccessory | undefined;
+    androidIcon?: AndroidIconProp | undefined;
+    disabled?: boolean | undefined;
+    // @internal
+    hybridRef?: ((view: {
+        readonly title: string | null;
+        readonly subtitle: string | null;
+        readonly value: string | null;
+        readonly accessory: string;
+        readonly pressable: boolean;
+        readonly insideRow: boolean;
+        readonly disabled: boolean;
+        readonly systemImage: string | null;
+        readonly androidIcon: string | null;
+        readonly accessibilityLabel: string | null;
+        measureContent(): {
+            width: number;
+            height: number;
+        };
+        nuiTestPress(): void;
+        nuiTestProbeAccessibility(): void;
+        nuiTestStateReport(): string;
+        nuiTestLayoutReport(): string;
+        nuiTestPixelProbe(color: number): void;
+        nuiTestPixelReport(): string;
+        nuiTestLifetimeReport(): string;
+    }) => void) | undefined;
+    nuiPerfId?: number | null | undefined;
+    onPress?: (() => void) | undefined;
+    subtitle?: string | null | undefined;
+    systemImage?: string | undefined;
+    title?: string | null | undefined;
+    value?: string | null | undefined;
+}
+
+// @public
 export type MaterialTheme = 'expressive' | 'baseline';
 
 // @public
