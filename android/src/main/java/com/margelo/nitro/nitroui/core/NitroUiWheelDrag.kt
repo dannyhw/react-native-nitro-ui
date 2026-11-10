@@ -29,10 +29,11 @@ import androidx.compose.ui.platform.LocalView
  * carries it to every ancestor above.
  *
  * What it costs is the other half of the same decision: a drag that begins on the drum rolls
- * the drum and does not scroll the page, so the page has to be dragged somewhere else. That is
- * what a pager does on every platform — iOS' `UIPickerView` keeps its own drags the same way —
- * and it is why the request is not made for a [enabled] control: a drum that cannot roll has
- * no claim on the gesture, and there the page keeps it.
+ * the drum and does not scroll the page, so the page has to be dragged somewhere else. It is
+ * the trade a drum-shaped control makes wherever it is drawn, and `docs/components/picker.md`
+ * tells app developers so rather than leaving them to find the dead patch of screen. It is
+ * also why the request is not made for a [enabled] control: a drum that cannot roll has no
+ * claim on the gesture, and there the page keeps it.
  */
 @Composable
 internal fun Modifier.nuiOwnVerticalDrags(enabled: Boolean = true): Modifier {
