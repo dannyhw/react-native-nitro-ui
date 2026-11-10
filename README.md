@@ -1441,10 +1441,11 @@ The full list per control is in its doc; these are the ones that bite.
   platforms so the JS API means one thing.
 - **Android's wheels are Material's own.** With `variant="wheel"`, `Picker` gets a
   `ScrollField` drum and a `DatePicker` in `mode="time"` gets Material's time drums —
-  each reporting one change per settled roll. There is no _date_ wheel: `DatePicker`
-  with `mode="date"` or `"datetime"` keeps the inline calendar there. Android also has
-  no combined date-and-time control: `mode="datetime"` opens a date dialog and then a
-  time dialog.
+  each reporting one change per settled roll. A drum keeps the vertical drag that begins
+  on it, so a page with a wheel in it is scrolled beside the wheel. There is no _date_
+  wheel: `DatePicker` with `mode="date"` or `"datetime"` keeps the inline calendar there.
+  Android also has no combined date-and-time control: `mode="datetime"` opens a date
+  dialog and then a time dialog.
 - **`Menu`'s open state is Android-only, and its splits are iOS's.** SwiftUI's
   `Menu` has no expansion binding, so **iOS never fires `onOpen` or `onClose`**,
   and a `disabled` that arrives while the menu is open closes it on Android only —

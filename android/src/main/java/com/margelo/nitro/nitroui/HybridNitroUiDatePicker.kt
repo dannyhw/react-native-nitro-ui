@@ -1577,7 +1577,6 @@ private fun syncTimeWheel(
   LaunchedEffect(state) {
     snapshotFlow { Pair(state.hour, state.minute) }
       .collectLatest { pair ->
-        delay(TIME_WHEEL_SETTLE_MILLIS)
         // A row still moving restarts this block before the delay ends, so what arrives
         // here is a pair that has held for the window: the roll, not a row of it.
         if (pair.first != pushed.value.first || pair.second != pushed.value.second) {
