@@ -4,6 +4,13 @@ import { type ViewProps } from 'react-native';
 import { useControlled } from '../../core/useControlled';
 import { useSizingId } from '../../core/useSizingId';
 import {
+  AUTO_CAPITALIZE,
+  KEYBOARD_TYPES,
+  resolveKeyboardOption,
+  type TextFieldAutoCapitalize,
+  type TextFieldKeyboardType,
+} from '../../core/keyboard';
+import {
   useStableCallback,
   type NitroCallbackProp,
 } from '../../core/useStableCallback';
@@ -12,19 +19,15 @@ import {
   type NitroUiTextFieldHandle,
 } from './NativeNitroUiTextField';
 
-/** The keyboard a field asks for, in React Native's spellings. */
-export type TextFieldKeyboardType =
-  | 'default'
-  | 'number-pad'
-  | 'decimal-pad'
-  | 'numeric'
-  | 'email-address'
-  | 'phone-pad'
-  | 'url';
-
-/** What the keyboard capitalises on its own. */
-export type TextFieldAutoCapitalize =
-  'none' | 'sentences' | 'words' | 'characters';
+/**
+ * The two keyboard types, published from `TextField` because that is where they
+ * started; `SearchField` takes the same two props and the same
+ * {@link ../../core/keyboard} module declares them.
+ */
+export type {
+  TextFieldAutoCapitalize,
+  TextFieldKeyboardType,
+} from '../../core/keyboard';
 
 /** The label of the Return key on a single-line field. */
 export type TextFieldReturnKeyType =
@@ -153,21 +156,6 @@ export interface TextFieldProps extends Omit<ViewProps, 'onFocus' | 'onBlur'> {
   nuiPerfId?: number | null | undefined;
 }
 
-const KEYBOARD_TYPES: ReadonlyArray<TextFieldKeyboardType> = [
-  'default',
-  'number-pad',
-  'decimal-pad',
-  'numeric',
-  'email-address',
-  'phone-pad',
-  'url',
-];
-const AUTO_CAPITALIZE: ReadonlyArray<TextFieldAutoCapitalize> = [
-  'none',
-  'sentences',
-  'words',
-  'characters',
-];
 const RETURN_KEY_TYPES: ReadonlyArray<TextFieldReturnKeyType> = [
   'default',
   'done',
@@ -176,14 +164,6 @@ const RETURN_KEY_TYPES: ReadonlyArray<TextFieldReturnKeyType> = [
   'search',
   'send',
 ];
-
-function resolve<T extends string>(
-  value: T | undefined,
-  allowed: ReadonlyArray<T>,
-  fallback: T
-): T {
-  return value != null && allowed.includes(value) ? value : fallback;
-}
 
 /**
  * `maxLength` as native receives it: a whole number of code units, or `null`.
@@ -348,12 +328,24 @@ export function TextField({
       mostRecentEventCount={controlled.mostRecentEventCount}
       placeholder={placeholder ?? null}
       multiline={multiline}
-      keyboardType={resolve(keyboardType, KEYBOARD_TYPES, 'default')}
-      autoCapitalize={resolve(autoCapitalize, AUTO_CAPITALIZE, 'sentences')}
+      keyboardType={resolveKeyboardOption(
+        keyboardType,
+        KEYBOARD_TYPES,
+        'default'
+      )}
+      autoCapitalize={resolveKeyboardOption(
+        autoCapitalize,
+        AUTO_CAPITALIZE,
+        'sentences'
+      )}
       autoCorrect={autoCorrect}
       secureTextEntry={secureTextEntry}
       maxLength={resolveMaxLength(maxLength)}
-      returnKeyType={resolve(returnKeyType, RETURN_KEY_TYPES, 'default')}
+      returnKeyType={resolveKeyboardOption(
+        returnKeyType,
+        RETURN_KEY_TYPES,
+        'default'
+      )}
       editable={editable}
       testID={testID ?? null}
       accessibilityLabel={accessibilityLabel ?? null}

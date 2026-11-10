@@ -119,6 +119,8 @@ export const ECHO = Object.freeze({
   searchFrozen: 'search-frozen-echo',
   searchCapped: 'search-capped-echo',
   searchFocus: 'search-focus-echo',
+  searchNumber: 'search-number-echo',
+  searchEmail: 'search-email-echo',
   ctxEcho: 'ctx-echo',
   // G23: an IconButton has no text, so every reading of it is one of these rows —
   // the press count, the toggle's state, and the two counters a refused or refused

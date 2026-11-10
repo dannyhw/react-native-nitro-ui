@@ -128,7 +128,7 @@ export const REAL_INPUT_CONTROL_ROWS = Object.freeze([
   {
     id: 'search-field',
     title:
-      'real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard',
+      'real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, the Search key submits then dismisses the keyboard, and a keyboard prop reaches the IME as the keyboard it names with the Search key still on it',
     screen: 'searchfield',
   },
   {

@@ -62,6 +62,9 @@ export interface NativeNitroUiSearchFieldProps
   defaultValue: string | null;
   mostRecentEventCount: number;
   placeholder: string | null;
+  keyboardType: string;
+  autoCapitalize: string;
+  autoCorrect: boolean;
   maxLength: number | null;
   editable: boolean;
   testID: string | null;

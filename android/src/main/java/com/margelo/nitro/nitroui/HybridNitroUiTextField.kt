@@ -325,7 +325,7 @@ private object TextFieldStyleCache {
   }
 }
 
-private fun keyboardTypeOf(name: String, secure: Boolean): KeyboardType =
+internal fun keyboardTypeOf(name: String, secure: Boolean): KeyboardType =
   when {
     // A secure number pad stays a number pad, as `inputType` NUMBER_VARIATION_PASSWORD
     // does in React Native.
@@ -342,7 +342,7 @@ private fun keyboardTypeOf(name: String, secure: Boolean): KeyboardType =
     else -> KeyboardType.Text
   }
 
-private fun imeActionOf(name: String, multiline: Boolean): ImeAction =
+internal fun imeActionOf(name: String, multiline: Boolean): ImeAction =
   when {
     // Return inserts a newline in a multi-line field, as it does in RN; any other
     // action would take the key away from it.
@@ -355,13 +355,133 @@ private fun imeActionOf(name: String, multiline: Boolean): ImeAction =
     else -> ImeAction.Default
   }
 
-private fun capitalizationOf(name: String): KeyboardCapitalization =
+internal fun capitalizationOf(name: String): KeyboardCapitalization =
   when (name) {
     "none" -> KeyboardCapitalization.None
     "words" -> KeyboardCapitalization.Words
     "characters" -> KeyboardCapitalization.Characters
     else -> KeyboardCapitalization.Sentences
   }
+
+/**
+ * The read-back side of [keyboardTypeOf] and [capitalizationOf]: the RN spelling of a
+ * keyboard a Compose field was configured with.
+ *
+ * `SearchField`'s test state reports what the field was *configured with*, so a prop
+ * that never reached the composition is visible from JS. While the field is focused
+ * it reads the `EditorInfo` the IME is handed (see
+ * `HybridNitroUiSearchField.currentEditorInfo`), and these three functions are the
+ * only decoder for that; with no input connection up yet they decode the
+ * [KeyboardType] / [KeyboardCapitalization] the mapping produced instead.
+ *
+ * Android cannot tell `"numeric"` from `"decimal-pad"`, because Compose offers one
+ * keyboard for both (`docs/components/text-field.md`'s table): the read-back says
+ * `"decimal-pad"` for either, and that is the truth rather than a lost prop.
+ */
+internal object NitroUiKeyboardNames {
+  /**
+   * The RN spelling of an `EditorInfo.inputType`'s keyboard.
+   *
+   * The class is read first and the variation only inside `CLASS_TEXT`, because the
+   * `InputType` masks overlap between classes: `TYPE_NUMBER_VARIATION_PASSWORD` and
+   * `TYPE_TEXT_VARIATION_URI` are the same bit (0x10), so a secure number pad read by
+   * variation alone decodes as a URL keyboard. That is not a hypothetical: it is what
+   * an earlier cut of this function did, and `KeyboardNamesTest` keeps it fixed.
+   */
+  fun nameOfInputType(inputType: Int): String =
+    when (inputType and android.text.InputType.TYPE_MASK_CLASS) {
+      android.text.InputType.TYPE_CLASS_PHONE -> "phone-pad"
+      android.text.InputType.TYPE_CLASS_NUMBER ->
+        if (inputType and android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL != 0) {
+          "decimal-pad"
+        } else {
+          "number-pad"
+        }
+      android.text.InputType.TYPE_CLASS_TEXT ->
+        when (inputType and android.text.InputType.TYPE_MASK_VARIATION) {
+          android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS,
+          android.text.InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS,
+          -> "email-address"
+          android.text.InputType.TYPE_TEXT_VARIATION_URI -> "url"
+          else -> "default"
+        }
+      else -> "default"
+    }
+
+  /**
+   * The RN spelling of an `EditorInfo.inputType`'s capitalisation flags — for a text
+   * keyboard. The `CAP_*` bits overlap another class's flags
+   * (`TYPE_TEXT_FLAG_CAP_WORDS` == `TYPE_NUMBER_FLAG_DECIMAL`), so a number keyboard has
+   * no capitalisation to read and says `"none"`, which is also what it was told.
+   */
+  fun nameOfCapitalization(inputType: Int): String =
+    when (inputType and android.text.InputType.TYPE_MASK_CLASS) {
+      android.text.InputType.TYPE_CLASS_TEXT ->
+        when {
+          inputType and android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS != 0 ->
+            "characters"
+          inputType and android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS != 0 -> "words"
+          inputType and android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES != 0 ->
+            "sentences"
+          else -> "none"
+        }
+      else -> "none"
+    }
+
+  /**
+   * Whether an `EditorInfo.inputType` allows autocorrection.
+   *
+   * The flag is [android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT], which is what
+   * Compose 1.12.1 writes for `autoCorrectEnabled = true` and does not write for
+   * `false` — read out of the artifact's `EditorInfo.update()`, not from memory, because
+   * the two readings differ exactly where the prop matters: an
+   * [android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS]-only rule calls a field that
+   * refused autocorrection an allowed one, since nothing in this mapping ever sets that
+   * flag. `TYPE_TEXT_FLAG_NO_SUGGESTIONS` is still honoured, as an outright refusal
+   * whoever wrote it.
+   *
+   * [asked] is what the field was told, and it answers for the keyboards that carry no
+   * autocorrection flag at all: Compose writes the capitalisation and autocorrection
+   * flags only inside `TYPE_CLASS_TEXT`, so a number or phone keyboard has nothing to
+   * read back, and "what did the app ask for" is the only honest answer — which is also
+   * what iOS reports for the same keyboard, whose `autocorrectionType` is not consulted
+   * by the keys that are up.
+   */
+  fun autoCorrectOf(inputType: Int, asked: Boolean): Boolean {
+    if (inputType and android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0) {
+      return false
+    }
+    return (
+      if (inputType and android.text.InputType.TYPE_MASK_CLASS ==
+        android.text.InputType.TYPE_CLASS_TEXT
+      ) {
+        inputType and android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT != 0
+      } else {
+        asked
+      }
+    )
+  }
+
+  /** The same answer for a mapped [KeyboardType], with no input connection up. */
+  fun nameOfKeyboardType(type: KeyboardType): String =
+    when (type) {
+      KeyboardType.Number, KeyboardType.NumberPassword -> "number-pad"
+      KeyboardType.Decimal -> "decimal-pad"
+      KeyboardType.Phone -> "phone-pad"
+      KeyboardType.Email -> "email-address"
+      KeyboardType.Uri -> "url"
+      else -> "default"
+    }
+
+  /** The same answer for a mapped [KeyboardCapitalization]. */
+  fun nameOfCapitalization(capitalization: KeyboardCapitalization): String =
+    when (capitalization) {
+      KeyboardCapitalization.Words -> "words"
+      KeyboardCapitalization.Characters -> "characters"
+      KeyboardCapitalization.Sentences -> "sentences"
+      else -> "none"
+    }
+}
 
 /** The field's host: [NitroComposeHost] plus the composable. */
 private class TextFieldHost(

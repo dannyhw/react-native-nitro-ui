@@ -15,11 +15,18 @@ import type { NitroUiSize } from '../Switch/Switch.nitro';
  * on every render.
  *
  * This is `NitroUiTextFieldProps` minus what a search field has no answer for
- * (D38 item 2): `multiline` (always one line), `secureTextEntry`,
- * `returnKeyType` (always Search) and the three keyboard props, which Material
- * 3's search input field does not take at all. What stays identical is the model
- * behind them: the two views share one text model, one handshake, one IME guard
- * and one `maxLength` implementation, so they cannot drift apart.
+ * (D38 item 2): `multiline` (always one line), `secureTextEntry` and
+ * `returnKeyType` (always Search). The three keyboard props it does take —
+ * `keyboardType`, `autoCapitalize`, `autoCorrect` — are TextField's, with its
+ * types, its values and its platform mapping; what they used to be fixed to is
+ * what their defaults are (G27, D40 pass 3), so an app that passes nothing gets
+ * the field it got before. Material 3's stateful `InputField` is what lets them
+ * through at all: the 1.4 one this component was built on has no keyboard
+ * parameter.
+ *
+ * What stays identical is the model behind them: the two views share one text
+ * model, one handshake, one IME guard and one `maxLength` implementation, so they
+ * cannot drift apart.
  */
 export interface NitroUiSearchFieldProps
   extends HybridViewProps, NitroUiIntrinsicProps {
@@ -45,6 +52,24 @@ export interface NitroUiSearchFieldProps
    * open.
    */
   maxLength: number | null;
+  /**
+   * `'default' | 'number-pad' | 'decimal-pad' | 'numeric' | 'email-address' |
+   * 'phone-pad' | 'url'`, RN's spellings, as `NitroUiTextFieldProps` documents
+   * them. Anything else is `'default'`, which is also the default: the keyboard a
+   * search field has always opened.
+   */
+  keyboardType: string;
+  /**
+   * `'none' | 'sentences' | 'words' | 'characters'`, as TextField's. Default
+   * `'none'` — a query is not a sentence, which is what v1 fixed it to.
+   */
+  autoCapitalize: string;
+  /**
+   * Whether the keyboard may autocorrect. Default `true`: on iOS that is
+   * `.default`, the system's own answer, and on Android the autocorrect flag is
+   * asked for rather than left unstated — the same mapping TextField uses.
+   */
+  autoCorrect: boolean;
   /** `false`: the field shows its text and takes no focus and no input. */
   editable: boolean;
   /** Forwarded to the native view so tests and a11y tools can find it. */
@@ -104,6 +129,16 @@ export interface NitroUiSearchFieldTestState {
   accessibilityLabel: string;
   /** The Return key as applied - `search` on both platforms. */
   returnKeyType: string;
+  /**
+   * The keyboard type as applied (RN spelling), read back from what the control
+   * was configured with — iOS from the field's `UIKeyboardType`, Android from the
+   * `EditorInfo` the IME is handed. Not the prop the wrapper sent.
+   */
+  keyboardType: string;
+  /** The capitalisation as applied (RN spelling), read back the same way. */
+  autoCapitalize: string;
+  /** Autocorrect as applied, read back the same way. */
+  autoCorrect: boolean;
   /**
    * Whether the Android search bar is expanded. Always `false`: v1 holds it
    * collapsed (there is no results view to expand to), and a bar that expanded on

@@ -44,6 +44,8 @@ import {
   nitroUiCore,
   type NitroUiSizingTraceEvent,
   type SearchFieldHandle,
+  type TextFieldAutoCapitalize,
+  type TextFieldKeyboardType,
 } from 'react-native-nitro-ui';
 import { waitForHandle } from './handles';
 
@@ -94,6 +96,9 @@ type FieldState = {
   placeholder: string;
   accessibilityLabel: string;
   returnKeyType: string;
+  keyboardType: string;
+  autoCapitalize: string;
+  autoCorrect: boolean;
   expanded: boolean;
   canClear: boolean;
 };
@@ -182,6 +187,31 @@ async function focusField(id: string) {
   const handle = await handleOf(id);
   handle.focus();
   await stateWhen(id, (state) => state.focused, 'focus');
+}
+
+/**
+ * Move the field's focus away and back, then wait for its report to satisfy `check`.
+ *
+ * A Compose field is handed its keyboard options when the input session starts, and a
+ * session that is already running is not restarted for a change to them
+ * (`docs/components/search-field.md`), so a focused Android field keeps the keyboard it
+ * opened with. Refocusing is therefore how this file asks Android whether a keyboard prop
+ * reached the IME; on iOS it costs one blur to prove the same answer a second time.
+ */
+async function refocusAndRead(
+  id: string,
+  check: (state: FieldState) => boolean,
+  what: string
+): Promise<FieldState> {
+  const handle = await handleOf(id);
+  handle.blur();
+  await stateWhen(id, (state) => !state.focused, 'the field to give up focus');
+  // The session ends with the focus and starts a frame later; a blur and a focus in the
+  // same turn are one frame, and the second session has to be a new one.
+  await sleep(150);
+  handle.focus();
+  await stateWhen(id, (state) => state.focused, 'the field to take focus back');
+  return stateWhen(id, check, what, 8000);
 }
 
 /**
@@ -289,6 +319,61 @@ function Controlled({
     </View>
   );
 }
+
+/**
+ * A field whose three keyboard props come from the test, so one `rerender` can move
+ * them while the field holds the keyboard. `hybridRef` is how the test reads the field
+ * back, which is the point: the assertions below are answered by the control, not by
+ * the props React was given.
+ */
+function Keyboard({
+  keyboardType,
+  autoCapitalize,
+  autoCorrect,
+}: {
+  keyboardType?: TextFieldKeyboardType;
+  autoCapitalize?: TextFieldAutoCapitalize;
+  autoCorrect?: boolean;
+}) {
+  return (
+    <SearchField
+      testID="keyboard"
+      accessibilityLabel="Keyboard search field"
+      keyboardType={keyboardType}
+      autoCapitalize={autoCapitalize}
+      autoCorrect={autoCorrect}
+      hybridRef={capture('keyboard')}
+    />
+  );
+}
+
+/**
+ * What each `keyboardType` is expected to read back as. Both columns are the same
+ * mapping (`docs/components/text-field.md`'s table) seen from the other end, and they
+ * differ in exactly one row: Android offers one keyboard for both `numeric` and
+ * `decimal-pad`, so there the read-back names the keyboard the IME was handed rather
+ * than repeating the spelling that asked for it. That is the honest answer, not a lost
+ * prop — which is why it is spelled out per platform instead of asserted away.
+ */
+const KEYBOARD_READ_BACK: Record<TextFieldKeyboardType, string> = iOS
+  ? {
+      'default': 'default',
+      'number-pad': 'number-pad',
+      'decimal-pad': 'decimal-pad',
+      'numeric': 'numeric',
+      'email-address': 'email-address',
+      'phone-pad': 'phone-pad',
+      'url': 'url',
+    }
+  : {
+      'default': 'default',
+      'number-pad': 'number-pad',
+      'decimal-pad': 'decimal-pad',
+      'numeric': 'decimal-pad',
+      'email-address': 'email-address',
+      'phone-pad': 'phone-pad',
+      'url': 'url',
+    };
 
 /**
  * A field focused from its parent's mount effect - the way an app opens a search screen
@@ -689,6 +774,126 @@ describe('SearchField', () => {
     expect(verdict).toBe('lens=clear ring=painted ringTop=painted');
   });
 
+  it('gives the field the keyboard the app asked for, Search key included', async () => {
+    const { rerender } = await render(<Keyboard />);
+    await waitForTestId('keyboard');
+    await focusField('keyboard');
+
+    // 1. The defaults, read back from a focused field. These three are what v1 fixed
+    // them to, so an app that passes no keyboard prop has to get the field it always
+    // got — and the answer has to come from the control rather than from the snapshot's
+    // own initial value, which says the same words for a field that was never told.
+    const asFound = (await handleOf('keyboard')).nuiTestState();
+    expect(asFound.focused).toBe(true);
+    expect(asFound.keyboardType).toBe('default');
+    expect(asFound.autoCapitalize).toBe('none');
+    expect(asFound.autoCorrect).toBe(true);
+    expect(asFound.returnKeyType).toBe('search');
+
+    // 2. iOS is the platform that answers a keyboard change *while the keyboard is up*:
+    // a `UITextInputTraits` setter does not reach a visible keyboard, so the apply step
+    // reloads it (TextField's rule). Asserted here with focus having never moved, so a
+    // change that only took effect at the next focus would be caught. Android is not
+    // asked this way, because Compose builds the editor info when the input session
+    // starts and leaves a session that is already running alone - the rule
+    // `docs/components/search-field.md` states - and step 3 is where Android is graded.
+    if (iOS) {
+      await rerender(<Keyboard keyboardType="number-pad" />);
+      const reloaded = await stateWhen(
+        'keyboard',
+        (current) => current.keyboardType === 'number-pad',
+        'a focused field to reload its own keyboard',
+        8000
+      );
+      expect(reloaded.focused).toBe(true);
+      expect(reloaded.returnKeyType).toBe('search');
+    }
+
+    // 3. Every keyboard type, one at a time, each with the field taking focus again: a
+    // prop that is read once at first composition and never again cannot get through this
+    // loop. iOS reads the traits back off the `UITextField`; Android asks the focused
+    // field for the `EditorInfo` it hands the IME, so what is asserted is what the
+    // keyboard was built from, not what the wrapper was passed.
+    for (const type of Object.keys(
+      KEYBOARD_READ_BACK
+    ) as TextFieldKeyboardType[]) {
+      const expected = KEYBOARD_READ_BACK[type];
+      await rerender(<Keyboard keyboardType={type} />);
+      const applied = await refocusAndRead(
+        'keyboard',
+        (current) => current.keyboardType === expected,
+        `the ${type} keyboard to reach the field`
+      );
+      console.log(
+        `search field keyboardType="${type}" read back "${applied.keyboardType}" ` +
+          `(return key "${applied.returnKeyType}", focused ${String(applied.focused)})`
+      );
+      expect(applied.keyboardType).toBe(expected);
+      // Whatever the keys are, the key that submits a query stays Search's: the one
+      // thing a keyboard prop must never move.
+      expect(applied.returnKeyType).toBe('search');
+      expect(applied.focused).toBe(true);
+    }
+
+    // 4. The two remaining props, each moved on a text keyboard and on its own, so a
+    // failure names the prop that did not move. They are flags of Android's *text* input
+    // class, which is why step 5 asks about them on a keyboard that has them.
+    for (const capitalisation of [
+      'words',
+      'characters',
+      'sentences',
+    ] as TextFieldAutoCapitalize[]) {
+      await rerender(
+        <Keyboard keyboardType="default" autoCapitalize={capitalisation} />
+      );
+      const moved = await refocusAndRead(
+        'keyboard',
+        (current) => current.autoCapitalize === capitalisation,
+        `the ${capitalisation} capitalisation to reach the field`
+      );
+      console.log(
+        `search field autoCapitalize="${capitalisation}" read back ` +
+          `"${moved.autoCapitalize}"`
+      );
+      expect(moved.autoCapitalize).toBe(capitalisation);
+    }
+    await rerender(<Keyboard keyboardType="default" autoCorrect={false} />);
+    const refused = await refocusAndRead(
+      'keyboard',
+      (current) => current.autoCorrect === false,
+      'autocorrection to be refused'
+    );
+    console.log(
+      `search field autoCorrect=false read back ${String(refused.autoCorrect)}`
+    );
+    expect(refused.autoCorrect).toBe(false);
+
+    // 5. All three at once, on the keyboard that carries only two of them: a number
+    // keyboard has no capitalisation to report on Android (it is a text-class flag), and
+    // the Search key is still the key that submits.
+    await rerender(
+      <Keyboard
+        keyboardType="number-pad"
+        autoCorrect={false}
+        autoCapitalize="characters"
+      />
+    );
+    const together = await refocusAndRead(
+      'keyboard',
+      (current) =>
+        current.keyboardType === KEYBOARD_READ_BACK['number-pad'] &&
+        current.autoCorrect === false,
+      'a field to take all three keyboard props at once'
+    );
+    console.log(`search field all three read back ${JSON.stringify(together)}`);
+    expect(together.keyboardType).toBe(KEYBOARD_READ_BACK['number-pad']);
+    expect(together.autoCorrect).toBe(false);
+    // Android's capitalisation flags belong to the text input class, so a number
+    // keyboard reports none whatever was asked; iOS has one trait either way.
+    expect(together.autoCapitalize).toBe(iOS ? 'characters' : 'none');
+    expect(together.returnKeyType).toBe('search');
+  });
+
   it('comes back from the pool with none of its previous owner', async () => {
     function Owner({ second }: { second: boolean }) {
       return second ? (
@@ -705,6 +910,9 @@ describe('SearchField', () => {
           defaultValue="first"
           placeholder="first owner"
           maxLength={9}
+          keyboardType="number-pad"
+          autoCapitalize="words"
+          autoCorrect={false}
           editable
           accessibilityLabel="First owner"
           hybridRef={capture('pooled')}
@@ -742,6 +950,11 @@ describe('SearchField', () => {
       expect(state.nativeEvents).toBe(0);
       expect(state.jsEvents).toBe(0);
       expect(state.returnKeyType).toBe('search');
+      // A keyboard is part of what the previous owner configured, so it goes with the
+      // rest of it: back from the pool the field is the default field again.
+      expect(state.keyboardType).toBe('default');
+      expect(state.autoCapitalize).toBe('none');
+      expect(state.autoCorrect).toBe(true);
       const lifetime = handle.nuiTestLifetimeReport();
       recycled = /recycles=[1-9]/.test(lifetime);
       console.log(`search field recycle round ${round}: ${lifetime}`);

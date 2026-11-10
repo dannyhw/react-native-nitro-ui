@@ -50,12 +50,15 @@ namespace margelo::nitro::nitroui {
     std::string placeholder     SWIFT_PRIVATE;
     std::string accessibilityLabel     SWIFT_PRIVATE;
     std::string returnKeyType     SWIFT_PRIVATE;
+    std::string keyboardType     SWIFT_PRIVATE;
+    std::string autoCapitalize     SWIFT_PRIVATE;
+    bool autoCorrect     SWIFT_PRIVATE;
     bool expanded     SWIFT_PRIVATE;
     bool canClear     SWIFT_PRIVATE;
 
   public:
     NitroUiSearchFieldTestState() = default;
-    explicit NitroUiSearchFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, double maxLength, std::string placeholder, std::string accessibilityLabel, std::string returnKeyType, bool expanded, bool canClear): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel), returnKeyType(returnKeyType), expanded(expanded), canClear(canClear) {}
+    explicit NitroUiSearchFieldTestState(std::string text, bool focused, bool composing, double nativeEvents, double jsEvents, std::string lastWrite, bool editable, double maxLength, std::string placeholder, std::string accessibilityLabel, std::string returnKeyType, std::string keyboardType, std::string autoCapitalize, bool autoCorrect, bool expanded, bool canClear): text(text), focused(focused), composing(composing), nativeEvents(nativeEvents), jsEvents(jsEvents), lastWrite(lastWrite), editable(editable), maxLength(maxLength), placeholder(placeholder), accessibilityLabel(accessibilityLabel), returnKeyType(returnKeyType), keyboardType(keyboardType), autoCapitalize(autoCapitalize), autoCorrect(autoCorrect), expanded(expanded), canClear(canClear) {}
 
   public:
     friend bool operator==(const NitroUiSearchFieldTestState& lhs, const NitroUiSearchFieldTestState& rhs) = default;
@@ -82,6 +85,9 @@ namespace margelo::nitro {
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "placeholder"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel"))),
         JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "returnKeyType"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "keyboardType"))),
+        JSIConverter<std::string>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCapitalize"))),
+        JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "expanded"))),
         JSIConverter<bool>::fromJSI(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "canClear")))
       );
@@ -99,6 +105,9 @@ namespace margelo::nitro {
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "placeholder"), JSIConverter<std::string>::toJSI(runtime, arg.placeholder));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel"), JSIConverter<std::string>::toJSI(runtime, arg.accessibilityLabel));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "returnKeyType"), JSIConverter<std::string>::toJSI(runtime, arg.returnKeyType));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "keyboardType"), JSIConverter<std::string>::toJSI(runtime, arg.keyboardType));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "autoCapitalize"), JSIConverter<std::string>::toJSI(runtime, arg.autoCapitalize));
+      obj.setProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect"), JSIConverter<bool>::toJSI(runtime, arg.autoCorrect));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "expanded"), JSIConverter<bool>::toJSI(runtime, arg.expanded));
       obj.setProperty(runtime, PropNameIDCache::get(runtime, "canClear"), JSIConverter<bool>::toJSI(runtime, arg.canClear));
       return obj;
@@ -122,6 +131,9 @@ namespace margelo::nitro {
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "placeholder")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "accessibilityLabel")))) return false;
       if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "returnKeyType")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "keyboardType")))) return false;
+      if (!JSIConverter<std::string>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCapitalize")))) return false;
+      if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "autoCorrect")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "expanded")))) return false;
       if (!JSIConverter<bool>::canConvert(runtime, obj.getProperty(runtime, PropNameIDCache::get(runtime, "canClear")))) return false;
       return true;

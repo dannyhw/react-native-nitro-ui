@@ -32,7 +32,7 @@ the layout engine, and React never sees a native node.
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`                    | `androidx.compose.material3.AlertDialog`                                                              | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`              | M3 `ModalBottomSheet` with one row per action                                                         | 0.5.0 | [dialog.md](docs/components/dialog.md)                       |
 | `TextField`          | `UITextField` / `UITextView` (multi-line)                      | `BasicTextField(TextFieldState)`                                                                      | 0.6.0 | [text-field.md](docs/components/text-field.md)               |
-| `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `DockedSearchBar` + `SearchBarDefaults.InputField`                                                 | next  | [search-field.md](docs/components/search-field.md)           |
+| `SearchField`        | `UISearchTextField` (the field `UISearchBar` vends)            | M3 `SearchBarDefaults.InputField`, in a `Surface` shaped like the bar's input field                   | next  | [search-field.md](docs/components/search-field.md)           |
 | `BottomSheet`        | `UISheetPresentationController` (`.pageSheet`, detents)        | M3 `ModalBottomSheet` with React Native content                                                       | 0.6.0 | [bottom-sheet.md](docs/components/bottom-sheet.md)           |
 | `Tooltip`            | a `.popover` presentation with SwiftUI content                 | M3 `TooltipBox` with `PlainTooltip` / `RichTooltip`                                                   | next  | [tooltip.md](docs/components/tooltip.md)                     |
 | `Popover`            | `UIPopoverPresentationController` with React Native content    | a Compose `Popup` with a Material 3 `Surface` — Android has no popover                                | next  | [popover.md](docs/components/popover.md)                     |
@@ -935,8 +935,9 @@ clear button that comes with the query — on iOS while the field is editing.
 UIKit's own `UISearchTextField` on iOS,
 Material 3's search input field on Android, so each platform draws its own search
 field rather than a copy of the other's. Same React Native `TextInput` prop names
-as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()` — and no
-keyboard props: a search field is one line and its Return key is Search.
+as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()`, and
+the same `keyboardType`, `autoCapitalize` and `autoCorrect`. What stays fixed is
+the shape and the key: one line, and Search submits it.
 
 ```tsx name=search-field
 export function ProductSearch({

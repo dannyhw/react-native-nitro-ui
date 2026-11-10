@@ -26,6 +26,9 @@ namespace margelo::nitro::nitroui::views {
     mostRecentEventCount(nitro::ReactProp<double>::fromRawValue("NitroUiSearchField", "mostRecentEventCount", rawProps, sourceProps.mostRecentEventCount)),
     placeholder(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSearchField", "placeholder", rawProps, sourceProps.placeholder)),
     maxLength(nitro::ReactProp<std::variant<nitro::NullType, double>>::fromRawValue("NitroUiSearchField", "maxLength", rawProps, sourceProps.maxLength)),
+    keyboardType(nitro::ReactProp<std::string>::fromRawValue("NitroUiSearchField", "keyboardType", rawProps, sourceProps.keyboardType)),
+    autoCapitalize(nitro::ReactProp<std::string>::fromRawValue("NitroUiSearchField", "autoCapitalize", rawProps, sourceProps.autoCapitalize)),
+    autoCorrect(nitro::ReactProp<bool>::fromRawValue("NitroUiSearchField", "autoCorrect", rawProps, sourceProps.autoCorrect)),
     editable(nitro::ReactProp<bool>::fromRawValue("NitroUiSearchField", "editable", rawProps, sourceProps.editable)),
     testID(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSearchField", "testID", rawProps, sourceProps.testID)),
     accessibilityLabel(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiSearchField", "accessibilityLabel", rawProps, sourceProps.accessibilityLabel)),
@@ -47,6 +50,9 @@ namespace margelo::nitro::nitroui::views {
       case hashString("mostRecentEventCount"): return true;
       case hashString("placeholder"): return true;
       case hashString("maxLength"): return true;
+      case hashString("keyboardType"): return true;
+      case hashString("autoCapitalize"): return true;
+      case hashString("autoCorrect"): return true;
       case hashString("editable"): return true;
       case hashString("testID"): return true;
       case hashString("accessibilityLabel"): return true;
