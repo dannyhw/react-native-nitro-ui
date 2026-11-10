@@ -8,8 +8,16 @@ import android.os.Handler
 import android.os.Looper
 import android.text.TextPaint
 import android.view.View
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.DatePicker
+import androidx.compose.material3.ScrollField
+import androidx.compose.material3.ScrollFieldColors
+import androidx.compose.material3.ScrollFieldState
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DatePickerState
 import androidx.compose.material3.ColorScheme
@@ -22,14 +30,16 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.TimePickerDefaults
 import androidx.compose.material3.TimePickerDialog
-import androidx.compose.material3.TimePickerShapes
 import androidx.compose.material3.TimePickerState
-import androidx.compose.material3.TimeScroll
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberScrollFieldState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
@@ -37,12 +47,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -59,13 +69,17 @@ import androidx.compose.ui.unit.dp
 import com.facebook.react.uimanager.ThemedReactContext
 import com.margelo.nitro.core.NullType
 import com.margelo.nitro.nitroui.core.NitroComposeHost
+import com.margelo.nitro.nitroui.core.NuiWheelRow
 import com.margelo.nitro.nitroui.core.nuiOwnVerticalDrags
+import com.margelo.nitro.nitroui.core.nuiReportAtWheelRest
+import com.margelo.nitro.nitroui.core.nuiWheelColors
 import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.views.RecyclableView
 import java.text.DateFormat
+import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -1091,6 +1105,153 @@ private class DatePickerHost(
     }
   }
 
+  /**
+   * The `wheel` variant of `mode="time"`: one `ScrollField` drum per field, in the row a
+   * wheel is.
+   *
+   * Why the drums are drawn here instead of by `TimeScroll`, and what the settle costs, is
+   * in [syncTimeWheel]. What matters here is that the *rows* are Material's own drum rows
+   * ([NuiWheelRow], the same one a Picker's wheel paints), that the drums are named by
+   * Material's own localised `m3c_time_picker_*` descriptions rather than invented ones, so
+   * a screen reader hears the same words it hears from a stock wheel in every locale, and
+   * that the drums share the box rather than overflow it: `weight(1f, fill = false)` up
+   * front and a width cap after it means a wheel in a 320 dp box gets three narrower drums
+   * instead of a column the caller cannot see.
+   *
+   * The height is this widget's own claim, stated rather than asked for: a drum is a pager
+   * and a pager fills whatever height it is offered, which under this component's
+   * `fillWidth` question (the box's width, an unbounded height) would be as tall as the
+   * screen. Three rows of 40 dp with the middle one snapped, measured against the box the
+   * harness reports - and above the 48 dp an interactive thing must offer a finger.
+   */
+  @Composable
+  private fun TimeWheel(
+    model: DatePickerModel,
+    twentyFourHour: Boolean,
+    hourState: ScrollFieldState,
+    minuteState: ScrollFieldState,
+    periodState: ScrollFieldState?,
+    touching: MutableState<Boolean>,
+  ) {
+    val colors = nuiWheelColors(model.tintColor)
+    val enabled = model.enabled
+    // Material's own words for its own columns, from the same `m3c_` resources the rest of
+    // this file reaches into for the picker dialogs. Hardcoding "Select hour" would speak
+    // English to a German screen reader; the resources are what a stock wheel says.
+    val hourDrumLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_hour_selection)
+    val minuteDrumLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_minute_selection)
+    val amLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_am)
+    val pmLabel = stringResource(androidx.compose.material3.R.string.m3c_time_picker_pm)
+    // The columns in the digits the device's locale writes. Material's drum rows use its own
+    // `toLocalString`, which is `internal` to the artifact, so the wheel asks for the same
+    // thing directly: a `NumberFormat` for the device's locale with a minimum digit count.
+    // That is what puts Arabic-Indic digits in a wheel on an Arabic device, where Latin ones
+    // would disagree with every other number on the screen. Keyed on the composition's
+    // language tag, which is the fact a wheel's columns would be stale about.
+    val localeTag = LocalLocale.current.toLanguageTag()
+    val (padded, plain) =
+      remember(localeTag) {
+        Pair(
+          NumberFormat.getInstance().apply {
+            minimumIntegerDigits = 2
+            isGroupingUsed = false
+          },
+          NumberFormat.getInstance().apply {
+            isGroupingUsed = false
+          },
+        )
+      }
+    Row(
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .nuiControlSemantics(
+            label = model.accessibilityLabel,
+            value = DatePickerFieldText.format("time", model.displayed),
+            enabled = enabled,
+          )
+          // The drums live inside this node, and a page that swallows their drags is a wheel
+          // that cannot be rolled. See [nuiOwnVerticalDrags], which also keeps the touch flag
+          // the settle is armed by.
+          .nuiOwnVerticalDrags(enabled, touching),
+      horizontalArrangement = Arrangement.spacedBy(TimeWheelGap, Alignment.CenterHorizontally),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      TimeWheelDrum(
+        // `fill = false`, so the cap below is the cap: with `fill = true` the row would
+        // force the drum to its whole share and a wheel in a wide box would paint a 190 dp
+        // hour column instead of the 100 dp column a wheel has.
+        modifier = Modifier.weight(1f, fill = false).widthIn(max = TimeWheelDrumWidth).height(TimeWheelHeight),
+        state = hourState,
+        label = hourDrumLabel,
+        colors = colors,
+        enabled = enabled,
+        // 00..23 in 24-hour form; 12, 1, ... 11 in 12-hour form, unpadded because "01
+        // o'clock" reads like a date and it is iOS's 12-hour wheel that spells it that way.
+        text = { index ->
+          if (twentyFourHour) {
+            padded.format(index.toLong())
+          } else if (index == 0) {
+            plain.format(12L)
+          } else {
+            plain.format(index.toLong())
+          }
+        },
+      )
+      TimeWheelDrum(
+        modifier = Modifier.weight(1f, fill = false).widthIn(max = TimeWheelDrumWidth).height(TimeWheelHeight),
+        state = minuteState,
+        label = minuteDrumLabel,
+        colors = colors,
+        enabled = enabled,
+        text = { index -> padded.format(index.toLong()) },
+      )
+      if (periodState != null) {
+        TimeWheelDrum(
+          modifier = Modifier.weight(1f, fill = false).widthIn(max = TimeWheelDrumWidth).height(TimeWheelHeight),
+          state = periodState,
+          // The column has no description of its own in Material's strings - its stock
+          // control is a toggle, not a drum - so it is named by the two values it holds.
+          label = "$amLabel/$pmLabel",
+          colors = colors,
+          enabled = enabled,
+          text = { index -> if (index == 1) pmLabel else amLabel },
+        )
+      }
+    }
+  }
+
+  /** One column of [TimeWheel]: the drum, its rows, and the words a reader is given. */
+  @Composable
+  private fun TimeWheelDrum(
+    modifier: Modifier,
+    state: ScrollFieldState,
+    label: String,
+    colors: ScrollFieldColors,
+    enabled: Boolean,
+    text: (Int) -> String,
+  ) {
+    ScrollField(
+      state = state,
+      contentDescription = label,
+      modifier = modifier,
+      enabled = enabled,
+      colors = colors,
+      // The spoken row and the painted row are one function, which is the pair that makes
+      // "the row shown is the value reported" a fact rather than a hope.
+      fieldAccessibilityDescription = { index -> text(index) },
+      interactionSource = null,
+      field = { index, selected, rowEnabled ->
+        NuiWheelRow(
+          text = text(index),
+          selected = selected,
+          enabled = rowEnabled,
+          colors = colors,
+        )
+      },
+    )
+  }
+
   /** The always-visible picker: Material 3's calendar, or its clock. */
   @Composable
   private fun InlinePicker(
@@ -1100,40 +1261,67 @@ private class DatePickerHost(
     val shown = model.displayed
     if (mode == "time") {
       val fields = model.localFields(shown)
-      val state = rememberTimePickerState(
-        initialHour = fields.get(Calendar.HOUR_OF_DAY),
-        initialMinute = fields.get(Calendar.MINUTE),
-        is24Hour = twentyFourHour,
-      )
-      // The dial commits a value when the finger leaves it; the drum does not commit
-      // anything at all, so the two need the same rules read from different triggers.
+      val hour = fields.get(Calendar.HOUR_OF_DAY)
+      val minute = fields.get(Calendar.MINUTE)
       if (model.variant == "wheel") {
-        syncTimeWheel(model, state)
-      } else {
-        syncTimePicker(model, state)
-      }
-      // The wheel and the clock are the same control with the same two fields, drawn
-      // two ways: `TimeScroll` is 1.5's wheel (Q8 Appendix E pass 3 A), and both take
-      // a `TimePickerState`, so the value, the clamps and the bounds behind them are
-      // one code path. What differs is the widget, the trigger the value is read on
-      // (see [syncTimeWheel]), and the 12/24-hour convention, which comes from the
-      // device either way ([twentyFourHour]).
-      if (model.variant == "wheel") {
-        TimeScroll(
-          state = state,
-          shapes = TimePickerDefaults.shapes(),
-          modifier = Modifier
-            .nuiControlSemantics(
-              label = model.accessibilityLabel,
-              value = DatePickerFieldText.format(mode, shown),
-              enabled = model.enabled,
-            )
-            // Two drums live inside this node, and a page that swallows their drags is a
-            // wheel that cannot be rolled. See [nuiOwnVerticalDrags].
-            .nuiOwnVerticalDrags(model.enabled),
-          colors = TimePickerDefaults.vibrantColors(),
+        // The wheel and the clock are the same control with the same two fields, drawn two
+        // ways, and the 12/24-hour convention comes from the device either way
+        // ([twentyFourHour]). What differs is where the value lives: the clock is a
+        // `TimePickerState` Material both writes and reads, and the wheel is a row of
+        // drums whose states have to belong to *this* composable, because the settle is
+        // read off a drum's own scroll flag (see [syncTimeWheel]).
+        //
+        // The hour column is 0..23 or - on a 12-hour device - 12 o'clock followed by
+        // 1..11, whose index is the hour modulo 12, with an AM/PM column beside it for the
+        // other half. Three columns of a wheel is also what iOS's time wheel draws.
+        val hourState =
+          rememberScrollFieldState(
+            itemCount = if (twentyFourHour) 24 else 12,
+            index = if (twentyFourHour) hour else hour % 12,
+          )
+        val minuteState = rememberScrollFieldState(itemCount = 60, index = minute)
+        val periodState =
+          if (twentyFourHour) {
+            null
+          } else {
+            rememberScrollFieldState(itemCount = 2, index = if (hour >= 12) 1 else 0)
+          }
+        // Is a finger on the wheel? [nuiOwnVerticalDrags] awaits the down and the up anyway,
+        // so it keeps this; the settle needs it because a roll does not end when the finger
+        // leaves - the drum is still coasting then - and cannot end at all after it has.
+        val touching = remember { mutableStateOf(false) }
+        // "Active" for [nuiReportAtWheelRest]: a finger on the wheel, or any drum of it
+        // still turning. A `derivedStateOf` read only by the settle's flow, so a drum
+        // starting or stopping recomposes no part of the wheel - the one variant of this
+        // component that is already redrawing a pager on every row it crosses.
+        val active =
+          remember(hourState, minuteState, periodState, touching) {
+            derivedStateOf {
+              hourState.isScrollInProgress ||
+                minuteState.isScrollInProgress ||
+                periodState?.isScrollInProgress == true ||
+                touching.value
+            }
+          }
+        syncTimeWheel(model, twentyFourHour, hourState, minuteState, periodState, active)
+        TimeWheel(
+          model = model,
+          twentyFourHour = twentyFourHour,
+          hourState = hourState,
+          minuteState = minuteState,
+          periodState = periodState,
+          touching = touching,
         )
       } else {
+        val state =
+          rememberTimePickerState(
+            initialHour = hour,
+            initialMinute = minute,
+            is24Hour = twentyFourHour,
+          )
+        // The dial commits a value when the finger leaves it, so it needs the same rules
+        // read from a different trigger than the drums do.
+        syncTimePicker(model, state)
         TimePicker(
           state = state,
           modifier = Modifier.nuiControlSemantics(
@@ -1511,94 +1699,140 @@ private fun syncDatePicker(
 }
 
 /**
- * How long the `wheel`'s drums have to hold still before a roll counts as a pick.
+ * One drum's width, at its widest: the drum `TimeScroll` lays out on `nitroui_b`
+ * (hour drum 263 px at 2.625 x = 100 dp), kept because it is the width the rows of this
+ * library's other wheel were measured at too, and because a drum is a *column* - 100 dp
+ * shows the centre row's two digits with room for the type to grow into the centre size.
  *
- * `TimeScroll` has no settle to subscribe to — see [syncTimeWheel] for what it does
- * instead. This is not a measured settle time, because nothing in the widget exposes one
- * to measure: it is the window proven from the other side. Delete it and one fling of the
- * hour drum in `scripts/real-input/android.mjs` (a 130 ms swipe whose momentum outlives
- * the finger) reports two changes instead of one, which is the red that keeps this block
- * honest. Long enough that the snap of one row landing cannot be mistaken for the end of
- * a roll across several; short enough that the report still arrives with the finger's lift.
+ * It is a maximum, not a demand: `weight(1f, fill = false)` shares whatever box the caller
+ * gave the control, so a wheel in a 320 dp box gets three narrower drums rather than a
+ * wheel wider than its box and a clipped column. `docs/components/date-picker.md` quotes
+ * the box the harness measures.
  */
-private const val TIME_WHEEL_SETTLE_MILLIS = 180L
+private val TimeWheelDrumWidth = 100.dp
+
+/** The wheel's height - three rows of 40 dp, the middle one snapped. */
+private val TimeWheelHeight = 120.dp
+
+/** The gutter between drums, so the centre band of one does not read as the other's. */
+private val TimeWheelGap = 16.dp
 
 /**
- * [syncTimePicker]'s rules, on the widget that cannot follow them as written.
+ * The `wheel`'s drums, held by *this* composable rather than by a Material widget.
  *
- * `TimeScroll` is not a clock. A dial writes the hour once, when the finger lifts off it;
- * a `ScrollField` — which is what `TimeScroll` is built from — reports the row nearest the
- * snap position *continuously*, and `TimeScrollImpl` (read from the artifact's sources,
- * 1.5.0-beta02) forwards each of those to the state:
+ * `TimeScroll` is 1.5's wheel, and it is the obvious thing to draw - which is what G29 did
+ * first, and then could not make it report. A wheel's value commits on a *settle*, and
+ * [nuiReportAtWheelRest] needs the drum's own scroll flag to know when one has happened;
+ * `TimeScrollImpl` (read from the artifact's sources, 1.5.0-beta02) builds its two
+ * `ScrollFieldState`s privately and hands the caller only a `TimePickerState`, which is a
+ * pair of ints and says nothing about whether a drum is still turning. Nothing else on the
+ * widget says so either - a `Pager` dispatches no nested scroll or fling to its ancestors,
+ * and the drums' states are `internal` to Material - so from outside, "the wheel has
+ * stopped" is not a fact that exists, and the only trigger left is a clock. That is the
+ * 180 ms window this file used to keep, and on a loaded box one real fling crossed rows
+ * slowly enough for the window to expire twice, so the same roll reported two changes.
  *
- * ```
- * LaunchedEffect(hourState.selectedOption) { state.hour = newHour }
- * LaunchedEffect(minuteState.selectedOption) { state.minute = ... }
- * ```
- *
- * So [syncTimePicker]'s second effect — "the fields moved, so somebody picked" — is right
- * about a dial and wrong about a drum: a roll from 9 to 2 past midnight would report five
- * changes (and across forty minutes, forty), each of them a `Picker`-style pick with its
- * own event count, which is the failure mode the brief names for this variant.
- *
- * What is kept, therefore, is the *rule* and not the trigger: the pair is read at a
- * **rest**, one rest one report. There is no rest to subscribe to — the two
- * `ScrollFieldState`s belong to `TimeScrollImpl` and are not reachable, and the state
- * object itself is an interface Material's own implementation backs, so `hour` cannot be
- * made to answer `isScrollInProgress` either. Rest is what it looks like from here:
- * [snapshotFlow] over the two fields, restarted on every change and given
- * [TIME_WHEEL_SETTLE_MILLIS] to settle ([collectLatest] is what cancels the previous
- * attempt), so the pair that gets reported is the pair the drums came to rest on.
- *
- * The two directions of [syncTimePicker] survive unchanged: a value React holds moves the
- * drums ([LaunchedEffect] on the shown instant, [kotlinx.coroutines.launch] semantics
- * identical), and a pick the model refuses is written back rather than left painted —
- * which lands on the *drums* through `TimeScroll`'s own feedback effect on `state.hour`,
- * so a snap-back is the widget moving, not this file repainting it.
+ * So the wheel is built out of the same public primitive `TimeScroll` is built from -
+ * `ScrollField`, with Material's own `m3c_time_picker_*` descriptions for the drums - and
+ * the drum states are this file's to read. The widget is Material's drum with an hour
+ * column, a minute column, and on a 12-hour device an AM/PM column, which is the shape
+ * iOS's wheel has had all along; the *behaviour* - one roll, one rest, one event - is now
+ * the same rule [com.margelo.nitro.nitroui.HybridNitroUiPicker]'s wheel runs on, from the
+ * same helper.
  */
 @Composable
 private fun syncTimeWheel(
   model: DatePickerModel,
-  state: TimePickerState,
+  twentyFourHour: Boolean,
+  hourState: ScrollFieldState,
+  minuteState: ScrollFieldState,
+  periodState: ScrollFieldState?,
+  active: State<Boolean>,
 ) {
   val shown = model.displayed
   // [syncTimePicker]'s own-write guard, for the same reason: comparing the drums against
   // `model.displayed` prices a model-driven write as a pick whenever the instant is a
-  // frame behind, so the pair written *into* the state is remembered beside the write.
-  val pushed = remember(state) {
-    mutableStateOf(Pair(state.hour, state.minute))
+  // frame behind, so the pair written *into* the drums is remembered beside the write.
+  val pushed = remember(model) { mutableStateOf(timeOfDayOf(model, shown)) }
+  // The value the app holds moves the drums - the direction that closes a refused pick and
+  // answers a new `value`. Instant, never animated: a rejected roll has to be off the
+  // centre line before the user looks, and this write must not start a scroll that could be
+  // read as the user's (it cannot - the rest it causes reads back the value just written,
+  // which the guard below refuses - but an instant snap does not even open the question).
+  LaunchedEffect(shown, hourState, minuteState, periodState) {
+    val wanted = timeOfDayOf(model, shown)
+    pushed.value = wanted
+    seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted)
   }
-  LaunchedEffect(shown) {
-    val hour = model.localFields(shown).get(Calendar.HOUR_OF_DAY)
-    val minute = model.localFields(shown).get(Calendar.MINUTE)
-    if (state.hour != hour || state.minute != minute) {
-      pushed.value = Pair(hour, minute)
-      state.hour = hour
-      state.minute = minute
+  // One report per rest, on the rule the Picker's drum shares: a finger on the wheel or a
+  // drum still turning is "active", and the pair the drums stand for when neither is true
+  // any more is the roll. `applyUserSelection` is the same gate every other Android pick
+  // goes through, so a refused pair is not reported and a roll onto the shown time is not
+  // either - and the write-back below is what puts a refused pair off the drums, on the
+  // widget's own road home rather than a repaint from here.
+  nuiReportAtWheelRest(active) {
+    val rolled = readTimeDrums(twentyFourHour, hourState, minuteState, periodState)
+    if (rolled != pushed.value) {
+      model.applyUserSelection(model.fromTimeOfDay(rolled.first, rolled.second, model.displayed))
     }
+    val wanted = timeOfDayOf(model, model.displayed)
+    pushed.value = wanted
+    seatTimeDrums(twentyFourHour, hourState, minuteState, periodState, wanted)
   }
-  LaunchedEffect(state) {
-    snapshotFlow { Pair(state.hour, state.minute) }
-      .collectLatest { pair ->
-        // A row still moving restarts this block before the delay ends, so what arrives
-        // here is a pair that has held for the window: the roll, not a row of it.
-        if (pair.first != pushed.value.first || pair.second != pushed.value.second) {
-          model.applyUserSelection(
-            model.fromTimeOfDay(pair.first, pair.second, model.displayed)
-          )
-        }
-        // The snap-back, on the other side of the same rest: a pick the model refused has
-        // to leave the drums, and writing the shown value is what moves them —
-        // `TimeScroll`'s `LaunchedEffect(state.hour)` scrolls a drum to the hour it is
-        // given, which is the widget's own road home.
-        val fields = model.localFields(model.displayed)
-        val wanted = Pair(fields.get(Calendar.HOUR_OF_DAY), fields.get(Calendar.MINUTE))
-        pushed.value = wanted
-        if (state.hour != wanted.first || state.minute != wanted.second) {
-          state.hour = wanted.first
-          state.minute = wanted.second
-        }
-      }
+}
+
+/** The hour-of-day and minute an instant stands for, as the drums hold them. */
+private fun timeOfDayOf(
+  model: DatePickerModel,
+  millis: Double,
+): Pair<Int, Int> {
+  val fields = model.localFields(millis)
+  return Pair(fields.get(Calendar.HOUR_OF_DAY), fields.get(Calendar.MINUTE))
+}
+
+/**
+ * The hour-of-day and minute the drums are standing for.
+ *
+ * In 12-hour form the hour column is 12 o'clock followed by 1..11, so its index *is* the
+ * hour modulo 12 and the AM/PM column carries the other half; 0 is midnight and 12 is noon.
+ */
+private fun readTimeDrums(
+  twentyFourHour: Boolean,
+  hourState: ScrollFieldState,
+  minuteState: ScrollFieldState,
+  periodState: ScrollFieldState?,
+): Pair<Int, Int> {
+  val hour =
+    if (twentyFourHour) {
+      hourState.selectedOption
+    } else {
+      val half = periodState?.selectedOption ?: 0
+      (hourState.selectedOption % 12) + if (half == 1) 12 else 0
+    }
+  return Pair(hour, minuteState.selectedOption)
+}
+
+/** Put the drums on an hour of day and a minute, leaving alone any drum already there. */
+private fun seatTimeDrums(
+  twentyFourHour: Boolean,
+  hourState: ScrollFieldState,
+  minuteState: ScrollFieldState,
+  periodState: ScrollFieldState?,
+  timeOfDay: Pair<Int, Int>,
+) {
+  val hour = timeOfDay.first
+  val wantedHour = if (twentyFourHour) hour else hour % 12
+  if (hourState.selectedOption != wantedHour) {
+    hourState.selectedOption = wantedHour
+  }
+  if (minuteState.selectedOption != timeOfDay.second) {
+    minuteState.selectedOption = timeOfDay.second
+  }
+  if (periodState != null) {
+    val wantedPeriod = if (hour >= 12) 1 else 0
+    if (periodState.selectedOption != wantedPeriod) {
+      periodState.selectedOption = wantedPeriod
+    }
   }
 }
 
