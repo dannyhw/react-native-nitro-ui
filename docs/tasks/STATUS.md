@@ -121,3 +121,4 @@
 | X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | merged (PR #60; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | merged (PR #61; 1 impl + 1 fix round; merge gates 5/5 on code tree `fe9f3b10`) |
 | G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | running |
+| G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | running |
