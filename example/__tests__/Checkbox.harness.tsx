@@ -638,7 +638,10 @@ describe('Checkbox · G15', () => {
     // platforms, so the two cannot disagree about what the props mean even though one of
     // them has a new picture. And a tap reports `true` from the dash everywhere, so an
     // app's `onCheckedChange` never sees a third value.
-    poison([sizingKey(true, 'Select all')]);
+    // Both keys are poisoned: the dash's and the same label's plain unchecked one.
+    // Comparing two boxes that were never corrected would only prove the fallback is
+    // one number - the equality below is about what the control measured.
+    poison([sizingKey(true, 'Select all'), sizingKey(false, 'Select all')]);
     const before = stats();
     await render(
       <View style={rowStyle}>
@@ -648,6 +651,18 @@ describe('Checkbox · G15', () => {
           onCheckedChange={recordChecked('mixed')}
           testID="mixed"
           hybridRef={captureHybrid('mixed')}
+        />
+        {/*
+          The same label with the third state *off*, so "the dash costs nothing" is a
+          comparison and not a sentence: one label, two states, two cold keys. G15
+          pinned the same fact for `checked` in the sizing case; this is its twin for
+          `indeterminate`, on both platforms, and the reason the dash can share a box
+          with the state that replaced it.
+        */}
+        <Checkbox
+          label="Select all"
+          testID="plain"
+          hybridRef={captureHybrid('plain')}
         />
         <Checkbox
           label="Select all, checked"
@@ -669,6 +684,12 @@ describe('Checkbox · G15', () => {
     await waitForTestId('mixed');
     const size = await waitForMeasured('mixed', 'the third state');
     await waitForBox('mixed', size, 'the third state');
+    await waitForTestId('plain');
+    const plainSize = await waitForMeasured(
+      'plain',
+      'the same label, unchecked'
+    );
+    await waitForBox('plain', plainSize, 'the same label, unchecked');
     const made = corrections(before, stats());
     await waitForDisplayed('mixed', 'mixed');
     await waitForDisplayed('mixed-on', '1');
@@ -684,7 +705,16 @@ describe('Checkbox · G15', () => {
     }
     // The third state is its own configuration wherever it is its own glyph; poisoned, it
     // has to be corrected or the box above is the planted size.
-    expect(made).toBeGreaterThanOrEqual(1);
+    // Two poisoned keys, two corrections: the dash's and the plain box's.
+    expect(made).toBeGreaterThanOrEqual(2);
+    // And neither box is the planted one, or the comparison below is a comparison
+    // between two failures to measure.
+    expect(sameSize(size, WRONG_SIZE)).toBe(false);
+    expect(sameSize(plainSize, WRONG_SIZE)).toBe(false);
+    // The dash replaces the mark inside the same box: one label, two states, one size.
+    // If this ever differs, the box moved with the glyph and the sizing table in
+    // `docs/components/checkbox.md` has a row missing.
+    expect(sameSize(size, plainSize)).toBe(true);
     await toggleCheckbox('mixed');
     expect(await waitForEvents(0, ['mixed:true'])).toEqual(['mixed:true']);
     await waitForDisplayed('mixed', '1');
@@ -725,6 +755,12 @@ describe('Checkbox · G15', () => {
     await waitForTestId('disabled');
     await waitForTestId('barrier');
     await waitForDisplayed('disabled', '1');
+    if (Platform.OS === 'ios') {
+      // The barrier is enabled and untouched here, so this reads the empty glyph,
+      // *before* anything is pressed on it. Below it is checked, and the read there
+      // proves the enabled box moved into the picture of the state its press asked for.
+      await waitForSymbol('barrier', 'circle');
+    }
     await toggleCheckbox('disabled');
     await toggleCheckbox('disabled');
     await toggleCheckbox('barrier');
@@ -740,7 +776,11 @@ describe('Checkbox · G15', () => {
       // reader cannot change is still the state they can see. A style that answered
       // `circle` here would be drawing the *enabled* box of a disabled control.
       await waitForSymbol('disabled', 'checkmark.circle.fill');
-      await waitForSymbol('barrier', 'circle');
+      // The barrier is checked by now - that was its job in this case - so the enabled
+      // box answers with the check mark its own press asked for. Measured, not reasoned
+      // out: the first device run read `checkmark.circle.fill` here while the case still
+      // asked for `circle`, the empty box it had already left.
+      await waitForSymbol('barrier', 'checkmark.circle.fill');
     }
   });
 

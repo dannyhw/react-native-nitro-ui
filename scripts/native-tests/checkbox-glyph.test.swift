@@ -11,7 +11,7 @@
 //  (the state an app reaches by leaving its third-state prop set after a tap, which
 //  is exactly the case `docs/components/checkbox.md` warns callers about), and the
 //  two glyph styles agreeing about *colour* while disagreeing about shape - the pair
-//  that lets them share one sizing rule.
+//  that keeps one table honest about two shapes.
 //
 //  There is no Kotlin twin: Android ignores `iosStyle` (`HybridNitroUiCheckbox.kt`),
 //  so the table is one platform's and says so.
@@ -111,8 +111,10 @@ struct CheckboxGlyphTest {
             "\(style.rawValue): a state is a filled symbol")
     }
 
-    // The two glyph styles agree about colour and disagree only about shape - the pair
-    // of facts that lets one sizing rule cover both.
+    // The two glyph styles agree about colour and disagree only about shape: one table
+    // covers both. They do not share a *box* - the device measures the circle row 26 pt
+    // tall and the square row 24 pt - so `iosStyle` stays in the iOS sizing key, which
+    // is `Checkbox.harness.tsx`'s business and not this one.
     for (checked, indeterminate) in [(false, false), (true, false), (false, true), (true, true)] {
       let circle = NitroUiCheckboxGlyphs.glyph(style: .circle, checked: checked, indeterminate: indeterminate)
       let square = NitroUiCheckboxGlyphs.glyph(style: .square, checked: checked, indeterminate: indeterminate)

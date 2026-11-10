@@ -438,16 +438,22 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
   /// points.
   ///
   /// One number for every configuration, for the reason Button's is (the engine keys
-  /// fallbacks by component alone). A bare `.switch` Toggle is the Switch's own box -
-  /// 61x28 pt from iOS 26 and 51x31 pt before it, the same OS check
-  /// `HybridNitroUiSwitch.swift` makes - and a label only adds width, which the
-  /// measurement is for. The height is therefore the part that is right for every
-  /// configuration, and the width is a bare box's: inside the measured table in
-  /// `docs/components/checkbox.md` rather than any one checkbox.
+  /// fallbacks by component alone), and it is the *default* configuration's box: a
+  /// checkbox with no label, in the default `'circle'` style, is what an app draws
+  /// first. `Checkbox.harness.tsx` measures that box on the device - 26x26 pt on
+  /// iPhone Air / iOS 27 - and `scripts/conformance-core.mjs` keeps this number
+  /// beside it, because a fallback that drifts from the box it names is a guess with
+  /// a number in it.
+  ///
+  /// Until DECISIONS D47 this read the Switch's box - 61x28 pt from iOS 26, 51x31 pt
+  /// before it, with the same OS check `HybridNitroUiSwitch.swift` makes - because a
+  /// Checkbox on iOS *was* a `Toggle(.switch)`. It is not any more, and the glyph's
+  /// measure is an SF Symbol's, which does not care about the SDK split that moves
+  /// the switch's thumb; hence one constant where that needed two. `'switch'` remains
+  /// one configuration of three, and its box is in the measured table in
+  /// `docs/components/checkbox.md` alongside the other two.
   private static let declaresFallback: Bool = {
-    let modern = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 26
-    let size = modern ? (width: 61.0, height: 28.0) : (width: 51.0, height: 31.0)
-    NitroUiSizing.setFallback(sizingComponentName, size.width, size.height, NitroUiSizingPolicy.intrinsic.rawValue)
+    NitroUiSizing.setFallback(sizingComponentName, 26.0, 26.0, NitroUiSizingPolicy.intrinsic.rawValue)
     return true
   }()
 
@@ -543,7 +549,8 @@ final class HybridNitroUiCheckbox: HybridNitroUiCheckboxSpec, RecyclableView {
       guard next != model.iosStyle else { return }
       model.iosStyle = next
       host.markDirty()
-      // The three styles measure apart (a 61x28 switch against a glyph row), and the
+      // The three styles measure apart - a bare 61x28 switch against a bare 26x26
+      // glyph, and the two glyph shapes are 2 pt apart from each other - and the
       // engine only learns that from this instance's next report.
       host.noteContentSizeMayHaveChanged()
     }
