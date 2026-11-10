@@ -1,6 +1,6 @@
 {
   "task": "G28",
-  "how": "One source mutation applied to the working tree, the named gate run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). All rows ran on lease G28-fn0rg, pair-a (`iPhone 17` / iOS 27 and emulator-5574 / API 35, Metro 8295). Filtered gate names satisfy nothing but their own name. Each row's tree digest is the `trees.android` half the run was keyed to, so a run can be matched to the build it pressed.",
+  "how": "One source mutation applied to the working tree, the named gate run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). Round 1's rows ran on lease G28-fn0rg and fix round 1's on G28-n0naq, both pair-a (`iPhone 17` / iOS 27 and emulator-5574 / API 35, Metro 8295). Filtered gate names satisfy nothing but their own name. Each row's tree digest is the `trees.android` half the run was keyed to, so a run can be matched to the build it pressed.",
   "mutations": [
     {
       "test": "example/__tests__/Dialog.harness.tsx + scripts/real-input/android.mjs (CHECKS.dialog)",
@@ -15,12 +15,12 @@
         "takes no tap on a disabled action, and draws it disabled (confirmation): expected '1,1,1' to be '1,0,1'",
         "reports the sheet rows as the component draws them, disabled included: expected 'Locked,Go,Wipe' to be 'Locked~,Go,Wipe'"
       ],
-      "note": "One mutation, three red lines, each from a different claim: the row's own accessibility state (`~`), the row's own drawn state (`drawn=1,0,1` — the disabled label stops being painted faint), and the press the component is supposed to take. The alert's row is red too because the deleted guard was the last thing standing between a disabled alert button and `onAction`."
+      "note": "One mutation, three red lines - and fix round 1's last row is what says which of them belong to which layer: `drawn=1,0,1` and the `~` in the dump are the row's own state, while the alert's event log went red because the deleted guard was the last thing standing between a disabled alert button and `onAction`. Both hunks were off here, so no line in this row isolates the row from the model."
     },
     {
       "test": "scripts/real-input/android.mjs (CHECKS.dialog, the sheet's rows)",
       "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
-      "mutation": "the same one as the row above: `enabled = !action.disabled` becomes `enabled = true` and the guard leaves `DialogModel.performAction`",
+      "mutation": "the same one as the row above: `enabled = !action.disabled` becomes `enabled = true` and the guard leaves `DialogModel.performAction` - two hunks, so this row shows what a finger does when *nothing* refuses the press, not which layer refuses it alone",
       "before": "            enabled = !action.disabled,",
       "after": "            enabled = true,",
       "run": "real-input:android:--control:dialog — FAIL (2026-11-10T09-12-32Z, tree 1b2e0dd1, 713 s)",
@@ -30,7 +30,7 @@
         "and reports nothing: the log gained only Back's close — expected …action:ok > presented:false > presented:false, saw …action:ok > presented:false > action:locked-row > presented:false",
         "the real tap on \"Copy link\": 3 real taps left dialog-log \"…action:locked-row > presented:false > action:copy > presented:false\" rather than \"…presented:false > action:copy > presented:false\""
       ],
-      "note": "A real finger, not a dump: the press on `Locked share` closed the sheet (the up-count) and reported `action:locked-row` (the log), which is the whole reason the check exists. An earlier run of this mutation (08-55-46Z) went red on the first line and then aborted, because the check read the log text while the sheet's own window owned the dump — fixed in 17eb1958 before this row, and the fix is what let lines 2-4 be seen at all."
+      "note": "A real finger, not a dump - but read it with fix round 1's caveat: the guard was deleted here too, so lines 2 and 3 (the sheet came down, and the log gained `action:locked-row`) are what happens with *both* layers off, and only line 1 (`the sheet's disabled row is not enabled`) is the row's own state. Fix round 1's last row is the one that isolates the row. An earlier run of this mutation (08-55-46Z) went red on the first line and then aborted, because the check read the log text while the sheet's own window owned the dump - fixed in 17eb1958 before this row, and the fix is what let lines 2-4 be seen at all."
     },
     {
       "test": "example/__tests__/Dialog.harness.tsx › reports the sheet rows as the component draws them",
@@ -65,6 +65,23 @@
       "run": "harness:android:Dialog — PASS, 31 of 31 (2026-11-10T09-24-43Z, tree 95250921, 43 s)",
       "redTests": [],
       "note": "Recorded because it did NOT go red, and an unreported non-mutation is how a test starts reading as stronger than it is. The inversion works from any depth (the constant's own docstring says so), and one pixel of anti-aliasing is inside the tolerance the corner is read through. The two rows above are what the radii assertion is proved by."
+    },
+    {
+      "test": "example/__tests__/Dialog.harness.tsx › takes no tap on a disabled action, and draws it disabled (confirmation) + reports the sheet rows as the component draws them",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "fix round 1, one hunk only: the sheet's row stops honouring `enabled` while `DialogModel.performAction` keeps its `if (action.disabled) return`, so the row is the only layer left that can be seen to refuse",
+      "before": "              enabled = !action.disabled,",
+      "after": "              enabled = true,",
+      "run": "harness:android:Dialog — FAIL, 2 of 31 (2026-11-10T14-15-45Z, tree dce81fed, 45 s)",
+      "redTests": [
+        "takes no tap on a disabled action, and draws it disabled (confirmation): expected '1,1,1' to be '1,0,1' (Dialog.harness.tsx:552 - the colour the label was painted with)",
+        "reports the sheet rows as the component draws them, disabled included: expected 'Locked,Go,Wipe' to be 'Locked~,Go,Wipe' (Dialog.harness.tsx:624 - the row's own accessibility node)"
+      ],
+      "greenTests": [
+        "takes no tap on a disabled action, and draws it disabled (alert) - the alert's row is a different call site, which is the control showing the hunk really was a single one",
+        "no press assertion at all: both red tests died on their state assertion, which sits *before* the press lines in the same test, and with the guard in place no press could have reported anything either"
+      ],
+      "note": "The row-only half of round 1's claim, which round 1 never ran. It reddens exactly the two lines that read the row itself - the painted colour and the `~` in the dump - and nothing else, which is the evidence that a press check proves only that nothing happens, whichever layer stops it."
     }
   ]
 }
