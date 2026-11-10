@@ -6,7 +6,7 @@ the view React Native lays out is a `0 × 0` anchor, and the window is the platf
 | Export               | iOS                                                    | Android                                                       |
 | -------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
 | `AlertDialog`        | `UIAlertController(preferredStyle: .alert)`            | Material 3 `AlertDialog`                                      |
-| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`      | Material 3 `ModalBottomSheet`, one `ListItem` row per action  |
+| `ConfirmationDialog` | `UIAlertController(preferredStyle: .actionSheet)`      | Material 3 `ModalBottomSheet`, one Expressive segmented row per action |
 
 ```tsx
 import { AlertDialog } from 'react-native-nitro-ui';
@@ -122,8 +122,13 @@ VoiceOver screen change.
 
 **Android.** The anchor is a `NitroComposeHost` at `0 × 0` that composes on attach and is
 not important for accessibility. `AlertDialog` lays the non-cancel actions out in order,
-with the cancel action as Material's dismiss button; `ModalBottomSheet` draws one row per
-action (destructive in `colorScheme.error`). `dismissible = false` maps to
+with the cancel action as Material's dismiss button; `ModalBottomSheet` draws one
+Expressive `SegmentedListItem` per action (destructive in `colorScheme.error`), the group's
+outer corners rounded by `ListItemDefaults.segmentedShapes(index, count)` so the actions
+read as one card inside the sheet. A row is interactive and knows it: `disabled` is the
+row's own `enabled = false`, which is what stops the press, colours the label with the
+component's own disabled colour, and says `disabled` to TalkBack — nothing is painted
+faintly by hand. `dismissible = false` maps to
 `DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)` and the
 sheet's equivalents. A programmatic close of the sheet runs its hide animation before the
 window leaves the composition. Changes while presented, including the action set, apply
@@ -187,8 +192,10 @@ The anchor is invisible to screen readers on both platforms. The window is the
 platform's: `UIAlertController` is modal to VoiceOver and reads the title, then the
 message; the Compose `AlertDialog` window takes TalkBack focus, and the sheet carries
 `paneTitle = title` so TalkBack announces it on open. A disabled action is
-`isEnabled == false` on iOS and `enabled="false"` in Android's accessibility tree, and
-both are asserted by real input (`testRealInputDialog`, `CHECKS.dialog`) — the a11y
+`isEnabled == false` on iOS and `enabled="false"` in Android's accessibility tree — on
+Android that is the row's own state, not a label wearing grey — and both are asserted by
+real input (`testRealInputDialog`, `CHECKS.dialog`) and by the Android harness, which reads
+the open sheet's rows back through `nuiTestStateReport`. The a11y
 sweep cannot open a window, so `A11Y_PRESENTATIONS` in `scripts/real-input/a11y.mjs`
 names those checks as the rule's presentation-aware variant.
 
