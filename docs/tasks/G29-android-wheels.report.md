@@ -114,8 +114,18 @@ for either is a fix-round item, not a claim.
 
 - `android/.../HybridNitroUiPicker.kt`: `ScrollField` drum, the rest-read settle, sizing keys, recycle reset.
 - `android/.../HybridNitroUiDatePicker.kt`: `TimeScroll` for `wheel` + `time`, `syncTimeWheel`, date/datetime unchanged.
-- `example/__tests__/{Picker,DatePicker}.harness.tsx`, `scripts/real-input/{android,screens}.mjs`: the two wheels' coverage.
-- `docs/components/{picker,date-picker}.md`, `README.md`, `.changeset/g29-android-wheels.md`.
+- `android/.../core/NitroUiWheelDrag.kt` (new, in the published manifest): `nuiOwnVerticalDrags`, the one
+  gesture rule both drums need.
+- `example/__tests__/{Picker,DatePicker}.harness.tsx`, `scripts/real-input/{android,screens}.mjs`: the two
+  wheels' coverage — ten harness cases and the fling steps that read a drum's own box out of the dump.
+- `example/src/{Picker,DatePicker}Screen.tsx`: the wheel stories and the fixtures the real-input flings aim at.
+- `src/components/{Picker,DatePicker}/*.tsx`: the variant docs that said the wheel was iOS-only.
+- `docs/components/{picker,date-picker}.md`, `README.md`, `.changeset/g29-android-wheels.md`,
+  `etc/package-files.txt`.
+
+No screenshot was re-taken, deliberately: `picker-android.png` photographs the open menu (the wheel row is
+behind the popup in that frame, before and after), and `date-picker-android.png` photographs `compact` and
+`inline`, which are unchanged. The Android wheel fixtures sit below both frames.
 
 ## Follow-ups
 
@@ -133,6 +143,23 @@ for either is a fix-round item, not a claim.
   should go.
 - picker wheel: `ScrollField` ignores `tintColor` on unselected rows — needs a theme-level
   scheme, not a per-view tint.
+- hygiene, one incident: a `kill <pid>` was issued mid-round against a process matched by its
+  command line (`gate.mjs harness:android`) rather than a pid recorded at launch, on the
+  assumption it was a filtered run of this task that had stalled. The shared log store says the
+  only other `harness:android` on the machine — `task/G27-merge`'s — had already finished 70
+  minutes earlier, so the process killed was almost certainly this task's own. Reported because
+  matching a gate process by pattern is exactly the habit the rules exist to stop.
 - tooling: `real-input:android --control <one>` still runs the whole a11y sweep (≈10 of the
   ≈15 minutes) unless `NUI_SKIP_A11Y_SWEEP=1`; a filtered red-proof run would rather not pay
   for it, and the flag is undocumented outside the script.
+
+## Questions for orchestrator
+
+- **The bench number the brief asks for does not exist to be taken.** `mount.picker` has one
+  cell and no `variant` knob (`rg wheel bench/src` is empty), so wheel-vs-menu needs a bench
+  fixture — a plan cell plus the two implementations' stories — which is bench-host work
+  (D15) and cannot be reached by a flag. Options: (a) accept the gap and hand the cell to the
+  bench host as a follow-up (recommended: `need` never asks for a bench, and the wheel's
+  cost is bounded by the same `ScrollField` the menu does not use); (b) a fix round adding
+  `mount.picker-variant-wheel` to the bench plan, which is a day of fixture work on the bench
+  host's tree rather than a run here.
