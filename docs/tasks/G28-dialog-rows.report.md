@@ -8,8 +8,8 @@
 The confirmation sheet's Android rows are the Expressive segmented row: `SegmentedListItem` with
 `ListItemDefaults.segmentedShapes(index, count)` — Q8 row 16's second candidate, adopted as D40's
 pass 3 B for Dialog. **Both candidates were built and photographed on the leased device**
-([segmented](G28-dialog-rows/rows-segmented.png),
-[interactive](G28-dialog-rows/rows-interactive.png)): the segmented one reads as one card inside the
+([segmented](G28/rows-segmented.png),
+[interactive](G28/rows-interactive.png)): the segmented one reads as one card inside the
 sheet — `CornerLarge`'s 16 dp at the group's outer corners, `CornerExtraSmall`'s 4 dp where rows meet, the notched
 boundary between rows, and a press that morphs the row — while `ListItem(onClick, enabled, …)` is a
 full-bleed row with no group. Nothing but the look separates them: with the interactive row swapped
@@ -39,23 +39,40 @@ change from the full-bleed rows, and the README shows it.
 
 ## Gates
 
-One row is red and it is not this branch's:
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1993 tests / 84 suites | `a21c6d004613` | 2 m 57 s | start 8.5 / med 17.5 / max 21.9 |
+| `harness:ios` | **PASS** | 565 tests / 30 suites + isolated 6 tests / 3 suites | `a21c6d004613` (ios tree) | 14 m 16 s | start 20.9 / med 6.6 / max 53.5 |
+| `harness:android` | **FAIL** | 1 failed of 621 tests / 30 suites + isolated 6 tests / 3 suites | `a21c6d004613` (android tree) | 18 m 25 s | start 4.5 / med 6.0 / max 71.2 |
+| `real-input:ios` | **PASS** | — | `a21c6d004613` (ios tree) | 40 m 15 s | start 27.0 / med 7.0 / max 76.6 |
+| `real-input:android` | **PASS** | — | `a21c6d004613` (android tree) | 58 m 13 s | start 2.9 / med 4.2 / max 14.7 |
+| `harness:android:Dialog` | stale | 1 failed of 31 tests / 1 suites | d3f21dee90f2 (not this tree) | 42.9 s | start 3.6 / med 4.1 / max 4.9 |
+| `harness:android:Form` | **FAIL** | 1 failed of 115 tests / 3 suites | `a21c6d004613` (android tree) | 3 m 27 s | start 14.8 / med 7.0 / max 14.8 |
+| `real-input:android:--control:dialog` | stale | — | 2e8347035aac (not this tree) | 11 m 53 s | start 4.5 / med 4.6 / max 14.9 |
+| `real-input:android:--control:dialog:--background` | stale | — | 2e8347035aac (not this tree) | 0.7 s | start 4.4 / med 4.4 / max 4.4 |
 
-- **`harness:android`** — 617 passed, 1 failed: `Form (G24) › starts a recycled Form at the top of
-  its own content`, `expected 200 to be less than or equal to 1` (`Form.harness.tsx:1266`). That is
-  X23's brief verbatim, line number and all: `docs/tasks/STATUS.md` records its cause (a recycled
-  Android Form keeps its cached test report, so the case reads the previous Form's offset), the
-  one-line reset in `prepareForRecycle` that fixes it, and PR #60 carrying it — none of which is on
-  `main` yet. The same line went red in G26's, G27's and X22-fix1's full runs, none of which touched
-  Dialog. It also goes red on this branch with `harness:android -- Form`, where the Dialog suite never
-  runs at all, so nothing in this diff is in its path. `Form.harness.tsx` is untouched here, and a
-  re-run of the whole suite cannot make it green: X23 is not G28's to fix (D19).
+`need --for review` exits 1 with one line — `need: 1 gate(s) missing for review: harness:android` —
+and that row is not this branch's:
 
-`need --for review`: <pasted below>.
+- **`harness:android`** — 617 passed, 1 failed: `Form (G24) › starts a recycled Form at the top of its
+  own content`, `expected 200 to be less than or equal to 1` (`Form.harness.tsx:1266`). That is X23's
+  brief verbatim, line number and all. `docs/tasks/STATUS.md` carries its cause (a recycled Android
+  Form keeps its cached test report, so the case reads the previous Form's offset), the one-line reset
+  in `prepareForRecycle` that fixes it, and PR #60 — none of which is on `main` yet. The same line
+  went red in G26's, G27's and X22-fix1's full runs, none of which touched Dialog, and it goes red on
+  this branch with `harness:android -- Form` (the row above it), where the Dialog suite never runs at
+  all — so nothing in this diff is in its path. `Form.harness.tsx` is untouched here, X23 is not
+  G28's to fix (D19), and re-running the suite cannot make it green.
+
+The four gates this task can move are green on `a21c6d004613`: `check` (1993 tests), `harness:ios`
+(565), `real-input:ios` (40 m 15 s) and `real-input:android` (58 m 13 s). The last one now presses the
+sheet's disabled row and reads the sheet's rows back, green while the row honours `enabled`. The
+filtered rows are the red proofs and the Form re-run; a filtered run satisfies nothing but its own
+name. `gate.mjs export --task G28` puts the ledger and the failed runs' excerpts beside this report.
 
 ## Red proofs
 
-Full data in [`G28-dialog-rows/mutations.json`](G28-dialog-rows/mutations.json), with the tree digest
+Full data in [`G28/mutations.json`](G28/mutations.json), with the tree digest
 each run was keyed to. The first five lines are one source mutation each, restored between runs.
 
 The new test - `Dialog.harness.tsx` › *reports the sheet rows as the component draws them, disabled
@@ -107,7 +124,7 @@ rather than the model is now the thing that refuses a press:
 - `docs/components/dialog.md` (the Android column, the platform mapping row, the a11y paragraph),
   `.changeset/g28-dialog-rows.md` (minor — the disabled row is a visible change), and
   `docs/images/components/confirmation-dialog-android.png` retaken at 720 px
-- `docs/tasks/G28-dialog-rows/`: the two candidate screenshots and `mutations.json`
+- `docs/tasks/G28/`: the two candidate screenshots and `mutations.json`
 
 ## Follow-ups
 
