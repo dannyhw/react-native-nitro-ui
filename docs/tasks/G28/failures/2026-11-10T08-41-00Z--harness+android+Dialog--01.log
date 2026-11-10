@@ -1,0 +1,70 @@
+# Failure excerpt — harness:android:Dialog
+
+- Ran: 2026-11-10T08:41:00.527Z on code tree `a70bca40dd36` at HEAD `c3b26ac` (branch `task/G28-dialog-rows`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Dialog`
+- Result: fail, exit 1, 12849 ms
+- Load: start 24.42, end 22.05, median 23.23, max 24.42
+- Device: android / device `emulator-5574` / lease `G28-fn0rg`
+- Full log: `task/G28-dialog-rows/harness+android+Dialog-2026-11-10T08-41-00.527Z.log` (<store>/task/G28-dialog-rows/harness+android+Dialog-2026-11-10T08-41-00.527Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Test suite failed to run`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G28-dialog-rows/harness+android+Dialog-2026-11-10T08-41-00.527Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G28-fn0rg (still live)
+  |   G25G26-f90yv             G25G26       both              pair-b
+  |   G28-fn0rg                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 22.05 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Dialog
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree a70bca40dd36, 24 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 24.42/13.43 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G28-dialog-rows/harness+android+Dialog-2026-11-10T08-41-00.527Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Runner android ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Test suite failed to run
+
+    The app bridge disconnected during test execution. This can happen if the app was killed, crashed, reloaded, or restarted while the test file was running.
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        11.072 s
+Ran all test suites matching Dialog.
+
+
+
+```
