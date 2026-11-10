@@ -5681,6 +5681,191 @@ const CHECKS = {
     });
     await t.hideKeyboard();
   },
+
+  'list-item': async (t) => {
+    // The three rows are named by their accessibility label, which on Android is both the
+    // node a reader stops on and the only handle a check has: React Native's `testID` is a
+    // view tag and never reaches a dump.
+    const LIVE = 'Real-input item';
+    const DISABLED = 'Real-input disabled item';
+    const IN_FORM = 'Item inside a Form row';
+    const boundsText = (node) =>
+      `${String(node.bounds.x1)},${String(node.bounds.y1)} \u2192 ` +
+      `${String(node.bounds.x2)},${String(node.bounds.y2)}`;
+    /**
+     * The average luminance of a grid inside one row's box.
+     *
+     * A grid and not one pixel: a bounded ripple is brightest near the touch point, and a
+     * single sample could land on the one spot it has not reached at the instant the
+     * screenshot was taken. Inset 4 dp from every edge so the sample is the row's fill and
+     * not a pixel of whatever is drawn outside it.
+     */
+    const meanLuma = (screen, node) => {
+      const inset = Math.max(2, Math.round(4 * t.density()));
+      const step = Math.max(1, Math.round(3 * t.density()));
+      const x1 = node.bounds.x1 + inset;
+      const x2 = node.bounds.x2 - inset;
+      const y1 = node.bounds.y1 + inset;
+      const y2 = node.bounds.y2 - inset;
+      let total = 0;
+      let samples = 0;
+      for (let y = y1; y <= y2; y += step) {
+        for (let x = x1; x <= x2; x += step) {
+          const pixel = screen.pixel(x, y);
+          if (pixel == null) {
+            continue;
+          }
+          total +=
+            (0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]) / 255;
+          samples += 1;
+        }
+      }
+      return samples === 0 ? 0 : total / samples;
+    };
+    const counters = () =>
+      `${t.requireEcho(ECHO.listItemPresses)}/` +
+      `${t.requireEcho(ECHO.listItemDisabledEvents)}/` +
+      `${t.requireEcho(ECHO.listItemFormPresses)}`;
+
+    // 1. At rest, so every claim below is about a number that moved.
+    t.log.checkEquals(
+      `no item has been pressed before a touch (${counters()})`,
+      counters(),
+      '0/0/0'
+    );
+
+    // 2. One element per item, read out of the tree rather than from inside the app: the
+    //    harness can say the leaf publishes one semantics node, and only this dump can
+    //    say a TalkBack swipe gets one stop and not a title, a subtitle and a value.
+    const live = await t.requireControlOnScreen(LIVE);
+    t.log.checkEquals(
+      "exactly one node carries the item's name — the title, subtitle and value are " +
+        'merged into the row, not three stops of their own',
+      String(t.dump().filter((node) => node.contentDesc === LIVE).length),
+      '1'
+    );
+    t.log.note(
+      `the named node is a ${live.className ?? 'missing'} at ` +
+        `${boundsText(live)}, clickable=${live.clickable} enabled=${live.enabled} — ` +
+        'clickable because it has an onPress, which is the same modifier that installs ' +
+        'the ripple the highlight sample below looks for'
+    );
+
+    // 3. Ten taps, ten presses, and the *row that answered* is named — the counter alone
+    //    would be satisfied by whichever item last happened to hold a callback.
+    for (let tap = 1; tap <= 10; tap += 1) {
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        String(tap),
+        `real tap ${String(tap)} of 10 on a list item`
+      );
+    }
+    t.log.checkEquals(
+      'ten real taps are ten presses, from this item and no other',
+      `${t.requireEcho(ECHO.listItemPresses)} ${t.requireEcho(ECHO.listItemLast)}`,
+      '10 real'
+    );
+
+    // 4. The row's own highlight: Material's ripple, sampled the way the iOS half samples
+    //    UIKit's — the same band of pixels at rest and with the finger still down. The
+    //    touch is injected raw and left down (see `rawTouch`), because by the time
+    //    `input tap` returns the ripple has already faded and a screenshot of a released
+    //    row is a picture of a row that never highlighted.
+    const atRest = meanLuma(t.screencap(), live);
+    const pressX = live.bounds.x1 + Math.round(live.bounds.width * 0.5);
+    const pressY = live.bounds.cy;
+    await t.rawTouch('DOWN', pressX, pressY);
+    await t.settle(400);
+    const during = meanLuma(t.screencap(), live);
+    let released = true;
+    try {
+      await t.rawTouch('UP', pressX, pressY);
+    } catch (error) {
+      released = false;
+      t.log.note(`the raw UP did not take: ${String(error)}`);
+    }
+    await t.settle(400);
+    const afterRelease = meanLuma(t.screencap(), live);
+    if (!released) {
+      t.log.abort(
+        'the highlight press could not be closed, so nothing after it is evidence'
+      );
+    }
+    t.log.note(
+      `highlight sample: luminance rest=${atRest.toFixed(4)} held=${during.toFixed(4)} ` +
+        `released=${afterRelease.toFixed(4)} over a ` +
+        `${String(live.bounds.width)}x${String(live.bounds.height)} px row`
+    );
+    t.log.check(
+      `the row is darker with the finger down than at rest (${during.toFixed(4)} against ` +
+        `${atRest.toFixed(4)}): the platform's own press feedback is drawn, not just wired`,
+      during < atRest - 0.005
+    );
+    t.log.check(
+      `and it is back where it started once the finger lifts (${afterRelease.toFixed(4)} ` +
+        `against rest ${atRest.toFixed(4)}) — a highlight, not a state the row got stuck in`,
+      Math.abs(afterRelease - atRest) < 0.01
+    );
+
+    // 5. A disabled item takes nothing, and the tree says so before the taps do. Then the
+    //    live item proves the silence was a refusal and not a dead screen.
+    await t.requireControlOnScreen(DISABLED);
+    t.log.checkEquals(
+      'the disabled item is in the tree as disabled, so a reader is told it is inert ' +
+        'instead of being handed a control that does nothing',
+      t.nativeEnabled(DISABLED),
+      'false'
+    );
+    const disabledNode = await t.requireControlOnScreen(DISABLED);
+    for (let tap = 1; tap <= 3; tap += 1) {
+      await t.tapNode(disabledNode);
+    }
+    t.log.checkEquals(
+      'three real taps on a disabled item report nothing',
+      t.requireEchoToStay(
+        ECHO.listItemDisabledEvents,
+        '0',
+        'three real taps on a disabled item'
+      ),
+      '0'
+    );
+    t.log.checkEquals(
+      'and input is alive: the live item still presses',
+      await t.tapUntilValue(
+        () => t.requireControl(LIVE),
+        ECHO.listItemPresses,
+        '11',
+        'a real tap on the live item after the disabled one'
+      ),
+      '11'
+    );
+
+    // 6. Inside a `Form.Row` the leaf is a different code path — the row owns the cell, the
+    //    item draws content edge-to-edge (DECISIONS D46 item 2) — and the tap has to reach
+    //    the item through a row that has a shape and insets of its own.
+    const inForm = await t.requireControlOnScreen(IN_FORM);
+    t.log.checkEquals(
+      'inside a Form.Row the item is still one named node',
+      String(t.dump().filter((node) => node.contentDesc === IN_FORM).length),
+      '1'
+    );
+    t.log.checkEquals(
+      'a real tap inside a Form.Row reaches the item, once',
+      await t.tapUntilValue(
+        () => t.requireControl(IN_FORM),
+        ECHO.listItemFormPresses,
+        '1',
+        'a real tap on the item inside a Form.Row'
+      ),
+      '1'
+    );
+    t.log.note(
+      `the in-form row is ${boundsText(inForm)} and the standalone item is ` +
+        `${boundsText(live)} — the boxes the harness reads insets from are in ` +
+        '`ListItem.harness.tsx`, which is where `insets=` is asserted'
+    );
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -8222,6 +8407,24 @@ function makeContext(harness, log) {
     screencap() {
       return harness.screencap();
     },
+
+    /**
+     * One raw touch event, injected without waiting for the injection to finish.
+     *
+     * For a check that has to ask a question *while the finger is down*, which the
+     * synchronous `input tap` cannot serve: by the time it returns, the platform's press
+     * feedback is gone. `DOWN`, then a read, then `UP` is the same touch a finger makes,
+     * and it is the only way out here can see the row's own highlight.
+     *
+     * The drag path has used [motionAsync] for this since the Android drag flake; this is
+     * the same injection, named for the check that needs it rather than for a gesture.
+     *
+     * @param {'DOWN' | 'MOVE' | 'UP'} action
+     * @param {number} x
+     * @param {number} y
+     * @returns {Promise<void>}
+     */
+    rawTouch: (action, x, y) => motionAsync(action, x, y),
 
     /**
      * Scroll the screen until this control is on it, then look it up.

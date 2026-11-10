@@ -37,7 +37,7 @@ const READY_LINE =
   'progress=310x4 segmented-control=214x32 ' +
   'date-picker=138x34 picker=72x35 menu=76x34 text-field=310x22 chip=58x28 ' +
   'search-field=310x37 checkbox=40x40 icon-button=32x32 button-group=310x48 ' +
-  'stepper=94x32 host=310x96';
+  'stepper=94x32 list-item=310x56 host=310x96';
 
 /**
  * What the two platforms printed for the eight controls this fixture predates:
@@ -58,7 +58,10 @@ const READY_LINE =
  * `stepper=` (G25) is written the same way, from the two boxes the harness measures:
  * 94x32 pt on iOS (SwiftUI's own `Stepper` with its label hidden) and 104x48 dp on
  * Android (two 48 dp targets and the 8 dp between them), which are also the two
- * numbers `DECLARED_FALLBACKS.NitroUiStepper` carries.
+ * numbers `DECLARED_FALLBACKS.NitroUiStepper` carries. `list-item=` (G30) is written the
+ * same way, from the one-line row both platforms declare — 56 dp on Android
+ * (`ItemOneLineContainerHeight`) and 52 pt on iOS — at the width this fixture scales every
+ * other control by.
  */
 const READY_LINE_FRACTIONAL =
   'I/ReactNativeJS(13147): ' +
@@ -69,7 +72,7 @@ const READY_LINE_FRACTIONAL =
   'text-field=363.4285583496094x24 chip=66.28571319580078x48 ' +
   'search-field=363.4285583496094x56 checkbox=48x48 ' +
   'icon-button=48x48 button-group=363.4285583496094x48 stepper=104x48 ' +
-  'host=363.4285583496094x96';
+  'list-item=363.4285583496094x65.651611328125 host=363.4285583496094x96';
 
 describe('smoke ready line', () => {
   it('passes on one non-zero box per control', () => {
