@@ -34,9 +34,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
@@ -1101,7 +1104,13 @@ private class DatePickerHost(
         initialMinute = fields.get(Calendar.MINUTE),
         is24Hour = twentyFourHour,
       )
-      syncTimePicker(model, state)
+      // The dial commits a value when the finger leaves it; the drum does not commit
+      // anything at all, so the two need the same rules read from different triggers.
+      if (model.variant == "wheel") {
+        syncTimeWheel(model, state)
+      } else {
+        syncTimePicker(model, state)
+      }
       // The wheel and the clock are the same control with the same two fields, drawn
       // two ways: `TimeScroll` is 1.5's wheel (Q8 Appendix E pass 3 A), and both take
       // a `TimePickerState`, so the value, the clamps and the handshake behind them
@@ -1496,7 +1505,101 @@ private fun syncDatePicker(
   }
 }
 
-/** [syncDatePicker] for Material 3's clock, which stores hour and minute instead of a day. */
+/**
+ * How long the `wheel`'s drums have to hold still before a roll counts as a pick.
+ *
+ * `TimeScroll` has no settle to subscribe to — see [syncTimeWheel] for what it does
+ * instead, and for how this number was measured. Long enough that the snap of one row
+ * landing cannot be mistaken for the end of a roll across several; short enough that the
+ * report still arrives with the finger's lift.
+ */
+private const val TIME_WHEEL_SETTLE_MILLIS = 180L
+
+/**
+ * [syncTimePicker]'s rules, on the widget that cannot follow them as written.
+ *
+ * `TimeScroll` is not a clock. A dial writes the hour once, when the finger lifts off it;
+ * a `ScrollField` — which is what `TimeScroll` is built from — reports the row nearest the
+ * snap position *continuously*, and `TimeScrollImpl` (read from the artifact's sources,
+ * 1.5.0-beta02) forwards each of those to the state:
+ *
+ * ```
+ * LaunchedEffect(hourState.selectedOption) { state.hour = newHour }
+ * LaunchedEffect(minuteState.selectedOption) { state.minute = ... }
+ * ```
+ *
+ * So [syncTimePicker]'s second effect — "the fields moved, so somebody picked" — is right
+ * about a dial and wrong about a drum: a roll from 9 to 2 past midnight would report five
+ * changes (and across forty minutes, forty), each of them a `Picker`-style pick with its
+ * own event count, which is the failure mode the brief names for this variant.
+ *
+ * What is kept, therefore, is the *rule* and not the trigger: the pair is read at a
+ * **rest**, one rest one report. There is no rest to subscribe to — the two
+ * `ScrollFieldState`s belong to `TimeScrollImpl` and are not reachable, and the state
+ * object itself is an interface Material's own implementation backs, so `hour` cannot be
+ * made to answer `isScrollInProgress` either. Rest is what it looks like from here:
+ * [snapshotFlow] over the two fields, restarted on every change and given
+ * [TIME_WHEEL_SETTLE_MILLIS] to settle ([collectLatest] is what cancels the previous
+ * attempt), so the pair that gets reported is the pair the drums came to rest on.
+ *
+ * The two directions of [syncTimePicker] survive unchanged: a value React holds moves the
+ * drums ([LaunchedEffect] on the shown instant, [kotlinx.coroutines.launch] semantics
+ * identical), and a pick the model refuses is written back rather than left painted —
+ * which lands on the *drums* through `TimeScroll`'s own feedback effect on `state.hour`,
+ * so a snap-back is the widget moving, not this file repainting it.
+ */
+@Composable
+private fun syncTimeWheel(
+  model: DatePickerModel,
+  state: TimePickerState,
+) {
+  val shown = model.displayed
+  // [syncTimePicker]'s own-write guard, for the same reason: comparing the drums against
+  // `model.displayed` prices a model-driven write as a pick whenever the instant is a
+  // frame behind, so the pair written *into* the state is remembered beside the write.
+  val pushed = remember(state) {
+    mutableStateOf(Pair(state.hour, state.minute))
+  }
+  LaunchedEffect(shown) {
+    val hour = model.localFields(shown).get(Calendar.HOUR_OF_DAY)
+    val minute = model.localFields(shown).get(Calendar.MINUTE)
+    if (state.hour != hour || state.minute != minute) {
+      pushed.value = Pair(hour, minute)
+      state.hour = hour
+      state.minute = minute
+    }
+  }
+  LaunchedEffect(state) {
+    snapshotFlow { Pair(state.hour, state.minute) }
+      .collectLatest { pair ->
+        delay(TIME_WHEEL_SETTLE_MILLIS)
+        // A row still moving restarts this block before the delay ends, so what arrives
+        // here is a pair that has held for the window: the roll, not a row of it.
+        if (pair.first != pushed.value.first || pair.second != pushed.value.second) {
+          model.applyUserSelection(
+            model.fromTimeOfDay(pair.first, pair.second, model.displayed)
+          )
+        }
+        // The snap-back, on the other side of the same rest: a pick the model refused has
+        // to leave the drums, and writing the shown value is what moves them —
+        // `TimeScroll`'s `LaunchedEffect(state.hour)` scrolls a drum to the hour it is
+        // given, which is the widget's own road home.
+        val fields = model.localFields(model.displayed)
+        val wanted = Pair(fields.get(Calendar.HOUR_OF_DAY), fields.get(Calendar.MINUTE))
+        pushed.value = wanted
+        if (state.hour != wanted.first || state.minute != wanted.second) {
+          state.hour = wanted.first
+          state.minute = wanted.second
+        }
+      }
+  }
+}
+
+/**
+ * [syncDatePicker] for Material 3's clock, which stores hour and minute instead of a day.
+ *
+ * See [syncTimeWheel] for the wheel, which needs the same rules on a different trigger.
+ */
 @Composable
 private fun syncTimePicker(
   model: DatePickerModel,
