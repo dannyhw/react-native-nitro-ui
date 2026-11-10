@@ -103,3 +103,60 @@ printed no stability line. The healthy reading is unchanged with the confirmatio
    the round on. Options: (a) **recommended** — land this and re-run `real-input:ios` on G25/G26 at
    merge: the merge bar runs it anyway, and it is the direct test of the claim; (b) I build G26's
    tree in a scratch checkout with this fix applied on top and run it there (one more round).
+
+## Fix round 1
+
+**Cause.** One component, three walk histories, iOS 27: a fresh app walked straight to the
+case reads **one** element — wrapper labelled, subtree hidden, no stops; the same tree after
+the sweep's 21 earlier cases reads **2** stops; the merged Stepper + Picker-radio tree's 22
+read **4**. Boxes identical, no instability line, the other 22 cases byte-identical in both logs. Not XCUITest echoing: the sweep's probe finds one labelled
+child under the wrapper and one under *that* — React Native vends two nested elements per
+`Text`. The window: the wrapper hides its subtree once React Native has stored `accessible` on the
+component view, and read from this view's getter, that store is still **false inside
+`afterUpdate()`** (`value="exp:hostElements:acc=n"`).
+
+**Fix.** The authorised fallback: that measurement says a component fix keyed on the prop
+there is a silent no-op (both probes ran; neither is a claimed failure). Any count is
+excused when every stop is one of the wrapper's own Texts *and* the sentence names the
+publication; the unnamed container box — the real D37 item 2 regression — stays red.
+Corrected the exemption comment, `FOLLOWUPS.md` and `context-menu.md`, which repeated G16's
+wrong count rule. Gates and proofs below.
+
+## Fix round 1 appendix
+
+**Both directions.** `ios-context-menu.log` (2 stops) and `ios-context-menu-four-stops.log`
+(measured 4) → `failures: []`, `known: 1`; `ios-context-menu-not-an-element.log` (the
+wrapper's element forced false) → `failures: 1`, `exempt: false`. Red proof of the separator:
+`unnamed.length > 0` → `unnamed.length > 1` → `goes red on the measured tree of a wrapper that
+is not one element` and `reports both shipped readings as its recorded debt, and only those`
+both failed; restored, 51 pass.
+
+**A branch that does not touch ContextMenu reads as `main`.** The new sentence sits in the
+`control.wrapperIsControl === true` branch, which only ContextMenu sets in `A11Y_CONTROLS`,
+and the row is keyed `context-menu`/`ios`; every iOS fixture verdict for every other control
+is byte-identical to `origin/main`'s rule (both modules imported and compared), and on device
+the 22 non-ContextMenu cases read byte-identically in the two raw logs compared above.
+
+**The 2-vs-4 bisect.** Not a case's identity: the same tree, same build, sweep narrowed to
+`context-menu` alone reads `nodes=1` (Run A, 03:37Z); with all 21 predecessors it reads
+`nodes=3` (Run D, `NUI_CTX_A11Y` no-op, 03:47Z); `task/G25-G26-merge`, one case longer, read
+`nodes=5`. Late re-reads 3, 6 and 9 s after the settled read never changed the count in any
+run, so the shape is latched by the time the rule sees it and the settle is right to trust it.
+`windowStaticTexts=0` in the 1-node reading: the second Text is nowhere in the a11y tree, not
+merely outside the wrapper.
+
+**Real fix, for whoever closes G16's debt** (measured, not shipped): the one-element tree is
+the natural reading, so what must be prevented is UIKit *keeping* children published during
+the window before `accessible` lands. The only lever that looks able is invalidating the
+published children after the answer flips (a layout-changed notification on the component
+view once `isAccessibilityElement` answers true — not inside `afterUpdate()`). Proof would be
+the full sweep reading `nodes=1`, a ~9-minute run plus `check`, `harness:ios`,
+`harness:android` and `real-input:ios`; the lease was granted at 02:45Z and that did not fit
+the round.
+
+**Follow-ups (round 1)**
+
+- real-input: the a11y sweep's own probe (`kind=diag`/`kind=late`/`kind=probe`) answered
+  questions the fixture could not; it is not in the tree — worth a permanent, cheap version.
+- a11y: `A11Y_EXEMPTIONS` rows anchored on a count are anchored on walk history; the two
+  Android `hosted-*` rows are the next candidates for the same treatment.
