@@ -86,6 +86,17 @@ internal class CheckboxModel : NitroUiModel() {
   /** The label beside the box, or `null`. Observed: it is content, and width. */
   var label by mutableStateOf<String?>(null)
 
+  /**
+   * The `iosStyle` React sent, kept so the getter answers what was written - and
+   * deliberately *not* snapshot-observed: this platform has a checkbox
+   * (`Checkbox`, and `TriStateCheckbox` for the dash), so DECISIONS D47's choice of
+   * picture is another platform's and reading it here would be a style switch Material
+   * 3 does not have. Storing rather than dropping it means a recycled instance cannot
+   * answer the previous owner's style, and `Checkbox.harness.tsx` can assert that
+   * Android took the prop and drew the same box anyway.
+   */
+  var iosStyle: String = "circle"
+
   /** `!disabled`, spelled positively for M3. */
   var enabled by mutableStateOf(true)
 
@@ -169,6 +180,7 @@ internal class CheckboxModel : NitroUiModel() {
   override fun reset() {
     displayed = false
     indeterminate = false
+    iosStyle = "circle"
     label = null
     enabled = true
     tint = null
@@ -578,6 +590,19 @@ class HybridNitroUiCheckbox(
       // The composable recomposes and Compose's own measure pass reports the new
       // width (sizing.md §5). A label is content: it is the whole width difference.
       host.markDirty()
+    }
+
+  /**
+   * Stored, never read: DECISIONS D47's three pictures are what iOS draws because iOS
+   * has no checkbox, and Android's is Material 3's own. Every style arrives, is kept for
+   * the getter, and changes nothing about what is composed - no `markDirty()`, because
+   * nothing observes it, which is the same reason `Checkbox.harness.tsx` measures the
+   * box under each style name and expects one answer.
+   */
+  override var iosStyle: String
+    get() = model.iosStyle
+    set(next) {
+      model.iosStyle = next
     }
 
   override var disabled: Boolean
