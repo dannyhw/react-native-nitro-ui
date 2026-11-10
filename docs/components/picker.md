@@ -209,6 +209,11 @@ passed several rows") and one fling in `scripts/real-input` both hold it to.
   Following it from a `LaunchedEffect` keyed on the shown index does not work: the
   composition only ever *sees* `0`, the key never changes, and the refused row stays
   painted under the finger — which is how this was first caught, red on a loaded run.
+  That direct write is made only for a batch that actually *moved* the displayed index,
+  and never while a roll is in flight: writing the pager is `requestScrollToPage`, which
+  stops the scroll in progress, so a `label` change or a re-sent `options` list halfway
+  through someone's fling would cancel it and report nothing. A roll is the user's until
+  it rests; the batch after that rest is what puts a refused value back.
 - **`empty options` draws no drum**, and `disabled` stops the drum answering: the
   gesture is swallowed and the semantics replaced by one disabled node, so a disabled
   wheel reports nothing however it is rolled (as on every other variant).
@@ -223,15 +228,17 @@ passed several rows") and one fling in `scripts/real-input` both hold it to.
   reset and when the view is dropped, so a recycled host never carries a previous
   owner's pager. Going `wheel → menu → wheel` re-seeds an uncontrolled picker at
   `defaultSelectedIndex`, exactly as it does for `radio`.
-- **A drag that begins on the drum rolls the drum.** A `ScrollField` is a pager, and the
-  React Native scroll view above it claims a vertical drag as soon as it passes touch
-  slop — before the pager has seen it — so a drum inside a scrolled page used to receive
-  `ACTION_CANCEL` and never move: the page moved, the drum did not, and no event reached
-  JS. `Modifier.nuiOwnVerticalDrags` asks the parents to stop intercepting for as long as
-  a gesture started inside the drum and releases them on the up. The drum keeps drags
-  begun on it, so a page with a wheel in it is scrolled from somewhere else — the trade a
-  drum-shaped control makes wherever it is drawn. Nothing changes for a drum that is not
-  inside a scroller.
+- **A vertical drag that begins on the drum rolls the drum.** A `ScrollField` is a pager,
+  and the React Native scroll view above it claims a vertical drag as soon as it passes
+  touch slop — before the pager has seen it — so a drum inside a scrolled page used to
+  receive `ACTION_CANCEL` and never move: the page moved, the drum did not, and no event
+  reached JS. `Modifier.nuiOwnVerticalDrags` asks the parents to stop intercepting for as
+  long as a gesture started inside the drum, and takes that ask back as soon as the first
+  move past touch slop is sideways: a drag leaving the drum horizontally is a page turn, a
+  drawer or a swipeable row, and a drum has no claim on it. So a drum keeps the *vertical*
+  drags begun on it — a page with a wheel in it is scrolled from somewhere else, the trade
+  a drum-shaped control makes wherever it is drawn — while a horizontal one still reaches
+  a pager or drawer beside it. Nothing changes for a drum that is not inside a scroller.
 - **Accessibility**: see Accessibility below — the drum is one named node, and the value a
   screen reader hears is the row under the centre line. It is not `scrollable` and its
   rows are not in the tree, so the wheel's a11y gap is that it can be *heard* but not
@@ -499,9 +506,10 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   row-activation actions on it — a screen-reader user can hear the current option but has
   no wheel gesture to change it, and nothing outside the control can compare "the row
   shown" with "the value reported" except the app's own echo. This is `ScrollField`'s
-  tree, not a semantics we omitted; the same is true of iOS's `UIPickerView` rows. A
-  layout where the wheel is the only way to choose needs an alternative (a `menu` Picker,
-  or `RadioGroup`) beside it.
+  tree, not a semantics we omitted. It is also Android's gap alone: iOS's `UIPickerView`
+  answers VoiceOver's own scroll, so once the reader is on the wheel, swiping up or down
+  moves it. A layout where the wheel is the only way to choose needs an alternative (a
+  `menu` Picker, or `RadioGroup`) beside it.
 - **A drum inside a scroller takes the vertical drag** (see Behaviour notes): the page it
   sits in has to be scrolled from beside it, not over it.
 - **Android has a 280 dp field floor**, so a menu with short options is much wider
