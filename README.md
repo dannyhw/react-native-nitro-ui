@@ -1441,7 +1441,7 @@ The full list per control is in its doc; these are the ones that bite.
   platforms so the JS API means one thing.
 - **Android's wheels are Material's own.** With `variant="wheel"`, `Picker` gets a
   `ScrollField` drum and a `DatePicker` in `mode="time"` gets Material's time drums —
-  each reporting one change per settled roll. There is no *date* wheel: `DatePicker`
+  each reporting one change per settled roll. There is no _date_ wheel: `DatePicker`
   with `mode="date"` or `"datetime"` keeps the inline calendar there. Android also has
   no combined date-and-time control: `mode="datetime"` opens a date dialog and then a
   time dialog.

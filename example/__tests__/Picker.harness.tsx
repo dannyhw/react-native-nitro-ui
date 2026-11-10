@@ -2490,7 +2490,9 @@ describe('Picker · wheel variant (G29)', () => {
     // component's declared fallback (which is the menu's 280 x 56) - it has to be
     // a correction, and the correction is counted.
     if (Platform.OS !== 'android') {
-      console.log('wheel geometry: Android-only case - iOS has had a wheel all along');
+      console.log(
+        'wheel geometry: Android-only case - iOS has had a wheel all along'
+      );
       return;
     }
     const OPTIONS = ['Small', 'Medium', 'Large', 'Extra large'];
@@ -2648,7 +2650,9 @@ describe('Picker · wheel variant (G29)', () => {
     // A disabled drum is a drum: `disabled` repaints, it does not resize, and the
     // height is the control's own whatever the state.
     const disabledSize = measured('wheel-disabled');
-    expect(Math.abs((disabledSize?.height ?? 0) - WHEEL_DP)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs((disabledSize?.height ?? 0) - WHEEL_DP)
+    ).toBeLessThanOrEqual(1);
     unmount();
   });
 
