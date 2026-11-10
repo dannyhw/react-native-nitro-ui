@@ -228,10 +228,10 @@ passed several rows") and one fling in `scripts/real-input` both hold it to.
   slop — before the pager has seen it — so a drum inside a scrolled page used to receive
   `ACTION_CANCEL` and never move: the page moved, the drum did not, and no event reached
   JS. `Modifier.nuiOwnVerticalDrags` asks the parents to stop intercepting for as long as
-  a gesture started inside the drum and releases them on the up, which is the bargain
-  every `UIPickerView` makes: the drum keeps drags begun on it, so a page with a wheel in
-  it is scrolled from somewhere else. Nothing changes for a drum that is not inside a
-  scroller.
+  a gesture started inside the drum and releases them on the up. The drum keeps drags
+  begun on it, so a page with a wheel in it is scrolled from somewhere else — the trade a
+  drum-shaped control makes wherever it is drawn. Nothing changes for a drum that is not
+  inside a scroller.
 - **Accessibility**: see Accessibility below — the drum is one named node, and the value a
   screen reader hears is the row under the centre line. It is not `scrollable` and its
   rows are not in the tree, so the wheel's a11y gap is that it can be *heard* but not

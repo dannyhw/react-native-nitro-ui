@@ -1514,9 +1514,12 @@ private fun syncDatePicker(
  * How long the `wheel`'s drums have to hold still before a roll counts as a pick.
  *
  * `TimeScroll` has no settle to subscribe to — see [syncTimeWheel] for what it does
- * instead, and for how this number was measured. Long enough that the snap of one row
- * landing cannot be mistaken for the end of a roll across several; short enough that the
- * report still arrives with the finger's lift.
+ * instead. This is not a measured settle time, because nothing in the widget exposes one
+ * to measure: it is the window proven from the other side. Delete it and one fling of the
+ * hour drum in `scripts/real-input/android.mjs` (a 130 ms swipe whose momentum outlives
+ * the finger) reports two changes instead of one, which is the red that keeps this block
+ * honest. Long enough that the snap of one row landing cannot be mistaken for the end of
+ * a roll across several; short enough that the report still arrives with the finger's lift.
  */
 private const val TIME_WHEEL_SETTLE_MILLIS = 180L
 
