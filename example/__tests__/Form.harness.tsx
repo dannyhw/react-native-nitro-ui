@@ -1813,7 +1813,9 @@ function TrailingEdgeForm() {
     <Form style={x24Styles.form}>
       <Form.Section title="Notifications">
         <Form.Row>
-          <View ref={keepBox('probe')} style={x24Row} testID="x24-probe" />
+          <View ref={keepBox('probe')} style={x24Row} testID="x24-probe">
+            <Text style={x24Styles.text}>Notifications</Text>
+          </View>
         </Form.Row>
         <Form.Row>
           <View style={x24Row}>
