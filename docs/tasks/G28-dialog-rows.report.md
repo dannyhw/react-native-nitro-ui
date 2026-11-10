@@ -42,17 +42,14 @@ change from the full-bleed rows, and the README shows it.
 
 ## Gates
 
-| Gate | Result | Counts | Code tree | Duration | Load |
-| --- | --- | --- | --- | --- | --- |
-| `check` | **PASS** | 1993 tests / 84 suites | `a21c6d004613` | 2 m 57 s | start 8.5 / med 17.5 / max 21.9 |
-| `harness:ios` | **PASS** | 565 tests / 30 suites + isolated 6 tests / 3 suites | `a21c6d004613` (ios tree) | 14 m 16 s | start 20.9 / med 6.6 / max 53.5 |
-| `harness:android` | **FAIL** | 1 failed of 621 tests / 30 suites + isolated 6 tests / 3 suites | `a21c6d004613` (android tree) | 18 m 25 s | start 4.5 / med 6.0 / max 71.2 |
-| `real-input:ios` | **PASS** | — | `a21c6d004613` (ios tree) | 40 m 15 s | start 27.0 / med 7.0 / max 76.6 |
-| `real-input:android` | **PASS** | — | `a21c6d004613` (android tree) | 58 m 13 s | start 2.9 / med 4.2 / max 14.7 |
-| `harness:android:Dialog` | stale | 1 failed of 31 tests / 1 suites | d3f21dee90f2 (not this tree) | 42.9 s | start 3.6 / med 4.1 / max 4.9 |
-| `harness:android:Form` | **FAIL** | 1 failed of 115 tests / 3 suites | `a21c6d004613` (android tree) | 3 m 27 s | start 14.8 / med 7.0 / max 14.8 |
-| `real-input:android:--control:dialog` | stale | — | 2e8347035aac (not this tree) | 11 m 53 s | start 4.5 / med 4.6 / max 14.9 |
-| `real-input:android:--control:dialog:--background` | stale | — | 2e8347035aac (not this tree) | 0.7 s | start 4.4 / med 4.4 / max 4.4 |
+The one gate table in this report is the generated one at the end, under **Gates (fix round 1)**:
+`gate.mjs table` prints one row per run recorded against the tree in front of the reader, and fix
+round 1 replaced round 1's tree, so round 1's table can no longer be pasted beside it. Round 1's own
+runs are untouched in the committed ledger — the twenty lines of
+`docs/tasks/G28/gates.jsonl` whose branch is `task/G28-dialog-rows`, code tree `a21c6d004613` — with
+a scrubbed excerpt of each failed run in `docs/tasks/G28/failures/`. Read from that ledger, round 1
+was: `check`, `harness:ios`, `real-input:ios` and `real-input:android` green, and `harness:android`
+red on one line that is not this task's.
 
 `need --for review` exits 1 with one line — `need: 1 gate(s) missing for review: harness:android` —
 and that row is not this branch's:
@@ -61,9 +58,10 @@ and that row is not this branch's:
   own content`, `expected 200 to be less than or equal to 1` (`Form.harness.tsx:1266`). That is X23's
   brief verbatim, line number and all. `docs/tasks/STATUS.md` carries its cause (a recycled Android
   Form keeps its cached test report, so the case reads the previous Form's offset), the one-line reset
-  in `prepareForRecycle` that fixes it, and PR #60 — none of which is on `main` yet. The same line
+  in `prepareForRecycle` that fixes it, and PR #60 — none of which was on `main` yet at the time of
+  writing (fix round 1 merged it, and the full suite is green on that tree). The same line
   went red in G26's, G27's and X22-fix1's full runs, none of which touched Dialog, and it goes red on
-  this branch with `harness:android -- Form` (the row above it), where the Dialog suite never runs at
+  this branch with `harness:android -- Form` (the filtered run named in the ledger above), where the Dialog suite never runs at
   all — so nothing in this diff is in its path. `Form.harness.tsx` is untouched here, X23 is not
   G28's to fix (D19), and re-running the suite cannot make it green.
 
@@ -76,7 +74,8 @@ name. `gate.mjs export --task G28` puts the ledger and the failed runs' excerpts
 ## Red proofs
 
 Full data in `docs/tasks/G28/mutations.json`, with the tree digest
-each run was keyed to. The first five lines are one source mutation each, restored between runs.
+each run was keyed to. Each line is one source mutation restored afterwards; the last is fix round
+1's single-hunk run, and round 1's first two are the two-hunk pair it reinterprets.
 
 The new test - `Dialog.harness.tsx` › *reports the sheet rows as the component draws them, disabled
 included*, and `CHECKS.dialog`'s new press of the disabled row:
@@ -144,23 +143,36 @@ state lines, the alert half stays green, and no press line goes red at all.
   window down — the next dialog check will rediscover this unless a helper says so.
 - The row probe is harness-only code inside a shipped file, armed by a token. If a second component
   needs one, it belongs in core next to `NitroUiPerf` rather than as a second copy.
+- `bun run task-ready` with no arguments reads the task id off the branch, so a fix branch named
+  `task/G28-fix1` derives the id from the `-fix1` suffix, looks for a report named after the
+  branch, and reports this task's own report as missing; passing `--task` is the escape hatch.
+  Every fix round on such a branch rediscovers this unless the tool strips the suffix or a round
+  names its report for the branch it is on.
+- `describeConfirmationRows` still carries the comment justifying a row "flush with the sheet's
+  edge" at `left = 0`. True as a reason to scan rightwards, but no row draws there now; it would
+  read cleanly as the inset's own note, which is a comment-only change to a shipped file and so was
+  not worth re-stamping three device gates for.
+- `gate.mjs <device-gate> -- <filter> --background` sends `--background` to the runner as a filter
+  and records a 1.4 s FAIL under a gate name with `--background` baked in. The flag belongs before
+  the `--`; a runner that recognises its own launcher's flag after a filter separator would not
+  leave the row in the ledger at all.
 
 ## Fix round 1
 
 **Branch:** `task/G28-fix1` (`a2111f12` + `origin/main`, so X23's Form fix is in) ·
 **Lease:** `G28-n0naq` (`pair-a`: iPhone 17 / iOS 27 + emulator-5574 / API 35 · Metro 8295)
 
-**The group had no inset.** Flush to the sheet, its 16 dp outer corners cut grey wedges at the
-sheet's edge and the segments touched. The rows now sit in their own `Column` with 16 dp horizontal
-padding — the radius of those corners — and material3's own `SegmentedGap`; title and message keep
-24 dp. On the new shot the card starts at x=42 px — 16 dp — with 5 px gaps. Retaken:
-`confirmation-dialog-android.png` (720 px) and `G28/rows-segmented.png`.
+**The group had no inset.** Flush to the sheet, its 16 dp outer corners cut grey wedges and the
+segments touched. The rows now sit in their own `Column` with 16 dp horizontal padding — the
+corners' radius — and material3's own `SegmentedGap`; title and message keep 24 dp. On the new
+shot the card starts at x=42 px — 16 dp — with 5 px gaps. Retaken:
+`docs/images/components/confirmation-dialog-android.png` (720 px) and
+`docs/tasks/G28/rows-segmented.png`.
 
 **Nothing tested the row refusing a press.** `enabled = true` alone — `performAction`'s guard left
 in, one hunk — reddens exactly the two lines that read the row (`Dialog.harness.tsx:552`, `:624`),
-keeps the alert half green (the control that the hunk was single), and reddens no press assertion.
-The row's own `enabled` is proven by the dump and the probe; a press check proves nothing happens,
-whichever layer stops it. `G28/mutations.json` and the summary above now say so.
+keeps the alert half green (the single-hunk control) and reddens no press assertion. The row's own `enabled` is proven by the dump and the probe; a press check proves nothing happens,
+whichever layer stops it. Recorded in `docs/tasks/G28/mutations.json`.
 
 **Harness-only:** the report is a pure read again — the probe is armed by the reserved id
 `__nui_probe_rows`, and `probePending` clears if the sheet leaves mid-answer; the changeset is cut to
@@ -178,4 +190,4 @@ two user-facing lines.
 | `harness:android:Dialog` | stale | 2 failed of 31 tests / 1 suites | dce81fed31bc (not this tree) | 45.1 s | start 12.8 / med 10.5 / max 12.8 |
 | `harness:android:Dialog:--background` | stale | — | dce81fed31bc (not this tree) | 1.4 s | start 5.8 / med 5.8 / max 5.8 |
 
-`need --for review`: **review is satisfied on this code tree** — nothing owed. The two `harness:android:Dialog` rows are this round's red proof and the CLI mistake before it, each keyed to the tree it actually ran on; a filtered run satisfies nothing but its own name. `real-input:ios` is not owed: this round changed no iOS code, and the harness file both platforms share is green on both.
+`need --for review`: **review is satisfied on this code tree** — nothing owed. The two `harness:android:Dialog` rows are this round's red proof and the CLI mistake before it, each keyed to the tree it actually ran on; a filtered run satisfies nothing but its own name. `real-input:ios` is not owed by this round: its diff is one Android `.kt` file, the shared harness, the Android real-input runner and docs — no iOS code, and that harness file is green under `harness:ios` here. `need --for merge` does list it, because gate-core reads `example/__tests__/*` as both-platform; that line belongs to the merge run, which pays for the full harness plus real-input on the merged tree anyway.
