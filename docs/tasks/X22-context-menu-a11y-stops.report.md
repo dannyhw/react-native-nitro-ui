@@ -103,3 +103,129 @@ printed no stability line. The healthy reading is unchanged with the confirmatio
    the round on. Options: (a) **recommended** — land this and re-run `real-input:ios` on G25/G26 at
    merge: the merge bar runs it anyway, and it is the direct test of the claim; (b) I build G26's
    tree in a scratch checkout with this fix applied on top and run it there (one more round).
+
+## Fix round 1
+
+**Cause.** One component, three walk histories, iOS 27: a fresh app walked straight to the
+case reads **one** element — wrapper labelled, subtree hidden, no stops; the same tree walked in
+the middle of `main`'s sweep reads **2** stops; on the merged Stepper + Picker-radio tree,
+whose sweep has one more case before this one, **4**. Boxes identical, no instability line,
+and the 21 cases the two sweeps share are byte-identical in both logs. Not XCUITest echoing: the sweep's probe finds one labelled
+child under the wrapper and one under *that* — React Native vends two nested elements per
+`Text`. The window: the wrapper hides its subtree once React Native has stored `accessible` on the
+component view, and read from this view's getter, that store is still **false inside
+`afterUpdate()`** (`value="exp:hostElements:acc=n"`).
+
+**Fix.** The authorised fallback: that measurement says a component fix keyed on the prop
+there is a silent no-op (both probes ran; neither is a claimed failure). Any count is
+excused when every stop is one of the wrapper's own Texts *and* the sentence names the
+publication; the unnamed container box — the real D37 item 2 regression — stays red.
+Corrected the exemption comment, `FOLLOWUPS.md` and `context-menu.md`, which repeated G16's
+wrong count rule. Gates and proofs below.
+
+## Fix round 1 appendix
+
+**Both directions.** `ios-context-menu.log` (2 stops) and `ios-context-menu-four-stops.log`
+(measured 4) → `failures: []`, `known: 1`; `ios-context-menu-not-an-element.log` (the
+wrapper's element forced false) → `failures: 1`, `exempt: false`. Red proof of the separator:
+`unnamed.length > 0` → `unnamed.length > 1` → `goes red on the measured tree of a wrapper that
+is not one element` and `reports both shipped readings as its recorded debt, and only those`
+both failed; restored, 51 pass.
+
+**A branch that does not touch ContextMenu reads as `main`.** The new sentence sits in the
+`control.wrapperIsControl === true` branch, which only ContextMenu sets in `A11Y_CONTROLS`,
+and the row is keyed `context-menu`/`ios`; every iOS fixture verdict for every other control
+is byte-identical to `origin/main`'s rule (both modules imported and compared), and on device
+the 21 non-ContextMenu cases the two sweeps share read byte-identically in those logs (the
+merged log's extra `stepper` case reads 3 nodes).
+
+**The 2-vs-4 bisect.** Not a case's identity: the same tree, same build, sweep narrowed to
+`context-menu` alone reads `nodes=1` (03:29Z); with all 20 of `main`'s predecessors it reads
+`nodes=3` (03:37Z, `NUI_CTX_A11Y` armed but a no-op); `task/G25-G26-merge`, one case longer, read
+`nodes=5`. Late re-reads 3, 6 and 9 s after the settled read never changed the count in any
+run, so the shape is latched by the time the rule sees it and the settle is right to trust it.
+`windowStaticTexts=0` in the 1-node reading: the second Text is nowhere in the a11y tree, not
+merely outside the wrapper.
+
+**Real fix, for whoever closes G16's debt** (measured, not shipped): the one-element tree is
+the natural reading, so what must be prevented is UIKit *keeping* children published during
+the window before `accessible` lands. The only lever that looks able is invalidating the
+published children after the answer flips (a layout-changed notification on the component
+view once `isAccessibilityElement` answers true — not inside `afterUpdate()`). Proof would be
+the full sweep reading `nodes=1`, a ~9-minute run plus `check`, `harness:ios`,
+`harness:android` and `real-input:ios`; the lease was granted at 02:45Z and that did not fit
+the round.
+
+**Follow-ups (round 1)**
+
+- real-input: the a11y sweep's own probe (`kind=diag`/`kind=late`/`kind=probe`) answered
+  questions the fixture could not; it is not in the tree — worth a permanent, cheap version.
+- a11y: `A11Y_EXEMPTIONS` rows anchored on a count are anchored on walk history; the two
+  Android `hosted-*` rows are the next candidates for the same treatment.
+- a11y: the ContextMenu debt row's comment says the walk happens after "the sweep's other 21
+  cases"; on `main` 20 cases precede this one (`form` follows). Comment-only wording fix,
+  deliberately not re-gated: `scripts/real-input/a11y.mjs` is keyed by every gate, and `check`
+  plus both harnesses plus `real-input:ios` did not fit the round's remaining runway.
+- harness: `Form (G24) › starts a recycled Form at the top of its own content`
+  (`Form.harness.tsx:1266`, `expected 200 to be less than or equal to 1`) is red across tasks on
+  this box today and blocks `harness:android` for any branch — G24's, or whoever owns the
+  Android recycle, not X22's.
+- gate-core: `scripts/real-input/` is outside the platform prefixes, so `need` reads an
+  iOS-only rule change as both-platforms and asks an 18-minute `harness:android` that the diff
+  cannot reach; worth deciding whether `scripts/real-input/ios.mjs`-only diffs should be
+  graded iOS.
+- gate: `wait --gate harness:android` twice left with exit 2 ("no background gate named
+  harness:android") while `status` on the same pid read "running (49s so far)", and a third
+  attempt reported a finished gate whose ledger line was not written — only `status` and the
+  ledger agreed with each other. A `wait` that can be wrong in that direction is how a task
+  ends its turn while its gate is still running.
+
+**Gates (fix round 1)** — `node scripts/gate.mjs table`, code tree `ff81e0d6e6dc`, lease `X22-1qgjs`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1993 tests / 84 suites | `ff81e0d6e6dc` | 3 m 33 s | start 2.6 / med 27.9 / max 115.6 |
+| `harness:ios` | **PASS** | 564 tests / 30 suites + isolated 6 tests / 3 suites | `ff81e0d6e6dc` (ios tree) | 16 m 30 s | start 6.5 / med 7.3 / max 33.5 |
+| `harness:android` | **FAIL** | 2 failed of 620 tests / 30 suites + isolated 6 tests / 3 suites | `ff81e0d6e6dc` (android tree) | 17 m 59 s | start 6.5 / med 5.3 / max 26.8 |
+| `real-input:ios` | **PASS** | — | `ff81e0d6e6dc` (ios tree) | 40 m 09 s | start 25.6 / med 6.8 / max 118.2 |
+| `real-input:android` | missing | — | — | — | — |
+| `harness:android:Form:--background` | **FAIL** | — | `ff81e0d6e6dc` (android tree) | 1.2 s | start 6.8 / med 6.8 / max 6.8 |
+
+`harness:ios` skips 2 of 564 (one suite), as on `main`; `real-input:android` is the merge bar's.
+
+**The `harness:android` red is not this diff.** Two full runs on this tree failed *different*
+tests, neither near a11y: `Form (G24) › starts a recycled Form at the top of its own content`
+(the scroll offset never returned after a recycle) in both (04:54Z, 1 of 620; 05:12Z), and
+`SearchField › takes no submit from a Return pressed on a query it has just cleared` in the
+second (2 of 620). The identical Form assertion is in G27's log on the *other* device pair
+(tree `1c37ba278d06`, pair-b, 04:21Z) and in G26-fix1's and G25-G26-merge's on 11-09 — and those
+two branches also hold PASSing runs, on trees (`3ec823676277`, `332b585f3d07`) that already
+contain this task's merged round-0 fix. The Android half here is `76dc2347d567`, the digest
+`main`'s own: the diff is `scripts/real-input/a11y.mjs`, its unit test, one fixture and docs,
+none of which the Android harness loads, and 615 of 620 Android tests pass with the isolated
+modal-hazard suites green. Task X23 was running the same `Form.harness` isolation probe on
+pair-b while this was written. Both reds are in the exported ledger with their excerpts.
+
+**Red proofs (fix round 1)**, recorded under `fixRound1` in `docs/tasks/X22/mutations.json`:
+the separator `unnamed.length > 0` → `unnamed.length > 1` takes that suite from 51 pass to 2 red,
+including `regressed.failures` expected 1 / received 0 — the wrapper-not-an-element regression
+being *excused* by the row; and `main`'s count-anchored row laid over the round-1 sentence goes
+red on the measured 4-stop fixture, printing the unexempted finding — the red reported on
+`task/G25-G26-merge`. Both were run against a detached `git worktree` of this HEAD with
+`node_modules` symlinked in, so the shipping tree the gates are keyed to never moved.
+
+**Other lines in this round's ledger** (exported, so nothing is hidden): two early `check` reds
+(01:55Z, 01:58Z — rule and fixture mid-edit), a `real-input:ios` run that exited in 0 s in a
+shell that had no lease env, and one probe recorded as `harness:android:Form:--background`,
+where `--background` after `--` is a jest pattern and not a flag.
+
+## Questions for orchestrator (fix round 1)
+
+`harness:android` is the one gate this round cannot hand green, and the reason is a foreign
+red (`Form (G24)`, `SearchField` — see above), so `need --for review` stays unsatisfied on this
+tree. Options: (a) **recommended** — review this diff on the iOS evidence (`check`,
+`harness:ios`, `real-input:ios` all green on `ff81e0d6e6dc`) and let the merge bar's
+`harness:android` be the one that matters, since the merge runs it anyway; (b) I re-run
+`harness:android` when the box is quiet (~18 min a go, and it has failed twice here on other
+tasks' tests); (c) re-grade `scripts/real-input/*` as iOS-only in `gate-core`, which weakens a
+guard and is not this task's call.

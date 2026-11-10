@@ -170,12 +170,7 @@ screen-reader path on Android; set `accessible` to give it one.
 | performing that action opens the menu                        | not exercised: UIKit derives the action, and no tool here reads it   | harness: the action performed on the node opens the menu     |
 | a recycled wrapper keeps no previous owner's label           | harness                                                              | harness                                                      |
 
-**The iOS gap (known debt).** XCUITest lists the wrapper as the element with the label,
-hides the second `Text` under it, and still lists the **first** `Text` as an element of
-its own (measured on iOS 27, the example screen's "Grace Hopper"). Real input reports it
-on every run as known debt, `A11Y_EXEMPTIONS` and FOLLOWUPS: the wrapper not being an
-element at all (D37 item 2), which lists both, stays red. Whether VoiceOver stops on that
-`Text` is not known.
+**The iOS gap (known debt).** XCUITest lists the wrapper as the element with the label, and can list the `Text`s inside it as elements of their own (measured on iOS 27, the example screen's "Grace Hopper"): React Native vends an accessibility element per `Text`, and the wrapper hides them only once `accessible` has reached the component view — so how many it lists is *when the tree was walked*, not what the component is. A walk that goes straight to the screen reads one element with no stops; one that follows the rest of the sweep reads one or both `Text`s, each as two nested elements (X22 fix round 1). Real input reports the listing on every run as known debt, `A11Y_EXEMPTIONS` and FOLLOWUPS. What stays red is the wrapper not being an element at all (D37 item 2), which the finding tells apart by the unnamed container box under the wrapper — not by the number of stops. Whether VoiceOver stops on those `Text`s is not known.
 
 **Not exercised:** VoiceOver and TalkBack themselves. Neither screen reader ran, and their
 double-tap-and-hold was not performed on a device: the simulator has no VoiceOver, and the

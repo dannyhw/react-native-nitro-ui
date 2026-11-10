@@ -33,5 +33,32 @@
         "reads past the designed confirmation are news, and this run has them (reads=5)"
       ]
     }
-  ]
+  ],
+  "fixRound1": {
+    "how": "Same field convention, appended for fix round 1 (2026-11-10, lease X22-1qgjs). One method difference: the mutations were applied to a detached `git worktree` of the shipping HEAD with `node_modules` symlinked in, and `bunx jest scripts/__tests__/real-input-a11y-ios.test.js` (51 tests) run there, because three device gates had already been recorded against this code tree and the shipping file could not be edited while they were the evidence. The unmutated copy of that worktree reads 51 pass - the same suite `check` runs.",
+    "mutations": [
+      {
+        "test": "scripts/__tests__/real-input-a11y-ios.test.js (bunx jest, 51 tests)",
+        "file": "scripts/real-input/a11y.mjs",
+        "mutation": "the separator between the debt and the regression stops separating - an unnamed box only counts in groups of two",
+        "before": "          (unnamed.length > 0",
+        "after": "          (unnamed.length > 1",
+        "redTests": [
+          "goes red on the measured tree of a wrapper that is not one element - Expected substring \"an unnamed box under the named wrapper\", received the React Native publication sentence with 4 stops",
+          "reports both shipped readings as its recorded debt, and only those - regressed.failures expected 1, received 0: the regression is excused by the row"
+        ]
+      },
+      {
+        "test": "scripts/__tests__/real-input-a11y-ios.test.js (bunx jest, 51 tests)",
+        "file": "scripts/real-input/a11y.mjs",
+        "mutation": "main's count-anchored row kept (2 stops, and only 2) over the round-1 sentence - the shape the merged Stepper + Picker-radio tree reads",
+        "before": "    matches: CONTEXT_MENU_TEXT_STOPS_ROW,",
+        "after": "    matches: /: 2 element\\(s\\) under \"ctx-accessible\" are stops of their own \\(static text \"Grace Hopper\"/,",
+        "redTests": [
+          "reports both shipped readings as its recorded debt, and only those - the 4-stop reading arrives as an unexempted failure: NitroUiContextMenu: 4 element(s) under \"ctx-accessible\" are stops of their own (static text \"Grace Hopper\" at (25, 459.67, 352, 17); ...) - the red reported on task/G25-G26-merge",
+          "excuses the wrapper's own Texts at any count, and nothing else"
+        ]
+      }
+    ]
+  }
 }
