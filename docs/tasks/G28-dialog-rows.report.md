@@ -72,7 +72,7 @@ name. `gate.mjs export --task G28` puts the ledger and the failed runs' excerpts
 
 ## Red proofs
 
-Full data in [`G28/mutations.json`](G28/mutations.json), with the tree digest
+Full data in `docs/tasks/G28/mutations.json`, with the tree digest
 each run was keyed to. The first five lines are one source mutation each, restored between runs.
 
 The new test - `Dialog.harness.tsx` › *reports the sheet rows as the component draws them, disabled
