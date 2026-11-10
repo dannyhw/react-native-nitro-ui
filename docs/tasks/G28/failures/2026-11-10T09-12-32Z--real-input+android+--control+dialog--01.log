@@ -1,0 +1,187 @@
+# Failure excerpt — real-input:android:--control:dialog
+
+- Ran: 2026-11-10T09:12:32.724Z on code tree `2e8347035aac` at HEAD `17eb195` (branch `task/G28-dialog-rows`)
+- Command: `node scripts/real-input/android.mjs --control dialog`
+- Result: fail, exit 1, 713144 ms
+- Load: start 4.45, end 3.81, median 4.59, max 14.86
+- Device: android / device `emulator-5574` / lease `G28-fn0rg`
+- Full log: `task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log` (<store>/task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ the sheet's disabled row is not enabled — expected false, saw true`
+- `✗ a real tap on the disabled row leaves the sheet up — expected 1, saw 0`
+- `✗ and reports nothing: the log gained only Back's close — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false`
+- `✗ the real tap on "Copy link": 3 real taps on "Copy link" left dialog-log "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" rather than "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false" - either the taps were never delivered (FOLLOWUPS.md:58) or the row ignores a real touch.`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G28-fn0rg (still live)
+  |   G25G26-f90yv             G25G26       both              pair-b
+  |   G28-fn0rg                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.81 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 138 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:dialog
+gate: node scripts/real-input/android.mjs --control dialog (cwd .)
+gate: code tree 2e8347035aac at HEAD 17eb1958
+gate: git tree 00623b8ecf91 with a DIRTY worktree (not reusable)
+gate: log task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log
+gate:       <store>/task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log
+real-input (android): emulator-5574 · nitroui_a · adb server 5043 · Metro 8295
+metro: started on 8295 (log: <repo>/.real-input/android/metro.log)
+  apk: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk
+
+  tab-targets: every example tab is a 48 dp touch target (uiautomator)
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  dialog: a real tap opens the dialog, a real tap on an action reports it before the close, a disabled action takes none, and back or outside closes only a dismissible one
+    ✓ no dialog has reported anything before a touch — expected none, saw none
+    ✓ no alert is up before a touch — expected 0, saw 0
+    ✓ a disabled action is a node that is not enabled — expected false, saw false
+    ✓ and an ordinary action is enabled — expected true, saw true
+    ✓ a real tap on a disabled action leaves the alert up — expected 1, saw 1
+    ✓ a real tap on an action reports its id, then the close - once each, in order — expected action:delete > presented:false, saw action:delete > presented:false
+    ✓ Back and a tap outside each closed the alert with one close and no action — expected action:delete > presented:false > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false
+    ✓ Back leaves the sticky alert up — expected 1, saw 1
+    ✓ and so does a tap outside — expected 1, saw 1
+    ✓ its one action closes it, reporting the action first — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false
+    ✓ the sheet shows the title the app asked to be visible — expected 1, saw 1
+    ✗ the sheet's disabled row is not enabled — expected false, saw true
+    ✗ a real tap on the disabled row leaves the sheet up — expected 1, saw 0
+    ✗ and reports nothing: the log gained only Back's close — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false
+    · the real tap on "Copy link": tap 1/3 on menu row "Copy link" left "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" - tapping again
+    · the real tap on "Copy link": tap 2/3 on menu row "Copy link" left "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" - tapping again
+    · the real tap on "Copy link": tap 3/3 on menu row "Copy link" left "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" - tapping again
+    ✗ the real tap on "Copy link": 3 real taps on "Copy link" left dialog-log "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" rather than "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false" - either the taps were never delivered (FOLLOWUPS.md:58) or the row ignores a real touch.
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:icon-button: IconButton a11y
+    ✓ NitroUiIconButton is named on one node a person can act on
+
+  a11y:button-group: ButtonGroup a11y
+    ✓ NitroUiButtonGroup is named on one node a person can act on
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2185][1038,2311]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2229][535,2355]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:search-field: SearchField a11y
+    ✓ NitroUiSearchField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+  a11y:form: Form a11y
+    ✓ NitroUiForm is named on one node a person can act on
+
+dialog: FAIL (no retries)
+    failed: the sheet's disabled row is not enabled — expected false, saw true
+    failed: a real tap on the disabled row leaves the sheet up — expected 1, saw 0
+    failed: and reports nothing: the log gained only Back's close — expected action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false, saw action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false
+    failed: the real tap on "Copy link": 3 real taps on "Copy link" left dialog-log "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > action:locked-row > presented:false > action:copy > presented:false" rather than "action:delete > presented:false > presented:false > presented:false > action:ok > presented:false > presented:false > action:copy > presented:false" - either the taps were never delivered (FOLLOWUPS.md:58) or the row ignores a real touch.
+
+real-input (android): 0/1 controls passed · 0 input sequence(s) needed a retry · 23/23 auxiliary checks passed
+gate: real-input:android:--control:dialog FAIL in 713.1 s
+gate: recorded in .gates/task/G28-dialog-rows.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G28-dialog-rows/real-input+android+--control+dialog-2026-11-10T09-12-32.293Z.log (5 probe(s))
+
+```
