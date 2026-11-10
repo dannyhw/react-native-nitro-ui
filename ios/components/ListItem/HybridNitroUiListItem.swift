@@ -170,6 +170,9 @@ final class NitroUiListRowView: UIView {
   private let content: UIListContentView
   private let valueLabel = UILabel()
   private let chevron = UIImageView()
+  /// The chevron's holder, whose only job is to be an accessibility container with no
+  /// elements in it (see the comment where it is configured).
+  private let chevronHost = UIView()
   /// The press recogniser. A long press with no minimum, which is what UIKit's own list
   /// selection effectively is: it recognises at touch-down, so the row *looks* pressed,
   /// and it fires at the release. `Form`'s cell uses the same shape for the same reason
@@ -252,11 +255,25 @@ final class NitroUiListRowView: UIView {
     chevron.contentMode = .center
     chevron.isHidden = true
     chevron.translatesAutoresizingMaskIntoConstraints = false
-    addSubview(chevron)
+    // The glyph is decoration, and the row is one element (D46 item 1) — but the flags
+    // that normally say so do not reach it: `isAccessibilityElement = false` and
+    // `accessibilityElementsHidden = true` on the image view were both measured on device
+    // and both left an element named "Forward" (the symbol's own label) in the tree. An
+    // empty `accessibilityElements` on the view that holds it is the explicit answer
+    // rather than a flag UIKit may second-guess: this container has no elements, so
+    // nothing inside it is vended. Same frame, same pixels, one fewer stop.
+    chevronHost.translatesAutoresizingMaskIntoConstraints = false
+    chevronHost.isAccessibilityElement = false
+    chevronHost.accessibilityElements = []
+    chevronHost.addSubview(chevron)
+    addSubview(chevronHost)
     NSLayoutConstraint.activate([
-      chevron.centerYAnchor.constraint(equalTo: centerYAnchor),
-      chevron.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ListItemModel.chevronInset),
-      chevron.widthAnchor.constraint(equalToConstant: ListItemModel.chevronWidth),
+      chevronHost.centerYAnchor.constraint(equalTo: centerYAnchor),
+      chevronHost.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -ListItemModel.chevronInset),
+      chevronHost.widthAnchor.constraint(equalToConstant: ListItemModel.chevronWidth),
+      chevron.leadingAnchor.constraint(equalTo: chevronHost.leadingAnchor),
+      chevron.trailingAnchor.constraint(equalTo: chevronHost.trailingAnchor),
+      chevron.centerYAnchor.constraint(equalTo: chevronHost.centerYAnchor),
     ])
 
     pressGesture.delegate = self
@@ -369,7 +386,19 @@ final class NitroUiListRowView: UIView {
     // hand a reader a second stop inside the one element this leaf is (D46 item 1). The
     // arrow says what the role already says.
     content.isAccessibilityElement = false
+    // `isAccessibilityElement = false` on the row's own subtree is not enough for the
+    // chevron: a view that is itself an element still hands UIKit's walk its subviews
+    // that are elements in their own right, and an image view with an SF Symbol is one
+    // (measured twice: the element survived the line above, `id="chevron.right"
+    // label="Forward"`, eleven of them on the component's own screen).
+    // `accessibilityElementsHidden` is the property that takes the subtree out of the
+    // walk rather than marking one view, which is the claim being made here.
     chevron.isAccessibilityElement = false
+    chevron.accessibilityElementsHidden = true
+    // The holder is the part that actually removes it from the walk, and the row's own
+    // children have to stay reachable for the label above to be read at all, so the
+    // empty list is asserted here as well as at construction (a re-apply must not lose it).
+    chevronHost.accessibilityElements = []
   }
 
   override func layoutSubviews() {
