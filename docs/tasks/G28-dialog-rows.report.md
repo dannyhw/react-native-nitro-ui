@@ -64,8 +64,10 @@ each run was keyed to.
   segmented row -> `expected '4/4,4/4,4/4' to be '16/4,4/4,4/16'`
 - not a red: `CORNER_PROBE_DEPTH_PX = 3` becomes `1` stayed green (31/31), because the inversion works
   from any depth — recorded so `radii=` is not credited with a proof it does not have
-- organic, before the probe existed: the new harness test's first run went red on
-  `probe=…radii=?-moving,?-moving,?-moving` (`harness:android:Dialog`, 08-43-25Z)
+- organic, not a mutation: the test's first run went red against the real thing — a sheet still on
+  its way up measures below the window, so the probe could only answer
+  `radii=?-moving,?-moving,?-moving` and the test timed out (`harness:android:Dialog`, 08-43-25Z).
+  Waiting past the slide-in, and polling an answer that contains no `?`, is what the test now does.
 
 ## Files changed
 
