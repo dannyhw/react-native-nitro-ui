@@ -80,7 +80,7 @@ export const ECHO = Object.freeze({
   wheelIndex: 'real-input-wheel-index',
   wheelEvents: 'real-input-wheel-events',
   // G29: the same pair on the `wheel` + `mode="time"` DatePicker, where the value is an
-  // instant and the drum that moved is Material's own `TimeScroll`.
+  // instant and the drums are one per field, drawn from Material's own `ScrollField`.
   wheelTimeValue: 'real-input-wheel-time-value',
   wheelTimeEvents: 'real-input-wheel-time-events',
   // G29: the count on the drum whose parent refuses every roll. The time it reports
