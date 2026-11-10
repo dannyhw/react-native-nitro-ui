@@ -104,14 +104,22 @@ Two more lines, one of them not a red:
   still on its way up measures below the window, so the probe refuses to guess. Sleeping past the
   slide-in and polling an answer with no `?` is what the test now does.
 
-And the two existing checks that the `enabled` mutation catches, which is the evidence that the row
-rather than the model is now the thing that refuses a press:
+And the two existing checks the same mutation catches. Round 1 read these two lines as proof that
+the row, rather than the model, was now the thing refusing a press. That was wrong and fix round 1
+corrects it: this mutation deleted the guard in `DialogModel.performAction` as well, and every press
+in the harness goes through `nuiTestPerformAction` → that guard, so nothing here isolated the row.
+What the row's own `enabled` is proven by is the two *state* reads — the `~` in the accessibility
+dump and the colour the label was painted with — and a press check proves only that nothing happens,
+whichever layer stops it. The single-hunk run that separates them is the last row of
+`docs/tasks/G28/mutations.json` (fix round 1): `enabled = true` alone reddens exactly those two
+state lines, the alert half stays green, and no press line goes red at all.
 
 - `takes no tap on a disabled action, and draws it disabled (alert)` -> same mutation ->
-  `expected 'locked:action:locked,locked:presented…' to be ''` - the deleted guard was the last thing
-  between a disabled alert button and `onAction`
+  `expected 'locked:action:locked,locked:presented…' to be ''` - the deleted guard, not the row, was
+  the last thing between a disabled alert button and `onAction`
 - the same test's confirmation half -> same mutation -> `expected '1,1,1' to be '1,0,1'` - the
-  disabled row stops being drawn faint, read from what was drawn rather than from the flag
+  disabled row stops being drawn faint: read from what was drawn rather than from the flag, and the
+  one line here that is the row's own
 
 ## Files changed
 
