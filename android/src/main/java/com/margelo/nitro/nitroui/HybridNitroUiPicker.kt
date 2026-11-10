@@ -44,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -900,22 +901,25 @@ private class PickerHost(
    * selection happens. Both callers are "the user moved the selection", and only a
    * selection that emitted is worth a hold, so they share the entry point rather than
    * keep two copies of the hold rule.
+   *
+   * A *refused* pick still moves the wheel variant, and that is the other half of this
+   * entry point: a roll that the model will not accept (the row already shown - or a
+   * control that was disabled while the drum was coasting, which is the same refusal
+   * arriving at the rest) has left the drum on a row this control does not hold, and
+   * `displayed` never moved, so no batch will tell the drum otherwise either. Putting
+   * the drum back here is what keeps "the row under the centre line is the value"
+   * true between the refusal and the next props pass; the same call from [afterUpdate]
+   * covers the batch that refuses it later. `DatePicker` re-seats its drums the same
+   * way, on the same reasoning (`HybridNitroUiDatePicker.seatTimeDrums`).
    */
   fun choose(index: Int) {
     if (model.applyUserSelection(index)) {
       holdSizingReports()
+    } else {
+      syncWheelRow(model.displayed)
     }
   }
 
-  /**
-   * Ask the composition to roll the wheel to [index], the way a row press does.
-   *
-   * The hook for `nuiTestSelect` on this variant. The pager is the composition's, so
-   * the request goes on the model and the composition turns it into an animated
-   * scroll; the settle at the end of that scroll is what emits, exactly as it is for
-   * a finger. [PickerModel.wheelRequest]'s serial is what makes a second request for
-   * the same option a second request.
-   */
   /**
    * The drum's [ScrollFieldState] while a [Wheel] is composed, and null at every
    * other moment of this view's life.
@@ -926,6 +930,19 @@ private class PickerHost(
    * move the drum, and it cannot reach a state object that lives in a slot table.
    */
   var wheelState: ScrollFieldState? = null
+
+  /**
+   * Whether a finger is on the drum, or the drum is still turning; null while no
+   * [Wheel] is composed.
+   *
+   * The same back-reference as [wheelState], for the same reason: the flag is
+   * [Wheel]'s own `derivedStateOf` and a props pass cannot reach a slot table. It is a
+   * [State] rather than a `Boolean` so the pass reads the *live* flag rather than a
+   * copy that was current whenever the composition last happened to run - for a flag
+   * that moves every frame of a roll, that is the difference between a guard and a
+   * decoration. UI-thread reads only ([syncWheelRow], [noteWheelBatch]).
+   */
+  var wheelActive: State<Boolean>? = null
 
   /**
    * Make the drum show [row], if it does not already.
@@ -947,19 +964,121 @@ private class PickerHost(
    * callable from a props batch at all - `scrollToOption` is a `suspend` function and
    * belongs to a coroutine.
    *
+   * Two things keep it off a drum that is *moving*, because writing
+   * [ScrollFieldState.selectedOption] is `requestScrollToPage`, and that stops a scroll
+   * in progress and snaps the pager home - a roll cancelled halfway reports nothing at
+   * all. First, [afterUpdate] calls this only for a batch that actually moved
+   * [PickerModel.displayed]: the ordinary batch (a `label` change, an `options` list
+   * re-sent, a size report landing) has no claim on the drum. Second, a call that does
+   * arrive is refused while [wheelActive] holds.
+   *
+   * A roll is the user's until it rests. What it lands on is then reported like any
+   * other pick, and a value that was refused while the finger was down is put back by
+   * the batch *after* that rest - the same reconcile, with the drum at standstill and
+   * nothing left to cancel.
+   *
    * A no-op when the drum already shows [row], which is every ordinary pick: the row
-   * arrived there by scrolling, and the value follows the drum, not the other way
-   * round. A user's own in-flight scroll is never fought here either - this runs only
-   * when the value JS holds is *newer* than the last event (the handshake in
-   * `afterUpdate`), and by then a settle has already happened.
+   * arrived there by scrolling, and the value follows the drum, not the other way round.
    */
   fun syncWheelRow(row: Int) {
     val wheel = wheelState ?: return
-    if (wheel.selectedOption != row) {
-      wheel.selectedOption = row
+    if (wheel.selectedOption == row) {
+      return
+    }
+    if (wheelActive?.value == true) {
+      wheelSeatRefusals += 1
+      return
+    }
+    wheelSeatWrites += 1
+    // The seat decides the row, so it is one of the two places the witness learns it.
+    wheelRow = row
+    wheel.selectedOption = row
+  }
+
+  /**
+   * Props batches that reached the drum's sync point, and what the drum was doing at
+   * each of them; see [noteWheelBatch].
+   *
+   * Witness fields for the `wheel` variant, published on the UI thread and read on the
+   * JS thread because a Nitro method may not wait for one (core.md section 5), and
+   * because the drum's own state belongs to a layout pass. They exist to make one claim
+   * assertable instead of logged - *a props batch landed while a roll was in flight and
+   * left the drum alone* - which `Picker.harness.tsx`'s mid-roll test needs to know
+   * whether it tested anything.
+   */
+  @Volatile
+  var wheelBatches = 0L
+    private set
+
+  /**
+   * Whether any props batch since this mount has landed while the drum was touched or
+   * turning. Sticky rather than per-batch, because what the harness asks is "did a batch
+   * arrive in the middle of a roll at all", and a test that sends several unrelated
+   * batches across one animation should not have to guess which one counted.
+   */
+  @Volatile
+  var wheelBatchSawRolling = false
+    private set
+
+  /** Writes [syncWheelRow] has made to the pager, this mount. */
+  @Volatile
+  var wheelSeatWrites = 0L
+    private set
+
+  /** Writes [syncWheelRow] has refused because the drum was touched or turning. */
+  @Volatile
+  var wheelSeatRefusals = 0L
+    private set
+
+  /**
+   * The row the drum last came to rest on, or was seated to; `-1` before either has
+   * happened.
+   *
+   * The drum's own position, which nothing else in this library can read: it is not
+   * painted from [PickerModel.displayed], its rows are not in the accessibility tree (so
+   * not even a `uiautomator dump` can see them), and its state belongs to a layout pass
+   * no JS call may enter. Published from the two places that *decide* it - a rest, and a
+   * seat - so `Picker.harness.tsx` can assert "the row the drum stands on is the row the
+   * app holds" about a refused pick, instead of trusting that a snap-back happened.
+   */
+  @Volatile
+  var wheelRow = -1
+    private set
+
+  /** Start the drum's witness counters over; see [wheelBatches]. */
+  fun clearWheelWitness() {
+    wheelBatches = 0
+    wheelBatchSawRolling = false
+    wheelSeatWrites = 0
+    wheelSeatRefusals = 0
+    wheelRow = -1
+  }
+
+  /** Record the row the drum settled on; see [wheelRow]. UI-thread only. */
+  fun noteWheelRow(row: Int) {
+    wheelRow = row
+  }
+
+  /**
+   * Record the batch that is being applied, against the drum's live state. Called from
+   * [afterUpdate] whether or not that batch moves the drum.
+   */
+  fun noteWheelBatch() {
+    wheelBatches += 1
+    if (wheelActive?.value == true) {
+      wheelBatchSawRolling = true
     }
   }
 
+  /**
+   * Ask the composition to roll the wheel to [index], the way a row press does.
+   *
+   * The hook for `nuiTestSelect` on this variant. The pager is the composition's, so
+   * the request goes on the model and the composition turns it into an animated
+   * scroll; the settle at the end of that scroll is what emits, exactly as it is for
+   * a finger. [PickerModel.wheelRequest]'s serial is what makes a second request for
+   * the same option a second request.
+   */
   fun requestWheelScroll(index: Int) {
     wheelRequestSerial += 1
     model.wheelRequest = PickerWheelRequest(index, wheelRequestSerial)
@@ -1149,7 +1268,16 @@ private class PickerHost(
           remember(wheelState, touching) {
             derivedStateOf { wheelState.isScrollInProgress || touching.value }
           }
+        // ... and published to the host beside the state it reads, for the same reason
+        // [wheelState] is: the props pass needs the flag as it is *now*, and it is the
+        // guard [syncWheelRow] refuses to write through while a roll is in flight.
+        remember(wheelState, active) {
+          this@PickerHost.wheelActive = active
+        }
         nuiReportAtWheelRest(active) {
+          // The row the user's roll ended on, recorded before the pick is applied so that
+          // a refused pick still says where the drum actually stands.
+          noteWheelRow(wheelState.selectedOption)
           choose(wheelState.selectedOption)
         }
         // The value React holds moves the drum - the direction that closes a refused
@@ -1174,6 +1302,15 @@ private class PickerHost(
         val request = model.wheelRequest
         LaunchedEffect(wheelState, request) {
           if (request != null) {
+            // Consumed before the scroll, not after it: this effect is keyed on
+            // [ScrollFieldState] too, so a request left standing is re-run by the next
+            // new state object - which `options` changing length produces *while* this
+            // roll is still coasting - and that scroll would undo the re-seat the same
+            // composition is doing for the new one. A request the composition has read
+            // is a request that has been spent.
+            if (model.wheelRequest === request) {
+              model.wheelRequest = null
+            }
             wheelState.animateScrollToOption(request.index)
           }
         }
@@ -1781,6 +1918,10 @@ class HybridNitroUiPicker(
 
   override fun afterUpdate() {
     val optionCount = model.options.size
+    // What the composition was showing when this batch arrived. The batch is interpreted
+    // below, and only a batch that *moves* the shown index has anything to tell the drum
+    // - see [PickerHost.syncWheelRow] for what writing to a rolling drum costs.
+    val shownBefore = model.displayed
     // `options`, `selectedIndex` and `defaultSelectedIndex` can all land in one
     // batch in any order, so none of them is interpreted until the batch is
     // complete - an index of 4 only means something once the choice list it belongs
@@ -1816,10 +1957,18 @@ class HybridNitroUiPicker(
       model.displayed = shown
       host.markDirty()
     }
-    // The drum follows, in the same breath as the writes above and for the reason
-    // spelled out on [PickerHost.syncWheelRow]: it is not painted from `displayed`, so
-    // it is told. A no-op for the other two variants, which have no drum.
-    host.syncWheelRow(model.displayed)
+    // The drum follows a value it did not take part in choosing, in the same breath as
+    // the writes above and for the reason spelled out on [PickerHost.syncWheelRow]: it is
+    // not painted from `displayed`, so it has to be told. Only a batch that moved
+    // `displayed` has a row to put there; every other batch (a `label`, an `options` list
+    // that came back equal, a size report) says nothing about the drum and must not
+    // interrupt a roll that is being had on it. A no-op for the other two variants, which
+    // have no drum at all - and the witness below counts them alike, because what it is
+    // counting is the batch.
+    host.noteWheelBatch()
+    if (model.displayed != shownBefore) {
+      host.syncWheelRow(model.displayed)
+    }
     // A list that shrank under an *open* popup has fewer rows than the window
     // already showed. It does not close itself here (the user did not ask it to),
     // but an index that no longer exists can leave it pointing at nothing, and the
@@ -1848,6 +1997,9 @@ class HybridNitroUiPicker(
   override fun prepareForRecycle() {
     // The drum's state belonged to the composition that is about to go.
     host.wheelState = null
+    host.wheelActive = null
+    // And the witness counts this mount, so the next one starts at zero.
+    host.clearWheelWitness()
     host.tag = null
     // `host.perfInstanceId` is cleared inside `host.prepareForRecycle()`, after it has
     // marked the recycle: clearing it here would hide that mark.
@@ -1863,6 +2015,7 @@ class HybridNitroUiPicker(
 
   override fun onDropView() {
     host.wheelState = null
+    host.wheelActive = null
     model.onChange = null
     // Ends the composition, which dismisses the popup with it - the one
     // "unmount while the menu is open" case that has to hold on both platforms.
@@ -1922,9 +2075,27 @@ class HybridNitroUiPicker(
    * a hosted popup needs a witness of its own. Reads a lock-protected snapshot of a
    * few integers, so it is safe on the JS thread and never waits for the UI thread
    * (core.md section 5).
+   *
+   * The `wheel` variant's own counters ride on the end of the same line as four more
+   * named fields, because this is the component's only test string and a wheel has no
+   * popup to witness - every box field is `-1` for the whole mount. They are *trailing*
+   * and named, so a reader that knows only the popup fields (HostPopups', Menu's
+   * `parseMenuReport`) is unaffected by them.
    */
   override fun nuiTestMenuReport(): String {
     MenuDrawnWitness.wanted = true
-    return model.readMenuReport()
+    return (
+      model.readMenuReport() +
+        ";batches=" +
+        host.wheelBatches +
+        ";sawRolling=" +
+        (if (host.wheelBatchSawRolling) 1 else 0) +
+        ";seats=" +
+        host.wheelSeatWrites +
+        ";refusals=" +
+        host.wheelSeatRefusals +
+        ";row=" +
+        host.wheelRow
+      )
   }
 }

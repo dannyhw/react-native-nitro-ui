@@ -2445,6 +2445,44 @@ describe('Picker · radio variant (G26)', () => {
 const WHEEL_DP = 200;
 
 /**
+ * What the drum's own witness line says.
+ *
+ * Android's `nuiTestMenuReport` ends with five `wheel` fields (the popup fields are all
+ * `-1` for this variant, because a wheel has no popup): how many props batches reached
+ * the drum's sync point, whether any of them landed *while the drum was touched or
+ * turning*, how many of them moved the drum, how many tried and were refused, and the
+ * row the drum stands on.
+ * Without them the mid-roll case below could only log that it had tested anything; with
+ * them "the batch arrived mid-flight" is an assertion.
+ */
+type WheelWitness = {
+  batches: number;
+  sawRolling: boolean;
+  seats: number;
+  refusals: number;
+  /** The row the drum stands on, or -1 before it has rested or been seated once. */
+  row: number;
+};
+
+function wheelWitness(testId: string): WheelWitness {
+  const line = handles.get(testId)?.nuiTestMenuReport() ?? '';
+  const field = (name: string): string => {
+    const found = line.split(';').find((part) => part.startsWith(`${name}=`));
+    if (found == null) {
+      throw new Error(`No "${name}" in the wheel witness "${line}".`);
+    }
+    return found.slice(name.length + 1);
+  };
+  return {
+    batches: Number(field('batches')),
+    sawRolling: field('sawRolling') === '1',
+    seats: Number(field('seats')),
+    refusals: Number(field('refusals')),
+    row: Number(field('row')),
+  };
+}
+
+/**
  * Roll the wheel to `index` and wait for the choice to arrive.
  *
  * The wait is for the *settle*, which is a later event than the call: an animated
@@ -2599,10 +2637,107 @@ describe('Picker · wheel variant (G29)', () => {
     // index the wheel is driven back to.
     expect(handles.get('wheel-refuse')?.selectedIndex).toBe(0);
     await settle(300);
+    // And driven back to it *in the drum*, which is the part `selectedIndex` cannot
+    // see and a screenshot cannot compare: the witness reads the row the drum came to
+    // rest on or was last seated to, and after a refusal both have to say 0. A drum left
+    // on 4 is the bug — the next roll of it is then a scroll that asks for the row the
+    // drum is already on, and reports nothing. Android's case, because the drum is
+    // Android's (`row` is not in the witness on iOS, where the wheel has always existed).
+    if (Platform.OS === 'android') {
+      const home = wheelWitness('wheel-refuse');
+      console.log(`wheel refused, drum home: witness=${JSON.stringify(home)}`);
+      expect(home.row).toBe(0);
+      expect(home.seats).toBe(1);
+    }
 
     await rollWheel('wheel-refuse', 4, true);
     console.log(`wheel refused twice: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual(['wheel-refuse:4', 'wheel-refuse:4']);
+    unmount();
+  });
+
+  it('leaves a roll in flight alone when an unrelated prop changes', async () => {
+    // A props batch is not a claim on the drum, and used to behave as if it were:
+    // `afterUpdate` wrote the drum's page on *every* batch, because the snap-back needs
+    // that write and the write is `requestScrollToPage` - which stops a scroll in
+    // progress and snaps the pager home. So any batch that arrived halfway through
+    // someone's roll cancelled it, and a roll that never reaches a rest reports nothing:
+    // the user's finger moved the drum, the app heard nothing, and the drum ended up back
+    // on the row React still held. The batch here says nothing about the selection at all
+    // - a renamed `label`, on an uncontrolled picker.
+    //
+    // Android-only: the witness that proves the batch landed mid-flight is Android's (the
+    // drum is Android's), and iOS has had its wheel since G5.
+    if (Platform.OS !== 'android') {
+      console.log(
+        'mid-roll batch: Android case - the drum write is Android-only'
+      );
+      return;
+    }
+    // Twenty options, and a request for the last one: the animation is long enough, and
+    // composes enough pages along the way, that batches spread over it cannot all miss
+    // it. Five of them, ~40 ms apart, is a wide window on "mid-flight" - and the witness
+    // below is what says whether the window was actually hit.
+    const OPTIONS = Array.from(
+      { length: 20 },
+      (_, i) => `Option ${String(i + 1)}`
+    );
+    poisonConfigurations([sizingKey(OPTIONS, 0, null, 'wheel')]);
+    const tree = (label: string) => (
+      <Picker
+        options={OPTIONS}
+        variant="wheel"
+        label={label}
+        onChange={recordChange('wheel-midroll')}
+        testID="wheel-midroll"
+        hybridRef={captureHybrid('wheel-midroll')}
+        style={{ width: 280 }}
+      />
+    );
+    const { rerender, unmount } = await render(tree('Drum'), {
+      timeout: 20000,
+    });
+    await waitForTestId('wheel-midroll');
+    await waitForMeasured('wheel-midroll', 'the drum');
+    expect(eventLog).toEqual([]);
+
+    handles.get('wheel-midroll')?.nuiTestSelect(19);
+    for (const label of ['Drum A', 'Drum B', 'Drum C', 'Drum D', 'Drum E']) {
+      await settle(40);
+      await rerender(tree(label));
+    }
+    const during = wheelWitness('wheel-midroll');
+    console.log(
+      `mid-roll batches: witness=${JSON.stringify(during)} ` +
+        `events=${JSON.stringify(eventLog)}`
+    );
+    // The case bit: some batch landed while the drum was still turning. Had none
+    // arrived in time, this would be a passing test that had tested nothing, so it fails
+    // instead - the same rule the red proofs of this suite run on.
+    expect(during.sawRolling).toBe(true);
+    // And not one of them wrote the drum.
+    expect(during.seats).toBe(0);
+
+    // The roll survives the noise: it reaches its rest, and reports the row it was asked
+    // for - exactly once, as every other roll here does.
+    await pollUntil(
+      () => (eventLog.length > 0 ? true : null),
+      () =>
+        new Error(
+          `a roll cancelled by an unrelated ${String(during.seats)} batch write ` +
+            `reported nothing at all - the log holds ${JSON.stringify(eventLog)}.`
+        ),
+      10000
+    );
+    await settle(600);
+    console.log(`mid-roll rest: events=${JSON.stringify(eventLog)}`);
+    expect(eventLog).toEqual(['wheel-midroll:19']);
+    const after = wheelWitness('wheel-midroll');
+    // Still nothing written, and nothing *refused* either: after the fix the props pass
+    // does not try to move a rolling drum at all, so the guard is a backstop rather than
+    // the routine path.
+    expect(after.seats).toBe(0);
+    expect(after.refusals).toBe(0);
     unmount();
   });
 
