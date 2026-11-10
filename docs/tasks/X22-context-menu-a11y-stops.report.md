@@ -174,6 +174,11 @@ the round.
   iOS-only rule change as both-platforms and asks an 18-minute `harness:android` that the diff
   cannot reach; worth deciding whether `scripts/real-input/ios.mjs`-only diffs should be
   graded iOS.
+- gate: `wait --gate harness:android` twice left with exit 2 ("no background gate named
+  harness:android") while `status` on the same pid read "running (49s so far)", and a third
+  attempt reported a finished gate whose ledger line was not written — only `status` and the
+  ledger agreed with each other. A `wait` that can be wrong in that direction is how a task
+  ends its turn while its gate is still running.
 
 **Gates (fix round 1)** — `node scripts/gate.mjs table`, code tree `ff81e0d6e6dc`, lease `X22-1qgjs`.
 
