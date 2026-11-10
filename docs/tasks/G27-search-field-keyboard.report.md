@@ -83,10 +83,10 @@ Recorded as data in `docs/tasks/G27/mutations.json`.
 - `src/core/keyboard.ts` (new); `src/components/TextField/TextField.tsx` re-exports it.
 - `src/components/SearchField/*`, `nitrogen/generated/**`: the three props, config and test-state fields.
 - `ios/components/SearchField/HybridNitroUiSearchField.swift`, `ios/components/TextField/NitroUiTextEditing.swift`.
-- `android/.../HybridNitroUiSearchField.kt` (stateful `InputField` in a `Surface`, `EditorInfo` read-back),
+- `android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt` (stateful `InputField` in a `Surface`, `EditorInfo` read-back),
   `HybridNitroUiTextField.kt` (shared `NitroUiKeyboardNames` decode).
-- Tests: `android/src/test/.../KeyboardNamesTest.kt`, `scripts/__tests__/real-input-ime-frame.test.js`,
-  `example/__tests__/SearchField.harness.tsx`, `example/ios/.../RealInputTests.swift`,
+- Tests: `android/src/test/java/com/margelo/nitro/nitroui/KeyboardNamesTest.kt`, `scripts/__tests__/real-input-ime-frame.test.js`,
+  `example/__tests__/SearchField.harness.tsx`, `example/ios/NitroUiExampleUITests/RealInputTests.swift`,
   `scripts/real-input/{android,controls,ime-frame,screens}.mjs`, `example/src/SearchFieldScreen.tsx`.
 - `README.md`, `docs/components/search-field.md`, `.changeset/search-field-keyboard.md`.
 
