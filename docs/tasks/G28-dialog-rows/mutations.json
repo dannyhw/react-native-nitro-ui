@@ -1,0 +1,70 @@
+{
+  "task": "G28",
+  "how": "One source mutation applied to the working tree, the named gate run against it, then the file restored before the next row (`before` is the shipped source the row was run against, `after` the text that replaced it). All rows ran on lease G28-fn0rg, pair-a (`iPhone 17` / iOS 27 and emulator-5574 / API 35, Metro 8295). Filtered gate names satisfy nothing but their own name. Each row's tree digest is the `trees.android` half the run was keyed to, so a run can be matched to the build it pressed.",
+  "mutations": [
+    {
+      "test": "example/__tests__/Dialog.harness.tsx + scripts/real-input/android.mjs (CHECKS.dialog)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "the row stops honouring `enabled`, and the model stops checking it either, so a disabled action is an ordinary row",
+      "before": "            enabled = !action.disabled,",
+      "after": "            enabled = true,",
+      "second_hunk": "the same row, in DialogModel.performAction: `if (action.disabled) {\\n      return\\n    }` deleted, so nothing else in the component refuses the press either",
+      "run": "harness:android:Dialog — FAIL, 3 of 31 (2026-11-10T08-54-59Z, tree 3a662cf6, 42 s)",
+      "redTests": [
+        "takes no tap on a disabled action, and draws it disabled (alert): expected 'locked:action:locked,locked:presented…' to be ''",
+        "takes no tap on a disabled action, and draws it disabled (confirmation): expected '1,1,1' to be '1,0,1'",
+        "reports the sheet rows as the component draws them, disabled included: expected 'Locked,Go,Wipe' to be 'Locked~,Go,Wipe'"
+      ],
+      "note": "One mutation, three red lines, each from a different claim: the row's own accessibility state (`~`), the row's own drawn state (`drawn=1,0,1` — the disabled label stops being painted faint), and the press the component is supposed to take. The alert's row is red too because the deleted guard was the last thing standing between a disabled alert button and `onAction`."
+    },
+    {
+      "test": "scripts/real-input/android.mjs (CHECKS.dialog, the sheet's rows)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "the same one as the row above: `enabled = !action.disabled` becomes `enabled = true` and the guard leaves `DialogModel.performAction`",
+      "before": "            enabled = !action.disabled,",
+      "after": "            enabled = true,",
+      "run": "real-input:android:--control:dialog — FAIL (2026-11-10T09-12-32Z, tree 1b2e0dd1, 713 s)",
+      "redTests": [
+        "the sheet's disabled row is not enabled — expected false, saw true",
+        "a real tap on the disabled row leaves the sheet up — expected 1, saw 0",
+        "and reports nothing: the log gained only Back's close — expected …action:ok > presented:false > presented:false, saw …action:ok > presented:false > action:locked-row > presented:false",
+        "the real tap on \"Copy link\": 3 real taps left dialog-log \"…action:locked-row > presented:false > action:copy > presented:false\" rather than \"…presented:false > action:copy > presented:false\""
+      ],
+      "note": "A real finger, not a dump: the press on `Locked share` closed the sheet (the up-count) and reported `action:locked-row` (the log), which is the whole reason the check exists. An earlier run of this mutation (08-55-46Z) went red on the first line and then aborted, because the check read the log text while the sheet's own window owned the dump — fixed in 17eb1958 before this row, and the fix is what let lines 2-4 be seen at all."
+    },
+    {
+      "test": "example/__tests__/Dialog.harness.tsx › reports the sheet rows as the component draws them",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "the probe's colour match loosens until the sheet's own background counts as the row's container",
+      "before": "private const val ROW_PIXEL_TOLERANCE = 6",
+      "after": "private const val ROW_PIXEL_TOLERANCE = 64",
+      "run": "harness:android:Dialog — FAIL, 1 of 31 (2026-11-10T09-25-44Z, tree 7487101a, 43 s)",
+      "redTests": [
+        "reports the sheet rows as the component draws them, disabled included: expected '1/1,1/1,1/1' to be '16/4,4/4,4/16'"
+      ],
+      "note": "The row that proves `radii=` is a measurement and not a restatement of the shapes argument: with a tolerance wide enough to call the sheet's background the container, every corner collapses to the probe depth. Nothing in the composition changed."
+    },
+    {
+      "test": "example/__tests__/Dialog.harness.tsx › reports the sheet rows as the component draws them",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "the rejected candidate: the interactive `ListItem(onClick, enabled, …)` instead of the Expressive segmented row, everything else identical",
+      "before": "          SegmentedListItem(\n            onClick = { model.performAction(action.id) },\n            shapes = ListItemDefaults.segmentedShapes(index, ordered.size),",
+      "after": "          ListItem(\n            onClick = { model.performAction(action.id) },",
+      "run": "harness:android:Dialog — FAIL, 1 of 31 (2026-11-10T09-26-47Z, tree e74f35cc, 43 s)",
+      "redTests": [
+        "reports the sheet rows as the component draws them, disabled included: expected '4/4,4/4,4/4' to be '16/4,4/4,4/16'"
+      ],
+      "note": "This is the brief's \"the other candidate, on the device\" row and the shape probe's red proof at once. Only the shape assertion moved: `rows=Locked~,Go,Wipe`, `drawn` and both press checks stayed green, which is what makes the choice between the two a look decision (docs/tasks/G28-dialog-rows/rows-{segmented,interactive}.png) rather than a behaviour one."
+    },
+    {
+      "test": "example/__tests__/Dialog.harness.tsx › reports the sheet rows as the component draws them",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiDialog.kt",
+      "mutation": "read the corner one pixel inside the row's edge instead of three",
+      "before": "private const val CORNER_PROBE_DEPTH_PX = 3",
+      "after": "private const val CORNER_PROBE_DEPTH_PX = 1",
+      "run": "harness:android:Dialog — PASS, 31 of 31 (2026-11-10T09-24-43Z, tree 95250921, 43 s)",
+      "redTests": [],
+      "note": "Recorded because it did NOT go red, and an unreported non-mutation is how a test starts reading as stronger than it is. The inversion works from any depth (the constant's own docstring says so), and one pixel of anti-aliasing is inside the tolerance the corner is read through. The two rows above are what the radii assertion is proved by."
+    }
+  ]
+}
