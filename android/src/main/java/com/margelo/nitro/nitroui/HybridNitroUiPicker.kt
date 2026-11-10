@@ -44,7 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -73,7 +73,10 @@ import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
 import com.margelo.nitro.nitroui.core.NitroUiSizing
+import com.margelo.nitro.nitroui.core.NuiWheelRow
 import com.margelo.nitro.nitroui.core.nuiOwnVerticalDrags
+import com.margelo.nitro.nitroui.core.nuiReportAtWheelRest
+import com.margelo.nitro.nitroui.core.nuiWheelColors
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
@@ -813,88 +816,6 @@ private fun pickerRadioColors(tint: Int?): RadioButtonColors {
   return built
 }
 
-/**
- * The wheel's `ScrollFieldColors`, so that a tinted `wheel` costs one colour set per
- * (colour scheme, tint) instead of one per recomposition - the rule in
- * `docs/architecture/core.md` ("Shared objects") and the same cache shape as
- * [PickerColorsCache] and [PickerRadioColorsCache].
- *
- * The tint replaces **`selectedContentColor`** - the colour of the row the wheel is
- * stopped on, which is the only role a wheel paints for the value it holds.
- * `contentColor` (the rows either side) and `containerColor` keep the scheme's
- * colours: a tint that painted the whole drum would say "accent" about every option
- * at once, and `ScrollFieldDefaults.colors()` takes `Color.Unspecified` to mean
- * "keep the scheme's", which is what makes this a one-role trade rather than a
- * rebuilt set. That is the same one-role rule the radio group makes with
- * `selectedColor`, and it is *more* than iOS's wheel takes - a SwiftUI `.wheel`
- * Picker ignores `.tint()` entirely (`docs/components/picker.md`).
- */
-private object PickerWheelColorsCache {
-  /** Tinted sets to remember before starting over; see [PickerColorsCache]. */
-  private const val MAX_TINTED_ENTRIES = 24
-
-  private var scheme: ColorScheme? = null
-
-  /** The untinted set - one slot, filled once per scheme. */
-  private var untinted: ScrollFieldColors? = null
-
-  /** Tinted sets, keyed by ARGB int. */
-  private var tinted: HashMap<Int, ScrollFieldColors>? = null
-
-  @Synchronized
-  fun get(
-    scheme: ColorScheme,
-    tint: Int?,
-  ): ScrollFieldColors? {
-    adopt(scheme)
-    return if (tint == null) untinted else tinted?.get(tint)
-  }
-
-  /** Record a colour set the caller just built. */
-  @Synchronized
-  fun put(
-    scheme: ColorScheme,
-    tint: Int?,
-    colors: ScrollFieldColors,
-  ) {
-    adopt(scheme)
-    if (tint == null) {
-      untinted = colors
-      return
-    }
-    val entries = tinted ?: HashMap<Int, ScrollFieldColors>().also { tinted = it }
-    if (entries.size >= MAX_TINTED_ENTRIES) {
-      entries.clear()
-    }
-    entries[tint] = colors
-  }
-
-  /** Drop what a different scheme invalidates. Called with the lock held. */
-  private fun adopt(scheme: ColorScheme) {
-    if (this.scheme === scheme) {
-      return
-    }
-    this.scheme = scheme
-    untinted = null
-    tinted?.clear()
-  }
-}
-
-/** The wheel's colours for [tint], served by [PickerWheelColorsCache]. */
-@Composable
-private fun pickerWheelColors(tint: Int?): ScrollFieldColors {
-  val scheme = MaterialTheme.colorScheme
-  PickerWheelColorsCache.get(scheme, tint)?.let { cached -> return cached }
-  val color = tint?.let { ComposeColor(it) }
-  val built =
-    if (color == null) {
-      ScrollFieldDefaults.colors()
-    } else {
-      ScrollFieldDefaults.colors(selectedContentColor = color)
-    }
-  PickerWheelColorsCache.put(scheme, tint, built)
-  return built
-}
 
 /**
  * The wheel's height: Material's own `ScrollFieldDefaults.ScrollFieldHeight`
@@ -910,16 +831,6 @@ private fun pickerWheelColors(tint: Int?): ScrollFieldColors {
  */
 private val WheelHeight = ScrollFieldDefaults.ScrollFieldHeight
 
-/**
- * How far a wheel row's text sits from each edge of the drum.
- *
- * The row is a `Text` the width of the wheel, centred, with an ellipsis - and the
- * type is `displayMedium`/`displayLargeEmphasized`, 45-57 sp. At the 280 dp minimum
- * width this library's boxes often are, an unpadded long option would touch both
- * edges of the drum; 8 dp of gutter keeps the ellipsis off the rounded corner
- * (`ScrollFieldDefaults.shape` is `ShapeDefaults.Large`).
- */
-private val WheelRowHorizontalPadding = 8.dp
 
 /**
  * One radio row's minimum height.
@@ -1164,14 +1075,15 @@ private class PickerHost(
    * during a fling, that is many times. Reading it as a choice would emit one event
    * per row the wheel passed, which is the failure mode this variant's whole design
    * is about (Q8 Appendix E pass 3 A: "the value commits on settle"). So the emit
-   * hangs off the [ScrollFieldState.isScrollInProgress] edge instead: the control
-   * reports when a scroll *stops*, through the same [choose] a popup row press uses,
-   * and `applyUserSelection`'s "the index did not move" guard turns the settles that
-   * changed nothing (a programmatic snap-back, a scroll that came to rest where it
-   * started) into no event at all. One settled value, one event - never one per row.
+   * hangs off [nuiReportAtWheelRest] instead - the rule both of this library's wheels
+   * share, armed by a finger on the drum and let off by the drum's own scroll ending -
+   * and goes out through the same [choose] a popup row press uses, so
+   * `applyUserSelection`'s "the index did not move" guard turns the rests that changed
+   * nothing (a snap-back, a scroll that came to rest where it started) into no event at
+   * all. One settled value, one event - never one per row.
    *
    * **The wheel's own row is what the drum shows.** The rows are the option's text,
-   * not the number `ScrollFieldDefaults.Item` draws, so [WheelRow] supplies the text
+   * not the number `ScrollFieldDefaults.Item` draws, so [NuiWheelRow] supplies the text
    * and keeps Material's own typography lerp and motion for the centre row.
    * `fieldAccessibilityDescription` says the same text to TalkBack, which is the pair
    * that makes the spoken value and the painted value the same fact.
@@ -1184,7 +1096,12 @@ private class PickerHost(
     val options = model.options
     val shown = model.displayed
     val enabled = model.enabled
-    val colors = pickerWheelColors(model.tintColor)
+    val colors = nuiWheelColors(model.tintColor)
+    // Is a finger on the wheel? [nuiOwnVerticalDrags] already awaits the down and the up,
+    // so it keeps this flag and the settle below reads it: a roll is not over when the
+    // finger leaves (the drum is still coasting then), but nothing can be over without
+    // the finger having left.
+    val touching = remember { mutableStateOf(false) }
     // The wheel has no visible label of its own - a drum of options is the whole
     // control - so `label` names it for accessibility, and an explicit
     // `accessibilityLabel` wins, as it does on the anchor and in the radio group.
@@ -1201,8 +1118,9 @@ private class PickerHost(
           .height(WheelHeight)
           // A drag that starts on the drum belongs to the drum: inside React Native's
           // scroll container the page would otherwise intercept it and the wheel would
-          // never turn. See [nuiOwnVerticalDrags].
-          .nuiOwnVerticalDrags(enabled),
+          // never turn. See [nuiOwnVerticalDrags] - and the same await tells the settle
+          // whether a finger is on the wheel, which is half of what a rest is.
+          .nuiOwnVerticalDrags(enabled, touching),
       contentAlignment = Alignment.Center,
     ) {
       // `rememberScrollFieldState` requires a positive item count, so an empty choice
@@ -1220,22 +1138,19 @@ private class PickerHost(
         remember(wheelState) {
           this@PickerHost.wheelState = wheelState
         }
-        // Every scroll that *stops* is one candidate selection.
-        //
-        // `snapshotFlow` rather than observed state: reading the flag in the
-        // composition would recompose the whole wheel at the start and the end of
-        // every scroll, and the wheel is the one variant already redrawing a pager.
-        // The flow starts with the current value, so the mount's first `false` calls
-        // [choose] with the row the drum was built on - which is [PickerModel.displayed],
-        // and `applyUserSelection` refuses an index that did not move. That is also
-        // what makes a snap-back silent: the wheel scrolls to the value React kept,
-        // settles there, and reports the index it is already showing.
-        LaunchedEffect(wheelState) {
-          snapshotFlow { wheelState.isScrollInProgress }.collect { scrolling ->
-            if (!scrolling) {
-              choose(wheelState.selectedOption)
-            }
+        // One report per rest, on the shared rule: the drum is "active" while a finger is
+        // on it or it is still scrolling, and the row it is on when that stops is the pick.
+        // Not a quiet period on the value stream - the rule's doc in
+        // [nuiReportAtWheelRest] keeps the reason, which is a real fling on a loaded box
+        // reporting two changes at one. A seat this component asked for (the snap-back
+        // below, or [syncWheelRow] following React) is a scroll too, so it arrives here
+        // and reports the index it was just given, which the handshake refuses.
+        val active =
+          remember(wheelState, touching) {
+            derivedStateOf { wheelState.isScrollInProgress || touching.value }
           }
+        nuiReportAtWheelRest(active) {
+          choose(wheelState.selectedOption)
         }
         // The value React holds moves the drum - the direction that closes a refused
         // pick. An instant `scrollToOption`, never an animation: a rejected choice has
@@ -1279,7 +1194,7 @@ private class PickerHost(
           fieldAccessibilityDescription = { index -> options.getOrElse(index) { "" } },
           interactionSource = null,
           field = { index, selected, rowEnabled ->
-            WheelRow(
+            NuiWheelRow(
               text = options.getOrElse(index) { "" },
               selected = selected,
               enabled = rowEnabled,
@@ -1291,54 +1206,6 @@ private class PickerHost(
     }
   }
 
-  /**
-   * One wheel row: the option's text, in the shape `ScrollFieldDefaults.Item` gives a
-   * number.
-   *
-   * The default `field` renders `index.toLocalString(minDigits = 2)` - a wheel of
-   * numbers, which is not what a Picker's wheel is - but the *presentation* around it
-   * is the whole look of the control: the type lerps from `displayMedium` to
-   * `displayLargeEmphasized` as a row arrives at the centre, and the colours animate
-   * through the same expressive spec. Both halves are copied from Material's own
-   * `Item` so that a Picker's wheel and a Material wheel animate alike; what differs
-   * is only the string, plus the ellipsis a number never needed.
-   */
-  @Composable
-  private fun WheelRow(
-    text: String,
-    selected: Boolean,
-    enabled: Boolean,
-    colors: ScrollFieldColors,
-  ) {
-    val targetColor =
-      when {
-        enabled && selected -> colors.selectedContentColor
-        enabled && !selected -> colors.contentColor
-        !enabled && selected -> colors.disabledSelectedContentColor
-        else -> colors.disabledContentColor
-      }
-    val motion = MaterialTheme.motionScheme
-    val selectionFraction by
-      animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = motion.fastSpatialSpec(),
-      )
-    val color by animateColorAsState(targetValue = targetColor, animationSpec = motion.fastSpatialSpec())
-    Text(
-      text = text,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-      textAlign = TextAlign.Center,
-      style =
-        lerp(
-          MaterialTheme.typography.displayMedium,
-          MaterialTheme.typography.displayLargeEmphasized,
-          selectionFraction.coerceIn(0f, 1f),
-        ),
-      color = color,
-      modifier = Modifier.padding(horizontal = WheelRowHorizontalPadding),
-    )
-  }
 
   /** The `menu` and `wheel` variants: the field anchor and the popup it opens. */
   @Composable
