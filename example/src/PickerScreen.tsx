@@ -473,38 +473,6 @@ export default function PickerScreen() {
             testID="real-input-radio-disabled"
           />
         </View>
-        {/* G29: the wheel as Material 3 1.5 draws it. Five options, so the drum has
-            rows above and below the centre one and a fling has somewhere to go; the
-            check flings it and asserts one event, not one per row crossed. */}
-        <View style={styles.row}>
-          <Text style={[styles.label, { color: ink.ink }]}>
-            Wheel variant — roll it (Android)
-          </Text>
-          <Picker
-            options={WHEEL_OPTIONS}
-            variant="wheel"
-            defaultSelectedIndex={0}
-            onChange={countWheelChange}
-            accessibilityLabel="Real-input wheel picker"
-            testID="real-input-wheel"
-          />
-          <Text style={[styles.readout, { color: ink.muted }]}>
-            last index reported
-          </Text>
-          <Text
-            testID="real-input-wheel-index"
-            style={[styles.value, { color: ink.ink }]}
-          >
-            {wheelIndex}
-          </Text>
-          <Text style={[styles.readout, { color: ink.muted }]}>changes</Text>
-          <Text
-            testID="real-input-wheel-events"
-            style={[styles.value, { color: ink.ink }]}
-          >
-            {wheelEvents}
-          </Text>
-        </View>
         <View style={styles.row}>
           <Text style={[styles.label, { color: ink.ink }]}>Disabled</Text>
           <Picker
@@ -553,6 +521,38 @@ export default function PickerScreen() {
             variant="wheel"
             testID="wheel-basic"
           />
+        </View>
+        {/* G29: the wheel as Material 3 1.5 draws it. Five options, so the drum has
+            rows above and below the centre one and a fling has somewhere to go; the
+            check flings it and asserts one event, not one per row crossed. */}
+        <View style={styles.row}>
+          <Text style={[styles.label, { color: ink.ink }]}>
+            Wheel variant — roll it (Android)
+          </Text>
+          <Picker
+            options={WHEEL_OPTIONS}
+            variant="wheel"
+            defaultSelectedIndex={0}
+            onChange={countWheelChange}
+            accessibilityLabel="Real-input wheel picker"
+            testID="real-input-wheel"
+          />
+          <Text style={[styles.readout, { color: ink.muted }]}>
+            last index reported
+          </Text>
+          <Text
+            testID="real-input-wheel-index"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {wheelIndex}
+          </Text>
+          <Text style={[styles.readout, { color: ink.muted }]}>changes</Text>
+          <Text
+            testID="real-input-wheel-events"
+            style={[styles.value, { color: ink.ink }]}
+          >
+            {wheelEvents}
+          </Text>
         </View>
 
         <Text style={[styles.section, { color: ink.muted }]}>

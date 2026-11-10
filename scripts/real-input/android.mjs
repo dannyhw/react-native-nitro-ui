@@ -4346,300 +4346,7 @@ const CHECKS = {
     // laid out as a week rather than as six columns and a sliver.
     await checkInlineCalendarGrids(t);
 
-    // ---------------------------------------------------------------------------
-    // G29: `variant="wheel"` with `mode="time"` is Material 3 1.5's `TimeScroll` — two
-    // drums, and a pick is a roll that comes to rest. Everything the dialog tests above
-    // do with a tap, this does with a fling, and the assertion that matters is a count:
-    // a roll across three rows reports **one** change, not three. `TimeScroll` forwards
-    // the row nearest the snap line to its state continuously, so a control that read
-    // each of those as a pick would report one event per row here, on the real input
-    // path, with the real timing a pager has.
-    //
-    // Red proof: point the wheel variant at `syncTimePicker` instead of
-    // `syncTimeWheel` (the dial's per-change effect), and the first fling below reports
-    // several events and goes red.
-    // ---------------------------------------------------------------------------
-    const SEEDED = '2024-06-15 09:20';
-    // Not `requireControlOnScreen`: a 200 dp drum is 525 px of a ~2 000 px window, so
-    // "the centre is on screen" can still mean "the snap line and half the rows are
-    // not", which would make both the row reading and the fling below wrong.
-    const wheel = await positionWheel(t, 'Real-input wheel time picker', [
-      ECHO.wheelTimeValue,
-      ECHO.wheelTimeEvents,
-    ]);
-    // The echo is empty, and that is the assertion: this picker is uncontrolled, so
-    // what it shows is its own business and what it has *reported* is the echo's. The
-    // seeded 09:20 is what the drums are on, and a `ScrollField` keeps its rows out of
-    // the accessibility tree, so the check learns the roll moved the time from the two
-    // echoes below rather than from a row it cannot read.
-    t.log.checkEquals(
-      'the uncontrolled wheel has reported no time yet',
-      t.requireEcho(ECHO.wheelTimeValue),
-      '-'
-    );
-    t.log.checkEquals(
-      'and has reported no change',
-      t.requireEcho(ECHO.wheelTimeEvents),
-      '0'
-    );
-    const density = t.density();
-    t.log.note(
-      `time wheel box: ${t.boundsText(wheel)} at ${String(density)} x = ` +
-        `${String(Math.round(wheel.bounds.height / density))} dp tall, ` +
-        `${String(Math.round(wheel.bounds.width / density))} dp wide`
-    );
-
-    // What TalkBack is offered, read out of the tree it navigates. The value itself
-    // travels as `stateDescription`, which a `uiautomator dump` does not transcribe, so
-    // this records the node's class, its name and whether it says it scrolls (the
-    // adjust actions), and the row-reading below carries "the value shown is the value
-    // reported" instead.
-    const wheelNodes = t.nodesNamed('Real-input wheel time picker');
-    // The assertion is that the wheel is named at all - zero is the failure this can
-    // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
-    // carrying the name is Material's decision, not ours: `TimeScroll` is two drums
-    // and each publishes semantics of its own, so a name that lands on the control
-    // can also land on a drum. Recorded rather than asserted, and raised as the a11y
-    // finding it is - a reader that meets the label twice hears it twice.
-    t.log.check(
-      `the wheel is named in the tree (${String(wheelNodes.length)} node(s) carry ` +
-        '"Real-input wheel time picker")',
-      wheelNodes.length >= 1
-    );
-    if (wheelNodes.length > 1) {
-      t.log.warn(
-        `the label is on ${String(wheelNodes.length)} nodes, not one: a screen ` +
-          'reader meets "Real-input wheel time picker" once per node, which is the ' +
-          'a11y gap docs/components/date-picker.md records for this wheel. The two ' +
-          'drums themselves are not separately named, so which drum is which is not ' +
-          'said either.'
-      );
-    }
-    t.log.note(
-      `wheel a11y node: class=${String(wheelNodes[0]?.className)} ` +
-        `enabled=${String(wheelNodes[0]?.enabled)} ` +
-        `scrollable=${String(wheelNodes[0]?.scrollable)} ` +
-        `content-desc=${String(wheelNodes[0]?.contentDesc)}`
-    );
-
-    const columnsBefore = wheelColumns(t, wheel);
-    const rowsReadable = columnsBefore[0]?.synthetic !== true;
-    if (rowsReadable) {
-      t.log.check(
-        `the drum rows are in the tree (${String(columnsBefore.length)} columns: ` +
-          `${columnsBefore.map((c) => String(c.count)).join('+')} rows visible)`,
-        true
-      );
-      t.log.note(
-        `drums: hour column x=${String(columnsBefore[0].x)} ` +
-          `centre="${columnsBefore[0].centre.text}" ` +
-          `pitch=${String(columnsBefore[0].pitch)}px; minute column ` +
-          `x=${String(columnsBefore[1].x)} ` +
-          `centre="${columnsBefore[1].centre.text}" ` +
-          `pitch=${String(columnsBefore[1].pitch)}px`
-      );
-    } else {
-      t.log.warn(
-        'the drum rows are NOT in the accessibility tree - `ScrollField` keeps its ' +
-          "rows to itself, so the aim is the control's own thirds and the four " +
-          '"the row shown is the value reported" comparisons below cannot be made ' +
-          'from a dump (the event-count assertions can, and are the point of the ' +
-          'flings). docs/components/date-picker.md records the gap.'
-      );
-    }
-    /** Re-read a drum's columns, with the same fallback every time. */
-    const columnsOf = (drum) => wheelColumns(t, drum);
-
-    // Roll one drum downwards, into the hours/minutes *before* the seeded 09:20 — the
-    // direction that cannot cross noon and so cannot change the AM/PM half of a
-    // 12-hour drum, which keeps the row-vs-echo comparison below about one field.
-    // The distance is three rows of pitch: far enough that a per-row emit is loud,
-    // short enough to stay inside the drum's own rows without a fling's throw.
-    // `drum` is re-read every time: the page settles after a fling, and a stale box
-    // aimed at where the control was rather than where it is.
-    const rollDown = async (drumLabel, column) => {
-      const live = t.requireControl(drumLabel);
-      // Rows readable: three rows of pitch, a measured distance. Rows not readable: the
-      // whole drum, fast — a fling whose throw the pager decides, which is the case a
-      // per-row emit is loudest in and the one a person actually does to a wheel.
-      const span = rowsReadable
-        ? Math.min(
-            Math.round(column.pitch * 3),
-            Math.round(live.bounds.height / 2) - 10
-          )
-        : Math.round(live.bounds.height * 0.45);
-      await t.swipePx(
-        column.x,
-        Math.round(live.bounds.cy) - span,
-        column.x,
-        Math.round(live.bounds.cy) + span,
-        100
-      );
-    };
-
-    // Exactly one event, then a quiet period: an event landing after the quiet window
-    // is one that landed after a rest, which is what the settle is supposed to prevent.
-    const expectOneRoll = (expected, label, echoId) => {
-      const reported = t.echoWithin(
-        echoId,
-        (value) => value === expected,
-        8000
-      );
-      t.log.checkEquals(
-        `one roll of the ${label} reports exactly one change, not one per row crossed`,
-        reported,
-        expected
-      );
-      t.requireEchoToStay(echoId, expected, `the ${label} drum at rest`, 1500);
-    };
-
-    await rollDown('Real-input wheel time picker', columnsBefore[0]);
-    expectOneRoll('1', 'hour', ECHO.wheelTimeEvents);
-    const afterHour = t.requireEcho(ECHO.wheelTimeValue);
-    t.log.checkEquals(
-      `the hour moved off the seeded one ("${afterHour}")`,
-      afterHour.slice(11, 13) !== SEEDED.slice(11, 13),
-      true
-    );
-    t.log.checkEquals(
-      'and rolling the hour left the day alone',
-      afterHour.slice(0, 10),
-      SEEDED.slice(0, 10)
-    );
-    // The value shown is the value reported. Read out of the tree the person's finger
-    // stopped: the row now under the hour drum's centre line, which in a 12-hour wheel
-    // is the 12-hour form of the hour JS was told - hence the modulo, with the
-    // AM/PM half recorded beside it rather than asserted.
-    if (rowsReadable) {
-      const hourColumn = columnsOf(wheel)[0];
-      t.log.checkEquals(
-        `the row under the hour drum's centre line is the hour reported ` +
-          `(drum "${hourColumn.centre.text}", reported ${afterHour})`,
-        Number(hourColumn.centre.text) % 12,
-        Number(afterHour.slice(11, 13)) % 12
-      );
-    }
-    const period = t
-      .dump()
-      .filter(
-        (node) =>
-          /^(AM|PM)$/i.test(node.text.trim()) &&
-          node.bounds.cx >= wheel.bounds.x1 &&
-          node.bounds.cx <= wheel.bounds.x2
-      )
-      .map((node) => node.text.trim());
-    t.log.note(
-      period.length > 0
-        ? `the wheel is a 12-hour one (${period.join('/')} toggle): the assertion ` +
-            'above compares the row with the reported hour modulo 12, and the half the ' +
-            'row does not carry is the reported day part, which was checked unchanged'
-        : 'the wheel is a 24-hour one, so the row is the reported hour itself'
-    );
-
-    // Two more rolls of the same drum. Every roll is aimed at the hour column and rolls
-    // *downwards*, into the hours before the seeded one: the minute drum's x is a guess
-    // this tree cannot check (its rows are not in the dump), and a swipe that lands on
-    // the AM/PM toggle instead would move the hour by twelve and make the assertion
-    // below about the wrong thing. Downwards also cannot cross noon, so no roll of this
-    // check changes the half of the day the wheel is in.
-    let previous = afterHour;
-    for (const [expected, label] of [
-      ['2', 'second'],
-      ['3', 'third'],
-    ]) {
-      await rollDown('Real-input wheel time picker', columnsBefore[0]);
-      expectOneRoll(expected, `${label} hour roll`, ECHO.wheelTimeEvents);
-      const after = t.requireEcho(ECHO.wheelTimeValue);
-      t.log.checkEquals(
-        `the ${label} roll moved the time again ("${previous}" → "${after}")`,
-        after !== previous,
-        true
-      );
-      t.log.checkEquals(
-        `and the ${label} roll left the day the time picker was seeded on`,
-        after.slice(0, 10),
-        SEEDED.slice(0, 10)
-      );
-      previous = after;
-    }
-
-    // ---------------------------------------------------------------------------
-    // The drum whose parent refuses every roll. On the dial a refused pick is a value
-    // the model never had; a drum *stays* where the finger left it until something
-    // moves it, so the snap-back has to reach the pager — and a drum left on the
-    // refused row would also swallow the next pick of that same time, because the
-    // model refuses an instant it is already showing. Both halves are checked: the
-    // roll is reported, and the rows in the tree are back on the seeded time.
-    // ---------------------------------------------------------------------------
-    const refusedLabel = 'Real-input wheel refusing picker';
-    const refused = await positionWheel(t, refusedLabel, [
-      ECHO.wheelRefuseEvents,
-    ]);
-    const refusedBefore = columnsOf(refused);
-    if (rowsReadable) {
-      t.log.checkEquals(
-        'the refusing drum starts on the time its parent holds',
-        Number(refusedBefore[0].centre.text) % 12,
-        9
-      );
-    }
-    t.log.checkEquals(
-      'and has reported nothing',
-      t.requireEcho(ECHO.wheelRefuseEvents),
-      '0'
-    );
-    await rollDown(refusedLabel, refusedBefore[0]);
-    expectOneRoll('1', 'refusing drum', ECHO.wheelRefuseEvents);
-    // The rollback, read where a person reads it. One settle, then the parent's no,
-    // then the widget's own road home — so give it a beat before the tree is asked.
-    // The beat is also an assertion: the rollback must not itself be an event, or the
-    // snap-back would loop — settle, report, revert, settle, report.
-    t.requireEchoToStay(
-      ECHO.wheelRefuseEvents,
-      '1',
-      'the refused roll, rolled back',
-      1500
-    );
-    if (rowsReadable) {
-      const refusedAfter = columnsOf(refused);
-      t.log.checkEquals(
-        `the refused roll left the hour drum on the parent's hour, not the rolled ` +
-          `one (row "${refusedAfter[0].centre.text}")`,
-        Number(refusedAfter[0].centre.text) % 12,
-        9
-      );
-    }
-    // And the reason that matters: with the drum back where it started, the same roll
-    // is a fresh selection again rather than the instant the model already holds.
-    await rollDown(refusedLabel, columnsOf(refused)[0]);
-    expectOneRoll('2', 'refusing drum, second roll', ECHO.wheelRefuseEvents);
-    t.log.checkEquals(
-      'the parent still refuses, so the time it sends never moved',
-      t.requireEcho(ECHO.wheelRefuseEvents),
-      '2'
-    );
-
-    // `mode="date"` with the same variant is *not* a drum: there is no Material date
-    // wheel, so the variant keeps the inline calendar (documented). The box says it -
-    // a calendar is far taller than a 200 dp drum, and a drum 58 dp wide is not a grid.
-    const dateWheel = await positionWheel(
-      t,
-      'Real-input wheel date picker',
-      []
-    );
-    const dateHeightDp = Math.round(dateWheel.bounds.height / density);
-    const drumHeightDp = Math.round(wheel.bounds.height / density);
-    t.log.note(
-      `wheel + mode="date" box: ${t.boundsText(dateWheel)} = ` +
-        `${String(dateHeightDp)} dp tall, against the time wheel's ` +
-        `${String(drumHeightDp)} dp`
-    );
-    t.log.check(
-      `the "wheel" that is a calendar is unmistakably a calendar ` +
-        `(${String(dateHeightDp)} dp tall, more than the drum's ` +
-        `${String(drumHeightDp)} dp plus a week of rows)`,
-      dateHeightDp > drumHeightDp + 100
-    );
+    await checkTimeDrums(t);
   },
   /**
    * A menu picker: a real tap must open a popup, a real tap on a row must bring the
@@ -6890,6 +6597,43 @@ async function positionWheel(t, label, echoIds) {
 }
 
 /**
+ * The two drums as Material itself names them.
+ *
+ * `TimeScroll` puts a semantics node on each `ScrollField` with the content description
+ * Material chose for the field — "Select hour" and "Select minutes" — and each of those
+ * nodes has the drum's own box. Measured on `nitroui_b` inside a 280 dp control at
+ * `172,951 → 908,1266`: hour `172,951 → 435,1266`, minutes `477,951 → 740,1266`, with the
+ * AM/PM toggle occupying the rest. So a fling can be aimed at a *measured* drum rather than
+ * at a sixth of the control's box, which is what makes a missed aim a failure of the control
+ * rather than of the check.
+ *
+ * Rows, by contrast, are not in the tree at all (see [wheelColumns]), so this is the only
+ * reading of the drum's geometry available here.
+ *
+ * @param {ReturnType<typeof makeContext>} t
+ * @param {import('./uiautomator.mjs').UiautomatorNode} control the wheel's own node
+ * @returns {Array<import('./uiautomator.mjs').UiautomatorNode> | null} hour, minute — or
+ *   `null` when the tree does not name both drums
+ */
+function timeWheelDrums(t, control) {
+  const found = ['Select hour', 'Select minutes'].map((description) =>
+    t
+      .dump()
+      .find(
+        (node) =>
+          node.contentDesc === description &&
+          node.bounds.cx >= control.bounds.x1 &&
+          node.bounds.cx <= control.bounds.x2 &&
+          node.bounds.cy >= control.bounds.y1 &&
+          node.bounds.cy <= control.bounds.y2
+      )
+  );
+  return found.every((node) => node != null)
+    ? /** @type {any} */ (found)
+    : null;
+}
+
+/**
  * [timeWheelColumns] with a fallback for a drum whose rows the tree does not carry.
  *
  * A `ScrollField` puts its own semantics on the drum and its rows are plain `Text`, so
@@ -6909,15 +6653,346 @@ function wheelColumns(t, drum) {
   if (columns.length >= 2) {
     return columns;
   }
+  // No rows to cluster on: aim at the drums' own boxes when the tree names them, and
+  // only then at the thirds, which are a guess about Material's layout rather than a
+  // reading of it.
+  const drums = timeWheelDrums(t, drum);
   return [0, 1].map((index) => ({
-    x: Math.round(
-      drum.bounds.x1 + drum.bounds.width * (index === 0 ? 1 / 6 : 1 / 2)
-    ),
+    x:
+      drums != null
+        ? drums[index].bounds.cx
+        : Math.round(
+            drum.bounds.x1 + drum.bounds.width * (index === 0 ? 1 / 6 : 1 / 2)
+          ),
     centre: { text: '' },
     count: 0,
     pitch: Math.round(40 * t.density()),
     synthetic: true,
   }));
+}
+
+/**
+ * G29: the two `variant="wheel"` drums, rolled with a finger.
+ *
+ * Split out of the `date-picker` check because it is the only part of that screen
+ * that presses nothing: a drum is rolled, and what a roll is worth asserting is
+ * how many events it costs. Same reason `checkInlineCalendarGrids` is separate.
+ */
+async function checkTimeDrums(t) {
+  // ---------------------------------------------------------------------------
+  // G29: `variant="wheel"` with `mode="time"` is Material 3 1.5's `TimeScroll` — two
+  // drums, and a pick is a roll that comes to rest. Everything the dialog tests above
+  // do with a tap, this does with a fling, and the assertion that matters is a count:
+  // a roll across three rows reports **one** change, not three. `TimeScroll` forwards
+  // the row nearest the snap line to its state continuously, so a control that read
+  // each of those as a pick would report one event per row here, on the real input
+  // path, with the real timing a pager has.
+  //
+  // Red proof: swap `collectLatest` for `collect` in `syncTimeWheel`, so the settle
+  // stops restarting while the drum is moving, and the first fling below reports one
+  // event per row it crossed and goes red.
+  // ---------------------------------------------------------------------------
+  const SEEDED = '2024-06-15 09:20';
+  // Not `requireControlOnScreen`: a 200 dp drum is 525 px of a ~2 000 px window, so
+  // "the centre is on screen" can still mean "the snap line and half the rows are
+  // not", which would make both the row reading and the fling below wrong.
+  const wheel = await positionWheel(t, 'Real-input wheel time picker', [
+    ECHO.wheelTimeValue,
+    ECHO.wheelTimeEvents,
+  ]);
+  // The echo is empty, and that is the assertion: this picker is uncontrolled, so
+  // what it shows is its own business and what it has *reported* is the echo's. The
+  // seeded 09:20 is what the drums are on, and a `ScrollField` keeps its rows out of
+  // the accessibility tree, so the check learns the roll moved the time from the two
+  // echoes below rather than from a row it cannot read.
+  t.log.checkEquals(
+    'the uncontrolled wheel has reported no time yet',
+    t.requireEcho(ECHO.wheelTimeValue),
+    '-'
+  );
+  t.log.checkEquals(
+    'and has reported no change',
+    t.requireEcho(ECHO.wheelTimeEvents),
+    '0'
+  );
+  const density = t.density();
+  t.log.note(
+    `time wheel box: ${t.boundsText(wheel)} at ${String(density)} x = ` +
+      `${String(Math.round(wheel.bounds.height / density))} dp tall, ` +
+      `${String(Math.round(wheel.bounds.width / density))} dp wide`
+  );
+
+  // What TalkBack is offered, read out of the tree it navigates. The value itself
+  // travels as `stateDescription`, which a `uiautomator dump` does not transcribe, so
+  // this records the node's class, its name and whether it says it scrolls (the
+  // adjust actions), and the row-reading below carries "the value shown is the value
+  // reported" instead.
+  const wheelNodes = t.nodesNamed('Real-input wheel time picker');
+  // The assertion is that the wheel is named at all - zero is the failure this can
+  // catch, and does if `nuiControlSemantics` is dropped. How many nodes end up
+  // carrying the name is Material's decision, not ours: `TimeScroll` is two drums
+  // and each publishes semantics of its own, so a name that lands on the control
+  // can also land on a drum. Recorded rather than asserted, and raised as the a11y
+  // finding it is - a reader that meets the label twice hears it twice.
+  t.log.check(
+    `the wheel is named in the tree (${String(wheelNodes.length)} node(s) carry ` +
+      '"Real-input wheel time picker")',
+    wheelNodes.length >= 1
+  );
+  if (wheelNodes.length > 1) {
+    t.log.warn(
+      `the label is on ${String(wheelNodes.length)} nodes, not one: a screen ` +
+        'reader meets "Real-input wheel time picker" once per node, which is the ' +
+        'a11y gap docs/components/date-picker.md records for this wheel. The two ' +
+        'drums themselves are not separately named, so which drum is which is not ' +
+        'said either.'
+    );
+  }
+  t.log.note(
+    `wheel a11y node: class=${String(wheelNodes[0]?.className)} ` +
+      `enabled=${String(wheelNodes[0]?.enabled)} ` +
+      `scrollable=${String(wheelNodes[0]?.scrollable)} ` +
+      `content-desc=${String(wheelNodes[0]?.contentDesc)}`
+  );
+
+  // Material's own names for the two drums, read out of the tree the check aims with.
+  // This is a real assertion because it is the aim: without it the fling below would be
+  // pointed at a fraction of the control's box, and a miss would look like a control that
+  // does not roll.
+  const drums = timeWheelDrums(t, wheel);
+  t.log.check(
+    'the tree names both drums, so each fling can be aimed at one of them',
+    drums != null
+  );
+  if (drums != null) {
+    t.log.note(
+      `hour drum ${t.boundsText(drums[0])} (${String(
+        Math.round(drums[0].bounds.width / density)
+      )} x ` +
+        `${String(Math.round(drums[0].bounds.height / density))} dp), minute drum ` +
+        `${t.boundsText(drums[1])} - ${String(
+          Math.round(drums[1].bounds.x1 - drums[0].bounds.x2)
+        )} px apart`
+    );
+  }
+
+  const columnsBefore = wheelColumns(t, wheel);
+  const rowsReadable = columnsBefore[0]?.synthetic !== true;
+  if (rowsReadable) {
+    t.log.check(
+      `the drum rows are in the tree (${String(columnsBefore.length)} columns: ` +
+        `${columnsBefore.map((c) => String(c.count)).join('+')} rows visible)`,
+      true
+    );
+    t.log.note(
+      `drums: hour column x=${String(columnsBefore[0].x)} ` +
+        `centre="${columnsBefore[0].centre.text}" ` +
+        `pitch=${String(columnsBefore[0].pitch)}px; minute column ` +
+        `x=${String(columnsBefore[1].x)} ` +
+        `centre="${columnsBefore[1].centre.text}" ` +
+        `pitch=${String(columnsBefore[1].pitch)}px`
+    );
+  } else {
+    t.log.warn(
+      'the drum rows are NOT in the accessibility tree - `ScrollField` keeps its ' +
+        "rows to itself, so the aim is the control's own thirds and the four " +
+        '"the row shown is the value reported" comparisons below cannot be made ' +
+        'from a dump (the event-count assertions can, and are the point of the ' +
+        'flings). docs/components/date-picker.md records the gap.'
+    );
+  }
+  /** Re-read a drum's columns, with the same fallback every time. */
+  const columnsOf = (drum) => wheelColumns(t, drum);
+
+  // Roll one drum downwards, into the hours/minutes *before* the seeded 09:20 — the
+  // direction that cannot cross noon and so cannot change the AM/PM half of a
+  // 12-hour drum, which keeps the row-vs-echo comparison below about one field.
+  // The distance is three rows of pitch: far enough that a per-row emit is loud,
+  // short enough to stay inside the drum's own rows without a fling's throw.
+  // `drum` is re-read every time: the page settles after a fling, and a stale box
+  // aimed at where the control was rather than where it is.
+  const rollDown = async (drumLabel, column) => {
+    const box = t.requireControl(drumLabel).bounds;
+    // The drum's own box with a 12 % margin at each end, top to bottom, in 130 ms —
+    // the shape the Picker's drum fling uses and the one measured on `nitroui_b` to
+    // carry the hour drum from 09:20 to 07:20 while reporting exactly one change. The
+    // aim is [timeWheelDrums]'s box, not a fraction of the control's, so a drum that
+    // does not turn under this is the control's problem and not the check's aim.
+    //
+    // Where the tree does show rows the travel shrinks to three rows of the measured
+    // pitch, so the "the row shown is the value reported" comparisons below are about a
+    // roll a reader can count rather than one whose landing page Material decides.
+    const pad = Math.round(box.height * 0.12);
+    const travel = rowsReadable
+      ? Math.min(
+          Math.round(column.pitch * 1.5),
+          Math.round(box.height / 2) - pad
+        )
+      : null;
+    await t.swipePx(
+      column.x,
+      travel == null ? box.y1 + pad : Math.round(box.cy - travel),
+      column.x,
+      travel == null ? box.y2 - pad : Math.round(box.cy + travel),
+      130
+    );
+  };
+
+  // Exactly one event, then a quiet period: an event landing after the quiet window
+  // is one that landed after a rest, which is what the settle is supposed to prevent.
+  const expectOneRoll = (expected, label, echoId) => {
+    const reported = t.echoWithin(echoId, (value) => value === expected, 8000);
+    t.log.checkEquals(
+      `one roll of the ${label} reports exactly one change, not one per row crossed`,
+      reported,
+      expected
+    );
+    t.requireEchoToStay(echoId, expected, `the ${label} drum at rest`, 1500);
+  };
+
+  await rollDown('Real-input wheel time picker', columnsBefore[0]);
+  expectOneRoll('1', 'hour', ECHO.wheelTimeEvents);
+  const afterHour = t.requireEcho(ECHO.wheelTimeValue);
+  t.log.checkEquals(
+    `the hour moved off the seeded one ("${afterHour}")`,
+    afterHour.slice(11, 13) !== SEEDED.slice(11, 13),
+    true
+  );
+  t.log.checkEquals(
+    'and rolling the hour left the day alone',
+    afterHour.slice(0, 10),
+    SEEDED.slice(0, 10)
+  );
+  // The value shown is the value reported. Read out of the tree the person's finger
+  // stopped: the row now under the hour drum's centre line, which in a 12-hour wheel
+  // is the 12-hour form of the hour JS was told - hence the modulo, with the
+  // AM/PM half recorded beside it rather than asserted.
+  if (rowsReadable) {
+    const hourColumn = columnsOf(wheel)[0];
+    t.log.checkEquals(
+      `the row under the hour drum's centre line is the hour reported ` +
+        `(drum "${hourColumn.centre.text}", reported ${afterHour})`,
+      Number(hourColumn.centre.text) % 12,
+      Number(afterHour.slice(11, 13)) % 12
+    );
+  }
+  const period = t
+    .dump()
+    .filter(
+      (node) =>
+        /^(AM|PM)$/i.test(node.text.trim()) &&
+        node.bounds.cx >= wheel.bounds.x1 &&
+        node.bounds.cx <= wheel.bounds.x2
+    )
+    .map((node) => node.text.trim());
+  t.log.note(
+    period.length > 0
+      ? `the wheel is a 12-hour one (${period.join('/')} toggle): the assertion ` +
+          'above compares the row with the reported hour modulo 12, and the half the ' +
+          'row does not carry is the reported day part, which was checked unchanged'
+      : 'the wheel is a 24-hour one, so the row is the reported hour itself'
+  );
+
+  // Two more rolls of the same drum. Every roll is aimed at the hour column and rolls
+  // *downwards*, into the hours before the seeded one: the minute drum's x is a guess
+  // this tree cannot check (its rows are not in the dump), and a swipe that lands on
+  // the AM/PM toggle instead would move the hour by twelve and make the assertion
+  // below about the wrong thing. Downwards also cannot cross noon, so no roll of this
+  // check changes the half of the day the wheel is in.
+  let previous = afterHour;
+  for (const [expected, label] of [
+    ['2', 'second'],
+    ['3', 'third'],
+  ]) {
+    await rollDown('Real-input wheel time picker', columnsBefore[0]);
+    expectOneRoll(expected, `${label} hour roll`, ECHO.wheelTimeEvents);
+    const after = t.requireEcho(ECHO.wheelTimeValue);
+    t.log.checkEquals(
+      `the ${label} roll moved the time again ("${previous}" → "${after}")`,
+      after !== previous,
+      true
+    );
+    t.log.checkEquals(
+      `and the ${label} roll left the day the time picker was seeded on`,
+      after.slice(0, 10),
+      SEEDED.slice(0, 10)
+    );
+    previous = after;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The drum whose parent refuses every roll. On the dial a refused pick is a value
+  // the model never had; a drum *stays* where the finger left it until something
+  // moves it, so the snap-back has to reach the pager — and a drum left on the
+  // refused row would also swallow the next pick of that same time, because the
+  // model refuses an instant it is already showing. Both halves are checked: the
+  // roll is reported, and the rows in the tree are back on the seeded time.
+  // ---------------------------------------------------------------------------
+  const refusedLabel = 'Real-input wheel refusing picker';
+  const refused = await positionWheel(t, refusedLabel, [
+    ECHO.wheelRefuseEvents,
+  ]);
+  const refusedBefore = columnsOf(refused);
+  if (rowsReadable) {
+    t.log.checkEquals(
+      'the refusing drum starts on the time its parent holds',
+      Number(refusedBefore[0].centre.text) % 12,
+      9
+    );
+  }
+  t.log.checkEquals(
+    'and has reported nothing',
+    t.requireEcho(ECHO.wheelRefuseEvents),
+    '0'
+  );
+  await rollDown(refusedLabel, refusedBefore[0]);
+  expectOneRoll('1', 'refusing drum', ECHO.wheelRefuseEvents);
+  // The rollback, read where a person reads it. One settle, then the parent's no,
+  // then the widget's own road home — so give it a beat before the tree is asked.
+  // The beat is also an assertion: the rollback must not itself be an event, or the
+  // snap-back would loop — settle, report, revert, settle, report.
+  t.requireEchoToStay(
+    ECHO.wheelRefuseEvents,
+    '1',
+    'the refused roll, rolled back',
+    1500
+  );
+  if (rowsReadable) {
+    const refusedAfter = columnsOf(refused);
+    t.log.checkEquals(
+      `the refused roll left the hour drum on the parent's hour, not the rolled ` +
+        `one (row "${refusedAfter[0].centre.text}")`,
+      Number(refusedAfter[0].centre.text) % 12,
+      9
+    );
+  }
+  // And the reason that matters: with the drum back where it started, the same roll
+  // is a fresh selection again rather than the instant the model already holds.
+  await rollDown(refusedLabel, columnsOf(refused)[0]);
+  expectOneRoll('2', 'refusing drum, second roll', ECHO.wheelRefuseEvents);
+  t.log.checkEquals(
+    'the parent still refuses, so the time it sends never moved',
+    t.requireEcho(ECHO.wheelRefuseEvents),
+    '2'
+  );
+
+  // `mode="date"` with the same variant is *not* a drum: there is no Material date
+  // wheel, so the variant keeps the inline calendar (documented). The box says it -
+  // a calendar is far taller than a 200 dp drum, and a drum 58 dp wide is not a grid.
+  const dateWheel = await positionWheel(t, 'Real-input wheel date picker', []);
+  const dateHeightDp = Math.round(dateWheel.bounds.height / density);
+  const drumHeightDp = Math.round(wheel.bounds.height / density);
+  t.log.note(
+    `wheel + mode="date" box: ${t.boundsText(dateWheel)} = ` +
+      `${String(dateHeightDp)} dp tall, against the time wheel's ` +
+      `${String(drumHeightDp)} dp`
+  );
+  t.log.check(
+    `the "wheel" that is a calendar is unmistakably a calendar ` +
+      `(${String(dateHeightDp)} dp tall, more than the drum's ` +
+      `${String(drumHeightDp)} dp plus a week of rows)`,
+    dateHeightDp > drumHeightDp + 100
+  );
 }
 
 /**
