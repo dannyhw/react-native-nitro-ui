@@ -21,6 +21,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -58,6 +59,7 @@ import com.margelo.nitro.nitroui.core.NitroUiPixelProbes
 import com.margelo.nitro.nitroui.core.NitroUiSizing
 import com.margelo.nitro.nitroui.core.nitroUiIcon
 import com.margelo.nitro.nitroui.core.nitroUiSamplePixels
+import com.margelo.nitro.nitroui.core.toRgbHex
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -179,6 +181,15 @@ internal class ListItemModel : NitroUiModel() {
   private var accessibilityReport = "none"
   private var layout = "pending"
 
+  /**
+   * The colour the leading glyph was painted with, as `#RRGGBB`, or `-` when no glyph drew.
+   *
+   * Test-only, for the reason `ListItemModel.recordIconTint` gives: Material's icon colour
+   * comes from the device's dynamic palette on Android 12+, so a harness cannot write the
+   * RGB down and has to be handed the one the row used.
+   */
+  private var iconTint = "-"
+
   /** Record what the composable was handed: `<title>|<subtitle>|<value>|<accessory>`. */
   fun recordDrawn(report: String) {
     synchronized(reportLock) { drawn = report }
@@ -196,15 +207,49 @@ internal class ListItemModel : NitroUiModel() {
     }
   }
 
+  /**
+   * Which press path drew this row: `own` (Material's interactive row, with the ripple),
+   * `cell` (inside a `Form.Row`, whose cell owns the highlight) or `none`.
+   *
+   * Recorded at the branch that picks the painter, not from `insideRow`, so the answer is
+   * the path that ran — the harness's "inside a row the leaf draws no shape or highlight of
+   * its own" is then a reading of the composition rather than an echo of the prop.
+   */
+  private var pressPath = "pending"
+
+  fun recordPressPath(
+    path: String,
+  ) {
+    synchronized(reportLock) { pressPath = path }
+  }
+
+  /** Whether this leaf paints a container or a press of its own — the `shape=` answer. */
+  fun paintsOwn(): Boolean =
+    synchronized(reportLock) { pressPath == "own" }
+
   /** Record where the row put its content, as `insets=<l>,<t>;shape=<0|1>;box=<w>x<h>`. */
   fun recordLayout(report: String) {
     synchronized(reportLock) { layout = report }
   }
 
-  /** `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>`. Safe from any thread. */
+  /**
+   * Record the colour the leading slot's glyph is being tinted with, from the same
+   * `LocalContentColor` the glyph takes it from — a reading of what will be painted, not of
+   * a prop. `null` says nothing drew, which the harness reads as "nothing to sample".
+   */
+  fun recordIconTint(
+    tint: ComposeColor?,
+  ) {
+    synchronized(reportLock) { iconTint = tint?.let { "#${it.toRgbHex()}" } ?: "-" }
+  }
+
+  /**
+   * `displayed=<…>;presses=<n>;probes=<n>;a11y=<…>;iconTint=<#RRGGBB|->`. Safe from any
+   * thread. iOS answers the last field `-` because it has no sampler to feed.
+   */
   fun stateReport(): String =
     synchronized(reportLock) {
-      "displayed=$drawn;presses=$presses;probes=$probes;a11y=$accessibilityReport"
+      "displayed=$drawn;presses=$presses;probes=$probes;a11y=$accessibilityReport;iconTint=$iconTint"
     }
 
   fun layoutReport(): String = synchronized(reportLock) { layout }
@@ -218,6 +263,8 @@ internal class ListItemModel : NitroUiModel() {
       probes = 0
       accessibilityReport = "none"
       layout = "pending"
+      iconTint = "-"
+      pressPath = "pending"
     }
   }
 
@@ -381,7 +428,16 @@ private class ListItemHost(
     val content = remember { FloatArray(3) }
     val publish = {
       if (box[2] > 0f && content[2] >= 0f) {
-        model.recordLayout(ListItemLayout.report(box, content, paintsContainer, density))
+        // `shape=`: a container of the leaf's own, or the leaf's own press — inside a
+        // `Form.Row` neither is painted, and the row that owns the cell can be told.
+        model.recordLayout(
+          ListItemLayout.report(
+            box,
+            content,
+            paintsContainer || model.paintsOwn(),
+            density,
+          ),
+        )
       }
     }
 
@@ -442,9 +498,13 @@ private class ListItemHost(
 
       val leading: (@Composable () -> Unit)? =
         if (model.androidIconContent == NitroUiIconContent.Absent) {
+          // Nothing in the slot, so nothing painted: the harness's probe has to be able to
+          // tell "this row has no glyph" from "the glyph's colour was never recorded".
+          model.recordIconTint(null)
           null
         } else {
           {
+            model.recordIconTint(LocalContentColor.current)
             NitroUiIconSlotGlyph(model.androidIconContent, ListItemMetrics.LeadingIconSize)
           }
         }
@@ -465,6 +525,7 @@ private class ListItemHost(
       if (pressable && !insideRow) {
         // Material's own interactive row: `combinedClickable` and Material's ripple, which
         // is the platform's row highlight rather than a colour this file chose.
+        model.recordPressPath("own")
         ListItem(
           modifier = Modifier.fillMaxWidth().then(rowSemantics),
           onClick = { press() },
@@ -485,6 +546,7 @@ private class ListItemHost(
         // The plain row. Inside a `Form.Row` it carries its own clickable with *no*
         // indication, because the row's own press is the highlight (D46 item 2); with no
         // `onPress` at all it carries nothing, and a tap goes to whatever is behind it.
+        model.recordPressPath(if (pressable) "cell" else "none")
         val ownClick =
           if (pressable) {
             Modifier.clickable(

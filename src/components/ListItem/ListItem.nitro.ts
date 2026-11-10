@@ -157,7 +157,7 @@ export interface NitroUiListItemMethods extends HybridViewMethods {
 
   /**
    * TEMPORARY, test-only: what the item is showing, as one line —
-   * `displayed=<title>|<subtitle>|<value>|<accessory>;presses=<n>;probes=<n>;a11y=<…>`.
+   * `displayed=<title>|<subtitle>|<value>|<accessory>;presses=<n>;probes=<n>;a11y=<…>;iconTint=<#RRGGBB|->`.
    *
    * `displayed` is written where the row is drawn — the `UIListContentView`
    * configuration, the Material 3 composable — so it is a reading of the hosted
@@ -165,7 +165,13 @@ export interface NitroUiListItemMethods extends HybridViewMethods {
    * `presses` counts presses that reached the press seam *and were accepted*, so a
    * disabled item stays where it was. `probes` counts the answers
    * `nuiTestProbeAccessibility` has stored; `a11y` is that answer
-   * (`role=…,enabled=…,clickable=…,label=…`).
+   * (`role=…,disabled=…,label=…`, plus `clickable=…` on Android, where the
+   * merged node is what a reader is handed).
+   *
+   * `iconTint` is the colour the leading glyph was painted with, recorded where it is
+   * painted, or `-` when no glyph drew — and always `-` on iOS, which has no sampler.
+   * `nuiTestPixelProbe` samples for it: Material's icon colour comes from the device's
+   * dynamic palette, so a harness cannot write the RGB down (Chip's reason).
    *
    * @internal Not app API (DECISIONS D14).
    */
@@ -178,9 +184,11 @@ export interface NitroUiListItemMethods extends HybridViewMethods {
    * `insets` are the horizontal paddings **the leaf itself** applied, taken from
    * where the row content actually landed inside the view's bounds — 16/16
    * standalone, 0/0 inside a `Form.Row`, whose cell has already paid for them
-   * (DECISIONS D46 item 2). `shape` is whether the leaf drew a background of its
-   * own. Both are read from the layout that drew, not from the props, so a leaf that
-   * ignored its own insets says so.
+   * (DECISIONS D46 item 2). `shape` is whether this leaf paints anything of its own
+   * behind or around the content — a background, or a press highlight of its own. It is
+   * `1` for a pressable row standing on its own and `0` inside a `Form.Row`, where the cell
+   * paints both; recorded where the painter is chosen, not read back off `insideRow`. Both
+   * are read from the layout that drew, so a leaf that ignored its own insets says so.
    *
    * @internal Not app API (DECISIONS D14).
    */
