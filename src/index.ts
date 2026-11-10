@@ -220,3 +220,11 @@ export {
 // `children` lay themselves out in the app's own tree at up to `maxWidth` - the popover
 // shows that box rather than measuring it, so its first frame is its final size.
 export { type PopoverProps, Popover } from './components/Popover/Popover';
+
+// A numeric stepper (G25, DECISIONS D38 item 1): SwiftUI's `Stepper` on iOS, and two
+// Material 3 tonal icon buttons on Android, which has no stepper control of its own.
+// `value` is controlled through the event-count handshake, and the clamping and step
+// snapping are Slider's `quantize` - shared rather than copied, which is what keeps a
+// `0.1` step from arriving as `0.30000000000000004`. It shows no number: the value
+// belongs to your own text.
+export { Stepper, type StepperProps } from './components/Stepper/Stepper';

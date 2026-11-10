@@ -10,6 +10,7 @@ import {
   ProgressView,
   Section,
   Slider,
+  Stepper,
   Text,
   TextField,
   Toggle,
@@ -61,6 +62,9 @@ import {
   pickerSelection,
   segmentedOptions,
   sliderValue,
+  stepperValue,
+  STEPPER_LABEL,
+  onStepperChange,
   stackStyle,
   onTextChange,
   textFieldValue,
@@ -228,6 +232,29 @@ function BenchIconButton({ index, value }: { index: number; value: boolean }) {
       systemImage={iconButtonGlyph(value).systemImage}
       onPress={onIconButtonPress}
       modifiers={ICON_ONLY}
+    />
+  );
+}
+
+/**
+ * `@expo/ui`'s SwiftUI `Stepper` — the same control `nitro-ui`'s iOS half is, reached
+ * through somebody else's runtime, which is exactly what makes it the comparison.
+ *
+ * `labelsHidden()` because the control under test shows no label: SwiftUI's `Stepper`
+ * requires one, and letting this arm draw a word would price a wider control than the
+ * one in the row above it. `min`/`max` match every other arm's range.
+ */
+function BenchStepper({ index, value }: { index: number; value: boolean }) {
+  return (
+    <Stepper
+      testID={`bench-expo-stepper-${String(index)}`}
+      label={STEPPER_LABEL}
+      value={stepperValue(value)}
+      min={0}
+      max={10}
+      step={1}
+      onValueChange={onStepperChange}
+      modifiers={LABELS_HIDDEN}
     />
   );
 }
@@ -496,6 +523,10 @@ export function ExpoUiHostPerControlList({
           <Host key={index} style={style}>
             <BenchSlider index={index} value={value} />
           </Host>
+        ) : component === 'stepper' ? (
+          <Host key={index} style={style}>
+            <BenchStepper index={index} value={value} />
+          </Host>
         ) : component === 'icon-button' ? (
           <Host key={index} style={style}>
             <BenchIconButton index={index} value={value} />
@@ -580,6 +611,8 @@ export function ExpoUiSharedHostList({ n, value, component }: BenchListProps) {
         {range(n).map((index) =>
           component === 'slider' ? (
             <BenchSlider key={index} index={index} value={value} />
+          ) : component === 'stepper' ? (
+            <BenchStepper key={index} index={index} value={value} />
           ) : component === 'icon-button' ? (
             <BenchIconButton key={index} index={index} value={value} />
           ) : component === 'text-field' ? (

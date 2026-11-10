@@ -146,6 +146,20 @@ const ICONS = [
     file: 'keyboard_arrow_down_24px.xml',
     why: "the split button's trailing chevron (the icon Material's split button uses)",
   },
+  {
+    resource: 'nitroui_remove',
+    symbol: 'remove',
+    style: 'materialsymbolsoutlined',
+    file: 'remove_24px.xml',
+    why: "the minus half of a Stepper (Material Symbols' `remove`; Android has no stepper control)",
+  },
+  {
+    resource: 'nitroui_add',
+    symbol: 'add',
+    style: 'materialsymbolsoutlined',
+    file: 'add_24px.xml',
+    why: "the plus half of a Stepper (Material Symbols' `add`; Android has no stepper control)",
+  },
 ];
 
 const rawUrl = (repoPath) =>
