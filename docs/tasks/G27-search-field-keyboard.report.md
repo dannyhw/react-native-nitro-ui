@@ -106,3 +106,37 @@ Recorded as data in `docs/tasks/G27/mutations.json`.
   SearchField evidence and route the Form case to its own task (recommended: it reproduces with `Switch` before Form,
   so no G27 change can turn it green); (b) hold G27 until that is fixed on `main`, then re-run `harness:android` only.
   `real-input:ios` waits on X22's fix round the same way, and is not a review gate.
+
+## Fix round 1
+
+Branch `task/G27-fix1` from `2de2b14a`, `origin/main` merged. Lease `G27-91rgl` (pair-a).
+
+- **Android change while focused, measured:** a field that takes focus and is moved to `number-pad` 2 s later
+  (new row on `SearchFieldScreen`) changes the IME's own `mInputEditorInfo` from `class=text` to
+  `class=number … action=search` with no blur. Compose restarts the session, so v1 of this report and the docs were
+  wrong. Docs and changeset now say both platforms reach the open keyboard, harness step 2 runs on Android, and the
+  `restartInput` follow-up is withdrawn.
+- **Probe off the production path:** `publishState()` reports the options decode when unfocused and, while focused,
+  only a cached `EditorInfo` read for the current stamp, otherwise `pending`. The view walk runs only from
+  `nuiTestState()`'s refresh. A focused read with no `EditorInfo` is never cached.
+- **Recycle reset proven:** `nuiTestLifetimeReport()` carries `resetKeyboard=…` on both platforms; the harness asserts it.
+- MUTATION B row now says PASS; the spec-type sentence is fixed; Android real-input names its hardware `KEY_ENTER`.
+
+Red proofs (`mutations.json`, fix-round rows): recycle keeps the keyboard -> `resetKeyboard=nu…` (iOS) / `drops=8 …`
+(Android); options remembered once -> `a focused field to reload its own keyboard never happened` and real-input
+`saw class=text … auto-correct`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1996 tests / 84 suites | `e26c3a8404ae` | 2 m 51 s | start 18.2 / med 26.5 / max 61.9 |
+| `harness:ios` | **PASS** | 565 tests / 30 suites + isolated 6 tests / 3 suites | `e26c3a8404ae` (ios tree) | 14 m 15 s | start 18.2 / med 8.2 / max 61.9 |
+| `harness:android` | **PASS** | 621 tests / 30 suites + isolated 6 tests / 3 suites | `e26c3a8404ae` (android tree) | 17 m 45 s | start 5.4 / med 4.4 / max 10.5 |
+| `real-input:ios` | **FAIL** | — | `e26c3a8404ae` (ios tree) | 41 m 12 s | start 7.8 / med 7.5 / max 50.5 |
+| `real-input:android` | **PASS** | — | `e26c3a8404ae` (android tree) | 58 m 52 s | start 5.2 / med 4.2 / max 23.6 |
+| `harness:android:SearchField` | stale | 2 failed of 16 tests / 1 suites | 29661020597e (not this tree) | 28.0 s | start 5.0 / med 5.0 / max 5.2 |
+| `harness:ios:SearchField` | stale | 1 failed of 16 tests / 1 suites | 2c558137670d (not this tree) | 27.4 s | start 11.1 / med 9.5 / max 11.1 |
+| `real-input:android:--control:search-field` | stale | — | 29661020597e (not this tree) | 11 m 27 s | start 5.5 / med 4.1 / max 8.0 |
+
+`need --for review`: `need: review is satisfied on this code tree.` `real-input:ios` is red only on `a11y:context-menu`
+and `a11y:ios-debt`, X22's open sweep, as in round 1; `testRealInputSearchField` passed (90.4 s). The stale rows are the
+red proofs above.

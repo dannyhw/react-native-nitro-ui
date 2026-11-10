@@ -1,0 +1,80 @@
+# Failure excerpt — harness:ios:SearchField
+
+- Ran: 2026-11-10T06:13:52.030Z on code tree `2c558137670d` at HEAD `ecc3203` (branch `task/G27-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios SearchField`
+- Result: fail, exit 1, 27411 ms
+- Load: start 11.09, end 8.01, median 9.50, max 11.09
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G27-91rgl`
+- Full log: `task/G27-fix1/harness+ios+SearchField-2026-11-10T06-13-52.030Z.log` (<store>/task/G27-fix1/harness+ios+SearchField-2026-11-10T06-13-52.030Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › comes back from the pool with none of its previous owner`
+- `expected 'drops=14 recycles=14 resetKeyboard=nu…' to contain 'resetKeyboard=default/none/true'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-fix1/harness+ios+SearchField-2026-11-10T06-13-52.030Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-91rgl (still live)
+  |   X23-8wjce                X23          both              pair-b
+  |   G27-91rgl                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.01 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 34 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios SearchField
+app is fresh: <repo>/example/ios/build/Build/Products/Debug-iphonesimulator/NitroUiExample.app (tree 2c558137670d, 23 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 11.09/6.22 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G27-fix1/harness+ios+SearchField-2026-11-10T06-13-52.030Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using ios runner
+
+HARNESS Reusing Metro cache for ios
+
+HARNESS Using booted iOS simulator nitro-ui A...
+HARNESS Runner ios ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › comes back from the pool with none of its previous owner
+
+    expected 'drops=14 recycles=14 resetKeyboard=nu…' to contain 'resetKeyboard=default/none/true'
+
+      [0m [90m 972 |[39m         [90m// so the second owner's own defaults would mask a reset that kept the first[39m
+       [90m 973 |[39m         [90m// owner's number pad.[39m
+      [31m[1m>[22m[39m[90m 974 |[39m         expect(lifetime)[33m.[39mtoContain([32m'resetKeyboard=default/none/true'[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 975 |[39m       }
+       [90m 976 |[39m       cleanup()[33m;[39m
+       [90m 977 |[39m       handles[33m.[39mclear()[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 passed, 16 total
+Snapshots:   0 total
+Time:        24.766 s
+Ran all test suites matching SearchField.
+
+
+
+```
