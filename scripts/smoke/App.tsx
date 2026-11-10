@@ -14,6 +14,7 @@ import {
   SearchField,
   SegmentedControl,
   Slider,
+  ListItem,
   Stepper,
   Switch,
   TextField,
@@ -358,6 +359,19 @@ export default function App(): React.ReactElement {
           items={SMOKE_BUTTON_GROUP_ITEMS}
           testID="SMOKE-button-group"
           onLayout={measureFor('button-group')}
+        />
+        {/* A ListItem is `fillWidth` like the ButtonGroup above it: the box is the row's
+            own height at the width the smoke screen gives it, and a 0x0 here would mean
+            UIKit's row content or Compose's ListItem never measured itself inside the
+            host. Title with a trailing value is the one-line rung — the configuration
+            `DECLARED_FALLBACKS.NitroUiListItem` describes, so the cold first frame is
+            checked against the height a first paint is actually laid out with. */}
+        <ListItem
+          accessibilityLabel="Notifications"
+          onLayout={measureFor('list-item')}
+          testID="SMOKE-list-item"
+          title="Notifications"
+          value="On"
         />
         {/* One Host, two hosted Switches: the Android path where a batch of
             controls shares one Compose composition. iOS renders this as a
