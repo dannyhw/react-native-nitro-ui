@@ -97,6 +97,52 @@
         "takes no submit from a Return pressed on a query it has just cleared: expected [ 'change:' ] to deeply equal []"
       ],
       "note": "The refresh published the text and focus straight off the TextFieldState, so a test waiting on the state saw a clear or a blur before its event reached JS. A timing race, so its red is a rate, not a guarantee: 2 of 4 before, 0 of 6 after."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (recycle test, resetKeyboard assertion)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION B again — prepareForRecycle keeps the previous owner's three keyboard values",
+      "before": "    applySearchPresets()\n    // What the reset left the keyboard as",
+      "after": "    val keptKeyboard = model.keyboardType  (and the other two)\n    applySearchPresets()\n    model.keyboardType = keptKeyboard  (and the other two)\n    // What the reset left the keyboard as",
+      "run": "harness:android:SearchField — FAIL, 2 of 16 (28.0 s; one build with MUTATION D)",
+      "redTests": [
+        "comes back from the pool with none of its previous owner: expected 'drops=8 recycles=8 measuresAfterDrop=…' to contain 'resetKeyboard=default/none/true'"
+      ],
+      "note": "Closes the hole row 5 recorded: `nuiTestLifetimeReport()` now carries what the reset left the keyboard as, read before the next owner's props land."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (recycle test, resetKeyboard assertion)",
+      "file": "ios/components/SearchField/HybridNitroUiSearchField.swift",
+      "mutation": "FIX ROUND 1, MUTATION B on iOS — prepareForRecycle keeps the previous owner's three keyboard values",
+      "before": "    applySearchPresets()\n    // What the reset left the keyboard as",
+      "after": "    let keptKeyboard = model.keyboardType  (and the other two)\n    applySearchPresets()\n    model.keyboardType = keptKeyboard  (and the other two)\n    // What the reset left the keyboard as",
+      "run": "harness:ios:SearchField — FAIL, 1 of 16 (27.4 s)",
+      "redTests": [
+        "comes back from the pool with none of its previous owner: expected 'drops=14 recycles=14 resetKeyboard=nu…' to contain 'resetKeyboard=default/none/true'"
+      ]
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (keyboard test, step 2 on Android)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION D — the keyboard options are remembered at first composition, so a prop change never reaches the field",
+      "before": "  val keyboardOptions =\n    KeyboardOptions(",
+      "after": "  val keyboardOptions = remember {\n    KeyboardOptions(  …  }",
+      "run": "harness:android:SearchField — FAIL, 2 of 16 (same build as the Android MUTATION B row)",
+      "redTests": [
+        "gives the field the keyboard the app asked for, Search key included: a focused field to reload its own keyboard never happened; last report {… \"focused\":true, … \"keyboardType\":\"default\" …}"
+      ]
+    },
+    {
+      "test": "scripts/real-input/android.mjs (search-field, keyboard changed while focused)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "FIX ROUND 1, MUTATION D (the same build)",
+      "before": "  val keyboardOptions =\n    KeyboardOptions(",
+      "after": "  val keyboardOptions = remember {\n    KeyboardOptions(  …  }",
+      "run": "real-input:android:--control:search-field — FAIL, 1 check (139 s)",
+      "redTests": [
+        "keyboardType changed while focused restarts the input session: the IME is handed a number keyboard without the field losing focus — expected class=number variation=0x0 flags=none action=search, saw class=text variation=0x0 flags=auto-correct action=search"
+      ],
+      "note": "The IME's own mInputEditorInfo, not the field's fresh EditorInfo. On the shipped tree the same check reads class=number: Compose does restart the session on a focused field's options change, which is what settled the docs."
     }
   ]
 }
