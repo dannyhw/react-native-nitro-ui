@@ -76,15 +76,17 @@ squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row
 - `icon-button-{ios,android}`: "each one disabled" and "the toggle form" hand four controls
   to `Row`, whose content box is a *column*, so the strip is four tall and its caption
   floats alone at the left; on Android the strip runs to the crop's bottom edge.
-- `button-group-ios`: the crop ends inside a caption ("each variant at the medium …"), so
-  the last row is a caption with no controls in the picture.
-- `confirmation-dialog-ios`: the trigger is sliced across its top edge by the crop.
-- `search-field-ios`, `date-picker-android`: the crop ends mid-sentence / mid-wheel-row.
+- `button-group-android`: the crop ends across the last caption ("each variant at the
+  medium ring"), so its row is below the fold.
+- `confirmation-dialog-android`: the trigger is sliced across its top edge by the crop.
+- `date-picker-android`: a band of calendar background with no dates in it under the last
+  row, inside the dashed frame — a measured height larger than what the calendar draws.
 - `checkbox-ios`: the picture is iOS `Switch`es, because iOS's Checkbox *is* a switch-style
   `Toggle` today — already decided as D47 and being changed by G31, which owes this pair a
   retake.
-- `menu-ios`, `picker-ios`, `popover-*`, `context-menu-*`: a presentation drawn over the
-  caption under its trigger. Inherent to photographing a presentation on a populated page.
+- `menu`, `picker`, `popover`, `context-menu`: a presentation drawn over the caption under
+  its trigger. Inherent to photographing a presentation on a populated page, and the
+  CONTRIBUTING note about `Confirmation Plain` is the recipe for avoiding it.
 - Root cause for the two the brief sent me: `Row`'s `content: { flexShrink: 1 }` with a
   caption that may not shrink. 13 story files use `Row`; the one-line change
   (`label: { flexShrink: 1 }`, `content: { flexShrink: 0 }`) is honest but retakes about ten
@@ -100,8 +102,8 @@ squashed by a component; what is wrong is either a crop or `showcase.tsx`'s `Row
   what users actually need.
 - showcase: `Row` lets its content wrapper shrink under a caption that cannot (13 story
   files, ~10 README pairs affected if changed).
-- docs/images: `button-group-ios`, `confirmation-dialog-ios`, `search-field-ios`,
-  `date-picker-android` are cropped inside content.
+- docs/images: `button-group-android` and `confirmation-dialog-android` are cropped inside
+  content; `date-picker-android` shows a calendar band it does not draw into.
 - docs/images: `checkbox-ios` needs a retake when G31's checkmark lands (D47).
 
 ## Questions for orchestrator
