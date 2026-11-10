@@ -184,6 +184,7 @@ the round.
 | `harness:android` | **FAIL** | 2 failed of 620 tests / 30 suites + isolated 6 tests / 3 suites | `ff81e0d6e6dc` (android tree) | 17 m 59 s | start 6.5 / med 5.3 / max 26.8 |
 | `real-input:ios` | **PASS** | — | `ff81e0d6e6dc` (ios tree) | 40 m 09 s | start 25.6 / med 6.8 / max 118.2 |
 | `real-input:android` | missing | — | — | — | — |
+| `harness:android:Form:--background` | **FAIL** | — | `ff81e0d6e6dc` (android tree) | 1.2 s | start 6.8 / med 6.8 / max 6.8 |
 
 `harness:ios` skips 2 of 564 (one suite), as on `main`; `real-input:android` is the merge bar's.
 
