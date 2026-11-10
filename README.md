@@ -1028,8 +1028,9 @@ clear button that comes with the query — on iOS while the field is editing.
 UIKit's own `UISearchTextField` on iOS,
 Material 3's search input field on Android, so each platform draws its own search
 field rather than a copy of the other's. Same React Native `TextInput` prop names
-as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()` — and no
-keyboard props: a search field is one line and its Return key is Search.
+as `TextField` — controlled by `value`, `ref` gives `focus()` and `blur()`, and
+the same `keyboardType`, `autoCapitalize` and `autoCorrect`. What stays fixed is
+the shape and the key: one line, and Search submits it.
 
 ```tsx name=search-field
 export function ProductSearch({
