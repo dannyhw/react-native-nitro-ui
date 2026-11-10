@@ -122,3 +122,5 @@
 | G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | merged (PR #61; 1 impl + 1 fix round; merge gates 5/5 on code tree `fe9f3b10`) |
 | G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | running |
 | G30 | ListItem: the row-content leaf (D46, Q10 question C) | Apex | Opus | running |
+| G31 | Checkbox on iOS: SF Symbol checkmark styles, `iosStyle` (D47) | Apex | Opus | running |
+| X24 | Stepper and Form examples and screenshots lay out properly; Form.Row trailing alignment (owner) | Apex | Opus | queued (after G29 frees a pair) |

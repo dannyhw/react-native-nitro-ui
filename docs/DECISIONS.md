@@ -644,3 +644,15 @@ React Native `Text` approximating it.
    leaf owns the content. Standalone, it draws its own padding at the platform's list metrics.
 3. The build starts with early checks (G30's brief) because `UIListContentView`'s self-sizing and Compose `ListItem`'s
    minimum heights decide the sizing design.
+
+## D47 — Checkbox on iOS draws a checkmark, not a switch (owner, 2026-11-10)
+
+iOS has no checkbox (`CheckboxToggleStyle` is iOS-unavailable), and `Checkbox` has rendered a switch-style `Toggle`
+there (D38 item 1). The owner found it confusing: on iOS a `Checkbox` looked exactly like a `Switch`. Decided:
+
+1. **iOS draws the system's checkmark glyphs**, as Reminders and Notes checklists do: a SwiftUI `Toggle` with its
+   own `ToggleStyle` drawing SF Symbols (`checkmark.circle.fill` / `circle`, or `checkmark.square.fill` / `square`),
+   tinted with the accent colour. It is still the platform's `Toggle` with Apple's own symbols, so D38 item 1's "no
+   imitation" rule holds: nothing is hand-drawn.
+2. **`iosStyle: 'circle' | 'square' | 'switch'`, default `'circle'`** (the iOS idiom). `'switch'` keeps the old look.
+3. `indeterminate` gets an iOS rendering in the glyph styles (`minus.circle.fill` / `minus.square.fill`).
