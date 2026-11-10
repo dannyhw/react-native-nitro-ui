@@ -1,11 +1,18 @@
 # Checkbox
 
-A checkbox: Material 3's `Checkbox` on Android, and SwiftUI's `Toggle(isOn:)` with
-the switch style on iOS. iOS has no checkbox — `CheckboxToggleStyle` is
-`@available(iOS, unavailable)` in the SDK — so the control there is a switch, which
-is what Expo's universal `Checkbox` renders for the same reason. The value, the
-label and the accessibility are a checkbox's on both; only the glyph is another
-platform's.
+A checkbox: Material 3's `Checkbox` on Android, and on iOS SwiftUI's `Toggle(isOn:)`
+wearing a style that draws Apple's own checklist glyph — `checkmark.circle.fill` over
+`circle`, the one Reminders and Notes draw. iOS has no checkbox: `CheckboxToggleStyle`
+is `@available(iOS, unavailable)` in the SDK, so there is no system checkbox to
+borrow, only the `Toggle` underneath one. Drawing Apple's symbol on Apple's control is
+what lets a `Checkbox` stop looking exactly like a `Switch` without this library
+imitating a control of its own (DECISIONS D47). `iosStyle` chooses the picture there —
+`'circle'` (the default), `'square'`, or `'switch'`, the look this component shipped
+with — and is ignored on Android, where Material 3 has a checkbox and there is nothing
+to choose.
+
+The value, the label, the events and the accessibility element are the same in all
+three: the control is the `Toggle` in every style, and only its drawing changes.
 
 Both are hosted by the core runtime (`docs/architecture/core.md`), so the control is
 the real one, with its own press feedback, its own accessibility element and its own
@@ -23,13 +30,14 @@ const [terms, setTerms] = useState(false);
 
 | Prop                 | Type                                  | Default   | Maps to                                                              |
 | -------------------- | ------------------------------------- | --------- | -------------------------------------------------------------------- |
-| `label`              | `string \| undefined`                  | none      | Text beside the box: SwiftUI `Text`, Compose `Text`. Part of the control and of its size. `''` is treated as no label at all, on both platforms. |
+| `label`              | `string \| undefined`                  | none      | Text beside the box: SwiftUI `Text`, Compose `Text`. Part of the control and of its size. `''` is treated as no label at all, on both platforms. On iOS the glyph is on its left. |
 | `checked`            | `boolean \| undefined`                 | unset     | Controlled value. Omit it for an uncontrolled checkbox.              |
 | `defaultChecked`     | `boolean \| undefined`                 | `false`   | Initial value of an uncontrolled checkbox.                           |
 | `onCheckedChange`    | `(checked: boolean) => void`          | none      | Fired after every user toggle, with the value native now shows.      |
-| `indeterminate`      | `boolean \| undefined`                 | `false`   | Android only: Material's third state (`TriStateCheckbox`). A display, not a value. |
+| `indeterminate`      | `boolean \| undefined`                 | `false`   | The third state: Material's `TriStateCheckbox` dash on Android, `minus.circle.fill` / `minus.square.fill` on iOS. A display, not a value, and `checked` outranks it on both. |
 | `disabled`           | `boolean \| undefined`                 | `false`   | SwiftUI `.disabled()` / M3 `enabled = false`. No event fires.        |
-| `tintColor`          | `ColorValue \| undefined`              | none      | The "on" accent: SwiftUI `.tint()` / `CheckboxDefaults.colors(checkedColor:)`. |
+| `tintColor`          | `ColorValue \| undefined`              | none      | The "on" accent: SwiftUI `.tint()` / `CheckboxDefaults.colors(checkedColor:)`. On iOS it colours the filled glyph; the empty box stays the system's secondary label colour. |
+| `iosStyle`           | `'circle' \| 'square' \| 'switch'`       | `'circle'` | **iOS only.** Which picture to draw: the checklist circle, the square pair, or the `.switch` `Toggle` this component shipped with. Anything unrecognised is `'circle'`. Android ignores it, and its sizing key does not carry it. |
 | `style`              | `ViewStyle`                           | none      | Overrides the measured box (see Sizing).                             |
 | `testID`             | `string \| undefined`                  | none      | iOS `accessibilityIdentifier` (RN's own), Android `View.tag`.        |
 | `accessibilityLabel` | `string \| undefined`                  | `label`   | Name of the control itself.                                          |
@@ -43,9 +51,10 @@ const [terms, setTerms] = useState(false);
 
 | Concept         | iOS                                                        | Android                                                        |
 | --------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| Control         | `Toggle(isOn:) { label }.toggleStyle(.switch)`             | `androidx.compose.material3.Checkbox`                          |
-| Third state     | none — the switch has two positions, so it reads as off    | `androidx.compose.material3.TriStateCheckbox`                  |
-| Label           | the `Toggle`'s label, visible; the row is one tap target   | a `Row` of box + `Text`, both tappable                          |
+| Control         | `Toggle(isOn:) { label }`, in all three styles             | `androidx.compose.material3.Checkbox`                          |
+| Picture         | `iosStyle`: `checkmark.circle.fill` / `.square.fill`, or `.switch` | one Material 3 box — the prop is stored and never read    |
+| Third state     | `minus.circle.fill` / `minus.square.fill`; `'switch'` has two positions and reads it as off | `androidx.compose.material3.TriStateCheckbox` |
+| Label           | the `Toggle`'s label, beside the glyph; the row is one tap target | a `Row` of box + `Text`, both tappable                     |
 | Value           | `NitroUiControlledValue<Bool>` on `CheckboxModel`          | `NitroUiControlledValue<Boolean>` on `CheckboxModel`           |
 | Role            | SwiftUI's toggle trait                                     | `Role.Checkbox` with its `ToggleableState`, published by M3    |
 | Name            | `.accessibilityLabel(_:)` on the `Toggle`                  | `contentDescription` on the merged row only — the box is presentational |
@@ -53,14 +62,18 @@ const [terms, setTerms] = useState(false);
 
 ### Why `indeterminate` is a prop and not a third `checked` value
 
-`checked` is `boolean | null` on both platforms. A `checked: 'indeterminate'`
-would make an app's `checked` a different type on iOS, where nothing can draw it,
-and would put a value in the one prop that every caller reads. So `indeterminate`
-is a *display*: it picks which composable Android draws, and `onCheckedChange`
-never carries a third value. On iOS the prop is accepted and ignored, and the
-switch reads as off — which is what `Checkbox.harness.tsx` asserts at the seam a
-test can read (`displayed=0`), so the day SwiftUI gains a checkbox and this
-library draws one, that test goes red rather than quietly agreeing.
+`checked` is `boolean | null` on both platforms. A `checked: 'indeterminate'` would
+put a third case in the one prop every caller reads, and would make an app's `checked`
+a type its `Switch` is not. So `indeterminate` is a *display*: it picks the third
+picture — `TriStateCheckbox` on Android, `minus.circle.fill` / `minus.square.fill` on
+iOS (DECISIONS D47 item 3) — and `onCheckedChange` never carries a third value.
+
+One exception is worth stating because both platforms had to agree on it: `'switch'`
+has two positions, so that one style reads the prop as off and draws nothing, exactly
+as it did before D47. The harness pins the distinction by reading the picture, not the
+prop — `displayed=mixed` with `symbol=minus.circle.fill` for a glyph style and
+`displayed=0` with `symbol=switch` for `'switch'` — so the day SwiftUI gains a checkbox
+and this library draws one, the test goes red rather than quietly agreeing.
 
 ### What a tap reports, from every state
 
@@ -74,13 +87,18 @@ showing**, because the box's own value is what the user just pressed.
 | dash                | `true`          | `true`      | check mark             |
 | check mark          | `true`          | **`false`** | dash                   |
 
-The last row is the one a caller has to handle, because it is the one where the
-display and the value disagree in the direction that surprises: Android draws a
-check mark for `indeterminate` *while `checked` is true* (`TriStateCheckbox` shows
-the dash only while the value is off), so the press that empties it reports
-`false`. Nothing clears `indeterminate` for you — it is your prop — so an Android
-caller that treats the third state as "some of them are selected" has to drop it
-when the user resolves it:
+The table is one table because the rule is one rule on both platforms: **`checked`
+outranks `indeterminate`**, so the dash only ever shows while the value is off. Android's
+`TriStateCheckbox` has always worked that way, and iOS was built to agree rather than to
+invent a third picture of its own — were the dash stronger here, the same props would
+draw a check mark on one platform and a dash on the other.
+
+The last row is the one a caller has to handle, because it is the one where the display
+and the value disagree in the direction that surprises: a box that is `indeterminate`
+*while `checked` is true* draws a check mark, so the press that empties it reports
+`false`. Nothing clears `indeterminate` for you — it is your prop — so a caller that
+treats the third state as "some of them are selected" has to drop it when the user
+resolves it:
 
 ```tsx
 const [all, setAll] = useState(false);
@@ -96,14 +114,17 @@ const [mixed, setMixed] = useState(false);
 />
 ```
 
-Leaving it set is not broken, just still-ambiguous: the box falls back to the dash
-on the next render, which is what the row above it (check mark → `false` → dash)
-draws. On iOS the same press reports `!checked` — the switch has two positions and
-the prop changes nothing about it.
+Leaving it set is not broken, just still-ambiguous: the box falls back to the dash on
+the next render, which is what the row above it (check mark → `false` → dash) draws.
+`iosStyle='switch'` is the one place the table does not hold, because that control has
+two positions to move between: it draws the empty box for the dash row and its press
+reports `!checked` like any other.
 
-`Checkbox.harness.tsx`'s third-state case pins the dash row (drawn `mixed`, tap
-reports `true`) on Android and `displayed=0` on iOS; `real-input:android` taps both
-rows with a finger.
+`Checkbox.harness.tsx`'s third-state case pins the dash row on both platforms — drawn
+`mixed`, tap reports `true` — and reads the picture with it (`symbol=minus.circle.fill`
+on iOS, `symbol=switch` for the style that cannot draw it), so the two platforms cannot
+drift into disagreeing about what the prop means; `real-input:android` taps both rows
+with a finger.
 
 ## Sizing
 
@@ -186,12 +207,22 @@ The control is the platform's, so the accessibility element is too:
   in-app through the control's own probe and asserts `role=Checkbox`,
   `checked=false`/`true`, the name, `disabled`, and that exactly one node publishes
   a toggle.
-- **iOS is a toggle.** XCUITest reports SwiftUI's toggle trait as a `switch` element
-  with `value` 0 or 1 — the same answer Chip's filter chip measures, for the same
-  reason. On iOS 27 the hosting view exposes no element to an in-app probe
-  (`nuiTestProbeAccessibility` answers `unavailable`, as it does for Slider and
-  Chip), so iOS role and state are asserted by real input:
-  `RealInputTests.testRealInputCheckbox` and the a11y sweep's `checkbox` case.
+- **iOS is a toggle in all three styles.** G31 changed what the control *draws*, not
+  what a reader meets: the element is still the `Toggle`'s, its name is still the label,
+  and the symbol is `.accessibilityHidden(true)` so the glyph is a picture of the value
+  rather than a second stop that says "image". XCUITest reports SwiftUI's toggle trait as
+  a `switch` element with `value` 0 or 1 — the same answer Chip's filter chip measures,
+  for the same reason. On iOS 27 the hosting view exposes no element to an in-app probe
+  (`nuiTestProbeAccessibility` answers `unavailable`, as it does for Slider and Chip), so
+  iOS role and state are asserted by real input: `RealInputTests.testRealInputCheckbox`
+  and the a11y sweep's `checkbox` case.
+- **The third state says "mixed", on both platforms.** A `Toggle` is two-position, so
+  its element can only say checked or unchecked, and a reader told "off" about a box
+  showing a dash is being told about a different box. Android's Material publishes
+  `ToggleableState.Indeterminate` and TalkBack reads it as "Mixed"; iOS sets
+  `.accessibilityValue(Text("mixed"))` for exactly the state where the picture and the
+  value disagree, and leaves the `Toggle`'s own value alone otherwise — an empty value
+  would silence it.
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.
@@ -227,10 +258,14 @@ The control is the platform's, so the accessibility element is too:
 
 ## Limits
 
-- **iOS has no checkbox.** `indeterminate` is Android-only and nothing about a
-  Checkbox on iOS looks like a checkbox: it is a switch. A caller who needs the
-  glyph on iOS needs a drawn control, which is a different component and not this
-  one's job.
+- **iOS has no checkbox *control*.** `CheckboxToggleStyle` is unavailable there, so a
+  Checkbox is a `Toggle` wearing a style that draws Apple's symbols. The glyph, the
+  colours and the dash are Apple's; the layout around them is ours, which means iOS
+  gets a checklist row rather than a system checklist row — no swipe-to-complete, no
+  list separators, and no list-inset alignment with the system's own tables.
+- **`iosStyle` is iOS's prop with Android's API surface.** It is sent to Android, kept
+  on the model, read by nothing, and kept out of Android's sizing key — so an app that
+  sets it gets one checkbox on Android whichever name it passes.
 - **A label is one line**, tail-truncated, in the platform's body type. No
   multiline label and no `numberOfLines`.
 - **No checkbox without a label on Android is unnamed** unless
@@ -238,9 +273,9 @@ The control is the platform's, so the accessibility element is too:
 - **Not hostable.** A `<Host>` refuses a `Checkbox` with an error that names it, as
   it does `Chip` and `TextField`. No round has measured a checkbox inside a Host.
 - **The iOS harness cannot tap a checkbox.** Its HID-less touch reaches no SwiftUI
-  gesture, and a `.switch` `Toggle` is a gesture recognizer (`Button.harness.tsx`
-  measured that for `Button`). The harness presses through `nuiTestToggle()`, and
-  `real-input:ios` does the real taps.
+  gesture, and a `Toggle` is a gesture recognizer (`Button.harness.tsx` measured that
+  for `Button`). The harness presses through `nuiTestToggle()`, and `real-input:ios`
+  does the real taps — in both the default style and `iosStyle='switch'`.
   Those real taps are also what pin the row: a switch-style `Toggle` answers touches on
   its glyph only — measured, a press on a labelled Checkbox's label delivered no value
   change and no event at all — so the row carries a tap target of its own that calls the
