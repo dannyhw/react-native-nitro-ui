@@ -16,7 +16,12 @@
 
 import { describe, expect, it } from '@jest/globals';
 
-import { imeInsetSample, imeInsetTop } from '../real-input/ime-frame.mjs';
+import {
+  imeEditorInfo,
+  imeEditorInfoSample,
+  imeInsetSample,
+  imeInsetTop,
+} from '../real-input/ime-frame.mjs';
 
 /** The keyboard on screen, as `dumpsys activity top` printed it on the API 35 image. */
 const SHOWN =
@@ -109,5 +114,71 @@ describe('imeInsetSample', () => {
     expect(
       imeInsetSample('InsetsSource id=1 type=statusBars frame=[0,0][1080,142]')
     ).toBe('no type=ime line at all');
+  });
+});
+
+/**
+ * `imeEditorInfo` is the reader for a different question — not "how high is the keyboard"
+ * but "which keyboard was the IME asked for" — and it broke in the other direction: a
+ * scrape written against `mCurEditorInfo=EditorInfo{…}` matched nothing at all, because the
+ * manager's *text* dump has never printed the editor record. It forwards to the bound IME,
+ * whose own section prints `mInputEditorInfo:` and then `EditorInfo.dump()`, whose first
+ * line is `inputType=0x… imeOptions=0x… privateImeOptions=…`.
+ *
+ * The fixtures are that shape, with the two hex numbers chosen so a parser that grabbed the
+ * wrong pair or read the hex as decimal cannot land on them: the field here asked for the
+ * decimal keypad (`0x2002`, not the plain number class the wrapper's own fallback would
+ * name) with the Search action (`0x3`), beside a `0x0` caps mode and a `0x8` show-flags
+ * value that are the decoys a loose match would take.
+ */
+const EDITOR_SESSION = [
+  'Input method service state for com.android.inputmethod.latin.LatinIME@9a3f1c0:',
+  '  mViewsCreated=true',
+  '  mDecorViewVisible=true mIsFullscreenMode=false mIsFullscreenExtractMode=false',
+  '  mToken=android.os.BinderProxy@c3d4e5f',
+  '  mInputBinding=InputBinding{InputMethodBinding{...',
+  '  mStartedInputConnection=android.view.inputmethod.ComposingText@0',
+  '  mInputStarted=true mInputViewStarted=true mCandidatesViewStarted=false',
+  '  mInputEditorInfo:',
+  '    inputType=0x2002 imeOptions=0x3 privateImeOptions=null',
+  '    actionLabel=null actionId=0',
+  '    initialSelStart=0 initialSelEnd=0 initialToolType=1 initialCapsMode=0x0',
+  '    hintText=Search recipes label=null',
+  '    packageName=com.nitroui.example autofillId=123 fieldId=0 fieldName=null',
+  '  mShowInputRequested=true mLastShowInputRequested=true mShowInputFlags=0x8',
+  '',
+].join('\n');
+
+/** The same section with a field focused and no session the IME has taken. */
+const NO_SESSION = EDITOR_SESSION.replace(
+  /  mInputEditorInfo:\n(?:.*\n)*?(?=  mShowInputRequested)/,
+  '  mInputEditorInfo: null\n'
+);
+
+describe('imeEditorInfo', () => {
+  it('reads the keyboard and the action key off the IME service section', () => {
+    const found = imeEditorInfo(EDITOR_SESSION);
+    expect(found).not.toBeNull();
+    expect(found.inputType).toBe(0x2002);
+    expect(found.imeOptions).toBe(0x3);
+    expect(found.sample).toContain('inputType=0x2002');
+  });
+
+  it('reads nothing when the field has no session, and says that is what it saw', () => {
+    expect(imeEditorInfo(NO_SESSION)).toBeNull();
+    expect(imeEditorInfoSample(NO_SESSION)).toContain('mInputEditorInfo: null');
+  });
+
+  it('says so when the dump carries no IME section at all', () => {
+    // The manager's own lines, which is all a dump used to be to a parser that looked for
+    // the record here: nothing in them answers the question, and a `null` with no words
+    // attached is how a broken scrape hides.
+    const managerOnly =
+      '  mCurrentUserId=0\n  mCurMethodId=com.android.inputmethod.latin/.LatinIME\n' +
+      '  mCurClient=ClientState{fa11 10136 android.view.inputmethod.IInputMethodWrapper}\n';
+    expect(imeEditorInfo(managerOnly)).toBeNull();
+    expect(imeEditorInfoSample(managerOnly)).toContain(
+      'no IME service section'
+    );
   });
 });

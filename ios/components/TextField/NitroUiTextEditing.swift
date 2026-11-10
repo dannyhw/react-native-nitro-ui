@@ -49,6 +49,40 @@ enum NitroUiTextTraits {
     }
   }
 
+  /// The RN spelling of a keyboard a control is *configured with* — the read-back
+  /// side of ``keyboardType(_:)``, for a test that has to prove the prop reached the
+  /// field rather than only reached the model. `.numbersAndPunctuation` is how
+  /// `"numeric"` arrives, so it goes back out under that name; a keyboard UIKit
+  /// offers that no prop asks for (`.asciiCapable`, say) reads back as
+  /// `"default"`, which is what the mapping would have chosen for it.
+  static func name(of keyboard: UIKeyboardType) -> String {
+    switch keyboard {
+    case .numberPad, .asciiCapableNumberPad: return "number-pad"
+    case .decimalPad: return "decimal-pad"
+    case .numbersAndPunctuation: return "numeric"
+    case .emailAddress: return "email-address"
+    case .phonePad: return "phone-pad"
+    case .URL: return "url"
+    default: return "default"
+    }
+  }
+
+  /// The read-back side of ``autocapitalization(_:)``.
+  static func name(of capitalization: UITextAutocapitalizationType) -> String {
+    switch capitalization {
+    case .words: return "words"
+    case .allCharacters: return "characters"
+    case .sentences: return "sentences"
+    default: return "none"
+    }
+  }
+
+  /// The read-back side of `autoCorrect`: only `.no` refuses it — `.default` is the
+  /// system's own answer, which is what `true` asks for.
+  static func autoCorrect(_ correction: UITextAutocorrectionType) -> Bool {
+    correction != .no
+  }
+
   static func returnKey(_ name: String) -> UIReturnKeyType {
     switch name {
     case "done": return .done

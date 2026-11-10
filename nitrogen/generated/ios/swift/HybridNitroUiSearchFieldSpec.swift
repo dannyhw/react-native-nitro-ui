@@ -15,6 +15,9 @@ public protocol HybridNitroUiSearchFieldSpec_protocol: HybridObject, HybridView 
   var mostRecentEventCount: Double { get set }
   var placeholder: Variant_NullType_String { get set }
   var maxLength: Variant_NullType_Double { get set }
+  var keyboardType: String { get set }
+  var autoCapitalize: String { get set }
+  var autoCorrect: Bool { get set }
   var editable: Bool { get set }
   var testID: Variant_NullType_String { get set }
   var accessibilityLabel: Variant_NullType_String { get set }

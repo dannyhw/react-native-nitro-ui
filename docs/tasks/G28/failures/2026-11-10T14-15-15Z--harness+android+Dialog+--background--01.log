@@ -1,0 +1,62 @@
+# Failure excerpt — harness:android:Dialog:--background
+
+- Ran: 2026-11-10T14:15:15.141Z on code tree `dce81fed31bc` at HEAD `8ace885` (branch `task/G28-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Dialog --background`
+- Result: fail, exit 1, 1356 ms
+- Load: start 5.85, end 5.85, median 5.85, max 5.85
+- Device: android / device `emulator-5574` / lease `G28-n0naq`
+- Full log: `task/G28-fix1/harness+android+Dialog+--background-2026-11-10T14-15-15.141Z.log` (<store>/task/G28-fix1/harness+android+Dialog+--background-2026-11-10T14-15-15.141Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `● Unrecognized CLI Parameter:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G28-fix1/harness+android+Dialog+--background-2026-11-10T14-15-15.141Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G28-n0naq (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G28-n0naq                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 5.85 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 16 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Dialog --background
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree dce81fed31bc, 25 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.85/5.21 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G28-fix1/harness+android+Dialog+--background-2026-11-10T14-15-15.141Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+● Unrecognized CLI Parameter:
+
+  Unrecognized option "background".
+
+  CLI Options Documentation:
+  https://jestjs.io/docs/cli
+
+
+
+
+```

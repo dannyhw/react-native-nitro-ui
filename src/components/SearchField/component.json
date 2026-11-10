@@ -11,5 +11,5 @@
   "benchUnsuffixed": false,
   "smoke": true,
   "realInput": true,
-  "realInputTitle": "real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, and the Search key submits then dismisses the keyboard"
+  "realInputTitle": "real keystrokes reach the field and JS sees the query, a real tap on the clear button reports the empty query, the Search key submits then dismisses the keyboard, and a keyboard prop reaches the IME as the keyboard it names with the Search key still on it"
 }

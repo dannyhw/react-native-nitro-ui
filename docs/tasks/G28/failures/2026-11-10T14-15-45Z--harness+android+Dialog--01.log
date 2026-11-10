@@ -1,0 +1,105 @@
+# Failure excerpt — harness:android:Dialog
+
+- Ran: 2026-11-10T14:15:45.807Z on code tree `dce81fed31bc` at HEAD `8ace885` (branch `task/G28-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android Dialog`
+- Result: fail, exit 1, 45138 ms
+- Load: start 12.79, end 8.88, median 10.46, max 12.79
+- Device: android / device `emulator-5574` / lease `G28-n0naq`
+- Full log: `task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log` (<store>/task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Dialog.harness.tsx`
+- `● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled (confirmation)`
+- `expected '1,1,1' to be '1,0,1' // Object.is equality`
+- `● Dialog · behaviour (G11, Q5 B7) › reports the sheet rows as the component draws them, disabled included`
+- `expected 'Locked,Go,Wipe' to be 'Locked~,Go,Wipe' // Object.is equality`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G28-n0naq (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G28-n0naq                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.88 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 55 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: harness:android:Dialog
+gate: node ../scripts/harness.mjs --harnessRunner android Dialog (cwd example)
+gate: code tree dce81fed31bc at HEAD 8ace8857
+gate: git tree 34af857f29b0 with a DIRTY worktree (not reusable)
+gate: log task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log
+gate:       <store>/task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android Dialog
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree dce81fed31bc, 25 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 12.79/6.97 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Dialog.harness.tsx
+  ● Dialog · behaviour (G11, Q5 B7) › takes no tap on a disabled action, and draws it disabled (confirmation)
+
+    expected '1,1,1' to be '1,0,1' // Object.is equality
+
+      [0m [90m 550 |[39m       [90m// given (`drawn`), not the model's flag (`enabled`) - an M3 `ListItem` row that[39m
+       [90m 551 |[39m       [90m// ignores the flag paints the disabled action like the others.[39m
+      [31m[1m>[22m[39m[90m 552 |[39m       expect([33mPlatform[39m[33m.[39m[33mOS[39m [33m===[39m [32m'ios'[39m [33m?[39m up[33m.[39menabled [33m:[39m up[33m.[39mdrawn)[33m.[39mtoBe([32m'1,0,1'[39m)[33m;[39m
+       [90m     |[39m                                                                 [31m[1m^[22m[39m
+       [90m 553 |[39m       handles[33m.[39m[36mget[39m([32m'locked'[39m)[33m?[39m[33m.[39mnuiTestPerformAction([32m'locked'[39m)[33m;[39m
+       [90m 554 |[39m       [36mawait[39m sleep([35m400[39m)[33m;[39m
+       [90m 555 |[39m       expect(eventLog[33m.[39mjoin([32m','[39m))[33m.[39mtoBe([32m''[39m)[33m;[39m[0m
+
+  ● Dialog · behaviour (G11, Q5 B7) › reports the sheet rows as the component draws them, disabled included
+
+    expected 'Locked,Go,Wipe' to be 'Locked~,Go,Wipe' // Object.is equality
+
+      [0m [90m 622 |[39m       }
+       [90m 623 |[39m       [90m// In the order the sheet draws them. No `cancel` action here, so the app's order.[39m
+      [31m[1m>[22m[39m[90m 624 |[39m       expect(fields[33m.[39mrows)[33m.[39mtoBe([32m'Locked~,Go,Wipe'[39m)[33m;[39m
+       [90m     |[39m                               [31m[1m^[22m[39m
+       [90m 625 |[39m       [90m// The group's outer radius (material3's `CornerLarge`) on the first row's top and[39m
+       [90m 626 |[39m       [90m// the last row's bottom; the small radius (`CornerExtraSmall`) where rows meet.[39m
+       [90m 627 |[39m       expect(fields[33m.[39mradii)[33m.[39mtoBe([32m'16/4,4/4,4/16'[39m)[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 29 passed, 31 total
+Snapshots:   0 total
+Time:        43.643 s
+Ran all test suites matching Dialog.
+gate: harness:android:Dialog FAIL in 45.1 s
+gate: recorded in .gates/task/G28-fix1.jsonl
+
+
+gate: appended the device context to task/G28-fix1/harness+android+Dialog-2026-11-10T14-15-45.058Z.log (5 probe(s))
+
+```

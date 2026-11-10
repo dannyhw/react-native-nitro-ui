@@ -104,6 +104,33 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_NullType_Double> /* maxLength */)>("setMaxLength");
     method(_javaPart, JVariant_NullType_Double::fromCpp(maxLength));
   }
+  std::string JHybridNitroUiSearchFieldSpec::getKeyboardType() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getKeyboardType");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiSearchFieldSpec::setKeyboardType(const std::string& keyboardType) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* keyboardType */)>("setKeyboardType");
+    method(_javaPart, jni::make_jstring(keyboardType));
+  }
+  std::string JHybridNitroUiSearchFieldSpec::getAutoCapitalize() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getAutoCapitalize");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiSearchFieldSpec::setAutoCapitalize(const std::string& autoCapitalize) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* autoCapitalize */)>("setAutoCapitalize");
+    method(_javaPart, jni::make_jstring(autoCapitalize));
+  }
+  bool JHybridNitroUiSearchFieldSpec::getAutoCorrect() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("getAutoCorrect");
+    auto __result = method(_javaPart);
+    return static_cast<bool>(__result);
+  }
+  void JHybridNitroUiSearchFieldSpec::setAutoCorrect(bool autoCorrect) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jboolean /* autoCorrect */)>("setAutoCorrect");
+    method(_javaPart, autoCorrect);
+  }
   bool JHybridNitroUiSearchFieldSpec::getEditable() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<jboolean()>("getEditable");
     auto __result = method(_javaPart);

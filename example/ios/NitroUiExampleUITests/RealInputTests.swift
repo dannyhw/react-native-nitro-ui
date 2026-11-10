@@ -144,6 +144,8 @@ final class RealInputTests: XCTestCase {
     static let searchFrozen = "search-frozen-echo"
     static let searchCapped = "search-capped-echo"
     static let searchFocus = "search-focus-echo"
+    static let searchNumber = "search-number-echo"
+    static let searchEmail = "search-email-echo"
     // The Form screen's counters - the same testIDs `scripts/real-input/screens.mjs` names.
     static let formScreenEcho = "form-screen-echo"
     static let formRowPresses = "form-row-presses"
@@ -4885,6 +4887,154 @@ final class RealInputTests: XCTestCase {
       "focus: 2 blur: 2 submitted: go",
       "and one that calls ref.blur() should blur it"
     )
+    // 4. The keyboard props (G27), from outside the app.
+    //
+    // The harness proves the control was configured; only a run like this one can prove
+    // the system drew the keyboard that goes with the configuration, because the keyboard
+    // belongs to UIKit and not to the app. The witness for "the letter keyboard" is a
+    // QWERTY keyboard measured *in this run* — the field with no keyboard prop at all,
+    // which is also the "an app that passes nothing sees no change" claim, seen as the
+    // letters it still gets. Everything else is compared against that reading rather than
+    // against a remembered key count or height, which belong to one iOS version.
+    try required("search-focus-js", as: "the Focus from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 3 blur: 2 submitted: go" },
+      "focus: 3 blur: 2 submitted: go",
+      "a field refocused from JS should have the keyboard again"
+    )
+    let qwerty = keyboardShape("the field with no keyboard prop")
+    XCTAssertTrue(
+      qwerty.keys >= 20,
+      "a plain search field should still open the letter keyboard, not \(qwerty.keys) keys"
+    )
+    // The keyboard has to be down before a field lower than this one is tapped, and the
+    // Blur button is the one control above the keys that puts it there.
+    try required("search-blur-js", as: "the Blur from JS button").fingerTap()
+    XCTAssertEqual(
+      readUntil(Echo.searchFocus) { $0 == "focus: 3 blur: 3 submitted: go" },
+      "focus: 3 blur: 3 submitted: go",
+      "and blurring it should take the keyboard away again"
+    )
+
+    // The email field first, because its keyboard carries the key that puts itself away:
+    // Search submits and the field blurs (step 3 above is that rule), which is what makes
+    // the number field reachable with a scroll and a tap — a row higher up, where no
+    // keyboard is drawn. The number pad has no Return key on iOS at all, so a check that
+    // ends there has no key to dismiss it with, and the next check launches its own app.
+    let email = try searchFieldInView(labelled: "Email search field")
+    try focusByTap(email, echo: nil, as: "the email field")
+    let emailKeys = keyboardShape("keyboardType=email-address")
+    XCTAssertTrue(
+      emailKeys.keys * 2 > qwerty.keys,
+      "keyboardType=\"email-address\" should open a keyboard with letters on it, not "
+        + "\(emailKeys.keys) keys (the letter keyboard in this run has \(qwerty.keys))"
+    )
+    // The "@" is the keystroke worth typing here: that keyboard carries it on its face,
+    // and a field the IME still believed was a plain text field has no @ key to press.
+    // One key at a time, each waited for — both fields are controlled, and a burst lands
+    // its second key before JS has answered the first (the shape `testRealInputPopover`
+    // documents losing). The query is built up as it is typed, so a dropped key cannot
+    // agree with itself: the expectation is what was pressed.
+    var emailQuery = ""
+    for key in ["a", "@", "b"] {
+      emailQuery += key
+      email.typeText(key)
+      let expected = "email: \(emailQuery) submitted: -"
+      XCTAssertTrue(
+        waitUntil({ echoText(Echo.searchEmail) == expected }, window: reactTimeout),
+        "typing \"\(key)\" should reach the email field: the echo reads "
+          + "\"\(echoText(Echo.searchEmail))\" and should read \"\(expected)\""
+      )
+    }
+    email.typeText("\n")
+    XCTAssertEqual(
+      readUntil(Echo.searchEmail) { $0 == "email: a@b submitted: a@b" },
+      "email: a@b submitted: a@b",
+      "the Search key should still submit a query on a keyboard the app chose"
+    )
+
+    let numbers = try searchFieldInView(labelled: "Number search field")
+    try focusByTap(numbers, echo: nil, as: "the number-pad field")
+    let numberPad = keyboardShape("keyboardType=number-pad")
+    XCTAssertTrue(
+      numberPad.keys > 0 && numberPad.keys * 2 <= qwerty.keys,
+      "keyboardType=\"number-pad\" should open a number keyboard, not the \(numberPad.keys) "
+        + "keys of a field that was told nothing (the letter keyboard here has \(qwerty.keys))"
+    )
+    var numberQuery = ""
+    for digit in "123" {
+      numberQuery += String(digit)
+      numbers.typeText(String(digit))
+      let expected = "number: \(numberQuery) submitted: -"
+      XCTAssertTrue(
+        waitUntil({ echoText(Echo.searchNumber) == expected }, window: reactTimeout),
+        "typing \"\(digit)\" should reach the number field: the echo reads "
+          + "\"\(echoText(Echo.searchNumber))\" and should read \"\(expected)\""
+      )
+    }
+  }
+
+  /// A search field with `label`, scrolled into the window so a tap can reach it.
+  ///
+  /// Every other field on this screen is tapped from the top down, because a keyboard
+  /// takes the lower half of it; a check that arrives at a lower field last has to move
+  /// the page instead, and a `fingerTap` on a row UIKit has scrolled away taps whatever
+  /// is at that point now. The loop re-reads the field's box on every pass because the
+  /// scroll is what moves it — and scrolls back down when the box is above the window,
+  /// which is where a field ends up after the check above it scrolled past it.
+  private func searchFieldInView(labelled label: String) throws -> XCUIElement {
+    let field = try searchField(labelled: label)
+    let screen = app.windows.firstMatch.frame
+    for _ in 0..<6 {
+      let box = field.frame
+      if box.height > 0 && box.minY > screen.minY && box.maxY < screen.maxY {
+        return field
+      }
+      if box.maxY < screen.minY {
+        app.swipeDown()
+      } else {
+        app.swipeUp()
+      }
+    }
+    dumpHierarchy("no search field labelled \"\(label)\" on screen")
+    XCTFail(
+      "the search field \"\(label)\" never came on screen: its box was \(field.frame) "
+        + "in a window of \(screen), however far the page was scrolled."
+    )
+    throw RealInputCheckAborted(identifier: label)
+  }
+
+  /// Which keyboard UIKit drew, in the two readings XCUITest can take of it: how many
+  /// keys it exposes and how tall it is.
+  ///
+  /// Both belong to the system's keyboard window, so neither can be faked from inside the
+  /// app. The key count is the useful one — a number pad is a grid of a dozen keys where
+  /// the letter keyboard is a full alphabet — and it is always compared with another
+  /// reading from the same run, because how many keys a keyboard has and how tall it
+  /// stands are the business of the iOS version installed and of no remembered constant.
+  ///
+  /// The labels are printed too, so a failure says what the keyboard was made of and not
+  /// only how big it was. A count of zero is the witness failing loudly, not a keyboard
+  /// with no keys: a run that cannot see the keys grades nothing.
+  private func keyboardShape(_ what: String) -> (keys: Int, height: CGFloat) {
+    let keyboard = app.keyboards.firstMatch
+    XCTAssertTrue(
+      keyboard.waitForExistence(timeout: 8),
+      "no keyboard came up for \(what)"
+    )
+    // `descendants`, not `children`: how UIKit nests a keyboard's keys behind its layout
+    // groups is UIKit's business, and a witness that counts only one level deep would
+    // read a real keyboard as a nearly empty one. Keys do not contain keys, so the two
+    // agree on a flat keyboard and this is the one that cannot miss.
+    let keys = keyboard.descendants(matching: .key)
+    let labels = keys.allElementsBoundByIndex.prefix(24).map { element in
+      element.label.isEmpty ? element.identifier : element.label
+    }
+    print(
+      "real-input (ios): keyboard for \(what): keys=\(keys.count) "
+        + "frame=\(keyboard.frame) labels=\(labels)"
+    )
+    return (keys.count, keyboard.frame.height)
   }
 
   /// Read an echo for `seconds` and hand back what it said at the end. The negative

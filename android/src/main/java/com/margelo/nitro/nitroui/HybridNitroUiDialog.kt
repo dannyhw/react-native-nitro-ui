@@ -1,10 +1,12 @@
 package com.margelo.nitro.nitroui
 
 import android.app.Activity
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -14,12 +16,12 @@ import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
@@ -32,11 +34,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color as ComposeColor
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -48,9 +58,13 @@ import com.margelo.nitro.nitroui.core.NitroComposeHost
 import com.margelo.nitro.nitroui.core.NitroUiControlledValue
 import com.margelo.nitro.nitroui.core.NitroUiModel
 import com.margelo.nitro.nitroui.core.NitroUiPerf
+import com.margelo.nitro.nitroui.core.toRgbHex
 import com.margelo.nitro.views.RecyclableView
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.math.absoluteValue
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /*
  * AlertDialog and ConfirmationDialog (G11, DECISIONS D33): one native view behind both
@@ -113,6 +127,21 @@ internal class DialogModel : NitroUiModel() {
    * composition, so a presentation that never got a window (no attach yet) is not one.
    */
   private val composedPresentations = AtomicInteger(0)
+
+  /**
+   * Bumped to arm one row probe, and read by [RowProbeWitness], which answers it.
+   * Snapshot state because arming has to reach the composition that draws the rows.
+   */
+  var probeToken by mutableIntStateOf(0)
+    private set
+
+  /** Whether the one armed probe is still unanswered, so a re-arm cannot pile up. */
+  @Volatile var probePending = false
+    private set
+
+  private val probeCount = AtomicInteger(0)
+
+  @Volatile private var probeLine = ""
 
   /** What the composition last composed, for [readReport]. Written on the UI thread. */
   @Volatile private var composedFacts = "kind=none"
@@ -200,6 +229,34 @@ internal class DialogModel : NitroUiModel() {
     drawnEnabled[id] = enabled
   }
 
+  /**
+   * Ask for one read of the sheet's rows, through [RowProbeWitness]. Only a confirmation
+   * sheet answers, and only one read is ever in flight: the answer costs a window-sized
+   * bitmap draw, so it happens because a harness asked for it by name
+   * ([PROBE_ROWS_ID]) and not on every read of the report.
+   */
+  fun armRowProbe() {
+    if (probePending || !presented || variant != "confirmation") {
+      return
+    }
+    probePending = true
+    probeToken += 1
+  }
+
+  /** What a row probe measured. The count is how a test picks its own answer out. */
+  fun publishRowProbe(line: String) {
+    probePending = false
+    probeLine = "n=${probeCount.incrementAndGet()} $line"
+  }
+
+  /**
+   * The sheet left composition with a probe armed, so nothing will ever answer it.
+   * Without this the flag stays set and no later probe can be armed at all.
+   */
+  fun abandonRowProbe() {
+    probePending = false
+  }
+
   fun noteWindowEntered() {
     composedPresentations.incrementAndGet()
   }
@@ -218,7 +275,9 @@ internal class DialogModel : NitroUiModel() {
   fun readReport(lifetime: String): String =
     "presented=${if (state.displayed) 1 else 0};js=${if (state.js == true) 1 else 0}" +
       ";live=${livePresentations.get()};presentCount=${composedPresentations.get()}" +
-      ";$composedFacts;drawn=${drawnReport()};hosted=${if (hosted) 1 else 0};$lifetime"
+      ";$composedFacts;drawn=${drawnReport()}" +
+      (if (probeLine.isEmpty()) "" else ";probe=$probeLine") +
+      ";hosted=${if (hosted) 1 else 0};$lifetime"
 
   private fun drawnReport(): String =
     composedIds.joinToString(",") { id ->
@@ -251,6 +310,10 @@ internal class DialogModel : NitroUiModel() {
     composedFacts = "kind=none"
     composedIds = emptyList()
     drawnEnabled.clear()
+    probePending = false
+    probeToken = 0
+    probeCount.set(0)
+    probeLine = ""
   }
 
   companion object {
@@ -270,9 +333,6 @@ internal class DialogModel : NitroUiModel() {
  * a disabled label at 0.38 and an enabled one opaque.
  */
 private const val DISABLED_ALPHA_CEILING = 0.5f
-
-/** Material 3's alpha for disabled content (`ButtonDefaults`' disabled text, say). */
-private const val DISABLED_CONTENT_ALPHA = 0.38f
 
 /** A confirmation sheet opens fully or not at all: it has no half-height rest. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -514,29 +574,79 @@ private class DialogHost(
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 8.dp),
           )
         }
-        val tint = model.tintColor
-        for (action in ordered) {
-          // A disabled row gets Material's disabled colour here, or it looks tappable
-          // and is not. Written when M3 1.4's `ListItem` had no `enabled`; 1.5's has
-          // one, and moving the row onto it (with `onClick`) is the Dialog's Expressive
-          // pass, not the platform bump that only replaced the deprecated overload.
-          val content =
-            when {
-              action.disabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = DISABLED_CONTENT_ALPHA)
-              action.role == "destructive" -> MaterialTheme.colorScheme.error
-              tint != null -> ComposeColor(tint)
-              else -> MaterialTheme.colorScheme.onSurface
+        // The group carries its own 16 dp inset, which is the radius of its outer corners:
+        // flush to the sheet the corners cut grey wedges against the sheet's edge, and
+        // segments that touch are not segments, so they keep material3's own gap. The title
+        // and message above keep the sheet's 24 dp padding.
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+          verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        ) {
+          val tint = model.tintColor
+          val rowColors = ListItemDefaults.segmentedColors()
+          ordered.forEachIndexed { index, action ->
+            // The interactive segmented row, and the row's own `enabled`: a disabled
+            // action takes no press, says so in the accessibility tree, and is painted
+            // with the component's own disabled colour rather than one picked here.
+            // (Written when M3 1.4's `ListItem` had no `enabled`; 1.5's interactive row
+            // has one, and this is the Dialog's Expressive pass - D40 pass 3 B.)
+            //
+            // `tintColor` and `role: 'destructive'` replace only the *enabled* content
+            // colour, so a disabled destructive row is still drawn disabled. The colour
+            // set is remembered, not rebuilt: `ListItemColors` has twenty-four fields and
+            // a prop update must not allocate one per row (`core.md` section 3).
+            val content =
+              when {
+                action.role == "destructive" -> MaterialTheme.colorScheme.error
+                tint != null -> ComposeColor(tint)
+                else -> null
+              }
+            val colors =
+              remember(rowColors, content) {
+                content?.let { rowColors.copy(contentColor = it) } ?: rowColors
+              }
+            SegmentedListItem(
+              onClick = { model.performAction(action.id) },
+              shapes = ListItemDefaults.segmentedShapes(index, ordered.size),
+              modifier =
+                Modifier
+                  .fillMaxWidth()
+                  .semantics { this[ROW_MARK] = Unit },
+              enabled = !action.disabled,
+              colors = colors,
+            ) {
+              ActionLabel(model, action)
             }
-          ListItem(
-            modifier =
-              Modifier
-                .fillMaxWidth()
-                .clickable(enabled = !action.disabled) { model.performAction(action.id) },
-            colors = ListItemDefaults.colors(contentColor = content),
-          ) {
-            ActionLabel(model, action)
           }
         }
+        RowProbeWitness(model)
+      }
+    }
+  }
+
+  /**
+   * Answers one armed row probe: what the sheet's rows *are*, by their own accessibility
+   * state and the container they actually draw.
+   *
+   * Composed inside the sheet because that is where `LocalView` is the sheet's own
+   * window, and harness-only because the harness can neither tap another window (that is
+   * `real-input:android`'s job) nor read it any other way. The answer needs a bitmap
+   * draw of that window, so it runs on the UI thread and costs a frame or two - a price
+   * no app ever pays, since nothing arms a probe outside the harness.
+   */
+  @Composable
+  private fun RowProbeWitness(model: DialogModel) {
+    val view = LocalView.current
+    val density = LocalDensity.current.density
+    val token = model.probeToken
+    DisposableEffect(Unit) {
+      // A sheet that goes away mid-answer would otherwise leave the probe armed
+      // forever: [DialogModel.abandonRowProbe] is what lets a later one be asked.
+      onDispose { model.abandonRowProbe() }
+    }
+    LaunchedEffect(token) {
+      if (token > 0) {
+        model.publishRowProbe(describeConfirmationRows(view, density))
       }
     }
   }
@@ -769,9 +879,27 @@ class HybridNitroUiDialog(
 
   // MARK: - Methods
 
+  /**
+   * What the dialog shows. Still a pure read - a lock-free snap of volatiles that never
+   * waits for the UI thread (`core.md` section 5) - and still draws nothing: the row
+   * probe, which costs a bitmap draw of the window, is armed by name through
+   * [nuiTestPerformAction] rather than by the act of asking.
+   */
   override fun nuiTestStateReport(): String = model.readReport(host.lifetimeReport().replace(' ', ';'))
 
+  /**
+   * Press one action, as a person would. [PROBE_ROWS_ID] is not an action: it is the
+   * reserved id by which a harness asks for one read of the confirmation sheet's rows,
+   * the only way it can reach a window it can neither tap nor otherwise read.
+   */
   override fun nuiTestPerformAction(id: String) {
+    if (id == PROBE_ROWS_ID) {
+      runOnUi {
+        model.armRowProbe()
+        host.applyModelWrites()
+      }
+      return
+    }
     runOnUi {
       model.performAction(id)
       host.applyModelWrites()
@@ -793,4 +921,173 @@ class HybridNitroUiDialog(
     }
     mainHandler.post { action() }
   }
+}
+
+/**
+ * The id [HybridNitroUiDialog.nuiTestPerformAction] reads as "answer one row probe"
+ * rather than as an action. Underscores first so no app's action id can collide, and
+ * private to this file because nothing outside it may name it.
+ */
+private const val PROBE_ROWS_ID = "__nui_probe_rows"
+
+/**
+ * Marks each confirmation row in the sheet's semantics tree, so [describeConfirmationRows]
+ * reports the rows and not the sheet's title, message or drag handle. A property of our
+ * own rather than a `testTag`, because with `testTagsAsResourceId` on the window a tag
+ * would also become a resource id in every app's accessibility tree.
+ */
+internal val ROW_MARK = SemanticsPropertyKey<Unit>("NitroUiDialogRow")
+
+/**
+ * How close a pixel has to be to a row's container colour to *be* it - far tighter than
+ * the 30 [nitroUiSamplePixels] allows, because the two colours this probe tells apart
+ * (`surface` and the sheet's `surfaceContainerLow`) are ~20 apart to begin with. Both
+ * sides are flat fills, so exactness costs nothing.
+ */
+private const val ROW_PIXEL_TOLERANCE = 6
+
+/**
+ * How far inside a row's edge the corner is read from. One pixel is still inside the
+ * corner's own anti-aliasing; three is a flat line, and the inversion above works from
+ * any depth.
+ */
+private const val CORNER_PROBE_DEPTH_PX = 3
+
+/** One row [describeConfirmationRows] found: what it says, and where it is drawn. */
+private class SheetRow(
+  val title: String,
+  val enabled: Boolean,
+  val left: Int,
+  val top: Int,
+  val right: Int,
+  val bottom: Int,
+)
+
+/**
+ * What the open sheet's rows are, as one line for a harness: `rows=` each row as the
+ * screen reader finds it (a disabled one carries `~`, the same mark `Menu`'s probe
+ * writes), and `radii=` the corner radius in dp that each row's own container is drawn
+ * with, `top/bottom` down its leading edge.
+ *
+ * Both halves are read from the component, never from the props that produced it: the
+ * first is the row's merged semantics node, the second is its pixels. A row that stopped
+ * honouring `enabled`, or stopped being a segmented row, moves the line.
+ */
+private fun describeConfirmationRows(
+  view: View,
+  density: Float,
+): String {
+  val owner = (view as? RootForTest)?.semanticsOwner ?: return "no semantics"
+  val rows = ArrayList<SheetRow>()
+  collectSheetRows(owner.rootSemanticsNode, rows)
+  if (rows.isEmpty()) {
+    return "no rows"
+  }
+  if (view.width < 8 || view.height < 8) {
+    return "no pixels"
+  }
+  val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+  try {
+    view.draw(Canvas(bitmap))
+    val measured = rows.map { it.drawnCorners(bitmap, density) }
+    val container = measured.map { it.second }.firstOrNull { it != "-" } ?: "-"
+    val state = rows.joinToString(",") { if (it.enabled) it.title else "${it.title}~" }
+    return (
+      "rows=$state radii=${measured.joinToString(",") { it.first }}" +
+        " container=$container window=${view.width}x${view.height}"
+      )
+  } finally {
+    bitmap.recycle()
+  }
+}
+
+/** Every [ROW_MARK]ed node at or under [node], in the order the sheet draws them. */
+private fun collectSheetRows(node: SemanticsNode, into: MutableList<SheetRow>) {
+  val bounds = if (node.config.contains(ROW_MARK)) node.boundsInRoot else null
+  if (bounds != null) {
+    val text = node.config.getOrNull(SemanticsProperties.Text)
+      ?.joinToString("") { it.text }
+      ?: "?"
+    into.add(
+      SheetRow(
+        title = text,
+        enabled = !node.config.contains(SemanticsProperties.Disabled),
+        left = bounds.left.roundToInt(),
+        top = bounds.top.roundToInt(),
+        right = bounds.right.roundToInt() - 1,
+        bottom = bounds.bottom.roundToInt() - 1,
+      )
+    )
+    return
+  }
+  for (child in node.children) {
+    collectSheetRows(child, into)
+  }
+}
+
+/**
+ * The corner radius material3 draws a row's container with, in dp, as `"<top>/<bottom>"`
+ * down its leading edge - reconstructed from where the container begins on a line [CORNER_PROBE_DEPTH_PX]
+ * pixels inside the edge. A rounded corner meets that line at `dx = r - sqrt(2rd - d^2)`,
+ * which inverts to `r = dx + d + sqrt(2dxd)`, so the number is the radius itself rather
+ * than a proxy for it: `16` is `CornerLarge`, where a segmented group's outer corners are,
+ * and `4` is `CornerExtraSmall`, where its rows meet.
+ *
+ * `?` when the row cannot be read at all - too small, outside the capture, or a container
+ * colour that is not to be found anywhere on the edge, which is also what a row that draws
+ * no container reads as. A test that expects radii goes red on those, rather than shrug.
+ */
+private fun SheetRow.drawnCorners(bitmap: Bitmap, density: Float): Pair<String, String> {
+  if (right - left < 8 || bottom - top < 8) {
+    return "?-small" to "-"
+  }
+  // Every pixel this reads has to be inside the capture. A sheet that is still on its
+  // way up measures *below* the window, and a row the probe could not reach is reported
+  // as that - not as a row that draws no container, which is the difference the harness
+  // waits on. (A row flush with the sheet's edge has left = 0, which reads fine: the
+  // scans start at left and look rightwards.)
+  if (top + CORNER_PROBE_DEPTH_PX >= bottom || bottom - CORNER_PROBE_DEPTH_PX <= top) {
+    return "?-small" to "-"
+  }
+  if (top < 0 || bottom >= bitmap.height || right >= bitmap.width) {
+    return "?-outside" to "-"
+  }
+  // Flat, untexted space of the row's own container, well inside every corner.
+  val container = bitmap.getPixel(right - 5, (top + bottom) / 2)
+  val topRadius = leadingRadius(bitmap, left, top + CORNER_PROBE_DEPTH_PX, container)
+  val bottomRadius = leadingRadius(bitmap, left, bottom - CORNER_PROBE_DEPTH_PX, container)
+  if (topRadius < 0 || bottomRadius < 0) {
+    return "?-blind" to ComposeColor(container).toRgbHex()
+  }
+  val toDp = { px: Double -> (px / density).roundToInt().toString() }
+  return "${toDp(cornerRadiusPx(topRadius))}/${toDp(cornerRadiusPx(bottomRadius))}" to
+    ComposeColor(container).toRgbHex()
+}
+
+/**
+ * How far from the row's leading edge its container colour begins on the line at [y],
+ * in px, or -1 when it never begins (a row with no container to find).
+ */
+private fun leadingRadius(bitmap: Bitmap, left: Int, y: Int, container: Int): Int {
+  for (x in left until bitmap.width) {
+    if (isSameColour(bitmap.getPixel(x, y), container)) {
+      return x - left
+    }
+  }
+  return -1
+}
+
+/** The measured start of the arc back to the radius it was drawn with. */
+private fun cornerRadiusPx(dx: Int): Double {
+  val d = CORNER_PROBE_DEPTH_PX.toDouble()
+  val gap = dx.toDouble()
+  return gap + d + sqrt(2.0 * gap * d)
+}
+
+private fun isSameColour(pixel: Int, colour: Int): Boolean {
+  val distance =
+    ((pixel shr 16 and 0xff) - (colour shr 16 and 0xff)).absoluteValue +
+      ((pixel shr 8 and 0xff) - (colour shr 8 and 0xff)).absoluteValue +
+      ((pixel and 0xff) - (colour and 0xff)).absoluteValue
+  return distance <= ROW_PIXEL_TOLERANCE
 }

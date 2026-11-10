@@ -1,0 +1,112 @@
+# Failure excerpt — harness:ios
+
+- Ran: 2026-11-10T09:30:52.405Z on code tree `a21c6d004613` at HEAD `c9ce779` (branch `task/G28-dialog-rows`)
+- Command: `node ../scripts/harness.mjs --harnessRunner ios`
+- Result: fail, exit 1, 377 ms
+- Load: start 9.37, end 9.37, median 9.37, max 9.37
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G28-fn0rg`
+- Full log: `task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log` (<store>/task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `Error details:`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G28-fn0rg (still live)
+  |   G25G26-f90yv             G25G26       both              pair-b
+  |   G28-fn0rg                G28          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 9.10 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 68 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: harness:ios
+gate: node ../scripts/harness.mjs --harnessRunner ios (cwd example)
+gate: code tree a21c6d004613 at HEAD c9ce779c
+gate: git tree 9896586ba6ee
+gate: log task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log
+gate:       <store>/task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: no app to test.
+       build it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp, which is what this check reads)
+       an app built another way has no stamp and is refused too -
+       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check
+       at all, against whatever the device already has installed.
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated suites, in an app instance of their own: BottomSheetModalHazard.harness.tsx, PopoverModalHazard.harness.tsx, TooltipModalHazard.harness.tsx
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner ios
+Failed to load configuration file
+
+File: <repo>/example/rn-harness.config.mjs
+
+Error details:
+  bun run harness:ios: no app to test.
+       build it: node scripts/build-app.mjs --platform ios
+       (it writes app.stamp, which is what this check reads)
+       an app built another way has no stamp and is refused too -
+       NITRO_UI_ALLOW_UNSTAMPED=1 runs the suite with no artifact check
+       at all, against whatever the device already has installed.
+
+This could be due to:
+  • Syntax errors in your configuration file
+  • Missing dependencies or modules
+  • Invalid file format or encoding
+  • File permissions issues
+
+Troubleshooting steps:
+  1. Check the file syntax and format
+  2. Ensure all required dependencies are installed
+  3. Verify file permissions
+  4. Try creating a new configuration file
+
+For more help, visit: https://www.react-native-harness.dev/docs/getting-started/configuration
+harness: isolated run failed (exit 1)
+gate: harness:ios FAIL in 0.4 s
+gate: recorded in .gates/task/G28-dialog-rows.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G28-dialog-rows/harness+ios-2026-11-10T09-30-51.971Z.log (4 probe(s))
+
+```

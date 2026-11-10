@@ -51,6 +51,9 @@ namespace margelo::nitro::nitroui::views {
     nitro::ReactProp<double> mostRecentEventCount;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> placeholder;
     nitro::ReactProp<std::variant<nitro::NullType, double>> maxLength;
+    nitro::ReactProp<std::string> keyboardType;
+    nitro::ReactProp<std::string> autoCapitalize;
+    nitro::ReactProp<bool> autoCorrect;
     nitro::ReactProp<bool> editable;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> testID;
     nitro::ReactProp<std::variant<nitro::NullType, std::string>> accessibilityLabel;
@@ -69,6 +72,9 @@ namespace margelo::nitro::nitroui::views {
              mostRecentEventCount.hasSameValue(other.mostRecentEventCount) &&
              placeholder.hasSameValue(other.placeholder) &&
              maxLength.hasSameValue(other.maxLength) &&
+             keyboardType.hasSameValue(other.keyboardType) &&
+             autoCapitalize.hasSameValue(other.autoCapitalize) &&
+             autoCorrect.hasSameValue(other.autoCorrect) &&
              editable.hasSameValue(other.editable) &&
              testID.hasSameValue(other.testID) &&
              accessibilityLabel.hasSameValue(other.accessibilityLabel) &&
@@ -88,6 +94,9 @@ namespace margelo::nitro::nitroui::views {
              mostRecentEventCount.isProvided() ||
              placeholder.isProvided() ||
              maxLength.isProvided() ||
+             keyboardType.isProvided() ||
+             autoCapitalize.isProvided() ||
+             autoCorrect.isProvided() ||
              editable.isProvided() ||
              testID.isProvided() ||
              accessibilityLabel.isProvided() ||

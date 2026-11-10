@@ -1,0 +1,148 @@
+# Failure excerpt — harness:android:(TextField%7CForm).harness
+
+- Ran: 2026-11-10T04:40:48.166Z on code tree `1c37ba278d06` at HEAD `3fd4700` (branch `task/G27-search-field-keyboard`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android (TextField|Form).harness`
+- Result: fail, exit 1, 34431 ms
+- Load: start 5.21, end 4.34, median 4.92, max 5.29
+- Device: android / device `emulator-5570` / lease `G27-ul745`
+- Full log: `task/G27-search-field-keyboard/harness+android+TextField+7CForm+.harness-2026-11-10T04-40-48.166Z.log` (<store>/task/G27-search-field-keyboard/harness+android+TextField+7CForm+.harness-2026-11-10T04-40-48.166Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Form.harness.tsx`
+- `● Console`
+- `● Form (G24) › starts a recycled Form at the top of its own content`
+- `expected 200 to be less than or equal to 1`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-search-field-keyboard/harness+android+TextField+7CForm+.harness-2026-11-10T04-40-48.166Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-ul745 (still live)
+  |   G27-ul745                G27          both              pair-b
+  |   X22-1qgjs                X22          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.34 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 99 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android (TextField|Form).harness
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 1c37ba278d06, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 5.21/6.12 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G27-search-field-keyboard/harness+android+TextField+7CForm+.harness-2026-11-10T04-40-48.166Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Form.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      FORM TRACE base: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE inserted: rows=10;items=-;inCells=10;reparents=-;reclaims=-;applies=-;alive=10;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE removed: rows=8;items=-;inCells=8;reparents=-;reclaims=-;applies=-;alive=8;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE reordered: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE before the cycles: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE after the cycles: rows=9;items=-;inCells=9;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TAP boxes pressable={"nativeId":"5c3570f9-e7e2-4b52-ab50-489c454c707b"} switch={"nativeId":"4efa389f-d16d-4e79-a1b7-d6eb5b788cc5"}
+
+
+    console.log
+      FORM COST N=20 form=115ms plain=78ms <missing>
+
+
+    console.log
+      FORM COST N=50 form=151ms plain=76ms <missing>
+
+
+    console.log
+      FORM TRACE scrolled before the recycle: rows=9;items=-;inCells=7;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      FORM TRACE the recycled Form: rows=9;items=-;inCells=7;reparents=-;reclaims=-;applies=-;alive=9;placed=3;screen=-;offset=0.00;recycles=-;insetTop=-
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=1 geometry{offset=0.00,origin=0.00,received=<missing>,listY=<missing>,insetTop=<missing>} - m5: measureInWindow 12.2,327.2,387.4,56.0 (-scroll 0.0 = 327.2) vs UIKit 12.2,37.3,387.4,56.0 (off by 289.9 pt)
+
+
+    console.log
+      S6b MEASURE at rest: compared=14 scroll=0.0 mismatched=0 geometry{offset=0.00,origin=0.00,received=<missing>,listY=<missing>,insetTop=<missing>}
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=14 geometry{offset=0.00,origin=0.00,received=<missing>,listY=<missing>,insetTop=<missing>} - m0: measureInWindow 12.2,-142.5,387.4,56.0 (-scroll 0.0 = -142.5) vs UIKit 12.2,37.3,387.4,56.0 (off by 179.8 pt) | m1: measureInWindow 12.2,-84.6,387.4,56.0 (-scroll 0.0 = -84.6) vs UIKit 12.2,95.2,387.4,56.0 (off by 179.8 pt) | m2: measureInWindow 12.2,-26.7,387.4,56.0 (-scroll 0.0 = -26.7) vs UIKit 12.2,153.1,387.4,56.0 (off by 179.8 pt) | m3: measureInWindow 12.2,31.2,387.4,56.0 (-scroll 0.0 = 31.2) vs UIKit 12.2,211.0,387.4,56.0 (off by 179.8 pt) | m4: measureInWindow 12.2,89.5,387.4,56.0 (-scroll 0.0 = 89.5) vs UIKit 12.2,269.3,387.4,56.0 (off by 179.8 pt) | m5: measureInWindow 12.2,147.4,387.4,56.0 (-scroll 0.0 = 147.4) vs UIKit 12.2,327.2,387.4,56.0 (off by 179.8 pt) | m6: measureInWindow 12.2,205.3,387.4,56.0 (-scroll 0.0 = 205.3) vs UIKit 12.2,385.1,387.4,56.0 (off by 179.8 pt) | m7: measureInWindow 12.2,263.2,387.4,56.0 (-scroll 0.0 = 263.2) vs UIKit 12.2,443.0,387.4,56.0 (off by 179.8 pt) | m8: measureInWindow 12.2,321.5,387.4,56.0 (-scroll 0.0 = 321.5) vs UIKit 12.2,501.3,387.4,56.0 (off by 179.8 pt) | m9: measureInWindow 12.2,379.4,387.4,56.0 (-scroll 0.0 = 379.4) vs UIKit 12.2,559.2,387.4,56.0 (off by 179.8 pt) | m10: measureInWindow 12.2,437.3,387.4,56.0 (-scroll 0.0 = 437.3) vs UIKit 12.2,617.1,387.4,56.0 (off by 179.8 pt) | m11: measureInWindow 12.2,495.2,387.4,56.0 (-scroll 0.0 = 495.2) vs UIKit 12.2,675.0,387.4,56.0 (off by 179.8 pt) | m12: measureInWindow 12.2,553.5,387.4,56.0 (-scroll 0.0 = 553.5) vs UIKit 12.2,733.3,387.4,56.0 (off by 179.8 pt) | m13: measureInWindow 12.2,611.4,387.4,56.0 (-scroll 0.0 = 611.4) vs UIKit 12.2,791.2,387.4,56.0 (off by 179.8 pt)
+
+
+    console.log
+      S6b MEASURE after 180 pt: compared=14 scroll=0.0 mismatched=0 geometry{offset=0.00,origin=0.00,received=<missing>,listY=<missing>,insetTop=<missing>}
+
+  ● Form (G24) › starts a recycled Form at the top of its own content
+
+    expected 200 to be less than or equal to 1
+
+      [0m [90m 1264 |[39m       [36mconst[39m top [33m=[39m [33mIOS[39m [33m?[39m num(next[33m,[39m [32m'insetTop'[39m) [33m:[39m [35m0[39m[33m;[39m
+       [90m 1265 |[39m       [36mif[39m ([33mIOS[39m) expect(top)[33m.[39mtoBeGreaterThan([35m0[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 1266 |[39m       expect([33mMath[39m[33m.[39mabs(num(next[33m,[39m offsetField) [33m+[39m top))[33m.[39mtoBeLessThanOrEqual([35m1[39m)[33m;[39m
+       [90m      |[39m                                                                         [31m[1m^[22m[39m
+       [90m 1267 |[39m     }
+       [90m 1268 |[39m   })[33m;[39m
+       [90m 1269 |[39m[0m
+
+
+Test Suites: 1 failed, 1 passed, 2 total
+Tests:       1 failed, 3 skipped, 26 passed, 30 total
+Snapshots:   0 total
+Time:        33.222 s
+Ran all test suites matching (TextField|Form).harness.
+
+
+
+```
