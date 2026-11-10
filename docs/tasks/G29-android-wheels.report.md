@@ -5,28 +5,37 @@
 
 ## Measured boxes
 
+All of them read off the device by `scripts/real-input/android.mjs` (density 2.625, API 35,
+`nitroui_b`), because they are the numbers the report quotes and a fixture could only prove
+the emulator had not changed.
+
 | Wheel | Device box (dp) | How measured |
 | --- | --- | --- |
-| Picker `wheel` | _harness log: `wheel box:`_ | `Picker.harness.tsx` in a 300 dp box, poisoned fallback |
-| DatePicker `wheel` `time` | _harness log: `time drum box:`_ | `DatePicker.harness.tsx` in a 320 dp box, poisoned fallback |
-| DatePicker `wheel` `date` | = `inline` `date` | same box as the inline calendar, asserted equal |
+| Picker `wheel` | 197 × **200**, in a box its story pins narrower than the 300 dp the harness used | real-input `drum box: 282,703 → 798,1228`; the harness lays the same drum out at 300 dp wide and 200 dp tall |
+| DatePicker `wheel` `time` | **280 × 120**, and inside it one drum per field: hour 100 × 120, minute 100 × 120, 42 px apart | real-input `time wheel box: 172,1020 → 908,1335` and the two named drum nodes ("Select hour", "Select minutes") |
+| DatePicker `wheel` `date` | **512 dp tall** — the inline calendar's own box, asserted equal to it | real-input `wheel + mode="date" box … = 512 dp tall, against the time wheel's 120 dp`; `DatePicker.harness.tsx` asserts the two boxes are the same box |
+
+The heights are the widgets' claims, not the component's: `fillWidth` gives the width and the
+`ScrollField`/`TimeScroll` gives the height, which is why each sizing test poisons the
+fallback first and then counts the correction.
 
 ## Summary
 
-Both wheels are Material's own now. `Picker variant="wheel"` draws `ScrollField` and
-DatePicker's `wheel` + `time` draws `TimeScroll`, where Android previously gave a menu and an
-inline calendar.
+Both wheels are Material's own now: `Picker variant="wheel"` draws `ScrollField`, and
+DatePicker's `wheel` + `time` draws `TimeScroll`, where Android gave a menu and an inline
+calendar. **Not mergeable as it stands:** one fling of the time drum reported two changes on a
+loaded box, and the freeze cut both iOS gates.
 
 The bug that mattered was not the drawing. A drum is a pager, and React Native's scroll view
-claims a vertical drag at touch slop, before the pager has seen it: in a scroller a fling
-moved the window, not the drum, and JS heard nothing. `Modifier.nuiOwnVerticalDrags` (core)
+claims a vertical drag at touch slop, before the pager sees it: a fling in a scroller moved
+the window, not the drum, and JS heard nothing. `Modifier.nuiOwnVerticalDrags` (core)
 asks the ancestors to stand down for a gesture begun on the drum — and both docs state the
 bargain: that drag rolls the drum, and the page is scrolled beside it.
 
 The one design decision a reviewer needs: **neither wheel reads its value as it turns.** A
-`ScrollField` names the row nearest its snap line continuously — `TimeScrollImpl` forwards
-every one of those to `state.hour`/`state.minute` — so the dial's "the fields moved, so
-somebody picked" rule would price a roll from 09:20 to 14:05 at fifty-odd events. Both wheels
+`ScrollField` names the row nearest its snap line continuously and `TimeScrollImpl` forwards
+each one to `state.hour`/`.minute`, so the dial's "the fields moved, so somebody picked" rule
+would price a 09:20→14:05 roll at fifty-odd events. Both wheels
 keep the rule and replace the trigger: the value is read at a *rest*, one rest one report.
 Picker has a real rest to subscribe to (`isScrollInProgress`); `TimeScroll`'s drum states are
 private to Material's implementation, so rest there is `collectLatest` over the two fields
@@ -35,24 +44,67 @@ is proven from the other side: with no window one fling of the hour drum reports
 with it, one. The refused-pick write-back hangs off the same rest, so a snap-back is the
 widget moving home, not this file repainting it.
 
-`tintColor` reaches the selected row and the centre band; the unselected rows keep Material's
-content colour, which is the one thing on a wheel it cannot take. `variant="wheel"` in
-`date`/`datetime` stays the inline calendar — Material has no wheel calendar, and a drum of days
-would be our control in Material's paint. That is the one place `variant` means something
-different on the two platforms, and `date-picker.md` says so in its Limits rather than in a
-footnote.
+`tintColor` reaches the selected row and the centre band; unselected rows keep Material's
+content colour, the one thing on a wheel it cannot take. `variant="wheel"` in `date`/`datetime`
+stays the inline calendar — Material has no wheel calendar, and a drum of days would be our
+control in Material's paint. It is the one place `variant` means something different per
+platform, stated in `date-picker.md`'s Limits.
 
 `TimeScroll` keeps its rows out of the accessibility tree, so the value travels as
-`stateDescription` on one node per drum. Both consequences are documented rather than papered
-over: no rows to compare a reported value with, and no `scrollable` on the node, so TalkBack
-offers no scroll actions.
+`stateDescription` on one node per drum: no rows to compare a reported value with, and no
+`scrollable` on the node, so TalkBack offers no scroll actions. Both are documented.
 
 ## Gates
 
 | Gate | Result | Counts | Code tree | Duration | Load |
 | --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 2010 tests / 85 suites | `c749a35e04e8` | 2 m 49 s | start 6.2 / med 11.2 / max 17.7 |
+| `harness:ios` | missing | — | — | — | — |
+| `harness:android` | **PASS** | 657 tests / 31 suites + isolated 6 tests / 3 suites | `c749a35e04e8` (android tree) | 18 m 33 s | start 8.4 / med 5.9 / max 33.8 |
+| `real-input:ios` | missing | — | — | — | — |
+| `real-input:android` | **FAIL** | — | `c749a35e04e8` (android tree) | 16 m 15 s | start 5.1 / med 5.6 / max 17.5 |
+| `harness:android:-t:wheel%20variant` | **PASS** | 657 tests / 31 suites | `c749a35e04e8` (android tree) | 1 m 02 s | start 5.4 / med 5.0 / max 5.4 |
+| `harness:android:DatePicker` | stale | 19 tests / 1 suites | 37936848b36d (not this tree) | 27.0 s | start 8.9 / med 8.2 / max 8.9 |
+| `real-input:android:--control:date-picker` | stale | — | 1a0a972a0d0f (not this tree) | 14 m 52 s | start 6.8 / med 4.9 / max 14.5 |
+| `real-input:android:--control:date-picker:--background` | stale | — | e9e8a5c85cb6 (not this tree) | 0.4 s | start 3.8 / med 3.8 / max 3.8 |
+| `real-input:android:--control:picker` | stale | — | 5de08269fd41 (not this tree) | 7 m 07 s | start 4.9 / med 4.3 / max 14.4 |
+| `real-input:android:date-picker` | stale | — | 37936848b36d (not this tree) | 0.3 s | start 41.4 / med 41.4 / max 41.4 |
 
-`need --for review`: pending.
+`need --for review`: pending — see *Status at the freeze*.
+
+## Status at the freeze
+
+The orchestrator froze the tree at 15:12 UTC while `real-input:android` was 27 min
+into its run. It was stopped (its own pid, and the Metro it had started on the leased port
+8293; nothing else was touched), and `harness:ios` / `real-input:ios` were never started — so
+**this branch has no iOS gate on the current tree**, which the brief asks for and the freeze
+refuses. The branch is committed and clean; nothing is half-written in it.
+
+Stopping it was the right call, because the run had already failed, on its own, before the
+kill:
+
+```text
+✗ one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2
+✗ the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"
+```
+
+**One fling of the hour drum reported two changes.** That is the exact claim this variant is
+about, so it is the one line that must not be waved through, and it is intermittent: the same
+check passed at 13:52 on a tree that differs from this one by comments only, and failed at
+14:55 with `load1` between 5 and 17 across the run. The likely reason is that the DatePicker
+drum's rest is a *timeout*, and a timeout is the one settle definition that stretches when the
+machine does: `TimeScroll` gives nothing to subscribe to, so 180 ms of quiet is treated as the
+end of a roll, and a pager that pauses longer than that mid-flight reports its halfway row and
+then its final row. The Picker drum reads `isScrollInProgress` instead and is much less
+exposed, but a stalled frame could split it the same way.
+
+The fix is to stop guessing from the clock and use the gesture that is already in this file:
+`nuiOwnVerticalDrags` sees the pointer's *up* on the drum, so the settle can be armed from
+that rather than from any quiet period, and the pair read is then the drum's final rest one
+gesture later. That is a small change inside `HybridNitroUiDatePicker.syncTimeWheel` plus a
+re-run of the fling a few times on a quiet box (a flaky check has to be repeated, not
+greened once). Not attempted during the freeze, because an unverified fix on a frozen tree is
+worth less than a precise bug report.
 
 ## Red proofs
 
@@ -154,6 +206,18 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
   for it, and the flag is undocumented outside the script.
 
 ## Questions for orchestrator
+
+- **The double-report needs a decision before G29 merges.** Options: (a) a fix round here — arm
+  the DatePicker drum's settle from the pointer-up `nuiOwnVerticalDrags` already sees instead of
+  from 180 ms of quiet, then run the fling several times on a quiet box (recommended: it is my
+  code, the seam is in the file, and the alternative is a timeout that is tuned until it
+  stops failing); (b) raise the window to something embarrassing (400 ms+) and accept a laggy
+  report; (c) land the Picker wheel only and hold the DatePicker drum back. The check that
+  caught it (`one roll of the hour reports exactly one change`) is the right check — it should
+  not be relaxed.
+- Also still owed by this task, once gates are allowed again: `harness:ios`, `real-input:ios`,
+  and a green `real-input:android` — twice, since one of its checks is now known to be
+  load-sensitive.
 
 - **The bench number the brief asks for does not exist to be taken.** `mount.picker` has one
   cell and no `variant` knob (`rg wheel bench/src` is empty), so wheel-vs-menu needs a bench
