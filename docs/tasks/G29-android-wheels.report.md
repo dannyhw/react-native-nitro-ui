@@ -203,6 +203,10 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
 - tooling: `real-input:android --control <one>` still runs the whole a11y sweep (≈10 of the
   ≈15 minutes) unless `NUI_SKIP_A11Y_SWEEP=1`; a filtered red-proof run would rather not pay
   for it, and the flag is undocumented outside the script.
+- tooling: `gate.mjs export`'s failure excerpt names the failing test but not the assertion line
+  above it — the iOS `XCTAssertLessThanOrEqual failed:` text is in the stored log (line 32 of the
+  red filtered run) and quoted here, but not in the committed excerpt, so committed evidence is a
+  step weaker than the run's own output.
 
 ## Fix round 2 — the rest is the wheel's, not a clock's
 
