@@ -2648,10 +2648,18 @@ describe('Picker · wheel variant (G29)', () => {
     console.log(`wheel silence: events=${JSON.stringify(eventLog)}`);
     expect(eventLog).toEqual([]);
     // A disabled drum is a drum: `disabled` repaints, it does not resize, and the
-    // height is the control's own whatever the state.
+    // height is the control's own whatever the state. Measured against the *enabled*
+    // drum of the same render rather than against `WHEEL_DP`, because that number is a
+    // platform's own — Material's drum is 200 dp, SwiftUI's is 216 — and the claim here
+    // is that the state does not move it, which is the same sentence on both machines.
     const disabledSize = measured('wheel-disabled');
+    const enabledSize = measured('wheel-noop');
+    console.log(
+      `disabled drum (${Platform.OS}): enabled=${describeSize(enabledSize)} ` +
+        `disabled=${describeSize(disabledSize)}`
+    );
     expect(
-      Math.abs((disabledSize?.height ?? 0) - WHEEL_DP)
+      Math.abs((disabledSize?.height ?? 0) - (enabledSize?.height ?? 0))
     ).toBeLessThanOrEqual(1);
     unmount();
   });
@@ -2703,11 +2711,18 @@ describe('Picker · wheel variant (G29)', () => {
       'the menu after the variant change'
     );
     await settle(300);
-    // A Material field, not a drum: 56 dp tall, and the field's 280 dp floor wide —
-    // not the 330 dp box, which is what a `fillWidth` policy left on the recycled
-    // host would have it measure.
-    expect(Math.abs(asMenu.height - 56) < 1).toBe(true);
-    expect(Math.abs(asMenu.width - 280) < 1).toBe(true);
+    // Not a drum any more, and not the box either: a `fillWidth` policy left on the
+    // recycled host would have the field measure the 330 dp box as its own title,
+    // which is the poisoning this case exists to catch. The numbers are each
+    // platform's own — Material's field is 56 dp tall on its 280 dp floor, iOS's menu
+    // is the compact intrinsic one at 82 x 34.67 — so the box-relative claim is the
+    // one made everywhere and the absolute one is made where it was measured.
+    expect(asMenu.width).toBeLessThan(BOX.width - 20);
+    expect(asMenu.height).toBeLessThan(asWheel.height - 20);
+    if (Platform.OS === 'android') {
+      expect(Math.abs(asMenu.height - 56) < 1).toBe(true);
+      expect(Math.abs(asMenu.width - 280) < 1).toBe(true);
+    }
     expect(eventLog).toEqual([]);
     expect(drawnOf('wheel-switch')).toBe('-1');
 
@@ -2730,11 +2745,15 @@ describe('Picker · wheel variant (G29)', () => {
     );
     await settle(400);
     console.log(
-      `wheel->menu->wheel (android): wheel=${describeSize(asWheel)} ` +
+      `wheel->menu->wheel (${Platform.OS}): wheel=${describeSize(asWheel)} ` +
         `menu=${describeSize(asMenu)} wheel2=${describeSize(asWheelAgain)} ` +
         `events=${JSON.stringify(eventLog)}`
     );
-    expect(Math.abs(asWheelAgain.height - WHEEL_DP) < 1).toBe(true);
+    // The drum that comes back is the drum that left: its height is the widget's own
+    // claim on whichever platform this runs, so the round trip is compared with the
+    // measurement the same run made before the detour, and the width with the box the
+    // `fillWidth` policy was supposed to poison.
+    expect(Math.abs(asWheelAgain.height - asWheel.height) < 1).toBe(true);
     expect(Math.abs(asWheelAgain.width - BOX.width) < 1).toBe(true);
     expect(handles.get('wheel-switch')?.variant).toBe('wheel');
     expect(eventLog).toEqual([]);
