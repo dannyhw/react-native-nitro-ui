@@ -117,4 +117,5 @@
 | G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | fix round 1 done (all items fixed with reds; gates green except real-input:ios on the ContextMenu stop count; waits on X22, then re-run real-input:ios only) |
 | G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | fix round 1 done (all review items fixed with reds; gates green except real-input:ios on the ContextMenu stop count, waits on X22) |
 | X22 | iOS ContextMenu a11y stops read 4 instead of 2 on unrelated branches (blocks G25 and G26 merges) | Apex | Opus | fix round 1 (PR #57 merged, but the G25+G26 merged tree still reads 4 stops, settled with the confirmation read: a stable order-dependent tree, not a transient. Find why the second Text is sometimes listed; real fix preferred, else the exemption matches the failure shape whatever the count) |
-| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex | Opus | running |
+| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | in review (PR pending; gates green except harness:android on G24's recycled-Form test, X23, and real-input:ios on the ContextMenu count, X22) |
+| X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | running |
