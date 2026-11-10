@@ -2573,6 +2573,258 @@ const CHECKS = {
   },
 
   /**
+   * A real tap on one half of a Stepper moves it exactly one step, and a tap on the
+   * half at its bound moves it nothing at all.
+   *
+   * Two things make this check worth having on the platform where Material has no
+   * stepper (D38 item 1):
+   *
+   * - the node a finger meets is **one node, not two buttons**. Android's
+   *   `Stepper.harness.tsx` proves the two halves clear their own semantics, but a
+   *   cleared node and a missing one look the same from inside the app; this dump
+   *   *is* the tree a reader walks, so "exactly one named node, and none of them
+   *   clickable" is measured here rather than asserted about Compose internals.
+   * - the halves are aimed at **positionally**. The named node's box covers both
+   *   buttons and the 8 dp between them, so `tapNode` would land in the gap and
+   *   prove nothing; 0.2 and 0.8 of that box are where the two glyphs are.
+   *
+   * The step counts are exact numbers rather than counters-that-moved, because
+   * "each tap is one step" is the contract, and a half that fired twice per tap
+   * passes anything weaker. The bound taps use `requireEchoToStay`, and the last
+   * tap of the block is on a live half, so the silence above it is a refusal and
+   * not a screen that stopped answering.
+   *
+   * @param {ReturnType<typeof makeContext>} t
+   */
+  'stepper': async (t) => {
+    // The two halves are positions on one node: 48 dp of button, an 8 dp gap, 48 dp
+    // of button, so 0.2 and 0.8 land on the glyphs and clear of the gap.
+    const MINUS = 0.2;
+    const PLUS = 0.8;
+    const aimAt = (fraction) => async (node) => {
+      await t.tapControlAt(node, fraction);
+    };
+    const named = (label) => t.requireControl(label);
+    const LIVE = 'Real-input stepper';
+    const REFUSING = 'Real-input refusing stepper';
+    const DISABLED = 'Real-input disabled stepper';
+
+    // 1. At rest, so every claim below is about a number that moved.
+    t.log.checkEquals(
+      'no step has been reported before a touch',
+      t.requireEcho(ECHO.stepperEvents),
+      '0'
+    );
+    t.log.checkEquals(
+      'the stepper starts where React put it',
+      t.requireEcho(ECHO.stepperValue),
+      '1'
+    );
+    t.log.checkEquals(
+      'the refusing stepper has been asked for nothing yet',
+      `${t.requireEcho(ECHO.stepperRefusedLast)} ${t.requireEcho(
+        ECHO.stepperRefusedEvents
+      )}`,
+      '- 0'
+    );
+    t.log.checkEquals(
+      'the counter the disabled stepper reports into starts at zero, so a stray ' +
+        'delivery is a number that moved rather than a callback nobody saw',
+      t.requireEcho(ECHO.stepperDisabledEvents),
+      '0'
+    );
+
+    // 2. What a reader is offered, read from the tree itself before anything is
+    //    aimed at it. One named node and no clickable one is the Android half of
+    //    the accessibility rule ("one adjustable value, not two buttons"): from
+    //    inside the app the two halves are cleared nodes and indistinguishable from
+    //    absent ones, and only this dump can say a TalkBack swipe has one stop.
+    await t.requireControlOnScreen(LIVE);
+    const stops = t.dump().filter((node) => node.contentDesc === LIVE);
+    t.log.checkEquals(
+      "exactly one node carries the stepper's name — a reader gets one stop, not " +
+        'the two buttons the control is built out of',
+      String(stops.length),
+      '1'
+    );
+    t.log.checkEquals(
+      'and none of them is clickable: the halves cleared their own semantics, so ' +
+        'there is no click here for a reader to take instead of the range action',
+      String(stops.filter((node) => node.clickable === 'true').length),
+      '0'
+    );
+    t.log.note(
+      `the named node is a ${stops[0]?.className ?? 'missing'} reporting ` +
+        `scrollable=${stops[0]?.scrollable ?? '?'} enabled=${t.nativeEnabled(LIVE)} — ` +
+        'kept as evidence beside the range assertions in `Stepper.harness.tsx`, ' +
+        'which is where the published ProgressBarRangeInfo is read'
+    );
+
+    // 3. Each half, one tap, one step. Exact, because one event per tap is the claim.
+    const plus = aimAt(PLUS);
+    const minus = aimAt(MINUS);
+    t.log.checkEquals(
+      'one real tap on the plus half steps to 2',
+      await t.tapUntilValue(
+        () => named(LIVE),
+        ECHO.stepperValue,
+        '2',
+        'the real tap on the plus half',
+        { aim: plus }
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'one real tap on the minus half steps back to 1',
+      await t.tapUntilValue(
+        () => named(LIVE),
+        ECHO.stepperValue,
+        '1',
+        'the real tap on the minus half',
+        { aim: minus }
+      ),
+      '1'
+    );
+    t.log.checkEquals(
+      'two taps, two steps — one event per tap, not one per half or one per gesture',
+      t.requireEcho(ECHO.stepperEvents),
+      '2'
+    );
+
+    // 4. The bounds, from the bound itself: walk down to 0, refuse another descent,
+    //    walk up to 2, refuse another ascent. The refusals are the same rule on
+    //    either half, so the count that must not move is read before each.
+    await t.tapControlAt(named(LIVE), MINUS);
+    t.log.checkEquals(
+      'the stepper is at its minimum',
+      t.requireEcho(ECHO.stepperValue),
+      '0'
+    );
+    let events = t.requireEcho(ECHO.stepperEvents);
+    await t.tapControlAt(named(LIVE), MINUS);
+    t.log.checkEquals(
+      'a tap on the half at the minimum reports nothing',
+      t.requireEchoToStay(
+        ECHO.stepperEvents,
+        events,
+        'a tap on the half at its minimum to be refused'
+      ),
+      events
+    );
+    for (let index = 0; index < 3; index += 1) {
+      await t.tapControlAt(named(LIVE), PLUS);
+      await t.settle(150);
+    }
+    t.log.checkEquals(
+      'three taps upward stop at the maximum rather than past it',
+      t.requireEcho(ECHO.stepperValue),
+      '2'
+    );
+    events = t.requireEcho(ECHO.stepperEvents);
+    await t.tapControlAt(named(LIVE), PLUS);
+    t.log.checkEquals(
+      'a tap on the half at the maximum reports nothing either',
+      t.requireEchoToStay(
+        ECHO.stepperEvents,
+        events,
+        'a tap on the half at its maximum to be refused'
+      ),
+      events
+    );
+
+    // 5. The refusing parent: React never moves `value`, so every step is refused
+    //    and has to snap back. The oracle is what the *next* tap asks for — a
+    //    stepper that had kept the refused value would ask for 3, not for 2 again.
+    for (const request of ['1', '2']) {
+      t.log.checkEquals(
+        `refused request ${request} reaches onValueChange`,
+        await t.tapUntilValue(
+          () => named(REFUSING),
+          ECHO.stepperRefusedEvents,
+          request,
+          `refused request ${request}`,
+          { aim: plus }
+        ),
+        request
+      );
+      t.log.checkEquals(
+        `refused request ${request} asks for 2 — one step above the value React ` +
+          'kept: a stepper that had adopted the refused one would ask for 3',
+        t.requireEcho(ECHO.stepperRefusedLast),
+        '2'
+      );
+      // Compose paints a tapped control before React has pushed the refused value
+      // back down, so reading too early catches a step the app is about to undo
+      // (Checkbox's wait, for Checkbox's reason).
+      await t.settle(500);
+      t.log.checkEquals(
+        `request ${request} leaves the live stepper alone: the two share no state`,
+        t.requireEcho(ECHO.stepperValue),
+        '2'
+      );
+    }
+
+    // 6. The disabled stepper takes nothing, on either half.
+    for (const [where, fraction] of [
+      ['minus', MINUS],
+      ['plus', PLUS],
+    ]) {
+      await t.tapControlAt(named(DISABLED), fraction);
+      t.log.checkEquals(
+        `a real tap on the disabled stepper's ${where} half reports no step`,
+        t.requireEchoToStay(
+          ECHO.stepperDisabledEvents,
+          '0',
+          'a tap on the disabled stepper to be refused'
+        ),
+        '0'
+      );
+    }
+
+    // 7. A press-and-hold steps **once**. Android has no hold-to-repeat in v1 and
+    //    `docs/components/stepper.md` says so; iOS repeats. This asserts the stated
+    //    behaviour instead of leaving it a sentence: the fixture is `0...10` from 5,
+    //    so a repeat would show as a value past 6, and the docs claim would be the
+    //    only thing standing between that and a green run.
+    const held = await t.requireControlOnScreen('Real-input hold stepper');
+    await t.holdAt(
+      held.bounds.x1 + held.bounds.width * PLUS,
+      held.bounds.cy,
+      1400
+    );
+    await t.settle(400);
+    t.log.checkEquals(
+      'a 1.4 s hold on the plus half steps exactly once (no Android repeat, as documented)',
+      t.requireEcho(ECHO.stepperHoldValue),
+      '6'
+    );
+
+    // 8. The barrier: the live stepper still answers a tap, so the refusals above
+    //    were refusals and not a screen that had stopped answering. It is sitting at
+    //    its maximum, so the barrier presses the half that can still move — pressing
+    //    the inert one and calling the result "a lost tap" is exactly the misread
+    //    this helper exists to prevent. `atLeast` because it waits on a counter: a
+    //    tap that landed late lands with the retry and skips a number, which proves
+    //    the claim twice rather than failing it (G12).
+    t.log.checkEquals(
+      'the live stepper, tapped on the half that can still move, still steps',
+      await t.tapUntilValue(
+        () => named(LIVE),
+        ECHO.stepperValue,
+        '1',
+        'the barrier tap on the live stepper',
+        { aim: minus }
+      ),
+      '1'
+    );
+    t.log.checkEquals(
+      'and that barrier step is the sixth event the control has reported',
+      t.requireEcho(ECHO.stepperEvents),
+      '6'
+    );
+  },
+
+  /**
    * A real drag must move the thumb and report every phase.
    *
    * The phases Slider is uncontrolled and counts each callback separately, so a
@@ -4858,6 +5110,161 @@ const CHECKS = {
     t.log.note(
       `name node reports focusable=${String(named[0]?.focusable)} - ` +
         'kept as evidence, not asserted'
+    );
+
+    // 9. The `radio` variant (G26). This is the one Picker whose options a real tap
+    //    can reach *directly*: the rows are the control, in the app's own window, so
+    //    there is no popup to open, no window to wait for, and nothing to aim at but
+    //    the row's label. Three claims, and the first two are the same event read
+    //    from two ends - what JS was told, and what the accessibility tree says.
+    const RADIO_ROWS = ['Basalt', 'Flint', 'Obsidian'];
+    const RADIO_LOCKED_ROWS = ['Gabbro', 'Peridot', 'Scoria'];
+    // The row a screen reader stops on, not the words inside it. A Compose row keeps
+    // its own state on its own node and leaves the label a node of its own, so
+    // reading whichever node carries the text reports every disabled row as enabled -
+    // the G12 Chip lesson, and the reason `android-tree.mjs` exists. The row is
+    // `selectable(role = Role.RadioButton)`, and a `Role` is what makes it the
+    // tightest `checkable` box around its own label.
+    const radioRowNode = (label, nodes = t.dump()) =>
+      tightestFlaggedNode(
+        nodes,
+        findAllByText(nodes, label)[0] ?? null,
+        'checkable'
+      );
+    const describeRow = (node) =>
+      node == null
+        ? 'no checkable row around the label'
+        : `${node.className} enabled=${node.enabled} checkable=${node.checkable} ` +
+          `checked=${node.checked} at ${node.bounds.x1},${node.bounds.y1}-` +
+          `${node.bounds.x2},${node.bounds.y2}`;
+    await t.requireControlOnScreen('Real-input radio picker');
+    t.log.checkEquals(
+      'the radio group has reported no index before a touch',
+      t.requireEcho(ECHO.radioIndex),
+      '-'
+    );
+    t.log.checkEquals(
+      'and no popup window belongs to it - the rows are the control',
+      t.popupWindowCount(),
+      0
+    );
+    // A real tap on row 2. `tapOptionUntilValue` re-finds the row each attempt and
+    // stops re-pressing once the label is gone from the tree; for a row that is
+    // always up, a repeat tap on the row already chosen is the control's own no-op,
+    // so a retry can never double-count a pick.
+    t.log.checkEquals(
+      'a real tap on radio row 2 reaches JS as index 2',
+      await t.tapOptionUntilValue(
+        RADIO_ROWS[2],
+        ECHO.radioIndex,
+        '2',
+        'a real tap on the radio row to register'
+      ),
+      '2'
+    );
+    t.log.checkEquals(
+      'one row tap reports one change',
+      t.requireEcho(ECHO.radioEvents),
+      '1'
+    );
+    t.log.checkEquals(
+      'a row tap opened no window',
+      t.waitForPopupCount(0, 'the row tap to open nothing'),
+      0
+    );
+    // The same pick, read from the tree a screen reader navigates: exactly one row
+    // says `checked`, and it is the row that was tapped. This is the radio group's
+    // version of step 1's "the open menu marks the current choice selected" - and
+    // stronger, because all three rows are on screen to be compared.
+    for (const [row, chosen] of [
+      [RADIO_ROWS[0], false],
+      [RADIO_ROWS[1], false],
+      [RADIO_ROWS[2], true],
+    ]) {
+      t.log.checkEquals(
+        `the tree marks "${row}" as ${chosen ? 'the chosen row' : 'not chosen'}`,
+        String(t.optionIsSelected(row)),
+        String(chosen)
+      );
+    }
+    // The same lookup on the group that *is* live, so a `false` below cannot be the
+    // lookup answering nothing. `className` is recorded, not asserted: what Compose
+    // writes for `Role.RadioButton` has not been measured the way the Spinner class
+    // the menu checks assert has, and the Checkbox precedent is to log the class
+    // until it has.
+    const enabledTree = t.dump();
+    for (const row of RADIO_ROWS) {
+      t.log.checkEquals(
+        `the enabled group's row "${row}" says it is enabled`,
+        String(radioRowNode(row, enabledTree)?.enabled),
+        'true'
+      );
+    }
+    t.log.note(
+      `radio row node, enabled group: "${RADIO_ROWS[2]}" -> ` +
+        `${describeRow(radioRowNode(RADIO_ROWS[2], enabledTree))}`
+    );
+    const radioNodes = t.nodesNamed('Real-input radio picker');
+    t.log.checkEquals(
+      'the group is named once, so TalkBack announces the group and then its rows',
+      radioNodes.length,
+      1
+    );
+    // Tapping the row already chosen is the no-op the menu refuses to report too.
+    await t.tapNode(t.waitForOption(RADIO_ROWS[2], 'the row already chosen'));
+    t.log.checkEquals(
+      'tapping the row that is already chosen reports nothing',
+      t.requireEchoToStay(
+        ECHO.radioEvents,
+        '1',
+        'a repeat tap on the chosen row'
+      ),
+      '1'
+    );
+    // The disabled group: its rows say so in the tree, and a real tap on one moves
+    // nothing. Both halves matter - a row that *looks* disabled but answers a finger
+    // is the bug, and a row that refuses while the tree says it is enabled is the
+    // same bug pointing the other way for a screen reader.
+    await t.requireControlOnScreen('Real-input disabled radio picker');
+    const disabledTree = t.dump();
+    for (const row of RADIO_LOCKED_ROWS) {
+      t.log.checkEquals(
+        `the disabled group's row "${row}" says it is not enabled`,
+        String(radioRowNode(row, disabledTree)?.enabled),
+        'false'
+      );
+    }
+    t.log.note(
+      `radio row node, disabled group: "${RADIO_LOCKED_ROWS[0]}" -> ` +
+        `${describeRow(radioRowNode(RADIO_LOCKED_ROWS[0], disabledTree))}`
+    );
+    await t.tapNode(
+      t.waitForOption(
+        RADIO_LOCKED_ROWS[1],
+        'the disabled group to have a row on screen'
+      )
+    );
+    t.log.checkEquals(
+      'a real tap on a disabled row reports nothing',
+      t.requireEchoToStay(
+        ECHO.radioIndex,
+        '2',
+        'a tap on a disabled radio row'
+      ),
+      '2'
+    );
+    // The enabled group still works after all of that, which is what turns the line
+    // above into "that row refused" rather than "the screen stopped answering".
+    await t.requireControlOnScreen('Real-input radio picker');
+    t.log.checkEquals(
+      'and a real tap on row 1 of the enabled group still echoes',
+      await t.tapOptionUntilValue(
+        RADIO_ROWS[1],
+        ECHO.radioIndex,
+        '1',
+        'a second real tap on another radio row'
+      ),
+      '1'
     );
   },
 

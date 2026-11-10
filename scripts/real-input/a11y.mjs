@@ -123,7 +123,7 @@ import { findByTestId, findAllByDescription } from './uiautomator.mjs';
  *   should be announced as.
  */
 
-/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'} ScreenId */
+/** @typedef {'switch'|'slider'|'button'|'segmented'|'datepicker'|'picker'|'progress'|'menu'|'chip'|'host'|'textfield'|'searchfield'|'checkbox'|'contextmenu'|'iconbutton'|'form'|'stepper'} ScreenId */
 
 /* Which screen file renders each tab lives in `screens.mjs`, because
  * `scripts/conformance-core.mjs` needs the same map to check these labels against the
@@ -300,6 +300,29 @@ export const A11Y_CONTROLS = Object.freeze([
     // by their own text ("Copy", "Cut", "Paste"). So the finding to guard is a group whose
     // name stops leading to its items: a merged box with nothing pressable in it, or a
     // name that slid up onto the page.
+  },
+  {
+    // A Stepper is one adjustable value on both platforms, not two buttons
+    // (`docs/components/stepper.md`), and Android is the half this rule can see: the
+    // row publishes the range info and the two Material buttons clear their own
+    // semantics away, so a dump has to show ONE named node with no clickable node
+    // under it. Two focus stops is precisely the bug this rule was written for (G6).
+    id: 'stepper',
+    component: 'Stepper',
+    hybridView: 'NitroUiStepper',
+    screen: 'stepper',
+    label: 'Real-input stepper',
+    role: 'interactive',
+    anchorTestId: 'real-input-stepper',
+    // What VoiceOver says, not what the tree reports: the element this control vends
+    // carries the `.adjustable` trait (its own `refresh()`), and XCUITest has no
+    // element type for a trait, so the measured announcement is in `A11Y_EXEMPTIONS`
+    // below — the Slider row's arrangement, for the same reason. Writing the measured
+    // word here would freeze the gap into the expectation. Measured G25 fix round 1 on
+    // the lease's iPhone Air (iOS 27): the sweep's tree has the named element, at the
+    // control's box, with `value="1"` — and its type is `other`, exactly as the Slider's
+    // is, which is what that row is for.
+    iosTrait: 'adjustable',
   },
   {
     // No case for Progress *on its own screen*: that screen cannot be dumped at all
@@ -542,6 +565,27 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  */
 
 /**
+ * One accessibility element listed under the accessible ContextMenu: one of the two
+ * `Text`s the example screen puts inside it, at a box of its own.
+ *
+ * `describeIosNode` writes these, so the pattern is pinned to the real shape — a fixture
+ * whose box is written any other way does not match the row, which is the point.
+ */
+const CTX_TEXT_STOP =
+  'static text "(?:Grace Hopper|One element for screen readers, with the menu on it\\.)" ' +
+  'at \\([\\d., -]+\\)';
+
+/**
+ * The ContextMenu debt sentence: any number of stops, as long as every one of them is one
+ * of the wrapper's own Texts and the finding blames React Native's publication for it.
+ */
+const CONTEXT_MENU_TEXT_STOPS_ROW = new RegExp(
+  `: \\d+ element\\(s\\) under "ctx-accessible" are stops of their own ` +
+    `\\(${CTX_TEXT_STOP}(?:; ${CTX_TEXT_STOP})*\\) — ` +
+    'React Native publishes each Text'
+);
+
+/**
  * The debt list, and the reason the suite can land green on its first run.
  *
  * An entry is not a `TODO`: {@link staleExemptions} proves each one still describes a
@@ -626,6 +670,20 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     matches: /not actionable/,
   },
   {
+    control: 'stepper',
+    platform: 'android',
+    followups:
+      "G25 a11y: the Stepper's RangeInfo node is not actionable in a dump",
+    // The same dump limitation the four Slider/SegmentedControl rows record, and for the
+    // same reason: the merged row is actionable through Compose's *custom* `SetProgress`
+    // action, and `uiautomator dump` prints only the standard clickable/scrollable
+    // flags, so a control a reader can adjust with a swipe reads as "no actions". The
+    // action itself is not taken on faith — `Stepper > steps once when a reader asks`
+    // performs SetProgress on this node and asserts the step and the one event it
+    // produces, so what is unasserted here is the flag, not the behaviour.
+    matches: /not actionable/,
+  },
+  {
     control: 'slider',
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',
@@ -636,6 +694,22 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     platform: 'ios',
     followups: 'X4 a11y: the Slider is announced as other and not as a slider',
     matches: /announced as an other/,
+  },
+  {
+    control: 'stepper',
+    platform: 'ios',
+    followups:
+      'G25 a11y: the Stepper is announced as other and not as an adjustable',
+    // The same gap `ios:slider` records, on the same element kind: this control vends a
+    // `UIAccessibilityElement` whose traits are `.adjustable` (measured by the harness
+    // probe, which reads the trait mask itself — `traits=4096` plus the bool UIKit
+    // computes from it), and XCUITest has no element type for a trait, so the tree calls
+    // it `other`. The row is anchored on the whole sentence — `and not as an adjustable`
+    // — because the *other* way an announcement goes wrong ("no element other than the
+    // React Native wrapper is announced as …", X4 re-review M3's lesson) must stay red:
+    // losing the label is not this debt. The kind is therefore excused and the name, the
+    // box and the value are not, which is also what the harness case grades.
+    matches: /announced as an other and not as an adjustable/,
   },
   {
     control: 'hosted-picker',
@@ -652,14 +726,29 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     control: 'context-menu',
     platform: 'ios',
     followups:
-      'G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS',
-    // The measured shape and nothing wider (G16, iOS 27): the wrapper is the element and
-    // carries the label, the second Text is hidden under it, and the first Text is still
-    // listed - twice, as XCUITest lists every element. A regression of D37 item 2 (the
-    // wrapper not an element at all) lists both Texts, four stops, and stays red.
-    // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
-    matches:
-      /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+      'G16 a11y: an accessible ContextMenu still lists its Texts as stops on iOS',
+    // One component, three walk histories, measured on iOS 27 (X22 fix round 1). An app
+    // that goes straight to this case reads ONE node: the wrapper with the label, its
+    // subtree hidden — the tree the rule actually wants. The same tree walked after the
+    // sweep's other 21 cases lists the first Text; after the merged Stepper + Picker-radio
+    // tree's 22 it lists both. Each Text shows up twice, and that is not XCUITest
+    // duplicating: the sweep's own probe finds one child under the wrapper with the same
+    // label and one child under *that*, so React Native really vends two nested elements
+    // per `Text` (the `Text`'s component view, and the element its Paragraph vends). All
+    // three readings have identical boxes and settle with no instability line, and the
+    // other 22 cases read byte for byte the same in both logs — the count is when the tree
+    // was walked, not what the component is. The reason it can change at all is React
+    // Native's: the wrapper hides its subtree only once React Native has stored
+    // `accessible` on the component view, and measured from this view's own getter that
+    // store still reads false inside the Hybrid's `afterUpdate()`. A walk that lands in
+    // that window publishes the subtree, and UIKit keeps what it has published.
+    //
+    // So: any count, but every stop listed has to be one of the wrapper's own two Texts,
+    // and the sentence has to be the one that names React Native's publication as the
+    // cause. A third label is not this row, and neither is the unnamed container box —
+    // that box is the D37 item 2 regression (the wrapper not an element at all), which is
+    // what G16's comment mistook four stops for.
+    matches: CONTEXT_MENU_TEXT_STOPS_ROW,
   },
   {
     control: 'form',
@@ -890,16 +979,32 @@ export function iosA11yProblems(control, tree) {
     // content view's getter forced false): XCUITest still listed the wrapper with its
     // label - it lists any view with an identifier - and its two texts as stops of their
     // own, so the name check alone passed a wrapper VoiceOver never stops on.
-    const separate = tree.filter(
-      (node) => !node.anchor && node.label !== '' && hasArea(node)
-    );
-    if (separate.length > 0) {
+    //
+    // Two different things produce that finding, and the debt row excuses one of them, so
+    // they are said differently (X22 fix round 1). XCUITest lists every element twice, so
+    // the *count* is never the signal — 2 and 4 stops are the same component, measured on
+    // either side of React Native publishing its second Text. What separates the two
+    // shapes is whether the walk also reaches an **unnamed** box under the named wrapper:
+    // that box is the container the texts hang off, and it only shows up when the wrapper
+    // is not the element UIKit stops on (the D37 item 2 regression). Without it, the
+    // wrapper *is* the element with the name and the menu, and what is listed alongside it
+    // are its own texts — React Native's doing, recorded as debt.
+    const separate = tree.filter((node) => !node.anchor && hasArea(node));
+    const unnamed = separate.filter((node) => node.label === '');
+    const labelled = separate.filter((node) => node.label !== '');
+    if (labelled.length > 0) {
       problems.push(
-        `${control.hybridView}: ${String(separate.length)} element(s) under ` +
+        `${control.hybridView}: ${String(labelled.length)} element(s) under ` +
           `"${control.anchorTestId}" are stops of their own ` +
-          `(${separate.map(describeIosNode).join('; ')}) — the wrapper is not one ` +
-          'accessibility element, so a screen reader reaches its children and never ' +
-          'the menu on it'
+          `(${labelled.map(describeIosNode).join('; ')}) — ` +
+          (unnamed.length > 0
+            ? `the walk also reaches ${describeIosNode(unnamed[0])}, an unnamed box ` +
+              'under the named wrapper, so the wrapper is not one accessibility ' +
+              'element and a screen reader reaches its children and never the menu ' +
+              'on it'
+            : 'React Native publishes each Text inside the wrapper as an element of ' +
+              'its own, so a reader stops on the texts as well as on the wrapper that ' +
+              'carries the name and the menu')
       );
     }
   }

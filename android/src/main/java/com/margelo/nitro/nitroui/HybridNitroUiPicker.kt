@@ -3,7 +3,15 @@ package com.margelo.nitro.nitroui
 import android.app.Activity
 import android.os.Looper
 import android.view.View
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -13,6 +21,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonColors
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.SelectableDropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldColors
@@ -24,6 +35,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.AbstractComposeView
@@ -37,6 +50,7 @@ import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import com.facebook.react.uimanager.ThemedReactContext
@@ -62,6 +76,12 @@ import java.util.concurrent.atomic.AtomicInteger
  * wheel's *layout* policy and says so (`docs/components/picker.md`); the alternative
  * is a hand-drawn wheel, which is not the platform control and not what the brief
  * asks for.
+ *
+ * `'radio'` is the opposite case: Material 3 *does* have the control - a
+ * `selectableGroup()` column of `RadioButton` rows - so that is what it draws
+ * ([PickerModel.isRadio]), in this window rather than a popup, and the popup half of
+ * this file is not composed for it at all. The variant is Android's; iOS has no
+ * radio-group picker style and renders the menu (DECISIONS D38 item 4).
  *
  * This is also the library's first control whose UI leaves the host's window: the
  * menu is a Compose `Popup` with its own `PopupWindow`. It is disposed with the
@@ -105,7 +125,14 @@ internal class PickerModel : NitroUiModel() {
    */
   var expanded by mutableStateOf(false)
 
-  /** `'menu'` or `'wheel'`; the wrapper normalises, and the setter guards again. */
+  /**
+   * `'menu'`, `'wheel'` or `'radio'`; the wrapper normalises, and the setter
+   * guards again through [resolvedVariant].
+   *
+   * `'radio'` is the one variant that is not a popup: it composes a column of
+   * rows in this window instead of a field and a menu, so nothing here is ever
+   * `expanded` and the popup witness answers "-1" for every box.
+   */
   var variant by mutableStateOf("menu")
 
   /** The picker's label, drawn as the field's floating label. */
@@ -406,6 +433,29 @@ internal class PickerModel : NitroUiModel() {
 
   companion object {
     /**
+     * The control this variant string names, in the one spelling the rest of the
+     * file understands.
+     *
+     * `'radio'` is Android's own (Q7 Appendix D): Material 3 has a documented
+     * radio-group pattern, so this variant is a real platform control and not an
+     * imitation (DECISIONS D38 item 1). `'wheel'` is the opposite case - Material
+     * 3 has no wheel, so it stays the menu under the wheel's layout policy - and
+     * anything else, including `'radio'` reaching iOS, is the menu. The wrapper
+     * already resolves the variant per platform, so a name outside these three
+     * means a caller that bypassed it, and the answer is the default control
+     * rather than a crash.
+     */
+    fun resolvedVariant(variant: String): String =
+      when (variant) {
+        "wheel" -> "wheel"
+        "radio" -> "radio"
+        else -> "menu"
+      }
+
+    /** Whether [variant] names the radio group rather than the popup control. */
+    fun isRadio(variant: String): Boolean = variant == "radio"
+
+    /**
      * How many menus this process has open right now.
      *
      * Process-wide rather than per mount for the same reason
@@ -621,6 +671,104 @@ private fun pickerFieldColors(tint: Int?): TextFieldColors {
 }
 
 /**
+ * The radio group's `RadioButtonColors`, so that a tinted `radio` picker costs one
+ * colour set per (colour scheme, tint) instead of one per row per recomposition.
+ *
+ * The same rule as [PickerColorsCache], for the same reason - `RadioButtonDefaults
+ * .colors()` builds a fresh object on every call, and a hosted control is its own
+ * composition so `remember` cannot share it between controls
+ * (`docs/architecture/core.md`, "Shared objects"). Bounded, self-clearing, one
+ * scheme at a time.
+ *
+ * The tint replaces `selectedColor` only - the dot's own colour - which is this
+ * variant's analogue of the menu's field accent and of iOS's `.tint()`. The
+ * unselected outline keeps the scheme's colour: a tint that painted every row
+ * would make the selection the only thing the colour says nothing about.
+ */
+private object PickerRadioColorsCache {
+  /** Tinted sets to remember before starting over; see [PickerColorsCache]. */
+  private const val MAX_TINTED_ENTRIES = 24
+
+  private var scheme: ColorScheme? = null
+
+  /** The untinted set - one slot, filled once per scheme. */
+  private var untinted: RadioButtonColors? = null
+
+  /** Tinted sets, keyed by ARGB int. */
+  private var tinted: HashMap<Int, RadioButtonColors>? = null
+
+  @Synchronized
+  fun get(
+    scheme: ColorScheme,
+    tint: Int?,
+  ): RadioButtonColors? {
+    adopt(scheme)
+    return if (tint == null) untinted else tinted?.get(tint)
+  }
+
+  /** Record a colour set the caller just built. */
+  @Synchronized
+  fun put(
+    scheme: ColorScheme,
+    tint: Int?,
+    colors: RadioButtonColors,
+  ) {
+    adopt(scheme)
+    if (tint == null) {
+      untinted = colors
+      return
+    }
+    val entries = tinted ?: HashMap<Int, RadioButtonColors>().also { tinted = it }
+    if (entries.size >= MAX_TINTED_ENTRIES) {
+      entries.clear()
+    }
+    entries[tint] = colors
+  }
+
+  /** Drop what a different scheme invalidates. Called with the lock held. */
+  private fun adopt(scheme: ColorScheme) {
+    if (this.scheme === scheme) {
+      return
+    }
+    this.scheme = scheme
+    untinted = null
+    tinted?.clear()
+  }
+}
+
+/** The radio rows' colours for [tint], served by [PickerRadioColorsCache]. */
+@Composable
+private fun pickerRadioColors(tint: Int?): RadioButtonColors {
+  val scheme = MaterialTheme.colorScheme
+  PickerRadioColorsCache.get(scheme, tint)?.let { cached -> return cached }
+  val color = tint?.let { ComposeColor(it) }
+  val built =
+    if (color == null) {
+      RadioButtonDefaults.colors()
+    } else {
+      RadioButtonDefaults.colors(selectedColor = color)
+    }
+  PickerRadioColorsCache.put(scheme, tint, built)
+  return built
+}
+
+/**
+ * One radio row's minimum height.
+ *
+ * Material's own minimum touch target, which the `RadioButton` inside the row
+ * asks for anyway through `minimumInteractiveComponentSize()` - spelled here so
+ * the row states the height it measures rather than hoping the widget inside it
+ * supplies one, and so the number the docs and the harness quote is in the code.
+ */
+private val RadioRowMinHeight = 48.dp
+
+/** How far a radio row's content sits from each edge of the group. */
+private val RadioRowHorizontalPadding = 16.dp
+
+/** The gap between a radio row's dot and its label. */
+private val RadioLabelGap = 16.dp
+
+/**
  * The control's host: [NitroComposeHost] plus this component's composable.
  *
  * [Content] is fixed for the lifetime of the view, which is why it lives in a
@@ -673,8 +821,106 @@ private class PickerHost(
     }
   }
 
+  /**
+   * The two controls this component is, chosen by the variant the wrapper sent.
+   *
+   * A variant change is a new mount (`Picker.tsx` keys the native view on the
+   * variant), so the two branches never trade slots in a live composition; a
+   * recycled view switching between them is the case `prepareForRecycle` resets,
+   * and the popup branch owns a window that a composition ending takes with it.
+   */
   @Composable
   override fun Component(model: PickerModel) {
+    if (PickerModel.isRadio(model.variant)) {
+      RadioGroup(model)
+    } else {
+      MenuField(model)
+    }
+  }
+
+  /**
+   * The `radio` variant: Material 3's documented radio-group pattern (Q7
+   * Appendix D), one 48 dp `selectable` row per option inside a
+   * `selectableGroup()` column.
+   *
+   * Three things about it are the pattern rather than a style choice:
+   *
+   * - **The row is the target.** `RadioButton(onClick = null)` draws the control
+   *   and publishes nothing of its own to press, so the `selectable` row carries
+   *   the role, the selected state and the press. Two pressable halves would read
+   *   to TalkBack as two choices per option.
+   * - **`selectableGroup()` is what says "1 of N".** The position comes from the
+   *   group, the role and the selected state from each row - the same division
+   *   `HybridNitroUiSegmentedControl` uses for its connected group.
+   * - **`label` is not drawn.** For a menu the label is the field's caption and
+   *   part of its box; a radio group has no field, and Material's group names
+   *   itself through the rows. So `label` names the *group* for accessibility
+   *   here (`docs/components/picker.md`), and stays out of the box - which is why
+   *   the variant's sizing key can ignore what it is not painted with.
+   *
+   * The rows are measured, not copied: 48 dp is Material's own minimum touch
+   * target, which the `RadioButton` inside already asks for through
+   * `minimumInteractiveComponentSize()`, so a row is exactly 48 dp at font scale 1
+   * and grows with the text instead of clipping it (`Picker.harness.tsx` measures
+   * 3 options at 144 dp and 5 at 240 dp on the device).
+   */
+  @Composable
+  private fun RadioGroup(model: PickerModel) {
+    val options = model.options
+    val shown = model.displayed
+    val enabled = model.enabled
+    val colors = pickerRadioColors(model.tintColor)
+    // An explicit `accessibilityLabel` wins over the visible `label`, which is what
+    // both platforms' own controls do and what the menu branch does with the same
+    // two values.
+    val spokenGroup = model.accessibilityLabel ?: model.label
+    val groupLabel =
+      if (spokenGroup != null) Modifier.semantics { contentDescription = spokenGroup } else Modifier
+    Column(modifier = groupLabel.selectableGroup()) {
+      options.forEachIndexed { index, text ->
+        Row(
+          modifier =
+            Modifier
+              // Under the host's unbounded (intrinsic) question `fillMaxWidth` is a
+              // no-op, so the row is its content and the column is its widest row -
+              // the width the engine records. Offered a real box (a stretched or
+              // measured width), the same line is what makes the whole row, blank
+              // space included, pressable.
+              .fillMaxWidth()
+              .heightIn(min = RadioRowMinHeight)
+              // `selectable` publishes `Role.RadioButton`, the selected state and
+              // the press, and - with `enabled = false` - the disabled state, which
+              // is what a screen reader reads as "not selectable" rather than an
+              // option that does nothing.
+              .selectable(
+                selected = index == shown,
+                onClick = { choose(index) },
+                enabled = enabled,
+                role = Role.RadioButton,
+              )
+              .padding(horizontal = RadioRowHorizontalPadding),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          RadioButton(
+            selected = index == shown,
+            // null on purpose: the row above is the one target.
+            onClick = null,
+            enabled = enabled,
+            colors = colors,
+          )
+          Spacer(modifier = Modifier.width(RadioLabelGap))
+          // One line with an ellipsis, so a box narrower than the widest option
+          // truncates the label instead of growing the row (C1's over-wide rule:
+          // the placement measure hands the rows the box's width).
+          Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+      }
+    }
+  }
+
+  /** The `menu` and `wheel` variants: the field anchor and the popup it opens. */
+  @Composable
+  private fun MenuField(model: PickerModel) {
     val options = model.options
     val selectedIndex = model.displayed
     val expanded = model.expanded
@@ -1009,6 +1255,15 @@ class HybridNitroUiPicker(
      *
      * Not covered by one pair: a `label` raises an Android field to 64 dp tall,
      * which the `lbl:` part of the sizing key corrects on the first measure.
+     *
+     * Nor by the `radio` variant, which is the same story in the other direction
+     * (D17): the engine holds one declared fallback per component, so a cold radio
+     * group's first frame is this 280 x 56 dp field box - far from a column of 48 dp
+     * rows - and its own measure corrects it on the turn it lands. Measured, not
+     * assumed: `Picker.harness.tsx`'s radio cases mount from a *poisoned* fallback,
+     * so the correction is required rather than decorative, and
+     * `docs/components/picker.md` states the cold frame. Per-variant fallbacks are
+     * what the engine has no room for.
      */
     private const val FALLBACK_WIDTH_DP = 280.0
     private const val FALLBACK_HEIGHT_DP = 56.0
@@ -1086,9 +1341,9 @@ class HybridNitroUiPicker(
   override var variant: String
     get() = model.variant
     set(next) {
-      // The wrapper is the only writer and sends one of two names; anything else
+      // The wrapper is the only writer and sends one of three names; anything else
       // behaves as `'menu'`, which is what the spec documents.
-      val resolved = if (next == "wheel") "wheel" else "menu"
+      val resolved = PickerModel.resolvedVariant(next)
       if (resolved == model.variant) {
         return
       }
@@ -1098,6 +1353,8 @@ class HybridNitroUiPicker(
       // buys here is the policy: `fillWidth` asks Compose for the height this
       // control wants at the box's width, and the field is told to take that width
       // - which is the only sense in which Android's "wheel" differs from its menu.
+      // A `radio` keeps the menu's `intrinsic` policy: its box is the widest row
+      // and the option count, not the box it was offered (Q7 Appendix D, D17).
       host.sizingPolicy =
         if (resolved == "wheel") {
           NitroUiSizing.POLICY_FILL_WIDTH
