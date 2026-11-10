@@ -565,6 +565,27 @@ export const A11Y_PRESENTATIONS = Object.freeze([
  */
 
 /**
+ * One accessibility element listed under the accessible ContextMenu: one of the two
+ * `Text`s the example screen puts inside it, at a box of its own.
+ *
+ * `describeIosNode` writes these, so the pattern is pinned to the real shape — a fixture
+ * whose box is written any other way does not match the row, which is the point.
+ */
+const CTX_TEXT_STOP =
+  'static text "(?:Grace Hopper|One element for screen readers, with the menu on it\\.)" ' +
+  'at \\([\\d., -]+\\)';
+
+/**
+ * The ContextMenu debt sentence: any number of stops, as long as every one of them is one
+ * of the wrapper's own Texts and the finding blames React Native's publication for it.
+ */
+const CONTEXT_MENU_TEXT_STOPS_ROW = new RegExp(
+  `: \\d+ element\\(s\\) under "ctx-accessible" are stops of their own ` +
+    `\\(${CTX_TEXT_STOP}(?:; ${CTX_TEXT_STOP})*\\) — ` +
+    'React Native publishes each Text'
+);
+
+/**
  * The debt list, and the reason the suite can land green on its first run.
  *
  * An entry is not a `TODO`: {@link staleExemptions} proves each one still describes a
@@ -705,14 +726,29 @@ export const A11Y_EXEMPTIONS = Object.freeze([
     control: 'context-menu',
     platform: 'ios',
     followups:
-      'G16 a11y: an accessible ContextMenu still lists its first Text as a stop on iOS',
-    // The measured shape and nothing wider (G16, iOS 27): the wrapper is the element and
-    // carries the label, the second Text is hidden under it, and the first Text is still
-    // listed - twice, as XCUITest lists every element. A regression of D37 item 2 (the
-    // wrapper not an element at all) lists both Texts, four stops, and stays red.
-    // Anchored on the `: ` before the count, so 12 or 22 stops are not this row.
-    matches:
-      /: 2 element\(s\) under "ctx-accessible" are stops of their own \(static text "Grace Hopper"/,
+      'G16 a11y: an accessible ContextMenu still lists its Texts as stops on iOS',
+    // One component, three walk histories, measured on iOS 27 (X22 fix round 1). An app
+    // that goes straight to this case reads ONE node: the wrapper with the label, its
+    // subtree hidden — the tree the rule actually wants. The same tree walked after the
+    // sweep's other 21 cases lists the first Text; after the merged Stepper + Picker-radio
+    // tree's 22 it lists both. Each Text shows up twice, and that is not XCUITest
+    // duplicating: the sweep's own probe finds one child under the wrapper with the same
+    // label and one child under *that*, so React Native really vends two nested elements
+    // per `Text` (the `Text`'s component view, and the element its Paragraph vends). All
+    // three readings have identical boxes and settle with no instability line, and the
+    // other 22 cases read byte for byte the same in both logs — the count is when the tree
+    // was walked, not what the component is. The reason it can change at all is React
+    // Native's: the wrapper hides its subtree only once React Native has stored
+    // `accessible` on the component view, and measured from this view's own getter that
+    // store still reads false inside the Hybrid's `afterUpdate()`. A walk that lands in
+    // that window publishes the subtree, and UIKit keeps what it has published.
+    //
+    // So: any count, but every stop listed has to be one of the wrapper's own two Texts,
+    // and the sentence has to be the one that names React Native's publication as the
+    // cause. A third label is not this row, and neither is the unnamed container box —
+    // that box is the D37 item 2 regression (the wrapper not an element at all), which is
+    // what G16's comment mistook four stops for.
+    matches: CONTEXT_MENU_TEXT_STOPS_ROW,
   },
   {
     control: 'form',
@@ -943,16 +979,32 @@ export function iosA11yProblems(control, tree) {
     // content view's getter forced false): XCUITest still listed the wrapper with its
     // label - it lists any view with an identifier - and its two texts as stops of their
     // own, so the name check alone passed a wrapper VoiceOver never stops on.
-    const separate = tree.filter(
-      (node) => !node.anchor && node.label !== '' && hasArea(node)
-    );
-    if (separate.length > 0) {
+    //
+    // Two different things produce that finding, and the debt row excuses one of them, so
+    // they are said differently (X22 fix round 1). XCUITest lists every element twice, so
+    // the *count* is never the signal — 2 and 4 stops are the same component, measured on
+    // either side of React Native publishing its second Text. What separates the two
+    // shapes is whether the walk also reaches an **unnamed** box under the named wrapper:
+    // that box is the container the texts hang off, and it only shows up when the wrapper
+    // is not the element UIKit stops on (the D37 item 2 regression). Without it, the
+    // wrapper *is* the element with the name and the menu, and what is listed alongside it
+    // are its own texts — React Native's doing, recorded as debt.
+    const separate = tree.filter((node) => !node.anchor && hasArea(node));
+    const unnamed = separate.filter((node) => node.label === '');
+    const labelled = separate.filter((node) => node.label !== '');
+    if (labelled.length > 0) {
       problems.push(
-        `${control.hybridView}: ${String(separate.length)} element(s) under ` +
+        `${control.hybridView}: ${String(labelled.length)} element(s) under ` +
           `"${control.anchorTestId}" are stops of their own ` +
-          `(${separate.map(describeIosNode).join('; ')}) — the wrapper is not one ` +
-          'accessibility element, so a screen reader reaches its children and never ' +
-          'the menu on it'
+          `(${labelled.map(describeIosNode).join('; ')}) — ` +
+          (unnamed.length > 0
+            ? `the walk also reaches ${describeIosNode(unnamed[0])}, an unnamed box ` +
+              'under the named wrapper, so the wrapper is not one accessibility ' +
+              'element and a screen reader reaches its children and never the menu ' +
+              'on it'
+            : 'React Native publishes each Text inside the wrapper as an element of ' +
+              'its own, so a reader stops on the texts as well as on the wrapper that ' +
+              'carries the name and the menu')
       );
     }
   }
