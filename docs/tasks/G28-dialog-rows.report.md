@@ -144,3 +144,26 @@ state lines, the alert half stays green, and no press line goes red at all.
   window down — the next dialog check will rediscover this unless a helper says so.
 - The row probe is harness-only code inside a shipped file, armed by a token. If a second component
   needs one, it belongs in core next to `NitroUiPerf` rather than as a second copy.
+
+## Fix round 1
+
+**Branch:** `task/G28-fix1` (`a2111f12` + `origin/main`, so X23's Form fix is in) ·
+**Lease:** `G28-n0naq` (`pair-a`: iPhone 17 / iOS 27 + emulator-5574 / API 35 · Metro 8295)
+
+**The group had no inset.** Flush to the sheet, its 16 dp outer corners cut grey wedges at the
+sheet's edge and the segments touched. The rows now sit in their own `Column` with 16 dp horizontal
+padding — the radius of those corners — and material3's own `SegmentedGap`; title and message keep
+24 dp. On the new shot the card starts at x=42 px — 16 dp — with 5 px gaps. Retaken:
+`confirmation-dialog-android.png` (720 px) and `G28/rows-segmented.png`.
+
+**Nothing tested the row refusing a press.** `enabled = true` alone — `performAction`'s guard left
+in, one hunk — reddens exactly the two lines that read the row (`Dialog.harness.tsx:552`, `:624`),
+keeps the alert half green (the control that the hunk was single), and reddens no press assertion.
+The row's own `enabled` is proven by the dump and the probe; a press check proves nothing happens,
+whichever layer stops it. `G28/mutations.json` and the summary above now say so.
+
+**Harness-only:** the report is a pure read again — the probe is armed by the reserved id
+`__nui_probe_rows`, and `probePending` clears if the sheet leaves mid-answer; the changeset is cut to
+two user-facing lines.
+
+## Gates (fix round 1)
