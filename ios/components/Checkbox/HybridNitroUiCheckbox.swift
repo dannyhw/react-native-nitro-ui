@@ -260,6 +260,46 @@ struct CheckboxContent: NitroUIContent {
     // glyph and counts, which is the assertion that a row handler and the `Toggle`'s own
     // gesture both answering the same touch would go red on. Out of the accessibility tree,
     // so the element a reader meets is still the switch.
+    // One element for a reader, on the row's own box (DECISIONS D47 item 3).
+    //
+    // Measured on the device by `real-input:ios`'s accessibility sweep, a custom
+    // `ToggleStyle` does not get the accessibility SwiftUI's own styles get: the element
+    // a reader reaches is built from the style's *content*, so a glyph row read as three
+    // stops - the `Toggle` (named, valued, and laid out at 107 x 21.67 pt inside a
+    // control laid out at 109 x 26), the symbol as an image named "Circle", and the row's
+    // text as static text of its own. Two of those are things a person has to skip to
+    // reach the control, and a name 2 pt off the box the finger presses is exactly the
+    // finding `scripts/real-input/a11y.mjs` fails a control for. Neither of the two
+    // obvious fixes measures out: `.accessibilityHidden(true)` on the symbol leaves the
+    // symbol in the tree with its "Circle" name, and
+    // `.accessibilityElement(children: .ignore)` - in the style or on the `Toggle` - adds
+    // an element rather than replacing one, and loses the toggle trait with it.
+    //
+    // `accessibilityRepresentation` replaces the row's accessibility with a `Toggle`'s
+    // that is never drawn, and it is the only shape measured here that answers all four
+    // questions at once: one element (no symbol stop, no text stop), the control's name,
+    // the value - including `mixed` for the dash - and the row's own box, one pixel of
+    // height taller than the host's (1/3 pt, inside the rule's half-point tolerance).
+    // The bare case gains the most: unnamed, its element used to be the symbol, named
+    // "Circle", at 21.67 pt; named with `accessibilityLabel`, it is now that name on the
+    // 26 pt box.
+    //
+    // `.disabled` is restated inside the representation because the representation is a
+    // separate view: measured without it, a *disabled* Checkbox's element answered
+    // `enabled=true` to a reader, which is a worse announcement than the inset box this
+    // replaced. The `'switch'` style is not represented at all - its element is already
+    // the row, at the box the sweep has read since D38 - so D47 changes nothing about
+    // what a reader meets for the look it kept.
+    .modifier(
+      CheckboxGlyphAccessibility(
+        glyph: model.iosStyle.drawsGlyph,
+        name: name ?? "",
+        isOn: model.state.displayed,
+        setOn: { requested in model.userToggle(to: requested) },
+        disabled: model.disabled,
+        value: showsThirdState ? "mixed" : nil
+      )
+    )
     .overlay {
       Color.clear
         .contentShape(Rectangle())
@@ -274,10 +314,15 @@ struct CheckboxContent: NitroUIContent {
 ///
 /// A style of ours on Apple's `Toggle`, which is what keeps every promise the component
 /// makes: the binding is the Toggle's, so a press means "the opposite of what is showing"
-/// here exactly as it does in the switch style; the element a reader meets is the
-/// Toggle's, with the label as its name and the value as its state; `.disabled` refuses
-/// the touch and dims the row; and the symbol is `.font(…)`-sized, so Dynamic Type
-/// scales the glyph with the label instead of leaving a 1990s-sized box behind large text.
+/// here exactly as it does in the switch style; `.disabled` refuses the touch and dims
+/// the row; and the symbol is `.font(…)`-sized, so Dynamic Type scales the glyph with the
+/// label instead of leaving a 1990s-sized box behind large text.
+///
+/// It says nothing to a reader, on purpose. What the elements of a custom style's content
+/// become is measured in `CheckboxContent/body` - three stops, with the name 2 pt off the
+/// box - which is why the row's one element comes from `CheckboxGlyphAccessibility`
+/// rather than from anything in here: a symbol and a text that are *pictures of* the
+/// state have no announcement to make.
 ///
 /// It draws and does not intercept. The row's tap target is applied to the control in
 /// ``CheckboxContent/body`` - one target for all three styles, for the measured reason
@@ -321,10 +366,6 @@ private struct CheckboxGlyphToggleStyle: ToggleStyle {
             ? (tint.map { Color(uiColor: $0) } ?? Color.accentColor)
             : Color(uiColor: .secondaryLabel)
         )
-        // One element for the reader: the `Toggle`, named by its label, carrying the
-        // value. The symbol is the *picture* of that value, and a second stop that says
-        // "image" beside it is a thing to skip rather than a thing to learn.
-        .accessibilityHidden(true)
       if showsLabel {
         configuration.label
       }
@@ -363,6 +404,42 @@ private struct CheckboxToggleStyleModifier: ViewModifier {
           tint: tint
         )
       )
+    }
+  }
+}
+
+/// The glyph styles' one accessibility element: the platform's `Toggle`, represented
+/// rather than drawn, on the row's box.
+///
+/// ``CheckboxContent/body`` carries the reason, measured. It is a modifier because
+/// `.accessibilityRepresentation` replaces the accessibility of everything it is applied
+/// to: the glyph branch gets it, the `'switch'` branch gets the element SwiftUI builds
+/// for itself, and the chain above (the name, the third state's word) stays one chain
+/// that every style shares. The name and the value inside the representation are the
+/// same two values the chain applies, from the same two sources, so a reader is told the
+/// same thing whichever style drew the row.
+private struct CheckboxGlyphAccessibility: ViewModifier {
+  /// Glyph styles only; `'switch'` keeps its own element.
+  let glyph: Bool
+  /// The control's name - `accessibilityLabel`, else `label` - or empty for no name.
+  let name: String
+  let isOn: Bool
+  let setOn: (Bool) -> Void
+  /// Restated inside the representation, which does not inherit it.
+  let disabled: Bool
+  /// The third state's word, or `nil` to let the `Toggle`'s own checked/unchecked answer
+  /// through (`NitroUiCheckboxGlyphs.accessibilityValue`'s rule).
+  let value: String?
+
+  @ViewBuilder func body(content: Content) -> some View {
+    if glyph {
+      content.accessibilityRepresentation {
+        Toggle(name, isOn: Binding(get: { isOn }, set: { requested in setOn(requested) }))
+          .modifier(OptionalAccessibilityValue(value: value))
+          .disabled(disabled)
+      }
+    } else {
+      content
     }
   }
 }

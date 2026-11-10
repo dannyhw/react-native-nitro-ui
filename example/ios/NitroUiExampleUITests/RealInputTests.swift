@@ -3136,19 +3136,23 @@ final class RealInputTests: XCTestCase {
     // of symbol and text answers on its own - `HybridNitroUiCheckbox.swift` carries the
     // row's tap target for exactly this reason, for all three styles.
     //
-    // G31 moved the glyph from the right of the label to the left of it, so the guard reads
-    // the other way round: the glyph has to *end* before the middle rather than start after
-    // it. Asserted rather than assumed: a fixture whose label went short would move the aim
-    // onto the glyph and leave the claim unproven while still going green.
+    // G31 moved the glyph from the right of the label to the left of it, and the glyph
+    // style's element spans the whole row - measured: one switch element at 107 x 21.67
+    // inside a wrapper 109 x 26 - so "which element is under this press" can no longer
+    // separate the glyph from the label. The whole row *is* the element. Geometry still can:
+    // the glyph is a square of the row's own height at its left, so a row more than twice as
+    // wide as it is tall has its middle past the glyph and on the label. Asserted rather
+    // than assumed: a fixture whose label went short would move the aim onto the glyph and
+    // leave the claim unproven while still going green.
     let glyph = enabled.descendants(matching: .`switch`).allElementsBoundByIndex.min {
       $0.frame.width < $1.frame.width
     }
     XCTAssertNotNil(glyph, "the Checkbox should offer a switch element of its own")
     XCTAssert(
-      (glyph?.frame.maxX ?? .greatestFiniteMagnitude) < enabled.frame.midX,
-      "the glyph ends at x=\(glyph?.frame.maxX ?? -1) and the row's middle is at "
-        + "x=\(enabled.frame.midX) - a press at the middle has to land on the label's side "
-        + "of the glyph, or these taps prove nothing about the label"
+      enabled.frame.width > enabled.frame.height * 2,
+      "the row is \(enabled.frame.width) x \(enabled.frame.height) - the glyph is a square of "
+        + "the row's height at its left, so a press at x=\(enabled.frame.midX) only asks about "
+        + "the label while the row is more than twice as wide as it is tall"
     )
 
     // 1. Checked, then unchecked: one change per tap, in both directions.
@@ -3268,7 +3272,11 @@ final class RealInputTests: XCTestCase {
     //    nothing and a counter that was simply read too early.
     let glyphBefore = Int(try read(Echo.checkboxEvents)) ?? -1
     let glyphWanted = String(glyphBefore + 1)
-    glyph?.tap()
+    // The glyph's own strip: the leftmost 8 per cent of the row, which is inside a square
+    // one row-height wide at its left edge. The element's centre is *not* that - the element
+    // is the row, so a centre press here would be one more press on the label's side, which
+    // the steps above have already counted.
+    enabled.atFraction(0.08).fingerTap()
     // The counter first, and read twice: the surplus event in Chip's G12 red proof arrived
     // *after* the count was reached, so a count taken once proves nothing. One press on the
     // glyph is one `onCheckedChange` - a second is the row's tap target and the Toggle's own
@@ -3369,8 +3377,69 @@ final class RealInputTests: XCTestCase {
       "two presses on the switch style are two `onCheckedChange`s after a quiet period, "
         + "which is the count a row handler and a gesture both answering would break"
     )
-  }
 
+    // 7. What a reader is told about the third state (G31, DECISIONS D47 item 3).
+    //
+    // The dash is the only state whose picture and value disagree: SwiftUI's `Toggle` has
+    // two positions, so its element can say checked or unchecked and nothing else, and the
+    // component therefore sets `.accessibilityValue("mixed")` for that state alone
+    // (`HybridNitroUiCheckbox.swift`). Whether the word reaches a screen reader is a
+    // question the app cannot answer - `nuiTestProbeAccessibility` reports `unavailable`
+    // for a hosted SwiftUI view on iOS 27 - so it is read from outside, printed, and then
+    // required: one element, the label as its name, and "mixed" as its value.
+    let mixedRow = try required(
+      "real-input-checkbox-mixed", as: "the mixed Checkbox")
+    let mixedNodes: [A11yNode] = [A11yNode(element: mixedRow)]
+      + mixedRow
+        .descendants(matching: .any)
+        .allElementsBoundByIndex
+        .map(A11yNode.init(element:))
+    for node in mixedNodes {
+      print(
+        "real-input checkbox mixed a11y trait=\(quoted(node.traitName)) "
+          + "enabled=\(node.enabled) hittable=\(node.hittable) "
+          + "id=\(quoted(node.identifier)) label=\(quoted(node.label)) "
+          + "value=\(quoted(node.valueText))"
+      )
+    }
+    let announced = mixedNodes
+      .map { "\($0.traitName)|\($0.label)|\($0.valueText)" }
+      .joined(separator: "  ")
+    // The React wrapper carries the testID and the name too - that is RN, not this
+    // component - so it is the one node below that is not counted as a stop, and the
+    // question becomes what *kind* of element the control is and what else a reader would
+    // stop on. The rest of the subtree is containers: XCUITest lists them, and
+    // `scripts/real-input/a11y.mjs` does not count an unnamed box as a stop either - what
+    // a reader hears is the element with something to say.
+    let stops = mixedNodes.filter { $0.identifier != "real-input-checkbox-mixed" }
+    let toggles = stops.filter { $0.traitName == "switch" }
+    XCTAssertEqual(
+      toggles.count, 1,
+      "the mixed Checkbox should be one toggle for a reader - the tree read: \(announced)"
+    )
+    XCTAssertEqual(
+      toggles.first?.label, "Real-input mixed checkbox",
+      "the toggle's name should be the accessibility label it was given - the tree read: "
+        + "\(announced)"
+    )
+    XCTAssertEqual(
+      toggles.first?.valueText, "mixed",
+      "the third state should be announced as \"mixed\" - Android's Material word for it, "
+        + "which is why iOS adopted it - and the tree read: \(announced)"
+    )
+    // No second stop that says anything. Measured without the representation this subtree
+    // read as three named stops: the toggle, the symbol as an image named "Circle", and
+    // the row's text as static text of its own - and `.accessibilityHidden(true)` on the
+    // symbol did not remove it, which is the sentence that decided the design. A picture of
+    // a state is not a thing to announce, and neither is text the control already carries
+    // as its own name.
+    let secondStops = stops.filter { !$0.label.isEmpty && $0.traitName != "switch" }
+    XCTAssertEqual(
+      secondStops.count, 0,
+      "the glyph and the label must be announced as part of the control and not as stops "
+        + "of their own - the tree read: \(announced)"
+    )
+  }
 
   /// Poll one item's element until it reports `expected`, and return its last word.
   private func waitForItemState(

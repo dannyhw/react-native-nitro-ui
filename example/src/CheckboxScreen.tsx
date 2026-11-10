@@ -123,6 +123,22 @@ export default function CheckboxScreen() {
             accessibilityLabel="Real-input switch checkbox"
             testID="real-input-checkbox-switch"
           />
+          {/*
+            The third state, for the one question only a screen reader can answer: what a
+            reader is *told* about a box showing a dash. iOS draws `minus.circle.fill` and
+            sets `.accessibilityValue("mixed")` for exactly that state
+            (`HybridNitroUiCheckbox.swift`), and Android publishes Material's
+            `ToggleableState.Indeterminate` - so the element has to be read from outside
+            the app, which is what `real-input` does. It is uncontrolled and has no echo:
+            no test presses it, because the thing under test is the announcement and not
+            the press.
+          */}
+          <Checkbox
+            label="Real input, mixed"
+            indeterminate
+            accessibilityLabel="Real-input mixed checkbox"
+            testID="real-input-checkbox-mixed"
+          />
           <Checkbox
             label="Refusing"
             checked={false}

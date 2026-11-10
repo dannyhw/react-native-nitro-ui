@@ -57,7 +57,7 @@ const [terms, setTerms] = useState(false);
 | Label           | the `Toggle`'s label, beside the glyph; the row is one tap target | a `Row` of box + `Text`, both tappable                     |
 | Value           | `NitroUiControlledValue<Bool>` on `CheckboxModel`          | `NitroUiControlledValue<Boolean>` on `CheckboxModel`           |
 | Role            | SwiftUI's toggle trait                                     | `Role.Checkbox` with its `ToggleableState`, published by M3    |
-| Name            | `.accessibilityLabel(_:)` on the `Toggle`                  | `contentDescription` on the merged row only — the box is presentational |
+| Name            | `.accessibilityLabel(_:)` on the element (glyph styles: on its representation) | `contentDescription` on the merged row only — the box is presentational |
 | Host            | `UIHostingController` inside `NitroSwiftUIHost`            | `NitroComposeHost<M>: AbstractComposeView`                     |
 
 ### Why `indeterminate` is a prop and not a third `checked` value
@@ -161,7 +161,7 @@ simulator and an API 35 `pixel_9` emulator:
 | `label="Measured"`, `circle`             | 110.00 × 26.00 pt | 131.05 × 48.00 dp |
 | `label="Measured"`, `square`             | 109.00 × 24.00 pt | 131.05 × 48.00 dp |
 | `label="Measured"`, `switch`             | 145.00 × 28.00 pt | 131.05 × 48.00 dp |
-| `indeterminate`, `label="Select all"`    | 103.00 × 26.00 pt | 131.05 × 48.00 dp |
+| `indeterminate`, `label="Select all"`    | 103.00 × 26.00 pt | 124.95 × 48.00 dp |
 
 Android answers one box to all five rows: `iosStyle` is another platform's prop, and
 Material's dash shares Material's box. iOS answers three, and none of them is another's —
@@ -234,22 +234,41 @@ The control is the platform's, so the accessibility element is too:
   in-app through the control's own probe and asserts `role=Checkbox`,
   `checked=false`/`true`, the name, `disabled`, and that exactly one node publishes
   a toggle.
-- **iOS is a toggle in all three styles.** G31 changed what the control *draws*, not
-  what a reader meets: the element is still the `Toggle`'s, its name is still the label,
-  and the symbol is `.accessibilityHidden(true)` so the glyph is a picture of the value
-  rather than a second stop that says "image". XCUITest reports SwiftUI's toggle trait as
-  a `switch` element with `value` 0 or 1 — the same answer Chip's filter chip measures,
-  for the same reason. On iOS 27 the hosting view exposes no element to an in-app probe
+- **iOS is one element, in all three styles.** G31 changed what the control *draws*, and
+  that turned out to be enough to change what a reader meets: a custom `ToggleStyle` does
+  not get the accessibility SwiftUI's built-in styles get. Measured with `real-input`'s a11y
+  sweep, a glyph row read as **three** stops — the `Toggle` (named and valued, but inset to
+  107 × 21.67 pt inside a control laid out at 109 × 26), the symbol as an image named
+  "Circle", and the label as static text of its own — and `.accessibilityHidden(true)` on
+  the symbol did not remove it: XCUITest still listed it, name and all. Nor did
+  `.accessibilityElement(children: .ignore)`, which adds an element instead of replacing one
+  and drops the toggle trait with it. So the glyph styles carry an
+  `accessibilityRepresentation`: a `Toggle` that is represented rather than drawn, with
+  `.disabled` restated inside it (measured without that, a *disabled* box announced itself
+  as enabled).
+
+  What a reader gets from that is one element: XCUITest's `switch` type — SwiftUI's toggle
+  trait, the same answer the `'switch'` style and Chip's filter chip give — named by
+  `accessibilityLabel ?? label`, valued `0`/`1`, on the row's own box, one pixel (⅓ pt)
+  taller than the host's. So a reader hears the name, then the state of a toggle, then the
+  activation hint; `value` is the number XCUITest reads, which is what this suite can hear
+  of an announcement, and it is the same number a switch-style Checkbox reported before
+  D47. The bare case gained the most: with no name of its own its element used to *be* the
+  symbol, announced as "Circle" at 21.67 pt.
+  On iOS 27 the hosting view exposes no element to an in-app probe
   (`nuiTestProbeAccessibility` answers `unavailable`, as it does for Slider and Chip), so
-  iOS role and state are asserted by real input: `RealInputTests.testRealInputCheckbox`
-  and the a11y sweep's `checkbox` case.
+  iOS role and state are asserted from outside the app: the a11y sweep's `checkbox` case
+  grades name, box and trait, and `RealInputTests.testRealInputCheckbox` reads the third
+  state's element.
 - **The third state says "mixed", on both platforms.** A `Toggle` is two-position, so
   its element can only say checked or unchecked, and a reader told "off" about a box
   showing a dash is being told about a different box. Android's Material publishes
   `ToggleableState.Indeterminate` and TalkBack reads it as "Mixed"; iOS sets
   `.accessibilityValue(Text("mixed"))` for exactly the state where the picture and the
   value disagree, and leaves the `Toggle`'s own value alone otherwise — an empty value
-  would silence it.
+  would silence it. Read from outside the app on iPhone Air / iOS 27, that word is what the
+  element answers with: `trait=switch label="Real-input mixed checkbox" value="mixed"`, and
+  the value string is what a reader hears in place of "on" or "off".
 - `accessibilityLabel` goes on the control, never on a wrapper, and defaults to
   `label`. A *bare* Android checkbox has no name of its own, which is the argument
   for giving one: pass `accessibilityLabel` when there is no `label`.
