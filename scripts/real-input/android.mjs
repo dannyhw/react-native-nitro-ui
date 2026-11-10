@@ -3321,7 +3321,10 @@ const CHECKS = {
     await waitGone(STICKY, 'the action to take the sticky alert down');
 
     // 8. The confirmation dialog is a Material bottom sheet of rows: its disabled row
-    //    is disabled, Back closes it with the close alone, and a row reports.
+    //    is disabled, Back closes it with the close alone, and a row reports. The log is
+    //    read here and at the end of the section, never with the sheet up: the sheet is
+    //    its own window, so while it is open the app's text is absent from the dump.
+    const beforeSheet = t.requireEcho(ECHO.dialogLog);
     await open(
       'dialog-open-sheet',
       SHEET_ROW,
@@ -3338,19 +3341,28 @@ const CHECKS = {
       'false'
     );
     // The tree saying `enabled="false"` is only a claim until a finger tests it. One
-    // press, and the right answer is silence: no action, no close, the sheet still up.
-    // The row a few lines below is the barrier that says this channel does report.
-    const beforeDisabledRow = t.requireEcho(ECHO.dialogLog);
+    // press, and the right answer is silence: no action, the sheet still up, and the log
+    // - read once it is down - no longer than it was plus Back's own close. The row a few
+    // lines below is the barrier that says this channel does report.
     await t.tapNode(t.waitForOption('Locked share', 'the disabled row'));
     await t.settle(1500);
+    const sheetUpPastDisabledRow = upCount(SHEET_ROW)();
     t.log.checkEquals(
-      'a real tap on the disabled row reports nothing',
-      t.requireEcho(ECHO.dialogLog),
-      beforeDisabledRow
+      'a real tap on the disabled row leaves the sheet up',
+      sheetUpPastDisabledRow,
+      1
     );
-    t.log.checkEquals('and leaves the sheet up', upCount(SHEET_ROW)(), 1);
-    await t.pressBack();
-    await waitGone(SHEET_ROW, 'Back to take the sheet down');
+    // Only Back while a sheet is up to take it down: Back with nothing up would leave the
+    // screen and cost the rest of the check, on a run that is already red.
+    if (sheetUpPastDisabledRow === 1) {
+      await t.pressBack();
+      await waitGone(SHEET_ROW, 'Back to take the sheet down');
+    }
+    t.log.checkEquals(
+      "and reports nothing: the log gained only Back's close",
+      t.requireEcho(ECHO.dialogLog),
+      `${beforeSheet} > presented:false`
+    );
     await open(
       'dialog-open-sheet',
       SHEET_ROW,
