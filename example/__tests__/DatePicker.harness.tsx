@@ -1953,7 +1953,15 @@ describe('DatePicker · wheel variant (G29)', () => {
     const box = sizeOf('wheel-time');
     expect(box).not.toBeNull();
     expect(Math.abs((box?.height ?? 0) - size.height)).toBeLessThanOrEqual(1);
-    expect(size.height).toBeGreaterThanOrEqual(48);
+    // The drum row states its own height - `TimeWheelHeight`, 120 dp of three rows with
+    // the middle one snapped - so the box is asked for *that* number rather than for "at
+    // least touch target". A `>= 48` would be happy with a drum clipped to one row, which
+    // is the way this variant could go wrong and still look plausible, and 120 is not the
+    // planted 66.5 either, so a correction that never arrived cannot pass by accident.
+    expect(Math.abs(size.height - 120)).toBeLessThanOrEqual(1);
+    console.log(
+      `time drum height: ${String(size.height)} dp (TimeWheelHeight=120)`
+    );
     expect(cold.corrections).toBeGreaterThanOrEqual(1);
     expect(cold.cachedSizes).toBeGreaterThanOrEqual(1);
     unmount();
@@ -2062,6 +2070,15 @@ describe('DatePicker · wheel variant (G29)', () => {
     // to 14:05 the picker is showing 09:20 again — which the tap-twice oracle can
     // see without reading a single row. A drum that left 14:05 painted would make
     // the second roll a no-op, and the log would be one line instead of two.
+    //
+    // What makes this case able to see that is `nuiTestSelect`: on this variant it asks
+    // the composition to *roll the drums* to the pair (as `Picker`'s hook asks for its
+    // drum), rather than writing the model. So the drums really do move to 14:05 here,
+    // the rest is a real rest, and the second call is a real roll only if something put
+    // the drums back afterwards — the props pass (`seatTimeDrumsFromModel`) when the
+    // frame the `LaunchedEffect` needs never came, and the rest's own tail when it did.
+    // Delete both and this goes red on the second `waitForEvents`: the drums are already
+    // on 14:05, the request moves nothing, no rest happens, and the log stays one line.
     const PARENT = localMs(2026, 5, 15, 9, 20);
     const ROLLED = localMs(2026, 5, 15, 14, 5);
     const { unmount } = await render(
