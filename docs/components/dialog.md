@@ -123,8 +123,9 @@ VoiceOver screen change.
 **Android.** The anchor is a `NitroComposeHost` at `0 × 0` that composes on attach and is
 not important for accessibility. `AlertDialog` lays the non-cancel actions out in order,
 with the cancel action as Material's dismiss button; `ModalBottomSheet` draws one
-Expressive `SegmentedListItem` per action (destructive in `colorScheme.error`), the group's
-outer corners rounded by `ListItemDefaults.segmentedShapes(index, count)` so the actions
+Expressive `SegmentedListItem` per action (destructive in `colorScheme.error`), gathered
+into a group inset 16 dp inside the sheet — material3's own gap between the rows, and its
+outer corners rounded by `ListItemDefaults.segmentedShapes(index, count)` — so the actions
 read as one card inside the sheet. A row is interactive and knows it: `disabled` is the
 row's own `enabled = false`, which is what stops the press, colours the label with the
 component's own disabled colour, and says `disabled` to TalkBack — nothing is painted
