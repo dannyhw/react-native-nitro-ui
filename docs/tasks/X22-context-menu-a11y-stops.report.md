@@ -162,3 +162,64 @@ the round.
   questions the fixture could not; it is not in the tree — worth a permanent, cheap version.
 - a11y: `A11Y_EXEMPTIONS` rows anchored on a count are anchored on walk history; the two
   Android `hosted-*` rows are the next candidates for the same treatment.
+- a11y: the ContextMenu debt row's comment says the walk happens after "the sweep's other 21
+  cases"; on `main` 20 cases precede this one (`form` follows). Comment-only wording fix,
+  deliberately not re-gated: `scripts/real-input/a11y.mjs` is keyed by every gate, and `check`
+  plus both harnesses plus `real-input:ios` did not fit the round's remaining runway.
+- harness: `Form (G24) › starts a recycled Form at the top of its own content`
+  (`Form.harness.tsx:1266`, `expected 200 to be less than or equal to 1`) is red across tasks on
+  this box today and blocks `harness:android` for any branch — G24's, or whoever owns the
+  Android recycle, not X22's.
+- gate-core: `scripts/real-input/` is outside the platform prefixes, so `need` reads an
+  iOS-only rule change as both-platforms and asks an 18-minute `harness:android` that the diff
+  cannot reach; worth deciding whether `scripts/real-input/ios.mjs`-only diffs should be
+  graded iOS.
+
+**Gates (fix round 1)** — `node scripts/gate.mjs table`, code tree `ff81e0d6e6dc`, lease `X22-1qgjs`.
+
+| Gate | Result | Counts | Code tree | Duration | Load |
+| --- | --- | --- | --- | --- | --- |
+| `check` | **PASS** | 1993 tests / 84 suites | `ff81e0d6e6dc` | 3 m 33 s | start 2.6 / med 27.9 / max 115.6 |
+| `harness:ios` | **PASS** | 564 tests / 30 suites + isolated 6 tests / 3 suites | `ff81e0d6e6dc` (ios tree) | 16 m 30 s | start 6.5 / med 7.3 / max 33.5 |
+| `harness:android` | **FAIL** | 2 failed of 620 tests / 30 suites + isolated 6 tests / 3 suites | `ff81e0d6e6dc` (android tree) | 17 m 59 s | start 6.5 / med 5.3 / max 26.8 |
+| `real-input:ios` | **PASS** | — | `ff81e0d6e6dc` (ios tree) | 40 m 09 s | start 25.6 / med 6.8 / max 118.2 |
+| `real-input:android` | missing | — | — | — | — |
+
+`harness:ios` skips 2 of 564 (one suite), as on `main`; `real-input:android` is the merge bar's.
+
+**The `harness:android` red is not this diff.** Two full runs on this tree failed *different*
+tests, neither near a11y: `Form (G24) › starts a recycled Form at the top of its own content`
+(the scroll offset never returned after a recycle) in both (04:54Z, 1 of 620; 05:12Z), and
+`SearchField › takes no submit from a Return pressed on a query it has just cleared` in the
+second (2 of 620). The identical Form assertion is in G27's log on the *other* device pair
+(tree `1c37ba278d06`, pair-b, 04:21Z) and in G26-fix1's and G25-G26-merge's on 11-09 — and those
+two branches also hold PASSing runs, on trees (`3ec823676277`, `332b585f3d07`) that already
+contain this task's merged round-0 fix. The Android half here is `76dc2347d567`, the digest
+`main`'s own: the diff is `scripts/real-input/a11y.mjs`, its unit test, one fixture and docs,
+none of which the Android harness loads, and 615 of 620 Android tests pass with the isolated
+modal-hazard suites green. Task X23 was running the same `Form.harness` isolation probe on
+pair-b while this was written. Both reds are in the exported ledger with their excerpts.
+
+**Red proofs (fix round 1)**, recorded under `fixRound1` in `docs/tasks/X22/mutations.json`:
+the separator `unnamed.length > 0` → `unnamed.length > 1` takes that suite from 51 pass to 2 red,
+including `regressed.failures` expected 1 / received 0 — the wrapper-not-an-element regression
+being *excused* by the row; and `main`'s count-anchored row laid over the round-1 sentence goes
+red on the measured 4-stop fixture, printing the unexempted finding — the red reported on
+`task/G25-G26-merge`. Both were run against a detached `git worktree` of this HEAD with
+`node_modules` symlinked in, so the shipping tree the gates are keyed to never moved.
+
+**Other lines in this round's ledger** (exported, so nothing is hidden): two early `check` reds
+(01:55Z, 01:58Z — rule and fixture mid-edit), a `real-input:ios` run that exited in 0 s in a
+shell that had no lease env, and one probe recorded as `harness:android:Form:--background`,
+where `--background` after `--` is a jest pattern and not a flag.
+
+## Questions for orchestrator (fix round 1)
+
+`harness:android` is the one gate this round cannot hand green, and the reason is a foreign
+red (`Form (G24)`, `SearchField` — see above), so `need --for review` stays unsatisfied on this
+tree. Options: (a) **recommended** — review this diff on the iOS evidence (`check`,
+`harness:ios`, `real-input:ios` all green on `ff81e0d6e6dc`) and let the merge bar's
+`harness:android` be the one that matters, since the merge runs it anyway; (b) I re-run
+`harness:android` when the box is quiet (~18 min a go, and it has failed twice here on other
+tasks' tests); (c) re-grade `scripts/real-input/*` as iOS-only in `gate-core`, which weakens a
+guard and is not this task's call.
