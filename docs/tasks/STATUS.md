@@ -117,6 +117,7 @@
 | G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | merged (PR #55; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | merged (PR #56; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | X22 | iOS ContextMenu a11y stops read 4 instead of 2 on unrelated branches (blocks G25 and G26 merges) | Apex | Opus | merged (PR #57, #59; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | fix round 1 done (all review items fixed with reds; Android does restart a focused keyboard, docs corrected; gates green except real-input:ios on X22's ContextMenu check, cleared by the combined merge; merge round after it) |
+| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | merge round (branch task/G27-merge: main merged, README conflict resolved keeping both; gates running) |
 | X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | merged (PR #60; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | running |
+| G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | running |
