@@ -1,0 +1,129 @@
+# Failure excerpt — harness:android:-t:wheel%20variant
+
+- Ran: 2026-11-10T14:12:57.484Z on code tree `0407964ed912` at HEAD `cd09513` (branch `task/G29-android-wheels`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android -t wheel variant`
+- Result: fail, exit 1, 59755 ms
+- Load: start 3.58, end 3.96, median 4.07, max 5.30
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log` (<store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/DatePicker.harness.tsx`
+- `● Console`
+- `● DatePicker · wheel variant (G29) › sends nothing from a disabled time drum`
+- `expected [ 'wheel-locked:1778850300000' ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G27-izh0s                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.96 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 80 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:-t:wheel%20variant
+gate: node ../scripts/harness.mjs --harnessRunner android -t wheel variant (cwd example)
+gate: code tree 0407964ed912 at HEAD cd095138
+gate: git tree b4a628a6ed2e with a DIRTY worktree (not reusable)
+gate: log task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log
+gate:       <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android -t wheel variant
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 0407964ed912, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 3.58/4.53 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/DatePicker.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      time drum box: 280.38x120.00 in a 320 dp box cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      date wheel box: 320.00x512.00
+
+
+    console.log
+      date wheel vs inline: 320.00x512.00 vs 320.00x512.00
+
+
+    console.log
+      wheel to compact: 280.38x120.00 -> 107.81x48.00
+
+  ● DatePicker · wheel variant (G29) › sends nothing from a disabled time drum
+
+    expected [ 'wheel-locked:1778850300000' ] to deeply equal []
+
+      [0m [90m 2054 |[39m     expect(reportOf([32m'wheel-locked'[39m)[33m.[39mpresented)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m 2055 |[39m     expect(displayedOf([32m'wheel-locked'[39m))[33m.[39mtoBe([33mPINNED[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2056 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2057 |[39m     unmount()[33m;[39m
+       [90m 2058 |[39m   })[33m;[39m
+       [90m 2059 |[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/DatePicker.harness.tsx
+  ● DatePicker · wheel variant (G29) › sends nothing from a disabled time drum
+
+    expected [ 'wheel-locked:1778850300000' ] to deeply equal []
+
+      [0m [90m 2054 |[39m     expect(reportOf([32m'wheel-locked'[39m)[33m.[39mpresented)[33m.[39mtoBe([36mfalse[39m)[33m;[39m
+       [90m 2055 |[39m     expect(displayedOf([32m'wheel-locked'[39m))[33m.[39mtoBe([33mPINNED[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2056 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2057 |[39m     unmount()[33m;[39m
+       [90m 2058 |[39m   })[33m;[39m
+       [90m 2059 |[39m[0m
+
+
+Test Suites: 1 failed, 29 skipped, 1 passed, 2 of 31 total
+Tests:       1 failed, 647 skipped, 9 passed, 657 total
+Snapshots:   0 total
+Time:        58.632 s, estimated 197 s
+Ran all test suites with tests matching "wheel variant".
+gate: harness:android:-t:wheel%20variant FAIL in 59.8 s
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+
+
+gate: appended the device context to task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T14-12-57.060Z.log (5 probe(s))
+
+```

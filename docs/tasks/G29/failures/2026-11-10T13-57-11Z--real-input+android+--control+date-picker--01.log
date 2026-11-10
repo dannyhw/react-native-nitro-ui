@@ -1,0 +1,197 @@
+# Failure excerpt — real-input:android:--control:date-picker
+
+- Ran: 2026-11-10T13:57:11.855Z on code tree `1a0a972a0d0f` at HEAD `2bb1b97` (branch `task/G29-android-wheels`)
+- Command: `node scripts/real-input/android.mjs --control date-picker`
+- Result: fail, exit 1, 891978 ms
+- Load: start 6.78, end 3.36, median 4.88, max 14.50
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-57-11.067Z.log` (<store>/task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-57-11.067Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `✗ one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2`
+- `✗ the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-57-11.067Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G27-izh0s                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 3.57 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 150 log line(s) (of 162 — the rest is in the full log above)
+
+```
+    ✓ tab "Switch" (tab-switch) is 65.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Slider" (tab-slider) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Button" (tab-button) is 65.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Progress" (tab-progress) is 80.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Segments" (tab-segmented) is 87.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dates" (tab-datepicker) is 60.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Picker" (tab-picker) is 63.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Menu" (tab-menu) is 59.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Dialogs" (tab-dialog) is 70.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Sheet" (tab-sheet) is 59.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Text" (tab-textfield) is 51.0 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Chip" (tab-chip) is 52.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Checkbox" (tab-checkbox) is 85.7 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Context" (tab-contextmenu) is 72.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Search" (tab-searchfield) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Tooltip" (tab-tooltip) is 67.4 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Icons" (tab-iconbutton) is 57.9 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Popover" (tab-popover) is 76.2 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Form" (tab-form) is 56.8 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Groups" (tab-buttongroup) is 69.3 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Stepper" (tab-stepper) is 73.1 × 48 dp, at least the 48 dp minimum
+    ✓ tab "Host" (tab-host) is 53.7 × 48 dp, at least the 48 dp minimum
+
+  date-picker: real tap opens the date dialog, a day cell reaches JS, and a refused day snaps back
+    ✓ the DatePicker has reported no day before a touch — expected -, saw -
+    ✓ no change has been reported before a touch — expected 0, saw 0
+    · "Real-input date picker" occupies 42,807 → 386,933
+    · tapping dialog day "Monday, November 16, 2026"
+    ✓ a real tap on a dialog day (Monday, November 16, 2026) reaches JS as a change — expected 1, saw 1
+    ✓ the day JS was told is the day React paints: "2026-11-16" is Y-M-D, written by hand so that no locale can move the assertion
+    ✓ the refusing parent pins its DatePicker to one day — expected 2024-06-15, saw 2024-06-15
+    ✓ nothing has been reported on the controlled control yet — expected 0, saw 0
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a real tap on the controlled control still reaches JS - native paints optimistically (core.md section 4) — expected 1, saw 1
+    ✓ the parent never accepted the change, so the day it sends is unchanged — expected 2024-06-15, saw 2024-06-15
+    · "Real-input rejecting date picker" occupies 42,1159 → 386,1285
+    · tapping dialog day "Sunday, June 16, 2024"
+    ✓ a second pick is a fresh selection, which is only true if the refused one was rolled back — expected 2, saw 2
+    ✓ and the parent should still be refusing — expected 2024-06-15, saw 2024-06-15
+    · grid: 31 cells in the band, first = "Thursday, January 1, 2026", value = "2026-01-01 08:30"
+    ✓ the tap moved the value it is echoing: "2026-01-08 08:30" is not "2026-01-01 08:30"
+    ✓ and the day it accepted is the instant that day echoed before, time of day kept — expected 2026-01-01 08:30, saw 2026-01-01 08:30
+    ✓ "Wide inline calendar" is laid out in a 411 dp box, at the 360 dp width that decides the touch target
+    ✓ the 411 dp inline calendar lays a whole week out on 48 dp targets: 7 columns of 126px, 126px, 126px, 126px, 126px, 126px, 126px (narrowest 48.0 dp)
+    ✓ "Narrow inline calendar" is laid out in a 320 dp box, under the 360 dp width that decides the touch target
+    ✓ the 320 dp inline calendar lays a whole week out on 40 dp targets: 7 columns of 105px, 105px, 105px, 105px, 105px, 105px, 105px (narrowest 40.0 dp)
+    · "Real-input wheel time picker" occupies 172,1831 → 908,2146
+    · "Real-input wheel time picker" occupies 172,949 → 908,1264
+    ✓ the uncontrolled wheel has reported no time yet — expected -, saw -
+    ✓ and has reported no change — expected 0, saw 0
+    · time wheel box: 172,949 → 908,1264 at 2.625 x = 120 dp tall, 280 dp wide
+    ✓ the wheel is named in the tree (1 node(s) carry "Real-input wheel time picker")
+    · wheel a11y node: class=android.view.View enabled=true scrollable=false content-desc=Real-input wheel time picker
+    ✓ the tree names both drums, so each fling can be aimed at one of them
+    · hour drum 172,949 → 435,1264 (100 x 120 dp), minute drum 477,949 → 740,1264 - 42 px apart
+    WARN the drum rows are NOT in the accessibility tree - `ScrollField` keeps its rows to itself, so the aim is the control's own thirds and the four "the row shown is the value reported" comparisons below cannot be made from a dump (the event-count assertions can, and are the point of the flings). docs/components/date-picker.md records the gap.
+    · "Real-input wheel time picker" occupies 172,949 → 908,1264
+    ✗ one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2
+    ✗ the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"
+
+  a11y:switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Controlled slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,764][1038,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:segmented-control: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Real-input segmented control" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,764][367,890]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:menu: Menu a11y
+    ✓ NitroUiMenu is named on one node a person can act on
+
+  a11y:chip: Chip a11y
+    ✓ NitroUiChip is named on one node a person can act on
+
+  a11y:checkbox: Checkbox a11y
+    ✓ NitroUiCheckbox is named on one node a person can act on
+
+  a11y:icon-button: IconButton a11y
+    ✓ NitroUiIconButton is named on one node a person can act on
+
+  a11y:button-group: ButtonGroup a11y
+    ✓ NitroUiButtonGroup is named on one node a person can act on
+
+  a11y:stepper: Stepper a11y
+    · known failing (G25 a11y: the Stepper's RangeInfo node is not actionable in a dump): NitroUiStepper: the node that carries "Real-input stepper" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,770][315,896]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiStepper has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-switch: Switch a11y
+    ✓ NitroUiSwitch is named on one node a person can act on
+
+  a11y:hosted-slider: Slider a11y
+    · known failing (X4 a11y: Compose RangeInfo nodes are not actionable in a dump): NitroUiSlider: the node that carries "Hosted slider" is not actionable, and nothing whose box is the control's is either (android.widget.SeekBar no actions [42,2185][1038,2311]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSlider has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-button: Button a11y
+    ✓ NitroUiButton is named on one node a person can act on
+
+  a11y:hosted-segmented: SegmentedControl a11y
+    · known failing (X4 a11y: nothing actionable at the named node): NitroUiSegmentedControl: the node that carries "Hosted segmented" is not actionable, and nothing whose box is the control's is either (android.view.View no actions [42,2203][535,2329]) — the name sits where a screen reader can stop but nobody can act, which is the split G5 M2 and G6 M3 found by hand. The nearest actionable box containing it is a android.widget.ScrollView [0,410][1080,2424] focusable, which is the page, not the control
+    ✓ NitroUiSegmentedControl has no new a11y finding — and no clean pass either: 1 of its problems match a debt row, printed above, so the rule is answered by the exemption rather than by the dump
+
+  a11y:hosted-picker: Picker a11y
+    ✓ NitroUiPicker is named on one node a person can act on
+
+  a11y:hosted-date-picker: DatePicker a11y
+    ✓ NitroUiDatePicker is named on one node a person can act on
+
+  a11y:hosted-progress: Progress a11y
+    ✓ NitroUiProgress is named on one node a person can act on
+
+  a11y:text-field: TextField a11y
+    ✓ NitroUiTextField is named on one node a person can act on
+
+  a11y:search-field: SearchField a11y
+    ✓ NitroUiSearchField is named on one node a person can act on
+
+  a11y:context-menu: ContextMenu a11y
+    ✓ NitroUiContextMenu is named on one node a person can act on
+
+  a11y:form: Form a11y
+    ✓ NitroUiForm is named on one node a person can act on
+
+date-picker: FAIL (no retries)
+    failed: one roll of the hour reports exactly one change, not one per row crossed — expected 1, saw 2
+    failed: the hour drum at rest: real-input-wheel-time-events went to "2" when it should have stayed "1"
+
+WARN 1 check(s) reported a finding that is neither a pass nor a failure: date-picker
+  date-picker: the drum rows are NOT in the accessibility tree - `ScrollField` keeps its rows to itself, so the aim is the control's own thirds and the four "the row shown is the value reported" comparisons below cannot be made from a dump (the event-count assertions can, and are the point of the flings). docs/components/date-picker.md records the gap.
+
+real-input (android): 0/1 controls passed · 0 input sequence(s) needed a retry · 24/24 auxiliary checks passed
+gate: real-input:android:--control:date-picker FAIL in 892.0 s
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G29-android-wheels/real-input+android+--control+date-picker-2026-11-10T13-57-11.067Z.log (5 probe(s))
+
+```

@@ -1,0 +1,133 @@
+# Failure excerpt — harness:android:-t:wheel%20variant
+
+- Ran: 2026-11-10T13:38:36.857Z on code tree `8f752b7b573b` at HEAD `2bb1b97` (branch `task/G29-android-wheels`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android -t wheel variant`
+- Result: fail, exit 1, 59370 ms
+- Load: start 6.12, end 8.91, median 8.24, max 8.91
+- Device: android / device `emulator-5570` / lease `G29-itkdc`
+- Full log: `task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log` (<store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/Picker.harness.tsx`
+- `● Console`
+- `● Picker · wheel variant (G29) › reports nothing for the row already shown, or for a disabled wheel`
+- `expected [ 'wheel-disabled:2' ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G29-itkdc (still live)
+  |   G29-itkdc                G29          both              pair-b
+  |   G27-izh0s                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 8.60 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 84 log line(s)
+
+```
+gate: claimed avd:nitroui_b for this run
+gate: harness:android:-t:wheel%20variant
+gate: node ../scripts/harness.mjs --harnessRunner android -t wheel variant (cwd example)
+gate: code tree 8f752b7b573b at HEAD 2bb1b970
+gate: git tree a2da67675a2e with a DIRTY worktree (not reusable)
+gate: log task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log
+gate:       <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log
+harness: ~/Library/Application Support/fnm/node-versions/v24.22.1/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android -t wheel variant
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 8f752b7b573b, 25 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 6.12/5.42 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/Picker.harness.tsx
+  ● Console
+
+    console.log
+      Running "NitroUiExample" with {"rootTag":1,"initialProps":{},"fabric":true}
+
+
+    console.log
+      wheel box: 300.19x200.00 in a 300 dp box cold={"corrections":1,"immediate":1,"flushes":1,"measurements":2,"epoch":0,"cachedSizes":1}
+
+
+    console.log
+      wheel roll 0->4: events=["wheel-roll:4"]
+
+
+    console.log
+      wheel refused twice: events=["wheel-refuse:4","wheel-refuse:4"]
+
+
+    console.log
+      wheel silence: events=["wheel-disabled:2"]
+
+
+    console.log
+      wheel->menu->wheel (android): wheel=330.29x200.00 menu=280.00x56.00 wheel2=330.29x200.00 events=[]
+
+  ● Picker · wheel variant (G29) › reports nothing for the row already shown, or for a disabled wheel
+
+    expected [ 'wheel-disabled:2' ] to deeply equal []
+
+      [0m [90m 2647 |[39m     [36mawait[39m rollWheel([32m'wheel-disabled'[39m[33m,[39m [35m2[39m[33m,[39m [36mfalse[39m)[33m;[39m
+       [90m 2648 |[39m     console[33m.[39mlog([32m`wheel silence: events=${JSON.stringify(eventLog)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2649 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2650 |[39m     [90m// A disabled drum is a drum: `disabled` repaints, it does not resize, and the[39m
+       [90m 2651 |[39m     [90m// height is the control's own whatever the state.[39m
+       [90m 2652 |[39m     [36mconst[39m disabledSize [33m=[39m measured([32m'wheel-disabled'[39m)[33m;[39m[0m
+
+
+Summary of all failing tests
+FAIL __tests__/Picker.harness.tsx
+  ● Picker · wheel variant (G29) › reports nothing for the row already shown, or for a disabled wheel
+
+    expected [ 'wheel-disabled:2' ] to deeply equal []
+
+      [0m [90m 2647 |[39m     [36mawait[39m rollWheel([32m'wheel-disabled'[39m[33m,[39m [35m2[39m[33m,[39m [36mfalse[39m)[33m;[39m
+       [90m 2648 |[39m     console[33m.[39mlog([32m`wheel silence: events=${JSON.stringify(eventLog)}`[39m)[33m;[39m
+      [31m[1m>[22m[39m[90m 2649 |[39m     expect(eventLog)[33m.[39mtoEqual([])[33m;[39m
+       [90m      |[39m                             [31m[1m^[22m[39m
+       [90m 2650 |[39m     [90m// A disabled drum is a drum: `disabled` repaints, it does not resize, and the[39m
+       [90m 2651 |[39m     [90m// height is the control's own whatever the state.[39m
+       [90m 2652 |[39m     [36mconst[39m disabledSize [33m=[39m measured([32m'wheel-disabled'[39m)[33m;[39m[0m
+
+
+Test Suites: 1 failed, 29 skipped, 1 passed, 2 of 31 total
+Tests:       1 failed, 647 skipped, 9 passed, 657 total
+Snapshots:   0 total
+Time:        58.256 s, estimated 197 s
+Ran all test suites with tests matching "wheel variant".
+gate: harness:android:-t:wheel%20variant FAIL in 59.4 s - note: the code tree moved during the run (c2e3656a8dcb now), so this line describes 8f752b7b573b
+gate: recorded in .gates/task/G29-android-wheels.jsonl
+
+
+gate: appended the device context to task/G29-android-wheels/harness+android+-t+wheel+20variant-2026-11-10T13-38-36.430Z.log (5 probe(s))
+
+```
