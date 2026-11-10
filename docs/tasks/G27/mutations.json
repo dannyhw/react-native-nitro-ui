@@ -84,6 +84,19 @@
         "RealInputTests.swift:4914: XCTAssertTrue failed - keyboardType=\"number-pad\" should open a number keyboard, not the 35 keys of a field that was told nothing (the letter keyboard here has 35)"
       ],
       "note": "The keyboard the IME drew is read off its own key labels: 35 keys, letter for letter the keyboard the field with no prop opened. The email field above it, whose keyboard is a letter keyboard either way, stayed green in the same test."
+    },
+    {
+      "test": "example/__tests__/SearchField.harness.tsx (submit and recleared cases, unchanged from main)",
+      "file": "android/src/main/java/com/margelo/nitro/nitroui/HybridNitroUiSearchField.kt",
+      "mutation": "the organic kind: the take-over round's first tree, where every nuiTestState() read queued a full publishState() rather than a keyboard-only refresh",
+      "before": "      publishKeyboard()",
+      "after": "      publishState()",
+      "run": "harness:android (full) and harness:android:SearchField x3 on that tree - 2 of 4 runs red; with the fix, harness:android:SearchField x6 green at load1 12-23",
+      "redTests": [
+        "submits on the Search key, then blurs - and never on an empty field: expected [ 'focus', 'change:t', …(2) ] to deeply equal [ 'focus', 'change:t', …(4) ]",
+        "takes no submit from a Return pressed on a query it has just cleared: expected [ 'change:' ] to deeply equal []"
+      ],
+      "note": "The refresh published the text and focus straight off the TextFieldState, so a test waiting on the state saw a clear or a blur before its event reached JS. A timing race, so its red is a rate, not a guarantee: 2 of 4 before, 0 of 6 after."
     }
   ]
 }
