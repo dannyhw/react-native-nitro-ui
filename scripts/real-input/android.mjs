@@ -3337,6 +3337,18 @@ const CHECKS = {
       enabledOf('Locked share'),
       'false'
     );
+    // The tree saying `enabled="false"` is only a claim until a finger tests it. One
+    // press, and the right answer is silence: no action, no close, the sheet still up.
+    // The row a few lines below is the barrier that says this channel does report.
+    const beforeDisabledRow = t.requireEcho(ECHO.dialogLog);
+    await t.tapNode(t.waitForOption('Locked share', 'the disabled row'));
+    await t.settle(1500);
+    t.log.checkEquals(
+      'a real tap on the disabled row reports nothing',
+      t.requireEcho(ECHO.dialogLog),
+      beforeDisabledRow
+    );
+    t.log.checkEquals('and leaves the sheet up', upCount(SHEET_ROW)(), 1);
     await t.pressBack();
     await waitGone(SHEET_ROW, 'Back to take the sheet down');
     await open(
@@ -3348,7 +3360,8 @@ const CHECKS = {
       'presented:false > presented:false > action:ok > presented:false > ' +
       'presented:false > action:copy > presented:false';
     t.log.checkEquals(
-      "a sheet's row reports its id, then the close; Back before it reported a close alone",
+      "a sheet's row reports its id once, then the close; Back before it reported a " +
+        'close alone',
       await t.tapOptionUntilValue(
         SHEET_ROW,
         ECHO.dialogLog,

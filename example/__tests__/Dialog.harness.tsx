@@ -563,6 +563,70 @@ describe('Dialog · behaviour (G11, Q5 B7)', () => {
     });
   }
 
+  /**
+   * Android, and only Android can answer it: what the sheet's rows *are*, read off the
+   * open sheet rather than out of the props that produced it. Reading the report arms
+   * one row probe while one is unanswered, so polling the report is the whole seam (G28).
+   *
+   * `rows=` is each row's own merged accessibility node - `~` marks one that says it is
+   * disabled, the same mark `Menu.harness.tsx`'s probe writes - and `radii=` is the
+   * corner radius, in dp, that the row's container is *painted* with at its leading edge.
+   * Between them they say the row honours `enabled` and is the segmented row it claims to
+   * be: a row that ignored `enabled` loses its `~`, and a plain row loses the 16 dp outer
+   * corners, whichever way the first half of the line moved.
+   */
+  const itAndroid = Platform.OS === 'android' ? it : it.skip;
+  itAndroid(
+    'reports the sheet rows as the component draws them, disabled included',
+    async () => {
+      const actions: DialogAction[] = [
+        { id: 'locked', title: 'Locked', disabled: true },
+        { id: 'go', title: 'Go' },
+        { id: 'wipe', title: 'Wipe', role: 'destructive' },
+      ];
+      await render(
+        <Stage testId="rows" initial variant="confirmation" actions={actions} />
+      );
+      await waitForHandle('rows');
+      await waitForReport('rows', isUpCounted(1), 'the sheet up');
+      // Past the slide-in: a sheet on its way up measures below the window, and the
+      // probe says `?-moving` rather than guess. Polling re-arms it, so this waits for
+      // an answer that could be measured, whatever the first ones said.
+      await sleep(900);
+      const probed = await waitForReport(
+        'rows',
+        (report) => {
+          const answer = report.probe ?? '';
+          return answer.includes('radii=') && !answer.includes('?');
+        },
+        'a row probe answer the sheet could be measured in',
+        20000
+      );
+      const probe = probed.probe ?? '';
+      console.log(`sheet rows: ${probe}`);
+      const fields: Record<string, string> = {};
+      for (const part of probe.split(' ')) {
+        const at = part.indexOf('=');
+        if (at > 0) fields[part.slice(0, at)] = part.slice(at + 1);
+      }
+      // In the order the sheet draws them. No `cancel` action here, so the app's order.
+      expect(fields.rows).toBe('Locked~,Go,Wipe');
+      // The group's outer radius (material3's `CornerLarge`) on the first row's top and
+      // the last row's bottom; the small radius (`CornerExtraSmall`) where rows meet.
+      expect(fields.radii).toBe('16/4,4/4,4/16');
+      // What the container is painted in, so a failure names what it compared against.
+      expect(fields.container).toMatch(/^[0-9A-F]{6}$/);
+      // The barrier that makes `~` mean something: an ordinary row of the same sheet is
+      // not marked, and the sheet as a whole is not one long disabled row.
+      expect(fields.rows).not.toBe('Locked,Go,Wipe');
+      // The disabled row still takes no press, once the probe has read it.
+      handles.get('rows')?.nuiTestPerformAction('locked');
+      await sleep(400);
+      expect(eventLog.join(',')).toBe('');
+      expect(reportOf('rows').presented).toBe('1');
+    }
+  );
+
   it('presents again when the app refuses a dismissal, and warns once', async () => {
     const warnings: string[] = [];
     const original = console.warn;
