@@ -95,6 +95,7 @@ final class RealInputTests: XCTestCase {
     static let checkboxRefusedLast = "real-input-checkbox-refused-last"
     static let checkboxRefusedEvents = "real-input-checkbox-refused-events"
     static let checkboxDisabledEvents = "real-input-checkbox-disabled-events"
+    static let checkboxSwitchEvents = "real-input-checkbox-switch-events"
     static let iconButtonPresses = "real-input-icon-button-presses"
     static let iconButtonValue = "real-input-icon-button-value"
     static let iconButtonEvents = "real-input-icon-button-events"
@@ -3078,12 +3079,23 @@ final class RealInputTests: XCTestCase {
   // MARK: - Checkbox
 
   /// A real tap checks a Checkbox, a toggle its parent refuses snaps back, and a disabled
-  /// one takes nothing (G15).
+  /// one takes nothing (G15); the `iosStyle='switch'` fixture is toggled the same way, so
+  /// the look DECISIONS D47 made optional is proved unchanged by a finger and not by a
+  /// comment (G31).
   ///
-  /// iOS has no checkbox, so the control renders SwiftUI `Toggle(isOn:)` with the `.switch`
-  /// style, which XCUITest reports as a switch-type element carrying a toggle trait and
-  /// `value` 0/1 - the same element a filter chip's `Toggle(.button)` produces, read here
-  /// with the Switch's own witness, `nativeSwitchState`.
+  /// iOS has no checkbox, so every style is SwiftUI's `Toggle`, which XCUITest reports as a
+  /// switch-type element carrying a toggle trait and `value` 0/1 - the same element a filter
+  /// chip's `Toggle(.button)` produces, read here with the Switch's own witness,
+  /// `nativeSwitchState`. **The picture changed in G31 and the element did not**: the
+  /// default Checkbox now draws `checkmark.circle.fill` in a style of ours rather than a
+  /// `.switch`, and this check is where that is proved - an element that lost the toggle
+  /// trait would stop answering `nativeSwitchState` at all, and one that gained a second
+  /// stop would double the event count below.
+  ///
+  /// Because the glyph is now on the **left** of the label instead of the right, the aim of
+  /// every tap in this check moved with it: the row's middle is still the label's side of
+  /// the glyph, which is what the guard under "Where the taps land" now says in the other
+  /// direction.
   ///
   /// The element's value is asserted alongside the echo for a reason the Switch check does
   /// not have: a native implementation that always requested `true` would light the "on"
@@ -3117,20 +3129,24 @@ final class RealInputTests: XCTestCase {
     )
 
     // Where the taps below land is part of this check, not a detail of it. The fixture
-    // gives this Checkbox a label, which makes the row wider than the switch, so the
-    // row's middle - where every press here goes - is on the label's side of the glyph.
-    // The taps therefore ask "is touching the label touching the control?", which a
-    // switch-style `Toggle` does not answer on its own (`HybridNitroUiCheckbox.swift`
-    // carries the row's tap target for exactly this reason). Asserted rather than
-    // assumed: a fixture whose label went short would move the aim onto the glyph and
-    // leave the claim unproven while still going green.
+    // gives this Checkbox a label, which makes the row wider than its glyph, so the row's
+    // middle - where every press here goes - is on the *label's* side of the glyph. The
+    // taps therefore ask "is touching the label touching the control?", which neither a
+    // switch-style `Toggle` (measured: a label press delivered nothing) nor a plain `HStack`
+    // of symbol and text answers on its own - `HybridNitroUiCheckbox.swift` carries the
+    // row's tap target for exactly this reason, for all three styles.
+    //
+    // G31 moved the glyph from the right of the label to the left of it, so the guard reads
+    // the other way round: the glyph has to *end* before the middle rather than start after
+    // it. Asserted rather than assumed: a fixture whose label went short would move the aim
+    // onto the glyph and leave the claim unproven while still going green.
     let glyph = enabled.descendants(matching: .`switch`).allElementsBoundByIndex.min {
       $0.frame.width < $1.frame.width
     }
     XCTAssertNotNil(glyph, "the Checkbox should offer a switch element of its own")
     XCTAssert(
-      (glyph?.frame.minX ?? .greatestFiniteMagnitude) > enabled.frame.midX,
-      "the switch glyph starts at x=\(glyph?.frame.minX ?? -1) and the row's middle is at "
+      (glyph?.frame.maxX ?? .greatestFiniteMagnitude) < enabled.frame.midX,
+      "the glyph ends at x=\(glyph?.frame.maxX ?? -1) and the row's middle is at "
         + "x=\(enabled.frame.midX) - a press at the middle has to land on the label's side "
         + "of the glyph, or these taps prove nothing about the label"
     )
@@ -3278,6 +3294,80 @@ final class RealInputTests: XCTestCase {
     XCTAssertEqual(
       waitForNativeSwitchState("real-input-checkbox", "off"), "off",
       "the tapped glyph's own element should report the value it was tapped into"
+    )
+
+    // 6. `iosStyle='switch'` (G31). DECISIONS D47 keeps the old look behind a prop, and a
+    //    prop that chooses a *drawing* must not have quietly chosen a different control -
+    //    so this fixture gets the same two aims as the pair above and the same count. The
+    //    harness cannot stand in for it: on iOS a harness touch reaches no SwiftUI gesture,
+    //    which is the whole reason `nuiTestToggle` exists, and the harness's iOS toggles
+    //    therefore never touch the gesture this style is built from.
+    let switched = try required(
+      "real-input-checkbox-switch", as: "the switch-style Checkbox")
+    XCTAssertEqual(
+      nativeSwitchState(of: "real-input-checkbox-switch"), "off",
+      "the switch-style Checkbox should start by reporting value 0, like the default one"
+    )
+    XCTAssertEqual(
+      try read(Echo.checkboxSwitchEvents), "0",
+      "the switch-style Checkbox should have reported no change before a touch"
+    )
+    // The mirror of the guard above, and the reason these are two fixtures rather than one:
+    // SwiftUI's `.switch` puts its label on the left and its thumb on the right, while the
+    // glyph row puts the glyph first. Both rows still have their middle on the *label's*
+    // side, which is the only thing the claim below needs.
+    let switchGlyph = switched.descendants(matching: .`switch`).allElementsBoundByIndex.min {
+      $0.frame.width < $1.frame.width
+    }
+    XCTAssertNotNil(switchGlyph, "the switch-style Checkbox should offer a switch element too")
+    XCTAssert(
+      (switchGlyph?.frame.minX ?? .greatestFiniteMagnitude) > switched.frame.midX,
+      "the switch thumb starts at x=\(switchGlyph?.frame.minX ?? -1) and the row's middle is "
+        + "at x=\(switched.frame.midX) - if the switch style's glyph has moved, its row is no "
+        + "longer the layout D47 promised to leave alone"
+    )
+    // The label's side of the row, once: checked, with one event.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox-switch",
+        echo: Echo.checkboxSwitchEvents,
+        expected: "1",
+        as: "the switch-style Checkbox",
+        waitingFor: "the real tap that checks the switch-style box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox-switch") }
+      ),
+      "1",
+      "one real tap on the switch style's label should check it and report one change"
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox-switch", "on"), "on",
+      "the switch style's element should report value 1, as it did before the style prop "
+        + "existed - the same witness, the same answer"
+    )
+    // Then the glyph, which asks for the other direction: `false`, and a second event.
+    // A style that toggled through both the row's tap target and the `Toggle`'s own
+    // gesture would land back on `on` here, and read 3 or 4 rather than 2.
+    XCTAssertEqual(
+      try tapUntilValue(
+        "real-input-checkbox-switch",
+        echo: Echo.checkboxSwitchEvents,
+        expected: "2",
+        as: "the switch-style Checkbox",
+        waitingFor: "the real tap that unchecks the switch-style box",
+        nativeState: { self.nativeSwitchState(of: "real-input-checkbox-switch") }
+      ),
+      "2",
+      "a second real tap should ask for false: two presses, two events, both directions"
+    )
+    XCTAssertEqual(
+      waitForNativeSwitchState("real-input-checkbox-switch", "off"), "off",
+      "the switch style should snap its element back to value 0 on the second press"
+    )
+    Thread.sleep(forTimeInterval: 0.5)
+    XCTAssertEqual(
+      try read(Echo.checkboxSwitchEvents), "2",
+      "two presses on the switch style are two `onCheckedChange`s after a quiet period, "
+        + "which is the count a row handler and a gesture both answering would break"
     )
   }
 

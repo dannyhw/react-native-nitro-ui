@@ -30,17 +30,42 @@ export interface NitroUiCheckboxProps
   /** Initial value of an uncontrolled Checkbox; ignored while `checked` is set. */
   defaultChecked: boolean | null;
   /**
-   * Three-state display, Android only: Material 3's `TriStateCheckbox` shows a dash
-   * instead of the box. It is never a value - a tap still asks for "checked" - and
-   * iOS has no checkbox at all (`CheckboxToggleStyle` is iOS-unavailable), so a
-   * SwiftUI `Toggle` reads this as off. `docs/components/checkbox.md` has the table.
+   * Three-state display: Material 3's `TriStateCheckbox` draws a dash instead of the
+   * box, and on iOS the glyph styles draw `minus.circle.fill` / `minus.square.fill`
+   * (DECISIONS D47 item 3). It is never a value - a tap still asks for "checked" -
+   * and `checked` outranks it on both platforms: a box that is `indeterminate` *and*
+   * checked draws the check mark, which is Android's rule and has to stay Android's.
+   * `docs/components/checkbox.md` has the table.
    *
-   * It is in the sizing key on Android because the third glyph is what Material's
-   * three-state composable draws, and an unlabelled box keeps its own measure;
-   * `checked` is not, because neither state changes the box on either platform
-   * (the harness measures both).
+   * The one thing `'switch'` does not draw: that style is SwiftUI's two-position
+   * control, which reads this as off, exactly as it did before D47.
+   *
+   * It is in the sizing key wherever it changes what is drawn - on Android, and on iOS
+   * in the glyph styles - and out wherever it does not; `checked` is out on both,
+   * because no box on either platform moves between states (the harness measures all
+   * of them).
    */
   indeterminate: boolean | null;
+  /**
+   * Which picture iOS draws: `'circle'` (the default), `'square'` or `'switch'`,
+   * resolved by the wrapper - anything else is `'circle'`. See
+   * `docs/components/checkbox.md` for what each maps to.
+   *
+   * `'circle'` and `'square'` are still the platform's own `Toggle`, with a style of
+   * ours that draws Apple's SF Symbols (`checkmark.circle.fill` / `circle`,
+   * `checkmark.square.fill` / `square`) - the checklist glyph iOS itself uses in
+   * Reminders and Notes, which is why a Checkbox no longer has to look like a Switch
+   * on this platform (DECISIONS D47). `'switch'` is the look this component shipped
+   * with under D38 item 1, unchanged in every detail: same control, same box, same
+   * element a reader meets.
+   *
+   * **Android ignores it** - Material 3 has a checkbox, so there is nothing to choose
+   * - and it stays out of Android's sizing key for the reason `indeterminate` stays
+   * out of iOS's: a prop that changes nothing that is drawn must not cost a cold
+   * configuration. On iOS it *is* in the key, because the three styles measure apart
+   * (`HybridNitroUiCheckbox.swift` declares the default one's box).
+   */
+  iosStyle: string;
   /**
    * The last event count JS has fully processed (core-architecture §4). Native
    * only accepts a `checked` write once it has seen this many of its own events.

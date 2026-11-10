@@ -116,6 +116,12 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.indeterminate.hasSameValue(oldViewProps->indeterminate)) {
       swiftPart.setIndeterminate(newViewProps.indeterminate.get());
     }
+    // iosStyle: string
+    if (oldViewProps == nullptr
+          ? newViewProps.iosStyle.isProvided()
+          : !newViewProps.iosStyle.hasSameValue(oldViewProps->iosStyle)) {
+      swiftPart.setIosStyle(newViewProps.iosStyle.get());
+    }
     // mostRecentEventCount: number
     if (oldViewProps == nullptr
           ? newViewProps.mostRecentEventCount.isProvided()

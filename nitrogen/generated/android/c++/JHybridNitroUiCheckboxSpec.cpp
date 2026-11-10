@@ -81,6 +81,15 @@ namespace margelo::nitro::nitroui {
     static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<JVariant_Boolean_NullType> /* indeterminate */)>("setIndeterminate");
     method(_javaPart, JVariant_Boolean_NullType::fromCpp(indeterminate));
   }
+  std::string JHybridNitroUiCheckboxSpec::getIosStyle() {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<jni::local_ref<jni::JString>()>("getIosStyle");
+    auto __result = method(_javaPart);
+    return __result->toStdString();
+  }
+  void JHybridNitroUiCheckboxSpec::setIosStyle(const std::string& iosStyle) {
+    static const auto method = _javaPart->javaClassStatic()->getMethod<void(jni::alias_ref<jni::JString> /* iosStyle */)>("setIosStyle");
+    method(_javaPart, jni::make_jstring(iosStyle));
+  }
   double JHybridNitroUiCheckboxSpec::getMostRecentEventCount() {
     static const auto method = _javaPart->javaClassStatic()->getMethod<double()>("getMostRecentEventCount");
     auto __result = method(_javaPart);

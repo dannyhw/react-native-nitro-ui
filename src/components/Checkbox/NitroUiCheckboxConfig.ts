@@ -21,6 +21,7 @@ export const NitroUiCheckboxConfig: ViewConfig<NativeNitroUiCheckboxProps> = {
     indeterminate: true,
     mostRecentEventCount: true,
     label: true,
+    iosStyle: true,
     disabled: true,
     tintColor: true,
     testID: true,

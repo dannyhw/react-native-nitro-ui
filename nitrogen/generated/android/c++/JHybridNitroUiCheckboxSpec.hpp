@@ -56,6 +56,8 @@ namespace margelo::nitro::nitroui {
     void setDefaultChecked(const std::variant<bool, nitro::NullType>& defaultChecked) override;
     std::variant<bool, nitro::NullType> getIndeterminate() override;
     void setIndeterminate(const std::variant<bool, nitro::NullType>& indeterminate) override;
+    std::string getIosStyle() override;
+    void setIosStyle(const std::string& iosStyle) override;
     double getMostRecentEventCount() override;
     void setMostRecentEventCount(double mostRecentEventCount) override;
     std::variant<nitro::NullType, std::string> getLabel() override;

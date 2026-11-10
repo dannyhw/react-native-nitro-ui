@@ -17,9 +17,17 @@
  *   (`nuiTestProbeAccessibility`); on iOS there is nothing to read in-process and
  *   `real-input:ios`'s XCUITest asserts the role instead, as Chip's does.
  *
- * Indeterminate is the Android third state. It is a display, not a value: the case
- * below asserts what is drawn (`mixed`) *and* that a tap still reports `true`, so the
- * two platforms cannot drift into disagreeing about what the prop means.
+ * Indeterminate is the third state. It is a display, not a value: the case below asserts
+ * what is drawn (`mixed`) *and* that a tap still reports `true`, so the two platforms
+ * cannot drift into disagreeing about what the prop means.
+ *
+ * G31's cases (task G31, DECISIONS D47) are about the *picture*: `iosStyle` picks which
+ * glyph iOS draws, so the suite asks which symbol the drawing code was handed
+ * (`nuiTestStateReport`'s `symbol=` field, because a SwiftUI hosting view answers
+ * `accessibilityElements == []` to an in-process probe and there is no pixel to read),
+ * what each style's box is from a poisoned fallback, what a style change costs in
+ * corrections, and - the Android half, which is the half that must not move - that the
+ * prop is stored, ignored, and kept out of Android's sizing key.
  *
  * The readings: `harnessUi.queryByTestId` (the box Fabric gave the view),
  * `hybridRef.measureContent()` (the size the hosted control measured),
@@ -64,6 +72,7 @@ type CheckboxHandle = {
   readonly label: string | null;
   readonly disabled: boolean;
   readonly indeterminate: boolean | null;
+  readonly iosStyle: string;
   readonly accessibilityLabel: string | null;
   measureContent(): { width: number; height: number };
   nuiTestToggle(): void;
@@ -248,6 +257,27 @@ async function waitForDisplayed(testId: string, displayed: string) {
   );
 }
 
+/**
+ * Poll until the control reports the picture `symbol` (`circle`,
+ * `checkmark.circle.fill`, `minus.square.fill`, `switch`, ...).
+ *
+ * This is how an iOS Checkbox's *drawing* is read: the hosting view answers
+ * `accessibilityElements == []` to anything that is not an accessibility client, so the
+ * element itself is `real-input`'s to assert, and the field is written in the SwiftUI
+ * body - the name the drawing code was handed, not an echo of the prop. On Android the
+ * field does not exist, which the cases below assert rather than skip.
+ */
+async function waitForSymbol(testId: string, symbol: string) {
+  return pollUntil(
+    () => (reportOf(testId).symbol === symbol ? symbol : null),
+    () =>
+      new Error(
+        `"${testId}" never drew symbol=${symbol} - it reports ` +
+          `"${handles.get(testId)?.nuiTestStateReport() ?? 'no handle'}".`
+      )
+  );
+}
+
 /** Wait until the app has been told exactly `wanted` since `from`. */
 async function waitForEvents(from: number, wanted: readonly string[]) {
   await pollUntil(
@@ -304,14 +334,41 @@ async function probeAccessibility(testId: string): Promise<string> {
   );
 }
 
+/** The iOS pictures `iosStyle` names (DECISIONS D47), in declaration order. */
+const STYLES = ['circle', 'square', 'switch'] as const;
+type IosStyle = (typeof STYLES)[number];
+
 /**
- * The key `Checkbox.tsx` builds: `indeterminate|label`, with the third state only
- * where it changes what is drawn (Android). Written out rather than imported, so a
- * wrong helper cannot poison and pass its own test (Chip's rule).
+ * The key `Checkbox.tsx` builds: `indeterminate|label` on Android and
+ * `indeterminate|iosStyle|label` on iOS, with the third state only where it changes what
+ * is drawn (Android always; iOS in the two glyph styles, which have a dash to draw).
+ * Written out rather than imported, so a wrong helper cannot poison and pass its own test
+ * (Chip's rule) - and here it is the whole Android half of G31: a helper that put the
+ * style in Android's key would poison three keys, the engine would answer three cold
+ * configurations, and every Android assertion below would still read green.
  */
-function sizingKey(indeterminate: boolean, label: string): string {
-  const field = Platform.OS === 'android' && indeterminate ? '1' : '0';
-  return `${field}|${label}`;
+function sizingKey(
+  indeterminate: boolean,
+  label: string,
+  style: IosStyle = 'circle'
+): string {
+  if (Platform.OS === 'android') {
+    return `${indeterminate ? '1' : '0'}|${label}`;
+  }
+  const field = style !== 'switch' && indeterminate ? '1' : '0';
+  return `${field}|${style}|${label}`;
+}
+
+/** The symbol the iOS drawing code should be handed for one state of one style. */
+function expectedSymbol(
+  style: IosStyle,
+  checked: boolean,
+  indeterminate: boolean
+): string {
+  if (style === 'switch') return 'switch';
+  const shape = style === 'square' ? 'square' : 'circle';
+  if (checked) return `checkmark.${shape}.fill`;
+  return indeterminate ? `minus.${shape}.fill` : shape;
 }
 
 /** A size that is no checkbox's, planted as the engine's answer before a mount. */
@@ -422,21 +479,37 @@ describe('Checkbox · G15', () => {
           testID="on"
           hybridRef={captureHybrid('on')}
         />
+        {/* The third state joined the pair in G31: on iOS the dash is a *symbol* now
+            (`minus.circle.fill`), and the claim that keeps `checked` and `indeterminate`
+            out of the sizing key is that the empty box, the check mark and the dash are
+            one symbol box. Two of the three was the old claim; three is the new one. */}
+        <Checkbox
+          label="Sized"
+          indeterminate
+          testID="dash"
+          hybridRef={captureHybrid('dash')}
+        />
       </View>,
       { timeout: 20000 }
     );
     await waitForTestId('off');
     await waitForTestId('on');
+    await waitForTestId('dash');
     const off = await waitForMeasured('off', 'unchecked');
     const on = await waitForMeasured('on', 'checked');
+    const dash = await waitForMeasured('dash', 'the third state');
     await waitForBox('off', off, 'unchecked');
     await waitForBox('on', on, 'checked');
+    await waitForBox('dash', dash, 'the third state');
     await waitForDisplayed('on', '1');
     await waitForDisplayed('off', '0');
+    await waitForDisplayed('dash', 'mixed');
     console.log(
-      `checkbox states: off=${describeSize(off)} on=${describeSize(on)}`
+      `checkbox states: off=${describeSize(off)} on=${describeSize(on)} ` +
+        `dash=${describeSize(dash)}`
     );
     expect(sameSize(on, off)).toBe(true);
+    expect(sameSize(dash, off)).toBe(true);
   });
 
   it('follows a controlled checked in both directions', async () => {
@@ -552,44 +625,78 @@ describe('Checkbox · G15', () => {
     await waitForDisplayed('free', '0');
   });
 
-  it('draws the third state on Android, and off on iOS', async () => {
-    // The platform difference the brief settles (Q5, D29's style): Material 3's
-    // `TriStateCheckbox` has a dash, SwiftUI's switch has two positions. Both
-    // platforms take the prop - only one can draw it - and a tap reports `true` on
-    // both, so an app's `onCheckedChange` never sees a third value.
+  it('draws the third state on both platforms, and off in the switch style', async () => {
+    // The third state is a display, not a value, on both platforms: Material 3's
+    // `TriStateCheckbox` has a dash and, since DECISIONS D47 item 3, so do the iOS glyph
+    // styles (`minus.circle.fill` / `minus.square.fill`). `'switch'` is the one control
+    // here with two positions, so the third fixture - the same props in the switch style -
+    // is where G15's "iOS reads this as off" now lives: still true, about one style
+    // instead of a whole platform.
+    //
+    // `checked` outranks `indeterminate`, which is Android's rule (`TriStateCheckbox` shows
+    // the dash only while the value is off) and is asserted here as `displayed` on both
+    // platforms, so the two cannot disagree about what the props mean even though one of
+    // them has a new picture. And a tap reports `true` from the dash everywhere, so an
+    // app's `onCheckedChange` never sees a third value.
     poison([sizingKey(true, 'Select all')]);
     const before = stats();
     await render(
-      <Checkbox
-        label="Select all"
-        indeterminate
-        onCheckedChange={recordChecked('mixed')}
-        testID="mixed"
-        hybridRef={captureHybrid('mixed')}
-      />,
+      <View style={rowStyle}>
+        <Checkbox
+          label="Select all"
+          indeterminate
+          onCheckedChange={recordChecked('mixed')}
+          testID="mixed"
+          hybridRef={captureHybrid('mixed')}
+        />
+        <Checkbox
+          label="Select all, checked"
+          checked
+          indeterminate
+          testID="mixed-on"
+          hybridRef={captureHybrid('mixed-on')}
+        />
+        <Checkbox
+          label="Select all, switch"
+          iosStyle="switch"
+          indeterminate
+          testID="mixed-switch"
+          hybridRef={captureHybrid('mixed-switch')}
+        />
+      </View>,
       { timeout: 20000 }
     );
     await waitForTestId('mixed');
     const size = await waitForMeasured('mixed', 'the third state');
     await waitForBox('mixed', size, 'the third state');
     const made = corrections(before, stats());
-    if (Platform.OS === 'android') {
-      await waitForDisplayed('mixed', 'mixed');
-      // The third state is its own configuration on Android because it is its own
-      // composable; poisoned, it has to be corrected or the box above is the
-      // planted size.
-      expect(made).toBeGreaterThanOrEqual(1);
+    await waitForDisplayed('mixed', 'mixed');
+    await waitForDisplayed('mixed-on', '1');
+    if (Platform.OS === 'ios') {
+      // The dash is drawn, named, and - with `checked` also set - not drawn.
+      await waitForSymbol('mixed', 'minus.circle.fill');
+      await waitForSymbol('mixed-on', 'checkmark.circle.fill');
+      // The switch has two positions: the prop arrives, and the answer stays `0`.
+      await waitForDisplayed('mixed-switch', '0');
+      await waitForSymbol('mixed-switch', 'switch');
     } else {
-      // iOS answers `0`: the switch is off, which is what "reads as off" means at
-      // the seam a test can read. It never answers `mixed`, so the day SwiftUI
-      // gains a checkbox and this library draws one, this line goes red.
-      await waitForDisplayed('mixed', '0');
+      await waitForLabelBox('mixed', 'the third state');
     }
+    // The third state is its own configuration wherever it is its own glyph; poisoned, it
+    // has to be corrected or the box above is the planted size.
+    expect(made).toBeGreaterThanOrEqual(1);
     await toggleCheckbox('mixed');
     expect(await waitForEvents(0, ['mixed:true'])).toEqual(['mixed:true']);
     await waitForDisplayed('mixed', '1');
+    if (Platform.OS === 'ios') {
+      // And the press that resolves the dash draws the check mark it asked for, in the
+      // same box - which is what keeps `checked` out of the sizing key honest.
+      await waitForSymbol('mixed', 'checkmark.circle.fill');
+    }
     console.log(
       `checkbox indeterminate: drawn=${reportOf('mixed').displayed} ` +
+        `symbol=${reportOf('mixed').symbol ?? '-'} checked-with-dash=` +
+        `${reportOf('mixed-on').displayed} switch=${reportOf('mixed-switch').displayed} ` +
         `size=${describeSize(size)} corrections=${made}`
     );
   });
@@ -627,6 +734,14 @@ describe('Checkbox · G15', () => {
     await waitForDisplayed('disabled', '1');
     expect(handles.get('disabled')?.disabled).toBe(true);
     expect(handles.get('disabled')?.mostRecentEventCount).toBe(0);
+    if (Platform.OS === 'ios') {
+      // A disabled checkbox is a dimmed picture and not a missing one: the row is still
+      // the glyph with `.opacity` over it (`CheckboxGlyphToggleStyle`), so the state a
+      // reader cannot change is still the state they can see. A style that answered
+      // `circle` here would be drawing the *enabled* box of a disabled control.
+      await waitForSymbol('disabled', 'checkmark.circle.fill');
+      await waitForSymbol('barrier', 'circle');
+    }
   });
 
   it('is one node with the label as its name when a label is shown', async () => {
@@ -730,6 +845,308 @@ describe('Checkbox · G15', () => {
       // wrongly. Asserted absent so the day this control grows a `labelBox`, this case
       // has to grow the claim instead of quietly measuring nothing.
       expect(reportOf('centred').labelBox).toBeUndefined();
+    }
+  });
+
+  it('lays out every iOS style at the box that style measures', async () => {
+    // DECISIONS D47's three pictures are three boxes: the switch's 61x28 pt and a glyph
+    // row each. The style is in the iOS sizing key because of that, so all three are cold
+    // configurations here and the poisoned cache has to see all three corrected - read
+    // without the poison, "each box is the size the control measured" is a sentence about
+    // a size the test planted.
+    //
+    // Android is the other half of this case and the half that must not move: the prop is
+    // stored and ignored (`HybridNitroUiCheckbox.kt`), so it is out of Android's key and
+    // three style names of one label are *one* configuration. That is what the correction
+    // count is read for there - the day the key starts carrying a field Android ignores,
+    // it costs three cold mounts and this line goes red.
+    poison(STYLES.map((style) => sizingKey(false, 'Measured', style)));
+    const before = stats();
+    await render(
+      <View style={rowStyle}>
+        {STYLES.map((style) => (
+          <Checkbox
+            key={style}
+            label="Measured"
+            iosStyle={style}
+            checked
+            testID={`style-${style}`}
+            hybridRef={captureHybrid(`style-${style}`)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const boxes = new Map<IosStyle, Size>();
+    for (const style of STYLES) {
+      const testId = `style-${style}`;
+      await waitForTestId(testId);
+      const size = await waitForMeasured(testId, testId);
+      await waitForBox(testId, size, testId);
+      boxes.set(style, size);
+      expect(sameSize(size, WRONG_SIZE)).toBe(false);
+      if (Platform.OS === 'ios') {
+        // Every style drew the picture it was named, at the size it measured: the box and
+        // the glyph are read from the same instance, so a style that laid out one control
+        // and drew another cannot pass.
+        await waitForSymbol(testId, expectedSymbol(style, true, false));
+      }
+    }
+    const made = corrections(before, stats());
+    const boxOf = (style: IosStyle): Size => {
+      const size = boxes.get(style);
+      if (size == null) throw new Error(`no box for style "${style}"`);
+      return size;
+    };
+    console.log(
+      `checkbox styles: ${STYLES.map(
+        (style) => `${style}=${describeSize(boxOf(style))}`
+      ).join(' ')} corrections=${made}`
+    );
+    if (Platform.OS === 'ios') {
+      // Three poisoned configurations, three corrections...
+      expect(made).toBeGreaterThanOrEqual(STYLES.length);
+      // ...and the glyph row is not the switch's box, which is the claim the declared
+      // fallback and the iOS key are both built on. Over one labelled string, so the
+      // label cannot be what tells them apart.
+      const circle = boxOf('circle');
+      const toggled = boxOf('switch');
+      expect(
+        Math.abs(circle.width - toggled.width) > 0.6 ||
+          Math.abs(circle.height - toggled.height) > 0.6
+      ).toBe(true);
+    } else {
+      // One configuration, not three (fewer corrections than styles), and one box for all
+      // three names: Material 3's checkbox, whichever picture iOS was asked for.
+      expect(made).toBeLessThan(STYLES.length);
+      expect(sameSize(boxOf('square'), boxOf('circle'))).toBe(true);
+      expect(sameSize(boxOf('switch'), boxOf('circle'))).toBe(true);
+    }
+  });
+
+  it('draws the glyph its state names, and keeps one state per platform', async () => {
+    // The picture, named. `symbol=` is what the iOS drawing code was handed, written in
+    // the SwiftUI body, so the three states of a style answer three different names and
+    // "checked and unchecked look different" is a comparison rather than a claim (the
+    // alternative this suite has - a pixel probe - would have to guess the colour before
+    // it knew what was on screen, and `real-input`'s screenshot is not a test).
+    //
+    // `displayed=` is asserted for every fixture on *both* platforms, which is the half
+    // that keeps the new picture from drifting: the same props answer the same state on
+    // Android and iOS, including the one that surprises - a box that is `indeterminate`
+    // *and* checked is checked (`displayed=1`), because `checked` outranks the display on
+    // both platforms.
+    const fixtures = [
+      { style: 'circle', checked: false, indeterminate: false },
+      { style: 'circle', checked: true, indeterminate: false },
+      { style: 'circle', checked: false, indeterminate: true },
+      { style: 'circle', checked: true, indeterminate: true },
+      { style: 'square', checked: false, indeterminate: false },
+      { style: 'square', checked: true, indeterminate: false },
+      { style: 'square', checked: false, indeterminate: true },
+      { style: 'switch', checked: false, indeterminate: false },
+      { style: 'switch', checked: true, indeterminate: true },
+    ] satisfies { style: IosStyle; checked: boolean; indeterminate: boolean }[];
+    await render(
+      <View style={rowStyle}>
+        {fixtures.map((fixture, index) => (
+          <Checkbox
+            key={`glyph-${String(index)}`}
+            label={`Glyph ${String(index)}`}
+            iosStyle={fixture.style}
+            checked={fixture.checked}
+            indeterminate={fixture.indeterminate}
+            testID={`glyph-${String(index)}`}
+            hybridRef={captureHybrid(`glyph-${String(index)}`)}
+          />
+        ))}
+      </View>,
+      { timeout: 20000 }
+    );
+    const drawn: string[] = [];
+    for (const [index, fixture] of fixtures.entries()) {
+      const testId = `glyph-${String(index)}`;
+      await waitForTestId(testId);
+      const wanted = fixture.checked
+        ? '1'
+        : fixture.indeterminate
+          ? 'mixed'
+          : '0';
+      await waitForDisplayed(testId, wanted);
+      drawn.push(
+        `${fixture.style}/${fixture.checked ? 'on' : 'off'}/` +
+          `${fixture.indeterminate ? 'ind' : '-'}=${reportOf(testId).displayed}` +
+          `/symbol=${reportOf(testId).symbol ?? 'none'}`
+      );
+      if (Platform.OS === 'ios') {
+        await waitForSymbol(
+          testId,
+          expectedSymbol(fixture.style, fixture.checked, fixture.indeterminate)
+        );
+      } else {
+        // Android has no symbol of ours to name - the field is absent, as iOS has never
+        // answered Android's `labelBox`. Asserted rather than skipped: a Material box that
+        // started publishing symbol names would be a second implementation.
+        expect(reportOf(testId).symbol).toBeUndefined();
+      }
+    }
+    console.log(`checkbox glyphs: ${drawn.join(' ')}`);
+    if (Platform.OS === 'ios') {
+      // Named out loud because the whole point of D47 is that three of these nine rows no
+      // longer look like a switch.
+      expect(reportOf('glyph-0').symbol).toBe('circle');
+      expect(reportOf('glyph-1').symbol).toBe('checkmark.circle.fill');
+      expect(reportOf('glyph-2').symbol).toBe('minus.circle.fill');
+      expect(reportOf('glyph-6').symbol).toBe('minus.square.fill');
+      expect(reportOf('glyph-8').symbol).toBe('switch');
+      // A style that drew the same picture for checked and unchecked would satisfy every
+      // size assertion in this file, which is why the pair is compared here.
+      expect(reportOf('glyph-0').symbol).not.toBe(reportOf('glyph-1').symbol);
+    }
+  });
+
+  it('re-measures for a new style on iOS, and never on Android', async () => {
+    // A style change is a *configuration* change, and D17's rule is about the frame after
+    // it: the box has to move to the new control's, from a poisoned start, with a
+    // correction that is not swallowed by the engine's dedupe (`noteSizingKeyChanged`,
+    // whose absence is review F1's stuck fallback).
+    //
+    // Android answers the same rerender with nothing: the prop is stored and ignored, the
+    // key does not change, and so no new configuration is asked about and no correction is
+    // owed. Zero is the assertion - three style names of one label that cost a correction
+    // on Android would be the key carrying a field that changes nothing.
+    poison([
+      sizingKey(false, 'Remeasured', 'circle'),
+      sizingKey(false, 'Remeasured', 'switch'),
+    ]);
+    const { rerender } = await render(
+      <Checkbox
+        label="Remeasured"
+        iosStyle="circle"
+        checked
+        testID="style-change"
+        hybridRef={captureHybrid('style-change')}
+      />,
+      { timeout: 20000 }
+    );
+    await waitForTestId('style-change');
+    const circle = await waitForMeasured('style-change', 'the circle style');
+    await waitForBox('style-change', circle, 'the circle style');
+    if (Platform.OS === 'ios') {
+      await waitForSymbol('style-change', 'checkmark.circle.fill');
+    }
+    const before = stats();
+    await rerender(
+      <Checkbox
+        label="Remeasured"
+        iosStyle="switch"
+        checked
+        testID="style-change"
+        hybridRef={captureHybrid('style-change')}
+      />
+    );
+    const handle = await handleOf('style-change');
+    // The prop has to have arrived before "nothing else happened" means anything.
+    await pollUntil(
+      () => (handle.iosStyle === 'switch' ? true : null),
+      () =>
+        new Error(
+          `"style-change" never took the style it was given - it still answers ` +
+            `iosStyle=${handle.iosStyle}.`
+        )
+    );
+    const made = corrections(before, stats());
+    if (Platform.OS === 'ios') {
+      const toggled = await waitForRemeasure(
+        'style-change',
+        circle,
+        'the switch style'
+      );
+      await waitForBox('style-change', toggled, 'the switch style');
+      await waitForSymbol('style-change', 'switch');
+      console.log(
+        `checkbox style change: circle=${describeSize(circle)} ` +
+          `switch=${describeSize(toggled)} corrections=${made}`
+      );
+      expect(made).toBeGreaterThanOrEqual(1);
+    } else {
+      // Give any correction the engine might still owe a turn to arrive, then read the
+      // box: it may not have moved, and nothing may have been corrected.
+      await sleep(500);
+      const after = measured('style-change');
+      console.log(
+        `checkbox style change (ignored): circle=${describeSize(circle)} ` +
+          `after=${describeSize(after)} corrections=${made}`
+      );
+      expect(sameSize(after, circle)).toBe(true);
+      expect(made).toBe(0);
+    }
+  });
+
+  it('recycles into the next owner with its own picture', async () => {
+    // RN's pool hands a dropped Checkbox to the next mount (`Recycling.harness.tsx` proves
+    // the pool is real on both platforms), and `prepareForRecycle` is the reset that
+    // instance has to arrive with: the style, the handshake, the reports, and the
+    // `defaultChecked` seed it has not yet applied.
+    //
+    // The two residue failures a device can actually see are asserted: an instance that
+    // kept its previous owner's *report* answers a square glyph for a circle owner, and an
+    // instance whose `didApplyDefault` survived never applies the new owner's
+    // `defaultChecked` - it draws an empty box while its own prop says checked, which no
+    // assertion about props would catch because the prop is indeed `true`.
+    //
+    // The swap is by `key` inside one parent (drop one instance, ask for another, stay on
+    // the surface whose pool this is - see `Recycling.harness.tsx`), and the styles
+    // alternate so each round's expected glyph names the round.
+    const owner = (key: 'a' | 'b') => (
+      <Checkbox
+        key={key}
+        label={`Round ${key}`}
+        iosStyle={key === 'a' ? 'square' : 'circle'}
+        defaultChecked
+        testID="recycled"
+        hybridRef={captureHybrid('recycled')}
+      />
+    );
+    const { rerender, unmount } = await render(owner('a'), { timeout: 25000 });
+    await waitForTestId('recycled', 10000);
+    try {
+      for (const key of ['a', 'b', 'a', 'b'] as const) {
+        await rerender(owner(key));
+        // A settle for the drop, the pool entry and the next mount's own commit.
+        await sleep(400);
+        const handle = await handleOf('recycled');
+        await waitForDisplayed('recycled', '1');
+        const expected = expectedSymbol(
+          key === 'a' ? 'square' : 'circle',
+          true,
+          false
+        );
+        if (Platform.OS === 'ios') {
+          await waitForSymbol('recycled', expected);
+        }
+        // Its own props, from this round: a recycled view that had come back as a corpse
+        // would answer the previous owner's label here.
+        if (
+          handle.label !== `Round ${key}` ||
+          handle.iosStyle !== (key === 'a' ? 'square' : 'circle')
+        ) {
+          throw new Error(
+            `a recycled Checkbox describes someone else: label=${String(
+              handle.label
+            )} iosStyle=${handle.iosStyle} report=${handle.nuiTestStateReport()}`
+          );
+        }
+        console.log(
+          `checkbox recycle: round=${key} drawn=${
+            reportOf('recycled').displayed
+          } symbol=${reportOf('recycled').symbol ?? '-'} label=${String(
+            handle.label
+          )}`
+        );
+      }
+    } finally {
+      unmount();
     }
   });
 });

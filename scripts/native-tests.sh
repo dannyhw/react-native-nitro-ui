@@ -106,6 +106,22 @@ run_case "picker-variant.test (Swift)" \
       -o '$OUT/picker-variant' && '$OUT/picker-variant'
   "
 
+# The iOS Checkbox's glyph table (G31, DECISIONS D47): which style a name means, and
+# which SF Symbol each of its states draws. It is a host test because the table has six
+# answers and a device run sees the one combination it mounted - and because the two
+# rules worth holding down are states no fixture produces on demand: `checked`
+# outranking `indeterminate` (the state an app reaches by leaving its third-state prop
+# set after a tap) and the two glyph styles agreeing about colour while disagreeing
+# about shape, which is what lets them share one sizing rule. There is no Kotlin twin:
+# Android ignores `iosStyle`, and both Android gates say so.
+run_case "checkbox-glyph.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Checkbox/NitroUiCheckboxGlyph.swift' \
+      '$ROOT/scripts/native-tests/checkbox-glyph.test.swift' \
+      -o '$OUT/checkbox-glyph' && '$OUT/checkbox-glyph'
+  "
+
 # The TextField's `maxLength` cut and text equality (G13). The delegate's cut keeps
 # the part of an *inserted* text that fits; for typing at the end of the text the
 # post-edit backstop gives the same answer, so only mid-text vectors - which no

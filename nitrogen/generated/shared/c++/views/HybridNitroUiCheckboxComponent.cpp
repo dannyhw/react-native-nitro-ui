@@ -24,6 +24,7 @@ namespace margelo::nitro::nitroui::views {
     checked(nitro::ReactProp<std::variant<bool, nitro::NullType>>::fromRawValue("NitroUiCheckbox", "checked", rawProps, sourceProps.checked)),
     defaultChecked(nitro::ReactProp<std::variant<bool, nitro::NullType>>::fromRawValue("NitroUiCheckbox", "defaultChecked", rawProps, sourceProps.defaultChecked)),
     indeterminate(nitro::ReactProp<std::variant<bool, nitro::NullType>>::fromRawValue("NitroUiCheckbox", "indeterminate", rawProps, sourceProps.indeterminate)),
+    iosStyle(nitro::ReactProp<std::string>::fromRawValue("NitroUiCheckbox", "iosStyle", rawProps, sourceProps.iosStyle)),
     mostRecentEventCount(nitro::ReactProp<double>::fromRawValue("NitroUiCheckbox", "mostRecentEventCount", rawProps, sourceProps.mostRecentEventCount)),
     label(nitro::ReactProp<std::variant<nitro::NullType, std::string>>::fromRawValue("NitroUiCheckbox", "label", rawProps, sourceProps.label)),
     disabled(nitro::ReactProp<bool>::fromRawValue("NitroUiCheckbox", "disabled", rawProps, sourceProps.disabled)),
@@ -44,6 +45,7 @@ namespace margelo::nitro::nitroui::views {
       case hashString("checked"): return true;
       case hashString("defaultChecked"): return true;
       case hashString("indeterminate"): return true;
+      case hashString("iosStyle"): return true;
       case hashString("mostRecentEventCount"): return true;
       case hashString("label"): return true;
       case hashString("disabled"): return true;

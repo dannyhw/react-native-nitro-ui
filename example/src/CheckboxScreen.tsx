@@ -62,6 +62,15 @@ export default function CheckboxScreen() {
     setRefusedLast(String(next));
     setRefusedEvents((count) => count + 1);
   }, []);
+  // The `iosStyle='switch'` fixture (G31): DECISIONS D47 keeps the old look behind a
+  // prop, so a real tap has to prove it still toggles in both directions with one event
+  // each - which the harness cannot do on iOS, where its touch reaches no SwiftUI gesture.
+  const [realSwitchChecked, setRealSwitchChecked] = useState(false);
+  const [realSwitchEvents, setRealSwitchEvents] = useState(0);
+  const onRealSwitchChange = useCallback((next: boolean) => {
+    setRealSwitchChecked(next);
+    setRealSwitchEvents((count) => count + 1);
+  }, []);
   // Shared by the enabled and the disabled checkbox, so a stray tap on the disabled
   // one is a number on screen rather than the absence of a callback.
   const [disabledEvents, setDisabledEvents] = useState(0);
@@ -85,8 +94,10 @@ export default function CheckboxScreen() {
           react-native-nitro-ui · Checkbox
         </Text>
         <Text style={styles.note}>
-          SwiftUI Toggle (switch style) on iOS - which has no checkbox - and
-          Material 3 Checkbox / TriStateCheckbox on Android.
+          SwiftUI Toggle wearing Apple&apos;s checklist glyph on iOS - which has
+          no checkbox control - and Material 3 Checkbox / TriStateCheckbox on
+          Android. `iosStyle` picks the iOS picture: circle, square, or the
+          switch it shipped with.
         </Text>
 
         {/*
@@ -103,6 +114,14 @@ export default function CheckboxScreen() {
             onCheckedChange={onRealCheckedChange}
             accessibilityLabel="Real-input checkbox"
             testID="real-input-checkbox"
+          />
+          <Checkbox
+            label="Real input, switch"
+            iosStyle="switch"
+            checked={realSwitchChecked}
+            onCheckedChange={onRealSwitchChange}
+            accessibilityLabel="Real-input switch checkbox"
+            testID="real-input-checkbox-switch"
           />
           <Checkbox
             label="Refusing"
@@ -151,6 +170,12 @@ export default function CheckboxScreen() {
             value={String(disabledEvents)}
             ink={ink}
           />
+          <Echo
+            label="switch: requests"
+            testID="real-input-checkbox-switch-events"
+            value={String(realSwitchEvents)}
+            ink={ink}
+          />
         </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>Labelled</Text>
@@ -173,9 +198,7 @@ export default function CheckboxScreen() {
           <Checkbox testID="bare" accessibilityLabel="Bare box" />
         </View>
 
-        <Text style={[styles.section, { color: ink.ink }]}>
-          Three state{Platform.OS === 'android' ? '' : ' (Android only)'}
-        </Text>
+        <Text style={[styles.section, { color: ink.ink }]}>Three state</Text>
         <View style={styles.column}>
           <Checkbox
             label="Select all"
@@ -192,10 +215,29 @@ export default function CheckboxScreen() {
         </View>
         {Platform.OS === 'ios' ? (
           <Text style={[styles.note, { color: ink.muted }]}>
-            iOS has no checkbox, so `indeterminate` reads as off - the switch
-            above is the same control the library renders for every Checkbox.
+            The dash is `minus.circle.fill` on iOS, and `checked` outranks it on
+            both platforms: the row below draws a check mark, not a dash. Only
+            `iosStyle='switch'` reads the prop as off - that control has two
+            positions.
           </Text>
         ) : null}
+
+        <Text style={[styles.section, { color: ink.ink }]}>iOS styles</Text>
+        <View style={styles.column}>
+          <Checkbox label="Circle (default)" testID="style-circle" />
+          <Checkbox
+            label="Square"
+            iosStyle="square"
+            defaultChecked
+            testID="style-square"
+          />
+          <Checkbox
+            label="Switch (the previous look)"
+            iosStyle="switch"
+            defaultChecked
+            testID="style-switch"
+          />
+        </View>
 
         <Text style={[styles.section, { color: ink.ink }]}>Disabled</Text>
         <View style={styles.column}>

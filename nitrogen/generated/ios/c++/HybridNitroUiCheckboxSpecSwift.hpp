@@ -89,6 +89,13 @@ namespace margelo::nitro::nitroui {
     inline void setIndeterminate(const std::variant<bool, nitro::NullType>& indeterminate) noexcept override {
       _swiftPart.setIndeterminate(indeterminate);
     }
+    inline std::string getIosStyle() noexcept override {
+      auto __result = _swiftPart.getIosStyle();
+      return __result;
+    }
+    inline void setIosStyle(const std::string& iosStyle) noexcept override {
+      _swiftPart.setIosStyle(iosStyle);
+    }
     inline double getMostRecentEventCount() noexcept override {
       return _swiftPart.getMostRecentEventCount();
     }
