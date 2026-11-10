@@ -203,6 +203,9 @@ behind the popup in that frame, before and after), and `date-picker-android.png`
   only other `harness:android` on the machine — `task/G27-merge`'s — had already finished 70
   minutes earlier, so the process killed was almost certainly this task's own. Reported because
   matching a gate process by pattern is exactly the habit the rules exist to stop.
+- device state left behind, for whoever leases pair-b next: `emulator-5570` still carries an
+  `adb reverse tcp:8080` that this task did not create (this task's own `tcp:8293` was removed
+  before the lease was released, and no debug-host preference or `cmd uimode` was ever set).
 - tooling: `real-input:android --control <one>` still runs the whole a11y sweep (≈10 of the
   ≈15 minutes) unless `NUI_SKIP_A11Y_SWEEP=1`; a filtered red-proof run would rather not pay
   for it, and the flag is undocumented outside the script.
