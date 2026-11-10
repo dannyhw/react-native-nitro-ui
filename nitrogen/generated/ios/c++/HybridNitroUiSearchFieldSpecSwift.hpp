@@ -105,6 +105,26 @@ namespace margelo::nitro::nitroui {
     inline void setMaxLength(const std::variant<nitro::NullType, double>& maxLength) noexcept override {
       _swiftPart.setMaxLength(maxLength);
     }
+    inline std::string getKeyboardType() noexcept override {
+      auto __result = _swiftPart.getKeyboardType();
+      return __result;
+    }
+    inline void setKeyboardType(const std::string& keyboardType) noexcept override {
+      _swiftPart.setKeyboardType(keyboardType);
+    }
+    inline std::string getAutoCapitalize() noexcept override {
+      auto __result = _swiftPart.getAutoCapitalize();
+      return __result;
+    }
+    inline void setAutoCapitalize(const std::string& autoCapitalize) noexcept override {
+      _swiftPart.setAutoCapitalize(autoCapitalize);
+    }
+    inline bool getAutoCorrect() noexcept override {
+      return _swiftPart.getAutoCorrect();
+    }
+    inline void setAutoCorrect(bool autoCorrect) noexcept override {
+      _swiftPart.setAutoCorrect(std::forward<decltype(autoCorrect)>(autoCorrect));
+    }
     inline bool getEditable() noexcept override {
       return _swiftPart.getEditable();
     }

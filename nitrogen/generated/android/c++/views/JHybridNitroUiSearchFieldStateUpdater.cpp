@@ -79,6 +79,21 @@ void JHybridNitroUiSearchFieldStateUpdater::updateViewProps(jni::alias_ref<jni::
     hybridView->setMaxLength(newProps->maxLength.get());
   }
   if (oldProps == nullptr
+        ? newProps->keyboardType.isProvided()
+        : !newProps->keyboardType.hasSameValue(oldProps->keyboardType)) {
+    hybridView->setKeyboardType(newProps->keyboardType.get());
+  }
+  if (oldProps == nullptr
+        ? newProps->autoCapitalize.isProvided()
+        : !newProps->autoCapitalize.hasSameValue(oldProps->autoCapitalize)) {
+    hybridView->setAutoCapitalize(newProps->autoCapitalize.get());
+  }
+  if (oldProps == nullptr
+        ? newProps->autoCorrect.isProvided()
+        : !newProps->autoCorrect.hasSameValue(oldProps->autoCorrect)) {
+    hybridView->setAutoCorrect(newProps->autoCorrect.get());
+  }
+  if (oldProps == nullptr
         ? newProps->editable.isProvided()
         : !newProps->editable.hasSameValue(oldProps->editable)) {
     hybridView->setEditable(newProps->editable.get());

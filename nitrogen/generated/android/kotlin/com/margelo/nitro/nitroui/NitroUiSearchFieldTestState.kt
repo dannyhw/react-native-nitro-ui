@@ -53,6 +53,15 @@ data class NitroUiSearchFieldTestState(
   val returnKeyType: String,
   @DoNotStrip
   @Keep
+  val keyboardType: String,
+  @DoNotStrip
+  @Keep
+  val autoCapitalize: String,
+  @DoNotStrip
+  @Keep
+  val autoCorrect: Boolean,
+  @DoNotStrip
+  @Keep
   val expanded: Boolean,
   @DoNotStrip
   @Keep
@@ -74,6 +83,9 @@ data class NitroUiSearchFieldTestState(
       && Objects.deepEquals(this.placeholder, other.placeholder)
       && Objects.deepEquals(this.accessibilityLabel, other.accessibilityLabel)
       && Objects.deepEquals(this.returnKeyType, other.returnKeyType)
+      && Objects.deepEquals(this.keyboardType, other.keyboardType)
+      && Objects.deepEquals(this.autoCapitalize, other.autoCapitalize)
+      && Objects.deepEquals(this.autoCorrect, other.autoCorrect)
       && Objects.deepEquals(this.expanded, other.expanded)
       && Objects.deepEquals(this.canClear, other.canClear)
   }
@@ -91,6 +103,9 @@ data class NitroUiSearchFieldTestState(
       placeholder,
       accessibilityLabel,
       returnKeyType,
+      keyboardType,
+      autoCapitalize,
+      autoCorrect,
       expanded,
       canClear
     ).contentDeepHashCode()
@@ -104,8 +119,8 @@ data class NitroUiSearchFieldTestState(
     @Keep
     @Suppress("unused")
     @JvmStatic
-    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, expanded: Boolean, canClear: Boolean): NitroUiSearchFieldTestState {
-      return NitroUiSearchFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, maxLength, placeholder, accessibilityLabel, returnKeyType, expanded, canClear)
+    private fun fromCpp(text: String, focused: Boolean, composing: Boolean, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Boolean, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, keyboardType: String, autoCapitalize: String, autoCorrect: Boolean, expanded: Boolean, canClear: Boolean): NitroUiSearchFieldTestState {
+      return NitroUiSearchFieldTestState(text, focused, composing, nativeEvents, jsEvents, lastWrite, editable, maxLength, placeholder, accessibilityLabel, returnKeyType, keyboardType, autoCapitalize, autoCorrect, expanded, canClear)
     }
   }
 }

@@ -18,8 +18,8 @@ public extension NitroUiSearchFieldTestState {
   /**
    * Create a new instance of `NitroUiSearchFieldTestState`.
    */
-  init(text: String, focused: Bool, composing: Bool, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Bool, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, expanded: Bool, canClear: Bool) {
-    self.init(std.string(text), focused, composing, nativeEvents, jsEvents, std.string(lastWrite), editable, maxLength, std.string(placeholder), std.string(accessibilityLabel), std.string(returnKeyType), expanded, canClear)
+  init(text: String, focused: Bool, composing: Bool, nativeEvents: Double, jsEvents: Double, lastWrite: String, editable: Bool, maxLength: Double, placeholder: String, accessibilityLabel: String, returnKeyType: String, keyboardType: String, autoCapitalize: String, autoCorrect: Bool, expanded: Bool, canClear: Bool) {
+    self.init(std.string(text), focused, composing, nativeEvents, jsEvents, std.string(lastWrite), editable, maxLength, std.string(placeholder), std.string(accessibilityLabel), std.string(returnKeyType), std.string(keyboardType), std.string(autoCapitalize), autoCorrect, expanded, canClear)
   }
 
   @inline(__always)
@@ -75,6 +75,21 @@ public extension NitroUiSearchFieldTestState {
   @inline(__always)
   var returnKeyType: String {
     return String(self.__returnKeyType)
+  }
+  
+  @inline(__always)
+  var keyboardType: String {
+    return String(self.__keyboardType)
+  }
+  
+  @inline(__always)
+  var autoCapitalize: String {
+    return String(self.__autoCapitalize)
+  }
+  
+  @inline(__always)
+  var autoCorrect: Bool {
+    return self.__autoCorrect
   }
   
   @inline(__always)

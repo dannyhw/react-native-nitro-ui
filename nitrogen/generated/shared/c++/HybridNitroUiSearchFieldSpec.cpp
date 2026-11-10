@@ -24,6 +24,12 @@ namespace margelo::nitro::nitroui {
       prototype.registerHybridSetter("placeholder", &HybridNitroUiSearchFieldSpec::setPlaceholder);
       prototype.registerHybridGetter("maxLength", &HybridNitroUiSearchFieldSpec::getMaxLength);
       prototype.registerHybridSetter("maxLength", &HybridNitroUiSearchFieldSpec::setMaxLength);
+      prototype.registerHybridGetter("keyboardType", &HybridNitroUiSearchFieldSpec::getKeyboardType);
+      prototype.registerHybridSetter("keyboardType", &HybridNitroUiSearchFieldSpec::setKeyboardType);
+      prototype.registerHybridGetter("autoCapitalize", &HybridNitroUiSearchFieldSpec::getAutoCapitalize);
+      prototype.registerHybridSetter("autoCapitalize", &HybridNitroUiSearchFieldSpec::setAutoCapitalize);
+      prototype.registerHybridGetter("autoCorrect", &HybridNitroUiSearchFieldSpec::getAutoCorrect);
+      prototype.registerHybridSetter("autoCorrect", &HybridNitroUiSearchFieldSpec::setAutoCorrect);
       prototype.registerHybridGetter("editable", &HybridNitroUiSearchFieldSpec::getEditable);
       prototype.registerHybridSetter("editable", &HybridNitroUiSearchFieldSpec::setEditable);
       prototype.registerHybridGetter("testID", &HybridNitroUiSearchFieldSpec::getTestID);

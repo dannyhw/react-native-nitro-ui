@@ -1,0 +1,94 @@
+# Failure excerpt — harness:android:SearchField
+
+- Ran: 2026-11-10T06:00:24.115Z on code tree `29661020597e` at HEAD `ecc3203` (branch `task/G27-fix1`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SearchField`
+- Result: fail, exit 1, 28001 ms
+- Load: start 4.97, end 4.90, median 4.97, max 5.23
+- Device: android / device `emulator-5574` / lease `G27-91rgl`
+- Full log: `task/G27-fix1/harness+android+SearchField-2026-11-10T06-00-24.115Z.log` (<store>/task/G27-fix1/harness+android+SearchField-2026-11-10T06-00-24.115Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › gives the field the keyboard the app asked for, Search key included`
+- `● SearchField › comes back from the pool with none of its previous owner`
+- `expected 'drops=8 recycles=8 measuresAfterDrop=…' to contain 'resetKeyboard=default/none/true'`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-fix1/harness+android+SearchField-2026-11-10T06-00-24.115Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-91rgl (still live)
+  |   X23-8wjce                X23          both              pair-b
+  |   G27-91rgl                G27          both              pair-a
+gate: load
+  |   load1 at the moment of failure: 4.90 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 45 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SearchField
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree 29661020597e, 24 components registered)
+lease: nitroui_a boots on console port 5574 (serial emulator-5574)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 4.97/6.62 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G27-fix1/harness+android+SearchField-2026-11-10T06-00-24.115Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › gives the field the keyboard the app asked for, Search key included
+
+    SearchField keyboard: a focused field to reload its own keyboard never happened; last report {"text":"","focused":true,"composing":false,"nativeEvents":0,"jsEvents":0,"lastWrite":"none","editable":true,"maxLength":-1,"placeholder":"Search…","accessibilityLabel":"Keyboard search field","returnKeyType":"search","keyboardType":"default","autoCapitalize":"none","autoCorrect":true,"expanded":false,"canClear":false}
+
+      [0m [90m 175 |[39m     [36mif[39m (check(state)) [36mreturn[39m state[33m;[39m
+       [90m 176 |[39m     [36mif[39m ([33mDate[39m[33m.[39mnow() [33m>[39m deadline) {
+      [31m[1m>[22m[39m[90m 177 |[39m       [36mthrow[39m [36mnew[39m [33mError[39m(
+       [90m     |[39m                      [31m[1m^[22m[39m
+       [90m 178 |[39m         [32m`SearchField ${id}: ${what} never happened; last report ${JSON.stringify(state)}`[39m
+       [90m 179 |[39m       )[33m;[39m
+       [90m 180 |[39m     }[0m
+
+  ● SearchField › comes back from the pool with none of its previous owner
+
+    expected 'drops=8 recycles=8 measuresAfterDrop=…' to contain 'resetKeyboard=default/none/true'
+
+      [0m [90m 972 |[39m         [90m// so the second owner's own defaults would mask a reset that kept the first[39m
+       [90m 973 |[39m         [90m// owner's number pad.[39m
+      [31m[1m>[22m[39m[90m 974 |[39m         expect(lifetime)[33m.[39mtoContain([32m'resetKeyboard=default/none/true'[39m)[33m;[39m
+       [90m     |[39m                                   [31m[1m^[22m[39m
+       [90m 975 |[39m       }
+       [90m 976 |[39m       cleanup()[33m;[39m
+       [90m 977 |[39m       handles[33m.[39mclear()[33m;[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       2 failed, 14 passed, 16 total
+Snapshots:   0 total
+Time:        25.963 s
+Ran all test suites matching SearchField.
+
+
+
+```

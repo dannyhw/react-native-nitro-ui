@@ -309,6 +309,8 @@ lib/module/core/NitroUiIntrinsicProps.js
 lib/module/core/NitroUiIntrinsicProps.js.map
 lib/module/core/index.js
 lib/module/core/index.js.map
+lib/module/core/keyboard.js
+lib/module/core/keyboard.js.map
 lib/module/core/useControlled.js
 lib/module/core/useControlled.js.map
 lib/module/core/useProcessedColor.js
@@ -521,6 +523,8 @@ lib/typescript/src/core/NitroUiIntrinsicProps.d.ts
 lib/typescript/src/core/NitroUiIntrinsicProps.d.ts.map
 lib/typescript/src/core/index.d.ts
 lib/typescript/src/core/index.d.ts.map
+lib/typescript/src/core/keyboard.d.ts
+lib/typescript/src/core/keyboard.d.ts.map
 lib/typescript/src/core/useControlled.d.ts
 lib/typescript/src/core/useControlled.d.ts.map
 lib/typescript/src/core/useProcessedColor.d.ts
@@ -1185,6 +1189,7 @@ src/components/Tooltip/Tooltip.nitro.ts
 src/components/Tooltip/Tooltip.tsx
 src/core/NitroUiIntrinsicProps.ts
 src/core/index.ts
+src/core/keyboard.ts
 src/core/useControlled.ts
 src/core/useProcessedColor.ts
 src/core/useSizingId.ts
