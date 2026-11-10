@@ -192,11 +192,9 @@ async function focusField(id: string) {
 /**
  * Move the field's focus away and back, then wait for its report to satisfy `check`.
  *
- * A Compose field is handed its keyboard options when the input session starts, and a
- * session that is already running is not restarted for a change to them
- * (`docs/components/search-field.md`), so a focused Android field keeps the keyboard it
- * opened with. Refocusing is therefore how this file asks Android whether a keyboard prop
- * reached the IME; on iOS it costs one blur to prove the same answer a second time.
+ * Step 2 of the keyboard test proves a change reaches a field that keeps focus; the
+ * loops after it refocus so that every value is also read from a session that *started*
+ * with it, which is the path a field that is tapped after a prop change takes.
  */
 async function refocusAndRead(
   id: string,
@@ -801,24 +799,23 @@ describe('SearchField', () => {
     expect(asFound.autoCorrect).toBe(true);
     expect(asFound.returnKeyType).toBe('search');
 
-    // 2. iOS is the platform that answers a keyboard change *while the keyboard is up*:
-    // a `UITextInputTraits` setter does not reach a visible keyboard, so the apply step
-    // reloads it (TextField's rule). Asserted here with focus having never moved, so a
-    // change that only took effect at the next focus would be caught. Android is not
-    // asked this way, because Compose builds the editor info when the input session
-    // starts and leaves a session that is already running alone - the rule
-    // `docs/components/search-field.md` states - and step 3 is where Android is graded.
-    if (iOS) {
-      await rerender(<Keyboard keyboardType="number-pad" />);
-      const reloaded = await stateWhen(
-        'keyboard',
-        (current) => current.keyboardType === 'number-pad',
-        'a focused field to reload its own keyboard',
-        8000
-      );
-      expect(reloaded.focused).toBe(true);
-      expect(reloaded.returnKeyType).toBe('search');
-    }
+    // 2. A keyboard change *while the keyboard is up* reaches the focused field, with
+    // focus never moving, so a change that only took effect at the next focus is caught.
+    // iOS: a `UITextInputTraits` setter does not reach a visible keyboard, so the apply
+    // step reloads it (TextField's rule). Android: Compose restarts the input session
+    // when a focused field's keyboard options change; this reads the `EditorInfo` the
+    // field now hands the IME, and real-input reads the IME's own record of the restart.
+    await rerender(<Keyboard keyboardType="number-pad" />);
+    const reloaded = await stateWhen(
+      'keyboard',
+      (current) =>
+        current.keyboardType === KEYBOARD_READ_BACK['number-pad'] &&
+        current.focused,
+      'a focused field to reload its own keyboard',
+      8000
+    );
+    expect(reloaded.focused).toBe(true);
+    expect(reloaded.returnKeyType).toBe('search');
 
     // 3. Every keyboard type, one at a time, each with the field taking focus again: a
     // prop that is read once at first composition and never again cannot get through this
