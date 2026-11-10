@@ -156,6 +156,10 @@ state lines, the alert half stays green, and no press line goes red at all.
   and records a 1.4 s FAIL under a gate name with `--background` baked in. The flag belongs before
   the `--`; a runner that recognises its own launcher's flag after a filter separator would not
   leave the row in the ledger at all.
+- `gate.mjs export --task <ID>` writes the *current branch's* lines and replaces
+  `docs/tasks/<ID>/gates.jsonl`, so a fix round on a second branch erases round 1's exported lines
+  unless they are re-merged by hand — as this round had to. Exporting the union of every branch a
+  task has run on is what the command reads like it does.
 
 ## Fix round 1
 
