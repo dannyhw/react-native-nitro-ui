@@ -89,7 +89,11 @@ enum NitroUiCheckboxGlyphs {
     // The two shapes are the only difference between the two glyph styles, which is
     // why one table covers both: `checkmark.circle.fill`/`checkmark.square.fill`,
     // `minus.circle.fill`/`minus.square.fill` and `circle`/`square` are the same
-    // symbol at the same size in each pair, so the two styles cannot measure apart.
+    // symbol in either shape. They are *near* each other but not the same box - the
+    // device measures the circle row 26 pt tall and the square row 24 pt
+    // (`Checkbox.harness.tsx`, and `docs/components/checkbox.md` carries both) - which
+    // is one reason `iosStyle` is in the iOS sizing key rather than the two styles
+    // sharing a measured size.
     let shape = style == .square ? "square" : "circle"
     if checked {
       return NitroUiCheckboxGlyph(symbol: "checkmark.\(shape).fill", filled: true)

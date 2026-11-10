@@ -130,46 +130,67 @@ with a finger.
 
 A checkbox is its box plus its label (`sizing: "intrinsic"`). The host measures the
 control unbounded and Yoga lays out that box. The sizing key is
-`indeterminate|label`:
+`indeterminate|iosStyle|label` on iOS and `indeterminate|label` on Android — one rule
+(`iosStyle`'s doc comment), read about each platform's own control: a field belongs in
+the key where it changes what is mounted, and does not where it does not.
 
 - `label` is content — a bare box and a labelled one are different controls of
   different widths, so a new label is a new configuration (`noteContentSizeMayHaveChanged`
   on iOS, the same call on Android);
-- `indeterminate` is in the key on Android only, because that is where it changes
-  what is drawn: `TriStateCheckbox` is a different composable with a different glyph.
-  iOS draws the same switch either way, so turning it on there is not a cold
-  configuration;
+- `iosStyle` is in iOS's key and out of Android's. iOS draws three different controls'
+  worth of pictures and they measure apart (the table below); Android stores the prop and
+  never reads it, so its key would pay for three cold configurations to mount one box —
+  `Checkbox.harness.tsx` measures three style names of one label there and asserts
+  **zero** extra corrections and one box for all three;
+- `indeterminate` is in the key wherever a third glyph is mounted: on Android
+  (`TriStateCheckbox` is a different composable), and on iOS in the two glyph styles,
+  which draw `minus.circle.fill` / `minus.square.fill`. It changes no box — see the
+  third-state row below — and `iosStyle='switch'` leaves the field at `0`, because that
+  control has two positions and nothing third to mount;
 - `checked` is in neither key, because neither platform's box moves between states.
   `Checkbox.harness.tsx` measures a checked and an unchecked checkbox of one label
   side by side and asserts they are the same size — if that ever differs, the key is
   wrong and a first toggle is a cold configuration with a frame at the fallback.
 
-`CheckboxFallbacks` measured on iPhone 17 / iOS 27 and an API 35 Pixel 9 emulator by
-`example/__tests__/Checkbox.harness.tsx` (`bun run harness:*` prints them):
+Measured by `example/__tests__/Checkbox.harness.tsx` on an iPhone Air / iOS 27
+simulator and an API 35 `pixel_9` emulator:
 
-| Configuration         | iOS          | Android       |
-| --------------------- | ------------ | ------------- |
-| no label              | 61.00 × 28.00 pt | 48.00 × 48.00 dp |
-| `label="Measured"`    | 145.00 × 28.00 pt | 131.05 × 48.00 dp |
-| `indeterminate`, labelled | 145.00 × 28.00 pt | 131.05 × 48.00 dp |
+| Configuration                            | iOS              | Android          |
+| ---------------------------------------- | ---------------- | ---------------- |
+| no label (default `circle`)              | 26.00 × 26.00 pt | 48.00 × 48.00 dp |
+| `label="Measured"`, `circle`             | 110.00 × 26.00 pt | 131.05 × 48.00 dp |
+| `label="Measured"`, `square`             | 109.00 × 24.00 pt | 131.05 × 48.00 dp |
+| `label="Measured"`, `switch`             | 145.00 × 28.00 pt | 131.05 × 48.00 dp |
+| `indeterminate`, `label="Select all"`    | 103.00 × 26.00 pt | 131.05 × 48.00 dp |
 
-The third state costs nothing: the dash replaces the check inside the same box, so
-`indeterminate` measures the labelled size on both platforms — and on iOS it measures
-it because the switch does not move at all. The bare iOS box is the one measurement
-that equals its own declared fallback (61 × 28 pt), which is exactly why
-`Checkbox.harness.tsx` poisons the cache with `11.5 × 57.5` before mounting: the
-agreement has to be earned by a correction, not handed over by the fallback.
+Android answers one box to all five rows: `iosStyle` is another platform's prop, and
+Material's dash shares Material's box. iOS answers three, and none of them is another's —
+the square is 2 pt shorter than the circle, and the switch is the box this component
+shipped with (145.00 × 28.00 pt, the same number G15 measured for it, which is the point
+of keeping it as a style rather than as the control). The dash row is narrower than the
+three above it because its fixture's label is `"Select all"`, not `"Measured"`: the label
+decides the width, the dash decides the picture. `Checkbox.harness.tsx` asserts that, by
+measuring the dash and an unchecked box of the *same* label from poisoned keys and
+requiring the same size — the third state costs a configuration, not a box.
 
 The fallback — the size of the very first frame before anything is measured — is
-61 × 28 pt on iOS (51 × 31 pt before iOS 26) and 48 × 48 dp on Android
-(`NitroUiSizing.setFallback` in `ios/components/Checkbox/HybridNitroUiCheckbox.swift`
-and `android/.../HybridNitroUiCheckbox.kt`). Its **height is not a guess**:
-`minimumInteractiveComponentSize` will not publish a smaller Android target than 48 dp,
-so every configuration of this control is 48 dp tall, and the conformance run compares
-that constant against the box it measures. The width is a bare box's, because the
-engine keys fallbacks by component alone and a labelled Checkbox is wider by its label
-(`Checkbox.harness.tsx` measures 48 against 131.05 dp, 61 against 145 pt). The first
-instance of a new configuration can show it for one frame (DECISIONS D17).
+26 × 26 pt on iOS and 48 × 48 dp on Android (`NitroUiSizing.setFallback` in
+`ios/components/Checkbox/HybridNitroUiCheckbox.swift` and
+`android/.../HybridNitroUiCheckbox.kt`). Until DECISIONS D47 the iOS number was the
+Switch's 61 × 28 pt — with the Switch's OS-version split, because a Checkbox on iOS *was*
+a `Toggle(.switch)` — and it is this component's own default box now: a bare checkbox in
+the default style, which is what an app draws first. The glyph's measure is an SF Symbol's
+and does not move with the SDK split that moves the switch's thumb, so it is one constant
+where that needed two. Its **height is not a guess** on Android:
+`minimumInteractiveComponentSize` will not publish a smaller target than 48 dp, so every
+configuration of this control is 48 dp tall, and the conformance run compares that
+constant against the box it measures. The width is a bare box's on both platforms, because
+the engine keys fallbacks by component alone and a labelled Checkbox is wider by its label
+(`Checkbox.harness.tsx` measures 48 against 131.05 dp, and 26 against 110 pt). The bare
+default box is the one measurement that equals its own declared fallback, which is exactly
+why `Checkbox.harness.tsx` poisons the cache with `11.5 × 57.5` before mounting everything
+else: the agreement has to be earned by a correction, not handed over by the fallback. The
+first instance of a new configuration can show it for one frame (DECISIONS D17).
 
 A user `style` wins. A `width` narrower than the control truncates the label with a
 trailing ellipsis on both platforms rather than painting outside the box.
@@ -187,6 +208,12 @@ lands wherever it lands, and what that costs the glyph is SwiftUI's own press fe
 the thumb's drag. What it does not cost is one press meaning one `onCheckedChange`:
 `real-input:ios` taps the glyph itself and counts the events, which is where a row handler
 and the `Toggle`'s own gesture both answering the same touch would show up.
+
+The two glyph styles get their whole-row tap from that same overlay, and for them it is
+not a convenience: a style that draws a symbol and a text installs no gesture of its own,
+so without the row handler nothing on the control would answer a touch at all. One target
+for all three styles is also what makes the count in the paragraph above mean something —
+wherever a press lands, it is asked once.
 
 **The label is centred against the box.** The Android row is 48 dp tall because the box
 asks for a 48 dp touch target, and a `Row` aligns its children to the top unless told

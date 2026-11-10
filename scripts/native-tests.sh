@@ -112,7 +112,7 @@ run_case "picker-variant.test (Swift)" \
 # rules worth holding down are states no fixture produces on demand: `checked`
 # outranking `indeterminate` (the state an app reaches by leaving its third-state prop
 # set after a tap) and the two glyph styles agreeing about colour while disagreeing
-# about shape, which is what lets them share one sizing rule. There is no Kotlin twin:
+# about shape, which is what keeps one table honest about two shapes. There is no Kotlin twin:
 # Android ignores `iosStyle`, and both Android gates say so.
 run_case "checkbox-glyph.test (Swift)" \
   bash -c "
