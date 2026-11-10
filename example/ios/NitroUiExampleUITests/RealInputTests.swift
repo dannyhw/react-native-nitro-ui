@@ -6793,6 +6793,9 @@ final class RealInputTests: XCTestCase {
         + "tap is delivered — inside a row the leaf still has to be reachable (D46 item 2)"
     )
     let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
+    // The row inside that wrapper, which is where the leaf publishes its own element
+    // (`hostedControl`, the same addressing the disabled Picker's case uses).
+    let disabledRow = try hostedControl(in: "real-input-listitem-disabled", as: "the disabled list item")
 
     // 1. At rest, so every claim below is about a number that moved.
     XCTAssertEqual(
@@ -6822,15 +6825,33 @@ final class RealInputTests: XCTestCase {
       optionLabels(containing: "Real input"), 0,
       "and the row's title should not also be an element of its own — one stop per item"
     )
-    XCTAssert(item.isEnabled, "an enabled item should not read as disabled")
-    XCTAssertFalse(
-      disabled.isEnabled,
-      "a disabled item should say so in the tree, so a reader is told it is inert "
-        + "instead of being handed a control that does nothing"
+    // The chevron is the same claim from the other side. It is a sibling of the content
+    // subtree rather than inside it, and `chevron.right` vends its own label, so a row
+    // with a disclosure can gain a second stop that nothing in the row's own label
+    // explains. Measured in this case's own node dump before it was stood down: an
+    // `other` element named "Forward" at the arrow's 14 pt box, inside the row.
+    XCTAssertEqual(
+      optionLabels(containing: "Forward"), 0,
+      "the disclosure chevron is decoration inside the row, not a stop of its own — one "
+        + "element per item (D46 item 1) includes the arrow that says what the role says"
     )
+    // The disabled claim is taken on the row's own element rather than on the React
+    // Native view that hosts it, because RN owns the wrapper's element and a Hybrid View
+    // speaks `disabled` to the platform control — the Picker's disabled case made this
+    // the rule here for the same reason. Both readings are printed *before* the claim,
+    // so a red run says which of the two elements moved instead of leaving the reader to
+    // rerun it to find out.
     print(
       "real-input list-item: item traits label=\(item.label) enabled=\(item.isEnabled) "
-        + "frame=\(item.frame); disabled enabled=\(disabled.isEnabled)"
+        + "frame=\(item.frame); disabled wrapper enabled=\(disabled.isEnabled) "
+        + "row enabled=\(disabledRow.isEnabled) row traits label=\(disabledRow.label)"
+    )
+    XCTAssert(item.isEnabled, "an enabled item should not read as disabled")
+    XCTAssertFalse(
+      disabledRow.isEnabled,
+      "a disabled item should say so in the tree, so a reader is told it is inert "
+        + "instead of being handed a control that does nothing "
+        + "(row isEnabled=\(disabledRow.isEnabled), React Native wrapper isEnabled=\(disabled.isEnabled))"
     )
 
     // 3. Ten taps, ten presses, one per tap (`assertOnePressPerTap` reads the counter
