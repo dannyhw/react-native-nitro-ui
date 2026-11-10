@@ -6770,13 +6770,29 @@ final class RealInputTests: XCTestCase {
   func testRealInputListItem() throws {
     try goToTab(Tab.listItemTab, showing: Echo.listItemPresses)
 
+    // The three fixtures sit at three heights of one page taller than the window, and
+    // XCUITest taps an element's frame without scrolling a plain view to reach it (see
+    // `scrollIntoView`), so each one is brought into the band a tap can land in just
+    // before the claim that taps it. Both hittability claims below are made of a node
+    // after *its own* scroll, which is the only form of that claim that means anything
+    // here; a fixture the screen cannot bring into view fails inside `scrollIntoView`,
+    // naming the screen, rather than being tapped off-screen and reading as a refusal
+    // nobody delivered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     let item = try required("real-input-listitem", as: "the list item with onPress")
-    let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
+    XCTAssert(
+      item.isHittable,
+      "the item with onPress should be touchable once it is in the tappable band, "
+        + "before any tap is delivered"
+    )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     let inForm = try required("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     XCTAssert(
-      item.isHittable && inForm.isHittable,
-      "both pressable items should be touchable before any tap is delivered"
+      inForm.isHittable,
+      "the item inside the Form should be touchable once it is in the band, before any "
+        + "tap is delivered — inside a row the leaf still has to be reachable (D46 item 2)"
     )
+    let disabled = try required("real-input-listitem-disabled", as: "the disabled list item")
 
     // 1. At rest, so every claim below is about a number that moved.
     XCTAssertEqual(
@@ -6820,6 +6836,7 @@ final class RealInputTests: XCTestCase {
     // 3. Ten taps, ten presses, one per tap (`assertOnePressPerTap` reads the counter
     //    between taps, which is what tells an overshoot from a drop), and the *named* row
     //    is the one that answered.
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     try assertOnePressPerTap("real-input-listitem", echo: Echo.listItemPresses, times: 10, as: "the list item with onPress")
     XCTAssertEqual(
       try read(Echo.listItemLast), "real",
@@ -6828,16 +6845,19 @@ final class RealInputTests: XCTestCase {
 
     // 4. The row's own highlight: UIKit's press colour, sampled the same way the Form's
     //    cell is (same helper, same bounded mid-press wait, same UNSAMPLED discipline).
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     try assertRowShowsCellHighlight("real-input-listitem", echo: Echo.listItemPresses, as: "the list item with onPress")
 
     // 5. The disabled item takes nothing, and the live item then proves the silence was a
     //    refusal rather than a screen that had stopped answering.
+    try scrollIntoView("real-input-listitem-disabled", as: "the disabled list item")
     try assertTapsGoNowhere(
       "real-input-listitem-disabled",
       echoes: [Echo.listItemDisabledEvents, Echo.listItemPresses, Echo.listItemFormPresses],
       taps: 10,
       as: "the disabled list item"
     )
+    try scrollIntoView("real-input-listitem", as: "the list item with onPress")
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-listitem",
@@ -6857,6 +6877,7 @@ final class RealInputTests: XCTestCase {
       inForm.label, "Item inside a Form row",
       "inside a Form.Row the item is still the element that carries its own name"
     )
+    try scrollIntoView("real-input-listitem-in-form", as: "the list item inside a Form.Row")
     try assertOnePressPerTap("real-input-listitem-in-form", echo: Echo.listItemFormPresses, times: 5, as: "the list item inside a Form.Row")
   }
 
