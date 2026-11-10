@@ -223,8 +223,19 @@ passed several rows") and one fling in `scripts/real-input` both hold it to.
   reset and when the view is dropped, so a recycled host never carries a previous
   owner's pager. Going `wheel → menu → wheel` re-seeds an uncontrolled picker at
   `defaultSelectedIndex`, exactly as it does for `radio`.
-- **Accessibility**: see Accessibility below — the drum is one named, scrollable node,
-  and the value a screen reader hears is the row under the centre line.
+- **A drag that begins on the drum rolls the drum.** A `ScrollField` is a pager, and the
+  React Native scroll view above it claims a vertical drag as soon as it passes touch
+  slop — before the pager has seen it — so a drum inside a scrolled page used to receive
+  `ACTION_CANCEL` and never move: the page moved, the drum did not, and no event reached
+  JS. `Modifier.nuiOwnVerticalDrags` asks the parents to stop intercepting for as long as
+  a gesture started inside the drum and releases them on the up, which is the bargain
+  every `UIPickerView` makes: the drum keeps drags begun on it, so a page with a wheel in
+  it is scrolled from somewhere else. Nothing changes for a drum that is not inside a
+  scroller.
+- **Accessibility**: see Accessibility below — the drum is one named node, and the value a
+  screen reader hears is the row under the centre line. It is not `scrollable` and its
+  rows are not in the tree, so the wheel's a11y gap is that it can be *heard* but not
+  moved by a screen reader's own actions (see Limits).
 
 ## Sizing
 
@@ -430,6 +441,17 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   this control depends on it now, and step 8 counts the nodes so a second one cannot
   come back unnoticed), and the merged node is not `focusable`. The functional refusal —
   a real tap on a disabled field opens no menu — is measured too.
+- **The `wheel` is one node that names itself — and says little else.** `ScrollField`
+  publishes a single semantics node for the whole drum (its `clearAndSetSemantics` carries
+  the name, a state description and a progress range), so `accessibilityLabel` lands on
+  the drum rather than beside it. The state description is the option under the centre
+  line, spelled from the same `options` the rows paint rather than the numbers Material's
+  default field would show — read off the semantics `ScrollField` publishes, since
+  `uiautomator dump` does not transcribe `stateDescription`. What the dump does show, on
+  the API 35 emulator: `android.widget.SeekBar`, the name in `content-desc`, and
+  `enabled=false` when the picker is disabled (which `ScrollField` never publishes itself,
+  so the flag is added on the drum's own layout node). Two things it does not say, both
+  measured and both in Limits: `scrollable=false`, and no rows anywhere under it.
 
 ## Behaviour notes
 
@@ -472,6 +494,16 @@ SegmentedControl can say (a SwiftUI *segmented* `Picker` ignores `.tint()`):
   even if strings allowed one. It is as wide as its box and has no width of its own,
   so a `wheel` in a narrow box is a narrow drum, and unlike the menu — which keeps
   drawing a field — a `wheel` with empty `options` draws nothing at all.
+- **The wheel's accessibility gap: it can be heard, not moved.** The drum's node is not
+  `scrollable` and its rows are not in the tree, so TalkBack offers no scroll or
+  row-activation actions on it — a screen-reader user can hear the current option but has
+  no wheel gesture to change it, and nothing outside the control can compare "the row
+  shown" with "the value reported" except the app's own echo. This is `ScrollField`'s
+  tree, not a semantics we omitted; the same is true of iOS's `UIPickerView` rows. A
+  layout where the wheel is the only way to choose needs an alternative (a `menu` Picker,
+  or `RadioGroup`) beside it.
+- **A drum inside a scroller takes the vertical drag** (see Behaviour notes): the page it
+  sits in has to be scrolled from beside it, not over it.
 - **Android has a 280 dp field floor**, so a menu with short options is much wider
   than its title. The width follows the title only above that floor.
 - The menu is the platform's, so its look is the platform's: an iOS 26+ menu is a
