@@ -362,8 +362,14 @@ final class NitroUiListRowView: UIView {
     if model.disabled { traits.insert(.notEnabled) }
     accessibilityTraits = traits
     // The labels inside are not elements: `isAccessibilityElement` on the row hides the
-    // subtree from UIKit's own walk, and the leading image is decoration.
+    // subtree from UIKit's own walk, and the leading image is decoration. The chevron is
+    // a *sibling* of that subtree, so the line above does not reach it and it has to be
+    // stood down by name: `chevron.right` vends its own label ("Forward", measured in
+    // `real-input:ios`'s own node dump), and a row that goes somewhere would otherwise
+    // hand a reader a second stop inside the one element this leaf is (D46 item 1). The
+    // arrow says what the role already says.
     content.isAccessibilityElement = false
+    chevron.isAccessibilityElement = false
   }
 
   override func layoutSubviews() {
