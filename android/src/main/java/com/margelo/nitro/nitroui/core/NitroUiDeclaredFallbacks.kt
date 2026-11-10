@@ -13,6 +13,7 @@ import com.margelo.nitro.nitroui.HybridNitroUiChip
 import com.margelo.nitro.nitroui.HybridNitroUiCheckbox
 import com.margelo.nitro.nitroui.HybridNitroUiSearchField
 import com.margelo.nitro.nitroui.HybridNitroUiIconButton
+import com.margelo.nitro.nitroui.HybridNitroUiStepper
 import com.margelo.nitro.nitroui.HybridNitroUiButtonGroup
 
 /**
@@ -54,6 +55,7 @@ object NitroUiDeclaredFallbacks {
     HybridNitroUiCheckbox.declareFallback()
     HybridNitroUiSearchField.declareFallback()
     HybridNitroUiIconButton.declareFallback()
+    HybridNitroUiStepper.declareFallback()
     HybridNitroUiButtonGroup.declareFallback()
   }
 }

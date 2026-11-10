@@ -92,6 +92,20 @@ run_case "slider-value.test (Swift)" \
       -o '$OUT/slider-value' && '$OUT/slider-value'
   "
 
+# The iOS Picker's variant rule (G26): `radio` is Android's control, so on this
+# platform it resolves to the menu (DECISIONS D38 item 4). It is a host test because
+# the device cannot reach it - `Picker.tsx` resolves the variant per platform before
+# the prop is sent, so the native guard only ever runs for a caller that bypassed the
+# wrapper. The Kotlin twin is `PickerModelTest.theVariantResolvesToTheThreeControls
+# ThisComponentHas`, and the two answers differ by design.
+run_case "picker-variant.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Picker/NitroUiPickerVariant.swift' \
+      '$ROOT/scripts/native-tests/picker-variant.test.swift' \
+      -o '$OUT/picker-variant' && '$OUT/picker-variant'
+  "
+
 # The TextField's `maxLength` cut and text equality (G13). The delegate's cut keeps
 # the part of an *inserted* text that fits; for typing at the end of the text the
 # post-edit backstop gives the same answer, so only mid-text vectors - which no
@@ -118,6 +132,20 @@ run_case "scroll-offset.test (C++)" \
       -I '$ROOT/node_modules/react-native-nitro-modules/cpp/core' \
       -I '$ROOT/node_modules/react-native-nitro-modules/cpp/utils' \
       '$ROOT/scripts/native-tests/scroll-offset.test.cpp' -o '$OUT/scroll-offset' && '$OUT/scroll-offset'
+  "
+
+# The Stepper's Binding rule (G25): what a write from SwiftUI's control is allowed to
+# do with its own stride. The bug this holds down is invisible to a stepped range —
+# which is every on-device tap the suite can cheaply make — and shows only on a range
+# that does not end on a step, where SwiftUI supplies a stride of 1 and the control has
+# to refuse the destination while taking the direction.
+run_case "stepper-binding.test (Swift)" \
+  bash -c "
+    swiftc -Onone \
+      '$ROOT/ios/components/Slider/NitroUiSliderValue.swift' \
+      '$ROOT/ios/components/Stepper/NitroUiStepperBinding.swift' \
+      '$ROOT/scripts/native-tests/stepper-binding.test.swift' \
+      -o '$OUT/stepper-binding' && '$OUT/stepper-binding'
   "
 
 # The accessibility pass's re-read rule (X16 item 4): the bounded "read until two
