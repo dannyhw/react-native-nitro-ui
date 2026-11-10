@@ -128,6 +128,24 @@ using namespace margelo::nitro::nitroui::views;
           : !newViewProps.maxLength.hasSameValue(oldViewProps->maxLength)) {
       swiftPart.setMaxLength(newViewProps.maxLength.get());
     }
+    // keyboardType: string
+    if (oldViewProps == nullptr
+          ? newViewProps.keyboardType.isProvided()
+          : !newViewProps.keyboardType.hasSameValue(oldViewProps->keyboardType)) {
+      swiftPart.setKeyboardType(newViewProps.keyboardType.get());
+    }
+    // autoCapitalize: string
+    if (oldViewProps == nullptr
+          ? newViewProps.autoCapitalize.isProvided()
+          : !newViewProps.autoCapitalize.hasSameValue(oldViewProps->autoCapitalize)) {
+      swiftPart.setAutoCapitalize(newViewProps.autoCapitalize.get());
+    }
+    // autoCorrect: boolean
+    if (oldViewProps == nullptr
+          ? newViewProps.autoCorrect.isProvided()
+          : !newViewProps.autoCorrect.hasSameValue(oldViewProps->autoCorrect)) {
+      swiftPart.setAutoCorrect(newViewProps.autoCorrect.get());
+    }
     // editable: boolean
     if (oldViewProps == nullptr
           ? newViewProps.editable.isProvided()

@@ -54,6 +54,8 @@ import { checkTabTargets, exampleTabs } from './tab-targets.mjs';
 import {
   imeInsetSample,
   imeInsetTop,
+  imeEditorInfo,
+  imeEditorInfoSample,
   imeServiceSample,
   imeServiceShown,
   imeServiceTopPx,
@@ -4680,7 +4682,7 @@ const CHECKS = {
     );
     t.key(KEY_ENTER);
     t.log.checkEquals(
-      'the Search key with an empty query submits nothing and blurs nobody',
+      'a hardware KEY_ENTER (the route the Search key shares) with an empty query submits nothing and blurs nobody',
       t.requireEchoToStay(
         ECHO.searchFocus,
         'focus: 1 blur: 0 submitted: -',
@@ -4722,7 +4724,7 @@ const CHECKS = {
     await t.type('go');
     t.key(KEY_ENTER);
     t.log.checkEquals(
-      'the Search key submits the query and then blurs the field',
+      'a hardware KEY_ENTER (the route the Search key shares) submits the query and then blurs the field',
       t.waitForEcho(
         ECHO.searchFocus,
         'focus: 1 blur: 1 submitted: go',
@@ -4750,8 +4752,185 @@ const CHECKS = {
       ),
       'focus: 2 blur: 2 submitted: go'
     );
-    // Leave no keyboard up for the next check.
     await t.hideKeyboard();
+
+    // 4. The keyboard props (G27), read off the IME's own record of the connection.
+    //
+    // This is the only place the claim "this field opens *that* keyboard" can be graded,
+    // and it is graded on what the app asked for rather than on a screenshot: every field
+    // in the app's tree is an `EditText` whatever keyboard was requested, and one IME's
+    // artwork on one AVD is evidence about that IME. The service's `EditorInfo` is the
+    // request it received, kept by the party that has to act on it — `inputType` carries
+    // the keyboard, `imeOptions` the key.
+    //
+    /** The words a wrong `inputType`/`imeOptions` pair is reported in. */
+    const editorWords = (info) => {
+      const CLASS = { 0x1: 'text', 0x2: 'number', 0x3: 'phone' };
+      const flags = [];
+      if ((info.inputType & 0xf) === 0x1) {
+        if (info.inputType & 0x1000) flags.push('cap-characters');
+        if (info.inputType & 0x2000) flags.push('cap-words');
+        if (info.inputType & 0x4000) flags.push('cap-sentences');
+        if (info.inputType & 0x8000) flags.push('auto-correct');
+      }
+      if (info.inputType & 0x80000) flags.push('no-suggestions');
+      if ((info.inputType & 0xf) === 0x2 && info.inputType & 0x2000) {
+        flags.push('decimal');
+      }
+      const ACTIONS = {
+        0x0: 'default',
+        0x1: 'none',
+        0x2: 'go',
+        0x3: 'search',
+        0x4: 'send',
+        0x5: 'next',
+        0x6: 'done',
+        0x7: 'previous',
+      };
+      return (
+        `class=${CLASS[info.inputType & 0xf] ?? `0x${String((info.inputType & 0xf).toString(16))}`} ` +
+        `variation=0x${String((info.inputType & 0xff0).toString(16))} ` +
+        `flags=${flags.join('+') || 'none'} ` +
+        `action=${ACTIONS[info.imeOptions & 0xf] ?? `0x${String((info.imeOptions & 0xf).toString(16))}`}`
+      );
+    };
+
+    // The service only holds an editor record while an IME session is up, and every AVD
+    // in the pool has a hardware keyboard, which Android answers with a floating toolbar
+    // and no session at all. So the record is read on a device that is showing a real
+    // keyboard, and the preference is put back afterwards: the same wrapper the Form's
+    // keyboard case uses.
+    await t.withFullSoftwareKeyboard(async () => {
+      // The field with no keyboard prop at all, first, because "an app that passes nothing
+      // gets what v1 asked for" is the claim the whole change rests on. v1 named no keyboard
+      // and Compose filled that in as the plain text keyboard with autocorrection asked for;
+      // v2 says the same three things through props, and this is the byte-for-byte check
+      // that they are still the same three things.
+      await t.tapNode(await t.requireControlOnScreen('Typing search field'));
+      const untouched = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x1,
+        'the field with no keyboard prop to be a text keyboard to the IME'
+      );
+      t.log.checkEquals(
+        'a field with no keyboard prop still asks for the plain text keyboard, with ' +
+          'autocorrection and the Search key',
+        editorWords(untouched),
+        'class=text variation=0x0 flags=auto-correct action=search'
+      );
+
+      // A keyboard prop, then: the number field has to reach the IME as a number keyboard,
+      // and the key that submits a query must still be the Search key on it.
+      //
+      // The keyboard goes down first, for the same reason the check started with it down:
+      // `requireControlOnScreen` asks whether the row is on the *window*, and a row behind
+      // the keys answers yes — so a tap aimed at it would press the IME instead. Both of the
+      // two fields below sit lower on the screen than the one above them.
+      await t.hideKeyboard();
+      await t.tapNode(await t.requireControlOnScreen('Number search field'));
+      const number = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x2,
+        'the number-pad field to be a number keyboard to the IME'
+      );
+      t.log.checkEquals(
+        'keyboardType="number-pad" reaches the IME as a number keyboard, Search key ' +
+          'included',
+        editorWords(number),
+        'class=number variation=0x0 flags=none action=search'
+      );
+      await t.type('123');
+      t.log.checkEquals(
+        'keys reach the number field, and React sees the query',
+        t.waitForEcho(
+          ECHO.searchNumber,
+          'number: 123 submitted: -',
+          'the digits typed into the number field'
+        ),
+        'number: 123 submitted: -'
+      );
+      t.key(KEY_ENTER);
+      t.log.checkEquals(
+        'and a hardware KEY_ENTER on it submits the query through the Search action',
+        t.waitForEcho(
+          ECHO.searchNumber,
+          'number: 123 submitted: 123',
+          'the number field to submit'
+        ),
+        'number: 123 submitted: 123'
+      );
+
+      // The keyboard that carries all three props, and the one whose Return key every
+      // platform draws: `autoCorrect={false}` has to take the autocorrection flag back off
+      // the request, which is the half of the mapping a screenshot could never show.
+      await t.hideKeyboard();
+      await t.tapNode(await t.requireControlOnScreen('Email search field'));
+      const email = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xff0) === 0x20,
+        'the email-pad field to be an email keyboard to the IME'
+      );
+      t.log.checkEquals(
+        'keyboardType="email-address" with autoCorrect={false} reaches the IME as an email ' +
+          'keyboard that refuses autocorrection, Search key included',
+        editorWords(email),
+        'class=text variation=0x20 flags=none action=search'
+      );
+      await t.type('a@b');
+      t.log.checkEquals(
+        'keys reach the email field, and React sees the query',
+        t.waitForEcho(
+          ECHO.searchEmail,
+          'email: a@b submitted: -',
+          'the query typed into the email field'
+        ),
+        'email: a@b submitted: -'
+      );
+      t.key(KEY_ENTER);
+      t.log.checkEquals(
+        'and a hardware KEY_ENTER still submits through the Search action on a keyboard the app chose',
+        t.waitForEcho(
+          ECHO.searchEmail,
+          'email: a@b submitted: a@b',
+          'the email field to submit'
+        ),
+        'email: a@b submitted: a@b'
+      );
+
+      // A keyboard prop changed while the field holds focus. The IME's own record is the
+      // witness: `onCreateInputConnection` would build a fresh `EditorInfo` from the new
+      // options whether or not the running session was restarted, but the record the
+      // service holds only changes when the session is started again.
+      await t.hideKeyboard();
+      await t.tapNode(await t.requireControlOnScreen('Switching search field'));
+      const before = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x1,
+        'the switching field to open as a text keyboard'
+      );
+      t.log.checkEquals(
+        'the switching field opens with the text keyboard it was given',
+        editorWords(before),
+        'class=text variation=0x0 flags=auto-correct action=search'
+      );
+      t.log.checkEquals(
+        'two seconds after focus the screen moved the prop to number-pad, focus kept',
+        t.waitForEcho(
+          ECHO.searchSwitching,
+          'switching: number-pad',
+          'the prop to change'
+        ),
+        'switching: number-pad'
+      );
+      const after = await t.imeEditorInfoWhen(
+        (info) => (info.inputType & 0xf) === 0x2,
+        'the open keyboard to become a number keyboard'
+      );
+      t.log.checkEquals(
+        'keyboardType changed while focused restarts the input session: the IME is ' +
+          'handed a number keyboard without the field losing focus',
+        editorWords(after),
+        'class=number variation=0x0 flags=none action=search'
+      );
+      // Leave no keyboard up for the next check.
+      await t.hideKeyboard();
+    });
   },
 
   'picker': async (t) => {
@@ -7313,6 +7492,29 @@ class DeviceHarness {
   }
 
   /**
+   * The `EditorInfo` the IME service holds for the connection in front of it, or `null`.
+   *
+   * This is the only witness for "which keyboard did the app ask for": the app's own tree
+   * calls every field an `EditText` whatever keyboard was requested, and a screenshot
+   * proves what one IME drew rather than what the app asked for. The service's record is
+   * the app's request, kept by the party that has to act on it.
+   *
+   * @returns {{inputType: number, imeOptions: number, sample: string} | null}
+   */
+  imeEditorInfo() {
+    return imeEditorInfo(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
+   * What the dump said about the editor, for the failure that has to be fixable.
+   *
+   * @returns {string}
+   */
+  imeEditorInfoSample() {
+    return imeEditorInfoSample(this.shell('dumpsys input_method').stdout);
+  }
+
+  /**
    * Whether the IME is asked to show on a device that also has a hardware keyboard.
    *
    * @returns {'0' | '1' | 'unset'}
@@ -8533,6 +8735,59 @@ function makeContext(harness, log) {
      */
     imeFrameSample() {
       return harness.imeFrameSample();
+    },
+
+    /**
+     * The IME's record of the focused field's connection, right now, or `null` when no
+     * connection is up. See `DeviceHarness.imeEditorInfo`.
+     *
+     * @returns {{inputType: number, imeOptions: number, sample: string} | null}
+     */
+    imeEditorInfo() {
+      return harness.imeEditorInfo();
+    },
+
+    /**
+     * @returns {string} what the dump said about the editor record
+     */
+    imeEditorInfoSample() {
+      return harness.imeEditorInfoSample();
+    },
+
+    /**
+     * Wait for the IME's editor record to satisfy `wanted`, and hand it back.
+     *
+     * A tap that focuses a field and the service's record of the connection it opened are
+     * not the same instant, so this is polled; the abort says what the dump *did* say, so a
+     * field that never got its keyboard is distinguishable from a dump format that moved.
+     *
+     * @param {(info: {inputType: number, imeOptions: number}) => boolean} wanted
+     * @param {string} what what the check was waiting to see
+     * @returns {Promise<{inputType: number, imeOptions: number, sample: string}>}
+     */
+    async imeEditorInfoWhen(wanted, what) {
+      /** @type {{inputType: number, imeOptions: number, sample: string} | null} */
+      let seen = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const now = harness.imeEditorInfo();
+        if (now != null) {
+          seen = now;
+          if (wanted(now)) {
+            return now;
+          }
+        }
+        await sleep(250);
+      }
+      if (seen == null) {
+        return log.abort(
+          `${what}: the IME never reported a connection at all - ` +
+            harness.imeEditorInfoSample()
+        );
+      }
+      // The service answered, and answered something else: that is the finding, so the
+      // record goes back to the check, which fails on the words the pair spells rather
+      // than on a missing record that would read like a broken scrape.
+      return seen;
     },
 
     /**

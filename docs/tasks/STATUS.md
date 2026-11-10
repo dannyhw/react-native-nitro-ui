@@ -117,7 +117,7 @@
 | G25 | Stepper (Q7 Appendix E, D38 item 1, D43) | Apex | Opus | merged (PR #55; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | G26 | Picker `variant="radio"` (Q7 Appendix D, D38 item 4) | Apex | Opus | merged (PR #56; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
 | X22 | iOS ContextMenu a11y stops read 4 instead of 2 on unrelated branches (blocks G25 and G26 merges) | Apex | Opus | merged (PR #57, #59; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | merge round (branch task/G27-merge: main merged, README conflict resolved keeping both; gates running) |
+| G27 | SearchField v2: keyboard props (Q8 row 14, D38 item 2) | Apex, then Opus (Apex outage) | Opus | merged (PR #58; 1 impl + 1 fix round; merge gates 5/5 on code tree `89018eda`) |
 | X23 | Android: a recycled Form keeps its scroll offset after other suites run (G24 test, order-dependent) | Apex | Opus | merged (PR #60; combined merge of G25, G26, X22's fix round and X23, gates 5/5 on code tree `1688c7b7`) |
-| G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | fix round 1 (PR #61; review: rows flush to the sheet edge with no gaps; row-level refusal untested; report reads arm a full-window probe; probe flag can stick; changeset internals) |
+| G28 | ConfirmationDialog rows: Material 3 Expressive list items on Android (Q8 row 16, D40) | Apex | Opus | merge round (fix round 1 done: inset + gaps, row refusal proven by dump and probe, probe armed only on request; gates green except real-input:ios, owed at merge) |
 | G29 | Real Android wheels: Picker `wheel` (`ScrollField`) and DatePicker time wheel (`TimeScroll`) (Q8 rows 7-8, D40 pass 3 A) | Apex | Opus | running |

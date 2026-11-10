@@ -63,6 +63,12 @@ namespace margelo::nitro::nitroui {
       virtual void setPlaceholder(const std::variant<nitro::NullType, std::string>& placeholder) = 0;
       virtual std::variant<nitro::NullType, double> getMaxLength() = 0;
       virtual void setMaxLength(const std::variant<nitro::NullType, double>& maxLength) = 0;
+      virtual std::string getKeyboardType() = 0;
+      virtual void setKeyboardType(const std::string& keyboardType) = 0;
+      virtual std::string getAutoCapitalize() = 0;
+      virtual void setAutoCapitalize(const std::string& autoCapitalize) = 0;
+      virtual bool getAutoCorrect() = 0;
+      virtual void setAutoCorrect(bool autoCorrect) = 0;
       virtual bool getEditable() = 0;
       virtual void setEditable(bool editable) = 0;
       virtual std::variant<nitro::NullType, std::string> getTestID() = 0;
