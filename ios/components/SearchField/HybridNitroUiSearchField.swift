@@ -12,10 +12,16 @@
 //  report, and a clear button of UIKit's own. `NitroUiTextEditing.swift` holds the
 //  bodies both controls run, and `TextFieldModel` is the same model, so the only
 //  thing this file decides is what a *search* field looks like: one line, the Search
-//  key, no auto-capitalisation, a clear button while editing, and no placeholder
+//  key, a clear button while editing, and no placeholder
 //  nobody asked for — UIKit sets none on the bare field (it draws "Search" only inside
 //  a search bar), so the default is read back from the control at init and stays empty
 //  today; `docs/components/search-field.md` carries the claim the harness asserts.
+//
+//  The three keyboard props are TextField's, applied through the same
+//  `NitroUiTextTraits.Resolved` resolver, and their defaults are what v1 fixed them
+//  to (`applySearchPresets()`), which is why an app that passes none gets the field it
+//  always got. A change while the field is focused reloads the open keyboard, because
+//  a `UITextInputTraits` setter does not reach one that is already up.
 //
 //  It is its own Hybrid View rather than `variant="search"` on TextField because a
 //  declared fallback is keyed by component (docs/architecture/sizing.md §5): as a
@@ -298,6 +304,7 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
   private var stateSnapshot = NitroUiSearchFieldTestState(
     text: "", focused: false, composing: false, nativeEvents: 0, jsEvents: 0, lastWrite: "none",
     editable: true, maxLength: -1, placeholder: "", accessibilityLabel: "", returnKeyType: "search",
+    keyboardType: "default", autoCapitalize: "none", autoCorrect: true,
     expanded: false, canClear: false)
 
   override init() {
@@ -321,9 +328,15 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     return host.model
   }
 
-  /// The four traits a search field fixes, as the model's own values - so the shared
-  /// trait resolver (`NitroUiTextTraits.Resolved`) is still the one thing that decides
-  /// what the control is configured with, and no prop can move them (D38 item 2).
+  /// The traits a search field fixes or defaults, as the model's own values - so the
+  /// shared trait resolver (`NitroUiTextTraits.Resolved`) stays the one thing that
+  /// decides what the control is configured with.
+  ///
+  /// `returnKeyType`, `multiline` and `secureTextEntry` have no prop and cannot move
+  /// (D38 item 2). The other three are a search field's *defaults*: they are what v1
+  /// fixed them to, so a field whose app passes no keyboard prop is configured
+  /// exactly as it was, and this is also what a recycled field comes back with
+  /// (`prepareForRecycle`) rather than `TextFieldModel`'s own text-field defaults.
   private func applySearchPresets() {
     model.returnKeyType = "search"
     model.keyboardType = "default"
@@ -370,6 +383,35 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
       let next = newValue.asType(String.self)
       guard next != model.placeholder else { return }
       model.placeholder = next
+      host.markDirty()
+    }
+  }
+
+  var keyboardType: String {
+    get { model.keyboardType }
+    set {
+      // TextField's setter, verbatim: store, mark dirty, let `nuiApply()` decide what
+      // the control does with it - including reloading a keyboard that is already up.
+      guard newValue != model.keyboardType else { return }
+      model.keyboardType = newValue
+      host.markDirty()
+    }
+  }
+
+  var autoCapitalize: String {
+    get { model.autoCapitalize }
+    set {
+      guard newValue != model.autoCapitalize else { return }
+      model.autoCapitalize = newValue
+      host.markDirty()
+    }
+  }
+
+  var autoCorrect: Bool {
+    get { model.autoCorrect }
+    set {
+      guard newValue != model.autoCorrect else { return }
+      model.autoCorrect = newValue
       host.markDirty()
     }
   }
@@ -513,6 +555,10 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     // Back to a search field's own traits: the model is shared with TextField, and its
     // defaults are a text field's.
     applySearchPresets()
+    // What the reset left the keyboard as, read off the model after the fact: the harness
+    // cannot read between this and the next owner's first prop write, which would mask a
+    // reset that kept the previous owner's keyboard.
+    resetKeyboard = "\(model.keyboardType)/\(model.autoCapitalize)/\(model.autoCorrect)"
     // The control outlives the mount (the hosting controller is the expensive part the
     // pool keeps), so its text and its placeholder go with the model's - the
     // placeholder returns to UIKit's own, whatever the previous row asked for.
@@ -548,6 +594,17 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
       placeholder: control?.placeholder ?? "",
       accessibilityLabel: control?.accessibilityLabel ?? "",
       returnKeyType: model.returnKeyType,
+      // The three keyboard traits read back from the control, not from the model, so
+      // what JS sees is what UIKit was told (`nuiApply()` is what writes them, and a
+      // prop that never reached the field is visible here). With no control built yet
+      // the model's own value is the honest answer: it is what `nuiApply()` will apply.
+      keyboardType: control.map { NitroUiTextTraits.name(of: $0.keyboardType) }
+        ?? model.keyboardType,
+      autoCapitalize: control.map { NitroUiTextTraits.name(of: $0.autocapitalizationType) }
+        ?? model.autoCapitalize,
+      autoCorrect: NitroUiTextTraits.autoCorrect(
+        control?.autocorrectionType ?? (model.autoCorrect ? .default : .no)
+      ),
       // iOS has no expanded state; the field is always the collapsed field.
       expanded: false,
       canClear: (control?.nuiAllowsClear ?? false) && !(control?.nuiText.isEmpty ?? true))
@@ -613,7 +670,10 @@ final class HybridNitroUiSearchField: HybridNitroUiSearchFieldSpec, RecyclableVi
     }
   }
 
+  /// The keyboard `prepareForRecycle` last reset to, for `nuiTestLifetimeReport`.
+  private var resetKeyboard = "never"
+
   func nuiTestLifetimeReport() throws -> String {
-    return host.lifetimeReport()
+    return "\(host.lifetimeReport()) resetKeyboard=\(resetKeyboard)"
   }
 }

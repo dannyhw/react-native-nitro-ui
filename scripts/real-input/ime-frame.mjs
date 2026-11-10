@@ -172,3 +172,64 @@ export function imeServiceSample(text) {
     ? `${shown}, no "Last computed insets:" block with visibleTopInsets`
     : `${shown}, ${insets[0].split('\n').pop().trim().slice(0, 160)}`;
 }
+
+/**
+ * The `EditorInfo` the input method service is holding for the session in front of it.
+ *
+ * A control's keyboard claim — "a number field opens a number keyboard", "the Return key
+ * is still the Search key" — is a claim about what the *IME was told*, and the app's own
+ * view tree cannot answer it: a Compose field draws its own text input and keeps the
+ * connection on the compose view, and neither an accessibility dump nor a screenshot says
+ * which keyboard the IME was asked for. The service's own dump does, because the record is
+ * the state the service runs on.
+ *
+ * The dump is read where the record actually is. `dumpsys input_method` is the *manager's*
+ * dump, and the manager keeps the editor record in its proto dump only: its text dump
+ * forwards to the bound IME, which prints its own state, and there `EditorInfo` appears as
+ * an `mInputEditorInfo:` line followed by `EditorInfo.dump()` — whose first line is
+ * `inputType=0x… imeOptions=0x… privateImeOptions=…`. `mInputEditorInfo: null` is that
+ * section with no record: a field focused with no session the IME has taken.
+ *
+ * @param {string} text the output of `dumpsys input_method`
+ * @returns {{inputType: number, imeOptions: number, sample: string} | null} `null` when
+ * the dump carries no editor record — no session up, or the line moved.
+ */
+export function imeEditorInfo(text) {
+  const record = String(text).match(
+    /mInputEditorInfo:\s*\n\s*inputType=(0x[0-9a-fA-F]+)\s+imeOptions=(0x[0-9a-fA-F]+)/
+  );
+  if (record == null) {
+    return null;
+  }
+  return {
+    inputType: Number.parseInt(record[1], 16),
+    imeOptions: Number.parseInt(record[2], 16),
+    sample: record[0].replace(/\s+/g, ' ').slice(0, 200),
+  };
+}
+
+/**
+ * What the dump said about the editor, for the failure that has to be fixable: the same
+ * rule every other scrape here follows, that a format change fails loudly rather than
+ * turning an absent keyboard into a passing claim.
+ *
+ * @param {string} text the output of `dumpsys input_method`
+ * @returns {string}
+ */
+export function imeEditorInfoSample(text) {
+  const found = imeEditorInfo(text);
+  if (found != null) {
+    return found.sample;
+  }
+  const dump = String(text);
+  const named = dump.match(/mInputEditorInfo:[^\n]*(?:\n[ \t]*[^\n]*){0,2}/);
+  if (named != null) {
+    return named[0].replace(/\s+/g, ' ').slice(0, 200);
+  }
+  const service = dump.match(
+    /Input method service state for[^\n]*|No input method service\./
+  );
+  return service == null
+    ? 'the dump has no IME service section at all, so no editor record either'
+    : `no editor record, and the service section reads "${service[0]}"`;
+}

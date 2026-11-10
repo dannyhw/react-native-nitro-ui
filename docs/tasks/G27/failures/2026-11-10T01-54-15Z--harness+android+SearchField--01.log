@@ -1,0 +1,81 @@
+# Failure excerpt — harness:android:SearchField
+
+- Ran: 2026-11-10T01:54:15.980Z on code tree `fc7b926cc3d4` at HEAD `d067f6b` (branch `task/G27-search-field-keyboard`)
+- Command: `node ../scripts/harness.mjs --harnessRunner android SearchField`
+- Result: fail, exit 1, 45482 ms
+- Load: start 9.56, end 26.21, median 19.52, max 26.21
+- Device: android / device `emulator-5570` / lease `G27-ul745`
+- Full log: `task/G27-search-field-keyboard/harness+android+SearchField-2026-11-10T01-54-15.980Z.log` (<store>/task/G27-search-field-keyboard/harness+android+SearchField-2026-11-10T01-54-15.980Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+- `FAIL __tests__/SearchField.harness.tsx`
+- `● SearchField › takes no submit from a Return pressed on a query it has just cleared`
+- `expected [ 'change:' ] to deeply equal []`
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G27-search-field-keyboard/harness+android+SearchField-2026-11-10T01-54-15.980Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (3AE7EE8D-543D-445D-BC4A-C7A6CDFF5646) (Booted) 
+  |     nitro-ui A (<other device>) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G27-ul745 (still live)
+  |   G27-ul745                G27          both              pair-b
+  |   G25G26-w18jy             G25G26       both              pair-a
+gate: load
+  |   load1 at the moment of failure: 26.21 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5570)
+gate: ---- end device context ----
+```
+
+## Last 33 log line(s)
+
+```
+harness: ~/Library/Application Support/fnm/node-versions/v24.21.0/installation/bin/node <repo>/node_modules/react-native-harness/bin.js --harnessRunner android SearchField
+app is fresh: <repo>/example/android/app/build/outputs/apk/debug/app-debug.apk (tree fc7b926cc3d4, 24 components registered)
+lease: nitroui_b boots on console port 5570 (serial emulator-5570)
+harness: wall-clock gates off (HARNESS_TIMING=unset) · load average 9.56/30.70 over 10 cores · a gate refuses at load1 >= 10 · published to harness-timing/state.json
+suite-timing: writing per-suite durations to <store>/task/G27-search-field-keyboard/harness+android+SearchField-2026-11-10T01-54-15.980Z.log.suites.json
+app-launch: the app runs at TZ=Europe/Lisbon locale=en-US — NITRO_UI_TEST_LOCALE/NITRO_UI_TEST_TZ, pinned by this file (iOS launch arguments; the emulator takes neither, its zone is a device setting)
+HARNESS Preparing to run tests using android runner
+
+HARNESS Reusing Metro cache for android
+
+HARNESS Runner android ready
+
+FAIL __tests__/SearchField.harness.tsx
+  ● SearchField › takes no submit from a Return pressed on a query it has just cleared
+
+    expected [ 'change:' ] to deeply equal []
+
+      [0m [90m 611 |[39m     [90m// The clear is the last thing this field is told: no `submit:` carrying an empty[39m
+       [90m 612 |[39m     [90m// query, and no `blur` either - refusing a submit does not send the field away.[39m
+      [31m[1m>[22m[39m[90m 613 |[39m     expect(eventsOf([32m'recleared'[39m)[33m.[39mslice(before))[33m.[39mtoEqual([])[33m;[39m
+       [90m     |[39m                                                        [31m[1m^[22m[39m
+       [90m 614 |[39m     expect(([36mawait[39m handleOf([32m'recleared'[39m))[33m.[39mnuiTestState()[33m.[39mfocused)[33m.[39mtoBe([36mtrue[39m)[33m;[39m
+       [90m 615 |[39m   })[33m;[39m
+       [90m 616 |[39m[0m
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 15 passed, 16 total
+Snapshots:   0 total
+Time:        43.298 s
+Ran all test suites matching SearchField.
+
+
+
+```

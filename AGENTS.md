@@ -145,7 +145,9 @@ fix it, investigate it further, or widen the task. Tasks have a hard round cap (
 
 **Always address Android devices by serial** (`adb -s emulator-55xx`, `ANDROID_SERIAL`): every adb
 server — including your private one — also sees the human's `emulator-5560`, so an unqualified `adb`
-command can reach it.
+command can reach it. **Never `adb kill-server` or `adb start-server` on the default port (5037)**: that
+server is the human's, and restarting it drops their own adb session. Use your lease's
+`ANDROID_ADB_SERVER_PORT`, which is yours alone.
 
 **Never `pkill`/`killall` at all** — not by name (logcat, emulator, node, Metro…), not by pattern (`-f`), not by
 parent (`pkill -P 1` signals every daemon launchd started: on 2026-11-03 it powered off every simulator and emulator on
