@@ -6879,16 +6879,23 @@ final class RealInputTests: XCTestCase {
       as: "the disabled list item"
     )
     try scrollIntoView("real-input-listitem", as: "the list item with onPress")
+    // The wanted count is read from the counter rather than hard-coded. The held press in
+    // the highlight check above is itself a press this counter counted, so the absolute
+    // number is a fact about how many checks ran above; "one more press after one more
+    // tap" is the claim. Android's half hard-coded 11 and its first real run arrived at 12.
+    let beforeBarrier = Int(try read(Echo.listItemPresses)) ?? -1
+    let wantedBarrier = String(beforeBarrier + 1)
     XCTAssertEqual(
       try tapUntilValue(
         "real-input-listitem",
         echo: Echo.listItemPresses,
-        expected: "11",
+        expected: wantedBarrier,
         as: "the list item with onPress",
         waitingFor: "the barrier tap after the disabled item"
       ),
-      "11",
-      "the live item, tapped the same way, should still answer"
+      wantedBarrier,
+      "the live item, tapped the same way, should still answer (\(beforeBarrier) -> "
+        + "\(wantedBarrier))"
     )
 
     // 6. Inside a `Form.Row` the leaf is the other code path: the cell, the shape and the
