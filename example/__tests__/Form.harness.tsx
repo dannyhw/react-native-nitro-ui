@@ -1128,9 +1128,10 @@ describe('Form (G24)', () => {
       return report;
     };
 
-    const { rerender } = await render(
+    const surface = await render(
       <Churn on={true} parts={PARTS} perSection={PER_SECTION} />
     );
+    const { rerender } = surface;
     for (let cycle = 1; cycle <= CYCLES; cycle += 1) {
       const step = `cycle ${String(cycle)}`;
       const churn = await handleOf(
@@ -1194,6 +1195,26 @@ describe('Form (G24)', () => {
     trace('after the loop', last);
     expect(num(last, 'orphans')).toBe(0);
     if (IOS) expect(num(last, 'stale')).toBe(0);
+
+    // The seat the churn leaves behind, taken by someone else. What the loop ends with is a
+    // list that may still hold items its Form has forgotten, and the abort is not in the
+    // tearing down — it is in the *next* mount, when UIKit asks this Form's provider for a cell
+    // at an index path that has nothing behind it. What that answer is made of is the whole
+    // claim (X25 round 1): a cell the list has no registration for aborts the app in
+    // UIKit's own cell-creation path, so the case cannot stop at "the loop survived".
+    surface.unmount();
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    delete forms.churn;
+    const next = await render(
+      <Churn on={true} parts={PARTS - 1} perSection={PER_SECTION} />
+    );
+    await handleOf(() => forms.churn, 'the Form that took the churn seat');
+    const refilled = await settledTo(
+      PARTS - 1,
+      'the Form that took the churn seat'
+    );
+    expect(num(refilled, 'orphans')).toBe(0);
+    next.unmount();
   });
 
   it('composes a recycled Section, and drops the band of a gone title', async () => {
