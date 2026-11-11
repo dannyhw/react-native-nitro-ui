@@ -58,6 +58,7 @@ const TAB_LABEL = {
   form: 'Form',
   stepper: 'Stepper',
   buttongroup: 'Groups',
+  listitem: 'List items',
 };
 
 function adb(args) {

@@ -2,8 +2,11 @@ import {
   createContext,
   Fragment,
   isValidElement,
+  useCallback,
   useContext,
   useMemo,
+  useReducer,
+  useRef,
   useState,
   type JSX,
   type ReactNode,
@@ -89,6 +92,75 @@ interface FormLayout {
 const EMPTY_LAYOUT: FormLayout = { contentWidth: 0 };
 
 const FormLayoutContext = createContext<FormLayout>(EMPTY_LAYOUT);
+
+/**
+ * Whether the nearest wrapper above is already a `Form.Row`.
+ *
+ * Only {@link RowRoot} sets it, for its own children. It exists so a Row written inside a Row
+ * says so instead of drawing a cell inside a cell: on iOS the inner row's content ends up in
+ * the outer cell and the inner row never reaches a cell of its own; on Android it gets a row
+ * rect inside a row rect.
+ */
+/**
+ * Whether the nearest wrapper above is a {@link RowRoot}.
+ *
+ * @internal Not app API (DECISIONS D14): exported for `ListItem`, whose row content
+ * has to stand down inside a row — the cell has already paid for its insets, its
+ * shape and its highlight, and a leaf that paid for them again draws a band inside a
+ * band (DECISIONS D46 item 2). An app never passes this; the context is the whole
+ * mechanism, so a `ListItem` in a `Form.Row` is right without being configured.
+ */
+export function useInsideFormRow(): boolean {
+  return useInsideRow();
+}
+
+/**
+ * What an item inside a {@link RowRoot} hands *up* to the row: the press it wants the
+ * cell to own, and whether it is disabled.
+ *
+ * `null` outside a row. The callback is stable, so an item can report from an effect and
+ * clear the report on unmount without a re-render loop; the row ignores a report that
+ * says what it already had.
+ *
+ * This is the other half of {@link useInsideFormRow}. D46 item 2 says the row is the cell
+ * and the item is content - which is also what the README tells an app to write
+ * (`list-item-in-form`: a `<Form.Row>` with no handler, holding a `<ListItem onPress>`).
+ * A leaf that keeps that handler for itself can obey every other half of the rule - no
+ * insets, no shape, no highlight of its own - and still press in silence, because the
+ * thing that draws a pressed row is the cell, and the cell only paints for a row it was
+ * told is pressable. So the handler travels up, the cell presses, and the cell highlights.
+ *
+ * @internal Not app API (DECISIONS D14): exported for `ListItem`, which reports through it.
+ */
+const RowItemPressContext = createContext<RowItemPressReporter | null>(null);
+
+/** Report the press an item wants its `Form.Row` to own. @internal Not app API (D14). */
+export type RowItemPressReporter = (
+  onPress: (() => void) | null,
+  disabled: boolean
+) => void;
+
+/**
+ * The reporter a `ListItem` hands its press to, or `null` outside a {@link RowRoot}.
+ *
+ * @internal Not app API (DECISIONS D14).
+ */
+export function useFormRowItemPressReporter(): RowItemPressReporter | null {
+  return useContext(RowItemPressContext);
+}
+
+/**
+ * Said once per process when a row and one of its items both have an `onPress`, which is
+ * the shape the warning exists to point at rather than a failure: the row's own handler
+ * wins (the cell is the touch target), and the item's is then decoration.
+ */
+const BOTH_HANDLERS_WARNING =
+  'nitro-ui: a `Form.Row` with an `onPress` has a `ListItem` inside it with an `onPress` ' +
+  'too. The row is the cell and the cell is the touch target, so the row\u2019s handler is ' +
+  'the one that fires and the item\u2019s is never called. Wire the press on one of the two.';
+
+/** Set the first time {@link BOTH_HANDLERS_WARNING} is logged. */
+let warnedBothHandlers = false;
 
 /** What a Row inside a Row is told, once per process — a 50-row list should not log 50 lines. */
 const NESTED_ROW_WARNING =
@@ -498,8 +570,44 @@ function RowRoot({
   /** The segmented gap, set by {@link wrapRows} — not app API. */
   gap?: number;
 }) {
+  // What the item inside this row reported (`RowItemPressContext`). A ref plus a bump,
+  // rather than state carrying a function: the report arrives from the child's effect, and
+  // the only thing that has to change is what this row hands its own native view.
+  const reported = useRef<{ onPress: (() => void) | null; disabled: boolean }>({
+    onPress: null,
+    disabled: false,
+  });
+  const [, repaintRow] = useReducer((n: number) => n + 1, 0);
+  const reportItemPress = useCallback<RowItemPressReporter>(
+    (next, disabled) => {
+      const current = reported.current;
+      if (current.onPress === next && current.disabled === disabled) {
+        return;
+      }
+      reported.current = { onPress: next, disabled };
+      repaintRow();
+    },
+    []
+  );
+  // The cell presses for whichever of the two the app wired it for. The row's own handler
+  // wins outright: a row asked to do something itself is not made inert by a disabled item
+  // inside it. An item's handler is used only when the row has none, and a disabled item
+  // contributes nothing - the row stops being pressable and stops highlighting, which is
+  // what "a tap on a disabled item does nothing" has to mean when the tap lands on the cell.
+  const reportedItem = reported.current;
+  if (
+    __DEV__ &&
+    onPress != null &&
+    reportedItem.onPress != null &&
+    !warnedBothHandlers
+  ) {
+    warnedBothHandlers = true;
+    console.error(BOTH_HANDLERS_WARNING);
+  }
+  const fromItem = reportedItem.disabled ? null : reportedItem.onPress;
+  const effectiveOnPress = onPress ?? fromItem;
   const press = useStableCallback(
-    onPress ?? onPressNotProvided
+    effectiveOnPress ?? onPressNotProvided
   ) as NitroCallbackProp<() => void>;
   const hybridRefCallback = useStableCallback(hybridRef);
   // The row centres its own content (`alignItems: 'center'` on the row style, which the app's
@@ -540,13 +648,15 @@ function RowRoot({
       style={[IOS ? styles.iosRow : styles.androidRow, box, style]}
       accessory={accessory}
       selected={selected}
-      pressable={onPress != null}
+      pressable={effectiveOnPress != null}
       nuiPerfId={null}
       onPress={press}
       hybridRef={hybridRefCallback ?? undefined}
     >
       <InsideRowContext.Provider value={true}>
-        {children}
+        <RowItemPressContext.Provider value={reportItemPress}>
+          {children}
+        </RowItemPressContext.Provider>
       </InsideRowContext.Provider>
     </NativeNitroUiFormRow>
   );

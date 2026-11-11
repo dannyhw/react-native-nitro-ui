@@ -1,0 +1,24 @@
+{
+  "uiViewClassName": "NitroUiListItem",
+  "supportsRawText": false,
+  "bubblingEventTypes": {},
+  "directEventTypes": {},
+  "validAttributes": {
+    "title": true,
+    "subtitle": true,
+    "value": true,
+    "systemImage": true,
+    "androidIcon": true,
+    "accessory": true,
+    "pressable": true,
+    "insideRow": true,
+    "disabled": true,
+    "testID": true,
+    "accessibilityLabel": true,
+    "nuiPerfId": true,
+    "onPress": true,
+    "nuiSizingKey": true,
+    "nuiSizingId": true,
+    "hybridRef": true
+  }
+}

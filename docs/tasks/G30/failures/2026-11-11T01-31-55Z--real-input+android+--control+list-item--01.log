@@ -1,0 +1,69 @@
+# Failure excerpt — real-input:android:--control:list-item
+
+- Ran: 2026-11-11T01:31:55.744Z on code tree `6bf420771372` at HEAD `01459b4` (branch `task/G30-list-item`)
+- Command: `node scripts/real-input/android.mjs --control list-item`
+- Result: fail, exit 1, 548 ms
+- Load: start 3.83, end 3.83, median 3.83, max 3.83
+- Device: android / device `emulator-5574` / lease `G30-16rcb`
+- Full log: `task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log` (<store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state
+  | device
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-16rcb (still live)
+  |   G30-16rcb                G30          both              pair-a
+  |   G31-5oft1                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 3.83 (the ledger line carries the samples across the whole run)
+gate: logcat --pid nitroui.example [unavailable]
+  | (no nitroui.example process on emulator-5574)
+gate: ---- end device context ----
+```
+
+## Last 23 log line(s)
+
+```
+gate: claimed avd:nitroui_a for this run
+gate: real-input:android:--control:list-item
+gate: node scripts/real-input/android.mjs --control list-item (cwd .)
+gate: code tree 6bf420771372 at HEAD 01459b4d
+gate: git tree b91781dfc786
+gate: log task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log
+gate:       <store>/task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log
+bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 99596414 at 0b04f1996f2fe5ad09d0504f6e2a88719d7865e5, now 6bf42077 at 01459b4d45a5f3f14baf561afbbeb57d67e2e615)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+
+real-input (android): Error: bun run test:real-input:android: refusing to run against a stale app.
+       - the app was built from a different code tree (stamp 99596414 at 0b04f1996f2fe5ad09d0504f6e2a88719d7865e5, now 6bf42077 at 01459b4d45a5f3f14baf561afbbeb57d67e2e615)
+     rebuild it: node scripts/build-app.mjs --platform android
+       (it writes app.stamp and refuses if the binary is still missing a component; add --clean when an incremental build is the thing that is stuck)
+gate: real-input:android:--control:list-item FAIL in 0.5 s
+gate: recorded in .gates/task/G30-list-item.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-list-item/real-input+android+--control+list-item-2026-11-11T01-31-55.046Z.log (5 probe(s))
+
+```

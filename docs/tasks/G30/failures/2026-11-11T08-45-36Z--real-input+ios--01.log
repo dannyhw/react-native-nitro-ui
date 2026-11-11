@@ -1,0 +1,64 @@
+# Failure excerpt — real-input:ios
+
+- Ran: 2026-11-11T08:45:36.747Z on code tree `538673e29f23` at HEAD `be99747` (branch `task/G30-fix1`)
+- Command: `node scripts/real-input/ios.mjs`
+- Result: fail, exit 1, 195275 ms
+- Load: start 29.95, end 65.56, median 62.44, max 89.83
+- Device: ios / device `49D5024D-967B-4B93-ACF6-F73BA0A19E9F` / lease `G30-o7nwh`
+- Full log: `task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log` (<store>/task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log)
+- Scrubbed: 0 credential-looking value(s) were replaced, and this checkout's, the store's, your home, username, host and scratch paths are written as `<repo>`/`<store>`/`~`/`<user>`/`<host>`/`<tmp>`, before this file was written. Device identifiers are limited to this run's own lease; any other device on the host is written as `<other device>`.
+
+## Failing tests and assertion messages
+
+_(none matched — the log had no jest/real-input failure lines)_
+
+## Device and run context (captured when the gate failed)
+
+```
+gate: ---- device context (recorded on failure, X12) ----
+gate: log in the store: <store>/task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log (checkout <repo>)
+gate: xcrun simctl list devices booted
+  | == Devices ==
+  | -- iOS 26.5 --
+  |     nitro-ui iOS 26.5 (<other device>) (Booted) 
+  | -- iOS 27.0 --
+  |     nitro-ui B (<other device>) (Booted) 
+  |     nitro-ui A (49D5024D-967B-4B93-ACF6-F73BA0A19E9F) (Booted) 
+  | -- iOS 27.1 --
+  |     nitro-ui iOS 27.1 (<other device>) (Booted) 
+gate: adb get-state [unavailable]
+  | (not an Android gate, so no emulator is asked about)
+gate: leases
+  |   lease file: <lease file>
+  |   this run's lease: G30-o7nwh (still live)
+  |   G30-o7nwh                G30          both              pair-a
+  |   G31-uep8q                G31          both              pair-b
+gate: load
+  |   load1 at the moment of failure: 65.56 (the ledger line carries the samples across the whole run)
+gate: ---- end device context ----
+```
+
+## Last 20 log line(s)
+
+```
+gate: claimed ios:49D5024D-967B-4B93-ACF6-F73BA0A19E9F for this run
+gate: real-input:ios
+gate: node scripts/real-input/ios.mjs (cwd .)
+gate: code tree 538673e29f23 at HEAD be997473
+gate: git tree f86116a1ed62
+gate: log task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log
+gate:       <store>/task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log
+real-input (ios): nitro-ui A · 49D5024D-967B-4B93-ACF6-F73BA0A19E9F · Metro 8295 · scheme NitroUiExampleUITests
+metro: started on 8295 (log: <repo>/.real-input/ios/metro.log)
+  building the app and the UI-test bundle (log: <repo>/.real-input/ios/xcodebuild-build.log)
+    ** TEST BUILD FAILED **
+
+real-input (ios): Error: real-input: building for testing failed (65). See <repo>/.real-input/ios/xcodebuild-build.log.
+gate: real-input:ios FAIL in 195.3 s
+gate: recorded in .gates/task/G30-fix1.jsonl
+gate: no per-suite timings recorded - the harness plugin did not run
+
+
+gate: appended the device context to task/G30-fix1/real-input+ios-2026-11-11T08-45-36.043Z.log (4 probe(s))
+
+```
