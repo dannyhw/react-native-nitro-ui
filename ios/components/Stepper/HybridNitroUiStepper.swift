@@ -166,6 +166,9 @@ final class StepperModel: NitroUiModel {
   private var drawn = "none"
   private var up = "none"
   private var down = "none"
+  /// What SwiftUI's own environment said about `isEnabled` the last time this body ran
+  /// (iOS only — see ``recordDrawn(_:canStepUp:canStepDown:environmentEnabled:)``).
+  private var environmentEnabled = "none"
   private var probes = 0
   private var merged = "unavailable"
   private var accessibilityReport = "none"
@@ -185,11 +188,23 @@ final class StepperModel: NitroUiModel {
   /// Android records the same two fields from the same rule
   /// (`HybridNitroUiStepper.kt`), which is what lets one assertion cover both
   /// platforms' bound behaviour.
-  func recordDrawn(_ value: String, canStepUp: Bool, canStepDown: Bool) {
+  ///
+  /// `environmentEnabled` is the third thing worth reading where the control is drawn: it is
+  /// SwiftUI's own answer to `\isEnabled`, so it says whether the `.disabled(...)` modifier
+  /// below reached the control that is on screen. `model.disabled` cannot answer that — it is
+  /// the number React sent, and the accessibility traits are set from it directly, so a
+  /// `.disabled` that never arrived would leave every other reading of this control green.
+  func recordDrawn(
+    _ value: String,
+    canStepUp: Bool,
+    canStepDown: Bool,
+    environmentEnabled: Bool
+  ) {
     reportLock.lock()
     drawn = value
     up = canStepUp ? "1" : "0"
     down = canStepDown ? "1" : "0"
+    self.environmentEnabled = environmentEnabled ? "1" : "0"
     reportLock.unlock()
   }
 
@@ -205,7 +220,7 @@ final class StepperModel: NitroUiModel {
   func stateReport() -> String {
     reportLock.lock()
     defer { reportLock.unlock() }
-    return "displayed=\(drawn);up=\(up);down=\(down);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
+    return "displayed=\(drawn);up=\(up);down=\(down);enabled=\(environmentEnabled);probes=\(probes);merged=\(merged);a11y=\(accessibilityReport)"
   }
 
   /// Store an adjust-action report and count it, so two reports that do the same
@@ -230,6 +245,7 @@ final class StepperModel: NitroUiModel {
     drawn = "none"
     up = "none"
     down = "none"
+    environmentEnabled = "none"
     probes = 0
     merged = "unavailable"
     accessibilityReport = "none"
@@ -252,6 +268,9 @@ final class StepperModel: NitroUiModel {
 /// The SwiftUI half. Reads only the model, so any commit can rebuild it.
 struct StepperContent: NitroUIContent {
   @ObservedObject private var model: StepperModel
+  /// SwiftUI's own disabled environment, read where the control is drawn. See
+  /// ``StepperModel/recordDrawn(_:canStepUp:canStepDown:environmentEnabled:)``.
+  @Environment(\.isEnabled) private var environmentEnabled = true
 
   init(model: StepperModel) {
     self.model = model
@@ -262,7 +281,12 @@ struct StepperContent: NitroUIContent {
     // drawn, so it is what the control is handed rather than what React sent.
     let canStepUp = model.canStep(up: true)
     let canStepDown = model.canStep(up: false)
-    let _ = model.recordDrawn(model.accessibilityValueText, canStepUp: canStepUp, canStepDown: canStepDown)
+    let _ = model.recordDrawn(
+      model.accessibilityValueText,
+      canStepUp: canStepUp,
+      canStepDown: canStepDown,
+      environmentEnabled: environmentEnabled
+    )
     let value = Binding<Double>(
       get: { model.state.displayed },
       set: { requested in model.bindingWrite(requested) }

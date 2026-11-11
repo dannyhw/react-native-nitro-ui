@@ -924,6 +924,25 @@ describe('Stepper', () => {
       'a disabled stepper has no live half at all'
     ).toBe('0/0');
 
+    // iOS only: the *modifier*, not just the flag. `model.disabled` is what React sent, and
+    // the accessibility traits below are set straight from it — so both readings above stay
+    // green even if `.disabled(...)` never reached the control on screen, which is exactly
+    // what `stepper-ios.png` looked like: a row that is inert and draws as live. `enabled`
+    // is SwiftUI's own `\isEnabled`, read where the stepper is drawn. Android's two buttons
+    // take `enabled` as their own parameter from the same flag, so the `up`/`down` above
+    // already is that reading there; Compose has no environment to ask.
+    if (Platform.OS === 'ios') {
+      expect(
+        reportOf('off').enabled,
+        'a disabled iOS stepper is disabled in SwiftUI as well as in the model — otherwise ' +
+          'the screen shows a live control that answers to nobody'
+      ).toBe('0');
+      expect(
+        reportOf('off-barrier').enabled,
+        'and the live stepper beside it is not disabled'
+      ).toBe('1');
+    }
+
     // A reader is told the same thing the screen shows.
     const a11y = await probeAccessibility('off');
     expect(
